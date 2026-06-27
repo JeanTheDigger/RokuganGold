@@ -4040,6 +4040,12 @@ static func _apply_spell_zone(
 		"expiry_round": state.combat.round_number + dur,
 		"spell_id": spell_id, "caster_id": caster_id,
 	}
+	# s35 Breath of the Fire Dragon: the cone re-centers on the caster each Round (follow_caster) and
+	# deals DR = the caster's element Ring (dr_from_caster_ring). Concentration ends if the caster dies.
+	if eff.get("follow_caster", false):
+		zone["follow_caster"] = true
+	if eff.get("dr_from_caster_ring", false):
+		zone["dr_from_caster_ring"] = true
 	# s35 Light of the Sun (Jade): the field punishes the unworthy — extra per-round damage scaled by
 	# how far below Honor Rank 4 a (human) target is, and for Shadowlands Taint, plus Blinding at Honor 0.
 	if eff.get("judgment", false):
@@ -4838,6 +4844,18 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 					_apply_pit_death(state, cid, wpos)
 			surviving.append(zone)
 			continue
+		# s35 Breath of the Fire Dragon: a self-following cone — re-center on the caster each Round
+		# and deal DR = the caster's element Ring. Concentration ends if the caster is gone/dead.
+		if zone.get("follow_caster", false):
+			var bf_cid: int = int(zone.get("caster_id", -1))
+			var bf_ch = state.combatants.get(bf_cid, null)
+			if not state.positions.has(bf_cid) or bf_ch == null or CharacterStats.is_dead(bf_ch):
+				continue  # the breath stops — caster gone (zone ends, not re-appended)
+			zone["center"] = state.positions[bf_cid]
+			if zone.get("dr_from_caster_ring", false):
+				var bf_ring: int = SpellSystem.get_ring_value(bf_ch, int(zone.get("element", Enums.Ring.FIRE)))
+				zone["dr_rolled"] = bf_ring
+				zone["dr_kept"] = bf_ring
 		var dr_rolled: int = int(zone.get("dr_rolled", 0))
 		var dr_kept: int = int(zone.get("dr_kept", 0))
 		if dr_rolled > 0:

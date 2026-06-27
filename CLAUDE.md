@@ -6749,6 +6749,20 @@ costing a slot; non-caster interrupt no-op. LIMITATION: the speed-raise count is
 turn-based UI. Same PC-travel HOLD live-reachability caveat as the whole ASCII stack — driver-verified,
 not a live session.
 
+### Spell coverage — deferred sub-part: Breath of the Fire Dragon 4-round repeat (2026-06-27, runtime-verified 6/6)
+**Breath of the Fire Dragon** (Fire 3, s35 l169) GDD: for 4 Rounds, "Once per Round as a Simple Action, the
+caster may breathe a bolt of flames. DR equal to the caster's Fire Ring, striking every target in front of
+the caster within the area." Only a one-shot cone at cast was wired; the 4-round repeat was deferred.
+Converted the entry from `kind: damage` to a self-following `damage_zone` (`follow_caster` +
+`dr_from_caster_ring`, `duration_rounds: 4`, enemies-only): `_apply_spell_zone` carries the two flags, and
+the generic per-round damage-zone pass in `_process_spell_zones` re-centers the cone on the caster's current
+tile each Round and deals DR = the caster's Fire Ring, ending early if the caster dies (concentration lost) —
+the established self-following pattern (hurricane). Runtime-verified 6/6 (Godot 4.6.2, headless): the cast
+installs a follow-caster zone; the near enemy takes flame damage across the 4 Rounds (0→54) while a far
+enemy and a same-faction ally are untouched; the breath ends after its duration; and it stops when the caster
+dies. drv12 (damage_zone/judgment) re-passes — no regression. LIMITATION: the GDD Simple-action economy +
+"cannot speak or cast" are simplified to an automatic per-round tick (the established zone-channel pattern).
+
 ### Spell coverage — deferred sub-part: Essence of Void per-round break (2026-06-27, runtime-verified 5/5)
 **Essence of Void** (Void 4, s37 l173) GDD: held immobile by a Contested Void Roll; "On the second and
 subsequent Rounds, the target may make another Contested Roll during the Reactions Stage to break free."

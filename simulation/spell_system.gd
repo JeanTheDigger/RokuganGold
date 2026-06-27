@@ -228,8 +228,9 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	"fury_of_osano_wo": {"kind": "damage", "dr_rolled": 5, "dr_kept": 2,
 		"range_tiles": 60, "aoe_radius": 0,
 		"weather_dr": {"storm_rolled": 1, "severe_rolled": 1, "severe_kept": 1}},  # Fire 1: 5k2 lightning; STORM->6k2, TYPHOON/BLIZZARD->6k3 (GDD s35 l57)
-	"breath_of_the_fire_dragon": {"kind": "damage", "dr_rolled": 0, "dr_kept": 0,
-		"range_tiles": 0, "aoe_radius": 3, "aoe_hits": "enemies", "caster_exempt": true},
+	"breath_of_the_fire_dragon": {"kind": "damage_zone", "dr_rolled": 0, "dr_kept": 0,
+		"range_tiles": 0, "aoe_radius": 3, "aoe_hits": "enemies", "duration_rounds": 4,
+		"follow_caster": true, "dr_from_caster_ring": true},  # Fire 3: a self-centered flame cone re-fires each Round for 4 Rounds (DR = caster's Fire Ring); the cone follows the caster. (Simple-action / cannot-cast nuances simplified to an automatic per-round tick.)
 	"destructive_wave": {"kind": "damage", "dr_rolled": 7, "dr_kept": 7,
 		"range_tiles": 0, "aoe_radius": 5, "aoe_hits": "all", "caster_exempt": true},
 	"beam_of_the_inferno": {"kind": "damage", "dr_rolled": 10, "dr_kept": 10,
