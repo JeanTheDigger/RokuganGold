@@ -1184,7 +1184,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"know_the_mind":              {"e": 0, "m": 4, "s": 17},
 	"look_into_the_soul":         {"e": 0, "m": 4, "s": 17},  # Divination: reveals target's 2 lowest Rings — INFORMATION_GATHER
 	"netsuke_of_wind":            {"e": 0, "m": 4, "s": 0},   # conjure a real-profile weapon — wired (SPELL_COMBAT_EFFECTS "conjure_weapon" real_weapon)
-	"seeking_the_way":            {"e": 0, "m": 4, "s": 0},   # hides caster's tracks — COMBAT_ONLY
+	"seeking_the_way":            {"e": 0, "m": 4, "s": 0},   # WIRED (CombatController): false trail misdirects a fooled tracker away from the player (Hunting/Perception vs Spellcraft/Air to see through)
 	"symbol_of_air":              {"e": 0, "m": 4, "s": 10},
 	"tenjins_ear":                {"e": 0, "m": 4, "s": 0},   # language comprehension buff — COMBAT_ONLY
 	"whispers_of_the_forgotten":  {"e": 0, "m": 4, "s": 0},   # psychic fear/disorientation — COMBAT_ONLY

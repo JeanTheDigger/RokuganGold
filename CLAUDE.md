@@ -7169,6 +7169,24 @@ constant is 2, zero-bonus is a no-op (regression-safe). The `_cast_the_earth_flo
 verified (mirrors the runtime-verified `_cast_drawing_on_the_mountain`). 166 combat effects (world-sim
 mass-battle buff, not a combat-orchestrator effect).
 
+### Spell coverage — Seeking the Way (false trail) (2026-06-27, owner-directed, runtime-verified)
+**Seeking the Way (Air 4, Illusion, s33)** — hides the caster's tracks, replacing them with a false trail
+leading in a completely different direction; skilled trackers may see through it (Hunting/Perception vs the
+caster's Spellcraft/Air). Previously deferred ("overland false trail — world-map escape, no within-zone
+consumer"). Wired in **CombatController** (the stealth/exploration layer, like the disguise/perception
+spells): a SUSPICIOUS guard tracking the player's trail is led the wrong way. `cast_seeking_the_way()`
+(future stealth-command UI / deliberate caster) freezes the Spellcraft/Air contest pool + the ML resist
+(no invented magnitude) on the player. `_seeking_misdirects(es)` runs the GDD contest (guard Hunting/
+Perception vs caster Spellcraft/Air + ML; ties favor the illusion; cached per guard; an ALERT guard in
+combat is not misdirected). The hook in `_npc_investigate` (search phase) mirrors a fooled guard's
+`noise_src` to the FAR side of the guard (away from the player) — they walk off the wrong way and lapse
+back to UNAWARE without finding the player; a skilled tracker who sees through it tracks the true noise.
+Runtime-verified 6/6 (Godot 4.6.2, headless): can_cast gate; cast freezes the pool; a weak tracker is fooled
+200/200 by a strong caster while a strong tracker (Perception 6 / Hunting 5) sees through 80/200 (the
+contest discriminates); an ALERT guard is not misdirected; a non-knower cannot cast. Same PC-travel HOLD
+live-reachability caveat as the whole CombatController stealth layer. 166 combat effects (Seeking the Way is
+a stealth-layer effect, not a combat-orchestrator effect).
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

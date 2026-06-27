@@ -176,6 +176,15 @@ class EntityState:
 	## Per-guard see-through outcome: entity_id -> true (penetrated) / false
 	## (fooled). Absence = not yet evaluated. Reset on each fresh disguise.
 	var disguise_seethrough:  Dictionary = {}
+	## -- seeking_the_way (s33 Air 4): a false trail hides the caster's tracks.
+	## Carried by the PLAYER entity. Frozen Spellcraft/Air + ML resist (no invented
+	## magnitude). Per-guard misdirect outcome cache: entity_id -> true (fooled) /
+	## false (skilled tracker saw through). Reset on each fresh cast.
+	var seeking_the_way_active: bool = false
+	var seeking_spellcraft:     int = 0
+	var seeking_air:            int = 0
+	var seeking_resist_bonus:   int = 0
+	var seeking_seethrough:     Dictionary = {}
 	## -- heart_betrays_eyes (s33): a one-shot, expiring "next sighting fooled"
 	## charge placed ON this guard. Expiry round (-1 = none) + frozen caster Air.
 	var heart_betrays_until_round: int = -1
@@ -1472,6 +1481,16 @@ func _npc_investigate(es: EntityState) -> Dictionary:
 	# Return phase (prl <= 0): move toward patrol post. Never both in one turn.
 	if es.phase_rounds_left > 0:
 		if es.noise_src_x >= 0 and es.noise_src_y >= 0:
+			# s33 Seeking the Way: a fooled tracker is led the wrong way by the false trail — the
+			# search point is mirrored to the far side of the guard (away from the player). Once per
+			# guard (cached); a skilled tracker who sees through it tracks the true noise normally.
+			if _seeking_misdirects(es):
+				var pl: EntityState = get_player()
+				if pl != null:
+					var dx: int = es.x - pl.x
+					var dy: int = es.y - pl.y
+					es.noise_src_x = clampi(es.x + dx, 0, _map.width - 1)
+					es.noise_src_y = clampi(es.y + dy, 0, _map.height - 1)
 			moved = _npc_move_toward(es, es.noise_src_x, es.noise_src_y, _investigation_move_budget(es))
 	else:
 		moved = _npc_move_toward(es, es.patrol_x, es.patrol_y, _investigation_move_budget(es))
@@ -1878,6 +1897,47 @@ func _disguise_suppresses(es: EntityState) -> bool:
 	var penetrated: bool = _roll_disguise_seethrough(es, player)
 	player.disguise_seethrough[es.entity_id] = penetrated
 	return not penetrated
+
+## s33 Seeking the Way (Air 4, Illusion): hide the caster's tracks, replacing them with a false trail
+## leading in a completely different direction. The future stealth-command UI / a deliberate caster calls
+## this. Freezes the Spellcraft/Air contest pool + the ML resist (no invented magnitude); a fooled guard
+## that searches the caster's trail is sent the wrong way (see _npc_investigate). Skilled trackers may
+## see through it (Hunting/Perception vs Spellcraft/Air). PCs may be shugenja (s60.2).
+func cast_seeking_the_way() -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"ok": false, "reason": "no_living_player"}
+	if not SpellSystem.can_cast(player.character, "seeking_the_way"):
+		return {"ok": false, "reason": "cannot_cast"}
+	if not SpellSystem.resolve_cast(player.character, "seeking_the_way", _dice).get("success", false):
+		return {"ok": false, "reason": "cast_failed"}
+	player.seeking_the_way_active = true
+	player.seeking_spellcraft = SkillResolver.get_skill_rank(player.character, "Spellcraft")
+	player.seeking_air = SpellSystem.get_ring_value(player.character, Enums.Ring.AIR)
+	player.seeking_resist_bonus = int(SpellSystem.SPELL_LIBRARY.get("seeking_the_way", {}).get("m", 4))
+	player.seeking_seethrough = {}
+	return {"ok": true}
+
+## True if the false trail fools guard `es` (Contested Hunting/Perception vs the caster's Spellcraft/Air +
+## ML; ties favor the illusion). Rolled once per guard and cached. A guard already ALERT (fighting, not
+## tracking) is not misdirected.
+func _seeking_misdirects(es: EntityState) -> bool:
+	var player: EntityState = get_player()
+	if player == null or not player.seeking_the_way_active:
+		return false
+	if es.alert_state >= AsciiMapEnvironment.AlertState.ALERT:
+		return false
+	if player.seeking_seethrough.has(es.entity_id):
+		return bool(player.seeking_seethrough[es.entity_id])
+	var g_perc: int = es.character.perception
+	var g_hunt: int = SkillResolver.get_skill_rank(es.character, "Hunting")
+	var guard_roll: DiceResult = _dice.roll_and_keep(g_perc + g_hunt, maxi(1, g_perc), true, false)
+	var caster_roll: DiceResult = _dice.roll_and_keep(
+		player.seeking_air + player.seeking_spellcraft, maxi(1, player.seeking_air), true, false)
+	var fooled: bool = guard_roll.total <= caster_roll.total + player.seeking_resist_bonus
+	player.seeking_seethrough[es.entity_id] = fooled
+	return fooled
+
 
 ## Contested Investigation/Perception (guard) vs Spellcraft/Air + spell Mastery
 ## Level (caster). The guard penetrates only on a strict win; ties favor the
