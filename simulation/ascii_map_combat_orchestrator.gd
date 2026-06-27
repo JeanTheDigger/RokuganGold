@@ -3394,7 +3394,12 @@ static func _apply_spell_buff(
 	# combatant (incl. the caster) within aoe_radius of the caster.
 	if int(eff.get("aoe_radius", 0)) > 0 and String(eff.get("target", "self")) == "ally":
 		return _apply_spell_buff_aoe(state, caster_id, caster, eff)
-	var to_self: bool = eff.get("target", "self") == "self"
+	# "self": always the caster. "ally": the named target. "self_or_ally" (s35 Fires of Purity, Range 25'):
+	# the named living target when one is given, else the caster — so a PC may shroud an ally while the
+	# NPC self-buff path (target_id == caster_id) self-applies.
+	var tgt_mode: String = String(eff.get("target", "self"))
+	var to_self: bool = tgt_mode == "self" \
+		or (tgt_mode == "self_or_ally" and (target == null or target_id == caster_id))
 	var bid: int = caster_id if to_self else target_id
 	var bch: L5RCharacterData = caster if to_self else target
 	if bch == null:
@@ -7396,7 +7401,8 @@ static func _npc_maybe_cast_spell(
 	if not IndividualCombat.has_timed_modifier_source(p, "spell_buff"):
 		for sid in npc.spells_known:
 			var eff2: Dictionary = SpellSystem.get_combat_effect(sid)
-			if eff2.get("kind", "") != "buff" or eff2.get("target", "self") != "self":
+			var tmode: String = String(eff2.get("target", "self"))
+			if eff2.get("kind", "") != "buff" or (tmode != "self" and tmode != "self_or_ally"):
 				continue
 			if not SpellSystem.can_cast(npc, sid):
 				continue

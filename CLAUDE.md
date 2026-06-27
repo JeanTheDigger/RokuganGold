@@ -6524,6 +6524,18 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred sub-part: Fires of Purity ally-target (2026-06-27, runtime-verified 5/5)
+**Fires of Purity** (Fire 1 Defense, s35 l45) GDD: Range 25', 1 target — a flame shroud cast on **self OR an
+ally** (a melee attacker takes 2k2; the shrouded one's strikes deal +2k2; ranged bypasses). It was wired
+self-only (ally-target deferred). Added a reusable **`self_or_ally`** buff target mode to `_apply_spell_buff`:
+the named living target is buffed when one is given (with the same-faction + range gates), else the caster —
+so a PC may shroud an ally within range while the NPC self-buff path (which passes `target_id == caster_id`)
+still self-applies. The NPC + companion self-buff pickers (`_npc_maybe_cast_spell`) now accept `self_or_ally`
+(self-cast), preserving the existing NPC auto-cast. Fires of Purity's entry → `target: "self_or_ally",
+range_tiles: 5`. Runtime-verified 5/5 (Godot 4.6.2, headless): a PC ally-target shrouds the ally (not the
+caster); a self-cast shrouds the caster; an out-of-range ally is rejected; the NPC still auto-self-casts it.
+The `self_or_ally` mode is reusable for any other self-or-ally defensive buff.
+
 ### Spell coverage — deferred sub-part: Oath of the Heavens 2-target link (2026-06-27, runtime-verified 12/12)
 **Oath of the Heavens** (Fire 3, s35 l199) GDD: links two persons — both gain **+2k0 to Fire-Ring/Fire-Trait
 rolls** AND from then on **share Fatigued/Dazed/Stunned** (if either gains one, the other immediately does);

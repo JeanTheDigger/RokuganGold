@@ -526,8 +526,8 @@ const SPELL_COMBAT_EFFECTS: Dictionary = {
 	# Hooked buffs (effect read in _apply_hit / execute_melee_attack, not a stat total):
 	"the_souls_blade": {"kind": "buff", "target": "self", "duration_rounds": 5,
 		"mods": [{"kind": "weapon_stun", "value": 1}]},  # Fire 6: weapon auto-Stuns + overcomes Invulnerability
-	"fires_of_purity": {"kind": "buff", "target": "self", "duration_rounds": 10,
-		"mods": [{"kind": "flame_shroud", "value": 1}]},  # Fire 1: melee attacker takes 2k2; the shrouded one's strikes deal +2k2 (ranged bypasses; ally-target deferred)
+	"fires_of_purity": {"kind": "buff", "target": "self_or_ally", "range_tiles": 5, "duration_rounds": 10,
+		"mods": [{"kind": "flame_shroud", "value": 1}]},  # Fire 1: shroud self or an ally within 25'; melee attacker takes 2k2, the shrouded one's strikes deal +2k2 (ranged bypasses) (GDD s35 l45)
 	"reversal_of_fortunes": {"kind": "buff", "target": "self", "duration_rounds": 3,
 		"mods": [{"kind": "reroll", "value": 1}]},  # Water 1: re-roll one missed attack/round (broader re-rolls forward-wired)
 }
