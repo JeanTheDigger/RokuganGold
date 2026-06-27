@@ -3942,6 +3942,11 @@ static func _apply_spell_zone(
 		"expiry_round": state.combat.round_number + dur,
 		"spell_id": spell_id, "caster_id": caster_id,
 	}
+	# s35 Light of the Sun (Jade): the field punishes the unworthy — extra per-round damage scaled by
+	# how far below Honor Rank 4 a (human) target is, and for Shadowlands Taint, plus Blinding at Honor 0.
+	if eff.get("judgment", false):
+		zone["judgment"] = true
+		zone["caster_fire_ring"] = SpellSystem.get_ring_value(caster, Enums.Ring.FIRE)
 	state.spell_zones.append(zone)
 	# Optional immediate impact damage (Enticing the Dance: 3k2 on the round it takes effect).
 	var impact_hits: Array = []
@@ -4758,6 +4763,21 @@ static func _process_spell_zones(state: MapCombatState, dice_engine: DiceEngine)
 				if ch == null or CharacterStats.is_dead(ch):
 					continue
 				var dmg: int = dice_engine.roll_and_keep(dr_rolled, dr_kept, true).total
+				# s35 Light of the Sun: the Sun judges the unworthy. Human (non-spirit) targets take an
+				# extra 2k1 per Honor Rank below 4; any Taint Rank 1+ target takes an extra 2k2; an Honor-0
+				# human is Blinded for the caster's Fire Ring Rounds. (Lying Darkness control not modeled.)
+				if zone.get("judgment", false):
+					if ch.spirit_creature == null:
+						var ranks_below: int = maxi(0, 4 - int(ch.honor))
+						for _i in range(ranks_below):
+							dmg += dice_engine.roll_and_keep(2, 1, true).total
+						if int(ch.honor) <= 0:
+							var bp: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+							if bp != null:
+								IndividualCombat.apply_timed_condition(bp, IndividualCombat.CONDITION_BLINDED,
+									state.combat.round_number + int(zone.get("caster_fire_ring", 1)))
+					if MutationSystem.get_taint_rank(ch.taint) >= 1:
+						dmg += dice_engine.roll_and_keep(2, 2, true).total
 				if ch.spirit_creature != null:
 					var filt: Dictionary = SpiritAbilitySystem.incoming_damage(
 						ch.spirit_creature, dkind, true)

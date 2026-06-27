@@ -6524,6 +6524,17 @@ a new subsystem (illusion/disguise/perception, flight/elevation, per-limb), or t
 effect to model. NOTE: this whole layer remains NOT live-reachable until the PC-travel HOLD is lifted
 (see "ASCII Map System — Live-Reachability Status").
 
+### Spell coverage — deferred sub-part: Light of the Sun honor/taint judgment (2026-06-27, runtime-verified 4/4)
+**Light of the Sun** (Fire 5 Jade, s35 l323) GDD: a 30' field dealing 2k2/round to everyone (wired), plus
+**+2k1/round per Honor Rank a (human) target is below 4**, **+2k2/round if they have Taint Rank 1+** (or are
+Lying-Darkness-controlled), and **Honor-0 humans are Blinded for the caster's Fire Ring Rounds**. The
+honor/taint judgment was deferred. The zone reuses the existing `damage_zone` per-round processor (like Heaven's
+Tears reads honor/taint): a `judgment: true` flag on the entry → the zone stores the caster's Fire Ring at cast,
+and the per-round loop adds the bonuses — non-spirit targets take a 2k1 roll per Honor Rank below 4 (and are
+Blinded at Honor 0), and any Taint-Rank-1+ target takes an extra 2k2. (Lying-Darkness control is not modeled —
+no mechanic.) Runtime-verified 4/4 (Godot 4.6.2, headless): honorable target 11.5 dmg/round (base 2k2);
+dishonorable Honor-1 target 34.3 (+3×2k1); Tainted target 23.9 (+2k2); an Honor-0 human is Blinded by the field.
+
 ### Spell coverage — deferred sub-part: Warning Flame Reactions-Stage +3 Initiative (2026-06-27, runtime-verified 3/3)
 **Warning Flame** (Fire 1 Battle, s35 l93) GDD: the target is **immune to being surprised**, gains **+1k0 to
 Initiative rolls** (wired), and **may add +3 to their Initiative total during the Reactions Stage of each
