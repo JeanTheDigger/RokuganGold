@@ -6562,6 +6562,17 @@ static func _process_eavesdrop_writebacks(
 				continue
 			if a_char.physical_location != location:
 				continue
+			# s33 Tenjin's Ear: a foreign-language conversation is unintelligible to the eavesdropper
+			# UNLESS they speak that tongue or have made it intelligible. A Unicorn shugenja who knows
+			# Tenjin's Ear casts it (a deliberate sub-step of this chosen EAVESDROP) to comprehend; once
+			# per day (the marker prevents re-cast). (Dormant until a speaks_foreign population exists.)
+			if (a_char.speaks_foreign or b_char.speaks_foreign) and not eavesdropper.speaks_foreign:
+				if eavesdropper.tenjins_ear_ic_day != ic_day \
+						and "tenjins_ear" in eavesdropper.spells_known \
+						and SpellSystem.can_cast(eavesdropper, "tenjins_ear"):
+					SpellSystem.activate_tenjins_ear(eavesdropper, dice_engine, ic_day)
+				if eavesdropper.tenjins_ear_ic_day != ic_day:
+					continue  # cannot understand the foreign speech — learn nothing from it
 			# s33 Garbled Tongue: a garbled conversation is opaque to eavesdroppers — only a shugenja
 			# who WINS a Contested School Rank/Air roll against the caster (the frozen TN) can lift it.
 			var garble_tn: int = _garble_pierce_tn(a_char, b_char, ic_day)

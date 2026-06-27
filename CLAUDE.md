@@ -7249,6 +7249,27 @@ via spells_known; no NPC picker — situational, needs spirit creatures). Parse-
 the whirlpool/grounding zone + banish patterns; the orchestrator can't run under headless `-s`). Reduces the
 genuinely-blocked set to 1 (Tenjin's Ear — no language-barrier subsystem exists).
 
+### Spell coverage — Tenjin's Ear (language comprehension) — LAST SPELL (2026-06-27, owner-directed, runtime-verified)
+**Tenjin's Ear (Air 4, Unicorn-only, s33)** — makes all audible human speech in a 30' radius intelligible
+regardless of language. Previously deferred ("no language-barrier subsystem exists"). Owner directive ("don't
+conclude while spells remain") → built the **language-barrier mechanism + the Tenjin's Ear bypass** as the
+eavesdrop consumer. New `L5RCharacterData.speaks_foreign: bool` (@export, default false → ZERO regression: no
+world-gen population sets it yet — it is owner-pending DATA, a gaijin/Ivory-Kingdoms roster, not an invented
+mechanic) and `tenjins_ear_ic_day` (the cast marker). `SpellSystem.activate_tenjins_ear` (Unicorn-only via
+spells_known + can_cast) sets the marker. Wired into `_process_eavesdrop_writebacks` beside the Garbled Tongue
+gate: a conversation where either speaker `speaks_foreign` is unintelligible to an eavesdropper unless they
+speak that tongue OR have cast Tenjin's Ear — and a Unicorn shugenja who knows it casts it as a deliberate
+sub-step of the chosen EAVESDROP (once/day marker) to comprehend the foreign speech. Comprehension only (no
+enhanced hearing / no speaking back — not modeled). Runtime-verified 8/8 (Godot 4.6.2, headless): can_cast
+gate; activate sets the marker; native speech always understood; foreign speech blocked for a plain listener,
+comprehended by a Tenjin's-Ear caster or a foreign listener; a stale marker (different day) does not
+comprehend; non-knower cannot cast. The mechanism + bypass are complete and correct; it is **dormant only
+because no character currently has `speaks_foreign = true`** (owner-pending data, not a missing mechanic —
+populating a foreign-speaker roster activates it). **With this, EVERY spell in the 287-entry library is wired**
+(a combat effect, an activate_/execute_ function, a world-sim sim_effect router, or a CombatController
+stealth-layer hook). The former 3-spell blocked set (Piercing the Heavens, Opening the Veil, Tenjin's Ear) is
+now wired via faithful PROVISIONAL calls flagged for owner override. No genuinely-unwired spell remains.
+
 ### s54.7/s33 The World is Truth — first working sleeper-install path (2026-06-22, owner-approved, runtime-verified 7/7)
 Owner-authorized (2026-06-22) wiring of **The World is Truth** (Air 6, Kolat), the one residue spell
 with a REAL consumer — the s54.7 sleeper-conditioning install. Notable: `KolatSystem.complete_conditioning`

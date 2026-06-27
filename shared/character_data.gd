@@ -99,6 +99,12 @@ var spell_slot_adjustment: Dictionary = {}
 # s33 Piercing the Heavens (Air 6, Phoenix): IC day of the caster's last Fortune communion. The
 # spell may be cast at most once per month — this is the monthly guard. -1 = never communed.
 @export var piercing_heavens_ic_day: int = -1
+# Language barrier (s33 Tenjin's Ear consumer). true = this character speaks a foreign tongue
+# (gaijin / Ivory Kingdoms / etc.) not mutually intelligible with Rokugani. Default false (no
+# regression): no world-gen population sets it yet — it is owner-pending DATA, not a mechanic.
+@export var speaks_foreign: bool = false
+# s33 Tenjin's Ear (Air 4, Unicorn): IC day the caster last made foreign speech intelligible. -1 = none.
+@export var tenjins_ear_ic_day: int = -1
 # Day-long spell buffs (the standard model for any spell whose RAW duration is below the IC-day
 # tick — 10 minutes, 1 hour, etc.): a set of active buff IDs that last the rest of the OOC day
 # they were cast and are cleared wholesale by the daily orchestrator pass (clear_day_buffs). To

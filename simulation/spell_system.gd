@@ -907,6 +907,21 @@ static func activate_wolfs_proposal(
 	return res
 
 
+## s33 Tenjin's Ear (Air 4, Unicorn-only) — 30' radius, makes all audible human speech intelligible
+## regardless of language for the IC day (the within-tick window). The consumer is the eavesdrop pipeline:
+## a foreign-language conversation is opaque UNLESS the listener speaks that tongue OR has cast Tenjin's
+## Ear (tenjins_ear_ic_day == ic_day). Does NOT grant enhanced hearing or the capacity to speak in return
+## (not modeled — comprehension only). Cast as a deliberate sub-step of a chosen EAVESDROP. Consumes a slot.
+static func activate_tenjins_ear(caster: L5RCharacterData, dice: DiceEngine, ic_day: int) -> Dictionary:
+	if not can_cast(caster, "tenjins_ear"):
+		return {"success": false, "activated": false, "reason": "cannot_cast"}
+	var res: Dictionary = resolve_cast(caster, "tenjins_ear", dice, 0, null, ic_day)
+	res["activated"] = res.get("success", false)
+	if res.get("success", false):
+		caster.tenjins_ear_ic_day = ic_day
+	return res
+
+
 ## s36 Wisdom & Clarity (Water 2) — Personal/Self (2-Raise variant may target another), 1 hour ~ the
 ## IC day. Reading speed doubles + perfect recall of everything read. The faithful sim slice is sharper
 ## Lore (research/recall): SkillResolver reads the "wisdom_and_clarity" day buff and adds +1k0 to Lore
@@ -1187,7 +1202,7 @@ const SPELL_LIBRARY: Dictionary = {
 	"netsuke_of_wind":            {"e": 0, "m": 4, "s": 0},   # conjure a real-profile weapon — wired (SPELL_COMBAT_EFFECTS "conjure_weapon" real_weapon)
 	"seeking_the_way":            {"e": 0, "m": 4, "s": 0},   # WIRED (CombatController): false trail misdirects a fooled tracker away from the player (Hunting/Perception vs Spellcraft/Air to see through)
 	"symbol_of_air":              {"e": 0, "m": 4, "s": 10},
-	"tenjins_ear":                {"e": 0, "m": 4, "s": 0},   # language comprehension buff — COMBAT_ONLY
+	"tenjins_ear":                {"e": 0, "m": 4, "s": 0},   # WIRED (eavesdrop): comprehend foreign speech — a Unicorn shugenja casts it to eavesdrop on a foreign-language conversation (dormant until a speaks_foreign population exists — owner data)
 	"whispers_of_the_forgotten":  {"e": 0, "m": 4, "s": 0},   # psychic fear/disorientation — COMBAT_ONLY
 	"wisdom_of_the_kami":         {"e": 0, "m": 4, "s": 0},   # temporary skill rating bonus — COMBAT_ONLY
 	# ML5
