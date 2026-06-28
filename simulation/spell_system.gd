@@ -1476,6 +1476,28 @@ const SPELL_LIBRARY: Dictionary = {
 	"unmake_the_world":              {"e": 4, "m": 6, "s": 0,  "i": true},
 }
 
+## Inert-tail wiring status (owner-authorized 2026-06-28). The following spells
+## carry a sim_effect tag but had no handler before; they are now addressed:
+##  - Knowledge divinations (Group C, INFORMATION_GATHER router): secrets_on_the_wind,
+##    master_clouds_eyes, whispers_of_the_land — fully wired + NPC-selectable.
+##  - Forge/object effects (apply_raging_forge / apply_mending_forge /
+##    apply_elemental_crucible / apply_reforge / apply_transmute_object): effect
+##    implemented + PC-cast-ready; repair spells dormant until a damage PRODUCER
+##    (sacking/combat) exists — same status as the art survives_sacking functions.
+##  - Bespoke divinations (apply_funeral_rites / apply_reflections_of_pan_ku /
+##    apply_echoes_on_the_breeze / apply_augury_vision [visions_of_the_future +
+##    waters_sweet_clarity]): effect implemented + PC-cast-ready (PROVISIONAL proxies
+##    where noted on each function).
+##  - Travel spells (speed_of_the_waterfall, walking_upon_the_waves,
+##    steed_of_the_ebbing_tides, the_emperors_road, open_the_waves): DEFERRED by
+##    owner decision (sim tracks travel in whole-province days; no sub-day model).
+##  - PC/GM-only, no autonomous NPC effect (no world-sim consumer/subsystem exists):
+##    summon, command (raw-element creation — no resource/object model),
+##    call_the_spirit (spirit summon — combat/PC, no world-sim consumer),
+##    the_ties_that_bind (object-location tracking — none modeled),
+##    witness_the_untold (combat interrupt-on-delay — orchestrator has no interrupt),
+##    rites_of_preservation (corpse anti-animation — blocked on s54 undead).
+
 ## PROVISIONAL — actual school curricula require s28/s29 review.
 ## All shugenja start with Sense and Commune (universal ML1) plus element-appropriate ML1 spells.
 const _DEFAULT_STARTING_SPELLS: Array = ["sense", "commune"]
@@ -1745,6 +1767,161 @@ static func apply_ward_creation(character: L5RCharacterData, _spell_id: String) 
 		# s34: jade spirits recoil — ward blocked and caster learns of their own Taint.
 		return {"ward_applied": false, "taint_revealed": true}
 	return {"ward_applied": true, "taint_revealed": false}
+
+
+# -- Forge / object spells (s35/s37/s32; owner-authorized 2026-06-28) ----------
+## TRANSMUTE_MATERIAL/PRESERVATION-bucket spells that manipulate a crafted item.
+## These are PC/crafting-facing effects (the future cast UI / a sacking producer
+## invokes them); NPCs have no autonomous trigger, matching the established
+## "effect implemented, PC-cast" pattern (Wrath of Kaze-no-Kami, instant-kill spells).
+## Each returns {applied: bool, reason: String}; condition transitions per GDD.
+
+## The Raging Forge (Fire 1 Craft, s35): remake an ORDINARY-quality item into its
+## perfect form — removes blemishes/cracks/nicks. Cannot repair an actually-broken
+## (DESTROYED) item, and only affects ordinary (Mundane/Normal) quality.
+static func apply_raging_forge(item: ArtisanItemData) -> Dictionary:
+	if item.condition == ArtisanItemData.ItemCondition.DESTROYED:
+		return {"applied": false, "reason": "cannot_repair_broken"}
+	if item.quality_tier > GiftGivingSystem.QualityTier.NORMAL:
+		return {"applied": false, "reason": "not_ordinary_quality"}
+	if item.condition == ArtisanItemData.ItemCondition.PRISTINE:
+		return {"applied": false, "reason": "no_damage"}
+	item.condition = ArtisanItemData.ItemCondition.PRISTINE
+	return {"applied": true, "reason": "blemishes_removed"}
+
+## The Mending Forge (Fire 4 Craft, s35): restore a DAMAGED or DESTROYED item to
+## whole (all pieces must be gathered — caller's precondition). A Fine-or-better /
+## sacred / nemuranai item requires an offering to the Fire kami (has_gift).
+static func apply_mending_forge(item: ArtisanItemData, has_gift: bool = false) -> Dictionary:
+	if item.condition == ArtisanItemData.ItemCondition.PRISTINE:
+		return {"applied": false, "reason": "not_damaged"}
+	var needs_gift: bool = item.quality_tier >= GiftGivingSystem.QualityTier.FINE \
+		or item.is_sacred_weapon or item.is_exceptional_weapon
+	if needs_gift and not has_gift:
+		return {"applied": false, "reason": "requires_offering"}
+	item.condition = ArtisanItemData.ItemCondition.PRISTINE
+	return {"applied": true, "reason": "restored"}
+
+## Elemental Crucible (Fire 1, s35): strip all elements save one — the item is left
+## brittle/ruined (loss of pliability, etc.). Renders a usable item DAMAGED.
+static func apply_elemental_crucible(item: ArtisanItemData) -> Dictionary:
+	if item.condition == ArtisanItemData.ItemCondition.DESTROYED:
+		return {"applied": false, "reason": "already_destroyed"}
+	item.condition = ArtisanItemData.ItemCondition.DAMAGED
+	return {"applied": true, "reason": "elements_stripped"}
+
+## Reforge (Void 5, s37): transform a single uniform object into another object of
+## comparable size. Permanent but reversible by a second casting (even by another
+## ishiken). Records the original name for reversal.
+static func apply_reforge(item: ArtisanItemData, new_object_name: String) -> Dictionary:
+	if item.transformed:
+		# Second casting reverses the transformation.
+		item.item_name = item.pre_transform_name
+		item.pre_transform_name = ""
+		item.transformed = false
+		return {"applied": true, "reason": "reverted"}
+	if new_object_name.is_empty():
+		return {"applied": false, "reason": "no_target_form"}
+	item.pre_transform_name = item.item_name
+	item.item_name = new_object_name
+	item.transformed = true
+	return {"applied": true, "reason": "transformed"}
+
+## Transmute (universal, Any non-Void 2, s32) / Flow Through the Void (Void 1, s36):
+## transform the Elements within an inanimate object into other elements. Marks the
+## item element-transmuted (the daisho and complex multi-element objects are immune —
+## caller's precondition per GDD GM notes). Permanent.
+static func apply_transmute_object(item: ArtisanItemData) -> Dictionary:
+	if item.transformed:
+		return {"applied": false, "reason": "already_transmuted"}
+	item.transformed = true
+	return {"applied": true, "reason": "elements_transmuted"}
+
+
+# -- Bespoke divinations (s33/s36; owner-authorized 2026-06-28) ----------------
+## PC/GM-facing knowledge effects (the future cast UI / a dedicated trigger invokes
+## them); no autonomous NPC trigger — the established "effect implemented, PC-cast"
+## pattern. PROVISIONAL where the world-sim proxy bends the canonical effect.
+
+## Funeral Rites (Air 4, s33): converse with a character dead within 24h (caller's
+## precondition: deceased recently dead + a relative co-located) → the caster learns
+## what the departed knew (their topic_pool). Returns {transferred: Array[int]}.
+static func apply_funeral_rites(caster: L5RCharacterData, deceased: L5RCharacterData,
+		ic_day: int) -> Dictionary:
+	var transferred: Array[int] = []
+	for tid: int in deceased.topic_pool:
+		if tid not in caster.topic_pool and tid not in transferred:
+			caster.topic_pool.append(tid)
+			transferred.append(tid)
+	InformationSystem.add_knowledge(caster, InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE, "departed_testimony",
+		{"deceased_id": deceased.character_id, "topic_ids": transferred}, ic_day / 90))
+	return {"transferred": transferred}
+
+## Reflections of Pan Ku (Water 1, s36): learn an object's powers and provenance.
+## Produces an item_provenance KnowledgeEntry from the crafted item's record.
+static func apply_reflections_of_pan_ku(caster: L5RCharacterData, item: ArtisanItemData,
+		ic_day: int) -> Dictionary:
+	var data: Dictionary = {
+		"item_id": item.item_id,
+		"item_name": item.item_name,
+		"quality_tier": item.quality_tier,
+		"creator_id": item.creator_id,
+		"creator_clan": item.creator_clan,
+		"creation_province_id": item.creation_province_id,
+		"is_sacred_weapon": item.is_sacred_weapon,
+		"is_exceptional_weapon": item.is_exceptional_weapon,
+		"special_qualities": item.special_qualities,
+		"history_points": item.history_points,
+	}
+	InformationSystem.add_knowledge(caster, InformationSystem.make_entry(
+		Enums.KnowledgeSource.INTELLIGENCE, "item_provenance", data, ic_day / 90))
+	return {"item_id": item.item_id}
+
+## Echoes on the Breeze (Air 5, s33): a two-way voice link across the Empire to a
+## known individual. PROVISIONAL world-sim proxy: a one-shot bidirectional exchange of
+## the topics each party knows (the conversation's content). Returns the swapped ids.
+static func apply_echoes_on_the_breeze(caster: L5RCharacterData, other: L5RCharacterData,
+		ic_day: int) -> Dictionary:
+	var to_caster: Array[int] = []
+	for tid: int in other.topic_pool:
+		if tid not in caster.topic_pool and tid not in to_caster:
+			to_caster.append(tid)
+	var to_other: Array[int] = []
+	for tid: int in caster.topic_pool:
+		if tid not in other.topic_pool and tid not in to_other:
+			to_other.append(tid)
+	for tid: int in to_caster:
+		caster.topic_pool.append(tid)
+	for tid: int in to_other:
+		other.topic_pool.append(tid)
+	var season: int = ic_day / 90
+	if not to_caster.is_empty():
+		InformationSystem.add_knowledge(caster, InformationSystem.make_entry(
+			Enums.KnowledgeSource.INTELLIGENCE, "voice_link_exchange",
+			{"partner_id": other.character_id, "topic_ids": to_caster}, season))
+	if not to_other.is_empty():
+		InformationSystem.add_knowledge(other, InformationSystem.make_entry(
+			Enums.KnowledgeSource.INTELLIGENCE, "voice_link_exchange",
+			{"partner_id": caster.character_id, "topic_ids": to_other}, season))
+	return {"to_caster": to_caster, "to_other": to_other}
+
+## Visions of the Future (Water 3, s36) / Water's Sweet Clarity (Water 6, s36):
+## accurate augury. PROVISIONAL world-sim proxy: surface ALREADY-PENDING crisis state
+## the caller supplies (incoming horde, active war/edict, province crisis) as a vision
+## — it reveals scheduled state, not invented future events. Returns {revealed}.
+static func apply_augury_vision(caster: L5RCharacterData, pending_topic_ids: Array,
+		ic_day: int) -> Dictionary:
+	var revealed: Array[int] = []
+	for tid: int in pending_topic_ids:
+		if tid not in caster.topic_pool and tid not in revealed:
+			caster.topic_pool.append(tid)
+			revealed.append(tid)
+	if not revealed.is_empty():
+		InformationSystem.add_knowledge(caster, InformationSystem.make_entry(
+			Enums.KnowledgeSource.INTELLIGENCE, "augury_vision",
+			{"topic_ids": revealed}, ic_day / 90))
+	return {"revealed": revealed}
 
 
 ## Realms that each binding spell can suppress per GDD s34.

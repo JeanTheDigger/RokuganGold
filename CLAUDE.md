@@ -7444,8 +7444,38 @@ Owner calls (2026-06-27): ① wire the 3 knowledge divinations; ② **travel spe
   prior "runtime verification" never hit a populated loop). Fixed all 3 sites to `TravelSystem.is_traveling(sc)`.
 - **Travel spells (②) remain deferred** by explicit owner decision (the sim tracks travel only in whole-province
   days; the GDD effects are sub-day movement rates → no faithful wiring without an invented travel-time value).
-- Forge spells (③) and oracle/summon (④) are the next tranches (owner Q&A pending on the item-damage source
-  and per-spell bespoke effects).
+- **Group ③ — forge/object spells (owner-authorized "add minimal item-condition model").** New
+  `ArtisanItemData.ItemCondition { PRISTINE, DAMAGED, DESTROYED }` + `condition`/`transformed`/`pre_transform_name`
+  fields. Six forge effect-appliers on SpellSystem (parallel to apply_healing/apply_taint_removal):
+  **apply_raging_forge** (Fire 1: DAMAGED→PRISTINE, ordinary quality only, refuses DESTROYED),
+  **apply_mending_forge** (Fire 4: DAMAGED/DESTROYED→PRISTINE; Fine+/sacred/exceptional require an offering gift),
+  **apply_elemental_crucible** (Fire 1: →DAMAGED, strips elements), **apply_reforge** (Void 5: transform object,
+  reversible — records pre_transform_name), **apply_transmute_object** (Transmute universal + Flow Through the
+  Void: element-transmute flag). All GDD-faithful, no invented values. Status: **effect implemented +
+  PC-cast-ready; repair spells dormant until a damage PRODUCER (sacking/combat) exists** — investigated and
+  confirmed NO live sacking trigger exists in the sim (even the art `survives_sacking` functions are never
+  invoked), so a producer was out of scope; this is the same accepted "wired but dormant" status as the art
+  sacking tables. Runtime-verified in the minimal-project driver: 10/10 (all condition transitions, quality/gift
+  gates, reforge transform+revert, transmute once-only).
+- **Group ④ — oracle/summon (owner-authorized "bespoke where feasible, document the rest").** Four bespoke
+  effect-appliers on SpellSystem (PC-cast-ready, no autonomous NPC trigger — the established "effect implemented,
+  PC-cast" pattern): **apply_funeral_rites** (Air 4: transfer a recently-dead character's topic_pool to the
+  caster + departed_testimony KnowledgeEntry — faithful), **apply_reflections_of_pan_ku** (Water 1: item
+  provenance KnowledgeEntry from ArtisanItemData — faithful), **apply_echoes_on_the_breeze** (Air 5: PROVISIONAL
+  proxy — one-shot bidirectional topic exchange between two known characters), **apply_augury_vision**
+  (Visions of the Future Water 3 + Water's Sweet Clarity Water 6: PROVISIONAL proxy — surfaces caller-supplied
+  ALREADY-PENDING crisis topics as a vision; reveals scheduled state, not invented future). Runtime-verified:
+  6/6. **Documented PC/GM-only, no autonomous NPC effect** (no world-sim consumer/subsystem exists, not
+  inventable): **summon**/**command** (raw-element creation — no resource/object model), **call_the_spirit**
+  (spirit summon — no world-sim consumer), **the_ties_that_bind** (object-location tracking — none modeled),
+  **witness_the_untold** (combat interrupt-on-delay — orchestrator has no interrupt mechanic),
+  **rites_of_preservation** (corpse anti-animation — blocked on s54 undead).
+- **Net result of the inert-tail audit:** of the original ~25 inert shugenja spells, 14 now have an implemented
+  effect (3 Group C fully NPC-wired + 6 forge + 4 Group ④ + the augury pair counts as 2 spells through 1
+  applier), 5 travel spells are owner-deferred, and 6 are documented PC/GM-only (no modelable consumer). A
+  full status table lives in `spell_system.gd` after `SPELL_LIBRARY`. LIMITATION: the forge + Group ④ appliers
+  are PC-cast-ready but have no autonomous NPC caster (the world-sim NPC layer never invokes them yet) — same
+  not-live-until-PC-UI caveat as the whole ASCII/PC-cast stack; the world-sim-live piece is Group C only.
 
 ### Spell coverage — 6 Ishiken/Void/utility spells (2026-06-27, owner-directed, mixed verification)
 A regex gap (`"i": true` Ishiken entries) had hidden 6 spells from earlier audits. All now wired:

@@ -14,6 +14,22 @@ extends Resource
 
 @export var quality_tier: GiftGivingSystem.QualityTier = GiftGivingSystem.QualityTier.NORMAL
 
+# -- Condition (s35/s37 forge spells; owner-authorized 2026-06-28) -------------
+## Minimal item-condition model so the Fire/Void forge spells have a real target.
+## DAMAGED = blemished/cracked/brittle (Raging Forge / Elemental Crucible).
+## DESTROYED = broken, pieces gathered (Mending Forge restores).
+## transformed = element/object changed by Transmute / Reforge / Flow Through the
+##   Void; pre_transform_name preserves the original for Reforge's reversibility.
+## NOTE: no live damage PRODUCER exists in the sim yet (the parallel art
+## survives_sacking functions are likewise never triggered), so the repair spells
+## are dormant until a sacking/combat producer is added — same "wired but dormant"
+## status as the art sacking tables.
+enum ItemCondition { PRISTINE, DAMAGED, DESTROYED }
+
+@export var condition: ItemCondition = ItemCondition.PRISTINE
+@export var transformed: bool = false
+@export var pre_transform_name: String = ""
+
 # -- Provenance (creation record) ---------------------------------------------
 
 @export var creator_id: int = -1
