@@ -28921,11 +28921,12 @@ static func _process_ritual_spell_writebacks(
 						entry.season_acquired = ic_day / 90
 						character.knowledge_pool.append(entry)
 			SpellSystem.SpellSimEffect.INFORMATION_GATHER:
-				# s33-s37 divination spells. Two sub-groups per SpellSystem constants:
+				# s33-s37 divination spells. Three sub-groups per SpellSystem constants:
 				#   Group A (INFORMATION_GATHER_GROUP_A): person-intelligence, co-located.
 				#   Group B (INFORMATION_GATHER_GROUP_B): remote location-scrying.
+				#   Group C (INFORMATION_GATHER_GROUP_C): overhear/track (s33/s34).
 				# All other INFORMATION_GATHER spells are not NPC-selectable (handled by
-				# get_best_npc_information_spell) so this path only fires for Group A/B.
+				# get_best_npc_information_spell) so this path only fires for Group A/B/C.
 				# familiarity tracking (reflective_pool, boundless_sight "familiar place"
 				# gate) not yet modeled — known gap (no visited_settlements on character).
 				if not success:
@@ -28935,6 +28936,76 @@ static func _process_ritual_spell_writebacks(
 					break
 				var div_target: L5RCharacterData = characters_by_id.get(div_target_id)
 				if div_target == null or CharacterStats.is_dead(div_target):
+					break
+				# Group C — newly wired divinations (owner-authorized 2026-06-27).
+				#   secrets_on_the_wind (Air 2): remote overhear → transfer topics
+				#     circulating among characters at the target's settlement.
+				#   master_clouds_eyes (Air 3): view through a CO-LOCATED creature's
+				#     eyes (LOS, sight-only) → location_intelligence, audio off.
+				#   whispers_of_the_land (Earth 2): reveal who is at the target's
+				#     location (current snapshot; GDD 3-day history not modeled).
+				if ritual_spell_id in SpellSystem.INFORMATION_GATHER_GROUP_C:
+					var c_loc: String = div_target.physical_location
+					if c_loc.is_empty():
+						break
+					# master_clouds_eyes requires the viewed creature within line of
+					# sight (co-located with the caster).
+					if ritual_spell_id == "master_clouds_eyes" and \
+							(character.physical_location.is_empty() or \
+							character.physical_location != c_loc):
+						break
+					if ritual_spell_id == "secrets_on_the_wind":
+						# Overhear: collect topics known by living, non-traveling
+						# characters present at the target settlement, transfer to caster.
+						var heard: Array[int] = []
+						for cid: int in characters_by_id:
+							if cid == char_id:
+								continue
+							var sc_w: L5RCharacterData = characters_by_id[cid]
+							if CharacterStats.is_dead(sc_w) or TravelSystem.is_traveling(sc_w):
+								continue
+							if sc_w.physical_location != c_loc:
+								continue
+							for tid: int in sc_w.topic_pool:
+								if tid not in character.topic_pool and tid not in heard:
+									heard.append(tid)
+						for tid: int in heard:
+							character.topic_pool.append(tid)
+						InformationSystem.update_intelligence_knowledge(
+							character,
+							InformationSystem.make_entry(
+								Enums.KnowledgeSource.INTELLIGENCE,
+								"overheard_topics",
+								{
+									"settlement_id": c_loc,
+									"topic_ids": heard,
+								},
+								ic_day / 90
+							)
+						)
+						break
+					# master_clouds_eyes / whispers_of_the_land → location_intelligence
+					var c_spotted: Array[int] = []
+					for cid: int in characters_by_id:
+						var sc_c: L5RCharacterData = characters_by_id[cid]
+						if CharacterStats.is_dead(sc_c) or TravelSystem.is_traveling(sc_c):
+							continue
+						if sc_c.physical_location == c_loc:
+							c_spotted.append(cid)
+					InformationSystem.update_intelligence_knowledge(
+						character,
+						InformationSystem.make_entry(
+							Enums.KnowledgeSource.INTELLIGENCE,
+							"location_intelligence",
+							{
+								"target_character_id": div_target_id,
+								"settlement_id": c_loc,
+								"spotted_characters": c_spotted,
+								"is_audio_enabled": false,
+							},
+							ic_day / 90
+						)
+					)
 					break
 				# Group B — remote location scrying
 				if ritual_spell_id in SpellSystem.INFORMATION_GATHER_GROUP_B:
@@ -28983,7 +29054,7 @@ static func _process_ritual_spell_writebacks(
 					var spotted: Array[int] = []
 					for cid: int in characters_by_id:
 						var sc: L5RCharacterData = characters_by_id[cid]
-						if CharacterStats.is_dead(sc) or sc.is_traveling:
+						if CharacterStats.is_dead(sc) or TravelSystem.is_traveling(sc):
 							continue
 						if sc.physical_location == target_loc:
 							spotted.append(cid)

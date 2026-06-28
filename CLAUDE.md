@@ -7412,6 +7412,71 @@ populating a foreign-speaker roster activates it). **With this, EVERY spell in t
 stealth-layer hook). The former 3-spell blocked set (Piercing the Heavens, Opening the Veil, Tenjin's Ear) is
 now wired via faithful PROVISIONAL calls flagged for owner override. No genuinely-unwired spell remains.
 
+### Spell coverage — inert-tail audit + Group ① knowledge divinations (2026-06-28, owner-directed, runtime-verified)
+A fresh code-grounded audit (not the changelog) of all 287 `SPELL_LIBRARY` entries found that the prior
+"EVERY spell is wired" claim was over-optimistic: ~25 spells were **cataloged with a `sim_effect` tag but had
+no handler** — their effect type has no router arm, no dedicated function, no combat effect, no UI consumer
+(they did nothing if cast). Buckets: TRANSMUTE_MATERIAL (transmute, elemental_crucible, reforge,
+the_mending_forge, the_raging_forge, flow_through_the_void), TRAVEL_AID (speed_of_the_waterfall,
+walking_upon_the_waves, steed_of_the_ebbing_tides, the_emperors_road, open_the_waves), SUMMON/COMMAND_KAMI
+(summon, command, call_the_spirit), PRESERVATION (rites_of_preservation), and INFORMATION_GATHER-outside-
+Group-A/B (secrets_on_the_wind, master_clouds_eyes, funeral_rites, reflections_of_pan_ku, the_ties_that_bind,
+visions_of_the_future, waters_sweet_clarity, whispers_of_the_land, witness_the_untold, echoes_on_the_breeze).
+Owner calls (2026-06-27): ① wire the 3 knowledge divinations; ② **travel spells stay DEFERRED** (explicit);
+③ forge spells get a minimal item-condition model; ④ oracle/summon bespoke-where-feasible, document the rest.
+- **Group ① — DONE + runtime-verified.** New `SpellSystem.INFORMATION_GATHER_GROUP_C`
+  (secrets_on_the_wind, master_clouds_eyes, whispers_of_the_land), included in
+  `get_best_npc_information_spell`, plus a Group C arm in `DayOrchestrator._process_ritual_spell_writebacks`.
+  **secrets_on_the_wind** (Air 2): remote overhear → transfers the topics circulating among living,
+  non-traveling characters present at the target's settlement into the caster's topic_pool + an
+  `overheard_topics` INTELLIGENCE KnowledgeEntry. **master_clouds_eyes** (Air 3): requires CO-LOCATION (LOS);
+  produces `location_intelligence` (spotted_characters, `is_audio_enabled: false`). **whispers_of_the_land**
+  (Earth 2): produces `location_intelligence` of who is at the target's location (current snapshot; the GDD
+  3-day track history is not modeled — no arrival log). All GDD-faithful, no invented values. Runtime-verified
+  in a minimal autoload-free copy: selection driver 9/9 (membership, C-only select, prefer-higher-ML-B,
+  empty case, s-tag); router driver 5/5 (secrets topic transfer + knowledge entry; master_clouds_eyes
+  co-location gate skip + co-located audio-off intel; whispers spotted-characters intel).
+- **Bug fixed (pre-existing, found by the Group ① driver): `sc.is_traveling` property access in the
+  INFORMATION_GATHER arm.** The existing Group B `spotted` loop (and my new Group C loops) used
+  `sc.is_traveling` — but `is_traveling` is NOT a property on L5RCharacterData; it is `TravelSystem.is_traveling(c)`.
+  A property access on the missing member raises "Invalid access" at runtime whenever the loop iterates a
+  present character, so the **existing Group B remote-scry location_intelligence was latently broken** (its
+  prior "runtime verification" never hit a populated loop). Fixed all 3 sites to `TravelSystem.is_traveling(sc)`.
+- **Travel spells (②) remain deferred** by explicit owner decision (the sim tracks travel only in whole-province
+  days; the GDD effects are sub-day movement rates → no faithful wiring without an invented travel-time value).
+- **Group ③ — forge/object spells (owner-authorized "add minimal item-condition model").** New
+  `ArtisanItemData.ItemCondition { PRISTINE, DAMAGED, DESTROYED }` + `condition`/`transformed`/`pre_transform_name`
+  fields. Six forge effect-appliers on SpellSystem (parallel to apply_healing/apply_taint_removal):
+  **apply_raging_forge** (Fire 1: DAMAGED→PRISTINE, ordinary quality only, refuses DESTROYED),
+  **apply_mending_forge** (Fire 4: DAMAGED/DESTROYED→PRISTINE; Fine+/sacred/exceptional require an offering gift),
+  **apply_elemental_crucible** (Fire 1: →DAMAGED, strips elements), **apply_reforge** (Void 5: transform object,
+  reversible — records pre_transform_name), **apply_transmute_object** (Transmute universal + Flow Through the
+  Void: element-transmute flag). All GDD-faithful, no invented values. Status: **effect implemented +
+  PC-cast-ready; repair spells dormant until a damage PRODUCER (sacking/combat) exists** — investigated and
+  confirmed NO live sacking trigger exists in the sim (even the art `survives_sacking` functions are never
+  invoked), so a producer was out of scope; this is the same accepted "wired but dormant" status as the art
+  sacking tables. Runtime-verified in the minimal-project driver: 10/10 (all condition transitions, quality/gift
+  gates, reforge transform+revert, transmute once-only).
+- **Group ④ — oracle/summon (owner-authorized "bespoke where feasible, document the rest").** Four bespoke
+  effect-appliers on SpellSystem (PC-cast-ready, no autonomous NPC trigger — the established "effect implemented,
+  PC-cast" pattern): **apply_funeral_rites** (Air 4: transfer a recently-dead character's topic_pool to the
+  caster + departed_testimony KnowledgeEntry — faithful), **apply_reflections_of_pan_ku** (Water 1: item
+  provenance KnowledgeEntry from ArtisanItemData — faithful), **apply_echoes_on_the_breeze** (Air 5: PROVISIONAL
+  proxy — one-shot bidirectional topic exchange between two known characters), **apply_augury_vision**
+  (Visions of the Future Water 3 + Water's Sweet Clarity Water 6: PROVISIONAL proxy — surfaces caller-supplied
+  ALREADY-PENDING crisis topics as a vision; reveals scheduled state, not invented future). Runtime-verified:
+  6/6. **Documented PC/GM-only, no autonomous NPC effect** (no world-sim consumer/subsystem exists, not
+  inventable): **summon**/**command** (raw-element creation — no resource/object model), **call_the_spirit**
+  (spirit summon — no world-sim consumer), **the_ties_that_bind** (object-location tracking — none modeled),
+  **witness_the_untold** (combat interrupt-on-delay — orchestrator has no interrupt mechanic),
+  **rites_of_preservation** (corpse anti-animation — blocked on s54 undead).
+- **Net result of the inert-tail audit:** of the original ~25 inert shugenja spells, 14 now have an implemented
+  effect (3 Group C fully NPC-wired + 6 forge + 4 Group ④ + the augury pair counts as 2 spells through 1
+  applier), 5 travel spells are owner-deferred, and 6 are documented PC/GM-only (no modelable consumer). A
+  full status table lives in `spell_system.gd` after `SPELL_LIBRARY`. LIMITATION: the forge + Group ④ appliers
+  are PC-cast-ready but have no autonomous NPC caster (the world-sim NPC layer never invokes them yet) — same
+  not-live-until-PC-UI caveat as the whole ASCII/PC-cast stack; the world-sim-live piece is Group C only.
+
 ### Spell coverage — 6 Ishiken/Void/utility spells (2026-06-27, owner-directed, mixed verification)
 A regex gap (`"i": true` Ishiken entries) had hidden 6 spells from earlier audits. All now wired:
 - **Kharmic Intent (Void 3)** — pool VP with a willing ally. New `pool_void` effect: `_apply_kharmic_intent`
