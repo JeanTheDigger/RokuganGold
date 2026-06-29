@@ -3368,7 +3368,12 @@ tatami (+4/DR1, no penalty); else → ashigaru (+3/DR1, no penalty). Iron (tetsu
 in the catalog but UNASSIGNED (heaviest Crab loadouts / Unicorn cavalry await owner rules).
 Idempotent: `generate_character._assign_armor` delegates to it at creation (status still 1.0 → most
 bushi ashigaru), and `WorldBootstrap` re-runs it after position/role status is finalized so the
-tiers apply. Verified: profile driver 10/10 (each tier + Hida-beats-status + non-bushi-always-bare +
+tiers apply. **Re-armor on promotion (2026-06-29):** a seasonal sweep in `DayOrchestrator.advance_day`
+(inside the `is_season_boundary` block, after promotions/strategic-reviews/appointments settle)
+re-runs `assign_by_profile` over all living characters, so a bushi promoted/appointed/succeeded across
+a loadout tier (or whose accumulated Status crossed 2.0/4.0) upgrades or downgrades their worn armor
+to match — idempotent, dead-skipped, non-bushi stay bare. Runtime-verified: a Toritaka bushi bumped
+to status 4.0 upgrades ashigaru→light through the sweep on a real bootstrapped world. Verified: profile driver 10/10 (each tier + Hida-beats-status + non-bushi-always-bare +
 idempotent); full bootstrapped world (3815 living chars) → bushi 2072 = heavy 113 / light 121 /
 tatami 691 / ashigaru 1147, non-bushi 1743 all unarmored, ZERO non-bushi armored. Catalog/penalty
 verified 20/20 (catalog stats, equip mirroring, get_armor_tn +10, all four penalty rules, end-to-end

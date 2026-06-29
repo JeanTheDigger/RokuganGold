@@ -1794,6 +1794,14 @@ static func advance_day(
 			characters, characters_by_id, pending_letters, active_topics,
 			next_topic_id, ic_day,
 		)
+		# Re-sync the PROVISIONAL armor loadout to current status (s40). Promotions (applied
+		# earlier this day), governor appointments, successions, and accumulated Status changes
+		# can move a bushi across a loadout tier (>= 4.0 light / >= 2.0 tatami / else ashigaru;
+		# Hida -> heavy). ArmorSystem.assign_by_profile is idempotent, so this seasonal sweep
+		# upgrades/downgrades worn armor to match; non-bushi stay unarmored. Dead skipped.
+		for _ac: L5RCharacterData in characters:
+			if not CharacterStats.is_dead(_ac):
+				ArmorSystem.assign_by_profile(_ac)
 
 	# s57.57 Path A: daily fugitive sighting via co-location
 	_process_fugitive_sighting_colocation(
