@@ -13,8 +13,12 @@ class_name SkillMasterySystem
 ##   • Courtier/Etiquette R3 (+3 Insight) / R7 (+7 Insight total) — the ONLY two skills with
 ##     Insight masteries (s24 lines 57, 67).
 ##
+## WIRED HERE (Spell Casting Roll bonus, via SpellSystem.resolve_cast):
+##   • Spellcraft R5 (+1k0 on Spell Casting Rolls, s24 line 153). NOTE the casting roll is
+##     Ring + School Rank — NOT a Spellcraft skill roll — so the universal R10 Free Raise does
+##     NOT apply to it (R10 covers actual Spellcraft skill rolls via SkillResolver).
+##
 ## DEFERRED (each needs a different consumer; values all LOCKED in s24):
-##   • Casting — Spellcraft R5 (+1k0 Spell Casting Rolls) → SpellSystem.resolve_cast.
 ##   • TN reduction — Acting R3/5/7 (disguise TN −5/−10/−15) → disguise creation consumer.
 ##   • VP/recovery — Meditation R3/5/7, Divination R5 (Tea Ceremony R5 + Medicine R5 already wired).
 ##   • Conditional roll — Hunting R5 (+1k0 Stealth in wilderness) → needs a wilderness context flag.
@@ -87,3 +91,10 @@ static func total_insight_bonus(character: L5RCharacterData) -> int:
 	for skill: String in character.skills.keys():
 		total += insight_bonus(skill, int(character.skills[skill]))
 	return total
+
+
+# Spellcraft R5 mastery: extra ROLLED dice (+1k0) on Spell Casting Rolls (s24 line 153).
+# Applies to the cast roll (Ring + School Rank), which is NOT a Spellcraft skill roll, so the
+# universal R10 Free Raise is deliberately excluded here.
+static func spellcraft_casting_rolled_bonus(character: L5RCharacterData) -> int:
+	return 1 if int(character.skills.get("Spellcraft", 0)) >= MASTERY_RANK_5 else 0

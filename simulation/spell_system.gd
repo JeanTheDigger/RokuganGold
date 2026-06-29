@@ -1669,7 +1669,10 @@ static func resolve_cast(character: L5RCharacterData, spell_id: String,
 	# applied by the orchestrator when a spell is cast AT a warded character. Floors at 1k1.
 	# roll_penalty: −XkX (rolled AND kept), s34 The Kami's Will. rolled_only_penalty: −Nk0 (rolled
 	# only), s35 Essence of Fire (a spell cast at a warded duelist loses N rolled dice, same kept).
-	var roll_dice: int = maxi(1, ring_val + eff_rank - roll_penalty - rolled_only_penalty)
+	# s24 Spellcraft R5 mastery: +1k0 on Spell Casting Rolls (extra rolled die; can still be
+	# eaten by a strong −XkX ward penalty, the correct interaction).
+	var spellcraft_rolled: int = SkillMasterySystem.spellcraft_casting_rolled_bonus(character)
+	var roll_dice: int = maxi(1, ring_val + eff_rank + spellcraft_rolled - roll_penalty - rolled_only_penalty)
 	var keep_dice: int = maxi(1, ring_val - roll_penalty)
 	var wound_pen: int = CharacterStats.get_wound_penalty(character)
 	# Slot consumed on attempt regardless of outcome

@@ -3320,7 +3320,15 @@ All 135 files in `/simulation/` audited against GDD. Summary:
 
 ### s24 Skill Mastery Abilities + Insight wiring (2026-06-29, runtime-verified)
 `simulation/skill_mastery_system.gd` (SkillMasterySystem, pure class) is the s24 home for the
-roll/insight-applicable Mastery Abilities. **Two tranches:**
+roll/insight-applicable Mastery Abilities. **Three tranches:**
+- **Spellcraft R5 casting mastery (this tranche, 5/5 verified):** +1k0 on Spell Casting Rolls
+  (s24 line 153). `SkillMasterySystem.spellcraft_casting_rolled_bonus(character)` (+1 rolled die
+  at Spellcraft rank 5) folded into `SpellSystem.resolve_cast`'s `roll_dice` (before the maxi(1)
+  floor + the ward `−XkX` penalties, so a strong ward can still eat it — the correct interaction).
+  Deliberately NOT given the universal R10 Free Raise: the Spell Casting Roll is Ring + School Rank,
+  NOT a Spellcraft skill roll, so R10 applies only to actual Spellcraft skill rolls (already covered
+  by the SkillResolver universal wiring). Verified: Spellcraft-5 casting total mean 28.3 vs the
+  Spellcraft-4 baseline 26.6.
 - **Roll-applicable masteries (prior tranche, commit fe2a6dc, 16/16 verified):** universal
   Rank-10 (+1 Free Raise on ALL rolls with the skill) + the Rank-5 contested-roll masteries
   (Courtier/Etiquette +1k0; Sincerity/Investigation/Intimidation/Temptation +5). Folded into
