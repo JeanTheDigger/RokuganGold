@@ -27,11 +27,18 @@ class_name SkillMasterySystem
 ##
 ## WIRED HERE (Bugei combat masteries, s24.2, via IndividualCombat resolve hooks):
 ##   • Kenjutsu R3 (+1k0 sword damage) / R7 (explode on 9-10); Jiujutsu R3 (+1k0 unarmed) /
-##     R7 (+0k1); Heavy Weapons R7 (explode on 9-10) → resolve_damage.
+##     R7 (+0k1); Heavy Weapons R7 (explode on 9-10); Kyujutsu R7 (Bow Strength +1 → +1 die)
+##     → resolve_damage.
 ##   • Defense R5 (Armor TN +3 in Defense/Full Defense); War Fan R5/R7 (Armor TN +1/+3) → get_armor_tn.
 ##   • Battle R5 (Battle Rank to Initiative in skirmishes) → roll_initiative.
-##   The damage/explode/War-Fan masteries fire in NPC summary combat (duels, bodyguard fights,
-##   hunts); Defense-stance and Battle-initiative fire in the turn-based orchestrator.
+##   • Heavy Weapons R3 (opponent Reduction −2) / Spears R3 (−3 first round) → total_defender_reduction.
+##   • Heavy Weapons R5 (Free Raise toward Knockdown) / Knives R5 (toward Disarm) → orchestrator
+##     maneuver resolution.
+##   The damage/explode/War-Fan/reduction masteries fire in NPC summary combat (duels, bodyguard
+##   fights, hunts); Defense-stance, Battle-initiative, and the maneuver free-raises fire in the
+##   turn-based orchestrator. NOTE only Kenjutsu/Knives/Heavy Weapons/Polearms/Kyujutsu/War Fan/
+##   Jiujutsu/Bo have catalog weapons — Spears/Chain/Staves masteries are correct but inert (no
+##   weapon to wield; the staff weapon uses skill "Bo", not "Staves").
 ##
 ## DEFERRED (each needs a different consumer; values all LOCKED in s24):
 ##   • TN reduction — Acting R3/5/7 (disguise TN −5/−10/−15) → disguise creation consumer.
@@ -145,7 +152,33 @@ static func weapon_damage_bonus(weapon_skill: String, rank: int) -> Dictionary:
 				rolled += 1
 			if rank >= MASTERY_RANK_7:
 				kept += 1
+		"Kyujutsu":
+			# R7: Bow Strength +1 → +1 rolled damage die (s24 line 407).
+			if rank >= MASTERY_RANK_7:
+				rolled += 1
 	return {"rolled": rolled, "kept": kept}
+
+
+# Free Raises a weapon-skill mastery grants toward a specific COMBAT MANEUVER (s24.2).
+#   "disarm":       Knives R5 (s24 line 411).
+#   "knockdown":    Heavy Weapons R5 (s24 line 403).
+#   "grapple":      Jiujutsu R5 (s24 line 387).
+#   "extra_attack": Knives R7 (s24 line 411).
+static func maneuver_free_raises(weapon_skill: String, rank: int, maneuver: String) -> int:
+	match maneuver:
+		"disarm":
+			if weapon_skill == "Knives" and rank >= MASTERY_RANK_5:
+				return 1
+		"knockdown":
+			if weapon_skill == "Heavy Weapons" and rank >= MASTERY_RANK_5:
+				return 1
+		"grapple":
+			if weapon_skill == "Jiujutsu" and rank >= MASTERY_RANK_5:
+				return 1
+		"extra_attack":
+			if weapon_skill == "Knives" and rank >= MASTERY_RANK_7:
+				return 1
+	return 0
 
 
 # True if the weapon skill's damage dice explode on 9 (and 10) at this rank.

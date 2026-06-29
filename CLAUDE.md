@@ -3333,10 +3333,21 @@ roll/insight-applicable Mastery Abilities. **Five tranches:**
   damage/explode/War-Fan masteries fire in NPC **summary combat** (live: duels, assassination
   bodyguard fights, hunts — verified katana mean 20.3→21.3→26.2 across Ken2/3/7, unarmed
   10.6→11.4→19.0 across Jiu2/3/7); Defense-stance (+3 over R4's base, =+4 total: +1 base rank +3
-  mastery) and Battle-initiative (+5 mean delta) fire in the turn-based orchestrator. Bugei tranche 2
-  (action-economy / movement / maneuver: Ready-as-Free-Action, terrain movement, mount actions,
-  Grapple/Knockdown/Disarm free raises, reduction-pierce, Iaijutsu duel Focus) deferred — mostly
-  turn-based orchestrator effects on the PC-travel HOLD.
+  mastery) and Battle-initiative (+5 mean delta) fire in the turn-based orchestrator.
+  **Bugei tranche 2 (reduction-pierce + ranged + maneuvers — 18/18 verified, owner authorized
+  treating ASCII combat as accessible):** Heavy Weapons R3 (opponent Reduction −2, any round) +
+  Spears R3 (−3 first round) → `total_defender_reduction` (gains an `is_first_round` flag; Heavy
+  is live via tetsubo, Spears inert — no Spears weapon); Kyujutsu R7 (Bow Strength +1 → +1 damage
+  die, yumi, verified 12.2→15.3) → resolve_damage; Heavy Weapons R5 (Free Raise toward Knockdown,
+  +5 to the attacker roll) + Knives R5 (toward Disarm) → orchestrator maneuver resolution.
+  **Catalog limit:** only Kenjutsu/Knives/Heavy Weapons/Polearms/Kyujutsu/War Fan/Jiujutsu/Bo have
+  weapons, so Spears/Chain/Staves masteries are correct-but-inert (the staff weapon's skill is "Bo",
+  not "Staves"). Jiujutsu-R5-grapple / Knives-R7-extra-attack helpers exist but aren't wired into
+  their maneuver sites yet (forward-wired). **Bugei tranche 3 (still deferred):** terrain-aware
+  movement (Athletics R3/R5, Stealth — needs character-aware pathfinding cost), mount actions
+  (Horsemanship — no full mount system), Ready-as-Free-Action (weapons start ready — no draw action
+  modeled), off-hand-penalty removal (Knives/War Fan R3), Defense R7 (Simple action in Full Defense),
+  Iaijutsu R5/R7 (duel Focus stage), Polearms R3/R5, and Athletics R7 (+1 tile/Round move budget).
 - **Meditation VP-recovery cap (9/9 verified):** Meditation R3 restores up to 2 VP,
   R7 up to 3 VP per meditation session (base 1; s24 line 145). Was already functionally correct,
   hardcoded in `ActionExecutor._execute_meditate` (predates SkillMasterySystem); centralized into

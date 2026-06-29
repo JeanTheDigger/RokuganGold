@@ -1424,8 +1424,11 @@ static func execute_melee_attack(
 			# s34 The Mountain's Feet: defender's knockdown_resist buff adds extra rolled/kept dice.
 			var kdr_r: int = IndividualCombat.get_timed_modifier_total(t_p, "knockdown_resist_rolled")
 			var kdr_k: int = IndividualCombat.get_timed_modifier_total(t_p, "knockdown_resist_kept")
+			# s24 Heavy Weapons R5: Free Raise toward Knockdown (+5 to the attacker's roll).
+			var atk_skill_kd: String = IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")
+			var kd_mastery_fr: int = SkillMasterySystem.maneuver_free_raises(atk_skill_kd, int(attacker.skills.get(atk_skill_kd, 0)), "knockdown")
 			var kd: Dictionary = IndividualCombat.resolve_knockdown(
-				attacker, target, maneuver == "knockdown_quad", dice_engine, 0, kdr_r, kdr_k
+				attacker, target, maneuver == "knockdown_quad", dice_engine, kd_mastery_fr * 5, kdr_r, kdr_k
 			)
 			# Root the Mountain (s38 Earth): forcing the caster to move requires the
 			# attacker to also win a Contested Earth Roll, or the knockdown is negated.
@@ -1447,6 +1450,9 @@ static func execute_melee_attack(
 			if a_p.disarm_free_raises_pending > 0:
 				result["disarm_free_raises_used"] = a_p.disarm_free_raises_pending
 				a_p.disarm_free_raises_pending = 0
+			# s24 Knives R5: Free Raise toward Disarm (sai/jitte).
+			var atk_skill_dis: String = IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")
+			disarm_free += SkillMasterySystem.maneuver_free_raises(atk_skill_dis, int(attacker.skills.get(atk_skill_dis, 0)), "disarm")
 			if raises + disarm_free >= DISARM_RAISES:
 				var dr: Dictionary = IndividualCombat.resolve_disarm(attacker, target, dice_engine, weapon_name, a_p)
 				result["disarmed"] = dr["disarmed"]
