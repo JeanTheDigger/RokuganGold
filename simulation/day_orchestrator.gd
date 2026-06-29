@@ -1248,6 +1248,14 @@ static func advance_day(
 		crime_records,
 	)
 
+	# s11.11 Phase 5: resolve NPC insurgency-suppression commitments (reduces
+	# Strength; defeated insurgencies are removed by the seasonal pass).
+	_process_insurgency_suppression(
+		day_result.get("results", []),
+		insurgencies, characters_by_id, provinces, settlements,
+		active_topics, next_topic_id, ic_day, dice_engine, death_events,
+	)
+
 	_process_intercept_letter_writebacks(
 		day_result.get("results", []),
 		pending_letters, characters_by_id, current_season, dice_engine,
@@ -12995,6 +13003,198 @@ static func _decay_all_historical_modifiers(
 						continue
 					var days_elapsed: int = ic_day - created_day
 					DispositionSystem.decay_historical_modifier(mod, days_elapsed)
+
+
+# -- Insurgency Suppression Writeback (s11.11 Phase 5, daily) -----------------
+# Resolves NPC SUPPRESS_INSURGENCY commitments. The executor rolled each
+# participant's type-specific formula; here we batch same-day committers per
+# insurgency (coordinated suppression with the leader bonus), call
+# resolve_coordinated_suppression to reduce Strength, and apply the GDD
+# consequences (Stability gain on suppression, Peasant Revolt PU loss, the
+# "ineffective" topic on a wholly-failed attempt, and the Down critical-failure
+# survival roll). _process_insurgencies (seasonal) removes a Strength-0
+# insurgency and resolves its crisis topic.
+#
+# LIMITATION: the graded crit-fail injury penalties (Nicked/Hurt/Crippled,
+# -3/-10/-20 for N seasons, s11.11 line 107) need a timed-skill-penalty layer
+# that does not exist; only the Strength +1 (in resolve_coordinated_suppression)
+# and the Down→death outcome are modelled. The dedicated military-PU commit (a
+# lord committing the garrison so the unit commander rolls instead of a named
+# character) is also deferred — every present named character suppresses
+# personally this pass.
+static func _process_insurgency_suppression(
+	results: Array,
+	insurgencies: Array,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	dice: DiceEngine,
+	death_events: Array,
+) -> Array:
+	var out: Array = []
+	var by_ins: Dictionary = {}
+	for r: Variant in results:
+		if not (r is Dictionary):
+			continue
+		if r.get("action_id", "") != "SUPPRESS_INSURGENCY":
+			continue
+		var eff: Dictionary = r.get("effects", {})
+		if not eff.get("requires_insurgency_suppression", false):
+			continue
+		var iid: int = int(eff.get("target_insurgency_id", -1))
+		if iid < 0:
+			continue
+		if not by_ins.has(iid):
+			by_ins[iid] = []
+		by_ins[iid].append({
+			"cid": int(r.get("character_id", -1)),
+			"roll": int(eff.get("suppression_roll_total", 0)),
+			"is_shugenja": bool(eff.get("is_shugenja", false)),
+			"leader_cap": int(eff.get("leader_capability", 0)),
+		})
+
+	var ins_by_id: Dictionary = {}
+	for ins_v: Variant in insurgencies:
+		if ins_v is InsurgencyData:
+			ins_by_id[ins_v.insurgency_id] = ins_v
+
+	for iid_v: Variant in by_ins.keys():
+		var iid2: int = iid_v
+		var ins: InsurgencyData = ins_by_id.get(iid2, null)
+		if ins == null or ins.strength <= 0:
+			continue
+		var participants: Array = by_ins[iid2]
+		var has_shugenja: bool = false
+		var leader: Dictionary = {}
+		for p: Dictionary in participants:
+			if p["is_shugenja"]:
+				has_shugenja = true
+			if leader.is_empty() or int(p["leader_cap"]) > int(leader["leader_cap"]):
+				leader = p
+		# Leader rolls Battle/Perception once; the total is a flat bonus to every
+		# participant's roll (s11.11 LEADER BONUS).
+		var leader_bonus: int = 0
+		var leader_char: L5RCharacterData = characters_by_id.get(int(leader.get("cid", -1)), null)
+		if leader_char != null:
+			var lb_rolled: int = int(leader_char.skills.get("Battle", 0)) + leader_char.perception
+			leader_bonus = dice.roll_and_keep(
+				maxi(1, lb_rolled), maxi(1, leader_char.perception), true
+			).total
+		var tn: int = InsurgencySystem.get_suppression_tn(ins)
+		var rolls: Array = []
+		for p: Dictionary in participants:
+			rolls.append(int(p["roll"]))
+		var res: Dictionary = InsurgencySystem.resolve_coordinated_suppression(
+			ins, rolls, has_shugenja, leader_bonus
+		)
+		var prov: ProvinceData = provinces.get(ins.province_id, null)
+		# Suppressed → Stability +5 (s11.11 line 101).
+		if res.get("suppressed", false) and prov != null:
+			prov.stability = clampf(prov.stability + 5.0, 0.0, 100.0)
+		# Peasant Revolt → civilian PU loss per successful/partial action (line 147).
+		if ins.insurgency_type == Enums.InsurgencyType.PEASANT_REVOLT and prov != null:
+			var effective_actions: int = 0
+			for o: Variant in res.get("outcomes", []):
+				if o == "success" or o == "partial":
+					effective_actions += 1
+			if effective_actions > 0:
+				_apply_revolt_pu_loss(
+					prov, settlements, float(ins.strength) * 0.1 * float(effective_actions)
+				)
+		# Per-participant critical failure: Down→survival roll, else death (line 107).
+		for p: Dictionary in participants:
+			if int(p["roll"]) + leader_bonus <= tn - InsurgencySystem.CRITICAL_FAIL_MARGIN:
+				_apply_suppression_critical_injury(
+					characters_by_id.get(int(p["cid"]), null), dice, death_events
+				)
+		# No reduction at all → "ineffective" Tier 4 topic (line 105).
+		if int(res.get("strength_change", 0)) >= 0:
+			_create_ineffective_suppression_topic(
+				participants, ins, characters_by_id, active_topics, next_topic_id, ic_day
+			)
+		out.append({
+			"insurgency_id": iid2,
+			"strength_change": int(res.get("strength_change", 0)),
+			"suppressed": res.get("suppressed", false),
+			"participants": participants.size(),
+		})
+	return out
+
+
+static func _apply_revolt_pu_loss(
+	prov: ProvinceData, settlements: Array, pu_loss: float
+) -> void:
+	if pu_loss <= 0.0:
+		return
+	# Reduce the largest settlement's population in the affected province.
+	var largest: SettlementData = null
+	for s_v: Variant in settlements:
+		if not (s_v is SettlementData):
+			continue
+		var s: SettlementData = s_v
+		if s.province_id != prov.province_id:
+			continue
+		if largest == null or s.population_pu > largest.population_pu:
+			largest = s
+	if largest != null:
+		largest.population_pu = maxi(0, largest.population_pu - int(round(pu_loss)))
+
+
+static func _apply_suppression_critical_injury(
+	character: L5RCharacterData, dice: DiceEngine, death_events: Array
+) -> void:
+	if character == null or CharacterStats.is_dead(character):
+		return
+	# Wound Severity table (s11.11 line 107): 1k1. Only the Down (10) outcome is
+	# mechanically modelled here — incapacitated, Earth roll TN 20 to survive.
+	if dice.roll_die(10) < 10:
+		return
+	var earth: int = CharacterStats.get_earth_ring(character)
+	if dice.roll_and_keep(maxi(1, earth), maxi(1, earth), true).total >= 20:
+		return
+	character.wounds_taken = CharacterStats.get_total_wound_capacity(character) + 1
+	death_events.append({
+		"character_id": character.character_id,
+		"is_lord": character.role_position != "",
+		"suspicious_death": false,
+		"killer_id": -1,
+		"cause": "insurgency_suppression",
+	})
+
+
+static func _create_ineffective_suppression_topic(
+	participants: Array,
+	ins: InsurgencyData,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	if participants.is_empty():
+		return
+	var subject_id: int = int(participants[0].get("cid", -1))
+	var subject: L5RCharacterData = characters_by_id.get(subject_id, null)
+	if subject == null or CharacterStats.is_dead(subject):
+		return
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = "ineffective_suppression_char%d_ins%d_d%d" % [subject_id, ins.insurgency_id, ic_day]
+	topic.title = "Ineffective Suppression by %s" % subject.character_name
+	topic.topic_type = "ineffective_suppression"
+	topic.variant = "INEFFECTIVE_SUPPRESSION"
+	topic.tier = TopicData.Tier.TIER_4
+	topic.category = TopicData.Category.POLITICAL
+	topic.subject_character_id = subject_id
+	topic.subject_role = "NEGATIVE"
+	topic.ic_day_created = ic_day
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+	active_topics.append(topic)
+	if subject_id >= 0 and not subject.topic_pool.has(topic.topic_id):
+		subject.topic_pool.append(topic.topic_id)
 
 
 # -- Insurgency Processing (s11.11, season boundary) --------------------------

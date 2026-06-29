@@ -190,6 +190,41 @@ static func execute(
 			},
 		}
 
+	# Insurgency suppression (s11.11 Phase 5). The acting character rolls the
+	# type-specific suppression formula here; the actual Strength reduction,
+	# coordinated leader bonus, and consequences resolve in the orchestrator
+	# writeback (which holds the InsurgencyData + all same-day participants).
+	# Strength is hidden (blind roll per GDD) — the roll total carries forward and
+	# is compared to TN in the writeback.
+	if action_id == "SUPPRESS_INSURGENCY":
+		var s_iid: int = int(action.metadata.get("insurgency_id", -1))
+		var s_itype: String = action.metadata.get("insurgency_type", "")
+		if s_iid < 0:
+			return {
+				"success": false, "action_id": action_id,
+				"character_id": ctx.character_id,
+				"target_npc_id": -1, "target_province_id": action.target_province_id,
+				"ic_day": ctx.ic_day, "season": ctx.season,
+				"reason": "no_detected_insurgency", "effects": {"failed": true},
+			}
+		var s_roll: int = _roll_insurgency_suppression(character, s_itype, dice_engine)
+		var s_is_shug: bool = character.school_type == Enums.SchoolType.SHUGENJA
+		var s_leader_cap: int = int(character.skills.get("Battle", 0)) + character.perception
+		return {
+			"success": true, "action_id": action_id,
+			"character_id": ctx.character_id,
+			"target_npc_id": -1, "target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {
+				"requires_insurgency_suppression": true,
+				"target_insurgency_id": s_iid,
+				"insurgency_type": s_itype,
+				"suppression_roll_total": s_roll,
+				"is_shugenja": s_is_shug,
+				"leader_capability": s_leader_cap,
+			},
+		}
+
 	if action_id == "DELIVER_GIFT":
 		var gift_result: Dictionary = _try_execute_deliver_gift(
 			action, character, ctx, dice_engine, characters_by_id
@@ -1935,6 +1970,57 @@ static func _compute_allied_aid_effects(
 		"promise_debtor_id": target_id,
 		"is_crisis_request": true,
 	}
+
+
+# s11.11 Phase 5 suppression formulas. Each keeps by the GDD-specified stat (not
+# the skill's trait), so the roll is built directly rather than via SkillResolver.
+# All add (Insight Rank × 3). Strength/TN are unknown to the roller (blind roll).
+const _BUGEI_SKILLS: Array[String] = [
+	"Athletics", "Battle", "Defense", "Horsemanship", "Hunting", "Iaijutsu",
+	"Jiujutsu", "Kenjutsu", "Kyujutsu", "Spears", "Polearms", "Heavy Weapons",
+	"Knives", "War Fan", "Chain Weapons", "Staves", "Ninjutsu",
+]
+
+static func _roll_insurgency_suppression(
+	character: L5RCharacterData,
+	itype: String,
+	dice_engine: DiceEngine,
+) -> int:
+	var insight: int = CharacterStats.get_insight_rank(character)
+	var flat: int = insight * 3
+	var rolled: int = 0
+	var kept: int = 0
+	match itype:
+		"MAHO_CULT", "URBAN_CRIMINAL_NETWORK":
+			# Investigation: (Investigation + Perception) k Awareness. Maho: Lore:
+			# Shadowlands may substitute for Investigation; shugenja gain +5.
+			var inv: int = int(character.skills.get("Investigation", 0))
+			if itype == "MAHO_CULT":
+				inv = maxi(inv, int(character.skills.get("Lore: Shadowlands", 0)))
+				if character.school_type == Enums.SchoolType.SHUGENJA:
+					flat += 5
+			rolled = inv + character.perception
+			kept = character.awareness
+		"TAINT_MANIFESTATION":
+			# Spiritual: (Lore: Shadowlands or Theology + Intelligence) k Void.
+			var lore: int = maxi(
+				int(character.skills.get("Lore: Shadowlands", 0)),
+				int(character.skills.get("Lore: Theology", 0)),
+			)
+			rolled = lore + character.intelligence
+			kept = character.void_ring
+		_:
+			# Combat (Ronin Bandit, Peasant Revolt, Nezumi): (Highest Bugei +
+			# Agility) k Earth.
+			var best_bugei: int = 0
+			for sk: String in _BUGEI_SKILLS:
+				var r: int = int(character.skills.get(sk, 0))
+				if r > best_bugei:
+					best_bugei = r
+			rolled = best_bugei + character.agility
+			kept = CharacterStats.get_earth_ring(character)
+	var result: DiceResult = dice_engine.roll_and_keep(maxi(1, rolled), maxi(1, kept), true)
+	return result.total + flat
 
 
 static func _compute_admin_effects(action_id: String, action: NPCDataStructures.ScoredAction = null) -> Dictionary:

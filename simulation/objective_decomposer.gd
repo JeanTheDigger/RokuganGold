@@ -1078,7 +1078,17 @@ static func _decompose_eliminate_shadowlands(
 		if ps is NPCDataStructures.ProvinceStatus:
 			var p: NPCDataStructures.ProvinceStatus = ps as NPCDataStructures.ProvinceStatus
 			if p.active_insurgency_id >= 0:
-				return _make_need("INVESTIGATE_THREAT", 3, {"target_province_id": p.province_id})
+				# Once DETECTED (Phase 3 done), shift from investigation to
+				# suppression (s11.11 Phase 5): route to the NeedType whose
+				# alignment surfaces SUPPRESS_INSURGENCY. The Phase-4c precondition
+				# gate strips it when the actor is not co-located, falling back to
+				# investigation. Supernatural cults route via MANAGE_TAINT
+				# (shugenja-favoured); undetected still investigates.
+				if not p.insurgency_detected:
+					return _make_need("INVESTIGATE_THREAT", 3, {"target_province_id": p.province_id})
+				if p.insurgency_type == "MAHO_CULT" or p.insurgency_type == "TAINT_MANIFESTATION":
+					return _make_need("MANAGE_TAINT", 3, {"target_province_id": p.province_id})
+				return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": p.province_id})
 
 	# Step 3: Jigoku bleed event topics
 	if not ctx.taint_topic_province_ids.is_empty():

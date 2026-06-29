@@ -254,6 +254,7 @@ class ProvinceStatus:
 	var active_crisis_id: int = -1
 	var active_insurgency_id: int = -1
 	var insurgency_type: String = ""
+	var insurgency_detected: bool = false
 	var rice_stockpile: float = 0.0
 	var starvation_stage: int = 0
 	var last_report_ic_day: int = -1

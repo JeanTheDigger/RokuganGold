@@ -905,6 +905,52 @@ static func _apply_taint_examination_precondition_filter(
 	return _remove_action(options, "EXAMINE_FOR_TAINT")
 
 
+# -- Phase 4c: SUPPRESS_INSURGENCY Precondition Filter (s11.11 Phase 5) -------
+# Removes SUPPRESS_INSURGENCY unless the actor is co-located with a DETECTED
+# insurgency. Suppression requires being physically present in the affected
+# province (GDD: a character is committed "to the province for one season"),
+# and only a detected insurgency can be suppressed (Phase 3 precedes Phase 5).
+# A non-co-located or undetected case falls through to INVESTIGATE/PATROL/travel.
+
+static func _apply_suppress_insurgency_precondition_filter(
+	options: Array,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "SUPPRESS_INSURGENCY":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	var ins_meta: Dictionary = _pick_co_located_detected_insurgency(ctx)
+	if int(ins_meta.get("insurgency_id", -1)) >= 0:
+		return options
+	return _remove_action(options, "SUPPRESS_INSURGENCY")
+
+
+# Returns {insurgency_id, insurgency_type, province_id} for the actor's
+# co-located DETECTED insurgency, or {} if none. The co-located insurgency id is
+# injected as ctx.active_insurgency_id (the province the actor stands in); the
+# matching ProvinceStatus carries its detected flag and type.
+static func _pick_co_located_detected_insurgency(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	var iid: int = ctx.active_insurgency_id
+	if iid < 0:
+		return {}
+	for ps_var: Variant in ctx.province_statuses:
+		if ps_var is NPCDataStructures.ProvinceStatus:
+			var ps: NPCDataStructures.ProvinceStatus = ps_var
+			if ps.active_insurgency_id == iid and ps.insurgency_detected:
+				return {
+					"insurgency_id": iid,
+					"insurgency_type": ps.insurgency_type,
+					"province_id": ps.province_id,
+				}
+	return {}
+
+
 # -- Phase 4c: CAST_WORLD_IS_TRUTH Precondition Filter (s54.7/s33) ------------
 # CAST_WORLD_IS_TRUTH shares the CONDITION_SLEEPER NeedType with CONDUCT_CONDITIONING
 # (both score 100; competence/Spellcraft breaks the tie). But the magical install needs a
@@ -1307,6 +1353,7 @@ static func run(
 	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
 	options = _apply_terminate_contract_precondition_filter(options, world_state)
 	options = _apply_taint_examination_precondition_filter(options, world_state)
+	options = _apply_suppress_insurgency_precondition_filter(options, ctx)
 	options = _apply_petition_precondition_filter(options, world_state)
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
@@ -1611,6 +1658,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PERFORM_RITUAL", "PERFORM_WORSHIP",
 				"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE",
 				"INVESTIGATE_RUMOR", "ORDER_PATROL",
+				"SUPPRESS_INSURGENCY",
 				"EXAMINE_LETTER",
 				"SCOUT_ENEMY",
 				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
@@ -1733,6 +1781,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT", "COMMUNE_KAMI",
 				"INVESTIGATE_PROVINCE",
+				"SUPPRESS_INSURGENCY",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"PETITION_ACCESS",
@@ -1763,6 +1812,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
 				"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 				"SCOUT_ENEMY",
+				"SUPPRESS_INSURGENCY",
 				"INTIMIDATE", "NEGOTIATE",
 				"TREAT_WOUND",
 				"TRAIN",
@@ -1849,6 +1899,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"ASSESS_PROVINCE_STATUS": 1,
 		"INVESTIGATE_PROVINCE": 1,
 		"INVESTIGATE_RUMOR": 1,
+		"SUPPRESS_INSURGENCY": 1,
 		"ORDER_PATROL": 1,
 		"ORDER_BATTLE": 1,
 		"CONDUCT_RAID": 1,
@@ -3246,6 +3297,7 @@ static func build_province_statuses_from_data(
 		for ins: Variant in active_insurgencies:
 			if ins is InsurgencyData and ins.province_id == pd.province_id:
 				ps.insurgency_type = Enums.InsurgencyType.keys()[ins.insurgency_type]
+				ps.insurgency_detected = ins.detected
 				break
 		ps.last_report_ic_day = pd.last_report_ic_day
 		ps.province_taint_level = pd.province_taint_level
@@ -3647,6 +3699,14 @@ static func _populate_action_metadata(
 					ptl = ps.province_taint_level
 					break
 		option.metadata = {"ptl": ptl}
+	elif option.action_id == "SUPPRESS_INSURGENCY":
+		# s11.11 Phase 5: commit to suppressing a co-located, detected insurgency.
+		# Strength is hidden (blind roll per GDD) — only id + type flow to the
+		# executor; the actual roll resolves against TN in the orchestrator writeback.
+		var ins_meta: Dictionary = _pick_co_located_detected_insurgency(ctx)
+		option.metadata = ins_meta
+		if int(ins_meta.get("province_id", -1)) >= 0:
+			option.target_province_id = int(ins_meta.get("province_id", -1))
 	elif option.action_id == "SCOUT_ENEMY":
 		var target_clan_id: String = ""
 		for w: Variant in ctx.active_wars:

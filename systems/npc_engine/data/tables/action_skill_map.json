@@ -709,5 +709,9 @@
   "CAST_PROTECTIVE_WARD": {
     "primary": "Spellcraft",
     "secondary": null
+  },
+  "SUPPRESS_INSURGENCY": {
+    "primary": "Battle",
+    "secondary": "Investigation"
   }
 }
