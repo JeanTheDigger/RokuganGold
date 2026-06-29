@@ -744,6 +744,11 @@ static func resolve_skill_check(
 		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
 		+ mutation_mod.get("tn", 0) + soft_hearted_tn + darling_bonus \
 		+ _get_possession_terror_penalty(character)
+	# s40 Armor special-rule TN penalty (Light: Athletics/Stealth; Heavy/Iron/Riding:
+	# Agility/Reflexes). A "+N TN" penalty subtracts from the roll total (wound-penalty sign).
+	total_bonus -= ArmorSystem.get_skill_tn_penalty(
+		character, skill_name, trait_used, context.get("on_horseback", false)
+	)
 
 	# Unskilled: no explosions
 	var explodes: bool = skill_rank > 0
@@ -953,6 +958,9 @@ static func resolve_contested_check(
 	kept_b += int(mas_b["kept"])
 	var flat_a2: int = flat_bonus_a + int(mas_a["flat"])
 	var flat_b2: int = flat_bonus_b + int(mas_b["flat"])
+	# s40 Armor special-rule TN penalty per side (subtracts from the side's total).
+	flat_a2 -= ArmorSystem.get_skill_tn_penalty(char_a, skill_a, trait_a, context_a.get("on_horseback", false))
+	flat_b2 -= ArmorSystem.get_skill_tn_penalty(char_b, skill_b, trait_b, context_b.get("on_horseback", false))
 	var tfr_a2: int = tfr_a + SkillMasterySystem.universal_free_raise(sr_a)
 	var tfr_b2: int = tfr_b + SkillMasterySystem.universal_free_raise(sr_b)
 

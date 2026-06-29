@@ -3318,6 +3318,30 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   seppuku option, Imperial jurisdiction). Wired into full crime/investigation pipeline
   and Winter Court Emperor's Peace enforcement (v624).
 
+### s40 Armor System — full L5R 4e Equipment table (2026-06-29, owner-provided, runtime-verified)
+`simulation/armor_system.gd` (ArmorSystem, pure class) + an extended `shared/armor_data.gd`
+(ArmorData gains `reduction`, `penalty_kind`) wire armor end-to-end from the owner-provided armor
+table (zero invention). **Catalog** (`ARMOR_CATALOG`, 7 types): bogu (+0/DR1), ashigaru (+3/DR1),
+tatami (+4/DR1), light (+5/DR3), heavy (+10/DR5, heavy), tetsu_do/iron (+13/DR8, heavy), riding
+(+4 off-horse/DR4). **equip(character, name)** sets `armor_worn` and mirrors tn_bonus → `armor_tn_bonus`
+(read by `CharacterStats.get_armor_tn`) and reduction → `armor_reduction` (read by
+`total_defender_reduction`) — so the Armor TN bonus and damage Reduction were already plumbed via
+those fields; this populates them correctly. **Special-rule TN penalties (the missing piece) wired
+into SkillResolver** (`resolve_skill_check` + `resolve_contested_check`, per side) via
+`get_skill_tn_penalty`: Light → +5 TN to Athletics & Stealth; Heavy → +5 to Agility/Reflexes-trait
+rolls; Tetsu-do → +10 (or +5 if Strength ≥ 5) to Agi/Ref; Riding → +5 Agi/Ref except on horseback
+(`context["on_horseback"]`). Penalties subtract from the roll total (the wound-penalty sign
+convention; **NOTE** `adv_tn`/`soft_hearted_tn` in resolve_skill_check appear to add with the
+OPPOSITE sign — a possible pre-existing inversion, left untouched / out of scope). **World-gen
+loadout (PROVISIONAL, owner has not specified NPC loadouts):** `_assign_armor` gives BUSHI ashigaru
+(+3/DR1, NO skill penalty — lowest-risk), everyone else unarmored; heavier loadouts await owner
+rules (the catalog/equip/penalties all work regardless — any later loadout just calls
+ArmorSystem.equip). Verified 20/20 (catalog stats, equip mirroring, get_armor_tn +10, all four
+penalty rules, end-to-end heavy armor drops Kenjutsu-Agility success 2398→1470/4000 while leaving
+Courtier-Awareness untouched) + world-gen assignment (bushi=ashigaru, courtier/shugenja unarmored).
+DEFERRED: per-armor combat interactions beyond TN/reduction (riding's mounted +12 ATN; arrow
+armor-piercing / double-armor weapon rules from the weapon tables).
+
 ### s40 Weapon Catalog — full L5R 4e Equipment tables (2026-06-29, owner-provided, runtime-verified)
 `IndividualCombat.WEAPON_CATALOG` expanded from 10 to ~40 weapons, transcribed from the L5R 4e
 Equipment tables the owner pasted 2026-06-29 (zero invention — owner-provided stats). Adds every

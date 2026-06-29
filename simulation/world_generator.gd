@@ -719,7 +719,19 @@ static func generate_character(
 	if c.school_type == Enums.SchoolType.SHUGENJA:
 		SpellSystem.assign_starting_spells(c, school)
 	_assign_weapons(c)
+	_assign_armor(c)
 	return c
+
+
+## PROVISIONAL world-gen armor loadout (owner has not specified NPC loadouts; flagged for
+## refinement). Conservative + low-risk: bushi wear ashigaru armor (+3 Armor TN, DR 1, NO
+## skill-TN penalty), everyone else is unarmored. Heavier loadouts (light/heavy/iron/riding,
+## which carry Athletics/Stealth/Agility/Reflexes penalties) await owner loadout rules. The
+## full ArmorSystem catalog + equip API + special-rule penalties are wired regardless, so any
+## later loadout just calls ArmorSystem.equip(c, name).
+static func _assign_armor(c: L5RCharacterData) -> void:
+	if c.school_type == Enums.SchoolType.BUSHI:
+		ArmorSystem.equip(c, "ashigaru")
 
 
 static func _assign_weapons(c: L5RCharacterData) -> void:
