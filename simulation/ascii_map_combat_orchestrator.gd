@@ -9845,7 +9845,7 @@ static func _apply_hit(
 	var t_p: IndividualCombat.Participant = state.combat.participants.get(target.character_id, null)
 	var reduction: int = target.armor_reduction
 	if t_p != null:
-		reduction = IndividualCombat.total_defender_reduction(target, t_p, attacker, a_p, weapon_name)
+		reduction = IndividualCombat.total_defender_reduction(target, t_p, attacker, a_p, weapon_name, state.combat.round_number <= 1)
 		# Rising Mountain (s38 Earth): the defender gains Reduction = 2× the attacker's
 		# Raises on this offensive action (spells excluded — this is a weapon strike).
 		if "Rising Mountain" in t_p.active_kiho and raises > 0:

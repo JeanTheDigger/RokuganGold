@@ -176,3 +176,17 @@ static func combat_armor_tn_bonus(character: L5RCharacterData, stance: Enums.Sta
 static func battle_initiative_bonus(character: L5RCharacterData) -> int:
 	var battle_rank: int = int(character.skills.get("Battle", 0))
 	return battle_rank if battle_rank >= MASTERY_RANK_5 else 0
+
+
+# Attacker's weapon-skill reduction-pierce (subtracted from the defender's Reduction).
+#   Heavy Weapons R3: opponent Reduction −2, any round (s24 line 403).
+#   Spears R3: ignore 3 Reduction against opponents in the FIRST round only (s24 line 399).
+static func weapon_reduction_pierce(weapon_skill: String, rank: int, is_first_round: bool) -> int:
+	if rank < MASTERY_RANK_3:
+		return 0
+	match weapon_skill:
+		"Heavy Weapons":
+			return 2
+		"Spears":
+			return 3 if is_first_round else 0
+	return 0

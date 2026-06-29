@@ -757,12 +757,16 @@ static func total_defender_reduction(
 	attacker: L5RCharacterData,
 	attacker_p: Participant,
 	weapon_name: String,
+	is_first_round: bool = true,
 ) -> int:
 	var base: int = defender.armor_reduction
 	var kata: int = get_kata_reduction_bonus(defender, defender_p, weapon_name)
 	var kiho: int = _get_kiho_reduction_bonus(defender, defender_p)
 	var spell: int = get_timed_modifier_total(defender_p, "reduction")  # s34 Armor of Earth etc.
 	var pierce: int = get_kata_opponent_reduction_penalty(attacker, attacker_p, weapon_name)
+	# s24 Bugei reduction-pierce: Heavy Weapons R3 (−2 any round), Spears R3 (−3 first round).
+	var atk_skill: String = get_weapon_profile(weapon_name).get("skill", "")
+	pierce += SkillMasterySystem.weapon_reduction_pierce(atk_skill, int(attacker.skills.get(atk_skill, 0)), is_first_round)
 	return maxi(0, base + kata + kiho + spell - pierce)
 
 
