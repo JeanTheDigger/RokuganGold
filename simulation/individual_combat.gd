@@ -11,25 +11,79 @@ class_name IndividualCombat
 # confirm against Equipment section when that GDD section is locked.
 
 const WEAPON_CATALOG: Dictionary = {
-	# trait: "agility" is standard for melee (s4.5 "Agility for attacks").
-	# Iaijutsu duels use Reflexes — handled directly in resolve_duel_strike(), not via this table.
-	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Medium", "melee": true,  "trait": "agility"},
-	"wakizashi":  {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Small",  "melee": true,  "trait": "agility"},
-	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
-	"bo":         {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Bo",             "size": "Large",  "melee": true,  "trait": "agility"},
-	# can_grapple: s40 "Weapon Grapples" — chain weapons and certain polearms may
-	# initiate Grapples using the weapon skill. The naginata is the catalog's
-	# grapple-capable polearm; chain weapons (e.g. kusarigama) get can_grapple
-	# when added to the catalog with their own DR.
-	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility", "can_grapple": true},
-	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility"},
-	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "reflexes"},
-	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
-	# Off-hand weapons for the s40 dual-wield combinations (DR from s39 Equipment).
-	# kama: Mantis paired small weapons (s29.9 "Waves Rush to Shore" uses Knives).
-	# war_fan (tessen): Lion katana-and-war-fan (s29.4 "The Commander's Fan").
-	"kama":       {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
-	"war_fan":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "War Fan",        "size": "Small",  "melee": true,  "trait": "agility"},
+	# Damage / skill / keywords transcribed from the L5R 4e Equipment tables (owner-provided
+	# 2026-06-29). Schema: {rolled, kept, strength_adds, skill, size, melee, trait, [can_grapple]}.
+	# Damage "XkY" → rolled X, kept Y. trait "agility" is standard for melee (s4.5); Iaijutsu duels
+	# use Reflexes — handled in resolve_duel_strike(), not via this table. Special rules (thrown,
+	# charge, break, void-point, double/ignore-armor, no-explode, two-damage-modes) are NOT yet
+	# modeled — only the core damage/skill/size are captured. Arrow types not modeled (bow damage
+	# uses the willow-leaf default 2k2). can_grapple: s40 "Weapon Grapples".
+
+	# -- Swords (Kenjutsu) --
+	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
+	"wakizashi":  {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Small",  "melee": true,  "trait": "agility"},
+	"no_dachi":   {"rolled": 3, "kept": 3, "strength_adds": true,  "skill": "Kenjutsu", "size": "Large",  "melee": true,  "trait": "agility"},
+	"bokken":     {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
+	"ninja_to":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
+	"parangu":    {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
+	"scimitar":   {"rolled": 2, "kept": 3, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
+	"shinai":     {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
+
+	# -- Knives (kama: Mantis paired small weapon, s29.9; sai/jitte: s24 Knives R5 Disarm) --
+	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives", "size": "Small", "melee": true, "trait": "agility"},
+	"aiguchi":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives", "size": "Small", "melee": true, "trait": "agility"},
+	"sai":        {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives", "size": "Small", "melee": true, "trait": "agility"},
+	"jitte":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives", "size": "Small", "melee": true, "trait": "agility"},
+	"kama":       {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Knives", "size": "Small", "melee": true, "trait": "agility"},
+
+	# -- Heavy Weapons --
+	"tetsubo":    {"rolled": 3, "kept": 3, "strength_adds": true,  "skill": "Heavy Weapons", "size": "Large",  "melee": true, "trait": "agility"},
+	"dai_tsuchi": {"rolled": 5, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons", "size": "Large",  "melee": true, "trait": "agility"},
+	"masakiri":   {"rolled": 2, "kept": 3, "strength_adds": true,  "skill": "Heavy Weapons", "size": "Medium", "melee": true, "trait": "agility"},
+	"ono":        {"rolled": 0, "kept": 4, "strength_adds": true,  "skill": "Heavy Weapons", "size": "Large",  "melee": true, "trait": "agility"},
+
+	# -- Polearms (sasumata/sadegarami initiate grapples; naginata's legacy can_grapple retained) --
+	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+	"bisento":    {"rolled": 3, "kept": 3, "strength_adds": true,  "skill": "Polearms", "size": "Large", "melee": true, "trait": "agility"},
+	"nagamaki":   {"rolled": 2, "kept": 3, "strength_adds": true,  "skill": "Polearms", "size": "Large", "melee": true, "trait": "agility"},
+	"sasumata":   {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Polearms", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+	"sadegarami": {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Polearms", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+
+	# -- Spears --
+	"yari":       {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
+	"kumade":     {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
+	"mai_chong":  {"rolled": 0, "kept": 3, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
+	"lance":      {"rolled": 3, "kept": 4, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
+	"nage_yari":  {"rolled": 1, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
+
+	# -- Staves (skill "Staves" — the canonical name; bo was previously mislabeled "Bo") --
+	"bo":              {"rolled": 1, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Large",  "melee": true, "trait": "agility"},
+	"jo":              {"rolled": 0, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility"},
+	"machi_kanshisha": {"rolled": 0, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility"},
+	"nunchaku":        {"rolled": 1, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Small",  "melee": true, "trait": "agility"},
+	"sang_kauw":       {"rolled": 1, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility"},
+	"tonfa":           {"rolled": 0, "kept": 3, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility"},
+
+	# -- Chain Weapons (can initiate grapples, s40) --
+	"kusarigama":     {"rolled": 0, "kept": 2, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+	"kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+	"manrikikusari":  {"rolled": 1, "kept": 1, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+
+	# -- War fans (tessen): Lion katana-and-war-fan (s29.4 "The Commander's Fan") --
+	"war_fan":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "War Fan", "size": "Small", "melee": true, "trait": "agility"},
+
+	# -- Bows (Kyujutsu; Reflexes; no Strength to damage — the bow's Strength rating governs) --
+	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Large", "melee": false, "trait": "reflexes"},
+	"dai_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes"},
+	"han_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes"},
+
+	# -- Ninja weapons (Ninjutsu; thrown/ranged, no Strength to damage) --
+	"shuriken":   {"rolled": 1, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Small",  "melee": false, "trait": "agility"},
+	"tsubute":    {"rolled": 1, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Small",  "melee": false, "trait": "agility"},
+	"blowgun":    {"rolled": 0, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Medium", "melee": false, "trait": "agility"},
+
+	# -- Unarmed --
+	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu", "size": "Small", "melee": true, "trait": "agility"},
 }
 
 const DEFAULT_WEAPON: Dictionary = {

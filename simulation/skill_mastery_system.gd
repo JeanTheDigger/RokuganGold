@@ -36,9 +36,10 @@ class_name SkillMasterySystem
 ##     maneuver resolution.
 ##   The damage/explode/War-Fan/reduction masteries fire in NPC summary combat (duels, bodyguard
 ##   fights, hunts); Defense-stance, Battle-initiative, and the maneuver free-raises fire in the
-##   turn-based orchestrator. NOTE only Kenjutsu/Knives/Heavy Weapons/Polearms/Kyujutsu/War Fan/
-##   Jiujutsu/Bo have catalog weapons — Spears/Chain/Staves masteries are correct but inert (no
-##   weapon to wield; the staff weapon uses skill "Bo", not "Staves").
+##   turn-based orchestrator. The WEAPON_CATALOG was expanded to the full L5R 4e equipment tables
+##   (owner-provided 2026-06-29), so Spears (yari, lance, …), Chain Weapons (kusarigama, …), and
+##   Staves (bo, jo, …) now have weapons — those masteries are live (Spears R3 reduction-pierce,
+##   etc.). The bo's skill was corrected "Bo" → "Staves" (the canonical name).
 ##
 ## DEFERRED (each needs a different consumer; values all LOCKED in s24):
 ##   • TN reduction — Acting R3/5/7 (disguise TN −5/−10/−15) → disguise creation consumer.

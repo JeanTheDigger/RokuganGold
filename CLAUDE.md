@@ -3318,6 +3318,30 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   seppuku option, Imperial jurisdiction). Wired into full crime/investigation pipeline
   and Winter Court Emperor's Peace enforcement (v624).
 
+### s40 Weapon Catalog — full L5R 4e Equipment tables (2026-06-29, owner-provided, runtime-verified)
+`IndividualCombat.WEAPON_CATALOG` expanded from 10 to ~40 weapons, transcribed from the L5R 4e
+Equipment tables the owner pasted 2026-06-29 (zero invention — owner-provided stats). Adds every
+melee category so the Bugei weapon-skill masteries are no longer inert: **Swords** (katana,
+wakizashi, no_dachi, bokken, ninja_to, parangu, scimitar, shinai → Kenjutsu), **Knives** (tanto,
+aiguchi, sai, jitte, kama), **Heavy Weapons** (tetsubo, dai_tsuchi, masakiri, ono), **Polearms**
+(naginata, bisento, nagamaki, sasumata, sadegarami), **Spears** (yari, kumade, mai_chong, lance,
+nage_yari — NEW skill, was inert), **Staves** (bo, jo, machi_kanshisha, nunchaku, sang_kauw, tonfa
+— NEW), **Chain Weapons** (kusarigama, kyoketsu_shogi, manrikikusari — NEW, all can_grapple),
+**War Fan**, **Bows** (yumi, dai_kyu, han_kyu → Kyujutsu), **Ninja** (shuriken, tsubute, blowgun →
+Ninjutsu). **Corrected 3 wrong existing values** against the table: wakizashi 3k2→2k2, tetsubo
+3k2→3k3, bo 2k2→1k2. **Skill-name fix:** the bo's skill `"Bo"`→`"Staves"` (the canonical name used
+everywhere else — world-gen pools, mutation_system, kolat, the Musubi kata); the two
+combat_controller peasant `{"Bo":1}` assignments updated to `{"Staves":1}` to match. Schema
+unchanged ({rolled, kept, strength_adds, skill, size, melee, trait, [can_grapple]}); sasumata/
+sadegarami/chain weapons get can_grapple. DEFERRED (not yet modeled, documented in-file): weapon
+special rules (thrown, charge/lance, break-thresholds, katana void-point, bokken double-reduction,
+shinai no-explode, armor-piercing/ignore-armor arrows, two-damage-mode weapons) and arrow types
+(bow damage uses the willow-leaf 2k2 default). Verified 16/16 (each new skill resolves to a weapon
+via pick_best_weapon, Spears R3 reduction-pierce now fires end-to-end, corrected values, katana
+unchanged) + the two prior Bugei drivers re-pass 22/22 and 9/9 (no regression). Armor table also
+owner-provided (Bogu/Ashigaru/Tatami/Light/Heavy/Tetsu-do/Riding) — NOT yet added (ArmorData
+catalog + the Athletics/Stealth/Agility/Reflexes TN-penalty special rules are a follow-up).
+
 ### s24 Skill Mastery Abilities + Insight wiring (2026-06-29, runtime-verified)
 `simulation/skill_mastery_system.gd` (SkillMasterySystem, pure class) is the s24 home for the
 roll/insight-applicable Mastery Abilities. **Five tranches:**

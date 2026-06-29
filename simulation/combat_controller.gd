@@ -341,7 +341,7 @@ func _create_unit_character(unit_type: String, variance_seed: int) -> L5RCharact
 			c.agility = 2; c.intelligence = 2
 			c.strength = 2; c.perception = 2
 			c.void_ring = 1
-			c.skills = {"Bo": 1}  # farm tools — closest weapon skill
+			c.skills = {"Staves": 1}  # farm tools — closest weapon skill (bo uses the Staves skill)
 
 		"BANDIT_THUG":
 			c.reflexes = 2; c.awareness = 2
@@ -357,7 +357,7 @@ func _create_unit_character(unit_type: String, variance_seed: int) -> L5RCharact
 			c.agility = 2; c.intelligence = 2
 			c.strength = 2; c.perception = 2
 			c.void_ring = 1
-			c.skills = {"Bo": 1}
+			c.skills = {"Staves": 1}
 
 		"REBEL_ASHIGARU":
 			c.reflexes = 2; c.awareness = 2
