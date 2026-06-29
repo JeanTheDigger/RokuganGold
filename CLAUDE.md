@@ -3275,6 +3275,33 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   skills, swap, idempotency, below-threshold negatives; 15 spend/refresh/swap: just-in-time
   fire, single-charge-per-check, success no-spend, eligibility gate, exhaustion, weekly
   refill, Willpower swap).
+- **s24 Skill Mastery Abilities — roll-applicable tranche WIRED (2026-06-29).** The GDD
+  s24 skills reference (FULLY LOCKED) defines every L5R 4e per-skill Mastery Ability
+  (Ranks 3/5/7 + a universal Rank-10), but there was NO general skill-mastery system —
+  `resolve_skill_check`/`resolve_contested_check` applied none. New `simulation/skill_mastery_system.gd`
+  (SkillMasterySystem, pure data + helpers) is the s24 implementation home. Tranche 1 wires
+  the roll-applicable masteries into the two SkillResolver chokepoints (all values LOCKED,
+  zero invention): (1) **universal Rank-10** — +1 Free Raise on ALL rolls using a skill,
+  added to the free-raise term in both `resolve_skill_check` and `resolve_contested_check`;
+  (2) **Rank-5 contested-roll masteries** — Courtier +1k0, Etiquette +1k0, Sincerity +5,
+  Investigation +5, Intimidation +5, Temptation +5 ("to all Contested Rolls using <skill>"),
+  folded per-side into the contested pool/total (the per-side total was already DRY'd into
+  `_contested_total`, so the reroll recompute picks them up identically). `base_skill()`
+  strips "Parent: Sub" so the lookup keys on the base skill. Runtime-verified 16/16 (helper
+  values + rank gate; clean isolation — a mastery skill vs a non-mastery skill at equal
+  rank/trait: Sincerity-5 +5 → 65% win vs a 49% baseline, Courtier-5 +1k0 → 55%, rank-4 no
+  mastery → 49%; R10 free raise lifts rank-10 success 1981 vs 1755/2000 at TN 35). Self/
+  contested reroll drivers re-pass 15/15 each (no regression — same function). DEFERRED
+  (all LOCKED in s24, each needs a different consumer): **insight** masteries (Courtier/
+  Etiquette R3 +3 / R7 +7 → CharacterStats.get_insight — affects the foundational insight
+  stat, held back deliberately); **casting** (Spellcraft R5 +1k0 → SpellSystem.resolve_cast);
+  **TN reduction** (Acting R3/5/7 disguise); **VP/recovery** (Meditation R3/5/7, Divination
+  R5); **conditional** (Hunting R5 +1k0 Stealth in wilderness — needs a wilderness context);
+  **action-economy** (Investigation R3/R7 extra Search attempts); and the **combat/movement**
+  masteries (Defense, Kenjutsu, Iaijutsu, War Fan, Athletics, Stealth, Battle, Horsemanship,
+  Jiujutsu, weapon skills — the s40 layer). Already hand-wired elsewhere: Calligraphy R5
+  (cipher), Engineering R5 (+5 cooperative), Tea Ceremony R5 (2 VP), Medicine R5 (+1k0 heal);
+  Commerce R5 (±20% price) explicitly deferred (s57.40.8).
 - **SkillResolver Centralization** — All skill rolls now route through
   `SkillResolver.resolve_skill_check()` and `resolve_contested_check()` for uniform
   technique bonus, wound penalty, emphasis, and from_the_ashes handling. Replaces

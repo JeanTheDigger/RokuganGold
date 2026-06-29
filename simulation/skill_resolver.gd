@@ -738,7 +738,9 @@ static func resolve_skill_check(
 		+ kiho_mod.get("kept", 0) + void_mod.get("kept", 0) + voice_mod.get("kept", 0)
 		+ mq_mod.get("kept", 0)
 	)
-	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
+	# s24 universal Rank-10 mastery: +1 Free Raise on all rolls using the skill.
+	var mastery_fr: int = SkillMasterySystem.universal_free_raise(skill_rank)
+	var total_bonus: int = flat_bonus + wound_penalty + ((technique_fr + mastery_fr) * FREE_RAISE_VALUE) \
 		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
 		+ mutation_mod.get("tn", 0) + soft_hearted_tn + darling_bonus \
 		+ _get_possession_terror_penalty(character)
@@ -941,11 +943,24 @@ static func resolve_contested_check(
 	var rolled_b: int = tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0) + voice_b.get("rolled", 0) + soul_b + wisdom_b
 	var kept_b: int = tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0) + void_b.get("kept", 0) + voice_b.get("kept", 0)
 
+	# s24 contested-roll masteries: Rank-5 per-skill bonus (folded into the pool/total)
+	# + the universal Rank-10 free raise (added to the free-raise term).
+	var mas_a: Dictionary = SkillMasterySystem.contested_bonus(skill_a, sr_a)
+	var mas_b: Dictionary = SkillMasterySystem.contested_bonus(skill_b, sr_b)
+	rolled_a += int(mas_a["rolled"])
+	kept_a += int(mas_a["kept"])
+	rolled_b += int(mas_b["rolled"])
+	kept_b += int(mas_b["kept"])
+	var flat_a2: int = flat_bonus_a + int(mas_a["flat"])
+	var flat_b2: int = flat_bonus_b + int(mas_b["flat"])
+	var tfr_a2: int = tfr_a + SkillMasterySystem.universal_free_raise(sr_a)
+	var tfr_b2: int = tfr_b + SkillMasterySystem.universal_free_raise(sr_b)
+
 	var roll_a: DiceResult = dice_engine.roll_and_keep(rolled_a, kept_a, sr_a > 0, emph_a)
 	var roll_b: DiceResult = dice_engine.roll_and_keep(rolled_b, kept_b, sr_b > 0, emph_b)
 
-	var total_a: int = _contested_total(roll_a, flat_bonus_a, wp_a, tfr_a, adv_a.get("free_raises", 0), adv_tn_a, char_a)
-	var total_b: int = _contested_total(roll_b, flat_bonus_b, wp_b, tfr_b, adv_b.get("free_raises", 0), adv_tn_b, char_b)
+	var total_a: int = _contested_total(roll_a, flat_a2, wp_a, tfr_a2, adv_a.get("free_raises", 0), adv_tn_a, char_a)
+	var total_b: int = _contested_total(roll_b, flat_b2, wp_b, tfr_b2, adv_b.get("free_raises", 0), adv_tn_b, char_b)
 
 	var winner: String = "a"
 	if total_b > total_a:
@@ -970,10 +985,10 @@ static func resolve_contested_check(
 			lc.self_reroll[lidx]["charges_current"] = lc.self_reroll[lidx].get("charges_current", 1) - 1
 			if loser_a:
 				roll_a = dice_engine.roll_and_keep(rolled_a, kept_a, sr_a > 0, emph_a)
-				total_a = _contested_total(roll_a, flat_bonus_a, wp_a, tfr_a, adv_a.get("free_raises", 0), adv_tn_a, char_a)
+				total_a = _contested_total(roll_a, flat_a2, wp_a, tfr_a2, adv_a.get("free_raises", 0), adv_tn_a, char_a)
 			else:
 				roll_b = dice_engine.roll_and_keep(rolled_b, kept_b, sr_b > 0, emph_b)
-				total_b = _contested_total(roll_b, flat_bonus_b, wp_b, tfr_b, adv_b.get("free_raises", 0), adv_tn_b, char_b)
+				total_b = _contested_total(roll_b, flat_b2, wp_b, tfr_b2, adv_b.get("free_raises", 0), adv_tn_b, char_b)
 			winner = "a"
 			if total_b > total_a:
 				winner = "b"
