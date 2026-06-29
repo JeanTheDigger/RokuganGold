@@ -234,6 +234,19 @@ static func _decompose_hunt_maho(
 		return _make_need("TRAVEL_TO", 2, {
 			"target_intent": target_province,
 		})
+	# At the hotspot: if co-located with a DETECTED Maho Cult / Taint
+	# Manifestation, the hunter shifts from investigation to suppression (s11.11
+	# Phase 5; s11.3.5 names Kuni/Asako/Kuroiban as the cult counter-agents).
+	# Route via MANAGE_TAINT, whose alignment surfaces SUPPRESS_INSURGENCY above
+	# investigation; the Phase-4c precondition gate strips it if not actually
+	# co-located, falling back to the investigation passthrough below.
+	if ctx.active_insurgency_id >= 0:
+		for ps: Variant in ctx.province_statuses:
+			if ps is NPCDataStructures.ProvinceStatus:
+				var p: NPCDataStructures.ProvinceStatus = ps as NPCDataStructures.ProvinceStatus
+				if p.active_insurgency_id == ctx.active_insurgency_id and p.insurgency_detected \
+						and (p.insurgency_type == "MAHO_CULT" or p.insurgency_type == "TAINT_MANIFESTATION"):
+					return _make_need("MANAGE_TAINT", 2, {"target_province_id": p.province_id})
 	return _passthrough(objective)
 
 
