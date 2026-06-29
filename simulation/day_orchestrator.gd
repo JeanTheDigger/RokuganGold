@@ -1765,6 +1765,7 @@ static func advance_day(
 		_process_well_connected_weekly(
 			characters, characters_by_id, active_topics, ic_day,
 		)
+		_process_reroll_refresh_weekly(characters, ic_day)
 
 	if is_season_boundary:
 		_purge_resolved_crime_records(crime_records, ic_day)
@@ -12728,6 +12729,21 @@ static func _spy_char_fact_priority(need_type: String) -> Array:
 				"disposition_value", "location"]
 	# Default: cycle through all facts.
 	return _SPY_CHARACTER_FACT_TYPES.duplicate()
+
+
+# -- s29.15.24 Reroll charge refresh / expiry (weekly) ------------------------
+# Refills self-reroll charges (Yasuki R2 / Yoritomo R3 / Kasuga R5) to max each
+# OOC week (7 IC days) and prunes expired/used granted-reroll entries. Spend is
+# just-in-time in SkillResolver.resolve_skill_check on a failed roll.
+
+static func _process_reroll_refresh_weekly(characters: Array, ic_day: int) -> void:
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if not c.self_reroll.is_empty():
+			RerollSystem.refresh_weekly_charges(c)
+		if not c.granted_reroll.is_empty():
+			RerollSystem.expire_granted_rerolls(c, ic_day)
 
 
 # -- WELL_CONNECTED weekly secret topic revelation (s45) ----------------------

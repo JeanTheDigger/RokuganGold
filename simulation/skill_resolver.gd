@@ -152,6 +152,50 @@ static func apply_technique_flags(character: L5RCharacterData) -> void:
 				character.commerce_honor_exempt = true
 			if s.begins_with("Otomo Courtier") or s.begins_with("Yoritomo Courtier"):
 				character.intimidation_honor_exempt = true
+			# s29.15.24 Self-Reroll resources (charges granted/updated at creation
+			# AND rank-up; weekly refresh + just-in-time spend via RerollSystem).
+			if s.begins_with("Yasuki Courtier") and rank >= 2:
+				_ensure_self_reroll(character, "Yasuki R2", YASUKI_REROLL_SKILLS, rank, "")
+			if s.begins_with("Yoritomo Courtier") and rank >= 3:
+				_ensure_self_reroll(character, "Yoritomo R3", YORITOMO_REROLL_SKILLS, rank, "Intimidation")
+			if s.begins_with("Kasuga Smuggler") and rank >= 5:
+				_ensure_self_reroll(character, "Kasuga R5", KASUGA_SCHOOL_SKILLS, character.void_ring, "")
+
+
+# -- s29.15.24 Self-Reroll resource constants (LOCKED) ------------------------
+# Yasuki R2 "Do As We Say": Sincerity/Intimidation, school_rank charges, weekly.
+const YASUKI_REROLL_SKILLS: Array = ["Sincerity", "Intimidation"]
+# Yoritomo R3 "Command the Winds": Sincerity, school_rank charges, weekly, swap
+# to Intimidation (Control) — Intimidation's default Trait is Willpower, so the
+# swap re-roll substitutes Willpower automatically per the GDD.
+const YORITOMO_REROLL_SKILLS: Array = ["Sincerity"]
+# Kasuga R5: School Skills, Void Ring charges, weekly. Transcribed from the
+# Kasuga Smuggler school skill list (world_generator SCHOOL_DATA).
+const KASUGA_SCHOOL_SKILLS: Array = [
+	"Commerce", "Etiquette", "Investigation", "Sincerity", "Sleight of Hand", "Stealth",
+]
+
+
+# Ensure a self-reroll entry exists for the given source. Created at first
+# qualification; on rank-up the cap is updated and current charges are kept
+# (capped at the new max — no mid-week refill). Entry format owned by RerollSystem.
+static func _ensure_self_reroll(
+	character: L5RCharacterData,
+	source: String,
+	skills: Array,
+	charges_max: int,
+	skill_swap: String,
+) -> void:
+	for entry: Dictionary in character.self_reroll:
+		if entry.get("source", "") == source:
+			entry["charges_max"] = charges_max
+			entry["eligible_skills"] = skills
+			entry["skill_swap"] = skill_swap
+			entry["charges_current"] = mini(entry.get("charges_current", 0), charges_max)
+			return
+	character.self_reroll.append(RerollSystem.create_self_reroll_entry(
+		source, skills, charges_max, RerollSystem.REFRESH_WEEKLY, skill_swap,
+	))
 
 
 # -- School Technique Free Raises (s29.15) -------------------------------------
@@ -574,6 +618,7 @@ static func resolve_skill_check(
 	flat_bonus: int = 0,
 	ic_day: int = -1,
 	context: Dictionary = {},
+	allow_reroll: bool = true,
 ) -> Dictionary:
 	# Determine trait
 	var trait_used: Enums.Trait
@@ -773,6 +818,26 @@ static func resolve_skill_check(
 			result["success"] = result["margin"] >= 0
 			result["paragon_duty_activated"] = true
 			character.current_void_points -= 1
+
+	# s29.15.24 Self / Granted Reroll (Yasuki R2 / Yoritomo R3 / Kasuga R5; Ikoma R4 /
+	# Shiba granted). On a failed roll, spend one eligible charge to reroll — the
+	# owner-approved just-in-time NPC policy. Runs AFTER the retroactive Advantage
+	# fixes above (DARK_PARAGON / PARAGON Duty) so it only fires on a genuine failure.
+	# allow_reroll=false on the reroll's own internal roll (set by RerollSystem.apply_*)
+	# prevents recursion / spending multiple charges on one check.
+	if allow_reroll and not result.get("success", false):
+		var rr: Dictionary = RerollSystem.try_self_reroll(
+			character, dice_engine, skill_name, tn, result, raises,
+			emphasis_name, trait_override, bonus_rolled, bonus_kept, flat_bonus,
+		)
+		if rr.get("rerolled", false):
+			return rr
+		rr = RerollSystem.try_granted_reroll(
+			character, dice_engine, skill_name, tn, result, ic_day, raises,
+			emphasis_name, trait_override, bonus_rolled, bonus_kept, flat_bonus,
+		)
+		if rr.get("rerolled", false):
+			return rr
 
 	return result
 

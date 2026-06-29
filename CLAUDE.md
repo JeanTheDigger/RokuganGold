@@ -3213,6 +3213,43 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   filtering. Granted reroll: ally-granted entry with optional bonus dice. Weekly
   refresh cycle. DISCERN_NEED ActionID routed into NPC decision loop with school leans
   (Yasuki/Doji courtiers +15), accessible in AT_COURT and VISITING contexts.
+  **SELF-REROLL now WIRED end-to-end (2026-06-29, owner-approved just-in-time spend
+  policy).** RerollSystem was previously built but had ZERO production callers — no
+  character ever held a charge and nothing spent one. Closed all three sides:
+  (1) **Population** — `SkillResolver.apply_technique_flags` (called at creation +
+  rank-up) now grants self_reroll entries via `_ensure_self_reroll()` for the three
+  LOCKED self-reroll schools: Yasuki Courtier R2 (Sincerity/Intimidation, school-rank
+  charges), Yoritomo Courtier R3 (Sincerity, school-rank charges, skill_swap→Intimidation),
+  Kasuga Smuggler R5 (the six Kasuga school skills, Void-Ring charges); all weekly refresh,
+  insight rank used as the school-rank proxy (file convention). Idempotent on rank-up
+  (updates cap, keeps current charges — no mid-week refill). New consts YASUKI_REROLL_SKILLS
+  / YORITOMO_REROLL_SKILLS / KASUGA_SCHOOL_SKILLS. (2) **Spend** — `resolve_skill_check`
+  gains `allow_reroll: bool = true` (last param) and, after the retroactive Advantage
+  fixes (DARK_PARAGON / PARAGON Duty), on a genuine failure calls
+  `RerollSystem.try_self_reroll` then `try_granted_reroll`; the owner-approved policy is
+  "spend one available eligible charge on a failed eligible roll" (matches the kiho
+  just-in-time precedent). Recursion guard: `RerollSystem.apply_self_reroll` /
+  `apply_granted_reroll` pass `allow_reroll=false` on their own re-roll, so exactly ONE
+  charge is spent per check. (3) **Refresh** — `DayOrchestrator._process_reroll_refresh_weekly`
+  runs on the existing 7-IC-day weekly boundary (alongside spy_network/well_connected),
+  refilling self-reroll charges to max and pruning expired/used granted entries.
+  The SkillResolver↔RerollSystem circular static dependency parses + imports clean.
+  Yoritomo swap: Intimidation's default Trait is Willpower, so the Sincerity→Intimidation
+  swap auto-substitutes Willpower per GDD. LIMITATIONS / DEFERRED: (a) **Granted-reroll
+  POPULATION** (Ikoma R4 "Strength of Tradition", Shiba Advisor "Lessons Never Forgotten")
+  is NOT wired — the spend hook (`try_granted_reroll`) is live and harmless on empty
+  arrays, but nothing WRITES granted_reroll entries yet; that needs the grantor's
+  technique as a fireable action (Ikoma: Simple Action + Perform: Storytelling TN 25 +
+  −0.2 Honor on reroll-fail; Shiba: 1 AP + Lore: War/History before a military task),
+  a separate tranche. (b) Only `resolve_skill_check` (TN-based) consumes rerolls;
+  `resolve_contested_check` does not — Yasuki/Yoritomo rolls that resolve as a contest
+  won't reroll, but the many TN-based skill rolls (incl. Kasuga R5 School Skills and
+  TN-based social rolls) do. (c) The reroll re-roll drops ic_day/context (passes -1/{}),
+  matching the LOCKED RerollSystem behavior — minor (day-buffs not re-applied to the
+  reroll). Runtime-verified 32/32 via headless drivers (17 population: gates, charges,
+  skills, swap, idempotency, below-threshold negatives; 15 spend/refresh/swap: just-in-time
+  fire, single-charge-per-check, success no-spend, eligibility gate, exhaustion, weekly
+  refill, Willpower swap).
 - **SkillResolver Centralization** — All skill rolls now route through
   `SkillResolver.resolve_skill_check()` and `resolve_contested_check()` for uniform
   technique bonus, wound penalty, emphasis, and from_the_ashes handling. Replaces
