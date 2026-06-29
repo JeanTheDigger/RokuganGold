@@ -3350,14 +3350,29 @@ into SkillResolver** (`resolve_skill_check` + `resolve_contested_check`, per sid
 `get_skill_tn_penalty`: Light → +5 TN to Athletics & Stealth; Heavy → +5 to Agility/Reflexes-trait
 rolls; Tetsu-do → +10 (or +5 if Strength ≥ 5) to Agi/Ref; Riding → +5 Agi/Ref except on horseback
 (`context["on_horseback"]`). Penalties subtract from the roll total (the wound-penalty sign
-convention; **NOTE** `adv_tn`/`soft_hearted_tn` in resolve_skill_check appear to add with the
-OPPOSITE sign — a possible pre-existing inversion, left untouched / out of scope). **World-gen
-loadout (PROVISIONAL, owner has not specified NPC loadouts):** `_assign_armor` gives BUSHI ashigaru
-(+3/DR1, NO skill penalty — lowest-risk), everyone else unarmored; heavier loadouts await owner
-rules (the catalog/equip/penalties all work regardless — any later loadout just calls
-ArmorSystem.equip). Verified 20/20 (catalog stats, equip mirroring, get_armor_tn +10, all four
-penalty rules, end-to-end heavy armor drops Kenjutsu-Agility success 2398→1470/4000 while leaving
-Courtier-Awareness untouched) + world-gen assignment (bushi=ashigaru, courtier/shugenja unarmored).
+convention). **TN SIGN BUG FIXED (2026-06-29):** while wiring armor I found `resolve_skill_check`
+was ADDING `adv_tn`/`soft_hearted_tn` to `total_bonus` (which is itself ADDED to the roll), so
+those Disadvantage/Soft-Hearted +TN *penalties* were making rolls EASIER — a real pre-existing
+inversion. `total_bonus` is added to the total and compared `>= TN`, so a penalty must subtract.
+Fixed: `resolve_skill_check` subtracts `adv_tn`/`soft_hearted_tn` (and the new armor penalty);
+`_contested_total` and the contested-check flats subtract `adv_tn` and the armor penalty too. Also
+fixed `MutationSystem.DISCOLORED_SKIN` (its `dtn` convention is "positive = benefit", so the +5 TN
+social penalty must be `dtn -= 5`). Runtime-verified 4/4: SOFT_HEARTED, DISCOLORED_SKIN (social
+only, non-social untouched), and a FAILURE_OF_BUSHIDO +5-vs-Shadowlands disadvantage all now LOWER
+success; the new armor penalty is on the same corrected path. **World-gen loadout (PROVISIONAL,
+owner has not specified NPC loadouts — flagged for refinement; REFINED 2026-06-29):**
+`ArmorSystem.assign_by_profile(character)` is school+status tiered — non-bushi unarmored; Hida bushi
+→ heavy (+10/DR5, the iconic Crab Wall tank, trades Agi/Ref); bushi status ≥ 4.0 → light (+5/DR3,
+only Athletics/Stealth penalty — a strict combat upgrade for senior officers/lords); status ≥ 2.0 →
+tatami (+4/DR1, no penalty); else → ashigaru (+3/DR1, no penalty). Iron (tetsu_do) and riding stay
+in the catalog but UNASSIGNED (heaviest Crab loadouts / Unicorn cavalry await owner rules).
+Idempotent: `generate_character._assign_armor` delegates to it at creation (status still 1.0 → most
+bushi ashigaru), and `WorldBootstrap` re-runs it after position/role status is finalized so the
+tiers apply. Verified: profile driver 10/10 (each tier + Hida-beats-status + non-bushi-always-bare +
+idempotent); full bootstrapped world (3815 living chars) → bushi 2072 = heavy 113 / light 121 /
+tatami 691 / ashigaru 1147, non-bushi 1743 all unarmored, ZERO non-bushi armored. Catalog/penalty
+verified 20/20 (catalog stats, equip mirroring, get_armor_tn +10, all four penalty rules, end-to-end
+heavy armor drops Kenjutsu-Agility success 2398→1470/4000 while leaving Courtier-Awareness untouched).
 DEFERRED: per-armor combat interactions beyond TN/reduction (riding's mounted +12 ATN; arrow
 armor-piercing / double-armor weapon rules from the weapon tables).
 

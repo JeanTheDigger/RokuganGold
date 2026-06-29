@@ -485,6 +485,13 @@ static func bootstrap_world(
 	for _ic: L5RCharacterData in characters:
 		_ic.insight_rank = CharacterStats.get_insight_rank(_ic)
 
+	# Refine the PROVISIONAL armor loadout now that position/role status is finalized.
+	# generate_character ran assign_by_profile at status 1.0 (most bushi -> ashigaru); re-run it
+	# so senior officers/lords (status >= 4 light, >= 2 tatami) and Hida Wall infantry (heavy)
+	# receive their tiered loadout. Idempotent; non-bushi stay unarmored.
+	for _ac: L5RCharacterData in characters:
+		ArmorSystem.assign_by_profile(_ac)
+
 	return {
 		"provinces": provinces,
 		"settlements": settlements,

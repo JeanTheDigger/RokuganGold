@@ -77,6 +77,36 @@ static func get_skill_tn_penalty(
 	return 0
 
 
+# PROVISIONAL world-gen loadout by school + status (owner has not specified NPC loadouts;
+# every tier is flagged for refinement). Idempotent — safe to call at character creation
+# (status still 1.0) and again after the position/role status is finalized (the bootstrap
+# resync pass). Scheme:
+#   non-bushi              -> unarmored (courtiers/shugenja/monks wear no battle armor)
+#   Hida bushi             -> heavy  (+10/DR5; the iconic Crab Wall infantry — trades
+#                                     Agility/Reflexes for protection, the authentic L5R tank)
+#   bushi, status >= 4.0   -> light  (+5/DR3; only an Athletics/Stealth penalty, a strict
+#                                     combat upgrade for senior officers/lords)
+#   bushi, status >= 2.0   -> tatami (+4/DR1; no penalty — proven samurai's field armor)
+#   other bushi            -> ashigaru (+3/DR1; no penalty — the rank-and-file default)
+# Iron (tetsu_do) and riding armor stay in the catalog but UNASSIGNED here — heaviest Crab
+# loadouts and Unicorn cavalry await explicit owner loadout rules.
+const STATUS_LIGHT: float = 4.0
+const STATUS_TATAMI: float = 2.0
+
+static func assign_by_profile(character: L5RCharacterData) -> void:
+	if character.school_type != Enums.SchoolType.BUSHI:
+		equip(character, "")  # clear any prior armor (non-bushi never armored)
+		return
+	if character.family == "Hida":
+		equip(character, "heavy")
+	elif character.status >= STATUS_LIGHT:
+		equip(character, "light")
+	elif character.status >= STATUS_TATAMI:
+		equip(character, "tatami")
+	else:
+		equip(character, "ashigaru")
+
+
 static func _is_agi_ref(trait_used: Enums.Trait) -> bool:
 	return trait_used == Enums.Trait.AGILITY or trait_used == Enums.Trait.REFLEXES
 

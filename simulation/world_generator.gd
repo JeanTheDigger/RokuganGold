@@ -723,15 +723,14 @@ static func generate_character(
 	return c
 
 
-## PROVISIONAL world-gen armor loadout (owner has not specified NPC loadouts; flagged for
-## refinement). Conservative + low-risk: bushi wear ashigaru armor (+3 Armor TN, DR 1, NO
-## skill-TN penalty), everyone else is unarmored. Heavier loadouts (light/heavy/iron/riding,
-## which carry Athletics/Stealth/Agility/Reflexes penalties) await owner loadout rules. The
-## full ArmorSystem catalog + equip API + special-rule penalties are wired regardless, so any
-## later loadout just calls ArmorSystem.equip(c, name).
+## PROVISIONAL world-gen armor loadout — delegates to ArmorSystem.assign_by_profile (school +
+## status tiered: non-bushi unarmored, Hida->heavy, status>=4 light, status>=2 tatami, else
+## ashigaru). At creation status is still 1.0, so most bushi get ashigaru here; WorldBootstrap
+## re-runs assign_by_profile after the position/role status is finalized so senior officers and
+## Hida infantry receive their heavier loadout. The scheme is PROVISIONAL (owner has not
+## specified NPC loadouts) and idempotent.
 static func _assign_armor(c: L5RCharacterData) -> void:
-	if c.school_type == Enums.SchoolType.BUSHI:
-		ArmorSystem.equip(c, "ashigaru")
+	ArmorSystem.assign_by_profile(c)
 
 
 static func _assign_weapons(c: L5RCharacterData) -> void:
