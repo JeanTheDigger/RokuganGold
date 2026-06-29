@@ -478,6 +478,13 @@ static func bootstrap_world(
 	# to the deterministic district zone_id; the zone graph exists only now.
 	_link_otosan_uchi_governors(characters, zone_result["navigation_zones"])
 
+	# Resync the denormalized insight_rank cache after ALL world-gen character mutations
+	# (generate_character set it, but assign_derived_advantages / Kolat master skill boosts /
+	# Kuroiban can change skills afterward). Single idempotent pass — the canonical computed
+	# rank, so the spell ML gate / kolat / combat consumers are correct from world start.
+	for _ic: L5RCharacterData in characters:
+		_ic.insight_rank = CharacterStats.get_insight_rank(_ic)
+
 	return {
 		"provinces": provinces,
 		"settlements": settlements,

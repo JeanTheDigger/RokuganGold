@@ -3343,12 +3343,23 @@ roll/insight-applicable Mastery Abilities. **Two tranches:**
   to the computed canonical, zero invention): (1) `generate_character` sets
   `c.insight_rank = CharacterStats.get_insight_rank(c)` after the sheet is built (before
   `apply_technique_flags`, which uses it as the reroll school-rank proxy) — covers all creation
-  paths (population gen, gempukku, all route through generate_character; post-gen mutations only
-  touch status/lord/role, never rings/skills); (2) `NPCAdvancement` sets
+  paths (population gen, gempukku all route through generate_character); (2) `WorldBootstrap`
+  re-syncs every character at the END of world-gen, after the post-creation skill mutations that
+  DO change Insight (`AdvantageSystem.assign_derived_advantages` grants a rank-1 Lore skill;
+  `KolatMasterSelector` boosts a master's Sect skills; Kuroiban selection) — a single idempotent
+  pass so masters/advantaged characters aren't left stale; (3) `NPCAdvancement` sets
   `character.insight_rank = new_rank` each seasonal advancement pass (lockstep with the computed
-  rank); (3) `WorldStateSaver.load_world` backfills every living character's cache after load
-  (idempotent — heals pre-fix saves stuck at 1, no-op for post-fix saves). Verified: stored=3=computed,
-  ML2 spell now castable, Courtier R3→156 / R7→164 insight, all 5 files parse clean.
+  rank — the cadence at which Insight rank actually changes per s52 Part 3; covers PCs too, the
+  pass only skips the dead); (4) `WorldStateSaver.load_world` backfills every living character's
+  cache after load (idempotent — heals pre-fix saves stuck at 1, no-op for post-fix saves).
+  **PC coverage:** there is no separate PC sheet-construction path — a PC is an ordinary character
+  (built via generate_character) with `is_pc=true` flipped later, so all four sync points apply to
+  PCs identically. Verified: stored=3=computed + ML2 castable on an isolated Rank-3 Isawa; Courtier
+  R3→156 / R7→164 insight; and a FULL bootstrapped world (3819 living characters, incl. 228 rank-≥2
+  shugenja the bug had crippled) shows ZERO stale insight caches. KNOWN RESIDUAL: the not-yet-live
+  CombatController exploration-training skill gain (combat_controller.gd:505) would stale the cache
+  until the next season — benign (a +1 skill rank can't cross a 25-point Insight threshold in one
+  step) and on the PC-travel HOLD; resync there when that layer goes live.
 
 ### s30 / s30a Katas — Combat Effects WIRED into s40 (2026-06-06)
 `simulation/kata_system.gd` contains all 43 katas (eligibility, XP deduction, NPC
