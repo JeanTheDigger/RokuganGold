@@ -207,9 +207,24 @@ static func execute(
 				"ic_day": ctx.ic_day, "season": ctx.season,
 				"reason": "no_detected_insurgency", "effects": {"failed": true},
 			}
-		var s_roll: int = _roll_insurgency_suppression(character, s_itype, dice_engine)
-		var s_is_shug: bool = character.school_type == Enums.SchoolType.SHUGENJA
-		var s_leader_cap: int = int(character.skills.get("Battle", 0)) + character.perception
+		var s_roll: int
+		var s_is_shug: bool
+		var s_leader_cap: int
+		if ctx.is_lord and character.school_type != Enums.SchoolType.SHUGENJA:
+			# Military-PU commit (s11.11 MILITARY PU SUPPRESSION): a lord directs the
+			# garrison rather than fighting personally; the unit commander rolls
+			# Battle/Perception (base 5k2 if no named commander). Shugenja lords fall
+			# through to the personal path — they bring ritual power (maho/taint).
+			var mil: Dictionary = _roll_insurgency_suppression_military(
+				character, characters_by_id, dice_engine
+			)
+			s_roll = int(mil["roll"])
+			s_is_shug = bool(mil["is_shugenja"])
+			s_leader_cap = int(mil["leader_capability"])
+		else:
+			s_roll = _roll_insurgency_suppression(character, s_itype, dice_engine)
+			s_is_shug = character.school_type == Enums.SchoolType.SHUGENJA
+			s_leader_cap = int(character.skills.get("Battle", 0)) + character.perception
 		return {
 			"success": true, "action_id": action_id,
 			"character_id": ctx.character_id,
@@ -2021,6 +2036,50 @@ static func _roll_insurgency_suppression(
 			kept = CharacterStats.get_earth_ring(character)
 	var result: DiceResult = dice_engine.roll_and_keep(maxi(1, rolled), maxi(1, kept), true)
 	return result.total + flat
+
+
+# Military-PU suppression (s11.11): a lord commits the garrison. The unit
+# commander rolls Battle/Perception (no Bugei formula, no Insight bonus — the
+# garrison is an abstracted force). The best co-located military commander leads;
+# with no named commander the GDD base is Battle 3 / Perception 2 (5k2).
+static func _roll_insurgency_suppression_military(
+	lord: L5RCharacterData,
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var best: L5RCharacterData = null
+	var best_cap: int = -1
+	for v: Variant in characters_by_id.values():
+		if not (v is L5RCharacterData):
+			continue
+		var c: L5RCharacterData = v
+		if CharacterStats.is_dead(c):
+			continue
+		if c.military_rank == Enums.MilitaryRank.NONE:
+			continue
+		if c.physical_location != lord.physical_location:
+			continue
+		var cap: int = int(c.skills.get("Battle", 0)) + c.perception
+		if cap > best_cap:
+			best_cap = cap
+			best = c
+	var rolled: int
+	var kept: int
+	var is_shug: bool
+	var cap_out: int
+	if best != null:
+		rolled = int(best.skills.get("Battle", 0)) + best.perception
+		kept = best.perception
+		is_shug = best.school_type == Enums.SchoolType.SHUGENJA
+		cap_out = best_cap
+	else:
+		# GDD base: Battle 3, Perception 2 → 5k2.
+		rolled = 5
+		kept = 2
+		is_shug = false
+		cap_out = 5
+	var total: int = dice_engine.roll_and_keep(maxi(1, rolled), maxi(1, kept), true).total
+	return {"roll": total, "is_shugenja": is_shug, "leader_capability": cap_out}
 
 
 static func _compute_admin_effects(action_id: String, action: NPCDataStructures.ScoredAction = null) -> Dictionary:
