@@ -3237,8 +3237,6 @@ static func _execute_meditate(
 	dice_engine: DiceEngine,
 ) -> Dictionary:
 	const MEDITATE_TN: int = 20
-	const MASTERY_RANK3: int = 3
-	const MASTERY_RANK7: int = 7
 
 	if character.current_void_points >= character.max_void_points:
 		return {
@@ -3277,12 +3275,9 @@ static func _execute_meditate(
 	if not check["success"]:
 		return result
 
+	# s24 Meditation R3/R7 VP-recovery cap (base 1 / 2 / 3), centralized in SkillMasterySystem.
 	var med_rank: int = SkillResolver.get_skill_rank(character, "Meditation")
-	var recovery_cap: int = 1
-	if med_rank >= MASTERY_RANK7:
-		recovery_cap = 3
-	elif med_rank >= MASTERY_RANK3:
-		recovery_cap = 2
+	var recovery_cap: int = SkillMasterySystem.meditation_vp_recovery_cap(med_rank)
 
 	var recoverable: int = character.max_void_points - character.current_void_points
 	var recovered: int = mini(recovery_cap, recoverable)

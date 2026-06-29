@@ -18,6 +18,13 @@ class_name SkillMasterySystem
 ##     Ring + School Rank — NOT a Spellcraft skill roll — so the universal R10 Free Raise does
 ##     NOT apply to it (R10 covers actual Spellcraft skill rolls via SkillResolver).
 ##
+## WIRED HERE (Void Point recovery cap, via ActionExecutor._execute_meditate):
+##   • Meditation R3 (restores up to 2 VP) / R7 (restores up to 3 VP), base 1 (s24 line 145).
+##
+## NO CONSUMER (LOCKED but no sim mechanic to attach to — documented so they aren't "forgotten"):
+##   • Meditation R5 Fasting TN −5 — no individual food/water mechanic (starvation is province-level).
+##   • Divination R5 (free second divination roll) — Divination is not a sim action (GM-flavor).
+##
 ## DEFERRED (each needs a different consumer; values all LOCKED in s24):
 ##   • TN reduction — Acting R3/5/7 (disguise TN −5/−10/−15) → disguise creation consumer.
 ##   • VP/recovery — Meditation R3/5/7, Divination R5 (Tea Ceremony R5 + Medicine R5 already wired).
@@ -98,3 +105,12 @@ static func total_insight_bonus(character: L5RCharacterData) -> int:
 # universal R10 Free Raise is deliberately excluded here.
 static func spellcraft_casting_rolled_bonus(character: L5RCharacterData) -> int:
 	return 1 if int(character.skills.get("Spellcraft", 0)) >= MASTERY_RANK_5 else 0
+
+
+# Meditation Void-recovery cap per meditation session (s24 line 145): base 1, R3 → 2, R7 → 3.
+static func meditation_vp_recovery_cap(meditation_rank: int) -> int:
+	if meditation_rank >= MASTERY_RANK_7:
+		return 3
+	if meditation_rank >= MASTERY_RANK_3:
+		return 2
+	return 1

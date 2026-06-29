@@ -3320,8 +3320,16 @@ All 135 files in `/simulation/` audited against GDD. Summary:
 
 ### s24 Skill Mastery Abilities + Insight wiring (2026-06-29, runtime-verified)
 `simulation/skill_mastery_system.gd` (SkillMasterySystem, pure class) is the s24 home for the
-roll/insight-applicable Mastery Abilities. **Three tranches:**
-- **Spellcraft R5 casting mastery (this tranche, 5/5 verified):** +1k0 on Spell Casting Rolls
+roll/insight-applicable Mastery Abilities. **Four tranches:**
+- **Meditation VP-recovery cap (this tranche, 9/9 verified):** Meditation R3 restores up to 2 VP,
+  R7 up to 3 VP per meditation session (base 1; s24 line 145). Was already functionally correct,
+  hardcoded in `ActionExecutor._execute_meditate` (predates SkillMasterySystem); centralized into
+  `SkillMasterySystem.meditation_vp_recovery_cap(rank)` (behavior-preserving) so the cap lives in
+  the s24 home. The other VP-recovery sites (TEA_CEREMONY, s37 Drawing the Void) are distinct
+  mechanics and correctly do NOT use the Meditation cap. NO CONSUMER (documented, not wired):
+  Meditation R5 Fasting TN−5 (no individual food/water mechanic — starvation is province-level)
+  and Divination R5 free-second-roll (Divination is not a sim action, GM-flavor).
+- **Spellcraft R5 casting mastery (5/5 verified):** +1k0 on Spell Casting Rolls
   (s24 line 153). `SkillMasterySystem.spellcraft_casting_rolled_bonus(character)` (+1 rolled die
   at Spellcraft rank 5) folded into `SpellSystem.resolve_cast`'s `roll_dice` (before the maxi(1)
   floor + the ward `−XkX` penalties, so a strong ward can still eat it — the correct interaction).
