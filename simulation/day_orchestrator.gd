@@ -207,6 +207,11 @@ static func advance_day(
 
 	_apply_cohabitation(characters, characters_by_id)
 
+	# s29.15.24 Ikoma R4 / Shiba Advisor pre-battle inspiration grants (granted_reroll).
+	# Runs after arrivals/co-location settle and before the NPC wave so a grant is active
+	# when the ally rolls. Trigger/ally/expiry mappings PROVISIONAL (see the function).
+	_process_inspiration_grants(characters, active_wars, ic_day, dice_engine)
+
 	var favor_results: Dictionary = _process_favors(favors, ic_day, characters_by_id)
 
 	_remove_resolved_favors(favors)
@@ -12729,6 +12734,122 @@ static func _spy_char_fact_priority(need_type: String) -> Array:
 				"disposition_value", "location"]
 	# Default: cycle through all facts.
 	return _SPY_CHARACTER_FACT_TYPES.duplicate()
+
+
+# -- s29.15.24 Inspiration grants: Ikoma R4 / Shiba Advisor (granted_reroll) ---
+# Grantor techniques that write a granted_reroll onto an allied bushi before battle.
+# GDD-LOCKED values: Perform: Storytelling/Awareness TN 25 (Ikoma); Lore: War/Int TN 25
+# or Lore: History/Int TN 35 (Shiba); Ikoma bonus = bard Honor Rank unkept; Shiba = pure
+# reroll (0 bonus); uses 1; School-Rank grants per OOC week; Ikoma expires end_of_IC_day;
+# −0.2 Honor failure penalty on the bard. PROVISIONAL engine mappings (GDD line 99/141
+# defers these to engine dev — "fire automatically when a battle is imminent / bushi
+# deploying"):
+#   • Trigger ("battle imminent / deploying") → grantor's clan is in an active war.
+#   • Ally → highest-Kenjutsu/Iaijutsu co-located same-clan bushi without an active grant
+#     (Ikoma "ally" restricted to bushi here — combat rerolls are the high-value case).
+#   • Shiba "end_of_mission" → ic_day + 90 (~one season).
+#   • Mechanism → auto-fired daily writeback (no AP cost; the weekly School-Rank budget is
+#     the limiter), per GDD "NPC ... fire automatically". One ally per fire; the weekly
+#     budget spreads grants to up to School-Rank allies across the week.
+# DEFERRED: the Ikoma −0.2 Honor failure penalty is CARRIED on the entry (LOCKED format)
+# but its APPLICATION to the bard is not yet wired — the spend path surfaces it in the
+# result, but deducting the bard's Honor needs pending-penalty plumbing through
+# characters_by_id (forward-wired, like other emitted-but-unconsumed effect keys).
+const _INSPIRATION_SHIBA_EXPIRY_DAYS: int = 90  # PROVISIONAL: "mission duration" ~ one season
+
+static func _process_inspiration_grants(
+	characters: Array,
+	active_wars: Array,
+	ic_day: int,
+	dice: DiceEngine,
+) -> void:
+	for grantor: L5RCharacterData in characters:
+		if grantor == null or CharacterStats.is_dead(grantor) or grantor.is_pc:
+			continue
+		var is_ikoma: bool = grantor.school.begins_with("Ikoma Bard")
+		var is_shiba: bool = grantor.school.begins_with("Shiba Advisor")
+		if not (is_ikoma or is_shiba):
+			continue
+		var school_rank: int = CharacterStats.get_insight_rank(grantor)
+		if is_ikoma and school_rank < 4:
+			continue
+		if grantor.physical_location.is_empty():
+			continue
+		if not _clan_in_active_war(grantor.clan, active_wars):
+			continue
+		# Weekly School-Rank grant budget (OOC week = 7 IC days).
+		var week: int = ic_day / 7
+		if grantor.supply_ledger.get("inspiration_week", -1) != week:
+			grantor.supply_ledger["inspiration_week"] = week
+			grantor.supply_ledger["inspiration_grants"] = 0
+		var used: int = grantor.supply_ledger.get("inspiration_grants", 0)
+		if used >= school_rank:
+			continue
+		var ally: L5RCharacterData = _pick_inspiration_ally(grantor, characters, ic_day)
+		if ally == null:
+			continue
+		var entry: Dictionary = {}
+		if is_ikoma:
+			var roll: Dictionary = SkillResolver.resolve_skill_check(
+				grantor, dice, "Perform: Storytelling", 25, 0, "", Enums.Trait.AWARENESS,
+			)
+			if not roll.get("success", false):
+				continue
+			var honor_rank: int = HonorGlorySystem.get_honor_rank(grantor)
+			entry = RerollSystem.create_granted_reroll_entry(
+				grantor.character_id, "ikoma_strength_of_tradition", honor_rank, "unkept",
+				1, ic_day, {"target_id": grantor.character_id, "stat": "honor", "value": -0.2},
+			)
+		else:
+			# Shiba: Lore: War TN 25 (preferred) or Lore: History TN 35 — use the stronger.
+			var war_rank: int = grantor.skills.get("Lore: War", 0)
+			var hist_rank: int = grantor.skills.get("Lore: History", 0)
+			var roll: Dictionary
+			if war_rank >= hist_rank:
+				roll = SkillResolver.resolve_skill_check(grantor, dice, "Lore: War", 25, 0, "", Enums.Trait.INTELLIGENCE)
+			else:
+				roll = SkillResolver.resolve_skill_check(grantor, dice, "Lore: History", 35, 0, "", Enums.Trait.INTELLIGENCE)
+			if not roll.get("success", false):
+				continue
+			entry = RerollSystem.create_granted_reroll_entry(
+				grantor.character_id, "shiba_lessons", 0, "unkept",
+				1, ic_day + _INSPIRATION_SHIBA_EXPIRY_DAYS, {},
+			)
+		ally.granted_reroll.append(entry)
+		grantor.supply_ledger["inspiration_grants"] = used + 1
+
+
+static func _clan_in_active_war(clan: String, active_wars: Array) -> bool:
+	if clan.is_empty():
+		return false
+	for war: WarData in active_wars:
+		if war == null or not war.is_active:
+			continue
+		if war.clan_a == clan or war.clan_b == clan:
+			return true
+	return false
+
+
+# Highest-combat co-located same-clan bushi without an active granted reroll. PROVISIONAL.
+static func _pick_inspiration_ally(
+	grantor: L5RCharacterData, characters: Array, ic_day: int,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	var best_skill: int = -1
+	for c: L5RCharacterData in characters:
+		if c == null or c == grantor or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.school_type != Enums.SchoolType.BUSHI or c.clan != grantor.clan:
+			continue
+		if c.physical_location != grantor.physical_location:
+			continue
+		if RerollSystem.find_granted_reroll(c, ic_day) >= 0:
+			continue  # already holds an active grant
+		var skill: int = maxi(c.skills.get("Kenjutsu", 0), c.skills.get("Iaijutsu", 0))
+		if skill > best_skill:
+			best_skill = skill
+			best = c
+	return best
 
 
 # -- s29.15.24 Reroll charge refresh / expiry (weekly) ------------------------
