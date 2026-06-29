@@ -116,6 +116,11 @@ func load_world(ws: Node) -> bool:
 
 	ws.characters.assign(_load_resource_array(base + DIR_CHARACTERS))
 	ws.rebuild_characters_by_id()
+	# Backfill the denormalized insight_rank cache for worlds saved before it was wired
+	# (every such character is stuck at the default 1). Idempotent — a no-op once correct.
+	for c: L5RCharacterData in ws.characters:
+		if not CharacterStats.is_dead(c):
+			c.insight_rank = CharacterStats.get_insight_rank(c)
 	ws.active_topics.assign(_load_resource_array(base + DIR_TOPICS))
 	ws.commitments.assign(_load_resource_array(base + DIR_COMMITMENTS))
 	ws.crime_records.assign(_load_resource_array(base + DIR_CRIMES))

@@ -3318,6 +3318,38 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   seppuku option, Imperial jurisdiction). Wired into full crime/investigation pipeline
   and Winter Court Emperor's Peace enforcement (v624).
 
+### s24 Skill Mastery Abilities + Insight wiring (2026-06-29, runtime-verified)
+`simulation/skill_mastery_system.gd` (SkillMasterySystem, pure class) is the s24 home for the
+roll/insight-applicable Mastery Abilities. **Two tranches:**
+- **Roll-applicable masteries (prior tranche, commit fe2a6dc, 16/16 verified):** universal
+  Rank-10 (+1 Free Raise on ALL rolls with the skill) + the Rank-5 contested-roll masteries
+  (Courtier/Etiquette +1k0; Sincerity/Investigation/Intimidation/Temptation +5). Folded into
+  `SkillResolver.resolve_skill_check` (universal FR added to `total_bonus`) and
+  `resolve_contested_check` (both sides get their universal FR + contested {rolled,kept,flat}).
+  All values LOCKED in s24 (lines 31/57/67/85/121/409/437). `base_skill()` strips "Parent: Sub".
+- **Insight masteries + stale-field bug (this tranche, 11/11 verified):** Courtier/Etiquette are
+  the ONLY two skills with Insight-bonus masteries — **R3 +3, R7 +7 Insight total** (supersedes,
+  not cumulative; s24 lines 57/67). `SkillMasterySystem.insight_bonus(skill, rank)` +
+  `total_insight_bonus(character)` fold into `CharacterStats.get_insight` =
+  `(rings×10) + total_skill_ranks + total_insight_bonus`.
+- **BUG FOUND + FIXED — denormalized `insight_rank` cache was never written in production.**
+  `CharacterStats.get_insight_rank()` is COMPUTED/canonical, but the stored `@export var
+  insight_rank` field on L5RCharacterData (read directly by `SpellSystem.can_cast`'s ML casting
+  gate at spell_system.gd:1629, `school_rank = caster.insight_rank` at :1045, kolat, combat) was
+  left at its default **1** — `WorldGenerator.generate_character` takes an `insight_rank` PARAM
+  that drives trait/skill assignment but never did `c.insight_rank = …`. Empirically confirmed: a
+  Rank-3 Isawa shugenja had stored=1 / computed=3 and **could not cast any ML2+ spell** (every NPC
+  shugenja was crippled to ML1). FIXED at all three write points (the field is a cache → sync it
+  to the computed canonical, zero invention): (1) `generate_character` sets
+  `c.insight_rank = CharacterStats.get_insight_rank(c)` after the sheet is built (before
+  `apply_technique_flags`, which uses it as the reroll school-rank proxy) — covers all creation
+  paths (population gen, gempukku, all route through generate_character; post-gen mutations only
+  touch status/lord/role, never rings/skills); (2) `NPCAdvancement` sets
+  `character.insight_rank = new_rank` each seasonal advancement pass (lockstep with the computed
+  rank); (3) `WorldStateSaver.load_world` backfills every living character's cache after load
+  (idempotent — heals pre-fix saves stuck at 1, no-op for post-fix saves). Verified: stored=3=computed,
+  ML2 spell now castable, Courtier R3→156 / R7→164 insight, all 5 files parse clean.
+
 ### s30 / s30a Katas — Combat Effects WIRED into s40 (2026-06-06)
 `simulation/kata_system.gd` contains all 43 katas (eligibility, XP deduction, NPC
 selection). Combat effects are now **wired into IndividualCombat** (s40), not stubs:

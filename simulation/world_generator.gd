@@ -709,6 +709,12 @@ static func generate_character(
 	c.age = _generate_age(insight_rank, dice_engine)
 	c.koku = float(insight_rank) * float(dice_engine.rand_int_range(1, 10))
 
+	# Sync the denormalized insight_rank cache from the fully-built sheet (rings + skills +
+	# s24 Courtier/Etiquette masteries). Consumers that read character.insight_rank directly
+	# (spell ML casting gate, kolat, combat) require this — generation set the param-driven
+	# stats but never wrote the field, leaving it stuck at the default 1.
+	c.insight_rank = CharacterStats.get_insight_rank(c)
+
 	SkillResolver.apply_technique_flags(c)
 	if c.school_type == Enums.SchoolType.SHUGENJA:
 		SpellSystem.assign_starting_spells(c, school)

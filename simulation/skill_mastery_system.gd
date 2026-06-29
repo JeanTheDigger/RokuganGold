@@ -9,8 +9,11 @@ class_name SkillMasterySystem
 ##       Courtier +1k0, Etiquette +1k0, Sincerity +5, Investigation +5,
 ##       Intimidation +5, Temptation +5 — "to all Contested Rolls using <skill>".
 ##
+## WIRED HERE (Insight bonus, via CharacterStats.get_insight):
+##   • Courtier/Etiquette R3 (+3 Insight) / R7 (+7 Insight total) — the ONLY two skills with
+##     Insight masteries (s24 lines 57, 67).
+##
 ## DEFERRED (each needs a different consumer; values all LOCKED in s24):
-##   • Insight masteries — Courtier/Etiquette R3 (+3 Insight) / R7 (+7 total) → CharacterStats.get_insight.
 ##   • Casting — Spellcraft R5 (+1k0 Spell Casting Rolls) → SpellSystem.resolve_cast.
 ##   • TN reduction — Acting R3/5/7 (disguise TN −5/−10/−15) → disguise creation consumer.
 ##   • VP/recovery — Meditation R3/5/7, Divination R5 (Tea Ceremony R5 + Medicine R5 already wired).
@@ -22,8 +25,15 @@ class_name SkillMasterySystem
 ##     Engineering R5 (+5 cooperative, s57.41), Tea Ceremony R5 (2 VP), Medicine R5 (+1k0 heal).
 
 
+const MASTERY_RANK_3: int = 3
 const MASTERY_RANK_5: int = 5
+const MASTERY_RANK_7: int = 7
 const MASTERY_RANK_10: int = 10
+
+# s24 skills carrying an Insight-bonus mastery (the only two). R3 → +3, R7 → +7 total.
+const INSIGHT_SKILLS: Array = ["Courtier", "Etiquette"]
+const INSIGHT_R3_BONUS: int = 3  # s24 lines 57, 67
+const INSIGHT_R7_BONUS: int = 7  # s24 lines 57, 67 ("total" — supersedes, not cumulative)
 
 # s24 Rank-5 contested-roll masteries, keyed by base skill. {rolled, kept, flat}.
 const CONTESTED_R5: Dictionary = {
@@ -57,3 +67,23 @@ static func contested_bonus(skill: String, rank: int) -> Dictionary:
 		if CONTESTED_R5.has(b):
 			return CONTESTED_R5[b]
 	return {"rolled": 0, "kept": 0, "flat": 0}
+
+
+# Insight-bonus mastery for one skill at the given rank (s24 lines 57, 67).
+# R7+ → +7 (total, supersedes R3); R3–6 → +3; else 0. Only Courtier/Etiquette qualify.
+static func insight_bonus(skill: String, rank: int) -> int:
+	if not INSIGHT_SKILLS.has(base_skill(skill)):
+		return 0
+	if rank >= MASTERY_RANK_7:
+		return INSIGHT_R7_BONUS
+	if rank >= MASTERY_RANK_3:
+		return INSIGHT_R3_BONUS
+	return 0
+
+
+# Total Insight bonus across all of a character's skills (Courtier + Etiquette masteries).
+static func total_insight_bonus(character: L5RCharacterData) -> int:
+	var total: int = 0
+	for skill: String in character.skills.keys():
+		total += insight_bonus(skill, int(character.skills[skill]))
+	return total
