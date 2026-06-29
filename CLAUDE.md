@@ -3250,13 +3250,17 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   `supply_ledger`, one ally/fire so the weekly budget spreads to up to School-Rank allies);
   Ikoma "ally" restricted to bushi (the combat-reroll high-value case). The granted-reroll
   SPEND path (try_granted_reroll in resolve_skill_check / resolve_contested_check) is now
-  runtime-proven for the first time. STILL DEFERRED: the Ikoma −0.2 Honor failure penalty is
-  CARRIED on the entry (LOCKED format) and surfaced in the spend result, but its APPLICATION
-  to the bard is not yet wired (needs pending-penalty plumbing through characters_by_id —
-  forward-wired, like other emitted-but-unconsumed effect keys); and Shiba's "Raises bestow
-  additional allies" is modeled as one-ally-per-fire under the weekly budget rather than a
-  declared multi-ally single fire. Runtime-verified 23/23 (grant formats, war/co-location/
-  rank/budget gating, best-ally order, end-to-end consume). (b) Contested rolls ARE now covered too (2026-06-29):
+  runtime-proven for the first time. **Ikoma −0.2 Honor failure penalty now APPLIED
+  (2026-06-29):** when a granted reroll fires AND the reroll also fails, `apply_granted_reroll`
+  records the entry's `failure_penalty` on the ally (new `L5RCharacterData.pending_grant_penalties`,
+  since RerollSystem has the ally but not the bard); `DayOrchestrator._process_grant_failure_penalties`
+  (daily, right after the NPC wave) drains each character's pending penalties and applies them to
+  the target (the bard) via characters_by_id (`HonorGlorySystem.apply_honor_change`), then clears —
+  target-death-guarded, idempotent. Runtime-verified 10/10 (records on fail, drains −0.2, no penalty
+  on success, dead-target skip+clear, idempotent re-drain). STILL DEFERRED: Shiba's "Raises bestow
+  additional allies" is modeled as one-ally-per-fire under the weekly budget rather than a declared
+  multi-ally single fire. Grant-pass runtime-verified 23/23 (grant formats, war/co-location/rank/
+  budget gating, best-ally order, end-to-end consume). (b) Contested rolls ARE now covered too (2026-06-29):
   `resolve_contested_check` lets the strict LOSER spend one eligible charge to re-roll
   their own side once, then re-evaluates the winner — a single reroll, the new loser
   gets no counter (the tabletop reaction model; a tie is not a loss). Refactored the

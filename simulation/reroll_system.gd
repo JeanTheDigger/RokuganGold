@@ -183,6 +183,9 @@ static func apply_granted_reroll(
 
 	if not result.get("success", false) and not entry.get("failure_penalty", {}).is_empty():
 		result["failure_penalty"] = entry["failure_penalty"]
+		# Record on the ally (this character) so a daily orchestrator pass can apply the
+		# penalty to its target (the grantor) — apply_granted_reroll has no characters_by_id.
+		character.pending_grant_penalties.append(entry["failure_penalty"])
 
 	return result
 

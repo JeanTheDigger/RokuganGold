@@ -345,6 +345,10 @@ static func advance_day(
 		approach_penalties, commitments, military_data, settlements
 	)
 
+	# s29.15.24: apply any granted-reroll failure penalties recorded during the wave
+	# (e.g. Ikoma R4 −0.2 Honor to the bard when a granted reroll also failed).
+	_process_grant_failure_penalties(characters, characters_by_id)
+
 	var max_letter_id: int = 0
 	for _l: Variant in pending_letters:
 		if _l is LetterData and _l.letter_id > max_letter_id:
@@ -12850,6 +12854,28 @@ static func _pick_inspiration_ally(
 			best_skill = skill
 			best = c
 	return best
+
+
+# Apply granted-reroll failure penalties recorded on allies during the wave to their
+# targets (the grantor), then clear. s29.15.24 (Ikoma R4 −0.2 Honor to the bard when a
+# granted reroll fires AND the reroll also fails). Target-death-guarded; ally state is
+# irrelevant (the penalty was earned at reroll time).
+static func _process_grant_failure_penalties(
+	characters: Array, characters_by_id: Dictionary,
+) -> void:
+	for c: L5RCharacterData in characters:
+		if c == null or c.pending_grant_penalties.is_empty():
+			continue
+		for pen: Variant in c.pending_grant_penalties:
+			if not pen is Dictionary:
+				continue
+			var p: Dictionary = pen
+			var target: L5RCharacterData = characters_by_id.get(p.get("target_id", -1))
+			if target == null or CharacterStats.is_dead(target):
+				continue
+			if p.get("stat", "") == "honor":
+				HonorGlorySystem.apply_honor_change(target, float(p.get("value", 0.0)))
+		c.pending_grant_penalties.clear()
 
 
 # -- s29.15.24 Reroll charge refresh / expiry (weekly) ------------------------

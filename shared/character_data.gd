@@ -284,6 +284,10 @@ var combat_ring_deltas: Dictionary = {}
 
 @export var self_reroll: Array = []
 @export var granted_reroll: Array = []
+# s29.15.24: failure_penalty dicts recorded when a granted reroll fires AND the reroll
+# also fails (e.g. Ikoma R4 −0.2 Honor to the bard). Drained by a daily orchestrator
+# pass that applies each to its target via characters_by_id, then clears.
+@export var pending_grant_penalties: Array = []
 @export var enhanced_void: bool = false
 @export var precise_memory: bool = false
 @export var cadence_trained: bool = false
