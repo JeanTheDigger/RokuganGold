@@ -992,6 +992,7 @@ static func roll_initiative(
 	score += kata_init["flat_bonus"] + adv_init["free_raises"] * 5 - adv_init_tn
 	score += _get_kiho_initiative_bonus(character, participant, weapon_name)
 	score += participant.initiative_modifier  # Song of the World (s38), persistent delta
+	score += SkillMasterySystem.battle_initiative_bonus(character)  # s24 Battle R5: +Battle Rank
 
 	# Center Stance carry-over adds +10 to Initiative Score for that round only (s40)
 	if participant.stance == Enums.Stance.CENTER and not participant.center_stance_bonus_used:
@@ -1083,7 +1084,9 @@ static func get_armor_tn(
 	var timed_armor: int = get_timed_modifier_total(participant, "armor_tn")
 	# Touch the Void Dragon (s38): +1 Rank to Reflexes (Air) = +5 Armor TN.
 	var vd_armor: int = vd_ring_bonus(participant, Enums.Ring.AIR) * 5
-	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus + timed_armor + vd_armor
+	# s24 Bugei masteries: Defense R5 (+3 in Defense/Full Defense), War Fan R5/R7 (+1/+3 passive).
+	var bugei_armor: int = SkillMasterySystem.combat_armor_tn_bonus(character, participant.stance)
+	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus + timed_armor + vd_armor + bugei_armor
 
 
 static func roll_full_defense_bonus(
@@ -1403,11 +1406,20 @@ static func resolve_damage(
 		rolled += get_timed_modifier_total(attacker_p, "spell_damage_rolled")
 		kept += get_timed_modifier_total(attacker_p, "spell_damage_kept")
 
+	# s24 Bugei weapon-skill damage masteries: Kenjutsu R3 (+1k0 sword), Jiujutsu R3/R7 (+1k0/+0k1
+	# unarmed). Inert for spirit creatures (fixed stat-block damage, no skills).
+	var bugei_dmg_rank: int = int(attacker.skills.get(dmg_skill, 0)) if not spirit_fixed_damage else 0
+	var bugei_dmg: Dictionary = SkillMasterySystem.weapon_damage_bonus(dmg_skill, bugei_dmg_rank)
+	rolled += int(bugei_dmg["rolled"])
+	kept += int(bugei_dmg["kept"])
+
 	# s35 Hungry Blade: while the buff is active, all the wielder's damage dice also explode on an 8 or 9
 	# (once each). Inert (false) for everyone else.
 	var explode_8: bool = attacker_p != null and get_timed_modifier_total(attacker_p, "hungry_blade") > 0
+	# s24 Kenjutsu R7 / Heavy Weapons R7: damage dice explode on 9 AND 10.
+	var explode_9: bool = SkillMasterySystem.weapon_damage_explodes_on_9(dmg_skill, bugei_dmg_rank)
 	# roll_damage handles the dice pool; we pass strength already absorbed above
-	var result: Dictionary = dice_engine.roll_damage(rolled, kept, 0, 0, explode_8)
+	var result: Dictionary = dice_engine.roll_damage(rolled, kept, 0, 0, explode_8, explode_9)
 	var total: int = result["raw"] + feint_bonus + kata_dmg["flat_bonus"]
 
 	return {

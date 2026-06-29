@@ -25,13 +25,23 @@ class_name SkillMasterySystem
 ##   • Meditation R5 Fasting TN −5 — no individual food/water mechanic (starvation is province-level).
 ##   • Divination R5 (free second divination roll) — Divination is not a sim action (GM-flavor).
 ##
+## WIRED HERE (Bugei combat masteries, s24.2, via IndividualCombat resolve hooks):
+##   • Kenjutsu R3 (+1k0 sword damage) / R7 (explode on 9-10); Jiujutsu R3 (+1k0 unarmed) /
+##     R7 (+0k1); Heavy Weapons R7 (explode on 9-10) → resolve_damage.
+##   • Defense R5 (Armor TN +3 in Defense/Full Defense); War Fan R5/R7 (Armor TN +1/+3) → get_armor_tn.
+##   • Battle R5 (Battle Rank to Initiative in skirmishes) → roll_initiative.
+##   The damage/explode/War-Fan masteries fire in NPC summary combat (duels, bodyguard fights,
+##   hunts); Defense-stance and Battle-initiative fire in the turn-based orchestrator.
+##
 ## DEFERRED (each needs a different consumer; values all LOCKED in s24):
 ##   • TN reduction — Acting R3/5/7 (disguise TN −5/−10/−15) → disguise creation consumer.
-##   • VP/recovery — Meditation R3/5/7, Divination R5 (Tea Ceremony R5 + Medicine R5 already wired).
 ##   • Conditional roll — Hunting R5 (+1k0 Stealth in wilderness) → needs a wilderness context flag.
 ##   • Action-economy — Investigation R3/R7 (extra Search attempts).
-##   • Combat / movement (s40 layer) — Defense, Kenjutsu, Iaijutsu, War Fan, Athletics, Stealth,
-##     Battle, Horsemanship, Jiujutsu, weapon skills, etc.
+##   • Bugei action-economy / movement / maneuver (turn-based orchestrator, mostly PC-travel HOLD):
+##     Ready-as-Free-Action (Kenjutsu R5, Iaijutsu R3, Spears/Polearms/Staves R7), Defense R3/R7
+##     stance actions, Athletics/Stealth terrain movement, Horsemanship mount actions, Kyujutsu
+##     range, Iaijutsu R5/R7 duel Focus, Polearms R5 (vs mounted), reduction-pierce (Spears/Heavy
+##     R3), and the Grapple/Knockdown/Disarm/Extra-Attack free-raise masteries.
 ##   • Specific uses already hand-wired elsewhere — Calligraphy R5 (cipher, letter_system),
 ##     Engineering R5 (+5 cooperative, s57.41), Tea Ceremony R5 (2 VP), Medicine R5 (+1k0 heal).
 
@@ -114,3 +124,55 @@ static func meditation_vp_recovery_cap(meditation_rank: int) -> int:
 	if meditation_rank >= MASTERY_RANK_3:
 		return 2
 	return 1
+
+
+# ============================================================================
+# Bugei (martial) masteries — s24.2. Folded into IndividualCombat resolve hooks.
+# ============================================================================
+
+# Damage-roll bonus (rolled/kept dice) for a weapon SKILL at its rank.
+#   Kenjutsu R3: +1k0 sword damage (s24 line 393).
+#   Jiujutsu R3: +1k0 unarmed; R7: +0k1 unarmed (total +1k1 with R3) (s24 line 387).
+static func weapon_damage_bonus(weapon_skill: String, rank: int) -> Dictionary:
+	var rolled: int = 0
+	var kept: int = 0
+	match weapon_skill:
+		"Kenjutsu":
+			if rank >= MASTERY_RANK_3:
+				rolled += 1
+		"Jiujutsu":
+			if rank >= MASTERY_RANK_3:
+				rolled += 1
+			if rank >= MASTERY_RANK_7:
+				kept += 1
+	return {"rolled": rolled, "kept": kept}
+
+
+# True if the weapon skill's damage dice explode on 9 (and 10) at this rank.
+#   Kenjutsu R7 (s24 line 393) / Heavy Weapons R7 (s24 line 403).
+static func weapon_damage_explodes_on_9(weapon_skill: String, rank: int) -> bool:
+	return rank >= MASTERY_RANK_7 and (weapon_skill == "Kenjutsu" or weapon_skill == "Heavy Weapons")
+
+
+# Bugei Armor-TN bonus (stance-aware).
+#   Defense R5: Armor TN +3 in Defense/Full Defense Stance (s24 line 367 — ON TOP of the base
+#     Defense-stance bonus, which already includes the Defense Rank).
+#   War Fan R5: +1; R7: +3 (passive defensive bonus from war-fan mastery) (s24 line 419).
+static func combat_armor_tn_bonus(character: L5RCharacterData, stance: Enums.Stance) -> int:
+	var bonus: int = 0
+	var def_rank: int = int(character.skills.get("Defense", 0))
+	if def_rank >= MASTERY_RANK_5 and (stance == Enums.Stance.DEFENSE or stance == Enums.Stance.FULL_DEFENSE):
+		bonus += 3
+	var fan_rank: int = int(character.skills.get("War Fan", 0))
+	if fan_rank >= MASTERY_RANK_7:
+		bonus += 3
+	elif fan_rank >= MASTERY_RANK_5:
+		bonus += 1
+	return bonus
+
+
+# Battle R5: add Battle Skill Rank to Initiative Score during skirmishes (s24 line 339).
+# All individual combat is skirmish-scale, so the bonus always applies at rank 5+.
+static func battle_initiative_bonus(character: L5RCharacterData) -> int:
+	var battle_rank: int = int(character.skills.get("Battle", 0))
+	return battle_rank if battle_rank >= MASTERY_RANK_5 else 0

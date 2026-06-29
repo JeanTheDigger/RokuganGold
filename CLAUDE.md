@@ -3320,8 +3320,24 @@ All 135 files in `/simulation/` audited against GDD. Summary:
 
 ### s24 Skill Mastery Abilities + Insight wiring (2026-06-29, runtime-verified)
 `simulation/skill_mastery_system.gd` (SkillMasterySystem, pure class) is the s24 home for the
-roll/insight-applicable Mastery Abilities. **Four tranches:**
-- **Meditation VP-recovery cap (this tranche, 9/9 verified):** Meditation R3 restores up to 2 VP,
+roll/insight-applicable Mastery Abilities. **Five tranches:**
+- **Bugei combat masteries — tranche 1 (this tranche, 22/22 verified):** the attacker/defender
+  stat-value masteries (s24.2), folded into IndividualCombat alongside the existing `_get_kata_*`
+  hooks. **resolve_damage:** Kenjutsu R3 (+1k0 sword), Jiujutsu R3 (+1k0 unarmed) / R7 (+0k1), and
+  the **explode-on-9** masteries Kenjutsu R7 + Heavy Weapons R7 (new `explode_9` mode on
+  `DiceEngine.roll_and_keep`/`roll_damage` — lowers the explosion threshold to 9; zero-regression:
+  default false keeps threshold 10, and the existing `explode_8` Hungry-Blade guard reduces to its
+  prior form when `explode_9` is false). **get_armor_tn:** Defense R5 (+3 in Defense/Full Defense,
+  ON TOP of the base stance bonus which already includes Defense Rank) + War Fan R5/R7 (+1/+3
+  passive). **roll_initiative:** Battle R5 (+Battle Rank, all combat is skirmish-scale). The
+  damage/explode/War-Fan masteries fire in NPC **summary combat** (live: duels, assassination
+  bodyguard fights, hunts — verified katana mean 20.3→21.3→26.2 across Ken2/3/7, unarmed
+  10.6→11.4→19.0 across Jiu2/3/7); Defense-stance (+3 over R4's base, =+4 total: +1 base rank +3
+  mastery) and Battle-initiative (+5 mean delta) fire in the turn-based orchestrator. Bugei tranche 2
+  (action-economy / movement / maneuver: Ready-as-Free-Action, terrain movement, mount actions,
+  Grapple/Knockdown/Disarm free raises, reduction-pierce, Iaijutsu duel Focus) deferred — mostly
+  turn-based orchestrator effects on the PC-travel HOLD.
+- **Meditation VP-recovery cap (9/9 verified):** Meditation R3 restores up to 2 VP,
   R7 up to 3 VP per meditation session (base 1; s24 line 145). Was already functionally correct,
   hardcoded in `ActionExecutor._execute_meditate` (predates SkillMasterySystem); centralized into
   `SkillMasterySystem.meditation_vp_recovery_cap(rank)` (behavior-preserving) so the cap lives in
