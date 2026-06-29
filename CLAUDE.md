@@ -3241,10 +3241,16 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   arrays, but nothing WRITES granted_reroll entries yet; that needs the grantor's
   technique as a fireable action (Ikoma: Simple Action + Perform: Storytelling TN 25 +
   −0.2 Honor on reroll-fail; Shiba: 1 AP + Lore: War/History before a military task),
-  a separate tranche. (b) Only `resolve_skill_check` (TN-based) consumes rerolls;
-  `resolve_contested_check` does not — Yasuki/Yoritomo rolls that resolve as a contest
-  won't reroll, but the many TN-based skill rolls (incl. Kasuga R5 School Skills and
-  TN-based social rolls) do. (c) The reroll re-roll drops ic_day/context (passes -1/{}),
+  a separate tranche. (b) Contested rolls ARE now covered too (2026-06-29):
+  `resolve_contested_check` lets the strict LOSER spend one eligible charge to re-roll
+  their own side once, then re-evaluates the winner — a single reroll, the new loser
+  gets no counter (the tabletop reaction model; a tie is not a loss). Refactored the
+  per-side total into `_contested_total()` (DRY, behavior-preserving) so the initial
+  roll and the reroll recompute identically. The Yoritomo skill-swap is NOT applied in
+  a contest (the same skill is re-rolled); ic_day/context buffs ARE preserved (the pool
+  counts already include them). So Yasuki R2 / Kasuga R5 social CONTESTS (intimidation
+  vs Willpower, sincerity-deceit) now reroll, alongside the TN-based path. (c) The
+  resolve_skill_check reroll re-roll drops ic_day/context (passes -1/{}),
   matching the LOCKED RerollSystem behavior — minor (day-buffs not re-applied to the
   reroll). Runtime-verified 32/32 via headless drivers (17 population: gates, charges,
   skills, swap, idempotency, below-threshold negatives; 15 spend/refresh/swap: just-in-time

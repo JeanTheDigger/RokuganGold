@@ -844,6 +844,17 @@ static func resolve_skill_check(
 
 # -- Contested skill check between two characters ------------------------------
 
+# Final contested total for one side (extracted so the initial roll AND a
+# s29.15.24 reroll recompute it identically).
+static func _contested_total(
+	roll: DiceResult, flat_bonus: int, wound_penalty: int, technique_fr: int,
+	adv_free_raises: int, adv_tn: int, character: L5RCharacterData,
+) -> int:
+	return roll.total + flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
+		+ (adv_free_raises * FREE_RAISE_VALUE) + adv_tn \
+		+ _get_possession_terror_penalty(character)
+
+
 static func resolve_contested_check(
 	char_a: L5RCharacterData,
 	char_b: L5RCharacterData,
@@ -925,27 +936,51 @@ static func resolve_contested_check(
 	var wisdom_a: int = _get_wisdom_and_clarity_bonus(char_a, skill_a)
 	var wisdom_b: int = _get_wisdom_and_clarity_bonus(char_b, skill_b)
 
-	var roll_a: DiceResult = dice_engine.roll_and_keep(
-		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0) + voice_a.get("rolled", 0) + soul_a + wisdom_a,
-		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0) + void_a.get("kept", 0) + voice_a.get("kept", 0), sr_a > 0, emph_a
-	)
-	var roll_b: DiceResult = dice_engine.roll_and_keep(
-		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0) + voice_b.get("rolled", 0) + soul_b + wisdom_b,
-		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0) + void_b.get("kept", 0) + voice_b.get("kept", 0), sr_b > 0, emph_b
-	)
+	var rolled_a: int = tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0) + voice_a.get("rolled", 0) + soul_a + wisdom_a
+	var kept_a: int = tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0) + void_a.get("kept", 0) + voice_a.get("kept", 0)
+	var rolled_b: int = tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0) + voice_b.get("rolled", 0) + soul_b + wisdom_b
+	var kept_b: int = tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0) + void_b.get("kept", 0) + voice_b.get("kept", 0)
 
-	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE) \
-		+ (adv_a.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_a \
-		+ _get_possession_terror_penalty(char_a)
-	var total_b: int = roll_b.total + flat_bonus_b + wp_b + (tfr_b * FREE_RAISE_VALUE) \
-		+ (adv_b.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_b \
-		+ _get_possession_terror_penalty(char_b)
+	var roll_a: DiceResult = dice_engine.roll_and_keep(rolled_a, kept_a, sr_a > 0, emph_a)
+	var roll_b: DiceResult = dice_engine.roll_and_keep(rolled_b, kept_b, sr_b > 0, emph_b)
+
+	var total_a: int = _contested_total(roll_a, flat_bonus_a, wp_a, tfr_a, adv_a.get("free_raises", 0), adv_tn_a, char_a)
+	var total_b: int = _contested_total(roll_b, flat_bonus_b, wp_b, tfr_b, adv_b.get("free_raises", 0), adv_tn_b, char_b)
 
 	var winner: String = "a"
 	if total_b > total_a:
 		winner = "b"
 	elif total_a == total_b:
 		winner = "tie"
+
+	# s29.15.24 Self-Reroll on a contested loss (Yasuki R2 / Yoritomo R3 / Kasuga R5):
+	# the strict loser spends one eligible charge to re-roll their own side once, then
+	# re-evaluate. Single reroll — the new loser gets no counter (the reroll is the
+	# loser's reaction to the resolved contest; a tie is not a loss). Skill-swap
+	# (Yoritomo) is not applied in a contest — the same skill is re-rolled. ic_day/context
+	# buffs are preserved (the pool counts already include them).
+	var rerolled: bool = false
+	var reroll_side: String = ""
+	if winner != "tie":
+		var loser_a: bool = winner == "b"
+		var lc: L5RCharacterData = char_a if loser_a else char_b
+		var lskill: String = skill_a if loser_a else skill_b
+		var lidx: int = RerollSystem.find_self_reroll(lc, lskill)
+		if lidx >= 0:
+			lc.self_reroll[lidx]["charges_current"] = lc.self_reroll[lidx].get("charges_current", 1) - 1
+			if loser_a:
+				roll_a = dice_engine.roll_and_keep(rolled_a, kept_a, sr_a > 0, emph_a)
+				total_a = _contested_total(roll_a, flat_bonus_a, wp_a, tfr_a, adv_a.get("free_raises", 0), adv_tn_a, char_a)
+			else:
+				roll_b = dice_engine.roll_and_keep(rolled_b, kept_b, sr_b > 0, emph_b)
+				total_b = _contested_total(roll_b, flat_bonus_b, wp_b, tfr_b, adv_b.get("free_raises", 0), adv_tn_b, char_b)
+			winner = "a"
+			if total_b > total_a:
+				winner = "b"
+			elif total_a == total_b:
+				winner = "tie"
+			rerolled = true
+			reroll_side = "a" if loser_a else "b"
 
 	return {
 		"winner": winner,
@@ -955,4 +990,6 @@ static func resolve_contested_check(
 		"dice_b": roll_b,
 		"wound_penalty_a": wp_a,
 		"wound_penalty_b": wp_b,
+		"rerolled": rerolled,
+		"reroll_side": reroll_side,
 	}
