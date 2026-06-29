@@ -1648,6 +1648,9 @@ static func resolve_off_hand_attack(
 	var wound_penalty: int = CharacterStats.get_wound_penalty(attacker)
 	var size: String = weapon.get("size", "Medium")
 	var off_hand_pen: int = OFF_HAND_PENALTY.get(size, -10)
+	# Knives R3: no off-hand penalty when the off-hand weapon is a knife (s24 line 303).
+	if SkillMasterySystem.knives_negates_offhand_penalty(attacker, skill_name):
+		off_hand_pen = 0
 
 	var rolled: int = attacker.agility + skill_rank
 	var kept: int = attacker.agility
@@ -2310,13 +2313,15 @@ static func resolve_duel_focus(
 	def_rolled += def_adv_focus["rolled"]
 	def_kept += def_adv_focus["kept"]
 
-	# +1k1 bonus from winning Assessment by 10+
+	# +1k1 bonus from winning Assessment by 10+ — Iaijutsu R7 upgrades this to +2k2 (s24 line 247).
 	if duel.assessment_bonus_id == duel.challenger_id:
-		ch_rolled += 1
-		ch_kept += 1
+		var ch_an: int = SkillMasterySystem.iaijutsu_assessment_bonus_dice(challenger)
+		ch_rolled += ch_an
+		ch_kept += ch_an
 	elif duel.assessment_bonus_id == duel.defender_id:
-		def_rolled += 1
-		def_kept += 1
+		var def_an: int = SkillMasterySystem.iaijutsu_assessment_bonus_dice(defender)
+		def_rolled += def_an
+		def_kept += def_an
 
 	var ch_explodes: bool = ch_iai > 0
 	var def_explodes: bool = def_iai > 0
@@ -2324,8 +2329,9 @@ static func resolve_duel_focus(
 	var def_wound: int = CharacterStats.get_wound_penalty(defender)
 	var ch_result: DiceResult = dice_engine.roll_and_keep(ch_rolled, ch_kept, ch_explodes)
 	var def_result: DiceResult = dice_engine.roll_and_keep(def_rolled, def_kept, def_explodes)
-	var ch_total: int = ch_result.total + ch_wound
-	var def_total: int = def_result.total + def_wound
+	# Iaijutsu R5: one Free Raise on the Focus roll (+5 to the contested total, s24 line 245).
+	var ch_total: int = ch_result.total + ch_wound + SkillMasterySystem.iaijutsu_focus_free_raise(challenger)
+	var def_total: int = def_result.total + def_wound + SkillMasterySystem.iaijutsu_focus_free_raise(defender)
 
 	var margin: int = ch_total - def_total
 

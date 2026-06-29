@@ -3430,11 +3430,23 @@ roll/insight-applicable Mastery Abilities. **Five tranches:**
   **Catalog limit:** only Kenjutsu/Knives/Heavy Weapons/Polearms/Kyujutsu/War Fan/Jiujutsu/Bo have
   weapons, so Spears/Chain/Staves masteries are correct-but-inert (the staff weapon's skill is "Bo",
   not "Staves"). Jiujutsu-R5-grapple / Knives-R7-extra-attack helpers exist but aren't wired into
-  their maneuver sites yet (forward-wired). **Bugei tranche 3 (still deferred):** terrain-aware
-  movement (Athletics R3/R5, Stealth — needs character-aware pathfinding cost), mount actions
-  (Horsemanship — no full mount system), Ready-as-Free-Action (weapons start ready — no draw action
-  modeled), off-hand-penalty removal (Knives/War Fan R3), Defense R7 (Simple action in Full Defense),
-  Iaijutsu R5/R7 (duel Focus stage), Polearms R3/R5, and Athletics R7 (+1 tile/Round move budget).
+  their maneuver sites yet (forward-wired). **Bugei tranche 3 (duel Focus + off-hand, 11/11
+  verified 2026-06-29):** the contained, value-LOCKED masteries with existing combat hooks —
+  **Iaijutsu R5** (one Free Raise on the Focus roll = +5 to the contested Focus total, the codebase
+  1-Raise=+5 convention; s24 line 245) and **Iaijutsu R7** (the Assessment-win Focus bonus is +2k2
+  instead of +1k1 when a duelist's Assessment beat the opponent's by 10+; s24 line 247) → folded
+  into `IndividualCombat.resolve_duel_focus` (`iaijutsu_focus_free_raise` / `iaijutsu_assessment_bonus_dice`);
+  **Knives R3** (no off-hand size penalty when the off-hand WEAPON is a knife; s24 line 303) →
+  `resolve_off_hand_attack` (`knives_negates_offhand_penalty`). Runtime-verified 11/11: helper
+  determinism (R5→+5/R4→0, R7→2 dice/R5→1, Knives R3 knife→true / non-knife / R2→false), off-hand
+  end-to-end (tanto Small penalty 0 at Knives 3 vs −5 at Knives 2), and a Focus integration smoke (an
+  assessment-bonus holder first-strikes 4968/6000 vs a no-bonus 2098/6000 — the +2k2 path fires; two
+  symmetric Iai-5 duelists are ~50/50, the +5 free raise cancels with no side bias). **Still
+  deferred (each needs infra the core lacks):** terrain-aware movement (Athletics R3/R5, Stealth —
+  character-aware pathfinding cost) + Athletics R7 (+1 tile/Round move budget); mount actions
+  (Horsemanship — no full mount system); Ready-as-Free-Action (weapons start ready — no draw action
+  modeled); Defense R3/R7 stance actions; Iaijutsu R3 (ready katana free); Polearms R3/R5; and the
+  Knives R7 Extra-Attack free raise (helper exists, maneuver site not wired).
 - **Meditation VP-recovery cap (9/9 verified):** Meditation R3 restores up to 2 VP,
   R7 up to 3 VP per meditation session (base 1; s24 line 145). Was already functionally correct,
   hardcoded in `ActionExecutor._execute_meditate` (predates SkillMasterySystem); centralized into

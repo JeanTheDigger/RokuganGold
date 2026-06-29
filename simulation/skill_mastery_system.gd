@@ -34,6 +34,8 @@ class_name SkillMasterySystem
 ##   • Heavy Weapons R3 (opponent Reduction −2) / Spears R3 (−3 first round) → total_defender_reduction.
 ##   • Heavy Weapons R5 (Free Raise toward Knockdown) / Knives R5 (toward Disarm) → orchestrator
 ##     maneuver resolution.
+##   • Iaijutsu R5 (Focus Free Raise) / R7 (Assessment-win Focus bonus +2k2 vs +1k1) →
+##     resolve_duel_focus; Knives R3 (no off-hand penalty with a knife) → resolve_off_hand_attack.
 ##   The damage/explode/War-Fan/reduction masteries fire in NPC summary combat (duels, bodyguard
 ##   fights, hunts); Defense-stance, Battle-initiative, and the maneuver free-raises fire in the
 ##   turn-based orchestrator. The WEAPON_CATALOG was expanded to the full L5R 4e equipment tables
@@ -48,8 +50,8 @@ class_name SkillMasterySystem
 ##   • Bugei action-economy / movement / maneuver (turn-based orchestrator, mostly PC-travel HOLD):
 ##     Ready-as-Free-Action (Kenjutsu R5, Iaijutsu R3, Spears/Polearms/Staves R7), Defense R3/R7
 ##     stance actions, Athletics/Stealth terrain movement, Horsemanship mount actions, Kyujutsu
-##     range, Iaijutsu R5/R7 duel Focus, Polearms R5 (vs mounted), reduction-pierce (Spears/Heavy
-##     R3), and the Grapple/Knockdown/Disarm/Extra-Attack free-raise masteries.
+##     range, Polearms R5 (vs mounted), and the Extra-Attack free-raise mastery (Knives R7 helper
+##     exists, maneuver site not yet wired).
 ##   • Specific uses already hand-wired elsewhere — Calligraphy R5 (cipher, letter_system),
 ##     Engineering R5 (+5 cooperative, s57.41), Tea Ceremony R5 (2 VP), Medicine R5 (+1k0 heal).
 
@@ -224,3 +226,23 @@ static func weapon_reduction_pierce(weapon_skill: String, rank: int, is_first_ro
 		"Spears":
 			return 3 if is_first_round else 0
 	return 0
+
+
+# Iaijutsu R5: one Free Raise on the Iaijutsu (Focus)/Void roll during a duel's Focus Stage
+# (s24 line 245). Applied as +5 to the contested Focus total (the codebase 1-Raise = +5
+# convention; the Focus margin is itself converted to strike Free Raises via margin/5).
+static func iaijutsu_focus_free_raise(character: L5RCharacterData) -> int:
+	return 5 if int(character.skills.get("Iaijutsu", 0)) >= MASTERY_RANK_5 else 0
+
+
+# Iaijutsu R7: the Assessment-win Focus bonus is +2k2 instead of +1k1 when the duelist's
+# Assessment exceeded the opponent's by 10+ (s24 line 247). Returns the bonus dice count N
+# (the Focus bonus is +NkN): base 1, R7 → 2.
+static func iaijutsu_assessment_bonus_dice(character: L5RCharacterData) -> int:
+	return 2 if int(character.skills.get("Iaijutsu", 0)) >= MASTERY_RANK_7 else 1
+
+
+# Knives R3: the off-hand attack suffers NO size penalty when the off-hand WEAPON is a knife
+# (s24 line 303). off_hand_skill is the off-hand weapon's skill ("Knives" for a knife).
+static func knives_negates_offhand_penalty(character: L5RCharacterData, off_hand_skill: String) -> bool:
+	return off_hand_skill == "Knives" and int(character.skills.get("Knives", 0)) >= MASTERY_RANK_3
