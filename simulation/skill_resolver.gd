@@ -740,9 +740,14 @@ static func resolve_skill_check(
 	)
 	# s24 universal Rank-10 mastery: +1 Free Raise on all rolls using the skill.
 	var mastery_fr: int = SkillMasterySystem.universal_free_raise(skill_rank)
+	# Sign convention (matches wound_penalty / the combat code): a TN PENALTY reduces the roll
+	# total. adv_tn (get_tn_modifier) and soft_hearted_tn are POSITIVE penalties, so they are
+	# SUBTRACTED (combat does the same: `flat_bonus -= get_tn_modifier(...)`). darling_bonus is a
+	# genuine bonus (+). mutation_mod.tn uses MutationSystem's own "positive = benefit" convention,
+	# so it stays additive (its penalties are stored negative there).
 	var total_bonus: int = flat_bonus + wound_penalty + ((technique_fr + mastery_fr) * FREE_RAISE_VALUE) \
-		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
-		+ mutation_mod.get("tn", 0) + soft_hearted_tn + darling_bonus \
+		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) - adv_tn \
+		+ mutation_mod.get("tn", 0) - soft_hearted_tn + darling_bonus \
 		+ _get_possession_terror_penalty(character)
 	# s40 Armor special-rule TN penalty (Light: Athletics/Stealth; Heavy/Iron/Riding:
 	# Agility/Reflexes). A "+N TN" penalty subtracts from the roll total (wound-penalty sign).
@@ -857,8 +862,9 @@ static func _contested_total(
 	roll: DiceResult, flat_bonus: int, wound_penalty: int, technique_fr: int,
 	adv_free_raises: int, adv_tn: int, character: L5RCharacterData,
 ) -> int:
+	# adv_tn (get_tn_modifier) is a POSITIVE penalty → subtract (matches resolve_skill_check + combat).
 	return roll.total + flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
-		+ (adv_free_raises * FREE_RAISE_VALUE) + adv_tn \
+		+ (adv_free_raises * FREE_RAISE_VALUE) - adv_tn \
 		+ _get_possession_terror_penalty(character)
 
 

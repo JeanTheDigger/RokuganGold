@@ -484,9 +484,10 @@ static func get_skill_modifiers(
 		if context.get("appearance_known", false):
 			dr -= 1
 
-	# DISCOLORED_SKIN: +5 TN all Social rolls
+	# DISCOLORED_SKIN: +5 TN all Social rolls. dtn convention here is "positive = benefit"
+	# (adds to the roll total), so a +5 TN PENALTY is stored as -5.
 	if has_mutation(character, Enums.MutationType.DISCOLORED_SKIN) and is_social:
-		dtn += 5
+		dtn -= 5
 
 	# DISTORTED_LIMBS (arm): -3k0 to rolls made with that arm
 	if is_social:

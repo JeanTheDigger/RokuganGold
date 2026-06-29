@@ -3318,6 +3318,25 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   seppuku option, Imperial jurisdiction). Wired into full crime/investigation pipeline
   and Winter Court Emperor's Peace enforcement (v624).
 
+### Known Code Issues (found and fixed 2026-06-29, SkillResolver TN-penalty sign inversion)
+- **`resolve_skill_check` / `resolve_contested_check` ADDED positive TN penalties (made rolls
+  EASIER). FIXED.** The `total_bonus` convention is the wound-penalty one: it is added to the roll
+  total, so a TN PENALTY must be NEGATIVE (reduce the total). The combat code follows this — it
+  SUBTRACTS `get_tn_modifier` (`flat_bonus -= get_tn_modifier(...)`, `- adv_init_tn`,
+  `- adv_def_tn`). But `skill_resolver` ADDED `adv_tn` (`get_tn_modifier`, which only returns
+  positive penalties) and `soft_hearted_tn` (=10), so disadvantage TN penalties and SOFT_HEARTED's
+  "+10 TN" actually made skill rolls EASIER. Changed both to subtract in `resolve_skill_check` and
+  `adv_tn` in `_contested_total`. `darling_bonus` (a real bonus) and `mutation_mod.tn` (which uses
+  MutationSystem's own "positive = benefit" convention) correctly stay additive. Runtime-verified:
+  SOFT_HEARTED Courtier success 3665→1935, the FAILURE_OF_BUSHIDO(Courage)-vs-Shadowlands penalty
+  2433→1531 — both now correctly HARDER.
+- **MutationSystem DISCOLORED_SKIN stored a +5 TN penalty with the wrong sign. FIXED.** The `dtn`
+  field there uses "positive = benefit (adds to the roll total)" (its own comment + the taint-rank
+  benefit line), but DISCOLORED_SKIN's "+5 TN all Social rolls" penalty did `dtn += 5` (making
+  social rolls EASIER). Changed to `dtn -= 5`. Verified: DISCOLORED_SKIN social success 3928→3674
+  (harder), non-social rolls unaffected. (This is the only wrong-signed mutation penalty; the
+  rolled/kept mutation modifiers were already correct.)
+
 ### s40 Armor System — full L5R 4e Equipment table (2026-06-29, owner-provided, runtime-verified)
 `simulation/armor_system.gd` (ArmorSystem, pure class) + an extended `shared/armor_data.gd`
 (ArmorData gains `reduction`, `penalty_kind`) wire armor end-to-end from the owner-provided armor
