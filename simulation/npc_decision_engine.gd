@@ -200,6 +200,9 @@ static func build_context(
 	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
 	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [])
 	ctx.active_insurgency_id = world_state.get("active_insurgency_id", -1)
+	ctx.active_insurgency_detected = bool(world_state.get("active_insurgency_detected", false))
+	ctx.active_insurgency_type = world_state.get("active_insurgency_type", "")
+	ctx.active_insurgency_province_id = int(world_state.get("active_insurgency_province_id", -1))
 	ctx.famine_crisis_province_ids = _extract_famine_province_ids(
 		character, world_state.get("active_topics", [])
 	)
@@ -930,25 +933,19 @@ static func _apply_suppress_insurgency_precondition_filter(
 
 
 # Returns {insurgency_id, insurgency_type, province_id} for the actor's
-# co-located DETECTED insurgency, or {} if none. The co-located insurgency id is
-# injected as ctx.active_insurgency_id (the province the actor stands in); the
-# matching ProvinceStatus carries its detected flag and type.
+# co-located DETECTED insurgency, or {} if none. Read from per-character context
+# fields injected by the orchestrator (_inject_insurgency_context), so this works
+# for non-lords too — province_statuses is built lord-only.
 static func _pick_co_located_detected_insurgency(
 	ctx: NPCDataStructures.ContextSnapshot,
 ) -> Dictionary:
-	var iid: int = ctx.active_insurgency_id
-	if iid < 0:
+	if ctx.active_insurgency_id < 0 or not ctx.active_insurgency_detected:
 		return {}
-	for ps_var: Variant in ctx.province_statuses:
-		if ps_var is NPCDataStructures.ProvinceStatus:
-			var ps: NPCDataStructures.ProvinceStatus = ps_var
-			if ps.active_insurgency_id == iid and ps.insurgency_detected:
-				return {
-					"insurgency_id": iid,
-					"insurgency_type": ps.insurgency_type,
-					"province_id": ps.province_id,
-				}
-	return {}
+	return {
+		"insurgency_id": ctx.active_insurgency_id,
+		"insurgency_type": ctx.active_insurgency_type,
+		"province_id": ctx.active_insurgency_province_id,
+	}
 
 
 # -- Phase 4c: CAST_WORLD_IS_TRUTH Precondition Filter (s54.7/s33) ------------
@@ -2484,11 +2481,31 @@ static func _best_skill_rank(skill_name: String, skill_ranks: Dictionary) -> int
 	return int(skill_ranks.get(skill_name, 0))
 
 
+# SUPPRESS_INSURGENCY spans three GDD formulas (combat/investigation/spiritual),
+# so no single action_skill_map entry measures it. Competence = the actor's best
+# relevant suppression skill, so a bushi, magistrate-investigator, or shugenja
+# each scores on their real strength (s11.11 Phase 5 formulas).
+const _SUPPRESSION_SKILLS: Array[String] = [
+	"Athletics", "Battle", "Defense", "Horsemanship", "Hunting", "Iaijutsu",
+	"Jiujutsu", "Kenjutsu", "Kyujutsu", "Spears", "Polearms", "Heavy Weapons",
+	"Knives", "War Fan", "Chain Weapons", "Staves", "Ninjutsu",
+	"Investigation", "Lore: Shadowlands", "Lore: Theology", "Sailing",
+]
+
 static func _compute_competence_modifier(
 	action_id: String,
 	skill_ranks: Dictionary,
 	scoring_tables: Dictionary,
 ) -> float:
+	var competence_table_su: Dictionary = scoring_tables.get("competence_table", {})
+	if action_id == "SUPPRESS_INSURGENCY":
+		var best: int = 0
+		for sk: String in _SUPPRESSION_SKILLS:
+			var r: int = int(skill_ranks.get(sk, 0))
+			if r > best:
+				best = r
+		return clampf(float(competence_table_su.get(str(best), competence_table_su.get(best, -20))), -20.0, 20.0)
+
 	var skill_map: Dictionary = scoring_tables.get("action_skill_map", {})
 	var action_skills: Dictionary = skill_map.get(action_id, {})
 

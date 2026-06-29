@@ -18451,6 +18451,8 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"court_settlement_id", "court_session_state",
 		"pending_performance_requests",
 		"zone_subtype", "active_insurgency_id", "action_log",
+		"active_insurgency_detected", "active_insurgency_type",
+		"active_insurgency_province_id",
 		"self_offenses", "wall_statuses", "criminal_recall",
 		"is_patrolled", "phoenix_champion_authority",
 		"settlement_type",
@@ -18776,7 +18778,7 @@ static func _inject_insurgency_context(
 ) -> void:
 	var ins_by_province: Dictionary = {}
 	for ins: InsurgencyData in insurgencies:
-		ins_by_province[ins.province_id] = ins.insurgency_id
+		ins_by_province[ins.province_id] = ins
 
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
@@ -18789,14 +18791,20 @@ static func _inject_insurgency_context(
 		var pid: int = settlement_province_map.get(sid, -1)
 		if pid < 0:
 			continue
-		var iid: int = ins_by_province.get(pid, -1)
-		if iid < 0:
+		var ins: InsurgencyData = ins_by_province.get(pid, null)
+		if ins == null:
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
 		if ws.is_empty():
 			ws = {}
 			world_states[character.character_id] = ws
-		ws["active_insurgency_id"] = iid
+		# Co-located insurgency: id + detected flag + type + province, injected for
+		# every present character (lords and non-lords) so the decision engine can
+		# route to SUPPRESS_INSURGENCY without the lord-only province_statuses.
+		ws["active_insurgency_id"] = ins.insurgency_id
+		ws["active_insurgency_detected"] = ins.detected
+		ws["active_insurgency_type"] = Enums.InsurgencyType.keys()[ins.insurgency_type]
+		ws["active_insurgency_province_id"] = pid
 
 
 static func _process_crisis_court_calls(

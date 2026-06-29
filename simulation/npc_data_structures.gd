@@ -181,8 +181,12 @@ class ContextSnapshot:
 	var active_wars: Array = []
 	var escalating_conflicts: Array = []
 
-	# Insurgency context (convenience field populated from ProvinceStatus)
+	# Insurgency context (co-located insurgency the actor stands in; injected per
+	# character so it reaches non-lords too — province_statuses is lord-only).
 	var active_insurgency_id: int = -1
+	var active_insurgency_detected: bool = false
+	var active_insurgency_type: String = ""
+	var active_insurgency_province_id: int = -1
 
 	# Shadowlands intelligence (s55.23)
 	var taint_topic_province_ids: Array = []
