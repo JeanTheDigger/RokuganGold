@@ -3689,12 +3689,35 @@ roll/insight-applicable Mastery Abilities. **Five tranches:**
   at R3 / +2 at R7), which diverges from the generic s24 Ninjutsu mastery (R7 should be +0k1, not +2k0).
   **Ninjutsu R3/R7 ARE wired** (this session) for shuriken/tsubute — the generic s24 damage masteries (+1k0 /
   +0k1) applied in `resolve_damage` to ninjutsu weapons OTHER than the blowgun (which keeps its owner-table
-  scaling, so it is excluded to avoid double-counting). Only **Ninjutsu R5** (ninjutsu damage dice "explode
-  normally — they do not normally") stays blocked: it needs the base no-explode rule on ninjutsu weapons +
-  reconciliation with the blowgun table, an owner decision. **DEFERRED (low value,
-  doable):** Athletics R7 (+1 tile to one Move/Round, total unchanged — fiddly per-round move accounting;
-  R3/R5 terrain reduction ALREADY wired inline in `get_water_ring_for_terrain`). With this, **every Bugei
-  mastery that can be wired faithfully without an owner decision is done.**
+  scaling, so it is excluded to avoid double-counting).
+  **Bugei tranche 7 (the last three, owner-authorized "do all 3", 23/23 verified 2026-06-30):** the owner
+  approved making the design calls the GDD left open, using L5R 4e core values as PROVISIONAL (flagged).
+  (1) **Ninjutsu R5** (ninjutsu damage dice "explode normally — they do not normally", s24 line 427): in
+  `resolve_damage`, ninjutsu weapons get `can_explode = (Ninjutsu rank >= 5)` — orthogonal to the blowgun's
+  damage scaling (this controls explosion, not dice count), so it applies to all three ninjutsu weapons
+  cleanly. Verified: shuriken max 10 (R4, no explode) → 39 (R5, explodes), mean rises. (2) **Athletics R7**
+  (+1 tile to ONE Move Action per Round, s24): new `TurnState.athletics_burst_used` (reset each turn = each
+  Round for one actor); `_athletics_move_bonus` adds +1 to `free_move_budget`/`simple_move_budget` while the
+  flag is unset; the first move of the Round consumes it (`execute_move`). The "total unchanged" cap is not
+  enforced (a single +1 move never approaches the WR×4 round max — documented simplification). Verified:
+  free budget 3→4 on the first move, drops back after, returns next Round. (3) **Ready-as-Free-Action
+  subsystem** (Iaijutsu R3, Kenjutsu R5, Spears R7, Polearms R7, Staves R7, Kyujutsu R3): new
+  `Participant.weapon_ready: bool = true` (default ready → existing combat UNCHANGED; a `"weapon_sheathed":
+  true` setup flag starts a combatant — e.g. an iaijutsu duelist — with the weapon undrawn).
+  `execute_ready_weapon` draws/strings the weapon, spending `SkillMasterySystem.weapon_ready_cost`: a melee
+  weapon = Simple, a bow = Complex to string (**PROVISIONAL** L5R 4e core base costs — the project GDD gives
+  none, owner-authorized), reduced to Free by Iaijutsu R3 (katana) / Kenjutsu R5 (sword) / Spears R7 /
+  Polearms R7 / Staves R7 (Large staff only), and to Simple by Kyujutsu R3 (string a bow). `execute_melee_attack`
+  and `execute_ranged_attack` reject a non-unarmed attack while `not weapon_ready` (`weapon_not_ready`).
+  Verified 9-entry cost matrix + end-to-end (a sheathed duelist can't attack; Kenjutsu R5 readies the katana
+  for Free and still attacks the same turn; a Kenjutsu-2 spends a Simple to ready). LIMITATIONS: weapon
+  switching mid-combat is not modeled (one weapon per combatant via `pick_best_weapon`); the duel system
+  doesn't yet flag its duelists `weapon_sheathed` (the subsystem is ready for it — a future duel-entry hook);
+  no NPC AI auto-readies (a sheathed NPC would need a turn-loop hook — forward-wired, fires only for an
+  explicitly-sheathed combatant); sheathing (the reverse) isn't modeled (the masteries are about drawing).
+  6/6 + 20/20 regression confirm default-ready combat is unaffected. **With this, EVERY s24 Bugei combat
+  mastery is wired** — the only PROVISIONAL values are the Ready base costs (melee Simple / bow Complex),
+  flagged for owner override; nothing else was invented.
 - **Meditation VP-recovery cap (9/9 verified):** Meditation R3 restores up to 2 VP,
   R7 up to 3 VP per meditation session (base 1; s24 line 145). Was already functionally correct,
   hardcoded in `ActionExecutor._execute_meditate` (predates SkillMasterySystem); centralized into

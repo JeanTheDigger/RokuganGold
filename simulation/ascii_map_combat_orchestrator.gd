@@ -133,6 +133,8 @@ class TurnState:
 	var granted_simple: int = 0
 	var cast_as_simple: int = 0
 	var free_casts: int = 0
+	## s24 Athletics R7: +1 tile to ONE Move Action per Round. Consumed by the first move that uses it.
+	var athletics_burst_used: bool = false
 
 	func can_use_complex() -> bool:
 		return not complex_used and simple_used == 0
@@ -343,6 +345,10 @@ static func setup_combat(
 		elif entry.get("has_mount", false):
 			mp.has_mount = true
 			mp.mount_tile = mcs.positions.get(mc.character_id, Vector2i(-1, -1))  # horse waits beside them
+		# s24 ready-as-Free-Action: a combatant flagged "weapon_sheathed" starts with their weapon
+		# undrawn (e.g. an iaijutsu duelist) and must Ready it before attacking.
+		if entry.get("weapon_sheathed", false):
+			mp.weapon_ready = false
 
 	mcs.combat_log.append({
 		"type": "combat_started",
@@ -360,6 +366,16 @@ static func setup_combat(
 ## Water kata bonus (s30a: +5 ft = +1 tile in Attack Stance). Callers (NPC AI,
 ## companion AI, and the player-facing turn-based move UI) should use this rather
 ## than MovementSystem.budget(...FREE) directly so the kata is honored uniformly.
+## s24 Athletics R7: +1 tile to ONE Move Action per Round. Available (not yet consumed this Round) when
+## the character is Athletics R7+ and their TurnState burst flag is unset. Returns 0/1 tiles.
+static func _athletics_move_bonus(state: MapCombatState, char_id: int, character: L5RCharacterData) -> int:
+	var bonus: int = SkillMasterySystem.athletics_move_burst(character)
+	if bonus <= 0:
+		return 0
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	return bonus if (ts != null and not ts.athletics_burst_used) else 0
+
+
 static func free_move_budget(state: MapCombatState, char_id: int, character: L5RCharacterData) -> int:
 	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
 	var water: int = _effective_water_ring(p, character)
@@ -374,7 +390,7 @@ static func free_move_budget(state: MapCombatState, char_id: int, character: L5R
 	# s36 The Rushing Wave: Free Move up to Water Ring ×10' (= +Water tiles to the free-move
 	# budget, read from the mover's own effective Water at move time, not fixed at cast time).
 	var rush: int = water if IndividualCombat.get_timed_modifier_total(p, "free_move_tiles") > 0 else 0
-	return base + IndividualCombat.get_kata_free_move_bonus(character, p) + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character) + rush
+	return base + IndividualCombat.get_kata_free_move_bonus(character, p) + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character) + rush + _athletics_move_bonus(state, char_id, character)
 
 
 ## Water Ring for Move-distance purposes, reduced by any timed move penalty
@@ -447,7 +463,7 @@ static func simple_move_budget(state: MapCombatState, char_id: int, character: L
 	if fc > 0:
 		return _flight_simple_budget(water, fc)
 	var base: int = MovementSystem.budget(water, MovementSystem.MoveAction.SIMPLE)
-	return base + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character)
+	return base + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character) + _athletics_move_bonus(state, char_id, character)
 
 
 ## When flight ends, the kami set the caster down gently (GDD: Call Upon the Wind
@@ -840,6 +856,33 @@ static func execute_dismount(state: MapCombatState, char_id: int, character: L5R
 	return {"success": true, "cost": cost}
 
 
+## s24 Ready (draw / string) a sheathed weapon so it can attack. Cost by SkillMasterySystem.
+## weapon_ready_cost: a melee weapon is readied as a Simple Action, a bow strung as a Complex Action
+## (PROVISIONAL base costs), reduced to Free/Simple by the ready-as-Free-Action masteries (Iaijutsu R3,
+## Kenjutsu R5, Spears/Polearms/Staves R7, Kyujutsu R3). weapon_name "" = the character's best weapon.
+static func execute_ready_weapon(state: MapCombatState, char_id: int, character: L5RCharacterData, weapon_name: String = "") -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if ts == null or p == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if p.weapon_ready:
+		return {"success": false, "reason": "already_ready"}
+	if CharacterStats.get_wound_level(character) >= Enums.WoundLevel.DOWN:
+		return {"success": false, "reason": "down_only_free_actions"}
+	var w: String = weapon_name if weapon_name != "" else IndividualCombat.pick_best_weapon(character)
+	var wp: Dictionary = IndividualCombat.get_weapon_profile(w)
+	var cost: String = SkillMasterySystem.weapon_ready_cost(
+		character, w, String(wp.get("skill", "")), String(wp.get("size", "")))
+	if not _spend_action_cost(ts, cost):
+		return {"success": false, "reason": "no_actions_remaining"}
+	p.weapon_ready = true
+	state.combat_log.append({"type": "ready_weapon", "round": state.combat.round_number,
+		"char_id": char_id, "weapon": w, "cost": cost})
+	return {"success": true, "weapon": w, "cost": cost}
+
+
 ## Move within move_budget tiles (already computed by caller for action type).
 ## Returns result Dictionary including actual tiles moved.
 static func execute_move(
@@ -926,6 +969,10 @@ static func execute_move(
 			else:
 				ts.consume_simple()
 		"complex": ts.consume_complex()
+
+	# s24 Athletics R7: the first Move Action of the Round consumes the +1-tile burst.
+	if not ts.athletics_burst_used and SkillMasterySystem.athletics_move_burst(character) > 0:
+		ts.athletics_burst_used = true
 
 	state.combat_log.append({
 		"type": "move",
@@ -1352,6 +1399,12 @@ static func execute_melee_attack(
 	# action-legality check, independent of position, so it precedes the range check.
 	if a_p.stance == Enums.Stance.DEFENSE or a_p.stance == Enums.Stance.FULL_DEFENSE:
 		return {"success": false, "reason": "defense_cannot_attack"}
+
+	# s24 ready-as-Free-Action: a sheathed weapon must be Readied before it can attack (unarmed
+	# strikes need no readying). Default weapon_ready=true, so this is inert unless the combatant
+	# started sheathed.
+	if weapon_name != "" and weapon_name != "unarmed" and not a_p.weapon_ready:
+		return {"success": false, "reason": "weapon_not_ready"}
 
 	# Range check.
 	var apos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
@@ -1856,6 +1909,11 @@ static func execute_ranged_attack(
 	# s35 Wings of Fire: the caster's arms control the wings — no weapon/unarmed attacks.
 	if _arms_occupied(state, attacker_id):
 		return {"success": false, "reason": "arms_occupied"}
+
+	# s24 ready-as-Free-Action: a sheathed/unstrung weapon must be Readied before it can fire/throw.
+	# Default weapon_ready=true, so this is inert unless the combatant started sheathed.
+	if weapon_name != "" and weapon_name != "unarmed" and a_p_ins != null and not a_p_ins.weapon_ready:
+		return {"success": false, "reason": "weapon_not_ready"}
 
 	# s36 Stand Against the Waves: a granted_attacks pool lets a ranged attack proceed when the
 	# normal Complex is spent (consumes one granted attack instead).
@@ -7057,6 +7115,7 @@ static func begin_turn(state: MapCombatState, char_id: int) -> void:
 		ts.free_move_used = false
 		ts.free_actions_used = 0
 		ts.stance_changed = false
+		ts.athletics_burst_used = false  # s24 Athletics R7: one +1-tile burst per Round
 
 
 ## Get the character_id whose turn it currently is.

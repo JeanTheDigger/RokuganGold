@@ -278,6 +278,7 @@ class Participant:
 	var broken_weapons: Array = []             # s40 weapon break thresholds: names of weapons that shattered this skirmish
 	var has_mount: bool = false                # s40 mount: the combatant has a horse available (can mount/dismount)
 	var mount_tile: Vector2i = Vector2i(-1, -1)  # where the horse waits when dismounted; (-1,-1) = on the horse / no horse left
+	var weapon_ready: bool = true              # s24 ready-as-Free-Action: weapon drawn/strung (default ready; false = sheathed, must Ready before attacking)
 	# Weapon-grapple state (s40 "Weapon Grapples"): when a character initiates a
 	# grapple with a chain weapon / certain polearm, control rolls use the weapon
 	# skill and Hit deals weapon damage. Empty/"" = ordinary Jiujutsu grapple.
@@ -1654,6 +1655,11 @@ static func resolve_damage(
 	var explode_9: bool = SkillMasterySystem.weapon_damage_explodes_on_9(dmg_skill, bugei_dmg_rank)
 	# s40 weapon special (owner equipment table): a shinai's damage dice cannot explode.
 	var can_explode: bool = not weapon.get("no_explode", false)
+	# s24 Ninjutsu: ninjutsu weapon damage dice do NOT explode normally (s24 line 427); Ninjutsu R5
+	# restores normal explosion. Applies to all ninjutsu weapons (orthogonal to the blowgun's damage
+	# scaling — this controls explosion, not dice count).
+	if dmg_skill == "Ninjutsu":
+		can_explode = bugei_dmg_rank >= 5
 	# s40 weapon special: a katana wielder may spend a Void Point (just-in-time) for +1k1 damage.
 	# NPC-only auto-spend (PCs choose via the future combat UI), once-per-Round throttle.
 	if weapon.get("void_point_damage", false) and attacker_p != null and not spirit_fixed_damage \

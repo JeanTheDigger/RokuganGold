@@ -230,6 +230,41 @@ static func staff_doubles_armor(attacker_weapon_skill: String, attacker_rank: in
 	return attacker_weapon_skill == "Staves" and attacker_rank < MASTERY_RANK_3
 
 
+# Athletics R7: +5 ft = +1 tile to ONE Move Action per Round (s24 line ~193; the round total is
+# capped, so it is a single-action burst, not a net round increase). Returns the per-move tile bonus
+# for an Athletics R7+ character (the once-per-Round gating is the caller's TurnState flag).
+static func athletics_move_burst(character: L5RCharacterData) -> int:
+	return 1 if int(character.skills.get("Athletics", 0)) >= MASTERY_RANK_7 else 0
+
+
+# Action cost to READY (draw / string) a weapon (s24 "ready as a Free Action" masteries). Returns
+# "free" / "simple" / "complex". The BASE costs are PROVISIONAL L5R 4e core values (the project GDD
+# gives no base): a melee weapon is readied/sheathed as a Simple Action; a bow must be strung as a
+# Complex Action. The masteries reduce them:
+#   Kyujutsu R3  — stringing a bow is a Simple Action (s24 line 405).
+#   Kenjutsu R5  — a sword is readied as a Free Action (s24 line 393).
+#   Iaijutsu R3  — readying a KATANA is a Free Action (s24 line 243).
+#   Spears R7    — ready as a Free Action (s24 line 399).
+#   Polearms R7  — ready as a Free Action (s24 line 325).
+#   Staves R7    — LARGE staves ready as a Free Action (s24 line 327).
+static func weapon_ready_cost(character: L5RCharacterData, weapon_name: String, weapon_skill: String, weapon_size: String) -> String:
+	# Bows: stringing. Base Complex (PROVISIONAL); Kyujutsu R3 → Simple.
+	if weapon_skill == "Kyujutsu":
+		return "simple" if int(character.skills.get("Kyujutsu", 0)) >= MASTERY_RANK_3 else "complex"
+	# Melee: base Simple (PROVISIONAL). A matching ready-mastery makes it Free.
+	if weapon_skill == "Kenjutsu" and int(character.skills.get("Kenjutsu", 0)) >= MASTERY_RANK_5:
+		return "free"
+	if weapon_name == "katana" and int(character.skills.get("Iaijutsu", 0)) >= MASTERY_RANK_3:
+		return "free"
+	if weapon_skill == "Spears" and int(character.skills.get("Spears", 0)) >= MASTERY_RANK_7:
+		return "free"
+	if weapon_skill == "Polearms" and int(character.skills.get("Polearms", 0)) >= MASTERY_RANK_7:
+		return "free"
+	if weapon_skill == "Staves" and weapon_size == "Large" and int(character.skills.get("Staves", 0)) >= MASTERY_RANK_7:
+		return "free"
+	return "simple"
+
+
 # True if the weapon skill's damage dice explode on 9 (and 10) at this rank.
 #   Kenjutsu R7 (s24 line 393) / Heavy Weapons R7 (s24 line 403).
 static func weapon_damage_explodes_on_9(weapon_skill: String, rank: int) -> bool:
