@@ -1362,6 +1362,8 @@ static func execute_melee_attack(
 	# A charge (is_charge) bypasses this and gets the charge damage instead.
 	if not is_charge:
 		armor_tn += IndividualCombat.lance_no_charge_tn_penalty(weapon_name, IndividualCombat.CONDITION_MOUNTED in a_p.conditions)
+	# s40 weapon Armor-TN multiplier (owner table): kyoketsu-shogi ×2 — a precise hit is needed.
+	armor_tn *= IndividualCombat.weapon_armor_tn_mult(weapon_name)
 
 	# s54.10 Toshigoku auras + Ancient General Tactical Mastery: set the spirit
 	# attacker's per-attack rolled-die bonuses (always reset to the freshly-computed
@@ -1785,6 +1787,7 @@ static func execute_ranged_attack(
 	dice_engine: DiceEngine,
 	spend_void: bool = false,
 	thrown: bool = false,
+	ammo: String = "",
 ) -> Dictionary:
 	if CharacterStats.is_dead(attacker):
 		return {"success": false, "reason": "character_is_dead"}
@@ -1836,6 +1839,9 @@ static func execute_ranged_attack(
 	# range. A thrown melee weapon uses its thrown_range; a ranged weapon uses range_tiles.
 	# 0 = no specified range (the prior any-LOS PROVISIONAL behavior).
 	var rng: int = IndividualCombat.weapon_thrown_range(weapon_name) if thrown else IndividualCombat.weapon_range_tiles(weapon_name)
+	# s40 flesh-cutter ammo (owner table): halves the weapon's range.
+	if rng > 0 and IndividualCombat.ammo_range_halved(ammo):
+		rng = rng / 2
 	if rng > 0 and _chebyshev(apos, tpos) > rng:
 		return {"success": false, "reason": "out_of_range"}
 
@@ -1875,6 +1881,13 @@ static func execute_ranged_attack(
 	armor_tn += _cover_bonus(state, tpos, apos)
 	# s40 bow mount-TN (owner Equipment table): dai-kyu +10 on foot, han-kyu/yumi +10 mounted.
 	armor_tn += IndividualCombat.weapon_mount_tn_penalty(weapon_name, IndividualCombat.CONDITION_MOUNTED in a_p.conditions)
+	# s40 ammo + weapon Armor-TN penetration (owner table): armor-piercing ammo ignores the target's
+	# worn-armor TN bonus; flesh-cutter ammo (×2) / blowgun (×3) / kyoketsu-shogi (×2) multiply the
+	# Armor TN (a precise hit on a vulnerable spot). Applied to the physical Armor TN (base + cover +
+	# mount), before the magical zone/buff modifiers.
+	if IndividualCombat.ammo_ignores_armor(ammo):
+		armor_tn = maxi(5, armor_tn - target.armor_tn_bonus)
+	armor_tn *= IndividualCombat.ammo_armor_tn_mult(ammo) * IndividualCombat.weapon_armor_tn_mult(weapon_name)
 	# s33 Blessed Wind: +Armor TN vs non-magical ranged attacks only (ranged path).
 	# s33 Summoning the Gale: a target inside an anti-ranged zone is harder to shoot (+15 Armor TN).
 	armor_tn += IndividualCombat.get_timed_modifier_total(t_p, "ranged_armor_tn") \

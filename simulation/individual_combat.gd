@@ -69,7 +69,7 @@ const WEAPON_CATALOG: Dictionary = {
 
 	# -- Chain Weapons (can initiate grapples, s40) --
 	"kusarigama":     {"rolled": 0, "kept": 2, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
-	"kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+	"kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true, "armor_tn_mult": 2},
 	"manrikikusari":  {"rolled": 1, "kept": 1, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
 
 	# -- War fans (tessen): Lion katana-and-war-fan (s29.4 "The Commander's Fan") --
@@ -83,7 +83,7 @@ const WEAPON_CATALOG: Dictionary = {
 	# -- Ninja weapons (Ninjutsu; thrown/ranged, no Strength to damage) --
 	"shuriken":   {"rolled": 1, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Small",  "melee": false, "trait": "agility", "range_tiles": 5},
 	"tsubute":    {"rolled": 1, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Small",  "melee": false, "trait": "agility", "range_tiles": 6},
-	"blowgun":    {"rolled": 0, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Medium", "melee": false, "trait": "agility", "range_tiles": 10},
+	"blowgun":    {"rolled": 0, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Medium", "melee": false, "trait": "agility", "range_tiles": 10, "armor_tn_mult": 3},
 
 	# -- Unarmed --
 	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu", "size": "Small", "melee": true, "trait": "agility"},
@@ -1251,6 +1251,38 @@ static func weapon_charge_bonus(weapon_name: String) -> Dictionary:
 	}
 
 
+# --- s40 ammo + weapon Armor-TN penetration (owner Equipment table) ---
+# A weapon may MULTIPLY the target's Armor TN (blowgun ×3, kyoketsu-shogi ×2 — a precise hit on a
+# vulnerable spot is needed). Ammo modifies a bow shot: armor-piercing IGNORES the target's
+# worn-armor TN bonus; flesh-cutter MULTIPLIES the Armor TN ×2 and halves the weapon's range.
+
+## The Armor-TN multiplier a weapon applies (blowgun 3, kyoketsu-shogi 2; 1 = none).
+static func weapon_armor_tn_mult(weapon_name: String) -> int:
+	return int(get_weapon_profile(weapon_name).get("armor_tn_mult", 1))
+
+## Armor-piercing ammo ignores the target's worn-armor TN bonus (owner table).
+static func ammo_ignores_armor(ammo: String) -> bool:
+	return ammo == "armor_piercing"
+
+## Flesh-cutter ammo multiplies the target's Armor TN ×2 (owner table; 1 for standard/armor-piercing).
+static func ammo_armor_tn_mult(ammo: String) -> int:
+	return 2 if ammo == "flesh_cutter" else 1
+
+## Flesh-cutter ammo halves the weapon's range (owner table).
+static func ammo_range_halved(ammo: String) -> bool:
+	return ammo == "flesh_cutter"
+
+## Blowgun damage scaling (owner table): the dart deals 1k1 at Ninjutsu 3, 2k1 at Ninjutsu 7, over
+## its 0k1 base -> returns the +rolled-dice bonus (0/+1/+2). The poison is the real threat below 3.
+static func blowgun_damage_rolled_bonus(character: L5RCharacterData) -> int:
+	var n: int = int(character.skills.get("Ninjutsu", 0))
+	if n >= 7:
+		return 2
+	if n >= 3:
+		return 1
+	return 0
+
+
 static func resolve_attack(
 	attacker: L5RCharacterData,
 	attacker_p: Participant,
@@ -1475,6 +1507,11 @@ static func resolve_damage(
 	if thrown and weapon.has("thrown_rolled"):
 		rolled = int(weapon["thrown_rolled"])
 		kept = int(weapon.get("thrown_kept", 1)) + bonus_kept
+
+	# s40 Blowgun (owner table): the dart's damage scales with the wielder's Ninjutsu — 1k1 at
+	# rank 3, 2k1 at rank 7 (over the 0k1 base; the poison is the real threat at lower ranks).
+	if attacker != null and weapon_name == "blowgun":
+		rolled += blowgun_damage_rolled_bonus(attacker)
 
 	# s54: a spirit/oni creature deals its FIXED stat-block damage (XkY), not the named
 	# weapon profile nor Strength-augmented dice. Mirrors the to-hit override in

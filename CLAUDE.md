@@ -3493,10 +3493,21 @@ broken weapon (mirrors the existing disarmed→unarmed fallback). "Inflicts N da
 roll (the blow's force, independent of the target's armor — documented interpretation). Verified:
 helper values; a Str-10 parangu shatters on a 30+ roll and is recorded on the attacker; an
 unbreakable katana never breaks over 200 Str-10 hits; a broken parangu → the attacker swings
-unarmed. DEFERRED (values in hand, each needs its own hook): **lance charge** (3k4 charging mounted,
-else 1k2 + TN penalty 5 horse/10 foot) — mounted (producer exists) + a tile-combat charge action for
-characters; **ammo armor-TN mods** (armor-piercing ignores / flesh-cutter + kyoketsu-shogi double
-/ blowgun triple the target's Armor-TN bonus) — per-shot ammo selection; **two-damage-mode** (kusarigama
+unarmed. **Ammo + weapon Armor-TN penetration wired (tranche 9, 2026-06-30, 21/21 verified):** the
+owner table's ranged penetration rules. `execute_ranged_attack` gains an `ammo` param (default "" =
+standard): **armor-piercing** ammo ignores the target's worn-armor TN bonus (`ammo_ignores_armor` →
+`armor_tn -= target.armor_tn_bonus`, floored 5); **flesh-cutter** ammo ×2 Armor TN AND halves the
+weapon's range (`ammo_armor_tn_mult` / `ammo_range_halved`). Weapon Armor-TN multipliers
+(`weapon_armor_tn_mult`, catalog `armor_tn_mult`): blowgun ×3 (applied in the ranged path),
+kyoketsu-shogi ×2 (applied in `execute_melee_attack`) — a precise hit on a vulnerable spot. Blowgun
+damage scales with Ninjutsu (`blowgun_damage_rolled_bonus`: +1 rolled at rank 3 → 1k1, +2 at rank 7 →
+2k1, over the 0k1 base — the poison is the threat below rank 3), applied in `resolve_damage`.
+Runtime-verified 21/21 (Godot 4.6.2): all helper values, armor-piercing hits more vs heavy armor while
+flesh-cutter hits less (×2 ATN), flesh-cutter halves a yumi's range (out of range at dist-30), blowgun
+×3 ATN hits far less than a yumi, blowgun damage scales 0→8.4 mean from Ninjutsu 0→7. The `ammo`
+selection is a per-shot caller parameter (PC via the future combat UI / NPC AI); the kyoketsu-shogi /
+blowgun multipliers are intrinsic weapon properties. STILL DEFERRED (each needs its own hook):
+**lance charge** — DONE (tranche 8); **two-damage-mode** (kusarigama
 0k2/0k1, sang-kauw 1k2/2k1) — a mode pick; **ninja-to** "counts as Small for concealment". Arrow types
 (bow damage uses the willow-leaf 2k2 default). Verified 16/16 (each new skill resolves to a weapon
 via pick_best_weapon, Spears R3 reduction-pierce now fires end-to-end, corrected values, katana
