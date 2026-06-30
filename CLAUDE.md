@@ -3563,6 +3563,16 @@ on horseback; bogu/ashigaru/tatami none. The penalty statistically lowers an Agi
 riding mounted beats on-foot (3546 vs 2388), and the contested path applies it per side (heavy a-wins
 1194 vs bare 1918). `equip()` mirrors all 7 armors' TN bonus + Reduction onto the fast-lookup fields,
 and unarmored clears them. **The s40 weapon + armor equipment layer is complete and fully wired.**
+**Per-armor combat-interaction sweep (2026-06-30, 17/17 verified):** a follow-up confirming the
+weapon↔armor and armor↔combat interactions — no gaps, no code change. The full Reduction pipeline is
+wired (`_apply_hit`: `armor_reduction` → `total_defender_reduction` [base + bokken-double + kata/kiho/
+spell − kata/Bugei pierce] → `WoundSystem.apply_damage`): bokken doubles a defender's armor Reduction
+(heavy 5→10, tetsu-do 8→16, unarmored 0→0; katana unaffected), the net reaches WoundSystem (raw 20 −
+red 5 = 15; floored at 0 for raw 3 / red 10), and riding's +12 mounted ATN composes (mounted 27 vs
+on-foot 19). **`is_heavy` is a descriptive/forward-wiring flag with no distinct consumer** — correctly
+set for heavy + tetsu-do, false for the rest; the heavy-armor mechanical effect is the `penalty_kind`-
+driven Agi/Ref TN penalty (already wired), and the owner table specifies no further heavy-only mechanic,
+so none is invented. Every armor↔combat interaction stated in the owner tables is wired.
 
 ### s24 Skill Mastery Abilities + Insight wiring (2026-06-29, runtime-verified)
 `simulation/skill_mastery_system.gd` (SkillMasterySystem, pure class) is the s24 home for the
