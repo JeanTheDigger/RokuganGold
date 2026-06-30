@@ -63,8 +63,13 @@ const SPECIES_TABLE: Dictionary = {
 }
 
 # -- Rank Mastery thresholds ---------------------------------------------------
+const MASTERY_TRAIN_FOR_OTHERS_RANK: int = 3  # s57.39 R3 / s24 (agree)
 const MASTERY_COMMAND_RANK: int = 5
 const MASTERY_NO_FLEE_RANK: int = 7
+# s24 R7 ("issued commands non-verbally") CONFLICTS with the LOCKED s57.39.8 R7
+# ("Never Flees" no-flee override). Per "LOCKED sections win", s57.39.8 governs and
+# is implemented (has_no_flee_override below). The non-verbal interpretation is NOT
+# implemented pending owner adjudication of the GDD-internal conflict.
 
 # -- Training tier thresholds (s57.39.3) ---------------------------------------
 const TRAINING_TIER_FOLLOWING_SESSION: int = 3  # from 3rd session onward → "following"
@@ -278,6 +283,15 @@ static func apply_training_progress(companion: Dictionary, progress_gained: int)
 
 
 # -- Mastery checks (for ASCII-layer use) --------------------------------------
+
+# s57.39 R3 / s24: commonly-domesticated animals trained by a Rank-3+ character may
+# be trained for use by OTHERS (the trained companion is usable by a character other
+# than the trainer). NO CONSUMER yet — TRAIN_ANIMAL always trains the actor's own
+# companion (owner_id == self, enforced by can_train_subsequent_session) and no
+# objective produces cross-owner training, so this is ready-but-dormant.
+static func can_train_for_others(trainer_rank: int) -> bool:
+	return trainer_rank >= MASTERY_TRAIN_FOR_OTHERS_RANK
+
 
 static func can_command_to_attack(trainer_rank: int) -> bool:
 	return trainer_rank >= MASTERY_COMMAND_RANK

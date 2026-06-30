@@ -21,6 +21,15 @@ class_name SkillMasterySystem
 ## WIRED HERE (Void Point recovery cap, via ActionExecutor._execute_meditate):
 ##   • Meditation R3 (restores up to 2 VP) / R7 (restores up to 3 VP), base 1 (s24 line 145).
 ##
+## WIRED HERE (Merchant masteries — s24 Commerce / Engineering / Sailing):
+##   • Engineering R5 (+5 Cooperative/Cumulative) via cooperative_roll_bonus() — LIVE
+##     (ActionExecutor FORTIFY_WALL_SECTION cumulative SI track, s57.41).
+##   • Sailing R5 (+5 Cooperative/Cumulative) via the same helper — READY but DORMANT
+##     (no Sailing skill roll exists in the sim; Sailing is only rank-gated for captaincy).
+##   • Commerce R5 (price ±20% in the actor's favor) via commerce_price_favor_multiplier() —
+##     the BUY half is LIVE (PURCHASE_MARKET koku cost); the sell half is dormant.
+##   • Craft has NO masteries (s24 "Mastery Abilities: None").
+##
 ## NO CONSUMER (LOCKED but no sim mechanic to attach to — documented so they aren't "forgotten"):
 ##   • Meditation R5 Fasting TN −5 — no individual food/water mechanic (starvation is province-level).
 ##   • Divination R5 (free second divination roll) — Divination is not a sim action (GM-flavor).
@@ -53,7 +62,7 @@ class_name SkillMasterySystem
 ##     range, Polearms R5 (vs mounted), and the Extra-Attack free-raise mastery (Knives R7 helper
 ##     exists, maneuver site not yet wired).
 ##   • Specific uses already hand-wired elsewhere — Calligraphy R5 (cipher, letter_system),
-##     Engineering R5 (+5 cooperative, s57.41), Tea Ceremony R5 (2 VP), Medicine R5 (+1k0 heal).
+##     Tea Ceremony R5 (2 VP), Medicine R5 (+1k0 heal).
 
 
 const MASTERY_RANK_3: int = 3
@@ -373,3 +382,38 @@ static func kyujutsu_range_multiplier(weapon_skill: String, rank: int) -> float:
 	if weapon_skill == "Kyujutsu" and rank >= MASTERY_RANK_5:
 		return 1.5
 	return 1.0
+
+
+# ============================================================================
+# Merchant / Craft masteries — s24 (Commerce, Engineering, Sailing). Craft has
+# NO Mastery Abilities per s24 ("Mastery Abilities: None"), so nothing to wire.
+# ============================================================================
+
+# Cooperative/Cumulative-roll flat bonus (+5) granted by a skill's Rank-5 mastery:
+# Engineering R5 and Sailing R5 ("+5 to <skill> rolls made as part of a Cooperative
+# or Cumulative effort", s24). Returned as a flat add for SkillResolver's mastery
+# bonus slot. Engineering R5 is LIVE (FORTIFY_WALL_SECTION cumulative track, s57.41);
+# Sailing R5 is READY but DORMANT — no Sailing skill check exists in the sim (Sailing
+# is only rank-gated for captaincy, never rolled), so it has no consumer until a
+# cooperative/cumulative Sailing roll is added.
+const COOPERATIVE_ROLL_BONUS: int = 5
+const COOPERATIVE_SKILLS: Array = ["Engineering", "Sailing"]
+
+static func cooperative_roll_bonus(skill: String, character: L5RCharacterData) -> int:
+	var b: String = base_skill(skill)
+	if b in COOPERATIVE_SKILLS and int(character.skills.get(b, 0)) >= MASTERY_RANK_5:
+		return COOPERATIVE_ROLL_BONUS
+	return 0
+
+
+# Commerce R5: when the character buys or sells goods, the final price moves up to
+# 20% in their favor (s24). Returns the price multiplier: buying → 0.8 (pay 20%
+# less); selling → 1.2 (receive 20% more); 1.0 if not Commerce R5+. The 20% is
+# GDD-locked. Applied to PURCHASE_MARKET (the sim's market-buy koku cost); the sell
+# half has no koku-producing sell transaction in the sim yet (dormant).
+const COMMERCE_PRICE_FAVOR: float = 0.20
+
+static func commerce_price_favor_multiplier(character: L5RCharacterData, is_buying: bool) -> float:
+	if int(character.skills.get("Commerce", 0)) < MASTERY_RANK_5:
+		return 1.0
+	return (1.0 - COMMERCE_PRICE_FAVOR) if is_buying else (1.0 + COMMERCE_PRICE_FAVOR)

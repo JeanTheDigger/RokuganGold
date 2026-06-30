@@ -3574,6 +3574,46 @@ set for heavy + tetsu-do, false for the rest; the heavy-armor mechanical effect 
 driven Agi/Ref TN penalty (already wired), and the owner table specifies no further heavy-only mechanic,
 so none is invented. Every armor↔combat interaction stated in the owner tables is wired.
 
+### s24 Skill Mastery Abilities — Merchant tranche (Commerce/Engineering/Sailing; Craft none) (2026-06-30, runtime-verified 16/16)
+Wired the s24 non-Bugei "Merchant" masteries the owner pasted ("Now these masteries"), all values
+GDD-given (zero invention). New `SkillMasterySystem` helpers: **`cooperative_roll_bonus(skill,
+character)`** → +5 for Engineering R5+ or Sailing R5+ on Cooperative/Cumulative rolls, and
+**`commerce_price_favor_multiplier(character, is_buying)`** → 0.8 buy / 1.2 sell for Commerce R5+
+(the GDD-locked ±20% in the actor's favor), 1.0 otherwise.
+- **Engineering R5 — LIVE, centralized.** The +5 cumulative bonus was already inline in
+  `ActionExecutor._execute_fortify_wall_section` (FORTIFY_WALL_SECTION SI track, s57.41); replaced
+  the inline `5 if eng_rank>=5 else 0` with `cooperative_roll_bonus("Engineering", character)`
+  (behavior-preserving — verified 5 at R5, 0 at R4).
+- **Sailing R5 — READY but DORMANT.** Folded into the same helper, but **no Sailing skill check
+  exists anywhere in the sim** (Sailing is only rank-gated for captaincy in SailingSystem, never
+  rolled via SkillResolver), so the bonus has no consumer until a cooperative/cumulative Sailing
+  roll is added. Documented, not dead-wired.
+- **Commerce R5 — buy half LIVE.** Wired the buyer-favor into **PURCHASE_MARKET** (the sim's only
+  market-buy koku transaction): in `ActionExecutor.execute`'s post-effects block, a successful
+  PURCHASE_MARKET's `koku_cost` (consumed by `EffectApplicator._apply_koku_cost`) is multiplied by
+  `commerce_price_favor_multiplier(_character, true)` → a Commerce-5 buyer pays 0.8 koku vs 1.0.
+  The **sell half is dormant** (CONDUCT_COMMERCE is flavor with no koku-producing sell price; the
+  Kolat Commerce rolls are op-checks, not buy/sell). This supersedes the old "Commerce R5 explicitly
+  deferred (s57.40.8)" note — the owner re-authorized it by pasting the s24 mastery; the 20% is
+  GDD-given so no invention.
+- **Craft — NO masteries** (s24 "Mastery Abilities: None"). Nothing to wire.
+- **Animal Handling R3 (train-for-others) — helper added, DORMANT.** `can_train_for_others(rank)`
+  (rank ≥ 3) in `animal_handling_system.gd` (the s57.39 home; s24 and s57.39 R3 AGREE). No consumer
+  yet — TRAIN_ANIMAL always trains the actor's own companion (`owner_id == self`) and no objective
+  produces cross-owner training. The existing R5 (`can_command_to_attack`) / R7
+  (`has_no_flee_override`) helpers remain (also dormant — companion_system doesn't read them; ASCII
+  combat layer, PC-travel HOLD).
+- **⚠ GDD-INTERNAL CONFLICT FLAGGED (Animal Handling R7) — NOT resolved in code.** The s24 reference
+  says R7 = "animals may be issued commands non-verbally"; the dedicated LOCKED **s57.39.8** says
+  R7 = the "Never Flees" no-flee override. Per "LOCKED sections win," s57.39.8 governs and is the
+  implemented behavior (`has_no_flee_override`); the non-verbal interpretation is deliberately NOT
+  implemented. Surfaced to the owner for adjudication (comment left at the constants, no silent
+  overwrite of the LOCKED no-flee behavior).
+Runtime-verified 16/16 (Godot 4.6.2, headless): cooperative bonus 5/0 for Eng/Sailing R5/R4, 0 for a
+non-coop skill; Commerce 0.8 buy / 1.2 sell / 1.0 below R5; PURCHASE_MARKET base 1.0 → 0.8 for a
+Commerce-5 buyer vs 1.0 otherwise; AH R3 train-for-others gate; AH R7 no-flee (s57.39.8) retained.
+3 files parse clean.
+
 ### s24 Skill Mastery Abilities + Insight wiring (2026-06-29, runtime-verified)
 `simulation/skill_mastery_system.gd` (SkillMasterySystem, pure class) is the s24 home for the
 roll/insight-applicable Mastery Abilities. **Five tranches:**

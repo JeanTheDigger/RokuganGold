@@ -1809,6 +1809,13 @@ static func _apply_effects(
 	else:
 		effects = _compute_failure_effects(action_id, result.get("margin", 0))
 
+	# Commerce Rank-5 mastery (s24): a market BUY moves the final price up to 20% in
+	# the actor's favor. PURCHASE_MARKET is the sim's market-buy koku transaction; the
+	# 20% is GDD-locked. (The sell half has no koku-producing sell transaction yet.)
+	if action_id == "PURCHASE_MARKET" and effects.has("koku_cost"):
+		effects["koku_cost"] = float(effects["koku_cost"]) \
+			* SkillMasterySystem.commerce_price_favor_multiplier(_character, true)
+
 	# Poetry festival glory — s57.30.6: only for poem-letters (attached_poem_item_id set).
 	if action_id == "WRITE_LETTER" and result.get("success", false) \
 			and ctx.festival_glory_poetry > 0.001 \
@@ -2624,9 +2631,9 @@ static func _execute_fortify_wall_section(
 		}
 
 	var tn: int = WallSystem.get_fortify_tn(si)
-	# s57.41.1: Engineering Rank 5 mastery grants +5 flat bonus on cumulative rolls.
-	var eng_rank: int = character.skills.get("Engineering", 0)
-	var mastery_bonus: int = 5 if eng_rank >= 5 else 0
+	# s57.41.1 / s24: Engineering Rank-5 mastery grants +5 on Cooperative/Cumulative
+	# rolls (the FORTIFY cumulative SI track). Centralized in SkillMasterySystem.
+	var mastery_bonus: int = SkillMasterySystem.cooperative_roll_bonus("Engineering", character)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, "Engineering", tn,
 		0, "", Enums.Trait.NONE, 0, 0, mastery_bonus
