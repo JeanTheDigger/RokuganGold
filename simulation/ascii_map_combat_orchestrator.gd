@@ -1431,6 +1431,13 @@ static func execute_melee_attack(
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty") \
 		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty") \
 		+ _high_ground_attack_bonus(state, apos, tpos)
+	# s24 Chain Weapons R5: +1k0 vs an entangled/Grappled opponent (added as a positive rolled-die
+	# attack modifier through the same channel).
+	var tgt_restrained: bool = t_p != null and (IndividualCombat.CONDITION_GRAPPLED in t_p.conditions \
+		or IndividualCombat.CONDITION_ENTANGLED in t_p.conditions)
+	atk_pen += SkillMasterySystem.chain_vs_restrained_bonus(
+		String(IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")),
+		int(attacker.skills.get("Chain Weapons", 0)), tgt_restrained)
 	# Defender mount/size for the mounted +1k0 (s40) and Burning Kiss of Steel +2k2 (s35).
 	var tgt_mounted: bool = t_p != null and IndividualCombat.CONDITION_MOUNTED in t_p.conditions
 	var tgt_large: bool = AdvantageSystem.has_advantage(target, Enums.Advantage.LARGE)
@@ -1874,6 +1881,11 @@ static func execute_ranged_attack(
 	# s24 Kyujutsu R5: bow maximum range +50% (a thrown weapon is not a bow shot, so unaffected).
 	if not thrown:
 		rng = IndividualCombat.kyujutsu_extended_range(attacker, weapon_name, rng)
+	# s24 Spears R5: a thrown Spears weapon gets +5' (+1 tile) ranged range (s24 line 399).
+	elif rng > 0:
+		rng += SkillMasterySystem.spears_thrown_range_bonus(
+			String(IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")),
+			int(attacker.skills.get("Spears", 0)))
 	# s40 flesh-cutter ammo (owner table): halves the weapon's range.
 	if rng > 0 and IndividualCombat.ammo_range_halved(ammo):
 		rng = rng / 2
@@ -2227,6 +2239,10 @@ static func execute_grapple_initiate(
 		if not IndividualCombat.weapon_can_grapple(weapon_name):
 			return {"success": false, "reason": "weapon_cannot_grapple"}
 		grapple_skill = IndividualCombat.get_weapon_profile(weapon_name).get("skill", "Jiujutsu")
+		# s24 Chain Weapons R3: a chain weapon may initiate a Grapple only at rank 3+.
+		if grapple_skill == "Chain Weapons" \
+				and not SkillMasterySystem.chain_weapon_can_grapple(grapple_skill, int(attacker.skills.get("Chain Weapons", 0))):
+			return {"success": false, "reason": "chain_grapple_requires_rank_3"}
 
 	# Grapple ignores armor TN bonus — target TN = Reflexes × 5 + 5 (GDD s40).
 	var grapple_tn: int = target.reflexes * 5 + 5

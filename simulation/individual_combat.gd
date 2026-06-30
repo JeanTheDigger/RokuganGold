@@ -1635,6 +1635,9 @@ static func resolve_damage(
 	rolled += int(polearm_dmg["rolled"])
 	kept += int(polearm_dmg["kept"])
 
+	# s24 Staves R7: a small staff (not the Large bo) gets +1k0 damage (s24 line 327).
+	rolled += SkillMasterySystem.staff_small_damage_bonus(dmg_skill, bugei_dmg_rank, String(weapon.get("size", "")))
+
 	# s35 Hungry Blade: while the buff is active, all the wielder's damage dice also explode on an 8 or 9
 	# (once each). Inert (false) for everyone else.
 	var explode_8: bool = attacker_p != null and get_timed_modifier_total(attacker_p, "hungry_blade") > 0

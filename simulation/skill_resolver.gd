@@ -724,13 +724,17 @@ static func resolve_skill_check(
 	# s36 Wisdom & Clarity: +1k0 to Lore recall while the day buff is active
 	var wisdom_mod: int = _get_wisdom_and_clarity_bonus(character, skill_name)
 
+	# s24 Hunting R5: +1k0 to Stealth rolls in wilderness environments (context-gated).
+	var hunting_mod: int = SkillMasterySystem.hunting_wilderness_stealth_bonus(
+		character, skill_name, context.get("wilderness", false))
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = (
 		trait_value + skill_rank + bonus_rolled + ashes_bonus
 		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
 		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
 		+ kiho_mod.get("rolled", 0) + void_mod.get("rolled", 0) + voice_mod.get("rolled", 0)
-		+ mq_mod.get("rolled", 0) + soul_mod + wisdom_mod
+		+ mq_mod.get("rolled", 0) + soul_mod + wisdom_mod + hunting_mod
 	)
 	var kept: int = (
 		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)

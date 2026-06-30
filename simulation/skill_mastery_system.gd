@@ -172,8 +172,17 @@ static func maneuver_free_raises(weapon_skill: String, rank: int, maneuver: Stri
 		"disarm":
 			if weapon_skill == "Knives" and rank >= MASTERY_RANK_5:
 				return 1
+			# Chain Weapons R7: Free Raise toward Disarm OR Knockdown (s24 line 319).
+			if weapon_skill == "Chain Weapons" and rank >= MASTERY_RANK_7:
+				return 1
 		"knockdown":
 			if weapon_skill == "Heavy Weapons" and rank >= MASTERY_RANK_5:
+				return 1
+			# Staves R5: Free Raise toward Knockdown (s24 line 327).
+			if weapon_skill == "Staves" and rank >= MASTERY_RANK_5:
+				return 1
+			# Chain Weapons R7: Free Raise toward Disarm OR Knockdown (s24 line 319).
+			if weapon_skill == "Chain Weapons" and rank >= MASTERY_RANK_7:
 				return 1
 		"grapple":
 			if weapon_skill == "Jiujutsu" and rank >= MASTERY_RANK_5:
@@ -182,6 +191,43 @@ static func maneuver_free_raises(weapon_skill: String, rank: int, maneuver: Stri
 			if weapon_skill == "Knives" and rank >= MASTERY_RANK_7:
 				return 1
 	return 0
+
+
+# Chain Weapons R3: a chain weapon may initiate a Grapple only at rank 3+ (s24 line 319). Below R3 a
+# chain-weapon wielder cannot weapon-grapple.
+static func chain_weapon_can_grapple(weapon_skill: String, rank: int) -> bool:
+	return weapon_skill == "Chain Weapons" and rank >= MASTERY_RANK_3
+
+
+# Chain Weapons R5: +1k0 (one rolled die) on rolls against an entangled/Grappled opponent — applied
+# to the chain-user's attack roll vs a restrained target (s24 line 319).
+static func chain_vs_restrained_bonus(weapon_skill: String, rank: int, target_restrained: bool) -> int:
+	return 1 if (weapon_skill == "Chain Weapons" and rank >= MASTERY_RANK_5 and target_restrained) else 0
+
+
+# Staves R7: a SMALL staff gets +1k0 damage (s24 line 327; large staves get the ready-as-Free-Action
+# benefit instead). weapon_size is the weapon's catalog size ("Large" = the bo).
+static func staff_small_damage_bonus(weapon_skill: String, rank: int, weapon_size: String) -> int:
+	return 1 if (weapon_skill == "Staves" and rank >= MASTERY_RANK_7 and weapon_size != "Large") else 0
+
+
+# Spears R5: ranged (thrown) range +5' = +1 tile (s24 line 399). Applies to a thrown Spears weapon.
+static func spears_thrown_range_bonus(weapon_skill: String, rank: int) -> int:
+	return 1 if (weapon_skill == "Spears" and rank >= MASTERY_RANK_5) else 0
+
+
+# Hunting R5: +1k0 (one rolled die) to Stealth Skill Rolls in wilderness environments (s24 line 233).
+static func hunting_wilderness_stealth_bonus(character: L5RCharacterData, skill: String, in_wilderness: bool) -> int:
+	if skill == "Stealth" and in_wilderness and int(character.skills.get("Hunting", 0)) >= MASTERY_RANK_5:
+		return 1
+	return 0
+
+
+# Staves base rule: a staff attack doubles the DEFENDER's worn-armor TN bonus (s24 line 327). The
+# staff-user negates this doubling at Staves R3. Returns true when the attacker wields a staff and
+# lacks R3 (so the defender's armor TN bonus should be added one extra time = doubled).
+static func staff_doubles_armor(attacker_weapon_skill: String, attacker_rank: int) -> bool:
+	return attacker_weapon_skill == "Staves" and attacker_rank < MASTERY_RANK_3
 
 
 # True if the weapon skill's damage dice explode on 9 (and 10) at this rank.
