@@ -3574,6 +3574,31 @@ set for heavy + tetsu-do, false for the rest; the heavy-armor mechanical effect 
 driven Agi/Ref TN penalty (already wired), and the owner table specifies no further heavy-only mechanic,
 so none is invented. Every armor↔combat interaction stated in the owner tables is wired.
 
+### s57.39 Animal Handling — combat tranche A: species stat table + companion→combatant adapter (2026-06-30, runtime-verified 26/26)
+The data + converter foundation for trained-animal combat (owner confirmed the species→s54.1
+mapping). `simulation/animal_combatant.gd` (AnimalCombatant, pure class) mirrors `SpiritCombatant`:
+`catalog()` is the 6-species combat stat table (PIGEON excluded — a message bird), each a
+`SpiritCreatureData` transcribed WHOLE from its s54.1 block per the **owner-confirmed mapping**
+(DOG→Dog (Inu), WAR_DOG→Unicorn War Dog, FALCON→Falcon, RIDING_HORSE→Rokugani Pony, WARHORSE→Unicorn
+Riding Horse, WARCAT→Lion; Utaku Battle Steed stays school-only). `to_combatant(companion, instance_id)`
+builds the combat puppet via `SpiritCombatant.to_character_data` (reusing the verified to-hit / damage /
+wound-track overrides through the attached SpiritCreatureData), carrying the companion's NAME and current
+WOUND_TOTAL (a wounded animal fights wounded); returns null for a dead/archived or non-combat (PIGEON)
+companion. realm = NINGEN_DO (natural mortal animals). **Reconciliation (resolved per s57.39.7 "use its
+species stat block (Section 54 creature entries)"):** combat uses the s54.1 stat block whole — rings,
+named traits, initiative, attack/damage dice, Armor TN, Reduction, AND the s54.1 wound track
+(`wound_thresholds`+`wounds_dead`); s57.39.6's per-species `wound_threshold` stays the world-sim
+companion-record value (+ the Rank-5 Hurt-flee threshold), a separate field. **FLAGGED for owner
+review:** s57.39.9 says the companion Armor TN is "default 15 for most trained animals (warcats/warhorses
+higher per s54)", which conflicts with the varied s54.1 Armor TN (Dog 20, Falcon 30, …). This follows
+s57.39.7 and uses the s54.1 value; a `USE_S57_39_9_FLAT_ARMOR_TN` toggle (default false) flips to the
+flat-15 companion rule (warcat/warhorse exempt) if the owner prefers it. Runtime-verified 26/26 (Godot
+4.6.2): catalogue completeness, s54.1 stat-block fidelity (DOG/WARCAT/WARHORSE/FALCON spot-checks),
+adapter carries name+wounds + attaches spirit_creature, dead/PIGEON → null. NOT yet wired into the
+orchestrator (combat tranche B: add companions to setup_combat + animal turn AI with the three-tier
+behavior + R5 command-to-attack + R5 Hurt-flee / R7 no-flee). Same PC-travel HOLD as the whole ASCII
+stack — headless-verified, not live.
+
 ### s57.39 Animal Handling — in-game companion lifecycle (now unblocked by s40), tranche 1: travel-with-owner (2026-06-30, runtime-verified 7/7)
 The s57.39 TRAINING pipeline (TRAIN_ANIMAL executor, companion records on
 `L5RCharacterData.trained_companions`, cap, tiers, mastery gates) was already built, but the
