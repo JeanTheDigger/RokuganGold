@@ -324,6 +324,18 @@ static func setup_combat(
 		ts.char_id = cid
 		mcs.turn_states[cid] = ts
 
+	# s40 mount producer: a combatant flagged mounted (cavalry / a mounted PC) starts the skirmish
+	# on horseback. This is the producer for CONDITION_MOUNTED, which the combat math already reads
+	# (the cavalry +1k0 vs unmounted, riding-armor exemption, bow mount-TN, burning-kiss bonus).
+	for entry: Dictionary in combatants_data:
+		var mc: L5RCharacterData = entry["char"]
+		if CharacterStats.is_dead(mc):
+			continue
+		if entry.get("mounted", false):
+			var mp: IndividualCombat.Participant = mcs.combat.participants.get(mc.character_id, null)
+			if mp != null and IndividualCombat.CONDITION_MOUNTED not in mp.conditions:
+				mp.conditions.append(IndividualCombat.CONDITION_MOUNTED)
+
 	mcs.combat_log.append({
 		"type": "combat_started",
 		"round": 1,
@@ -1777,6 +1789,8 @@ static func execute_ranged_attack(
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, false, is_being_guarded, weapon_name)
 	armor_tn += _cover_bonus(state, tpos, apos)
+	# s40 bow mount-TN (owner Equipment table): dai-kyu +10 on foot, han-kyu/yumi +10 mounted.
+	armor_tn += IndividualCombat.weapon_mount_tn_penalty(weapon_name, IndividualCombat.CONDITION_MOUNTED in a_p.conditions)
 	# s33 Blessed Wind: +Armor TN vs non-magical ranged attacks only (ranged path).
 	# s33 Summoning the Gale: a target inside an anti-ranged zone is harder to shoot (+15 Armor TN).
 	armor_tn += IndividualCombat.get_timed_modifier_total(t_p, "ranged_armor_tn") \

@@ -73,9 +73,9 @@ const WEAPON_CATALOG: Dictionary = {
 	"war_fan":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "War Fan", "size": "Small", "melee": true, "trait": "agility"},
 
 	# -- Bows (Kyujutsu; Reflexes; no Strength to damage — the bow's Strength rating governs) --
-	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Large", "melee": false, "trait": "reflexes", "range_tiles": 50},
-	"dai_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes", "range_tiles": 100},
-	"han_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes", "range_tiles": 20},
+	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Large", "melee": false, "trait": "reflexes", "range_tiles": 50, "mount_tn_when": "mounted"},
+	"dai_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes", "range_tiles": 100, "mount_tn_when": "unmounted"},
+	"han_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes", "range_tiles": 20, "mount_tn_when": "mounted"},
 
 	# -- Ninja weapons (Ninjutsu; thrown/ranged, no Strength to damage) --
 	"shuriken":   {"rolled": 1, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Small",  "melee": false, "trait": "agility", "range_tiles": 5},
@@ -1207,6 +1207,20 @@ static func weapon_thrown_range(weapon_name: String) -> int:
 ## raw damage roll (the force of the blow), independent of the target's armor.
 static func weapon_break_threshold(weapon_name: String) -> int:
 	return int(get_weapon_profile(weapon_name).get("break_threshold", 0))
+
+
+const BOW_MOUNT_TN_PENALTY: int = 10  # s40 bow mount-TN penalty (owner Equipment table)
+
+## +TN penalty a bow imposes on its attack roll for being mounted (or on foot), from the owner
+## Equipment table (s40): dai-kyu +10 on FOOT, han-kyu/yumi +10 MOUNTED. 0 if the weapon has no
+## mount sensitivity or the attacker's mounted state doesn't match the penalty condition.
+static func weapon_mount_tn_penalty(weapon_name: String, attacker_mounted: bool) -> int:
+	var when: String = String(get_weapon_profile(weapon_name).get("mount_tn_when", ""))
+	if when == "mounted" and attacker_mounted:
+		return BOW_MOUNT_TN_PENALTY
+	if when == "unmounted" and not attacker_mounted:
+		return BOW_MOUNT_TN_PENALTY
+	return 0
 
 
 static func resolve_attack(

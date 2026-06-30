@@ -3417,8 +3417,21 @@ distant foes are still pursued; creatures unaffected (puppet weapon has no `rang
 use their own `ranged_range_tiles` gate). Verified: helper values (feet/5); shuriken excludes a
 dist-9 target while yumi/no-weapon include it; `execute_ranged_attack` out_of_range @dist9 vs a real
 attack @dist4; a shuriken NPC (range 5) vs a dist-11 target closes to dist 2 (advances) instead of
-shooting. **Bow mount-TN** (dai-kyu +10 on foot, han-kyu/yumi +10 mounted) stays DEFERRED — inert
-until a mount system sets `CONDITION_MOUNTED` for NPCs. **Thrown weapons wired (tranche 3, 2026-06-29,
+shooting. **Mount producer + bow mount-TN wired (tranche 5, 2026-06-29, 10/10 verified):** the engine
+already had `CONDITION_MOUNTED` and combat READS of it (the s40 cavalry +1k0 vs unmounted in
+`resolve_attack`, riding-armor exemption, burning-kiss bonus) but NOTHING ever set it — so all of it
+was inert. Added the PRODUCER: `setup_combat` honors a `"mounted": true` flag per combatant (cavalry /
+a mounted PC starts the skirmish on horseback → appends `CONDITION_MOUNTED`). This **revived the
+already-wired cavalry +1k0** (mounted attacker 2452/4000 hits vs foot 2060) and unblocked **bow
+mount-TN** (owner table: dai-kyu +10 attack TN on foot, han-kyu/yumi +10 mounted) via
+`IndividualCombat.weapon_mount_tn_penalty()` + `mount_tn_when` on the bows, applied to the shot's
+Armor TN in `execute_ranged_attack` (mounted yumi archer 1537/4000 hits vs foot 2961 — the +10
+penalty). Verified: the flag sets the condition; helper values; the cavalry +1k0 and bow penalty both
+move hit-rates the right way. STILL DEFERRED: a mount/dismount ACTION (needs base action costs +
+a horse entity on the map — the setup flag is the only producer so far); riding armor's mounted +12
+ATN (the +12 isn't bumped in `get_armor_tn` yet, and no one wears riding armor — the cavalry loadout
+is deferred); **lance charge** (needs both mounted AND a tile-combat charge action for characters —
+`execute_charge` is creature-only). **Thrown weapons wired (tranche 3, 2026-06-29,
 12/12 verified):** a melee weapon with a `thrown_range` can be hurled as a ranged attack —
 `thrown_range` (feet/5) added to wakizashi 4 (20') / mai-chong 5 (25') / nage-yari 10 (50') / yari 10
 (50') + `IndividualCombat.weapon_thrown_range()` (shuriken/tsubute are already ranged weapons, so
@@ -3441,8 +3454,8 @@ roll (the blow's force, independent of the target's armor — documented interpr
 helper values; a Str-10 parangu shatters on a 30+ roll and is recorded on the attacker; an
 unbreakable katana never breaks over 200 Str-10 hits; a broken parangu → the attacker swings
 unarmed. DEFERRED (values in hand, each needs its own hook): **lance charge** (3k4 charging mounted,
-else 1k2 + TN penalty 5 horse/10 foot) — mounted-charge context; **bow mount-TN** (dai-kyu +10 on foot, han-kyu/yumi +10 mounted) —
-mounted context; **ammo armor-TN mods** (armor-piercing ignores / flesh-cutter + kyoketsu-shogi double
+else 1k2 + TN penalty 5 horse/10 foot) — mounted (producer exists) + a tile-combat charge action for
+characters; **ammo armor-TN mods** (armor-piercing ignores / flesh-cutter + kyoketsu-shogi double
 / blowgun triple the target's Armor-TN bonus) — per-shot ammo selection; **two-damage-mode** (kusarigama
 0k2/0k1, sang-kauw 1k2/2k1) — a mode pick; **ninja-to** "counts as Small for concealment". Arrow types
 (bow damage uses the willow-leaf 2k2 default). Verified 16/16 (each new skill resolves to a weapon
