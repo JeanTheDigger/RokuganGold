@@ -908,6 +908,28 @@ static func _apply_taint_examination_precondition_filter(
 	return _remove_action(options, "EXAMINE_FOR_TAINT")
 
 
+# -- Phase 4c: CONDUCT_COMMERCE Precondition Filter (s55.27 once-per-season) ---
+# Removes CONDUCT_COMMERCE when this character already conducted commerce at the
+# current settlement this season (so they don't waste an AP on a refused action).
+
+static func _apply_commerce_precondition_filter(
+	options: Array,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "CONDUCT_COMMERCE":
+			has_action = true
+			break
+	if not has_action or ctx.location_id == "":
+		return options
+	var abs_season: int = TimeSystem.get_absolute_season(ctx.ic_day)
+	if int(character.commerce_conducted_seasons.get(ctx.location_id, -999)) == abs_season:
+		return _remove_action(options, "CONDUCT_COMMERCE")
+	return options
+
+
 # -- Phase 4c: SUPPRESS_INSURGENCY Precondition Filter (s11.11 Phase 5) -------
 # Removes SUPPRESS_INSURGENCY unless the actor is co-located with a DETECTED
 # insurgency. Suppression requires being physically present in the affected
@@ -1357,6 +1379,7 @@ static func run(
 	options = _apply_world_is_truth_precondition_filter(options, character, chars_by_id)
 	options = _apply_protective_ward_precondition_filter(options, character, ctx)
 	options = _apply_commune_precondition_filter(options, character)
+	options = _apply_commerce_precondition_filter(options, character, ctx)
 	options = _apply_arrived_travel_filter(options, need, ctx)
 	options = _apply_compliance_filter(options, ctx)
 

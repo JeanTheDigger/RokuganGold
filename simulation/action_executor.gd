@@ -150,6 +150,23 @@ static func execute(
 				"effects": {},
 			}
 
+	# s55.27: one CONDUCT_COMMERCE per settlement per character per season. Hard gate
+	# (belt-and-suspenders for any path; the NPC engine also filters it at selection).
+	if action_id == "CONDUCT_COMMERCE" and ctx.location_id != "":
+		var abs_season: int = TimeSystem.get_absolute_season(ctx.ic_day)
+		if int(character.commerce_conducted_seasons.get(ctx.location_id, -999)) == abs_season:
+			return {
+				"success": false,
+				"action_id": action_id,
+				"character_id": ctx.character_id,
+				"target_npc_id": action.target_npc_id,
+				"target_province_id": action.target_province_id,
+				"ic_day": ctx.ic_day,
+				"season": ctx.season,
+				"reason": "commerce_already_conducted_this_season",
+				"effects": {},
+			}
+
 	# Kolat actions route to KolatExecutor (s54.7c). Metadata from the decomposition
 	# (action.metadata) is enriched with the resolved NPC target where relevant.
 	if action_id in _KOLAT_ACTION_IDS:
@@ -1839,6 +1856,11 @@ static func _apply_effects(
 			* SkillMasterySystem.commerce_price_favor_multiplier(_character, false)
 		if yield_koku > 0.0:
 			effects["commerce_yield_koku"] = yield_koku
+		# Record the per-settlement-per-season conduct (s55.27 gate). Pattern B: the
+		# actor's own bookkeeping, applied here rather than via EffectApplicator.
+		if ctx.location_id != "":
+			_character.commerce_conducted_seasons[ctx.location_id] = \
+				TimeSystem.get_absolute_season(ctx.ic_day)
 
 	# Poetry festival glory — s57.30.6: only for poem-letters (attached_poem_item_id set).
 	if action_id == "WRITE_LETTER" and result.get("success", false) \

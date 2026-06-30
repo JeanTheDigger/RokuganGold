@@ -3732,10 +3732,24 @@ character)`** → +5 for Engineering R5+ or Sailing R5+ on Cooperative/Cumulativ
   already-wired s57.40 stigma fires (no double-charge). Runtime-verified 8/8 (Godot 4.6.2, headless):
   sell R5=1.2 / R4=1.0 / buy R5=0.8; a Commerce-5 CONDUCT_COMMERCE emits yield 12.0 (5×1×2×1.2),
   Commerce-4 emits 8.0 (4×1×2×1.0); EffectApplicator deposits the gain (3→15); a failed result
-  deposits nothing. LIMITATION: the "one CONDUCT_COMMERCE per settlement per character per season"
-  selection gate (s55.27) is not enforced as a precondition filter — the once-per-IC-day commerce-
-  stigma guard rate-limits the honor side, but a merchant could in principle conduct commerce on
-  successive days; tightening to per-settlement-per-season is a follow-up.
+  deposits nothing.
+- **s55.27 once-per-settlement-per-season gate now LIVE (2026-06-30, runtime-verified 17/17).**
+  Closes the prior limitation. New `L5RCharacterData.commerce_conducted_seasons: Dictionary`
+  (settlement location_id → the absolute-season index of the last commerce there; @export → persists)
+  + `TimeSystem.get_absolute_season(ic_day)` (monotonic `year*4 + season-in-year`, so two ic_days in
+  the same calendar season share a key). Two enforcement points: (1) **executor hard gate** — a
+  CONDUCT_COMMERCE at a settlement where `commerce_conducted_seasons[location] == current absolute
+  season` is refused (`commerce_already_conducted_this_season`, no roll, no yield), and a successful
+  conduct records the season (Pattern B); (2) **NPC selection gate** —
+  `NPCDecisionEngine._apply_commerce_precondition_filter` (Phase 4c) removes CONDUCT_COMMERCE from the
+  option set when already conducted at the current settlement this season, so a merchant doesn't waste
+  an AP on a refused action. Both key on `ctx.location_id` (the settlement) + the absolute season, so a
+  merchant may still conduct commerce in *different* settlements the same season and at the *same*
+  settlement in a *later* season. Runtime-verified 17/17 (Godot 4.6.2, headless): abs-season boundaries
+  (day 0/89/90/240/360 → 0/0/1/3/4); first conduct succeeds + records + yields; second same-settlement-
+  same-season refused with reason + no yield; different settlement same season allowed; same settlement
+  next season allowed + record updated; the precondition filter removes/keeps CONDUCT_COMMERCE correctly
+  (already-conducted vs fresh settlement).
 - **Craft — NO masteries** (s24 "Mastery Abilities: None"). Nothing to wire.
 - **Animal Handling R3 (train-for-others) — helper added, DORMANT.** `can_train_for_others(rank)`
   (rank ≥ 3) in `animal_handling_system.gd` (the s57.39 home; s24 and s57.39 R3 AGREE). No consumer

@@ -462,6 +462,10 @@ var taint_benefits_suppressed: bool = false
 
 @export var school_paths: Array = []
 @export var commerce_stigma_applied_ic_day: int = -1
+## s55.27: one CONDUCT_COMMERCE per settlement per character per season. Maps a
+## settlement location_id (String) → the absolute-season index of the last commerce
+## conducted there. Used by the selection gate + executor hard gate.
+@export var commerce_conducted_seasons: Dictionary = {}
 
 # -- Sailing (Section 57.42) ---------------------------------------------------
 
