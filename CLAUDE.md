@@ -3574,6 +3574,26 @@ set for heavy + tetsu-do, false for the rest; the heavy-armor mechanical effect 
 driven Agi/Ref TN penalty (already wired), and the owner table specifies no further heavy-only mechanic,
 so none is invented. Every armor↔combat interaction stated in the owner tables is wired.
 
+### s57.39 Animal Handling — lifecycle tranche 2: companion death (2026-06-30, runtime-verified 21/21)
+The direct consequence of the combat tranche — a trained animal that dies in a skirmish is now
+resolved (s57.39.9). Two halves, decoupled: **combat side** — `AsciiMapCombatOrchestrator.sync_companion_deaths(state)`
+marks each dead animal puppet's companion record `is_alive=false` (the record is the owner's persistent
+`trained_companions` entry, referenced in `animal_data`, so it archives on the owner); returns the
+{owner_id, companion} list, idempotent (already-archived skipped). **World-sim side** —
+`DayOrchestrator._process_companion_deaths(characters, active_topics, next_topic_id, ic_day)` (a daily
+pass, wired beside `_process_companion_locations`) scans living owners' companions for `is_alive=false` +
+not-yet-`companion_death_resolved`, builds the owner's Tier-4 PERSONAL loss topic via
+`AnimalHandlingSystem.build_death_topic` ("[Owner] lost their [species] [name]", subject=owner,
+subject_role NEUTRAL, **no Glory/Honor** per s57.39.9), appends it, seeds the owner's topic_pool (non-PC),
+and sets the resolved flag. The record is **archived, not deleted** (s57.39.9); the cap slot frees
+automatically (`count_active_companions` skips `is_alive=false`). Decoupling means the death is recorded
+in combat and the topic fires in the world-sim even though the live mission→world pipeline is deferred
+(PC-travel HOLD). Runtime-verified 21/21 (Godot 4.6.2): death-topic fidelity (Tier-4/PERSONAL/owner-
+subject/NEUTRAL/readable title/species_display), combat sync flips the record + idempotent, world pass
+creates the topic + counter advance + owner pool + resolved flag + **cap recovery**, world pass
+idempotent, dead-owner skipped. `sync_companion_deaths` is the API the deferred mission-resolution glue
+calls; the world pass already runs live each tick.
+
 ### s57.39 Animal Handling — combat tranche B: orchestrator integration + turn AI (2026-06-30, runtime-verified 15/15)
 Trained-animal companions now FIGHT on the ASCII map (the headline "can fight"). Wired into
 `AsciiMapCombatOrchestrator`: new `MapCombatState.animal_data` ({owner_id, companion record,

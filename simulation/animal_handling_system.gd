@@ -281,6 +281,37 @@ static func sync_companion_locations(owner: L5RCharacterData, owner_province_id:
 	return synced
 
 
+# -- Companion death (s57.39.9) -----------------------------------------------
+
+## A readable species name for topic text ("WAR_DOG" → "war dog").
+static func species_display(species: String) -> String:
+	return species.to_lower().replace("_", " ")
+
+
+## Build the owner's Tier-4 PERSONAL loss topic for a dead companion (s57.39.9):
+## "[Owner] lost their [species] [name]." NO Glory or Honor change — a personal loss,
+## not a reputation event. subject = the owner; subject_role NEUTRAL (the dead entity is
+## an animal, not a character, and no reputation valence attaches). The caller assigns the
+## topic_id (passed in) and appends to active_topics. Cap recovery is automatic — an
+## archived (is_alive=false) record no longer counts in count_active_companions.
+static func build_death_topic(owner: L5RCharacterData, companion: Dictionary, topic_id: int, ic_day: int) -> TopicData:
+	var t := TopicData.new()
+	t.topic_id = topic_id
+	var sp: String = species_display(String(companion.get("species", "animal")))
+	var nm: String = String(companion.get("name", ""))
+	t.slug = "companion_death_%d_%d" % [owner.character_id, int(companion.get("companion_id", 0))]
+	t.title = "%s lost their %s %s" % [owner.character_name, sp, nm]
+	t.topic_type = "companion_death"
+	t.variant = "companion_death"
+	t.tier = TopicData.Tier.TIER_4
+	t.category = TopicData.Category.PERSONAL
+	t.momentum = TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4)
+	t.subject_character_id = owner.character_id
+	t.subject_role = "NEUTRAL"
+	t.ic_day_created = ic_day
+	return t
+
+
 ## Apply progress from a subsequent TRAIN_ANIMAL session to a companion.
 ## Mutates the companion dictionary. Returns updated companion.
 static func apply_training_progress(companion: Dictionary, progress_gained: int) -> Dictionary:

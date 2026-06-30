@@ -146,6 +146,7 @@ static func advance_day(
 				character_province_map[_cpm_c.character_id] = _pid
 
 	_process_companion_locations(characters, character_province_map)
+	_process_companion_deaths(characters, active_topics, next_topic_id, ic_day)
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
@@ -8402,6 +8403,38 @@ static func _process_companion_locations(
 		if owner_pid < 0:
 			continue
 		AnimalHandlingSystem.sync_companion_locations(owner, owner_pid)
+
+
+# s57.39.9 — companion death resolution. A trained animal that died (in combat, via
+# AsciiMapCombatOrchestrator.sync_companion_deaths which flips is_alive=false on the
+# owner's record) gets resolved here: a Tier-4 PERSONAL loss topic for the owner, the
+# record archived (kept, not deleted), and the cap slot freed (automatic — an is_alive=false
+# record no longer counts). The `companion_death_resolved` flag prevents re-firing; the
+# record persists archived. No Glory/Honor change (s57.39.9).
+static func _process_companion_deaths(
+	characters: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	for owner: L5RCharacterData in characters:
+		if owner == null or CharacterStats.is_dead(owner):
+			continue
+		if owner.trained_companions.is_empty():
+			continue
+		for c: Variant in owner.trained_companions:
+			var comp: Dictionary = c as Dictionary
+			if comp.get("is_alive", true):
+				continue
+			if comp.get("companion_death_resolved", false):
+				continue
+			var topic: TopicData = AnimalHandlingSystem.build_death_topic(
+				owner, comp, next_topic_id[0], ic_day)
+			next_topic_id[0] += 1
+			active_topics.append(topic)
+			if not owner.is_pc and topic.topic_id not in owner.topic_pool:
+				owner.topic_pool.append(topic.topic_id)
+			comp["companion_death_resolved"] = true
 
 
 static func _assign_magistrate_standing_objectives(

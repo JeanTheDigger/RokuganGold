@@ -9448,6 +9448,24 @@ static func _animal_engage(
 	return {"actions": [{"action": "move", "result": mv}], "tier": "trained"}
 
 
+## s57.39.9 — sync combat deaths back to the companion records. For each animal puppet in
+## the skirmish that has died, mark its companion record `is_alive=false` (the record is the
+## owner's persistent trained_companions entry, referenced in animal_data, so this archives
+## it on the owner). The Tier-4 loss topic + cap recovery are produced by the world-sim pass
+## (DayOrchestrator._process_companion_deaths) from the archived record. Returns the list of
+## {owner_id, companion} that newly died this call (idempotent — already-archived skipped).
+static func sync_companion_deaths(state: MapCombatState) -> Array:
+	var dead: Array = []
+	for aid: int in state.animal_data.keys():
+		var entry: Dictionary = state.animal_data[aid]
+		var pup: L5RCharacterData = state.combatants.get(aid, null)
+		var comp: Dictionary = entry.get("companion", {})
+		if pup != null and CharacterStats.is_dead(pup) and comp.get("is_alive", false):
+			comp["is_alive"] = false
+			dead.append({"owner_id": int(entry.get("owner_id", -1)), "companion": comp})
+	return dead
+
+
 ## A fleeing animal moves toward the nearest exit and leaves the scene if it reaches one.
 static func _animal_flee(
 	state: MapCombatState,
