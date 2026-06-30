@@ -1638,6 +1638,15 @@ static func resolve_damage(
 	# s24 Staves R7: a small staff (not the Large bo) gets +1k0 damage (s24 line 327).
 	rolled += SkillMasterySystem.staff_small_damage_bonus(dmg_skill, bugei_dmg_rank, String(weapon.get("size", "")))
 
+	# s24 Ninjutsu R3 (+1k0) / R7 (+0k1) damage (s24 line 429). The blowgun is EXCLUDED — it carries
+	# its own owner-table scaling (blowgun_damage_rolled_bonus above), so applying the generic mastery
+	# here too would double-count. Inert for spirits (bugei_dmg_rank forced to 0).
+	if dmg_skill == "Ninjutsu" and weapon_name != "blowgun":
+		if bugei_dmg_rank >= 3:
+			rolled += 1
+		if bugei_dmg_rank >= 7:
+			kept += 1
+
 	# s35 Hungry Blade: while the buff is active, all the wielder's damage dice also explode on an 8 or 9
 	# (once each). Inert (false) for everyone else.
 	var explode_8: bool = attacker_p != null and get_timed_modifier_total(attacker_p, "hungry_blade") > 0

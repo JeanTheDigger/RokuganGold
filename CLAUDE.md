@@ -3661,12 +3661,40 @@ roll/insight-applicable Mastery Abilities. **Five tranches:**
   won't re-roll (companions are command-driven and rarely turtle; the change-TO path covers them). The
   attack-block reason for a Full-Defense actor is now `no_complex_actions_remaining` (the economy gate fires
   before the `defense_cannot_attack` stance check, which remains the backstop for plain Defense stance).
-  **Still deferred (each needs infra the core lacks):** Ready-as-Free-Action (Iaijutsu R3, Kenjutsu R5,
-  Spears R7, Polearms R7, Kyujutsu R3 — no draw/ready action modeled); Spears R5 (+5' ranged range — trivial,
-  low value); Chain Weapons R3/R5/R7 (chain-grapple / contested-vs-grappled / disarm-knockdown); Staves
-  R3/R5/R7 (staff-doubles-armor not modeled); Ninjutsu R3/R5/R7 (only blowgun scaling wired); Hunting R5
-  (+1k0 Stealth in wilderness — needs a wilderness context flag); Athletics R7 (+1 tile to one Move/Round —
-  R3/R5 terrain reduction ALREADY wired inline in `get_water_ring_for_terrain`).
+  **Bugei tranche 6 (Chain / Staves / Spears / Hunting, 27/27 + Staves-base 6/6 verified 2026-06-30):**
+  the masteries that reuse existing mechanics or have a GDD-stated base rule. **Chain Weapons R7** (Free
+  Raise toward Disarm AND Knockdown) and **Staves R5** (Free Raise toward Knockdown) → `maneuver_free_raises`
+  (auto-consumed at the existing disarm/knockdown maneuver sites, which derive the skill from the weapon).
+  **Chain Weapons R3** (a chain weapon may grapple only at rank 3+) → gate in `execute_grapple_initiate`
+  (`chain_grapple_requires_rank_3` below R3 — previously any chain wielder could weapon-grapple).
+  **Chain Weapons R5** (+1k0 vs an entangled/Grappled opponent) → the existing `atk_pen` rolled-die channel
+  in `execute_melee_attack`. **Staves R7** (a small staff — not the Large bo — gets +1k0 damage) →
+  `resolve_damage`. **Spears R5** (+5' = +1 tile thrown range) → `execute_ranged_attack`. **Hunting R5**
+  (+1k0 Stealth in wilderness) → `SkillResolver.resolve_skill_check`, gated on `context["wilderness"]` (the
+  read is wired; the wilderness-flag PRODUCERS are the mission/world-sim layer — forward-wired). **Staves
+  base rule + R3** (isolated commit, a real balance change): a staff attack DOUBLES the defender's worn-armor
+  TN bonus (s24 line 327), wired in `execute_melee_attack` (add `target.armor_tn_bonus` once more); the
+  staff-user negates it at Staves R3. Inert vs an unarmored target and for non-staff weapons; applies to the
+  primary melee path only (extra-attack/off-hand staff strikes don't double — documented limitation).
+  Runtime-verified: 27/27 (helper gates + end-to-end grapple rank-gate, jo-vs-bo damage, yari thrown
+  reach 10→11, wilderness Stealth lift) + 6/6 Staves-base (bo vs light-armor hits 1215 [Staves2 doubled]
+  vs 1452 [Staves3 negated], ~equal vs unarmored, katana unaffected) + 6/6 regression.
+  **GENUINELY BLOCKED (needs an owner decision — NOT wired, to avoid inventing):**
+  (1) **Ready-as-Free-Action** (Iaijutsu R3, Kenjutsu R5, Spears R7, Polearms R7, Kyujutsu R3) — the GDD
+  specifies NO base "Ready/Sheathe a weapon" action cost anywhere (only the masteries say "ready as a Free
+  Action"), there is no weapon-ready/sheathe state in the engine (weapons start ready), and the duel system
+  doesn't model the draw. Wiring these needs the owner to supply the base Ready cost + a weapon-ready
+  subsystem; inventing the base cost is forbidden. (2) **Ninjutsu R3/R5/R7** (+1k0 / explode-normally /
+  +0k1) — conflicts with the owner-provided blowgun damage scaling (`blowgun_damage_rolled_bonus`, +1 rolled
+  at R3 / +2 at R7), which diverges from the generic s24 Ninjutsu mastery (R7 should be +0k1, not +2k0).
+  **Ninjutsu R3/R7 ARE wired** (this session) for shuriken/tsubute — the generic s24 damage masteries (+1k0 /
+  +0k1) applied in `resolve_damage` to ninjutsu weapons OTHER than the blowgun (which keeps its owner-table
+  scaling, so it is excluded to avoid double-counting). Only **Ninjutsu R5** (ninjutsu damage dice "explode
+  normally — they do not normally") stays blocked: it needs the base no-explode rule on ninjutsu weapons +
+  reconciliation with the blowgun table, an owner decision. **DEFERRED (low value,
+  doable):** Athletics R7 (+1 tile to one Move/Round, total unchanged — fiddly per-round move accounting;
+  R3/R5 terrain reduction ALREADY wired inline in `get_water_ring_for_terrain`). With this, **every Bugei
+  mastery that can be wired faithfully without an owner decision is done.**
 - **Meditation VP-recovery cap (9/9 verified):** Meditation R3 restores up to 2 VP,
   R7 up to 3 VP per meditation session (base 1; s24 line 145). Was already functionally correct,
   hardcoded in `ActionExecutor._execute_meditate` (predates SkillMasterySystem); centralized into
