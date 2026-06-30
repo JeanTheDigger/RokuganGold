@@ -174,7 +174,10 @@ static func can_train_subsequent_session(
 		return {"valid": false, "reason": "invalid_context"}
 	if not companion.get("is_alive", false):
 		return {"valid": false, "reason": "companion_not_alive"}
-	if companion.get("fully_trained", false):
+	# A fully-trained companion is no longer trainable — UNLESS it is in the rebonding
+	# window after an ownership transfer (s57.39.2): those TRAIN_ANIMAL sessions establish
+	# the new owner's bond (they do not add training_progress).
+	if companion.get("fully_trained", false) and int(companion.get("rebond_sessions_remaining", 0)) <= 0:
 		return {"valid": false, "reason": "already_fully_trained"}
 	if companion.get("owner_id", -1) != character.character_id:
 		return {"valid": false, "reason": "not_owner"}
@@ -264,6 +267,28 @@ static func create_companion(
 		"is_alive": true,
 		"rebond_sessions_remaining": 0,
 	}
+
+
+# -- Ownership transfer + rebonding (s57.39.2) --------------------------------
+
+## Transfer a companion to a new owner, preserving its training (training_progress /
+## fully_trained) but NOT the bond: owner_id is repointed and rebond_sessions_remaining is
+## set to REBOND_SESSIONS (3) — the new owner must establish their own bond before the
+## Mastery Abilities (commanding, no-flee) function (s57.39.2). Mutates the companion record.
+const REBOND_SESSIONS: int = 3
+
+static func transfer_companion(companion: Dictionary, new_owner_id: int) -> void:
+	companion["owner_id"] = new_owner_id
+	companion["rebond_sessions_remaining"] = REBOND_SESSIONS
+
+
+## A rebonding TRAIN_ANIMAL session (s57.39.2): decrement rebond_sessions_remaining by 1
+## (floor 0). These sessions do NOT modify training_progress (the animal is already trained).
+## Returns the remaining count.
+static func apply_rebonding_session(companion: Dictionary) -> int:
+	var rem: int = maxi(0, int(companion.get("rebond_sessions_remaining", 0)) - 1)
+	companion["rebond_sessions_remaining"] = rem
+	return rem
 
 
 # -- Travel with owner (s57.39.2) ---------------------------------------------

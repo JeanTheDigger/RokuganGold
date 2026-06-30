@@ -145,6 +145,7 @@ static func advance_day(
 			if _pid >= 0:
 				character_province_map[_cpm_c.character_id] = _pid
 
+	_process_companion_owner_deaths(characters, characters_by_id)
 	_process_companion_locations(characters, character_province_map)
 	_process_companion_deaths(characters, active_topics, next_topic_id, ic_day)
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
@@ -8403,6 +8404,49 @@ static func _process_companion_locations(
 		if owner_pid < 0:
 			continue
 		AnimalHandlingSystem.sync_companion_locations(owner, owner_pid)
+
+
+# s57.39.2 — owner-death companion transfer. When a companion's owner dies, each ALIVE
+# companion transitions to the owner's heir (designated_heir_id, if living) per standard
+# inheritance, or becomes a free-roaming wild animal if there is no living heir. Training
+# (training_progress / fully_trained) is preserved; the BOND is not — the heir gets
+# rebond_sessions_remaining=3 (s57.39.2). A wild animal simply leaves the companion system
+# (dropped, not archived — it is not dead). Archived (dead) records stay on the dead owner.
+# Idempotent: a processed dead owner is left with no alive companions, so it is not re-run.
+# Heir = designated_heir_id alive (the same inheritance signal as favor-creditor death).
+static func _process_companion_owner_deaths(
+	characters: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for owner: L5RCharacterData in characters:
+		if owner == null or not CharacterStats.is_dead(owner):
+			continue
+		if owner.trained_companions.is_empty():
+			continue
+		var has_alive: bool = false
+		for c: Variant in owner.trained_companions:
+			if (c as Dictionary).get("is_alive", false):
+				has_alive = true
+				break
+		if not has_alive:
+			continue
+		# Resolve the heir: designated_heir_id, if that character is alive.
+		var heir: L5RCharacterData = null
+		if owner.designated_heir_id >= 0:
+			var cand: L5RCharacterData = characters_by_id.get(owner.designated_heir_id, null)
+			if cand != null and not CharacterStats.is_dead(cand):
+				heir = cand
+		var keep: Array = []
+		for c: Variant in owner.trained_companions:
+			var comp: Dictionary = c as Dictionary
+			if not comp.get("is_alive", false):
+				keep.append(comp)  # archived/dead records remain on the dead owner
+				continue
+			if heir != null:
+				AnimalHandlingSystem.transfer_companion(comp, heir.character_id)
+				heir.trained_companions.append(comp)
+			# else: no living heir — the animal goes wild (dropped from the system).
+		owner.trained_companions = keep
 
 
 # s57.39.9 — companion death resolution. A trained animal that died (in combat, via

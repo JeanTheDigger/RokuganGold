@@ -3574,6 +3574,27 @@ set for heavy + tetsu-do, false for the rest; the heavy-armor mechanical effect 
 driven Agi/Ref TN penalty (already wired), and the owner table specifies no further heavy-only mechanic,
 so none is invented. Every armor↔combat interaction stated in the owner tables is wired.
 
+### s57.39 Animal Handling — lifecycle tranche 3: owner-death transfer + rebonding (2026-06-30, runtime-verified 18/18)
+The other "companions persist in the world" pillar (s57.39.2). `DayOrchestrator._process_companion_owner_deaths(characters,
+characters_by_id)` (daily pass, before the locations/death passes): when a companion's owner is dead,
+each ALIVE companion transfers to the owner's heir (`designated_heir_id`, if that character is living —
+the same inheritance signal as favor-creditor death) or becomes a free-roaming WILD animal (dropped from
+the system, not archived — it is not dead) when there is no living heir. Archived (dead) records stay on
+the dead owner. Idempotent (a processed dead owner is left with no alive companions). On transfer,
+`AnimalHandlingSystem.transfer_companion(comp, new_owner_id)` preserves training (training_progress /
+fully_trained) but NOT the bond — repoints owner_id and sets `rebond_sessions_remaining = REBOND_SESSIONS`
+(3, s57.39.2), so the new owner's Mastery Abilities (command, no-flee) are gated until they rebond.
+**Rebonding wired** (otherwise the transferred animal could never be commanded — `command_animal` gates
+on rebond==0): `can_train_subsequent_session` now allows a fully-trained companion that is still rebonding;
+the TRAIN_ANIMAL subsequent-session executor decrements `rebond_sessions_remaining` (via
+`apply_rebonding_session`, floor 0) on a rebonding session and adds NO training_progress (s57.39.2: those
+sessions establish the bond, not the training). Heir resolution uses `designated_heir_id` alive (no
+eldest-child fallback — matches the established favor-death model; documented). Runtime-verified 18/18
+(Godot 4.6.2): transfer_companion repoint+rebond+training-preserved, rebonding decrement floor,
+can_train allows-rebonding/blocks-bonded, transfer-to-living-heir, idempotent, no-heir→wild,
+dead-heir→wild, archived-stays + alive-transfers. Voluntary-gift transfer (the other s57.39.2 transfer
+path) reuses `transfer_companion` — its ActionID/UI is the remaining bit.
+
 ### s57.39 Animal Handling — lifecycle tranche 2: companion death (2026-06-30, runtime-verified 21/21)
 The direct consequence of the combat tranche — a trained animal that dies in a skirmish is now
 resolved (s57.39.9). Two halves, decoupled: **combat side** — `AsciiMapCombatOrchestrator.sync_companion_deaths(state)`

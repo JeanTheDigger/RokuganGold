@@ -5951,7 +5951,13 @@ static func _execute_train_animal(
 		var roll_result: Dictionary = AnimalHandlingSystem.make_training_roll(
 			character, companion.get("species", "DOG"), dice_engine
 		)
-		AnimalHandlingSystem.apply_training_progress(companion, roll_result.get("progress_gained", 0))
+		# s57.39.2 rebonding: a session on a transferred companion still in its rebonding
+		# window establishes the new owner's bond (decrement) and does NOT add training_progress.
+		var is_rebonding: bool = int(companion.get("rebond_sessions_remaining", 0)) > 0
+		if is_rebonding:
+			AnimalHandlingSystem.apply_rebonding_session(companion)
+		else:
+			AnimalHandlingSystem.apply_training_progress(companion, roll_result.get("progress_gained", 0))
 
 		return {
 			"success": true,
@@ -5968,7 +5974,9 @@ static func _execute_train_animal(
 				"is_first_session": false,
 				"companion_id": companion_id,
 				"species": companion.get("species", ""),
-				"progress_gained": roll_result.get("progress_gained", 0),
+				"is_rebonding": is_rebonding,
+				"rebond_sessions_remaining": companion.get("rebond_sessions_remaining", 0),
+				"progress_gained": 0 if is_rebonding else roll_result.get("progress_gained", 0),
 				"roll_success": roll_result.get("success", false),
 				"fully_trained": companion.get("fully_trained", false),
 				"sessions_completed": companion.get("sessions_completed", 0),
