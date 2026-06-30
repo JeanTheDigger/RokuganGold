@@ -3405,7 +3405,21 @@ param on `DiceEngine.roll_damage` (shinai max raw 10 vs katana 63 over 8000 roll
 `total_defender_reduction` (armor Reduction 3→6 vs bokken, normal vs katana); **katana** "spend a
 Void Point to increase damage by 1k1" → `void_point_damage` flag, NPC-only just-in-time auto-spend
 in `resolve_damage` (6k2→7k3, VP 3→2, once-per-Round throttle; PC VP NOT auto-spent — future combat
-UI). DEFERRED (values now in hand from the table, each needs its own hook): **thrown** weapons
+UI). **Weapon ranges wired (tranche 2, 2026-06-29, 13/13 + 4/4 verified):** the Equipment section
+now exists, so `s40_combat.md:271`'s "ranged ranges PROVISIONAL — any LOS target" is resolved.
+`range_tiles` (feet/5) added to the 6 ranged weapons (dai-kyu 100, yumi 50, han-kyu 20, shuriken 5,
+tsubute 6, blowgun 10) + `IndividualCombat.weapon_range_tiles()`; `execute_ranged_attack` rejects a
+target beyond range (`out_of_range`), and `get_ranged_targets(state, id, weapon_name)` gained an
+optional weapon arg that range-filters (default "" = unlimited = prior behavior). The NPC turn's
+`target_in_ranged` is now weapon-aware, so an archer/thrower with an out-of-range target ADVANCES
+(via the free-move block) instead of firing a doomed turn-wasting shot — selection stays any-LOS so
+distant foes are still pursued; creatures unaffected (puppet weapon has no `range_tiles`, and they
+use their own `ranged_range_tiles` gate). Verified: helper values (feet/5); shuriken excludes a
+dist-9 target while yumi/no-weapon include it; `execute_ranged_attack` out_of_range @dist9 vs a real
+attack @dist4; a shuriken NPC (range 5) vs a dist-11 target closes to dist 2 (advances) instead of
+shooting. **Bow mount-TN** (dai-kyu +10 on foot, han-kyu/yumi +10 mounted) stays DEFERRED — inert
+until a mount system sets `CONDITION_MOUNTED` for NPCs. DEFERRED (values now in hand from the table,
+each needs its own hook): **thrown** weapons
 (wakizashi 20' / shuriken 25' / tsubute 30' / mai-chong 25' / nage-yari 50' / yari 50' thrown-DR 1k2)
 — a throw-as-ranged action; **lance charge** (3k4 charging mounted, else 1k2 + TN penalty 5 horse/10
 foot) — mounted-charge context; **break thresholds** (kumade 25 / lance 30 / parangu 30 / ninja-to 40)

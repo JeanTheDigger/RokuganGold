@@ -73,14 +73,14 @@ const WEAPON_CATALOG: Dictionary = {
 	"war_fan":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "War Fan", "size": "Small", "melee": true, "trait": "agility"},
 
 	# -- Bows (Kyujutsu; Reflexes; no Strength to damage — the bow's Strength rating governs) --
-	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Large", "melee": false, "trait": "reflexes"},
-	"dai_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes"},
-	"han_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes"},
+	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Large", "melee": false, "trait": "reflexes", "range_tiles": 50},
+	"dai_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes", "range_tiles": 100},
+	"han_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes", "range_tiles": 20},
 
 	# -- Ninja weapons (Ninjutsu; thrown/ranged, no Strength to damage) --
-	"shuriken":   {"rolled": 1, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Small",  "melee": false, "trait": "agility"},
-	"tsubute":    {"rolled": 1, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Small",  "melee": false, "trait": "agility"},
-	"blowgun":    {"rolled": 0, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Medium", "melee": false, "trait": "agility"},
+	"shuriken":   {"rolled": 1, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Small",  "melee": false, "trait": "agility", "range_tiles": 5},
+	"tsubute":    {"rolled": 1, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Small",  "melee": false, "trait": "agility", "range_tiles": 6},
+	"blowgun":    {"rolled": 0, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Medium", "melee": false, "trait": "agility", "range_tiles": 10},
 
 	# -- Unarmed --
 	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu", "size": "Small", "melee": true, "trait": "agility"},
@@ -1186,6 +1186,12 @@ static func get_weapon_profile(weapon_name: String) -> Dictionary:
 ## True if the named weapon may initiate a Grapple (s40 "Weapon Grapples").
 static func weapon_can_grapple(weapon_name: String) -> bool:
 	return get_weapon_profile(weapon_name).get("can_grapple", false)
+
+
+## Maximum range of a ranged weapon in tiles (1 tile = 5 feet), from the owner Equipment table
+## (s40). 0 = no range limit specified (default — any LOS target, the prior PROVISIONAL behavior).
+static func weapon_range_tiles(weapon_name: String) -> int:
+	return int(get_weapon_profile(weapon_name).get("range_tiles", 0))
 
 
 static func resolve_attack(

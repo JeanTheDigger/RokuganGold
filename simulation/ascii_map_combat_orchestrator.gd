@@ -629,12 +629,14 @@ static func get_melee_targets(state: MapCombatState, attacker_id: int) -> Array:
 	return targets
 
 
-## Return all enemy ids with clear line of sight from attacker.
-## PROVISIONAL: ranged weapon ranges not yet specified (Equipment section blocked).
-static func get_ranged_targets(state: MapCombatState, attacker_id: int) -> Array:
+## Return all enemy ids with clear line of sight from attacker. When weapon_name is given and the
+## weapon has a max range (owner Equipment table, s40), targets beyond range are excluded; "" keeps
+## the prior any-LOS behavior (for callers that haven't chosen a ranged weapon yet).
+static func get_ranged_targets(state: MapCombatState, attacker_id: int, weapon_name: String = "") -> Array:
 	var pos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
 	if pos.x < 0:
 		return []
+	var rng: int = IndividualCombat.weapon_range_tiles(weapon_name) if weapon_name != "" else 0
 	var faction: String = state.factions.get(attacker_id, FACTION_NEUTRAL)
 	var targets: Array = []
 	for cid: int in state.positions.keys():
@@ -646,6 +648,8 @@ static func get_ranged_targets(state: MapCombatState, attacker_id: int) -> Array
 		if not _is_targetable(state, cid):
 			continue
 		var tp: Vector2i = state.positions[cid]
+		if rng > 0 and _chebyshev(pos, tp) > rng:
+			continue
 		if _chebyshev(pos, tp) > MELEE_RANGE_TILES and _has_los(state.map, pos, tp) \
 				and not _ray_blocked_by_fog(state, pos, tp) \
 				and not _ray_blocked_by_false_realm(state, attacker_id, pos, tp):
@@ -1725,6 +1729,12 @@ static func execute_ranged_attack(
 	# sees through the illusion and is unaffected).
 	if _ray_blocked_by_false_realm(state, attacker_id, apos, tpos):
 		return {"success": false, "reason": "false_realm_blocks_los"}
+
+	# s40 weapon range (owner Equipment table): a target beyond the weapon's max range is out of
+	# range. 0 = no specified range (the prior any-LOS PROVISIONAL behavior).
+	var rng: int = IndividualCombat.weapon_range_tiles(weapon_name)
+	if rng > 0 and _chebyshev(apos, tpos) > rng:
+		return {"success": false, "reason": "out_of_range"}
 
 	# Weapon must be ranged.
 	var wp: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
@@ -7964,8 +7974,13 @@ static func execute_npc_turn(
 	var is_melee_weapon: bool = wp.get("melee", true)
 
 	# -- Move toward target if needed -----------------------------------------
+	# target_in_ranged is weapon-aware (s40 weapon range): a target beyond the NPC's actual ranged
+	# weapon range reads as out-of-range, so the NPC ADVANCES toward it rather than firing a doomed,
+	# turn-wasting shot. Selection (best_target) stays any-LOS so distant foes are still pursued.
+	# Creatures are unaffected (their puppet weapon has no range_tiles → unlimited; they use their
+	# own ranged_range_tiles gate in execute_creature_ranged_attack).
 	var target_in_melee: bool = (best_target in melee_targets)
-	var target_in_ranged: bool = (best_target in ranged_targets)
+	var target_in_ranged: bool = (best_target in get_ranged_targets(state, npc_id, weapon_name))
 
 	# Charge (s54.5/s54.12): a charge-capable creature out of melee but within charge range
 	# enters Full Attack (if able) and closes + strikes in one turn.
@@ -8004,9 +8019,9 @@ static func execute_npc_turn(
 				melee_targets = get_melee_targets(state, npc_id)
 				target_in_melee = (best_target in melee_targets)
 
-	# Re-check targets after movement.
+	# Re-check targets after movement (weapon-aware range, as above).
 	if not target_in_melee:
-		ranged_targets = get_ranged_targets(state, npc_id)
+		ranged_targets = get_ranged_targets(state, npc_id, weapon_name)
 		target_in_ranged = (best_target in ranged_targets)
 
 	# -- Creature melee multi-target attack (s54.12 blue whale Tail Smash / Yamato no Orochi
