@@ -107,6 +107,13 @@ const ADMIN_BASE_TN: int = 0
 
 const BRIBE_KOKU_COST: float = 5.0
 const PURCHASE_KOKU_COST: float = 1.0
+# CONDUCT_COMMERCE personal yield (s55.27 Effect 2 LOCKED): koku = Commerce rank ×
+# settlement_modifier × CONDUCT_COMMERCE_YIELD_MULT. settlement_modifier is the s4.3.8
+# Koku location modifier; it defaults to the standard-settlement value (1.0) and is
+# forward-wired to lift once SettlementData carries location-type data (no port/
+# crossroads/coastal flags exist yet — same blocker as the `is_coastal` gap).
+const CONDUCT_COMMERCE_YIELD_MULT: float = 2.0
+const CONDUCT_COMMERCE_STANDARD_MODIFIER: float = 1.0
 
 
 # -- Main Entry Point ---------------------------------------------------------
@@ -1815,6 +1822,23 @@ static func _apply_effects(
 	if action_id == "PURCHASE_MARKET" and effects.has("koku_cost"):
 		effects["koku_cost"] = float(effects["koku_cost"]) \
 			* SkillMasterySystem.commerce_price_favor_multiplier(_character, true)
+
+	# CONDUCT_COMMERCE personal yield (s55.27 Effect 2 LOCKED): a successful commerce
+	# roll deposits Commerce rank × settlement_modifier × 2 koku to the merchant —
+	# the income channel behind the s55.24 "Accumulate personal wealth" objective.
+	# Commerce Rank-5 mastery (s24): conducting trade is the SELL side, so a Commerce-5
+	# merchant earns up to 20% more (the dormant sell-half now has its consumer).
+	# Honor is NOT charged here — the s57.40 commerce stigma (already wired below) is the
+	# LOCKED honor consequence for public commerce. (s55.27's role-based −0.5 and s57.40's
+	# rank-based penalty are overlapping GDD honor models for the same act; applying both
+	# would double-charge, so only the already-wired s57.40 stigma fires.)
+	if action_id == "CONDUCT_COMMERCE" and result.get("success", false):
+		var commerce_rank: int = int(_character.skills.get("Commerce", 0))
+		var yield_koku: float = float(commerce_rank) \
+			* CONDUCT_COMMERCE_STANDARD_MODIFIER * CONDUCT_COMMERCE_YIELD_MULT \
+			* SkillMasterySystem.commerce_price_favor_multiplier(_character, false)
+		if yield_koku > 0.0:
+			effects["commerce_yield_koku"] = yield_koku
 
 	# Poetry festival glory — s57.30.6: only for poem-letters (attached_poem_item_id set).
 	if action_id == "WRITE_LETTER" and result.get("success", false) \

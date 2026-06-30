@@ -3710,10 +3710,32 @@ character)`** → +5 for Engineering R5+ or Sailing R5+ on Cooperative/Cumulativ
   market-buy koku transaction): in `ActionExecutor.execute`'s post-effects block, a successful
   PURCHASE_MARKET's `koku_cost` (consumed by `EffectApplicator._apply_koku_cost`) is multiplied by
   `commerce_price_favor_multiplier(_character, true)` → a Commerce-5 buyer pays 0.8 koku vs 1.0.
-  The **sell half is dormant** (CONDUCT_COMMERCE is flavor with no koku-producing sell price; the
-  Kolat Commerce rolls are op-checks, not buy/sell). This supersedes the old "Commerce R5 explicitly
-  deferred (s57.40.8)" note — the owner re-authorized it by pasting the s24 mastery; the 20% is
-  GDD-given so no invention.
+  This supersedes the old "Commerce R5 explicitly deferred (s57.40.8)" note — the owner re-authorized
+  it by pasting the s24 mastery; the 20% is GDD-given so no invention.
+- **Commerce R5 — sell half now LIVE (2026-06-30, runtime-verified 8/8).** The sell side had no
+  koku-producing consumer because **CONDUCT_COMMERCE produced no koku** (the executor returned a
+  flavor-only `{"effect":"commerce_conducted"}`). Built the missing income channel, which is
+  **GDD-LOCKED**: s55.27 Effect 2 ("Personal yield: `Commerce rank × settlement_modifier × 2`,
+  deposited to the character's koku") + s55.24 ("Accumulate personal wealth"). On a successful
+  CONDUCT_COMMERCE roll, `ActionExecutor.execute`'s post-effects block emits
+  `commerce_yield_koku = Commerce rank × CONDUCT_COMMERCE_STANDARD_MODIFIER(1.0) ×
+  CONDUCT_COMMERCE_YIELD_MULT(2.0) × commerce_price_favor_multiplier(_character, false)` — so a
+  Commerce-5 merchant earns ×1.2 (the SELL side of the mastery: conducting trade = selling). New
+  `EffectApplicator._apply_koku_gain` deposits it to `actor.koku`. **settlement_modifier defaults to
+  the s4.3.8 standard-settlement value 1.0 and is forward-wired** — SettlementData carries no
+  port/crossroads/coastal location-type flags (the same blocker as the `is_coastal` gap; the
+  `KOKU_LOCATION_MODIFIERS` table exists in `resource_tick.gd` but its `_koku_modifiers` source is
+  never populated in production), so the port ×1.5 / crossroads ×1.3 tiers lift automatically once
+  that data exists. **Honor is NOT charged here** — the s57.40 commerce stigma (already wired,
+  rank-scaled, LOCKED) is the honor consequence for public commerce; s55.27's role-based −0.5 and
+  s57.40's rank-based penalty are overlapping GDD honor models for the same act, so only the
+  already-wired s57.40 stigma fires (no double-charge). Runtime-verified 8/8 (Godot 4.6.2, headless):
+  sell R5=1.2 / R4=1.0 / buy R5=0.8; a Commerce-5 CONDUCT_COMMERCE emits yield 12.0 (5×1×2×1.2),
+  Commerce-4 emits 8.0 (4×1×2×1.0); EffectApplicator deposits the gain (3→15); a failed result
+  deposits nothing. LIMITATION: the "one CONDUCT_COMMERCE per settlement per character per season"
+  selection gate (s55.27) is not enforced as a precondition filter — the once-per-IC-day commerce-
+  stigma guard rate-limits the honor side, but a merchant could in principle conduct commerce on
+  successive days; tightening to per-settlement-per-season is a follow-up.
 - **Craft — NO masteries** (s24 "Mastery Abilities: None"). Nothing to wire.
 - **Animal Handling R3 (train-for-others) — helper added, DORMANT.** `can_train_for_others(rank)`
   (rank ≥ 3) in `animal_handling_system.gd` (the s57.39 home; s24 and s57.39 R3 AGREE). No consumer
