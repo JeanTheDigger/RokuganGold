@@ -730,13 +730,20 @@ static func execute_stance_change(
 			and IndividualCombat.get_timed_modifier_total(p, "stance_locked") > 0:
 		return {"success": false, "reason": "stance_locked"}
 
+	# GDD Stances: the Full Defense Defense/Reflexes roll "is considered a Complex Action," so
+	# declaring Full Defense requires a Complex available (and consumes it — see _enter_full_defense).
+	if new_stance == Enums.Stance.FULL_DEFENSE and not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_actions_remaining"}
+
 	p.stance = new_stance as Enums.Stance
 
-	# Full Defense stance: roll Defense now for full_defense_bonus (GDD s40).
-	# Called after stance is assigned so any stance-gated logic inside is correct.
 	if new_stance == Enums.Stance.FULL_DEFENSE:
-		IndividualCombat.roll_full_defense_bonus(character, p, dice_engine)
-	ts.consume_simple()
+		# GDD Stances: roll Defense/Reflexes now (a Complex Action) for the Armor TN bonus; the
+		# character may then take only Free Actions. Assigned after the stance so stance-gated logic
+		# inside is correct.
+		_enter_full_defense(character, p, ts, dice_engine)
+	else:
+		ts.consume_simple()  # changing stance costs a Simple action (existing behavior)
 	ts.stance_changed = true
 
 	state.combat_log.append({
@@ -746,6 +753,25 @@ static func execute_stance_change(
 		"new_stance": new_stance,
 	})
 	return {"success": true, "new_stance": new_stance}
+
+
+## Full Defense per-turn handling (GDD Stances). The Defense/Reflexes roll is made upon declaring
+## the Stance and "is considered a Complex Action, so a character in this Stance may only take Free
+## Actions." Fires on a change TO Full Defense and on maintaining it (re-rolled each turn). s24
+## Defense masteries: R3 may retain the previous (better) roll instead of re-rolling; R7 grants one
+## Simple Action (no attacks) despite the Complex being spent on the defense roll.
+static func _enter_full_defense(character: L5RCharacterData, p: IndividualCombat.Participant, ts: TurnState, dice_engine: DiceEngine) -> void:
+	var def_rank: int = int(character.skills.get("Defense", 0))
+	var prev_bonus: int = p.full_defense_bonus
+	IndividualCombat.roll_full_defense_bonus(character, p, dice_engine)
+	# s24 Defense R3: retain the previous Full-Defense roll rather than re-rolling, if it was better.
+	if def_rank >= 3 and prev_bonus > p.full_defense_bonus:
+		p.full_defense_bonus = prev_bonus
+	# The Defense/Reflexes roll is a Complex Action -> only Free Actions remain this turn.
+	ts.consume_complex()
+	# s24 Defense R7: one Simple Action (no attacks) may still be taken in Full Defense.
+	if def_rank >= 7:
+		ts.granted_simple += 1
 
 
 ## Consume a Complex / Simple / Free action by cost string (s40 mount/dismount). Returns false if
@@ -8437,6 +8463,11 @@ static func _npc_pick_stance(
 	var desired: Enums.Stance = _npc_desired_stance(state, npc_id, npc, wl, chars_by_id)
 
 	if p.stance == desired:
+		# Maintaining Full Defense still re-rolls the Defense bonus and spends the Complex each turn
+		# (GDD: the roll is made upon declaring the Stance — Stage 2 of every Round).
+		if desired == Enums.Stance.FULL_DEFENSE and ts.can_use_complex():
+			_enter_full_defense(npc, p, ts, dice_engine)
+			return {"changed": false, "maintained_full_defense": true}
 		return {"changed": false}
 
 	# Only change stance if there's a meaningful reason (not just a marginal preference).

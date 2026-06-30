@@ -3633,14 +3633,40 @@ roll/insight-applicable Mastery Abilities. **Five tranches:**
   init round-1 avg +5.3 over round-2; Knives R7 required_raises 5→4 (R5 stays 5); Jiujutsu R5 grapple
   1110/1200 successes vs 701/1200 at rank 4 (TN 25); Kyujutsu R5 yumi range 50→75 (R4 unchanged). Plus
   a 6/6 orchestrator regression smoke (all changed signatures resolve end-to-end; all added params
-  default-inert so non-mastery characters are unaffected). **Still deferred (each needs infra the core
-  lacks):** Ready-as-Free-Action (Iaijutsu R3, Kenjutsu R5, Spears R7, Polearms R7, Kyujutsu R3 — no
-  draw/ready action modeled); Defense R3 (retain Defense roll) / R7 (Simple in Full Defense — stance-action
-  mechanics); Spears R5 (+5' ranged range — trivial, low value); Chain Weapons R3/R5/R7 (chain-grapple /
-  contested-vs-grappled / disarm-knockdown); Staves R3/R5/R7 (staff-doubles-armor not modeled); Ninjutsu
-  R3/R5/R7 (only blowgun scaling wired); Hunting R5 (+1k0 Stealth in wilderness — needs a wilderness
-  context flag); Athletics R7 (+1 tile to one Move/Round — R3/R5 terrain reduction ALREADY wired inline
-  in `get_water_ring_for_terrain`).
+  default-inert so non-mastery characters are unaffected).
+  **Bugei tranche 5 (Defense R3/R7 + GDD Full-Defense fidelity, 20/20 verified 2026-06-30, owner-provided
+  Stances spec):** the owner pasted the LOCKED Stances rules, which resolved two open questions: the Full
+  Defense Defense/Reflexes roll is made "upon declaring his Stance" (each turn) and "is considered a Complex
+  Action, so a character in this Stance may only take Free Actions." Brought Full Defense into line with the
+  spec AND wired the two masteries that depend on it. New `AsciiMapCombatOrchestrator._enter_full_defense`
+  (called on a change TO Full Defense via `execute_stance_change`, and on maintaining it via the
+  `_npc_pick_stance` maintain branch): (1) rolls the Defense bonus — **Defense R3** (s24) retains the
+  previous (better) roll instead of re-rolling; (2) **consumes the Complex** (the defense roll is a Complex
+  Action → `consume_complex()` zeroes Simple+Complex availability, leaving only Free Actions — the GDD's
+  "only Free Actions"); (3) **Defense R7** (s24) grants one Simple Action via `ts.granted_simple += 1` (the
+  existing Move-grant pool — a Move is the canonical in-combat Simple). `execute_stance_change` now gates a
+  Full-Defense declaration on `can_use_complex()` (the defense roll needs a Complex) and routes Full Defense
+  through `_enter_full_defense` (Complex) instead of the generic stance-change Simple. **This is a real
+  Full-Defense behavior change** (previously Full Defense only blocked attacks and left a Simple free; now it
+  permits only Free Actions, faithful to the LOCKED spec). Runtime-verified 20/20 (Godot 4.6.2): base Full
+  Defense spends the Complex (Simple move blocked, Free move allowed, attack blocked, bonus reaches Armor TN);
+  R7 grants exactly one Simple (first Simple move allowed, second blocked, attack still blocked); R3 retains a
+  high previous bonus while a non-R3 (Def 2) re-rolls and loses it; the Complex gate refuses Full Defense after
+  a Simple is already spent. Plus 6/6 orchestrator regression (no break) + an NPC-turn smoke (no crash).
+  LIMITATIONS: the `_npc_pick_stance` maintain branch is **forward-wiring** — `_npc_desired_stance` never
+  returns FULL_DEFENSE (the NPC AI tops out at Defense), so an NPC reaches Full Defense only via Shadowed
+  Mountain (reactive, a separate path) or an explicit declaration; the per-turn re-roll/lockdown therefore
+  fires only for a PC (future turn UI) or any caller that explicitly declares/maintains Full Defense. The
+  companion-turn path doesn't re-declare stance, so a companion *maintaining* Full Defense across rounds
+  won't re-roll (companions are command-driven and rarely turtle; the change-TO path covers them). The
+  attack-block reason for a Full-Defense actor is now `no_complex_actions_remaining` (the economy gate fires
+  before the `defense_cannot_attack` stance check, which remains the backstop for plain Defense stance).
+  **Still deferred (each needs infra the core lacks):** Ready-as-Free-Action (Iaijutsu R3, Kenjutsu R5,
+  Spears R7, Polearms R7, Kyujutsu R3 — no draw/ready action modeled); Spears R5 (+5' ranged range — trivial,
+  low value); Chain Weapons R3/R5/R7 (chain-grapple / contested-vs-grappled / disarm-knockdown); Staves
+  R3/R5/R7 (staff-doubles-armor not modeled); Ninjutsu R3/R5/R7 (only blowgun scaling wired); Hunting R5
+  (+1k0 Stealth in wilderness — needs a wilderness context flag); Athletics R7 (+1 tile to one Move/Round —
+  R3/R5 terrain reduction ALREADY wired inline in `get_water_ring_for_terrain`).
 - **Meditation VP-recovery cap (9/9 verified):** Meditation R3 restores up to 2 VP,
   R7 up to 3 VP per meditation session (base 1; s24 line 145). Was already functionally correct,
   hardcoded in `ActionExecutor._execute_meditate` (predates SkillMasterySystem); centralized into
