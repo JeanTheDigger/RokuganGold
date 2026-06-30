@@ -3809,9 +3809,26 @@ character)`** → +5 for Engineering R5+ or Sailing R5+ on Cooperative/Cumulativ
   crossroads+coastal 1.69); `process_seasonal_tick` stamps non-1.0 entries (castle 1.2, port 1.5) and
   omits standard villages; Koku generation reflects the modifier (castle:village:port = 1.2:1.0:1.5,
   isolating from the under-garrison ×0.8 malus); a Commerce-5 merchant at a port earns yield 18.0
-  (5×1.5×2×1.2). LIMITATION: castle-town and island-port are the only factors live today; the rest are
-  forward-wired on `infrastructure` tags (no design value invented for which settlements are
-  crossroads/river-towns/remote).
+  (5×1.5×2×1.2). LIMITATION: castle-town and island-port are the only DERIVED factors; the named
+  commercial hubs are now tagged (below), but crossroads/river-town/remote for un-named settlements
+  forward-wire on `infrastructure` tags (no design value invented for which generic village is a
+  crossroads).
+- **s2.3 named commercial hubs tagged (2026-06-30, runtime-verified 6/6).** The GDD's explicitly-named
+  crossroads/port settlements now carry `infrastructure` tags at world-gen, lifting their s4.3.8 Koku
+  modifier above ×1.0. **TRANSCRIBED, not derived** — the sim has no road geometry (`ProvinceData.roads`
+  is unpopulated), so only the GDD's explicitly-designated provinces are tagged (everything else stays
+  ×1.0). `WorldBootstrap.COMMERCIAL_INFRASTRUCTURE` (province name → tags) + `_tag_commercial_infrastructure`
+  (runs after `_wire_adjacencies`): **Ryoko** (Ryoko Owari Toshi) → port+crossroads, **Tonfajutsen**
+  (Crossroads Castle, "a central crossroads for troop movements and trade") → crossroads, **Beiden**
+  ("the crossroads of the Empire") → crossroads. Verified on a REAL bootstrapped world: Ryoko Mura =
+  **×1.95** (exactly the canonical s4.3.8 port×crossroads example), Tonfajutsen Mura = ×1.3, Kyuden Yogo
+  (Beiden, the Yogo seat → a castle, so ×1.2 castle-town × ×1.3 crossroads) = ×1.56, and exactly 3
+  settlements carry the tags (no over-tagging). The table is extensible — adding a province→tags entry
+  is the way to transcribe more s2.3 designations (e.g. more "port city" hubs) as they're confirmed.
+  Note the bootstrap creates generic per-province settlements (`{prov} Mura` / `Kyuden {family}`), not
+  the named cities, so the tag lands on the province's settlement; Ryoko/Tonfajutsen are non-seat
+  villages (clean ×1.95 / ×1.3), Beiden is the Yogo castle (the +castle-town stack is faithful — it IS
+  an administrative seat AND a crossroads; the GDD pins only Ryoko's exact ×1.95).
 - **Craft — NO masteries** (s24 "Mastery Abilities: None"). Nothing to wire.
 - **Animal Handling R3 (train-for-others) — now WIRED (2026-06-30, runtime-verified 13/13).** s24.3 R3:
   "commonly domesticated animals (dogs, horses, falcons) may be trained for use by others." TRAIN_ANIMAL
