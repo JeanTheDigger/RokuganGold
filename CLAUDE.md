@@ -3608,8 +3608,25 @@ PC-travel HOLD), but fires automatically the moment a companion is wounded. Runt
 (Godot 4.6.2, headless): standing policy (assign FALCON at AH3 / clear at AH0-no-slot / none for Akodo /
 keep-training in-progress / clear when fully-trained / grieving vs past-grief / Utaku warhorse satisfies);
 species-aware TRAIN_ANIMAL metadata; companion treat success + wound reduced (8→4) + effects, and the
-unwounded / no-kit rejections. REMAINING s57.39 pieces are PC-layer (voluntary-gift transfer ActionID,
-PC command-issuance for animals on the ASCII map) — both on the PC-travel HOLD.
+unwounded / no-kit rejections.
+
+### s57.39 Animal Handling — lifecycle tranche 5: voluntary-gift transfer (2026-06-30, runtime-verified 10/10)
+The second of the two s57.39.2 ownership-transfer routes (death-of-owner→heir was tranche 3). New
+`GIVE_COMPANION` ActionID (`ActionExecutor._execute_give_companion`, an early-return handler taking
+`characters_by_id`, like TRANSFER_KOKU/MENTOR): a trainer hands a living trained companion to a
+co-located recipient, who becomes its owner — the record moves off the giver's `trained_companions`
+onto the recipient's, `transfer_companion` repoints `owner_id` and resets the bond
+(`rebond_sessions_remaining=3`), and the training (`training_progress`/`fully_trained`) is preserved
+(s57.39.2: "retains what it was taught… what does NOT transfer is the bond"). Gates: invalid/self
+recipient, dead recipient, not co-located (the animal is physically handed over), companion not
+found/dead, recipient at cap. **PC/deliberate-only — no autonomous NPC trigger** (the GDD says "the
+trainer explicitly transfers," specifying no NPC rule), so it is NOT in any context list /
+objective_alignment; it is reachable through the executor when a deliberate caller sets `companion_id`
++ `target_npc_id` (same pattern as s24.3 R3 train-for-others). Runtime-verified 10/10 (Godot 4.6.2,
+headless): gift moves the record giver→recipient, owner_id repointed, training preserved, bond reset
+to 3, effects correct; not-co-located / recipient-at-cap / self-gift all rejected with the right
+reason. **With this, both s57.39.2 transfer routes are complete.** The only REMAINING s57.39 piece is
+PC command-issuance for animals on the ASCII map (the live combat command UI, on the PC-travel HOLD).
 
 ### s57.39 Animal Handling — lifecycle tranche 3: owner-death transfer + rebonding (2026-06-30, runtime-verified 18/18)
 The other "companions persist in the world" pillar (s57.39.2). `DayOrchestrator._process_companion_owner_deaths(characters,

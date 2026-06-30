@@ -461,6 +461,9 @@ static func execute(
 	if action_id == "TRAIN_ANIMAL":
 		return _execute_train_animal(action, character, ctx, dice_engine, characters_by_id)
 
+	if action_id == "GIVE_COMPANION":
+		return _execute_give_companion(action, character, ctx, characters_by_id)
+
 	if action_id == "APPLY_TATTOO":
 		return _execute_apply_tattoo(action, character, ctx, dice_engine, characters_by_id)
 
@@ -6120,6 +6123,78 @@ static func _execute_train_animal(
 				"sessions_completed": companion.get("sessions_completed", 0),
 			},
 		}
+
+
+# -- s57.39.2 GIVE_COMPANION (voluntary gift) ---------------------------------
+# A trainer explicitly transfers a living trained companion to a co-located recipient,
+# who becomes its owner. Training is preserved; the BOND is not — rebond_sessions_remaining
+# is set to 3 (the new owner must rebond before Mastery Abilities work under their rank).
+# PC/deliberate-only: the GDD specifies no autonomous NPC trigger ("the trainer explicitly
+# transfers"), so this is not in any context list / objective_alignment — it is reachable
+# through the executor when a deliberate caller sets companion_id + target_npc_id.
+
+static func _execute_give_companion(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var recipient_id: int = action.target_npc_id
+	var companion_id: int = action.metadata.get("companion_id", -1)
+	var fail := func(reason: String) -> Dictionary:
+		return {
+			"success": false, "action_id": "GIVE_COMPANION",
+			"character_id": character.character_id, "target_npc_id": recipient_id,
+			"target_province_id": -1, "ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": reason, "effects": {},
+		}
+
+	if recipient_id < 0 or recipient_id == character.character_id:
+		return fail.call("invalid_recipient")
+	var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
+	if recipient == null or CharacterStats.is_dead(recipient):
+		return fail.call("invalid_recipient")
+	# The animal is physically handed over — giver and recipient must be co-located.
+	if character.physical_location == "" \
+			or character.physical_location != recipient.physical_location:
+		return fail.call("not_co_located")
+
+	var companion: Dictionary = {}
+	for c: Variant in character.trained_companions:
+		var comp: Dictionary = c as Dictionary
+		if comp.get("companion_id", -1) == companion_id:
+			companion = comp
+			break
+	if companion.is_empty():
+		return fail.call("companion_not_found")
+	if not companion.get("is_alive", false):
+		return fail.call("companion_dead")
+	if not AnimalHandlingSystem.under_cap(recipient):
+		return fail.call("recipient_at_companion_cap")
+
+	# Move the record off the giver, repoint ownership (+rebond), append to the recipient.
+	var keep: Array = []
+	for c: Variant in character.trained_companions:
+		if (c as Dictionary).get("companion_id", -1) != companion_id:
+			keep.append(c)
+	character.trained_companions = keep
+	AnimalHandlingSystem.transfer_companion(companion, recipient_id)
+	recipient.trained_companions.append(companion)
+
+	return {
+		"success": true,
+		"action_id": "GIVE_COMPANION",
+		"character_id": character.character_id,
+		"target_npc_id": recipient_id,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"gifted_companion_id": companion_id,
+			"new_owner_id": recipient_id,
+			"rebond_sessions_remaining": companion.get("rebond_sessions_remaining", 0),
+		},
+	}
 
 
 # -- s57.25.3 APPLY_TATTOO ---------------------------------------------------
