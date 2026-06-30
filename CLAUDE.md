@@ -3721,12 +3721,13 @@ character)`** → +5 for Engineering R5+ or Sailing R5+ on Cooperative/Cumulativ
   produces cross-owner training. The existing R5 (`can_command_to_attack`) / R7
   (`has_no_flee_override`) helpers remain (also dormant — companion_system doesn't read them; ASCII
   combat layer, PC-travel HOLD).
-- **⚠ GDD-INTERNAL CONFLICT FLAGGED (Animal Handling R7) — NOT resolved in code.** The s24 reference
-  says R7 = "animals may be issued commands non-verbally"; the dedicated LOCKED **s57.39.8** says
-  R7 = the "Never Flees" no-flee override. Per "LOCKED sections win," s57.39.8 governs and is the
-  implemented behavior (`has_no_flee_override`); the non-verbal interpretation is deliberately NOT
-  implemented. Surfaced to the owner for adjudication (comment left at the constants, no silent
-  overwrite of the LOCKED no-flee behavior).
+- **Animal Handling R7 — NO conflict (resolved 2026-06-30).** Earlier flagged as a possible
+  s24-vs-s57.39.8 conflict, but the PROJECT GDD is internally consistent: `s24.3` line 351 says R7 =
+  "will not flee from combat even when badly wounded; the Rank 5 default flee-when-wounded behaviour is
+  overridden" — the **Never-Flees** override, matching `s57.39.8` exactly. The "issued commands
+  non-verbally" R7 exists only in the external L5R 4e book (pasted by the owner), which the project GDD
+  deliberately did not adopt. The implementation (`has_no_flee_override`) matches both project sections;
+  nothing to adjudicate.
 Runtime-verified 16/16 (Godot 4.6.2, headless): cooperative bonus 5/0 for Eng/Sailing R5/R4, 0 for a
 non-coop skill; Commerce 0.8 buy / 1.2 sell / 1.0 below R5; PURCHASE_MARKET base 1.0 → 0.8 for a
 Commerce-5 buyer vs 1.0 otherwise; AH R3 train-for-others gate; AH R7 no-flee (s57.39.8) retained.

@@ -66,10 +66,11 @@ const SPECIES_TABLE: Dictionary = {
 const MASTERY_TRAIN_FOR_OTHERS_RANK: int = 3  # s57.39 R3 / s24 (agree)
 const MASTERY_COMMAND_RANK: int = 5
 const MASTERY_NO_FLEE_RANK: int = 7
-# s24 R7 ("issued commands non-verbally") CONFLICTS with the LOCKED s57.39.8 R7
-# ("Never Flees" no-flee override). Per "LOCKED sections win", s57.39.8 governs and
-# is implemented (has_no_flee_override below). The non-verbal interpretation is NOT
-# implemented pending owner adjudication of the GDD-internal conflict.
+# R7 = the "Never Flees" no-flee override (has_no_flee_override below). The project GDD is
+# internally consistent: s24.3 ("will not flee from combat even when badly wounded; the Rank 5
+# default flee-when-wounded behaviour is overridden") AND s57.39.8 both specify no-flee. (The
+# external L5R 4e book's "issued commands non-verbally" R7 was deliberately NOT adopted by the
+# project GDD — so there is no conflict and nothing to adjudicate.)
 
 # -- Training tier thresholds (s57.39.3) ---------------------------------------
 const TRAINING_TIER_FOLLOWING_SESSION: int = 3  # from 3rd session onward → "following"
