@@ -3430,11 +3430,27 @@ mount-TN** (owner table: dai-kyu +10 attack TN on foot, han-kyu/yumi +10 mounted
 `IndividualCombat.weapon_mount_tn_penalty()` + `mount_tn_when` on the bows, applied to the shot's
 Armor TN in `execute_ranged_attack` (mounted yumi archer 1537/4000 hits vs foot 2961 — the +10
 penalty). Verified: the flag sets the condition; helper values; the cavalry +1k0 and bow penalty both
-move hit-rates the right way. STILL DEFERRED: a mount/dismount ACTION (needs base action costs +
-a horse entity on the map — the setup flag is the only producer so far); riding armor's mounted +12
-ATN (the +12 isn't bumped in `get_armor_tn` yet, and no one wears riding armor — the cavalry loadout
-is deferred); **lance charge** (needs both mounted AND a tile-combat charge action for characters —
-`execute_charge` is creature-only). **Thrown weapons wired (tranche 3, 2026-06-29,
+move hit-rates the right way. STILL DEFERRED: riding armor's mounted +12
+ATN (the +12 isn't bumped in `get_armor_tn` yet); **lance charge** (needs both mounted AND a
+tile-combat charge action for characters — `execute_charge` is creature-only).
+**Mount/dismount ACTION wired (tranche 6, 2026-06-30, 32/32 verified, owner-directed):** a combatant
+with a horse can now mount/dismount mid-fight, and the Unicorn cavalry actually wear riding armor (the
+armor loadout is no longer deferred — `ArmorSystem.assign_by_profile` gives every Unicorn bushi
+`riding` and elite Hida `tetsu_do`/iron, owner ruling 2026-06-29). New `Participant.has_mount` +
+`mount_tile`; `setup_combat` honors two flags — `"mounted": true` (starts on the horse →
+CONDITION_MOUNTED + has_mount, mount_tile=(-1,-1), e.g. a battlefield cavalry NPC) and
+`"has_mount": true` (a foot combatant with a horse waiting beside them → has_mount, mount_tile =
+their tile). `execute_mount` (within 1 tile of `mount_tile`, not already mounted, horse present) and
+`execute_dismount` (leaves the horse at the dismounter's tile so it can be remounted) spend the
+**owner-provided Horsemanship action costs** via `SkillMasterySystem.horsemanship_mount_cost`
+(Complex base → Simple at R5 → Free at R7) / `horsemanship_dismount_cost` (Simple base → Free at R5+),
+routed through a shared `_spend_action_cost(ts, cost)`. Rejections: already_mounted / no_horse /
+horse_out_of_reach / not_mounted / down_only_free_actions / no_actions_remaining. The Horsemanship R3
+mounted-Full-Attack gate (added with the producer) is now exercised end-to-end. Runtime-verified
+32/32 (Godot 4.6.2): cost helpers by rank, both setup flags, dismount/mount round-trip + action-economy
+(free dismount keeps the Complex; complex mount spends it), all five rejections, and the R3 Full-Attack
+gate (rank-5 mounted CAN, rank-2 CANNOT). NPC/PC turn-loop auto-mount AI and the PC mount command are
+deferred to the turn-based UI (same PC-travel HOLD) — the actions are callable now. **Thrown weapons wired (tranche 3, 2026-06-29,
 12/12 verified):** a melee weapon with a `thrown_range` can be hurled as a ranged attack —
 `thrown_range` (feet/5) added to wakizashi 4 (20') / mai-chong 5 (25') / nage-yari 10 (50') / yari 10
 (50') + `IndividualCombat.weapon_thrown_range()` (shuriken/tsubute are already ranged weapons, so

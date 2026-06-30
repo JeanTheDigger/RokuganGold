@@ -246,3 +246,24 @@ static func iaijutsu_assessment_bonus_dice(character: L5RCharacterData) -> int:
 # (s24 line 303). off_hand_skill is the off-hand weapon's skill ("Knives" for a knife).
 static func knives_negates_offhand_penalty(character: L5RCharacterData, off_hand_skill: String) -> bool:
 	return off_hand_skill == "Knives" and int(character.skills.get("Knives", 0)) >= MASTERY_RANK_3
+
+
+# Horsemanship action costs (s24, owner-confirmed). Mounting: Complex (base) → Simple at R5 → Free
+# at R7. Dismounting: Simple (base) → Free at R5+.
+static func horsemanship_mount_cost(character: L5RCharacterData) -> String:
+	var r: int = int(character.skills.get("Horsemanship", 0))
+	if r >= MASTERY_RANK_7:
+		return "free"
+	if r >= MASTERY_RANK_5:
+		return "simple"
+	return "complex"
+
+
+static func horsemanship_dismount_cost(character: L5RCharacterData) -> String:
+	return "free" if int(character.skills.get("Horsemanship", 0)) >= MASTERY_RANK_5 else "simple"
+
+
+# Horsemanship R3: the character may use Full Attack Stance while mounted (s24). Without it, a
+# mounted combatant cannot take Full Attack.
+static func horsemanship_allows_mounted_full_attack(character: L5RCharacterData) -> bool:
+	return int(character.skills.get("Horsemanship", 0)) >= MASTERY_RANK_3

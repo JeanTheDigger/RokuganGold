@@ -264,6 +264,8 @@ class Participant:
 	var extra_attack_used_this_turn: bool = false  # Extra Attack may only be used once per turn
 	var off_hand_attack_used_this_turn: bool = false  # Off-hand attack may only be made once per turn (s40)
 	var broken_weapons: Array = []             # s40 weapon break thresholds: names of weapons that shattered this skirmish
+	var has_mount: bool = false                # s40 mount: the combatant has a horse available (can mount/dismount)
+	var mount_tile: Vector2i = Vector2i(-1, -1)  # where the horse waits when dismounted; (-1,-1) = on the horse / no horse left
 	# Weapon-grapple state (s40 "Weapon Grapples"): when a character initiates a
 	# grapple with a chain weapon / certain polearm, control rolls use the weapon
 	# skill and Hit deals weapon damage. Empty/"" = ordinary Jiujutsu grapple.

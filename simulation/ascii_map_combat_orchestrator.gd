@@ -324,17 +324,25 @@ static func setup_combat(
 		ts.char_id = cid
 		mcs.turn_states[cid] = ts
 
-	# s40 mount producer: a combatant flagged mounted (cavalry / a mounted PC) starts the skirmish
-	# on horseback. This is the producer for CONDITION_MOUNTED, which the combat math already reads
-	# (the cavalry +1k0 vs unmounted, riding-armor exemption, bow mount-TN, burning-kiss bonus).
+	# s40 mount producer: a combatant flagged "mounted" (cavalry / a mounted PC) starts the skirmish
+	# on horseback (CONDITION_MOUNTED, which the combat math already reads — cavalry +1k0, riding-armor
+	# exemption, bow mount-TN, burning-kiss). A "has_mount" flag gives a foot combatant a nearby horse
+	# to mount mid-fight. Both grant has_mount so the mount/dismount actions are available.
 	for entry: Dictionary in combatants_data:
 		var mc: L5RCharacterData = entry["char"]
 		if CharacterStats.is_dead(mc):
 			continue
+		var mp: IndividualCombat.Participant = mcs.combat.participants.get(mc.character_id, null)
+		if mp == null:
+			continue
 		if entry.get("mounted", false):
-			var mp: IndividualCombat.Participant = mcs.combat.participants.get(mc.character_id, null)
-			if mp != null and IndividualCombat.CONDITION_MOUNTED not in mp.conditions:
+			if IndividualCombat.CONDITION_MOUNTED not in mp.conditions:
 				mp.conditions.append(IndividualCombat.CONDITION_MOUNTED)
+			mp.has_mount = true
+			mp.mount_tile = Vector2i(-1, -1)  # on the horse
+		elif entry.get("has_mount", false):
+			mp.has_mount = true
+			mp.mount_tile = mcs.positions.get(mc.character_id, Vector2i(-1, -1))  # horse waits beside them
 
 	mcs.combat_log.append({
 		"type": "combat_started",
@@ -707,6 +715,11 @@ static func execute_stance_change(
 	if new_stance == Enums.Stance.FULL_ATTACK and IndividualCombat.CONDITION_FATIGUED in p.conditions:
 		return {"success": false, "reason": "fatigued_no_full_attack"}
 
+	# s24 Horsemanship: a mounted combatant cannot take Full Attack Stance without Horsemanship 3+.
+	if new_stance == Enums.Stance.FULL_ATTACK and IndividualCombat.CONDITION_MOUNTED in p.conditions \
+			and not SkillMasterySystem.horsemanship_allows_mounted_full_attack(character):
+		return {"success": false, "reason": "mounted_no_full_attack"}
+
 	# s35 Haze of Battle: a stance-locked target cannot switch away from Full Attack.
 	if new_stance != Enums.Stance.FULL_ATTACK \
 			and IndividualCombat.get_timed_modifier_total(p, "stance_locked") > 0:
@@ -728,6 +741,72 @@ static func execute_stance_change(
 		"new_stance": new_stance,
 	})
 	return {"success": true, "new_stance": new_stance}
+
+
+## Consume a Complex / Simple / Free action by cost string (s40 mount/dismount). Returns false if
+## the budget can't afford it.
+static func _spend_action_cost(ts: TurnState, cost: String) -> bool:
+	match cost:
+		"complex":
+			if not ts.can_use_complex():
+				return false
+			ts.consume_complex()
+		"simple":
+			if not ts.can_use_simple():
+				return false
+			ts.consume_simple()
+		"free":
+			ts.consume_free()
+		_:
+			return false
+	return true
+
+
+## s40 Mount a horse. The combatant must have a horse available (has_mount) and be within 1 tile of
+## where it waits (mount_tile). Cost by Horsemanship: Complex (base) / Simple (R5) / Free (R7).
+static func execute_mount(state: MapCombatState, char_id: int, character: L5RCharacterData) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if ts == null or p == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if IndividualCombat.CONDITION_MOUNTED in p.conditions:
+		return {"success": false, "reason": "already_mounted"}
+	if not p.has_mount:
+		return {"success": false, "reason": "no_horse"}
+	var pos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if p.mount_tile.x >= 0 and _chebyshev(pos, p.mount_tile) > 1:
+		return {"success": false, "reason": "horse_out_of_reach"}
+	if CharacterStats.get_wound_level(character) >= Enums.WoundLevel.DOWN:
+		return {"success": false, "reason": "down_only_free_actions"}
+	var cost: String = SkillMasterySystem.horsemanship_mount_cost(character)
+	if not _spend_action_cost(ts, cost):
+		return {"success": false, "reason": "no_actions_remaining"}
+	p.conditions.append(IndividualCombat.CONDITION_MOUNTED)
+	p.mount_tile = Vector2i(-1, -1)  # now on the horse
+	state.combat_log.append({"type": "mount", "round": state.combat.round_number, "char_id": char_id, "cost": cost})
+	return {"success": true, "cost": cost}
+
+
+## s40 Dismount. Cost by Horsemanship: Simple (base) / Free (R5+). The horse is left at the
+## dismounter's tile (mount_tile) so they can remount it later.
+static func execute_dismount(state: MapCombatState, char_id: int, character: L5RCharacterData) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if ts == null or p == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if IndividualCombat.CONDITION_MOUNTED not in p.conditions:
+		return {"success": false, "reason": "not_mounted"}
+	var cost: String = SkillMasterySystem.horsemanship_dismount_cost(character)
+	if not _spend_action_cost(ts, cost):
+		return {"success": false, "reason": "no_actions_remaining"}
+	p.conditions.erase(IndividualCombat.CONDITION_MOUNTED)
+	p.mount_tile = state.positions.get(char_id, Vector2i(-1, -1))  # horse waits here
+	state.combat_log.append({"type": "dismount", "round": state.combat.round_number, "char_id": char_id, "cost": cost})
+	return {"success": true, "cost": cost}
 
 
 ## Move within move_budget tiles (already computed by caller for action type).
