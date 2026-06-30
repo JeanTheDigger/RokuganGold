@@ -1198,6 +1198,11 @@ static func execute_melee_attack(
 	if a_p.disarmed and weapon_name != "" and weapon_name != "unarmed":
 		weapon_name = "unarmed"
 
+	# s40 broken weapon (Equipment table break thresholds): a shattered weapon can't strike —
+	# the wielder swings with the broken haft / bare hands until they draw another.
+	if weapon_name in a_p.broken_weapons:
+		weapon_name = "unarmed"
+
 	# Dance of the Flames (s38 Fire): unarmed attacks cost a Simple Action, not Complex.
 	# Simple-cost attack: Dance of the Flames (unarmed kiho) OR a Simple-economy Charge (s54.5).
 	var dance_simple: bool = as_simple or ((weapon_name == "" or weapon_name == "unarmed") and "Dance of the Flames" in a_p.active_kiho)
@@ -9868,6 +9873,13 @@ static func _apply_hit(
 		attacker, weapon_name, raises_for_damage + stv_rolled, feint_bonus, dice_engine, a_p, maneuver == "feint", stv_kept, thrown
 	)
 	var raw: int = dmg["raw_damage"]
+
+	# s40 weapon break threshold (owner Equipment table): a fragile weapon shatters when the force of
+	# its blow (the raw damage roll) reaches its threshold. This hit still lands; the weapon is marked
+	# broken so future attacks with it fall back to unarmed (execute_melee_attack).
+	var break_at: int = IndividualCombat.weapon_break_threshold(weapon_name)
+	if break_at > 0 and raw >= break_at and a_p != null and weapon_name not in a_p.broken_weapons:
+		a_p.broken_weapons.append(weapon_name)
 
 	# Reduction: base armor + kata/active-kiho Reduction − attacker piercing (s30a/s38).
 	var t_p: IndividualCombat.Participant = state.combat.participants.get(target.character_id, null)

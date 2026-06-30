@@ -3430,10 +3430,18 @@ and threads `thrown` through `_apply_hit` → `resolve_damage`. Only **yari** ch
 @dist6 (range 4), weapon_not_throwable for a katana, weapon_is_melee for a non-thrown wakizashi, and
 a real attack @dist4. LIMITATION: the throw is a callable action (PC via future combat UI / a
 deliberate caller) — **NPC auto-throw and the "weapon leaves the hand" one-shot consumption are
-deferred** (no weapon-inventory state; an NPC tracking a thrown-away weapon needs it). DEFERRED
-(values now in hand from the table, each needs its own hook): **lance charge** (3k4 charging mounted, else 1k2 + TN penalty 5 horse/10
-foot) — mounted-charge context; **break thresholds** (kumade 25 / lance 30 / parangu 30 / ninja-to 40)
-— a weapon-durability state; **bow mount-TN** (dai-kyu +10 on foot, han-kyu/yumi +10 mounted) —
+deferred** (no weapon-inventory state; an NPC tracking a thrown-away weapon needs it). **Break
+thresholds wired (tranche 4, 2026-06-29, 9/9 verified):** a fragile weapon shatters when the force
+of its blow (the raw damage roll) reaches its threshold — `break_threshold` added to kumade 25 /
+lance 30 / parangu 30 / ninja-to 40 + `IndividualCombat.weapon_break_threshold()`. New
+`Participant.broken_weapons` (per-skirmish); `_apply_hit` marks the attacker's weapon broken when
+`raw >= threshold` (that hit still lands), and `execute_melee_attack` substitutes "unarmed" for a
+broken weapon (mirrors the existing disarmed→unarmed fallback). "Inflicts N damage" = the raw damage
+roll (the blow's force, independent of the target's armor — documented interpretation). Verified:
+helper values; a Str-10 parangu shatters on a 30+ roll and is recorded on the attacker; an
+unbreakable katana never breaks over 200 Str-10 hits; a broken parangu → the attacker swings
+unarmed. DEFERRED (values in hand, each needs its own hook): **lance charge** (3k4 charging mounted,
+else 1k2 + TN penalty 5 horse/10 foot) — mounted-charge context; **bow mount-TN** (dai-kyu +10 on foot, han-kyu/yumi +10 mounted) —
 mounted context; **ammo armor-TN mods** (armor-piercing ignores / flesh-cutter + kyoketsu-shogi double
 / blowgun triple the target's Armor-TN bonus) — per-shot ammo selection; **two-damage-mode** (kusarigama
 0k2/0k1, sang-kauw 1k2/2k1) — a mode pick; **ninja-to** "counts as Small for concealment". Arrow types

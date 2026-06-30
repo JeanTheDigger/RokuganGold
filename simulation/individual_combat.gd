@@ -24,8 +24,8 @@ const WEAPON_CATALOG: Dictionary = {
 	"wakizashi":  {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Small",  "melee": true,  "trait": "agility", "thrown_range": 4},
 	"no_dachi":   {"rolled": 3, "kept": 3, "strength_adds": true,  "skill": "Kenjutsu", "size": "Large",  "melee": true,  "trait": "agility"},
 	"bokken":     {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "doubles_armor_reduction": true},
-	"ninja_to":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
-	"parangu":    {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
+	"ninja_to":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "break_threshold": 40},
+	"parangu":    {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "break_threshold": 30},
 	"scimitar":   {"rolled": 2, "kept": 3, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
 	"shinai":     {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "no_explode": true},
 
@@ -51,9 +51,9 @@ const WEAPON_CATALOG: Dictionary = {
 
 	# -- Spears --
 	"yari":       {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 10, "thrown_rolled": 1, "thrown_kept": 2},
-	"kumade":     {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
+	"kumade":     {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "break_threshold": 25},
 	"mai_chong":  {"rolled": 0, "kept": 3, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 5},
-	"lance":      {"rolled": 3, "kept": 4, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
+	"lance":      {"rolled": 3, "kept": 4, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "break_threshold": 30},
 	"nage_yari":  {"rolled": 1, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 10},
 
 	# -- Staves (skill "Staves" — the canonical name; bo was previously mislabeled "Bo") --
@@ -263,6 +263,7 @@ class Participant:
 	var guard_kata_bonus: int = 0              # extra Armor TN from void_phoenix_guard_bonus kata
 	var extra_attack_used_this_turn: bool = false  # Extra Attack may only be used once per turn
 	var off_hand_attack_used_this_turn: bool = false  # Off-hand attack may only be made once per turn (s40)
+	var broken_weapons: Array = []             # s40 weapon break thresholds: names of weapons that shattered this skirmish
 	# Weapon-grapple state (s40 "Weapon Grapples"): when a character initiates a
 	# grapple with a chain weapon / certain polearm, control rolls use the weapon
 	# skill and Hit deals weapon damage. Empty/"" = ordinary Jiujutsu grapple.
@@ -1199,6 +1200,13 @@ static func weapon_range_tiles(weapon_name: String) -> int:
 ## nage-yari + yari 10 (50'). yari's damage drops to its thrown DR (thrown_rolled/thrown_kept).
 static func weapon_thrown_range(weapon_name: String) -> int:
 	return int(get_weapon_profile(weapon_name).get("thrown_range", 0))
+
+
+## Damage-roll total at/above which a fragile weapon shatters (s40 "Breaks if inflicts N or more
+## damage"): kumade 25 / lance 30 / parangu 30 / ninja-to 40. 0 = unbreakable. The threshold is the
+## raw damage roll (the force of the blow), independent of the target's armor.
+static func weapon_break_threshold(weapon_name: String) -> int:
+	return int(get_weapon_profile(weapon_name).get("break_threshold", 0))
 
 
 static func resolve_attack(
