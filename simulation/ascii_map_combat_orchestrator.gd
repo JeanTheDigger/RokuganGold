@@ -1251,6 +1251,7 @@ static func execute_melee_attack(
 	charge_atk_bonus: int = 0,
 	charge_dmg_bonus: int = 0,
 	as_simple: bool = false,
+	is_charge: bool = false,
 ) -> Dictionary:
 	if CharacterStats.is_dead(attacker):
 		return {"success": false, "reason": "character_is_dead"}
@@ -1357,6 +1358,10 @@ static func execute_melee_attack(
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, weapon_name)
 	armor_tn += _cover_bonus(state, tpos, apos)
+	# s40 Lance (owner table): a stationary lance stab is unwieldy — +5 TN mounted / +10 TN on foot.
+	# A charge (is_charge) bypasses this and gets the charge damage instead.
+	if not is_charge:
+		armor_tn += IndividualCombat.lance_no_charge_tn_penalty(weapon_name, IndividualCombat.CONDITION_MOUNTED in a_p.conditions)
 
 	# s54.10 Toshigoku auras + Ancient General Tactical Mastery: set the spirit
 	# attacker's per-attack rolled-die bonuses (always reset to the freshly-computed
@@ -9439,6 +9444,68 @@ static func execute_charge(
 	if cr.charge_diving:
 		IndividualCombat.apply_condition(p, IndividualCombat.CONDITION_PRONE)
 	return {"ok": true, "charged": true, "reached": true, "attack": res, "diving": cr.charge_diving}
+
+
+## s40 Lance charge (owner table) — a MOUNTED character with a charge-capable weapon (lance) closes
+## a gap and strikes for the charge damage (3k4 vs the stationary 1k2), bypassing the lance's
+## no-charge TN penalty. Requires CONDITION_MOUNTED and the target beyond melee but within a Full
+## Move (Water Ring × 4 — the run-up; the exact charge distance is PROVISIONAL, derived from the
+## s4.5 Full-Move budget since the owner table gives no charge range). Enters Full Attack only if
+## able (action economy / Horsemanship R3 gate); the attack is a Complex. Returns {} if it cannot
+## charge (caller falls back to a normal — penalized — lance stab).
+static func execute_character_charge(
+	state: MapCombatState,
+	attacker_id: int,
+	target_id: int,
+	attacker: L5RCharacterData,
+	target: L5RCharacterData,
+	weapon_name: String,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(attacker_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	if ts == null or p == null:
+		return {}
+	# A charge is a mounted cavalry maneuver; the weapon must have a charge profile (lance).
+	if IndividualCombat.CONDITION_MOUNTED not in p.conditions:
+		return {}
+	var cb: Dictionary = IndividualCombat.weapon_charge_bonus(weapon_name)
+	if int(cb.get("rolled", 0)) <= 0 and int(cb.get("kept", 0)) <= 0:
+		return {}
+	if CharacterStats.is_dead(attacker) or CharacterStats.is_dead(target):
+		return {}
+	var ap: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
+	var tp: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if ap.x < 0 or tp.x < 0:
+		return {}
+	var charge_tiles: int = MovementSystem.budget(
+		CharacterStats.get_ring_value(attacker, Enums.Ring.WATER), MovementSystem.MoveAction.FULL_MOVE)
+	if charge_tiles < 1:
+		return {}
+	var dist: int = _chebyshev(ap, tp)
+	# already adjacent (use a normal stab) or unreachable even with the run-up → no charge.
+	if dist <= MELEE_RANGE_TILES or dist > charge_tiles + MELEE_RANGE_TILES:
+		return {}
+	# Enter Full Attack — only if able this turn (Fatigue / Horsemanship R3 mounted gate). Like the
+	# creature charge, the maneuver is two Simples (the mandatory Full-Attack stance change + a
+	# Simple-economy charge attack), so it costs the same full turn as a Complex while fitting the
+	# stance entry. A charger already in Full Attack just spends the one Simple attack.
+	if p.stance != Enums.Stance.FULL_ATTACK:
+		var sc: Dictionary = execute_stance_change(state, attacker_id, Enums.Stance.FULL_ATTACK, attacker, dice)
+		if not sc.get("success", false):
+			return {}
+	if not ts.can_use_simple():
+		return {}
+	# Charge run-up (free move within the charge distance), then the lance attack.
+	_npc_move_toward(state, attacker_id, target_id, attacker, charge_tiles, "free", dice)
+	if not (target_id in get_melee_targets(state, attacker_id)):
+		return {"ok": true, "charged": true, "reached": false}
+	# charge_dmg_bonus adds equally to rolled+kept; the lance charge bonus is symmetric (+2k2). The
+	# attack is Simple-economy (as_simple) and a charge (is_charge → bypasses the no-charge TN).
+	var res: Dictionary = execute_melee_attack(
+		state, attacker_id, target_id, attacker, target, weapon_name, 0, dice,
+		"", false, false, 0, int(cb["rolled"]), true, true)
+	return {"ok": true, "charged": true, "reached": true, "attack": res}
 
 
 ## Strength of the Dead (s54.12 Wanyudo): a Complex-action scream — every mortal enemy within

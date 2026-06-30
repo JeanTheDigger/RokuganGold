@@ -3430,9 +3430,30 @@ mount-TN** (owner table: dai-kyu +10 attack TN on foot, han-kyu/yumi +10 mounted
 `IndividualCombat.weapon_mount_tn_penalty()` + `mount_tn_when` on the bows, applied to the shot's
 Armor TN in `execute_ranged_attack` (mounted yumi archer 1537/4000 hits vs foot 2961 — the +10
 penalty). Verified: the flag sets the condition; helper values; the cavalry +1k0 and bow penalty both
-move hit-rates the right way. STILL DEFERRED: riding armor's mounted +12
-ATN (the +12 isn't bumped in `get_armor_tn` yet); **lance charge** (needs both mounted AND a
-tile-combat charge action for characters — `execute_charge` is creature-only).
+move hit-rates the right way.
+**Riding-armor mounted +12 ATN wired (tranche 7, 2026-06-30, 8/8 verified):** the owner table gives
+riding armor +12 Armor TN mounted / +4 on foot; `armor_tn_bonus` stores the +4, so a mounted rider
+needs the +8 delta. `ArmorSystem.mounted_armor_tn_bonus(character)` (= `RIDING_MOUNTED_TN_BONUS 12` −
+the worn `tn_bonus`; 0 for non-riding armor) is added in `IndividualCombat.get_armor_tn` only when
+`CONDITION_MOUNTED` is set, on the main return path (consistent with every other situational bonus
+skipping the flat-footed early returns). Verified: mounted riding ATN 32 vs foot 24 (+8); a mounted
+light-armor combatant gets no mount bonus (25); the +8 is the 12−4 delta. So Unicorn cavalry in
+riding armor are now tankier on horseback, the loadout's whole point.
+**Lance charge for characters wired (tranche 8, 2026-06-30, 16/16 verified, owner-directed):** the
+owner table gives the lance 1k2 stationary / 3k4 charging mounted, with a +5 TN (mounted) / +10 TN
+(foot) penalty when NOT charging. The base catalog became the stationary 1k2 (was wrongly 3k4) plus
+`charge_rolled 3 / charge_kept 4` and the two no-charge penalties. `IndividualCombat.weapon_charge_bonus`
+(+2k2 = 3k4−1k2) + `lance_no_charge_tn_penalty`. `execute_melee_attack` gains `is_charge` — a non-charge
+lance attack adds the no-charge TN penalty (skipped when charging). New `execute_character_charge`: a
+MOUNTED character with a charge-capable weapon closes a gap beyond melee but within a Full Move
+(Water×4 run-up — PROVISIONAL, derived from the s4.5 Full-Move budget since the owner table gives no
+charge range), enters Full Attack if able (Horsemanship R3 gate), and strikes for the charge damage as
+a two-Simple turn (stance + Simple-economy attack, mirroring the creature charge economy). Verified
+16/16 (Godot 4.6.2): helper values, charge closes a 6-tile gap + reaches + enters Full Attack, charge
+out-damages and out-hits the stationary stab (no +5 TN), and all four rejections (on-foot / non-charge
+weapon / adjacent target / no charge profile). NPC/PC turn-loop charge callers are deferred to the
+turn-based UI (the action is callable now). STILL DEFERRED: the foot-soldier braced-lance defensive use
+beyond the +10 TN penalty.
 **Mount/dismount ACTION wired (tranche 6, 2026-06-30, 32/32 verified, owner-directed):** a combatant
 with a horse can now mount/dismount mid-fight, and the Unicorn cavalry actually wear riding armor (the
 armor loadout is no longer deferred — `ArmorSystem.assign_by_profile` gives every Unicorn bushi

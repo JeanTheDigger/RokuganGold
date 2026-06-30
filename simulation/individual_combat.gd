@@ -53,7 +53,10 @@ const WEAPON_CATALOG: Dictionary = {
 	"yari":       {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 10, "thrown_rolled": 1, "thrown_kept": 2},
 	"kumade":     {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "break_threshold": 25},
 	"mai_chong":  {"rolled": 0, "kept": 3, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 5},
-	"lance":      {"rolled": 3, "kept": 4, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "break_threshold": 30},
+	# Lance (owner table): 1k2 stationary, 3k4 when charging mounted; +5 TN mounted / +10 TN on
+	# foot when NOT charging (unwieldy in a stationary stab); breaks at 30. Base catalog is the
+	# stationary value; the charge adds weapon_charge_bonus (3k4-1k2 = +2k2).
+	"lance":      {"rolled": 1, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "break_threshold": 30, "charge_rolled": 3, "charge_kept": 4, "no_charge_tn_mounted": 5, "no_charge_tn_foot": 10},
 	"nage_yari":  {"rolled": 1, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 10},
 
 	# -- Staves (skill "Staves" — the canonical name; bo was previously mislabeled "Bo") --
@@ -1150,7 +1153,9 @@ static func get_armor_tn(
 	var vd_armor: int = vd_ring_bonus(participant, Enums.Ring.AIR) * 5
 	# s24 Bugei masteries: Defense R5 (+3 in Defense/Full Defense), War Fan R5/R7 (+1/+3 passive).
 	var bugei_armor: int = SkillMasterySystem.combat_armor_tn_bonus(character, participant.stance)
-	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus + timed_armor + vd_armor + bugei_armor
+	# s40 Riding armor (owner table): +12 Armor TN mounted vs the +4 on foot already in base_tn -> +8 extra.
+	var mounted_armor: int = ArmorSystem.mounted_armor_tn_bonus(character) if CONDITION_MOUNTED in participant.conditions else 0
+	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus + timed_armor + vd_armor + bugei_armor + mounted_armor
 
 
 static func roll_full_defense_bonus(
@@ -1223,6 +1228,27 @@ static func weapon_mount_tn_penalty(weapon_name: String, attacker_mounted: bool)
 	if when == "unmounted" and not attacker_mounted:
 		return BOW_MOUNT_TN_PENALTY
 	return 0
+
+
+## +TN penalty for striking with a lance WITHOUT charging (s40 owner table): +5 mounted, +10 on
+## foot — a lance is unwieldy in a stationary stab. 0 if the weapon has no such profile.
+static func lance_no_charge_tn_penalty(weapon_name: String, attacker_mounted: bool) -> int:
+	var prof: Dictionary = get_weapon_profile(weapon_name)
+	if not prof.has("no_charge_tn_mounted"):
+		return 0
+	return int(prof["no_charge_tn_mounted"]) if attacker_mounted else int(prof["no_charge_tn_foot"])
+
+
+## The +NkN damage a charging weapon adds over its stationary damage (s40 owner table: lance 3k4
+## charging vs 1k2 stationary -> +2k2). Returns {rolled, kept}; {0,0} if no charge profile.
+static func weapon_charge_bonus(weapon_name: String) -> Dictionary:
+	var prof: Dictionary = get_weapon_profile(weapon_name)
+	if not prof.has("charge_rolled"):
+		return {"rolled": 0, "kept": 0}
+	return {
+		"rolled": int(prof["charge_rolled"]) - int(prof["rolled"]),
+		"kept": int(prof["charge_kept"]) - int(prof["kept"]),
+	}
 
 
 static func resolve_attack(

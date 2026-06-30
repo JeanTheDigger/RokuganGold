@@ -9,6 +9,7 @@ class_name ArmorSystem
 const PENALTY_AMOUNT: int = 5        # the standard +5 TN special-rule penalty
 const IRON_PENALTY_AMOUNT: int = 10  # Tetsu-do +10 (or +5 if Strength >= 5)
 const IRON_STRENGTH_RELIEF: int = 5  # Strength threshold that halves the iron penalty
+const RIDING_MOUNTED_TN_BONUS: int = 12  # Riding armor: Armor TN +12 mounted (vs the +4 stored on foot)
 
 # name -> {tn_bonus, reduction, is_heavy, penalty_kind}. Penalty kinds: see ArmorData.
 const ARMOR_CATALOG: Dictionary = {
@@ -109,6 +110,17 @@ static func assign_by_profile(character: L5RCharacterData) -> void:
 		equip(character, "tatami")
 	else:
 		equip(character, "ashigaru")
+
+
+# Extra Armor TN the worn armor grants while MOUNTED, beyond its on-foot tn_bonus (0 if none).
+# Riding armor is +12 Armor TN on horseback vs the +4 stored in armor_tn_bonus -> +8 extra (owner
+# Equipment table; the +8 is the 12-vs-4 delta, not an invented value). Read by
+# IndividualCombat.get_armor_tn only when CONDITION_MOUNTED is set.
+static func mounted_armor_tn_bonus(character: L5RCharacterData) -> int:
+	var a: ArmorData = character.armor_worn
+	if a != null and a.armor_name == "riding":
+		return RIDING_MOUNTED_TN_BONUS - a.tn_bonus
+	return 0
 
 
 static func _is_agi_ref(trait_used: Enums.Trait) -> bool:
