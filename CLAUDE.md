@@ -3451,9 +3451,24 @@ charge range), enters Full Attack if able (Horsemanship R3 gate), and strikes fo
 a two-Simple turn (stance + Simple-economy attack, mirroring the creature charge economy). Verified
 16/16 (Godot 4.6.2): helper values, charge closes a 6-tile gap + reaches + enters Full Attack, charge
 out-damages and out-hits the stationary stab (no +5 TN), and all four rejections (on-foot / non-charge
-weapon / adjacent target / no charge profile). NPC/PC turn-loop charge callers are deferred to the
-turn-based UI (the action is callable now). STILL DEFERRED: the foot-soldier braced-lance defensive use
-beyond the +10 TN penalty.
+weapon / adjacent target / no charge profile). STILL DEFERRED: the foot-soldier braced-lance defensive
+use beyond the +10 TN penalty.
+**NPC cavalry AI wired (tranche 10, 2026-06-30, 8/8 verified, owner-directed):** the mount/charge
+actions were callable but no NPC used them. A single cavalry block in `execute_npc_turn`, decided
+BEFORE the stance pick (so the maneuver owns the full action budget — the stance pick spends a Simple
+that the Complex mount / two-Simple charge needs; the bug that made a post-stance hook silently bail).
+(1) **Auto-mount:** an unmounted combatant with a horse in reach (`has_mount`) and no adjacent enemy
+mounts up (Complex at low Horsemanship ends the turn; a Free R7 mount falls through to charge the same
+turn). (2) **Auto-lance-charge:** a mounted spear-fighter (`pick_best_weapon` skill == "Spears")
+couches a **lance** (the cavalry charge weapon — pick_best_weapon returns a yari for stationary damage,
+so the charge explicitly switches to the lance) and charges a reachable foe beyond melee via
+`execute_character_charge`. Structural AI — the GDD gives no NPC mount/charge policy. Runtime-verified
+8/8 (Godot 4.6.2): a foot cavalry NPC mounts up and is now mounted; a mounted lancer charges + closes
+to melee; a mounted katana NPC does NOT lance-charge (still acts); a horseless NPC does not mount; an
+adjacent mounted lancer attacks (no charge — already in melee). Prior cavalry drivers re-pass
+(mount 32/32, lance 16/16, ammo 21/21, riding 8/8 — no regression). Auto-dismount AI is deliberately
+not wired (no clear benefit heuristic, and the GDD gives no NPC dismount policy); the PC mount/charge
+commands remain on the turn-based-UI HOLD.
 **Mount/dismount ACTION wired (tranche 6, 2026-06-30, 32/32 verified, owner-directed):** a combatant
 with a horse can now mount/dismount mid-fight, and the Unicorn cavalry actually wear riding armor (the
 armor loadout is no longer deferred — `ArmorSystem.assign_by_profile` gives every Unicorn bushi

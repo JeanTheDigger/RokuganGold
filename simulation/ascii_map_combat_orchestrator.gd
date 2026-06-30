@@ -7980,6 +7980,37 @@ static func execute_npc_turn(
 				actions_taken.append({"action": "climb", "result": eclimb})
 				return {"actions": actions_taken}
 
+	# s40 NPC cavalry (auto-mount + lance charge) — decided BEFORE the stance pick so the maneuver
+	# owns the full action budget (the stance pick would otherwise spend a Simple that the Complex
+	# mount / two-Simple charge needs). Structural AI — the GDD gives no NPC mount/charge policy.
+	if npc.spirit_creature == null \
+			and IndividualCombat.CONDITION_ENTANGLED not in p.conditions \
+			and IndividualCombat.CONDITION_PRONE not in p.conditions \
+			and not ts.is_down_restricted(wl):
+		# Mount an available horse when no enemy is adjacent (gains the cavalry +1k0 and, in riding
+		# armor, +12 Armor TN). A Complex mount (low Horsemanship) ends the turn; a Free R7 mount
+		# falls through to charge the same turn.
+		if p.has_mount and IndividualCombat.CONDITION_MOUNTED not in p.conditions \
+				and not is_in_melee_range_of_enemy(state, npc_id):
+			var mnt: Dictionary = execute_mount(state, npc_id, npc)
+			if mnt.get("success", false):
+				actions_taken.append({"action": "mount", "result": mnt})
+				if not ts.can_use_complex() and not ts.can_use_simple():
+					return {"actions": actions_taken}
+		# Mounted spear-fighter: couch a lance and charge a reachable foe beyond melee. (pick_best_weapon
+		# optimizes stationary damage and returns a yari; the lance is the cavalry charge weapon.)
+		if IndividualCombat.CONDITION_MOUNTED in p.conditions \
+				and String(IndividualCombat.get_weapon_profile(IndividualCombat.pick_best_weapon(npc)).get("skill", "")) == "Spears":
+			var cav_targets: Array = get_melee_targets(state, npc_id) + get_ranged_targets(state, npc_id)
+			var ct: int = _npc_pick_target(state, npc_id, cav_targets, chars_by_id)
+			if ct >= 0 and not (ct in get_melee_targets(state, npc_id)):
+				var lchg: Dictionary = execute_character_charge(
+					state, npc_id, ct, npc,
+					chars_by_id.get(ct, state.combatants.get(ct, null)), "lance", dice_engine)
+				if lchg.get("charged", false):
+					actions_taken.append({"action": "lance_charge", "result": lchg})
+					return {"actions": actions_taken}
+
 	# -- Pick optimal stance -----------------------------------------------
 	var stance_result: Dictionary = _npc_pick_stance(state, npc_id, npc, chars_by_id, dice_engine)
 	if stance_result.get("changed", false):
