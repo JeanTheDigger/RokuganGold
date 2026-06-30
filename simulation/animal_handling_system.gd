@@ -266,6 +266,21 @@ static func create_companion(
 	}
 
 
+# -- Travel with owner (s57.39.2) ---------------------------------------------
+
+## Companions travel with their owner automatically: set each ALIVE companion's
+## location_province_id to the owner's current province. Dead companions (archived
+## records, is_alive false) are left untouched. Returns the number synced.
+static func sync_companion_locations(owner: L5RCharacterData, owner_province_id: int) -> int:
+	var synced: int = 0
+	for c: Variant in owner.trained_companions:
+		var comp: Dictionary = c as Dictionary
+		if comp.get("is_alive", false):
+			comp["location_province_id"] = owner_province_id
+			synced += 1
+	return synced
+
+
 ## Apply progress from a subsequent TRAIN_ANIMAL session to a companion.
 ## Mutates the companion dictionary. Returns updated companion.
 static func apply_training_progress(companion: Dictionary, progress_gained: int) -> Dictionary:

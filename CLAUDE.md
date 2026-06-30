@@ -3574,6 +3574,30 @@ set for heavy + tetsu-do, false for the rest; the heavy-armor mechanical effect 
 driven Agi/Ref TN penalty (already wired), and the owner table specifies no further heavy-only mechanic,
 so none is invented. Every armor↔combat interaction stated in the owner tables is wired.
 
+### s57.39 Animal Handling — in-game companion lifecycle (now unblocked by s40), tranche 1: travel-with-owner (2026-06-30, runtime-verified 7/7)
+The s57.39 TRAINING pipeline (TRAIN_ANIMAL executor, companion records on
+`L5RCharacterData.trained_companions`, cap, tiers, mastery gates) was already built, but the
+**in-game lifecycle was entirely unwired** — `day_orchestrator` never touched `trained_companions`,
+so companions never travelled with their owner, never died/transferred, had no standing needs, and
+never entered combat. s40 (the ASCII combat layer) now exists, lifting the original "deferred (blocked
+on s40/s56)" gate. Building the lifecycle one tranche at a time. **Tranche 1 — travel-with-owner
+(s57.39.2, fully unambiguous, zero stat-block dependency):** `AnimalHandlingSystem.sync_companion_locations(owner,
+province_id)` sets each ALIVE companion's `location_province_id` to the owner's province (archived
+`is_alive==false` records untouched). `DayOrchestrator._process_companion_locations(characters,
+character_province_map)` runs each tick right after `character_province_map` is built (so it tracks
+travel arrivals), skipping dead/companion-less/unplaced owners. Runtime-verified 7/7 (Godot 4.6.2):
+2 alive companions follow the owner province→province, the archived one stays put, no-companion owner
+is a 0 no-op. 2 files parse clean.
+**REMAINING tranches (all pure s57.39 LOCKED spec):** owner-death transfer → heir/wild + rebonding
+decrement (s57.39.2); companion death → Tier-4 Personal topic + cap recovery + archival (s57.39.9);
+TREAT_WOUND on a companion (s57.39.9); Toritaka/Aerie/Utaku standing companion needs + loss re-fire
+(s57.39.11); voluntary-gift transfer. **COMBAT tranche (the "can fight" headline) is OWNER-GATED:**
+s54.1 has full stat blocks for the species (Dog/War Dog/Falcon/three horse breeds/Lion/Cat), but the
+species→s54.1-block MAPPING has genuine ambiguities I will NOT invent — which s54.1 horse block is the
+generic WARHORSE vs RIDING_HORSE, which block is the WARCAT, and how to reconcile s57.39.6's
+`wound_threshold` with the s54.1 full wound track. That mapping needs owner sign-off before the combat
+adapter (SpiritCombatant-style puppet) + R5 command + R5/R7 flee rules are wired.
+
 ### s24 Skill Mastery Abilities — Merchant tranche (Commerce/Engineering/Sailing; Craft none) (2026-06-30, runtime-verified 16/16)
 Wired the s24 non-Bugei "Merchant" masteries the owner pasted ("Now these masteries"), all values
 GDD-given (zero invention). New `SkillMasterySystem` helpers: **`cooperative_roll_bonus(skill,

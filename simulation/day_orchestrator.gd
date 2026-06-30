@@ -145,6 +145,7 @@ static func advance_day(
 			if _pid >= 0:
 				character_province_map[_cpm_c.character_id] = _pid
 
+	_process_companion_locations(characters, character_province_map)
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
@@ -8382,6 +8383,26 @@ static func _seed_crime_topic_to_knowers(
 # Magistrate-role NPCs automatically receive UPHOLD_LAW as their standing
 # objective if they don't already have one. This ensures they participate in
 # the crime topic scan each tick without requiring explicit lord directives.
+
+# s57.39.2 — trained animal companions travel with their owner. Each tick, sync every
+# living owner's alive companions to the owner's current province (location_province_id
+# tracks the owner automatically). Dead owners' companions are left in place for the
+# owner-death transfer pass; an owner with no resolvable province (unplaced) keeps the
+# companions' last known location.
+static func _process_companion_locations(
+	characters: Array,
+	character_province_map: Dictionary,
+) -> void:
+	for owner: L5RCharacterData in characters:
+		if owner == null or CharacterStats.is_dead(owner):
+			continue
+		if owner.trained_companions.is_empty():
+			continue
+		var owner_pid: int = character_province_map.get(owner.character_id, -1)
+		if owner_pid < 0:
+			continue
+		AnimalHandlingSystem.sync_companion_locations(owner, owner_pid)
+
 
 static func _assign_magistrate_standing_objectives(
 	characters: Array,
