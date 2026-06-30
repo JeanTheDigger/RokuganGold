@@ -17,6 +17,8 @@ class ImmediateNeed:
 	var target_intent: String = ""
 	# Otosan Uchi Governor appointment: zone_id of the district to govern (s2.3.23).
 	var target_zone_id: String = ""
+	## s57.39.11: expected companion species for a TRAIN_SKILL/TRAIN_ANIMAL standing.
+	var target_species: String = ""
 	var threshold: float = 0.0
 	var threshold_type: String = ""
 	var source: String = ""

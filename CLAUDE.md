@@ -3574,6 +3574,41 @@ set for heavy + tetsu-do, false for the rest; the heavy-armor mechanical effect 
 driven Agi/Ref TN penalty (already wired), and the owner table specifies no further heavy-only mechanic,
 so none is invented. Every armor↔combat interaction stated in the owner tables is wired.
 
+### s57.39 Animal Handling — lifecycle tranche 4: school standing needs + companion healing (2026-06-30, runtime-verified 14/14)
+Two more world-sim-live lifecycle pieces. **(A) s57.39.11 school companion standing need.**
+`AnimalHandlingSystem.evaluate_companion_standing(character, ic_day)` decides the school-driven
+standing (returns `{action: assign|clear|none, species}`): a member of a school in
+`SCHOOL_EXPECTED_SPECIES` (only **Toritaka Bushi → FALCON** exists in SCHOOL_DATA today; **Aerie
+Falconer** / **Utaku Horse Master → riding horse/warhorse** are GDD-named but unimplemented schools,
+forward-wired) should hold a TRAIN_SKILL standing for its species until it has a fully-trained one
+(then the standing clears, s57.39.11), keep training an in-progress one, grieve a 1-season window
+after a loss (`GRIEF_REPLACEMENT_DAYS=90`, PROVISIONAL low end of the GDD 1–2 season range) before
+seeking a replacement, and never pursue past its cap. `DayOrchestrator._assign_animal_companion_standing_objectives`
+(daily, after the monk pass) assigns/clears the `animal_companion_standing` standing slot without
+clobbering a higher-priority standing (e.g. a magistracy). The standing carries the expected species
+via the new `ImmediateNeed.target_species` (copied in `_passthrough`/`_make_need`), which the
+TRAIN_ANIMAL metadata population now reads — so a standing-driven trainer trains the *target* species
+(matching an in-progress companion of that species, else first-session it) instead of the old DOG
+default. `_process_companion_deaths` now stamps `death_ic_day` (the grief clock). **DORMANT for a
+fresh Toritaka:** Toritaka Bushi's SCHOOL_DATA skill list does NOT grant Animal Handling (contradicting
+s57.39.11's prose), so cap 0 at AH rank 0 → the standing evaluates to "clear/none" until a member
+reaches Animal Handling ≥ 1 (seasonal advancement, or a future SCHOOL_DATA correction — a school-design
+edit left to the owner, NOT made here). **(B) s57.39.9 companion healing.**
+`AnimalHandlingSystem.treat_companion_wound(healer, companion, dice, raises)` heals a wounded companion
+the same way a character is healed — Medicine (Wound Treatment)/Intelligence vs the s57.31 BASE_TN,
+consumes a Medicine Kit charge, heal roll 1k1 (+1 die at Medicine R5 mastery, +1/raise), reduces the
+companion's `wound_total`. New `ActionExecutor._execute_treat_companion` (TREAT_WOUND companion path,
+fired when metadata carries `treat_companion_id`): gates companion_not_found/companion_dead/
+companion_unwounded/no_medicine_skill/no_medicine_kit. NPC metadata trigger: with no wounded ally
+targeted, a Medicine-skilled handler tends its own wounded companion. Forward-wired in practice (no
+companion is wounded in the live world-sim yet — wounds come from the ASCII combat layer on the
+PC-travel HOLD), but fires automatically the moment a companion is wounded. Runtime-verified 14/14
+(Godot 4.6.2, headless): standing policy (assign FALCON at AH3 / clear at AH0-no-slot / none for Akodo /
+keep-training in-progress / clear when fully-trained / grieving vs past-grief / Utaku warhorse satisfies);
+species-aware TRAIN_ANIMAL metadata; companion treat success + wound reduced (8→4) + effects, and the
+unwounded / no-kit rejections. REMAINING s57.39 pieces are PC-layer (voluntary-gift transfer ActionID,
+PC command-issuance for animals on the ASCII map) — both on the PC-travel HOLD.
+
 ### s57.39 Animal Handling — lifecycle tranche 3: owner-death transfer + rebonding (2026-06-30, runtime-verified 18/18)
 The other "companions persist in the world" pillar (s57.39.2). `DayOrchestrator._process_companion_owner_deaths(characters,
 characters_by_id)` (daily pass, before the locations/death passes): when a companion's owner is dead,

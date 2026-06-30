@@ -3675,14 +3675,20 @@ static func _populate_action_metadata(
 			"accepted_invitee_ids": ctx.known_objectives.get("hunt_accepted_invitee_ids", []),
 		}
 	elif option.action_id == "TRAIN_ANIMAL":
-		# Prefer a companion already in progress; otherwise first session with DOG default
+		# Prefer a companion already in progress (matching the standing's target species
+		# when one is set, s57.39.11); otherwise first session with the target species
+		# (default DOG when none specified).
+		var want_species: String = need.target_species
 		var in_progress_id: int = -1
 		if character != null:
 			for c_var: Variant in character.trained_companions:
 				var comp: Dictionary = c_var as Dictionary
-				if comp.get("is_alive", false) and not comp.get("fully_trained", false):
-					in_progress_id = comp.get("companion_id", -1)
-					break
+				if not comp.get("is_alive", false) or comp.get("fully_trained", false):
+					continue
+				if want_species != "" and comp.get("species", "") != want_species:
+					continue
+				in_progress_id = comp.get("companion_id", -1)
+				break
 		if in_progress_id >= 0:
 			option.metadata = {
 				"is_first_session": false,
@@ -3690,11 +3696,12 @@ static func _populate_action_metadata(
 				"species": "",
 			}
 		else:
+			var sp: String = want_species if want_species != "" else "DOG"
 			option.metadata = {
 				"is_first_session": true,
 				"companion_id": -1,
-				"species": "DOG",
-				"companion_name": "companion",
+				"species": sp,
+				"companion_name": sp.to_lower(),
 			}
 	elif option.action_id == "ASK_FOR_INTRODUCTION":
 		# Intermediary: highest-disposition Friend+ contact who is not the target (s55.7.3).
@@ -3800,6 +3807,15 @@ static func _populate_action_metadata(
 			"raises": _pick_medicine_raises(ctx),
 			"healing_spell_id": healing_spell,
 		}
+		# s57.39.9: with no wounded ally targeted, a Medicine-skilled handler tends their
+		# own wounded trained companion instead (companions travel with their owner).
+		if option.target_npc_id < 0 and character != null \
+				and int(character.skills.get("Medicine", 0)) >= 1:
+			for c_var: Variant in character.trained_companions:
+				var comp: Dictionary = c_var as Dictionary
+				if comp.get("is_alive", false) and int(comp.get("wound_total", 0)) > 0:
+					option.metadata["treat_companion_id"] = comp.get("companion_id", -1)
+					break
 	elif option.action_id == "FORGE_IMPERSONATION_LETTER":
 		option.metadata = _build_forge_letter_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "FORGE_ORDER":

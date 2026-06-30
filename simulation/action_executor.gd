@@ -3162,6 +3162,13 @@ static func _execute_treat_wound(
 	dice_engine: DiceEngine,
 	characters_by_id: Dictionary,
 ) -> Dictionary:
+	# s57.39.9: TREAT_WOUND may target a wounded trained companion (a record on the
+	# healer's own trained_companions) instead of a character.
+	var treat_companion_id: int = action.metadata.get("treat_companion_id", -1)
+	if treat_companion_id >= 0:
+		return _execute_treat_companion(
+			action, character, ctx, dice_engine, treat_companion_id)
+
 	var target_id: int = action.target_npc_id
 	if target_id < 0 or characters_by_id.is_empty():
 		return {
@@ -3280,6 +3287,64 @@ static func _execute_treat_wound(
 			"kit_charge_consumed": treat_result["kit_charge_consumed"],
 			"target_id": target_id,
 			"wound_level_after": treat_result.get("wound_level_after", -1),
+		},
+	}
+
+
+# -- Treat a wounded trained companion (s57.39.9) -----------------------------
+
+static func _execute_treat_companion(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	companion_id: int,
+) -> Dictionary:
+	var fail := func(reason: String) -> Dictionary:
+		return {
+			"success": false, "action_id": "TREAT_WOUND",
+			"character_id": character.character_id, "target_npc_id": -1,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": reason, "effects": {},
+		}
+
+	var companion: Dictionary = {}
+	for c: Variant in character.trained_companions:
+		var comp: Dictionary = c as Dictionary
+		if comp.get("companion_id", -1) == companion_id:
+			companion = comp
+			break
+	if companion.is_empty():
+		return fail.call("companion_not_found")
+	if not companion.get("is_alive", false):
+		return fail.call("companion_dead")
+	if int(companion.get("wound_total", 0)) <= 0:
+		return fail.call("companion_unwounded")
+	if SkillResolver.get_skill_rank(character, "Medicine") < 1:
+		return fail.call("no_medicine_skill")
+	if not MedicineSystem.has_medicine_kit(character):
+		return fail.call("no_medicine_kit")
+
+	var raises: int = action.metadata.get("raises", 0)
+	var r: Dictionary = AnimalHandlingSystem.treat_companion_wound(
+		character, companion, dice_engine, raises)
+	return {
+		"success": r.get("success", false),
+		"action_id": "TREAT_WOUND",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Medicine",
+		"roll_total": r.get("roll_total", 0),
+		"tn": r.get("tn", MedicineSystem.BASE_TN),
+		"raises": raises,
+		"effects": {
+			"wounds_healed": r.get("wounds_healed", 0),
+			"kit_charge_consumed": r.get("kit_charge_consumed", false),
+			"treated_companion_id": companion_id,
 		},
 	}
 

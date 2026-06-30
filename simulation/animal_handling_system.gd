@@ -121,6 +121,101 @@ static func under_cap(character: L5RCharacterData) -> bool:
 	return count_active_companions(character) < cap
 
 
+# -- s57.39.11 School-driven companion standing need ---------------------------
+
+## Schools with a hard standing need for a companion of a specific species (priority 2).
+## Only "Toritaka Bushi" exists in SCHOOL_DATA today; "Aerie Falconer" and
+## "Utaku Horse Master" are GDD-named but unimplemented schools — forward-wired (they
+## lift automatically if added to world generation). Utaku Horse Master accepts either
+## a riding horse or a warhorse (the GDD's "character's choice at creation").
+## NOTE: Toritaka Bushi's SCHOOL_DATA skill list does NOT currently grant Animal Handling
+## (contradicting s57.39.11's prose), so this standing is DORMANT for a fresh Toritaka
+## (cap 0 at AH rank 0); it activates once a member has Animal Handling ≥ 1 (via seasonal
+## advancement, or a future SCHOOL_DATA correction — a school-design edit left to the owner).
+const SCHOOL_EXPECTED_SPECIES: Dictionary = {
+	"Toritaka Bushi": ["FALCON"],
+	"Aerie Falconer": ["FALCON"],
+	"Utaku Horse Master": ["RIDING_HORSE", "WARHORSE"],
+}
+## s57.39.11: the NPC grieves 1–2 IC seasons before seeking a replacement companion.
+## PROVISIONAL — the GDD gives a 1–2 season range; this uses the low end (one season).
+const GRIEF_REPLACEMENT_DAYS: int = 90
+
+## Decides the s57.39.11 school companion standing for a character. Returns
+## {action: "assign"|"clear"|"none", species: String}:
+##   none   — not a relevant school (no standing to manage).
+##   assign — the character should hold a TRAIN_SKILL standing for `species`
+##            (acquire a new one, or keep training the in-progress one).
+##   clear  — any prior animal-companion standing should be dropped (satisfied with a
+##            fully-trained companion, grieving a recent loss, or no open slot).
+static func evaluate_companion_standing(character: L5RCharacterData, ic_day: int) -> Dictionary:
+	var expected: Array = SCHOOL_EXPECTED_SPECIES.get(character.school, [])
+	if expected.is_empty():
+		return {"action": "none", "species": ""}
+	var inprogress_species: String = ""
+	var has_fulltrained: bool = false
+	var last_death: int = -1
+	for c: Variant in character.trained_companions:
+		var comp: Dictionary = c as Dictionary
+		var sp: String = comp.get("species", "")
+		if sp not in expected:
+			continue
+		if comp.get("is_alive", false):
+			if comp.get("fully_trained", false):
+				has_fulltrained = true
+			elif inprogress_species == "":
+				inprogress_species = sp
+		else:
+			last_death = maxi(last_death, int(comp.get("death_ic_day", -1)))
+	if has_fulltrained:
+		return {"action": "clear", "species": ""}  # satisfied (s57.39.11: standing clears)
+	if inprogress_species != "":
+		return {"action": "assign", "species": inprogress_species}  # keep training it
+	if last_death >= 0 and ic_day - last_death < GRIEF_REPLACEMENT_DAYS:
+		return {"action": "clear", "species": ""}  # grieving before replacement
+	if not under_cap(character):
+		return {"action": "clear", "species": ""}  # no open companion slot
+	return {"action": "assign", "species": String(expected[0])}  # acquire
+
+
+# -- s57.39.9 Companion healing ------------------------------------------------
+
+## Heal a wounded trained companion with Medicine (Wound Treatment) — the same
+## mechanism as healing a character (s57.39.9): consumes a Medicine Kit charge, rolls
+## Medicine / Intelligence vs the s57.31 base TN, and on success reduces the companion's
+## wound_total (the heal roll is 1k1, +1 die at Medicine Rank 5 mastery, +1 die per
+## raise). Returns {success, roll_total, tn, wounds_healed, kit_charge_consumed}. The
+## companion's `wound_total` is mutated in place on success.
+static func treat_companion_wound(
+	healer: L5RCharacterData,
+	companion: Dictionary,
+	dice: DiceEngine,
+	raises: int = 0,
+) -> Dictionary:
+	var tn: int = MedicineSystem.BASE_TN
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		healer, dice, "Medicine", tn, raises, "Wound Treatment", Enums.Trait.INTELLIGENCE)
+	MedicineSystem.consume_kit_charge(healer)
+	var result: Dictionary = {
+		"success": check.get("success", false),
+		"roll_total": check.get("total", 0),
+		"tn": tn,
+		"wounds_healed": 0,
+		"kit_charge_consumed": true,
+	}
+	if not check.get("success", false):
+		return result
+	var medicine_rank: int = SkillResolver.get_skill_rank(healer, "Medicine")
+	var mastery_bonus: int = 1 if medicine_rank >= MedicineSystem.MEDICINE_MASTERY_RANK else 0
+	var healing_dice: int = 1 + mastery_bonus + raises
+	var heal_roll: int = dice.roll_and_keep(healing_dice, 1).total
+	var before: int = int(companion.get("wound_total", 0))
+	var after: int = maxi(0, before - heal_roll)
+	companion["wound_total"] = after
+	result["wounds_healed"] = before - after
+	return result
+
+
 # -- Training tier (s57.39.3) -------------------------------------------------
 
 ## Returns "wild", "following", or "trained" based on training state.

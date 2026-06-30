@@ -162,6 +162,7 @@ static func advance_day(
 	# monk pass would otherwise stamp them PERFORM_RITUAL before they get HUNT_MAHO.
 	_assign_witch_hunter_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
+	_assign_animal_companion_standing_objectives(characters, objectives_map, ic_day)
 	_assign_kolat_standing_objectives(characters, objectives_map)
 	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
@@ -8479,6 +8480,7 @@ static func _process_companion_deaths(
 			if not owner.is_pc and topic.topic_id not in owner.topic_pool:
 				owner.topic_pool.append(topic.topic_id)
 			comp["companion_death_resolved"] = true
+			comp["death_ic_day"] = ic_day  # s57.39.11 grief window for replacement need
 
 
 static func _assign_magistrate_standing_objectives(
@@ -8509,6 +8511,48 @@ static func _assign_magistrate_standing_objectives(
 		objectives["standing"] = {
 			"need_type": "UPHOLD_LAW",
 			"priority": 4,
+			"auto_assigned": true,
+		}
+
+
+# -- Animal Companion Standing Objectives (s57.39.11) -------------------------
+# Toritaka Bushi / (forward-wired) Aerie Falconer, Utaku Horse Master maintain a
+# trained companion of their school's expected species: TRAIN_SKILL at priority 2
+# until satisfied (fully-trained companion), then the standing clears. Re-fires after
+# a 1-season grief window if the companion dies. Never clobbers a higher-priority
+# standing (e.g. a magistracy); only manages its own "animal_companion_standing" slot.
+
+static func _assign_animal_companion_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.is_pc or CharacterStats.is_dead(character):
+			continue
+		var decision: Dictionary = AnimalHandlingSystem.evaluate_companion_standing(
+			character, ic_day)
+		var act: String = decision.get("action", "none")
+		if act == "none":
+			continue
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+		if act == "clear":
+			if standing.get("source", "") == "animal_companion_standing":
+				objectives.erase("standing")
+			continue
+		# act == "assign": don't overwrite a higher-priority standing from another pass.
+		if not standing.is_empty() \
+				and standing.get("source", "") != "animal_companion_standing":
+			continue
+		objectives["standing"] = {
+			"need_type": "TRAIN_SKILL",
+			"priority": 2,
+			"target_species": decision.get("species", ""),
+			"source": "animal_companion_standing",
 			"auto_assigned": true,
 		}
 

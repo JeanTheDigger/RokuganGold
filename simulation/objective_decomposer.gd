@@ -1259,6 +1259,7 @@ static func _make_need(
 	need.target_army_id = extras.get("target_army_id", -1)
 	need.target_intent = extras.get("target_intent", "")
 	need.target_zone_id = extras.get("target_zone_id", "")
+	need.target_species = extras.get("target_species", "")
 	need.threshold = extras.get("threshold", 0.0)
 	need.threshold_type = extras.get("threshold_type", "")
 	return need
@@ -1277,6 +1278,7 @@ static func _passthrough(objective: Dictionary) -> NPCDataStructures.ImmediateNe
 	need.target_resource = objective.get("target_resource", "")
 	need.target_army_id = objective.get("target_army_id", -1)
 	need.target_intent = objective.get("target_intent", "")
+	need.target_species = objective.get("target_species", "")
 	need.threshold = objective.get("threshold", 0.0)
 	need.threshold_type = objective.get("threshold_type", "")
 	need.source = objective.get("source", "objective")
