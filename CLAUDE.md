@@ -3545,6 +3545,24 @@ via pick_best_weapon, Spears R3 reduction-pierce now fires end-to-end, corrected
 unchanged) + the two prior Bugei drivers re-pass 22/22 and 9/9 (no regression). Armor table also
 owner-provided (Bogu/Ashigaru/Tatami/Light/Heavy/Tetsu-do/Riding) — NOT yet added (ArmorData
 catalog + the Athletics/Stealth/Agility/Reflexes TN-penalty special rules are a follow-up).
+**Weapon-catalog + armor completeness audit (2026-06-30, 829/829 + 42/42 verified):** a verification
+pass after the special-rule work — no gaps found, the only change was refreshing the now-stale
+WEAPON_CATALOG header comment (it claimed special rules were "NOT yet modeled" — they all are).
+**Weapon audit (829/829):** all 44 catalog weapons are well-formed (required keys, known size tier,
+`resolve_damage` runs), `pick_best_weapon` returns a deterministic default per skill (Kenjutsu→katana,
+Spears→yari, …) + `unarmed` for no skills (every skill has a default), the corrected owner-table values
+hold (wakizashi 2k2, tetsubo 3k3, bo 1k2, lance 1k2, yari thrown 1k2), every special-rule helper fires
+for its weapon, and — the key check — **every key on every catalog entry is a known/consumed key** (no
+orphan/dead special-rule key), and the bow ranges match the table (feet/5). Non-default weapons (lance,
+ninja-to, …) are reachable by explicit caller choice, not `pick_best_weapon` (by design — it picks the
+first weapon of the best skill). **Armor audit (42/42):** every armor's `get_skill_tn_penalty` fires
+correctly end-to-end through `SkillResolver` — light +5 Athletics/Stealth (by skill name) only; heavy
++5 / tetsu-do +10 (or +5 at Strength ≥ 5) / riding +5 on any Agility/Reflexes-trait roll; riding exempt
+on horseback; bogu/ashigaru/tatami none. The penalty statistically lowers an Agility-trait roll
+(unarmored 3507 → heavy 2426 / 4000) while leaving an Awareness-trait roll unchanged (3568 vs 3558),
+riding mounted beats on-foot (3546 vs 2388), and the contested path applies it per side (heavy a-wins
+1194 vs bare 1918). `equip()` mirrors all 7 armors' TN bonus + Reduction onto the fast-lookup fields,
+and unarmored clears them. **The s40 weapon + armor equipment layer is complete and fully wired.**
 
 ### s24 Skill Mastery Abilities + Insight wiring (2026-06-29, runtime-verified)
 `simulation/skill_mastery_system.gd` (SkillMasterySystem, pure class) is the s24 home for the

@@ -12,12 +12,18 @@ class_name IndividualCombat
 
 const WEAPON_CATALOG: Dictionary = {
 	# Damage / skill / keywords transcribed from the L5R 4e Equipment tables (owner-provided
-	# 2026-06-29). Schema: {rolled, kept, strength_adds, skill, size, melee, trait, [can_grapple]}.
+	# 2026-06-29). Core schema: {rolled, kept, strength_adds, skill, size, melee, trait}.
 	# Damage "XkY" → rolled X, kept Y. trait "agility" is standard for melee (s4.5); Iaijutsu duels
-	# use Reflexes — handled in resolve_duel_strike(), not via this table. Special rules (thrown,
-	# charge, break, void-point, double/ignore-armor, no-explode, two-damage-modes) are NOT yet
-	# modeled — only the core damage/skill/size are captured. Arrow types not modeled (bow damage
-	# uses the willow-leaf default 2k2). can_grapple: s40 "Weapon Grapples".
+	# use Reflexes — handled in resolve_duel_strike(), not via this table. Optional special-rule keys
+	# (all wired, owner table — see the matching weapon_*/ammo_* helpers + resolve_damage/_apply_hit):
+	#   can_grapple — s40 Weapon Grapples. void_point_damage — katana +1k1 for a Void Point.
+	#   doubles_armor_reduction — bokken. no_explode — shinai. break_threshold — fragile weapons.
+	#   thrown_range[/_rolled/_kept] — a melee weapon hurled as a ranged attack. range_tiles — ranged
+	#   weapon max range (feet/5). mount_tn_when — bow +10 TN mounted/unmounted. charge_rolled/_kept +
+	#   no_charge_tn_mounted/_foot — lance charge. alt_rolled/_kept — two-surface weapons (mode pick).
+	#   armor_tn_mult — blowgun ×3 / kyoketsu-shogi ×2 Armor TN. conceal_size — ninja-to conceals Small.
+	# Ammo (a per-shot caller param, not a catalog key): armor-piercing / flesh-cutter — see ammo_*.
+	# Arrow damage uses the willow-leaf default 2k2 (arrow-type damage variants not modeled).
 
 	# -- Swords (Kenjutsu) --
 	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "void_point_damage": true},
