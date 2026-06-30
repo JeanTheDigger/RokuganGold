@@ -3574,6 +3574,34 @@ set for heavy + tetsu-do, false for the rest; the heavy-armor mechanical effect 
 driven Agi/Ref TN penalty (already wired), and the owner table specifies no further heavy-only mechanic,
 so none is invented. Every armor↔combat interaction stated in the owner tables is wired.
 
+### s57.39 Animal Handling — combat tranche B: orchestrator integration + turn AI (2026-06-30, runtime-verified 15/15)
+Trained-animal companions now FIGHT on the ASCII map (the headline "can fight"). Wired into
+`AsciiMapCombatOrchestrator`: new `MapCombatState.animal_data` ({owner_id, companion record,
+command_target_id}); `add_animal_companion(state, puppet, owner_id, companion, x, y, dice)` inserts an
+`AnimalCombatant` puppet on the owner's (player) faction (initiative roll, turn-order re-sort, TurnState
+— mirrors add_companion); `command_animal(state, owner, animal_id, target_id)` is the **s57.39.7 Rank-5
+command-to-attack** (Simple Action on the owner's turn; gates: owner alive + Animal Handling 5+, the
+companion fully trained + past the rebonding window, target a living enemy not an ally → reasons
+owner_below_rank_5 / not_fully_trained / rebonding / target_is_ally / invalid_target / no_action);
+`execute_animal_turn(...)` is the engine-controlled AI, wired into `resolve_current_turn` (animals are
+negative-id puppets in `state.combatants`, not `chars_by_id`, so they resolve before the chars lookup
+and never yield to player input). **Three-tier behavior (s57.39.3):** WILD (<3 sessions) flees any
+combat; FOLLOWING (3+ sessions, untrained) and a TRAINED-but-uncommanded/sub-R5/rebonding animal stay
+near the owner and flee if wounded; a TRAINED animal under an Animal-Handling-5+ owner with a live
+command ENGAGES (attack if adjacent, else move toward the target). **R5 Hurt-flee / R7 no-flee
+(s57.39.7/8):** a commanded animal that reaches its "Hurt" threshold breaks off and flees (command
+cleared) unless the owner has Animal Handling 7+ (no-flee override). **"Hurt" reconciliation (real bug
+caught + fixed):** the 8-level WoundLevel enum is NOT usable — a coarse s54.1 creature track (Dog `[12]`,
+Falcon `[5]`) never reaches the enum's HURT before Dead, so the flee would never fire. `AnimalCombatant.flee_wound_threshold()`
+uses the s54.1 FIRST wound threshold, which equals s54.1's explicit stated flee points exactly (Dog 12,
+Falcon 5) — GDD values, no invention (PROVISIONAL only where s54.1's prose flee point is higher, e.g.
+Pony "32" vs first-threshold 16). FLAGGED minor s57.39 gap: the trained-uncommanded default (stay
+defensively near owner, no attack — the skill layer requires R5+command to engage). Runtime-verified
+15/15 (Godot 4.6.2): add+command, engage-attacks-foe, R5 Hurt-flee + command-clear, R7 no-flee engages,
+WILD auto-flee, all three command gates. **PC command issuance + companion-into-mission spawn are the
+remaining wiring** (the future turn-based PC UI / mission-launch glue, same PC-travel HOLD as the whole
+ASCII stack); `command_animal`/`add_animal_companion` are the ready APIs.
+
 ### s57.39 Animal Handling — combat tranche A: species stat table + companion→combatant adapter (2026-06-30, runtime-verified 26/26)
 The data + converter foundation for trained-animal combat (owner confirmed the species→s54.1
 mapping). `simulation/animal_combatant.gd` (AnimalCombatant, pure class) mirrors `SpiritCombatant`:

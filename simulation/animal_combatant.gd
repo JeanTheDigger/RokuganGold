@@ -71,6 +71,23 @@ static func stat_block(species: String) -> SpiritCreatureData:
 	return catalog().get(species, null)
 
 
+## s57.39.7 Rank-5 "Hurt"-flee threshold: the wounds at which a commanded animal breaks
+## off combat (unless the owner has the Rank-7 no-flee mastery). Uses the s54.1 stat
+## block's FIRST wound threshold (the point the animal leaves Healthy) — which equals
+## s54.1's explicit per-animal flee points where stated (Dog 12, Falcon 5). This is why
+## the 8-level WoundLevel enum is NOT used: a 2-threshold creature never reaches the
+## enum's HURT before Dead. Falls back to wounds_dead if a block has no thresholds.
+## PROVISIONAL where s54.1 states a higher prose flee point (e.g. Rokugani Pony "32 or
+## more") — the first threshold (16) is used as the "Hurt" break-off.
+static func flee_wound_threshold(puppet: L5RCharacterData) -> int:
+	if puppet.spirit_creature == null:
+		return 9999
+	var b: SpiritCreatureData = puppet.spirit_creature
+	if not b.wound_thresholds.is_empty():
+		return b.wound_thresholds[0]
+	return b.wounds_dead if b.wounds_dead > 0 else 9999
+
+
 ## True if the species can take part in combat (has a stat block).
 static func is_combat_species(species: String) -> bool:
 	return catalog().has(species)

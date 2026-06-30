@@ -200,6 +200,11 @@ class MapCombatState:
 	var companion_data: Dictionary = {}
 	## companion_ids who started the mission — denominator for morale casualties.
 	var companion_started_count: int = 0
+	## Trained-animal companions (s57.39). Key: int (puppet character_id, negative by
+	## convention), Value: {owner_id:int, companion:Dictionary, command_target_id:int}.
+	## The puppet is built by AnimalCombatant.to_combatant; the companion Dictionary is
+	## the owner's trained_companions record (drives training tier + rebonding).
+	var animal_data: Dictionary = {}
 	## Mission weather (AsciiMapEnvironment.WeatherState) — drives FireSystem spread
 	## and extinguish at round end (s56.6.6). Wind bearing lives on map.wind_dir.
 	var weather: int = AsciiMapEnvironment.WeatherState.CLEAR
@@ -7250,10 +7255,23 @@ static func resolve_current_turn(
 	var actor: int = get_current_actor(state)
 	if actor < 0:
 		return {"no_actor": true}
-	# A player character (player-faction, not a companion) yields to input.
+	# A player character (player-faction, not a companion/animal) yields to input.
 	if state.factions.get(actor, FACTION_NEUTRAL) == FACTION_PLAYER \
-			and not state.companion_data.has(actor):
+			and not state.companion_data.has(actor) and not state.animal_data.has(actor):
 		return {"awaiting_player": true, "actor": actor}
+	# Trained-animal companions (s57.39) are engine-controlled puppets with negative ids
+	# living in state.combatants (not chars_by_id) — resolve before the chars_by_id lookup.
+	if state.animal_data.has(actor):
+		var apup: L5RCharacterData = state.combatants.get(actor, null)
+		if apup == null or CharacterStats.is_dead(apup):
+			advance_turn(state, chars_by_id, dice_engine)
+			return {"skipped": actor}
+		update_companion_morale(state, chars_by_id)
+		var ares: Dictionary = execute_animal_turn(state, actor, chars_by_id, dice_engine)
+		ares["actor_type"] = "animal"
+		ares["actor"] = actor
+		advance_turn(state, chars_by_id, dice_engine)
+		return ares
 	var character: L5RCharacterData = chars_by_id.get(actor, null)
 	if character == null or CharacterStats.is_dead(character):
 		advance_turn(state, chars_by_id, dice_engine)
@@ -9249,6 +9267,211 @@ static func _companion_goal_tile(state: MapCombatState, companion: CompanionData
 			return state.positions.get(companion.command_target_id, Vector2i(-1, -1))
 		_:  # FOLLOW (default): trail the player.
 			return _player_tile(state)
+
+
+# ── s57.39 Trained-animal companions in combat ──────────────────────────────────
+
+## Add a trained-animal companion puppet to a LIVE skirmish on the owner's
+## (player) faction. `puppet` is from AnimalCombatant.to_combatant; `companion` is
+## the owner's trained_companions record (drives training tier + rebonding); owner_id
+## is the trainer. Mirrors add_companion's participant insertion (initiative, turn-order
+## re-sort, TurnState). Returns false if the puppet id is already a participant.
+static func add_animal_companion(
+	state: MapCombatState,
+	puppet: L5RCharacterData,
+	owner_id: int,
+	companion: Dictionary,
+	x: int, y: int,
+	dice_engine: DiceEngine,
+) -> bool:
+	var aid: int = puppet.character_id
+	if state.combat.participants.has(aid):
+		return false
+	state.combatants[aid] = puppet
+	state.positions[aid] = Vector2i(x, y)
+	state.factions[aid] = FACTION_PLAYER
+	var p := IndividualCombat.Participant.new()
+	p.character_id = aid
+	p.stance = Enums.Stance.ATTACK
+	p.initiative_score = IndividualCombat.roll_initiative(
+		puppet, p, dice_engine, IndividualCombat.pick_best_weapon(puppet), state.combat.round_number)
+	state.combat.participants[aid] = p
+	state.combat.turn_order.append(aid)
+	state.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
+		var pa: IndividualCombat.Participant = state.combat.participants.get(a, null)
+		var pb: IndividualCombat.Participant = state.combat.participants.get(b, null)
+		var ia: int = pa.initiative_score if pa != null else 0
+		var ib: int = pb.initiative_score if pb != null else 0
+		return ia > ib
+	)
+	var ts := TurnState.new()
+	ts.char_id = aid
+	state.turn_states[aid] = ts
+	state.animal_data[aid] = {"owner_id": owner_id, "companion": companion, "command_target_id": -1}
+	return true
+
+
+## s57.39.7 Rank-5 command-to-attack: the owner commands a trained companion to
+## attack `target_id` (a Simple Action on the owner's turn). Requires: the animal is
+## a trained-animal participant the owner owns; owner alive with Animal Handling 5+;
+## the companion is fully trained and past the rebonding window (s57.39.2 — rebonding
+## animals do not reliably respond to commands); target is a living enemy (not an ally,
+## s57.39.7). Spends a Simple Action from the owner's TurnState. Returns {success, reason}.
+static func command_animal(
+	state: MapCombatState,
+	owner: L5RCharacterData,
+	animal_id: int,
+	target_id: int,
+) -> Dictionary:
+	var entry: Dictionary = state.animal_data.get(animal_id, {})
+	if entry.is_empty():
+		return {"success": false, "reason": "not_an_animal"}
+	if entry.get("owner_id", -1) != owner.character_id:
+		return {"success": false, "reason": "not_owner"}
+	if CharacterStats.is_dead(owner):
+		return {"success": false, "reason": "owner_dead"}
+	if int(owner.skills.get("Animal Handling", 0)) < AnimalHandlingSystem.MASTERY_COMMAND_RANK:
+		return {"success": false, "reason": "owner_below_rank_5"}
+	var companion: Dictionary = entry.get("companion", {})
+	if not companion.get("fully_trained", false):
+		return {"success": false, "reason": "not_fully_trained"}
+	if int(companion.get("rebond_sessions_remaining", 0)) > 0:
+		return {"success": false, "reason": "rebonding"}
+	# Target must be a living enemy of the animal's (player) faction, not an ally.
+	if not state.combat.participants.has(target_id) or target_id in state.fled_ids:
+		return {"success": false, "reason": "invalid_target"}
+	var tgt: L5RCharacterData = state.combatants.get(target_id, null)
+	if tgt == null or CharacterStats.is_dead(tgt):
+		return {"success": false, "reason": "invalid_target"}
+	if not _are_enemies(String(state.factions.get(animal_id, "")), String(state.factions.get(target_id, ""))):
+		return {"success": false, "reason": "target_is_ally"}
+	# The command costs the owner a Simple Action.
+	var ots: TurnState = state.turn_states.get(owner.character_id, null)
+	if ots == null or not ots.can_use_simple():
+		return {"success": false, "reason": "no_action"}
+	ots.consume_simple()
+	entry["command_target_id"] = target_id
+	return {"success": true, "reason": "commanded", "target_id": target_id}
+
+
+## Resolve a trained-animal companion's turn (engine-controlled). Three-tier behavior
+## (s57.39.3): WILD (< 3 sessions) flees any combat; FOLLOWING (3+ sessions, not fully
+## trained) stays near the owner and flees if wounded; TRAINED applies the mastery rules
+## (s57.39.7/8). A trained animal engages its commanded target only when the owner has
+## Animal Handling 5+ (a command is required to attack); a commanded animal that reaches
+## Hurt breaks off and flees unless the owner has Rank 7 (no-flee override). An
+## uncommanded / sub-Rank-5 / rebonding trained animal stays defensively near the owner
+## and flees if wounded (FLAGGED: the trained-uncommanded default is a small s57.39 gap —
+## the skill layer requires R5+command to attack, so an uncommanded animal does not
+## engage; flee-if-Hurt mirrors standard animal psychology, s57.39.7). Returns {actions, ...}.
+static func execute_animal_turn(
+	state: MapCombatState,
+	animal_id: int,
+	chars_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var entry: Dictionary = state.animal_data.get(animal_id, {})
+	if entry.is_empty():
+		return {"actions": [], "reason": "not_an_animal"}
+	var puppet: L5RCharacterData = state.combatants.get(animal_id, null)
+	if puppet == null or CharacterStats.is_dead(puppet) or animal_id in state.fled_ids:
+		return {"actions": [], "reason": "out"}
+	var ts: TurnState = state.turn_states.get(animal_id, null)
+	if ts == null:
+		return {"actions": [], "reason": "not_in_combat"}
+
+	begin_turn(state, animal_id)
+	var ip: IndividualCombat.Participant = state.combat.participants.get(animal_id, null)
+	if ip != null and IndividualCombat.CONDITION_INCAPACITATED in ip.conditions:
+		return {"actions": [], "reason": "incapacitated"}
+	apply_fear_checks(state, animal_id, puppet, dice_engine)
+
+	var companion: Dictionary = entry.get("companion", {})
+	var tier: String = AnimalHandlingSystem.training_tier(companion)
+	var owner_id: int = entry.get("owner_id", -1)
+	var owner: L5RCharacterData = chars_by_id.get(owner_id, state.combatants.get(owner_id, null))
+	var ah_rank: int = 0
+	if owner != null and not CharacterStats.is_dead(owner):
+		ah_rank = int(owner.skills.get("Animal Handling", 0))
+	# s57.39.7 "Hurt"-flee uses the s54.1 first wound threshold (NOT the 8-level WoundLevel
+	# enum — a coarse creature track never reaches the enum's HURT before Dead).
+	var wounded_hurt: bool = puppet.wounds_taken >= AnimalCombatant.flee_wound_threshold(puppet)
+
+	# WILD (s57.39.3 Tier 1): flees any combat outright.
+	if tier == "wild":
+		return _animal_flee(state, animal_id, puppet, dice_engine)
+
+	# A commanded TRAINED animal under an owner with Rank 5+ (and not rebonding) engages.
+	var cmd_target: int = int(entry.get("command_target_id", -1))
+	var commandable: bool = tier == "trained" \
+		and ah_rank >= AnimalHandlingSystem.MASTERY_COMMAND_RANK \
+		and int(companion.get("rebond_sessions_remaining", 0)) == 0
+	if commandable and cmd_target >= 0 and _animal_target_valid(state, cmd_target):
+		# R5 default flee-at-Hurt, overridden by the R7 no-flee mastery (s57.39.8).
+		if wounded_hurt and ah_rank < AnimalHandlingSystem.MASTERY_NO_FLEE_RANK:
+			entry["command_target_id"] = -1
+			return _animal_flee(state, animal_id, puppet, dice_engine)
+		return _animal_engage(state, animal_id, cmd_target, puppet, chars_by_id, dice_engine)
+
+	# FOLLOWING, or TRAINED-but-uncommanded/sub-R5/rebonding: stay near the owner; a badly
+	# wounded animal (Hurt+) flees regardless (standard animal psychology, s57.39.7).
+	if wounded_hurt:
+		return _animal_flee(state, animal_id, puppet, dice_engine)
+	var owner_tile: Vector2i = state.positions.get(owner_id, _player_tile(state))
+	if owner_tile.x >= 0 and state.positions.get(animal_id) != owner_tile:
+		var mv: Dictionary = _companion_step_toward(state, animal_id, owner_tile, puppet, dice_engine)
+		if mv.get("success", false):
+			return {"actions": [{"action": "follow", "result": mv}], "tier": tier}
+	return {"actions": [], "tier": tier, "reason": "stay"}
+
+
+## Engage the commanded target: attack if adjacent, else move toward it.
+static func _animal_engage(
+	state: MapCombatState,
+	animal_id: int,
+	target_id: int,
+	puppet: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var melee: Array = get_melee_targets(state, animal_id)
+	if target_id in melee:
+		var tc: L5RCharacterData = chars_by_id.get(target_id, state.combatants.get(target_id, null))
+		if tc != null and not CharacterStats.is_dead(tc):
+			var atk: Dictionary = _npc_execute_attack(
+				state, animal_id, target_id, puppet, tc,
+				IndividualCombat.pick_best_weapon(puppet), true, dice_engine, false)
+			return {"actions": [{"action": "attack", "result": atk}], "tier": "trained"}
+	# Not adjacent — move toward the commanded target.
+	var budget: int = simple_move_budget(state, animal_id, puppet)
+	var mv: Dictionary = _npc_move_toward(state, animal_id, target_id, puppet, budget, "simple", dice_engine)
+	return {"actions": [{"action": "move", "result": mv}], "tier": "trained"}
+
+
+## A fleeing animal moves toward the nearest exit and leaves the scene if it reaches one.
+static func _animal_flee(
+	state: MapCombatState,
+	animal_id: int,
+	puppet: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var exit_tile: Vector2i = _nearest_exit_tile(state, animal_id)
+	if exit_tile.x >= 0 and state.positions.get(animal_id) == exit_tile:
+		state.positions.erase(animal_id)
+		if animal_id not in state.fled_ids:
+			state.fled_ids.append(animal_id)
+		return {"actions": [{"action": "fled"}], "fled": true}
+	var goal: Vector2i = exit_tile if exit_tile.x >= 0 else _away_from_enemies_tile(state, animal_id)
+	var mv: Dictionary = _companion_step_toward(state, animal_id, goal, puppet, dice_engine)
+	return {"actions": [{"action": "flee_move", "result": mv}], "fleeing": true}
+
+
+## True if a commanded target is still a living enemy participant (not fled).
+static func _animal_target_valid(state: MapCombatState, target_id: int) -> bool:
+	if not state.combat.participants.has(target_id) or target_id in state.fled_ids:
+		return false
+	var tc: L5RCharacterData = state.combatants.get(target_id, null)
+	return tc != null and not CharacterStats.is_dead(tc)
 
 
 ## Pick an adjacent enemy to attack, honoring doshin samurai-avoidance.
