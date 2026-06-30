@@ -3361,11 +3361,14 @@ social penalty must be `dtn -= 5`). Runtime-verified 4/4: SOFT_HEARTED, DISCOLOR
 only, non-social untouched), and a FAILURE_OF_BUSHIDO +5-vs-Shadowlands disadvantage all now LOWER
 success; the new armor penalty is on the same corrected path. **World-gen loadout (PROVISIONAL,
 owner has not specified NPC loadouts — flagged for refinement; REFINED 2026-06-29):**
-`ArmorSystem.assign_by_profile(character)` is school+status tiered — non-bushi unarmored; Hida bushi
-→ heavy (+10/DR5, the iconic Crab Wall tank, trades Agi/Ref); bushi status ≥ 4.0 → light (+5/DR3,
-only Athletics/Stealth penalty — a strict combat upgrade for senior officers/lords); status ≥ 2.0 →
-tatami (+4/DR1, no penalty); else → ashigaru (+3/DR1, no penalty). Iron (tetsu_do) and riding stay
-in the catalog but UNASSIGNED (heaviest Crab loadouts / Unicorn cavalry await owner rules).
+`ArmorSystem.assign_by_profile(character)` is school+clan+status tiered — non-bushi unarmored;
+**elite Hida (status ≥ 4) → tetsu-do** (iron, +13/DR8, the heaviest Wall loadout) / other Hida →
+heavy (+10/DR5, the iconic Crab Wall tank, trades Agi/Ref); **Unicorn bushi → riding armor** (+4/DR4,
+the cavalry clan); bushi status ≥ 4.0 → light (+5/DR3, only Athletics/Stealth penalty — a strict
+combat upgrade for senior officers/lords); status ≥ 2.0 → tatami (+4/DR1, no penalty); else →
+ashigaru (+3/DR1, no penalty). The elite-Hida iron + Unicorn-riding assignments are an **owner ruling
+(2026-06-29)**; the status-≥4 "elite" cutoff is engine-chosen (PROVISIONAL). Verified on a real world
+(seed 777): 288 Unicorn bushi all riding, 9 elite Hida iron / 104 Hida heavy, 1743 non-bushi bare.
 Idempotent: `generate_character._assign_armor` delegates to it at creation (status still 1.0 → most
 bushi ashigaru), and `WorldBootstrap` re-runs it after position/role status is finalized so the
 tiers apply. **Re-armor on promotion (2026-06-29):** a seasonal sweep in `DayOrchestrator.advance_day`

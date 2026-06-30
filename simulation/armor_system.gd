@@ -82,14 +82,16 @@ static func get_skill_tn_penalty(
 # (status still 1.0) and again after the position/role status is finalized (the bootstrap
 # resync pass). Scheme:
 #   non-bushi              -> unarmored (courtiers/shugenja/monks wear no battle armor)
-#   Hida bushi             -> heavy  (+10/DR5; the iconic Crab Wall infantry — trades
+#   elite Hida (status>=4) -> tetsu-do (iron, +13/DR8 heavy; the heaviest Wall loadout)
+#   other Hida bushi       -> heavy  (+10/DR5; the iconic Crab Wall infantry — trades
 #                                     Agility/Reflexes for protection, the authentic L5R tank)
+#   Unicorn bushi          -> riding armor (+4/DR4; the cavalry clan — owner ruling 2026-06-29)
 #   bushi, status >= 4.0   -> light  (+5/DR3; only an Athletics/Stealth penalty, a strict
 #                                     combat upgrade for senior officers/lords)
 #   bushi, status >= 2.0   -> tatami (+4/DR1; no penalty — proven samurai's field armor)
 #   other bushi            -> ashigaru (+3/DR1; no penalty — the rank-and-file default)
-# Iron (tetsu_do) and riding armor stay in the catalog but UNASSIGNED here — heaviest Crab
-# loadouts and Unicorn cavalry await explicit owner loadout rules.
+# The elite-Hida status>=4 threshold is PROVISIONAL (owner approved iron for elite Hida; the
+# exact cutoff is engine-chosen, matching the light/senior tier).
 const STATUS_LIGHT: float = 4.0
 const STATUS_TATAMI: float = 2.0
 
@@ -98,7 +100,9 @@ static func assign_by_profile(character: L5RCharacterData) -> void:
 		equip(character, "")  # clear any prior armor (non-bushi never armored)
 		return
 	if character.family == "Hida":
-		equip(character, "heavy")
+		equip(character, "tetsu_do" if character.status >= STATUS_LIGHT else "heavy")
+	elif character.clan == "Unicorn":
+		equip(character, "riding")
 	elif character.status >= STATUS_LIGHT:
 		equip(character, "light")
 	elif character.status >= STATUS_TATAMI:
