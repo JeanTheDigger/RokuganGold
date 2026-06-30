@@ -159,8 +159,9 @@ func roll_initiative(reflexes: int, insight_rank: int) -> DiceResult:
 
 # -- Damage Roll ---------------------------------------------------------------
 
-func roll_damage(rolled: int, kept: int, strength_bonus: int = 0, reduction: int = 0, explode_8: bool = false, explode_9: bool = false) -> Dictionary:
-	var result: DiceResult = roll_and_keep(rolled + strength_bonus, kept, true, false, explode_8, explode_9)
+func roll_damage(rolled: int, kept: int, strength_bonus: int = 0, reduction: int = 0, explode_8: bool = false, explode_9: bool = false, can_explode: bool = true) -> Dictionary:
+	# can_explode = false for weapons whose damage dice cannot explode (s40 shinai).
+	var result: DiceResult = roll_and_keep(rolled + strength_bonus, kept, can_explode, false, explode_8, explode_9)
 	var raw_damage: int = result.total
 	var final_damage: int = maxi(0, raw_damage - reduction)
 

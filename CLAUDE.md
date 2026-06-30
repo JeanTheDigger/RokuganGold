@@ -3396,9 +3396,23 @@ Ninjutsu). **Corrected 3 wrong existing values** against the table: wakizashi 3k
 everywhere else — world-gen pools, mutation_system, kolat, the Musubi kata); the two
 combat_controller peasant `{"Bo":1}` assignments updated to `{"Staves":1}` to match. Schema
 unchanged ({rolled, kept, strength_adds, skill, size, melee, trait, [can_grapple]}); sasumata/
-sadegarami/chain weapons get can_grapple. DEFERRED (not yet modeled, documented in-file): weapon
-special rules (thrown, charge/lance, break-thresholds, katana void-point, bokken double-reduction,
-shinai no-explode, armor-piercing/ignore-armor arrows, two-damage-mode weapons) and arrow types
+sadegarami/chain weapons get can_grapple. **Weapon special rules — the owner's pasted Equipment
+table DOES include the full "Special rules" text (verified 2026-06-29; the catalog had only mined
+the stat lines).** First wired tranche (the three iconic sword rules, all exact from the table,
+runtime-verified 9/9): **shinai** "damage dice cannot explode" → `no_explode` flag + a `can_explode`
+param on `DiceEngine.roll_damage` (shinai max raw 10 vs katana 63 over 8000 rolls); **bokken**
+"Reduction from armor is doubled against a bokken" → `doubles_armor_reduction` flag read in
+`total_defender_reduction` (armor Reduction 3→6 vs bokken, normal vs katana); **katana** "spend a
+Void Point to increase damage by 1k1" → `void_point_damage` flag, NPC-only just-in-time auto-spend
+in `resolve_damage` (6k2→7k3, VP 3→2, once-per-Round throttle; PC VP NOT auto-spent — future combat
+UI). DEFERRED (values now in hand from the table, each needs its own hook): **thrown** weapons
+(wakizashi 20' / shuriken 25' / tsubute 30' / mai-chong 25' / nage-yari 50' / yari 50' thrown-DR 1k2)
+— a throw-as-ranged action; **lance charge** (3k4 charging mounted, else 1k2 + TN penalty 5 horse/10
+foot) — mounted-charge context; **break thresholds** (kumade 25 / lance 30 / parangu 30 / ninja-to 40)
+— a weapon-durability state; **bow mount-TN** (dai-kyu +10 on foot, han-kyu/yumi +10 mounted) —
+mounted context; **ammo armor-TN mods** (armor-piercing ignores / flesh-cutter + kyoketsu-shogi double
+/ blowgun triple the target's Armor-TN bonus) — per-shot ammo selection; **two-damage-mode** (kusarigama
+0k2/0k1, sang-kauw 1k2/2k1) — a mode pick; **ninja-to** "counts as Small for concealment". Arrow types
 (bow damage uses the willow-leaf 2k2 default). Verified 16/16 (each new skill resolves to a weapon
 via pick_best_weapon, Spears R3 reduction-pierce now fires end-to-end, corrected values, katana
 unchanged) + the two prior Bugei drivers re-pass 22/22 and 9/9 (no regression). Armor table also

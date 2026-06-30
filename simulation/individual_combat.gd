@@ -20,14 +20,14 @@ const WEAPON_CATALOG: Dictionary = {
 	# uses the willow-leaf default 2k2). can_grapple: s40 "Weapon Grapples".
 
 	# -- Swords (Kenjutsu) --
-	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
+	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "void_point_damage": true},
 	"wakizashi":  {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Small",  "melee": true,  "trait": "agility"},
 	"no_dachi":   {"rolled": 3, "kept": 3, "strength_adds": true,  "skill": "Kenjutsu", "size": "Large",  "melee": true,  "trait": "agility"},
-	"bokken":     {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
+	"bokken":     {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "doubles_armor_reduction": true},
 	"ninja_to":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
 	"parangu":    {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
 	"scimitar":   {"rolled": 2, "kept": 3, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
-	"shinai":     {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
+	"shinai":     {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "no_explode": true},
 
 	# -- Knives (kama: Mantis paired small weapon, s29.9; sai/jitte: s24 Knives R5 Disarm) --
 	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives", "size": "Small", "melee": true, "trait": "agility"},
@@ -814,6 +814,9 @@ static func total_defender_reduction(
 	is_first_round: bool = true,
 ) -> int:
 	var base: int = defender.armor_reduction
+	# s40 weapon special (owner equipment table): a bokken doubles the defender's ARMOR Reduction.
+	if get_weapon_profile(weapon_name).get("doubles_armor_reduction", false):
+		base *= 2
 	var kata: int = get_kata_reduction_bonus(defender, defender_p, weapon_name)
 	var kiho: int = _get_kiho_reduction_bonus(defender, defender_p)
 	var spell: int = get_timed_modifier_total(defender_p, "reduction")  # s34 Armor of Earth etc.
@@ -1476,8 +1479,18 @@ static func resolve_damage(
 	var explode_8: bool = attacker_p != null and get_timed_modifier_total(attacker_p, "hungry_blade") > 0
 	# s24 Kenjutsu R7 / Heavy Weapons R7: damage dice explode on 9 AND 10.
 	var explode_9: bool = SkillMasterySystem.weapon_damage_explodes_on_9(dmg_skill, bugei_dmg_rank)
+	# s40 weapon special (owner equipment table): a shinai's damage dice cannot explode.
+	var can_explode: bool = not weapon.get("no_explode", false)
+	# s40 weapon special: a katana wielder may spend a Void Point (just-in-time) for +1k1 damage.
+	# NPC-only auto-spend (PCs choose via the future combat UI), once-per-Round throttle.
+	if weapon.get("void_point_damage", false) and attacker_p != null and not spirit_fixed_damage \
+			and not attacker.is_pc and not attacker_p.void_spent_this_round and VoidSystem.can_spend(attacker):
+		if VoidSystem.spend(attacker):
+			rolled += 1
+			kept += 1
+			attacker_p.void_spent_this_round = true
 	# roll_damage handles the dice pool; we pass strength already absorbed above
-	var result: Dictionary = dice_engine.roll_damage(rolled, kept, 0, 0, explode_8, explode_9)
+	var result: Dictionary = dice_engine.roll_damage(rolled, kept, 0, 0, explode_8, explode_9, can_explode)
 	var total: int = result["raw"] + feint_bonus + kata_dmg["flat_bonus"]
 
 	return {
