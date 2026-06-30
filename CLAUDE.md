@@ -3521,9 +3521,25 @@ Runtime-verified 21/21 (Godot 4.6.2): all helper values, armor-piercing hits mor
 flesh-cutter hits less (×2 ATN), flesh-cutter halves a yumi's range (out of range at dist-30), blowgun
 ×3 ATN hits far less than a yumi, blowgun damage scales 0→8.4 mean from Ninjutsu 0→7. The `ammo`
 selection is a per-shot caller parameter (PC via the future combat UI / NPC AI); the kyoketsu-shogi /
-blowgun multipliers are intrinsic weapon properties. STILL DEFERRED (each needs its own hook):
-**lance charge** — DONE (tranche 8); **two-damage-mode** (kusarigama
-0k2/0k1, sang-kauw 1k2/2k1) — a mode pick; **ninja-to** "counts as Small for concealment". Arrow types
+blowgun multipliers are intrinsic weapon properties.
+**Two-damage-mode + ninja-to conceal wired (tranche 11, 2026-06-30, 22/22 verified):** the last two
+weapon special rules. **Two-mode** (owner table): kusarigama kama 0k2 (primary) / weighted chain 0k1
+(alt), sang-kauw crescent 1k2 (primary) / shield bash 2k1 (alt). New catalog `alt_rolled`/`alt_kept`
++ `IndividualCombat.weapon_alt_damage`; `resolve_damage` gains a `damage_mode` param (""=primary,
+"alt"=the alternate surface), threaded through `_apply_hit` and `execute_melee_attack`. A per-attack
+caller choice (PC via the future combat UI; NPC defaults to primary, which is the higher-average mode
+for both — kept dice dominate, so no NPC switch heuristic is invented). **Ninja-to** "counts as Small
+for concealment" (owner table): a Medium blade that conceals as SMALL. New ninja_to catalog
+`conceal_size: "SMALL"` + `IndividualCombat.weapon_conceal_size`; `SecretSystem.resolve_conceal_item`
+gains an optional `weapon_name` whose conceal-size override supersedes the passed item_size (""=generic
+item, keeps its size). Wired into the CONCEAL_ITEM executor (reads `weapon_name` from metadata). The
+weapon Sleight-of-Hand-5 conceal gate still applies. Runtime-verified 10/10 (two-mode: alt damage
+differs, primary out-damages the keep-1 alt for both weapons, katana ignores the param, alt reaches
+execute_melee_attack) + 12/12 (ninja-to conceals at TN 10 despite Medium/Large item_size, katana keeps
+its size, concealed more often than a generic Medium item, the SoH-5 gate still blocks rank 3). Prior
+combat drivers re-pass (lance 16/16, ammo 21/21, cavalry 8/8, mount 32/32 — no regression from the
+resolve_damage/execute_melee_attack signature additions). **With this, every owner-table weapon special
+rule is wired.** Arrow types
 (bow damage uses the willow-leaf 2k2 default). Verified 16/16 (each new skill resolves to a weapon
 via pick_best_weapon, Spears R3 reduction-pierce now fires end-to-end, corrected values, katana
 unchanged) + the two prior Bugei drivers re-pass 22/22 and 9/9 (no regression). Armor table also

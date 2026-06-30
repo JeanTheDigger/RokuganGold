@@ -604,8 +604,16 @@ static func resolve_conceal_item(
 	item_size: String,
 	is_weapon: bool,
 	dice_engine: DiceEngine,
+	weapon_name: String = "",
 ) -> Dictionary:
-	var tn: int = get_conceal_tn(item_size)
+	# s40 weapon conceal-size override (owner table): the ninja-to "counts as Small for concealment"
+	# despite its Medium size. When a specific weapon is named and carries an override, use it.
+	var effective_size: String = item_size
+	if weapon_name != "":
+		var override: String = IndividualCombat.weapon_conceal_size(weapon_name)
+		if override != "":
+			effective_size = override
+	var tn: int = get_conceal_tn(effective_size)
 	var soh_rank: int = actor.skills.get("Sleight of Hand", 0)
 	if is_weapon and soh_rank < CONCEAL_WEAPON_SKILL_GATE:
 		return {"success": false, "reason": "weapon_skill_gate", "required_rank": CONCEAL_WEAPON_SKILL_GATE}

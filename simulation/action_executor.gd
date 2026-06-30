@@ -1335,7 +1335,10 @@ static func _try_execute_covert(
 		"CONCEAL_ITEM":
 			var item_size: String = action.metadata.get("item_size", "MEDIUM")
 			var is_weapon: bool = action.metadata.get("is_weapon", false)
-			var r: Dictionary = SecretSystem.resolve_conceal_item(character, item_size, is_weapon, dice_engine)
+			# s40 ninja-to "counts as Small for concealment": a named weapon's conceal-size override
+			# (if any) supersedes item_size. "" = generic item, keeps item_size.
+			var conceal_weapon: String = action.metadata.get("weapon_name", "")
+			var r: Dictionary = SecretSystem.resolve_conceal_item(character, item_size, is_weapon, dice_engine, conceal_weapon)
 			return _build_covert_result(action, ctx, "Sleight of Hand", r)
 
 		"SEARCH_PERSON":

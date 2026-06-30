@@ -1252,6 +1252,7 @@ static func execute_melee_attack(
 	charge_dmg_bonus: int = 0,
 	as_simple: bool = false,
 	is_charge: bool = false,
+	damage_mode: String = "",
 ) -> Dictionary:
 	if CharacterStats.is_dead(attacker):
 		return {"success": false, "reason": "character_is_dead"}
@@ -1451,7 +1452,7 @@ static func execute_melee_attack(
 		log_entry["reversal_reroll"] = true
 
 	if result.get("hit", false):
-		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, raises, maneuver, result, dice_engine)
+		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, raises, maneuver, result, dice_engine, false, damage_mode)
 		log_entry["damage"] = dmg_result.get("damage", 0)
 		log_entry["wounds_inflicted"] = dmg_result.get("wounds", 0)
 		result["damage"] = dmg_result.get("damage", 0)
@@ -10051,6 +10052,7 @@ static func _apply_hit(
 	attack_result: Dictionary,
 	dice_engine: DiceEngine,
 	thrown: bool = false,
+	damage_mode: String = "",
 ) -> Dictionary:
 	var feint_bonus: int = 0
 	var raises_for_damage: int = 0
@@ -10074,7 +10076,7 @@ static func _apply_hit(
 		stv_kept = 1
 
 	var dmg: Dictionary = IndividualCombat.resolve_damage(
-		attacker, weapon_name, raises_for_damage + stv_rolled, feint_bonus, dice_engine, a_p, maneuver == "feint", stv_kept, thrown
+		attacker, weapon_name, raises_for_damage + stv_rolled, feint_bonus, dice_engine, a_p, maneuver == "feint", stv_kept, thrown, damage_mode
 	)
 	var raw: int = dmg["raw_damage"]
 

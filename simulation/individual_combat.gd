@@ -24,7 +24,8 @@ const WEAPON_CATALOG: Dictionary = {
 	"wakizashi":  {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Small",  "melee": true,  "trait": "agility", "thrown_range": 4},
 	"no_dachi":   {"rolled": 3, "kept": 3, "strength_adds": true,  "skill": "Kenjutsu", "size": "Large",  "melee": true,  "trait": "agility"},
 	"bokken":     {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "doubles_armor_reduction": true},
-	"ninja_to":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "break_threshold": 40},
+	# Ninja-to (owner table): a Medium blade that counts as SMALL for concealment (conceal_size).
+	"ninja_to":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "break_threshold": 40, "conceal_size": "SMALL"},
 	"parangu":    {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "break_threshold": 30},
 	"scimitar":   {"rolled": 2, "kept": 3, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
 	"shinai":     {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "no_explode": true},
@@ -64,11 +65,13 @@ const WEAPON_CATALOG: Dictionary = {
 	"jo":              {"rolled": 0, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility"},
 	"machi_kanshisha": {"rolled": 0, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility"},
 	"nunchaku":        {"rolled": 1, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Small",  "melee": true, "trait": "agility"},
-	"sang_kauw":       {"rolled": 1, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility"},
+	# Sang-kauw (owner table): two striking surfaces — crescent blade 1k2 (primary) / shield bash 2k1 (alt mode).
+	"sang_kauw":       {"rolled": 1, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility", "alt_rolled": 2, "alt_kept": 1},
 	"tonfa":           {"rolled": 0, "kept": 3, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility"},
 
 	# -- Chain Weapons (can initiate grapples, s40) --
-	"kusarigama":     {"rolled": 0, "kept": 2, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+	# Kusarigama (owner table): two striking surfaces — kama blade 0k2 (primary) / weighted chain 0k1 (alt mode).
+	"kusarigama":     {"rolled": 0, "kept": 2, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true, "alt_rolled": 0, "alt_kept": 1},
 	"kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true, "armor_tn_mult": 2},
 	"manrikikusari":  {"rolled": 1, "kept": 1, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
 
@@ -1272,6 +1275,21 @@ static func ammo_armor_tn_mult(ammo: String) -> int:
 static func ammo_range_halved(ammo: String) -> bool:
 	return ammo == "flesh_cutter"
 
+## The concealment-size override for a weapon (owner table): the ninja-to "counts as Small for
+## concealment" despite its Medium size. Returns "SMALL"/"MEDIUM"/"LARGE", or "" if the weapon has no
+## override (the caller keeps the item's own size). Used by SecretSystem.resolve_conceal_item.
+static func weapon_conceal_size(weapon_name: String) -> String:
+	return String(get_weapon_profile(weapon_name).get("conceal_size", ""))
+
+
+## The alternate-mode damage of a two-surface weapon (owner table): kusarigama 0k1 weighted chain,
+## sang-kauw 2k1 shield bash. Returns {rolled, kept}; {} if the weapon has only one mode.
+static func weapon_alt_damage(weapon_name: String) -> Dictionary:
+	var prof: Dictionary = get_weapon_profile(weapon_name)
+	if not prof.has("alt_rolled"):
+		return {}
+	return {"rolled": int(prof["alt_rolled"]), "kept": int(prof["alt_kept"])}
+
 ## Blowgun damage scaling (owner table): the dart deals 1k1 at Ninjutsu 3, 2k1 at Ninjutsu 7, over
 ## its 0k1 base -> returns the +rolled-dice bonus (0/+1/+2). The poison is the real threat below 3.
 static func blowgun_damage_rolled_bonus(character: L5RCharacterData) -> int:
@@ -1495,6 +1513,7 @@ static func resolve_damage(
 	was_feint: bool = false,
 	bonus_kept: int = 0,
 	thrown: bool = false,
+	damage_mode: String = "",
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	# Conjured elemental weapon (s33-s36): fixed DR, no Strength bonus. Inert otherwise.
@@ -1502,6 +1521,11 @@ static func resolve_damage(
 		weapon = attacker_p.conjured_weapon
 	var rolled: int = weapon.get("rolled", 2)
 	var kept: int = weapon.get("kept", 1) + bonus_kept
+	# s40 two-mode weapon (owner table): the alternate striking surface (kusarigama weighted chain
+	# 0k1, sang-kauw shield bash 2k1). A per-attack caller choice; Strength still adds for melee.
+	if damage_mode == "alt" and not thrown and weapon.has("alt_rolled"):
+		rolled = int(weapon["alt_rolled"])
+		kept = int(weapon["alt_kept"]) + bonus_kept
 	# s40 thrown weapon with a distinct thrown DR (only yari: melee 2k2 → thrown 1k2). Strength
 	# still adds (it is hurled with muscle; the weapon's strength_adds/melee flags are unchanged).
 	if thrown and weapon.has("thrown_rolled"):
