@@ -109,11 +109,10 @@ const BRIBE_KOKU_COST: float = 5.0
 const PURCHASE_KOKU_COST: float = 1.0
 # CONDUCT_COMMERCE personal yield (s55.27 Effect 2 LOCKED): koku = Commerce rank ×
 # settlement_modifier × CONDUCT_COMMERCE_YIELD_MULT. settlement_modifier is the s4.3.8
-# Koku location modifier; it defaults to the standard-settlement value (1.0) and is
-# forward-wired to lift once SettlementData carries location-type data (no port/
-# crossroads/coastal flags exist yet — same blocker as the `is_coastal` gap).
+# Koku location modifier (SettlementData.koku_location_modifier), injected into ctx as
+# commerce_settlement_modifier; it is 1.0 at a standard settlement and lifts at castle
+# towns (×1.2), ports (×1.5), etc.
 const CONDUCT_COMMERCE_YIELD_MULT: float = 2.0
-const CONDUCT_COMMERCE_STANDARD_MODIFIER: float = 1.0
 
 
 # -- Main Entry Point ---------------------------------------------------------
@@ -1851,8 +1850,11 @@ static func _apply_effects(
 	# would double-charge, so only the already-wired s57.40 stigma fires.)
 	if action_id == "CONDUCT_COMMERCE" and result.get("success", false):
 		var commerce_rank: int = int(_character.skills.get("Commerce", 0))
+		# s4.3.8 settlement modifier (port ×1.5, castle-town ×1.2, …) — defaults to the
+		# standard-settlement 1.0 when the settlement has no location-type factors.
+		var settlement_mod: float = ctx.commerce_settlement_modifier
 		var yield_koku: float = float(commerce_rank) \
-			* CONDUCT_COMMERCE_STANDARD_MODIFIER * CONDUCT_COMMERCE_YIELD_MULT \
+			* settlement_mod * CONDUCT_COMMERCE_YIELD_MULT \
 			* SkillMasterySystem.commerce_price_favor_multiplier(_character, false)
 		if yield_koku > 0.0:
 			effects["commerce_yield_koku"] = yield_koku

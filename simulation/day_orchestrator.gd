@@ -24174,6 +24174,15 @@ static func _inject_base_character_context(
 	var clan_values: Array = clans.values()
 	var season_name: String = _season_to_name(current_season)
 
+	# s4.3.8 / s55.27: per-settlement Koku location modifier (location_id String →
+	# modifier), built once. Only non-1.0 entries stored; the CONDUCT_COMMERCE yield
+	# defaults to 1.0 for the rest. Shared by reference across all characters.
+	var g_settlement_koku_mods: Dictionary = {}
+	for _s: SettlementData in settlements:
+		var _m: float = _s.koku_location_modifier()
+		if not is_equal_approx(_m, 1.0):
+			g_settlement_koku_mods[str(_s.settlement_id)] = _m
+
 	# Pre-build topics_by_id for champion conclusion injection (s57.54.10b).
 	var g_topics_by_id: Dictionary = {}
 	for _t: Variant in active_topics:
@@ -24220,6 +24229,7 @@ static func _inject_base_character_context(
 			ws["known_objectives"]["taint_corroboration_target_id"] = taint_corr["target_id"]
 			ws["known_objectives"]["taint_corroboration_topic_id"] = taint_corr["topic_id"]
 		ws["trade_routes"] = trade_routes
+		ws["settlement_koku_modifiers"] = g_settlement_koku_mods
 		ws["taint_topic_province_ids"] = taint_province_ids
 		ws["unit_training_counts"] = unit_counts.get(c.clan, {})
 		ws["worship_failing_province_ids"] = g_worship

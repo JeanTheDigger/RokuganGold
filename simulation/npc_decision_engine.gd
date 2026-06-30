@@ -60,6 +60,9 @@ static func build_context(
 		ctx.context_flag = world_state.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS) as Enums.ContextFlag
 	ctx.season = world_state.get("season", 0)
 	ctx.ic_day = world_state.get("ic_day", 0)
+	ctx.commerce_settlement_modifier = float(
+		(world_state.get("settlement_koku_modifiers", {}) as Dictionary).get(ctx.location_id, 1.0)
+	)
 	ctx.sublocation = world_state.get("sublocation", Enums.Sublocation.PUBLIC) as Enums.Sublocation
 	var ws_zone_subtype: int = world_state.get("zone_subtype", -1)
 	if ws_zone_subtype >= 0:

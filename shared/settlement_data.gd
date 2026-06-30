@@ -148,6 +148,36 @@ func has_infrastructure(feature: String) -> bool:
 	return feature in infrastructure
 
 
+# -- Koku Location Modifier (s4.3.8 LOCKED) ------------------------------------
+# Multiplicative product of the settlement's location-type factors. Used by the
+# seasonal Koku tick (resource_tick) and the CONDUCT_COMMERCE personal yield (s55.27).
+# DERIVED (no invention): a FAMILY_CASTLE/CASTLE settlement contains a major castle →
+# castle-town ×1.2; the other factors come from explicit `infrastructure` tags placed
+# at world-gen (only "port" is placed today — island ports; "crossroads"/"coastal"/
+# "river_town"/"remote" are forward-wired and lift as a data edit when designated or
+# when coordinate/road/river data exists). Returns 1.0 (standard settlement) when none
+# apply. Conflict-zone / bandit-infested are dynamic maluses applied elsewhere (garrison
+# / war passes), not here.
+const KOKU_LOC_INFRA_FACTORS: Dictionary = {
+	"port": 1.5,        # port city
+	"crossroads": 1.3,
+	"coastal": 1.3,
+	"river_town": 1.2,
+	"remote": 0.7,
+}
+const CASTLE_TOWN_MODIFIER: float = 1.2
+
+func koku_location_modifier() -> float:
+	var m: float = 1.0
+	if settlement_type == Enums.SettlementType.FAMILY_CASTLE \
+			or settlement_type == Enums.SettlementType.CASTLE:
+		m *= CASTLE_TOWN_MODIFIER
+	for tag: String in KOKU_LOC_INFRA_FACTORS:
+		if tag in infrastructure:
+			m *= float(KOKU_LOC_INFRA_FACTORS[tag])
+	return m
+
+
 func is_military() -> bool:
 	return settlement_type in Enums.MILITARY_SETTLEMENT_TYPES
 

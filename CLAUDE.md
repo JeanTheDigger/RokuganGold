@@ -3722,11 +3722,10 @@ character)`** → +5 for Engineering R5+ or Sailing R5+ on Cooperative/Cumulativ
   CONDUCT_COMMERCE_YIELD_MULT(2.0) × commerce_price_favor_multiplier(_character, false)` — so a
   Commerce-5 merchant earns ×1.2 (the SELL side of the mastery: conducting trade = selling). New
   `EffectApplicator._apply_koku_gain` deposits it to `actor.koku`. **settlement_modifier defaults to
-  the s4.3.8 standard-settlement value 1.0 and is forward-wired** — SettlementData carries no
-  port/crossroads/coastal location-type flags (the same blocker as the `is_coastal` gap; the
-  `KOKU_LOCATION_MODIFIERS` table exists in `resource_tick.gd` but its `_koku_modifiers` source is
-  never populated in production), so the port ×1.5 / crossroads ×1.3 tiers lift automatically once
-  that data exists. **Honor is NOT charged here** — the s57.40 commerce stigma (already wired,
+  the s4.3.8 standard-settlement value 1.0** at the time, but is now LIVE (see "s4.3.8 settlement
+  Koku location modifier" below) — castle-town ×1.2 and island-port ×1.5 lift the yield; the
+  crossroads/coastal/river/remote tiers forward-wire on explicit world-gen `infrastructure` tags.
+  **Honor is NOT charged here** — the s57.40 commerce stigma (already wired,
   rank-scaled, LOCKED) is the honor consequence for public commerce; s55.27's role-based −0.5 and
   s57.40's rank-based penalty are overlapping GDD honor models for the same act, so only the
   already-wired s57.40 stigma fires (no double-charge). Runtime-verified 8/8 (Godot 4.6.2, headless):
@@ -3750,6 +3749,32 @@ character)`** → +5 for Engineering R5+ or Sailing R5+ on Cooperative/Cumulativ
   same-season refused with reason + no yield; different settlement same season allowed; same settlement
   next season allowed + record updated; the precondition filter removes/keeps CONDUCT_COMMERCE correctly
   (already-conducted vs fresh settlement).
+- **s4.3.8 settlement Koku location modifier — now LIVE empire-wide (2026-06-30, runtime-verified 13/13).**
+  The s4.3.8 location-modifier table (castle-town ×1.2, port ×1.5, crossroads ×1.3, coastal ×1.3,
+  river-town ×1.2, remote ×0.7) was **dormant in production**: `resource_tick.KOKU_LOCATION_MODIFIERS`
+  existed but its `_koku_modifiers` source was only ever set by tests, so every settlement generated
+  Koku at ×1.0. New `SettlementData.koku_location_modifier()` computes the multiplicative product per
+  settlement from **GDD-grounded signals, no invention**: settlement_type ∈ {FAMILY_CASTLE, CASTLE} →
+  castle-town ×1.2 (it contains a major castle), plus explicit `infrastructure` tags
+  (`KOKU_LOC_INFRA_FACTORS`: port/crossroads/coastal/river_town/remote). Only `"port"` is placed at
+  world-gen today (island ports, in `world_bootstrap`); the other tags **forward-wire** (lift as a
+  one-line world-gen data edit when designated, or when coordinate/road/river data exists — coastal at
+  the settlement level genuinely needs coordinates to avoid over-applying to inland settlements in a
+  coastal province). `ResourceTick.process_seasonal_tick` now stamps `settlement_meta["_koku_modifiers"]`
+  from every settlement's modifier, so the seasonal Koku tick honors it empire-wide (dozens of castle
+  settlements now generate ×1.2; island ports ×1.5). Conflict-zone/bandit maluses stay dynamic
+  (garrison/war passes), unchanged. **CONDUCT_COMMERCE yield wired to the real modifier**: the orchestrator
+  builds a `settlement_koku_modifiers` map (location_id String → modifier, non-1.0 only) once per day in
+  `_inject_base_character_context` and injects it into every character's world_state; `build_context`
+  reads it into the new `ContextSnapshot.commerce_settlement_modifier`; the executor yield uses it
+  (the now-dead `CONDUCT_COMMERCE_STANDARD_MODIFIER` const removed). Runtime-verified 13/13 (Godot 4.6.2,
+  headless): modifier computation (village 1.0 / castle 1.2 / village+port 1.5 / castle+port 1.8 /
+  crossroads+coastal 1.69); `process_seasonal_tick` stamps non-1.0 entries (castle 1.2, port 1.5) and
+  omits standard villages; Koku generation reflects the modifier (castle:village:port = 1.2:1.0:1.5,
+  isolating from the under-garrison ×0.8 malus); a Commerce-5 merchant at a port earns yield 18.0
+  (5×1.5×2×1.2). LIMITATION: castle-town and island-port are the only factors live today; the rest are
+  forward-wired on `infrastructure` tags (no design value invented for which settlements are
+  crossroads/river-towns/remote).
 - **Craft — NO masteries** (s24 "Mastery Abilities: None"). Nothing to wire.
 - **Animal Handling R3 (train-for-others) — helper added, DORMANT.** `can_train_for_others(rank)`
   (rank ≥ 3) in `animal_handling_system.gd` (the s57.39 home; s24 and s57.39 R3 AGREE). No consumer

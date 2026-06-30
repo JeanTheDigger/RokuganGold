@@ -105,6 +105,8 @@ class ContextSnapshot:
 	var context_flag: Enums.ContextFlag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	var season: int = 0
 	var ic_day: int = 0
+	## s4.3.8 Koku location modifier at the current settlement (CONDUCT_COMMERCE yield).
+	var commerce_settlement_modifier: float = 1.0
 	var zone_subtype: Enums.ZoneSubtype = Enums.ZoneSubtype.OHIROMA
 	var zone_flags: Dictionary = {}
 	var sublocation: Enums.Sublocation = Enums.Sublocation.PUBLIC
