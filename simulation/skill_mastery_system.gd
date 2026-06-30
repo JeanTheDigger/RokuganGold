@@ -267,3 +267,28 @@ static func horsemanship_dismount_cost(character: L5RCharacterData) -> String:
 # mounted combatant cannot take Full Attack.
 static func horsemanship_allows_mounted_full_attack(character: L5RCharacterData) -> bool:
 	return int(character.skills.get("Horsemanship", 0)) >= MASTERY_RANK_3
+
+
+# Polearms R5: +1k0 damage against a mounted or significantly larger opponent (s24 line 325).
+# weapon_skill must be "Polearms" (the wielded weapon's skill); target_mounted/_large describe
+# the defender. Returns the {rolled, kept} damage bonus.
+static func polearm_vs_mounted_larger_bonus(weapon_skill: String, rank: int, target_mounted: bool, target_large: bool) -> Dictionary:
+	if weapon_skill == "Polearms" and rank >= MASTERY_RANK_5 and (target_mounted or target_large):
+		return {"rolled": 1, "kept": 0}
+	return {"rolled": 0, "kept": 0}
+
+
+# Polearms R3: +5 Initiative in the FIRST round of a skirmish (s24 line 323). round_number is the
+# combat round (1 = first); the bonus applies only on round 1.
+static func polearm_first_round_initiative(weapon_skill: String, rank: int, round_number: int) -> int:
+	if weapon_skill == "Polearms" and rank >= MASTERY_RANK_3 and round_number == 1:
+		return 5
+	return 0
+
+
+# Kyujutsu R5: bow maximum range increased 50% (s24 line 405). Returns the range multiplier for a
+# bow (Kyujutsu skill) wielder at rank 5+, else 1.0 (no change).
+static func kyujutsu_range_multiplier(weapon_skill: String, rank: int) -> float:
+	if weapon_skill == "Kyujutsu" and rank >= MASTERY_RANK_5:
+		return 1.5
+	return 1.0

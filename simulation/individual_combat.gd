@@ -1039,6 +1039,7 @@ static func roll_initiative(
 	participant: Participant,
 	dice_engine: DiceEngine,
 	weapon_name: String = "",
+	round_number: int = -1,
 ) -> int:
 	var kata_init: Dictionary = _get_kata_initiative_modifiers(character, weapon_name)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(character)
@@ -1069,6 +1070,10 @@ static func roll_initiative(
 	score += _get_kiho_initiative_bonus(character, participant, weapon_name)
 	score += participant.initiative_modifier  # Song of the World (s38), persistent delta
 	score += SkillMasterySystem.battle_initiative_bonus(character)  # s24 Battle R5: +Battle Rank
+	# s24 Polearms R3: +5 Initiative in the first round of a skirmish (round_number == 1).
+	var init_weapon_skill: String = String(get_weapon_profile(weapon_name).get("skill", "")) if weapon_name != "" else ""
+	score += SkillMasterySystem.polearm_first_round_initiative(
+		init_weapon_skill, int(character.skills.get("Polearms", 0)), round_number)
 
 	# Center Stance carry-over adds +10 to Initiative Score for that round only (s40)
 	if participant.stance == Enums.Stance.CENTER and not participant.center_stance_bonus_used:
@@ -1209,6 +1214,17 @@ static func weapon_can_grapple(weapon_name: String) -> bool:
 ## (s40). 0 = no range limit specified (default — any LOS target, the prior PROVISIONAL behavior).
 static func weapon_range_tiles(weapon_name: String) -> int:
 	return int(get_weapon_profile(weapon_name).get("range_tiles", 0))
+
+
+## Character-aware max range in tiles, applying s24 Kyujutsu R5 (bow max range +50%, line 405).
+## base_rng is the weapon's catalog range; the multiplier applies only to a bow (Kyujutsu skill)
+## wielder at rank 5+. Returns the (ceil'd) extended range; unchanged for everyone else.
+static func kyujutsu_extended_range(character: L5RCharacterData, weapon_name: String, base_rng: int) -> int:
+	if base_rng <= 0 or character == null:
+		return base_rng
+	var wskill: String = String(get_weapon_profile(weapon_name).get("skill", ""))
+	var mult: float = SkillMasterySystem.kyujutsu_range_multiplier(wskill, int(character.skills.get("Kyujutsu", 0)))
+	return int(ceil(base_rng * mult))
 
 
 ## Thrown range in tiles for a MELEE weapon that can be hurled as a ranged attack (s40 "Can be
@@ -1520,6 +1536,8 @@ static func resolve_damage(
 	bonus_kept: int = 0,
 	thrown: bool = false,
 	damage_mode: String = "",
+	target_mounted: bool = false,
+	target_large: bool = false,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	# Conjured elemental weapon (s33-s36): fixed DR, no Strength bonus. Inert otherwise.
@@ -1609,6 +1627,13 @@ static func resolve_damage(
 	var bugei_dmg: Dictionary = SkillMasterySystem.weapon_damage_bonus(dmg_skill, bugei_dmg_rank)
 	rolled += int(bugei_dmg["rolled"])
 	kept += int(bugei_dmg["kept"])
+
+	# s24 Polearms R5: +1k0 damage vs a mounted or significantly larger opponent (s24 line 325).
+	# Inert for spirit creatures (bugei_dmg_rank forced to 0 above).
+	var polearm_dmg: Dictionary = SkillMasterySystem.polearm_vs_mounted_larger_bonus(
+		dmg_skill, bugei_dmg_rank, target_mounted, target_large)
+	rolled += int(polearm_dmg["rolled"])
+	kept += int(polearm_dmg["kept"])
 
 	# s35 Hungry Blade: while the buff is active, all the wielder's damage dice also explode on an 8 or 9
 	# (once each). Inert (false) for everyone else.
@@ -1858,6 +1883,11 @@ static func resolve_extra_attack(
 	var required_raises: int = EXTRA_ATTACK_BASE_RAISES
 	if attacker_p.dual_wielding and _has_kata_effect(attacker, "fire_extra_attack_3_raises"):
 		required_raises = EXTRA_ATTACK_SPINNING_BLADES_RAISES
+	# s24 Knives R7: one Free Raise toward Extra Attack (s24 line 411) reduces the Raises the
+	# attacker must spend on the first attack by 1 (min 0).
+	var ea_skill: String = String(get_weapon_profile(weapon_name).get("skill", ""))
+	required_raises = maxi(0, required_raises - SkillMasterySystem.maneuver_free_raises(
+		ea_skill, int(attacker.skills.get(ea_skill, 0)), "extra_attack"))
 
 	var attack: Dictionary = resolve_attack(attacker, attacker_p, weapon_name, target_armor_tn, 0, dice_engine,
 		false, false, false, "", adv_context)
@@ -2042,7 +2072,11 @@ static func initiate_grapple(
 		attacker, skill_name, {"is_combat": true, "is_school_skill": is_school_jiu_init}
 	)
 	var adv_jiu_init_tn: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true})
-	var grapple_flat: int = wound_penalty + adv_jiu_init["free_raises"] * 5 - adv_jiu_init_tn
+	# s24 Jiujutsu R5: one Free Raise toward initiating a Grapple (s24 line 387). +5 to the roll
+	# (1 Raise = +5). Only the unarmed Jiujutsu grapple qualifies — a weapon grapple (chain weapon,
+	# skill_name != "Jiujutsu") gets 0 from the helper.
+	var grapple_mastery_fr: int = SkillMasterySystem.maneuver_free_raises(skill_name, jiujutsu, "grapple")
+	var grapple_flat: int = wound_penalty + (adv_jiu_init["free_raises"] + grapple_mastery_fr) * 5 - adv_jiu_init_tn
 
 	# Grapple initiation ignores armor's Armor TN bonus — target TN = Reflexes × 5 + 5
 	var result: Dictionary = dice_engine.roll_check(

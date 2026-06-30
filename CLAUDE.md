@@ -3610,12 +3610,37 @@ roll/insight-applicable Mastery Abilities. **Five tranches:**
   determinism (R5→+5/R4→0, R7→2 dice/R5→1, Knives R3 knife→true / non-knife / R2→false), off-hand
   end-to-end (tanto Small penalty 0 at Knives 3 vs −5 at Knives 2), and a Focus integration smoke (an
   assessment-bonus holder first-strikes 4968/6000 vs a no-bonus 2098/6000 — the +2k2 path fires; two
-  symmetric Iai-5 duelists are ~50/50, the +5 free raise cancels with no side bias). **Still
-  deferred (each needs infra the core lacks):** terrain-aware movement (Athletics R3/R5, Stealth —
-  character-aware pathfinding cost) + Athletics R7 (+1 tile/Round move budget); mount actions
-  (Horsemanship — no full mount system); Ready-as-Free-Action (weapons start ready — no draw action
-  modeled); Defense R3/R7 stance actions; Iaijutsu R3 (ready katana free); Polearms R3/R5; and the
-  Knives R7 Extra-Attack free raise (helper exists, maneuver site not wired).
+  symmetric Iai-5 duelists are ~50/50, the +5 free raise cancels with no side bias).
+  **Bugei tranche 4 (the now-unblocked masteries, 25/25 verified 2026-06-30):** five masteries with
+  existing consumers, all values LOCKED in s24, zero invention. **Polearms R5** (+1k0 damage vs a
+  mounted OR significantly larger opponent; s24 line 325) → `SkillMasterySystem.polearm_vs_mounted_larger_bonus`
+  folded into `resolve_damage` (which gained `target_mounted`/`target_large` params, threaded from
+  `_apply_hit` via `CONDITION_MOUNTED` + `Enums.Advantage.LARGE` — the same defender mount/size the
+  to-hit mounted/Burning-Kiss bonus already computes; the mount system this session is what unblocked
+  it). **Polearms R3** (+5 Initiative in the FIRST round only; s24 line 323) → `polearm_first_round_initiative`
+  in `roll_initiative` (which gained a `round_number` param, passed `state.combat.round_number` at all
+  4 call sites — setup is round 1, advance_round re-rolls use the incremented round, so the bonus is
+  round-1-only). **Knives R7** (Free Raise toward Extra Attack; s24 line 411) → `maneuver_free_raises(...,"extra_attack")`
+  lowers the NPC's declared Extra-Attack Raises 5→4 in `_npc_execute_attack` AND `resolve_extra_attack`'s
+  `required_raises` metadata. **Jiujutsu R5** (Free Raise toward initiating a Grapple; s24 line 387) →
+  `maneuver_free_raises(...,"grapple")` adds +5 to `grapple_flat` in `IndividualCombat.initiate_grapple`
+  (unarmed Jiujutsu only — a weapon grapple's skill != "Jiujutsu" gets 0). **Kyujutsu R5** (bow max
+  range +50%; s24 line 405) → `SkillMasterySystem.kyujutsu_range_multiplier` + `IndividualCombat.kyujutsu_extended_range`
+  applied in `execute_ranged_attack`'s range gate (before flesh-cutter halving) AND `get_ranged_targets`
+  (so a Kyujutsu-5 archer can both select and shoot a target at extended range). Runtime-verified 25/25
+  (Godot 4.6.2, headless): all helper gates (skill/rank/round); Polearms R5 naginata +1.1 mean damage
+  vs both mounted and large at N=8000 (the +1k0 survives the keep ~as often as expected); Polearms R3
+  init round-1 avg +5.3 over round-2; Knives R7 required_raises 5→4 (R5 stays 5); Jiujutsu R5 grapple
+  1110/1200 successes vs 701/1200 at rank 4 (TN 25); Kyujutsu R5 yumi range 50→75 (R4 unchanged). Plus
+  a 6/6 orchestrator regression smoke (all changed signatures resolve end-to-end; all added params
+  default-inert so non-mastery characters are unaffected). **Still deferred (each needs infra the core
+  lacks):** Ready-as-Free-Action (Iaijutsu R3, Kenjutsu R5, Spears R7, Polearms R7, Kyujutsu R3 — no
+  draw/ready action modeled); Defense R3 (retain Defense roll) / R7 (Simple in Full Defense — stance-action
+  mechanics); Spears R5 (+5' ranged range — trivial, low value); Chain Weapons R3/R5/R7 (chain-grapple /
+  contested-vs-grappled / disarm-knockdown); Staves R3/R5/R7 (staff-doubles-armor not modeled); Ninjutsu
+  R3/R5/R7 (only blowgun scaling wired); Hunting R5 (+1k0 Stealth in wilderness — needs a wilderness
+  context flag); Athletics R7 (+1 tile to one Move/Round — R3/R5 terrain reduction ALREADY wired inline
+  in `get_water_ring_for_terrain`).
 - **Meditation VP-recovery cap (9/9 verified):** Meditation R3 restores up to 2 VP,
   R7 up to 3 VP per meditation session (base 1; s24 line 145). Was already functionally correct,
   hardcoded in `ActionExecutor._execute_meditate` (predates SkillMasterySystem); centralized into

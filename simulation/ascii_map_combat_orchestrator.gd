@@ -302,7 +302,7 @@ static func setup_combat(
 		if p == null:
 			continue
 		var weapon_name: String = IndividualCombat.pick_best_weapon(c)
-		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
+		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name, mcs.combat.round_number)
 		p.initiative_score = init_score
 		# s40 dual-wield schools: flag the Participant from the character's off-hand
 		# weapon so the off-hand attack / dominant-hand / two-weapon rules apply.
@@ -657,6 +657,11 @@ static func get_ranged_targets(state: MapCombatState, attacker_id: int, weapon_n
 	if pos.x < 0:
 		return []
 	var rng: int = IndividualCombat.weapon_range_tiles(weapon_name) if weapon_name != "" else 0
+	# s24 Kyujutsu R5: bow max range +50% — extend the targeting range for the wielder if known.
+	if rng > 0:
+		var rt_attacker: L5RCharacterData = state.combatants.get(attacker_id, null)
+		if rt_attacker != null:
+			rng = IndividualCombat.kyujutsu_extended_range(rt_attacker, weapon_name, rng)
 	var faction: String = state.factions.get(attacker_id, FACTION_NEUTRAL)
 	var targets: Array = []
 	for cid: int in state.positions.keys():
@@ -1840,6 +1845,9 @@ static func execute_ranged_attack(
 	# range. A thrown melee weapon uses its thrown_range; a ranged weapon uses range_tiles.
 	# 0 = no specified range (the prior any-LOS PROVISIONAL behavior).
 	var rng: int = IndividualCombat.weapon_thrown_range(weapon_name) if thrown else IndividualCombat.weapon_range_tiles(weapon_name)
+	# s24 Kyujutsu R5: bow maximum range +50% (a thrown weapon is not a bow shot, so unaffected).
+	if not thrown:
+		rng = IndividualCombat.kyujutsu_extended_range(attacker, weapon_name, rng)
 	# s40 flesh-cutter ammo (owner table): halves the weapon's range.
 	if rng > 0 and IndividualCombat.ammo_range_halved(ammo):
 		rng = rng / 2
@@ -7408,7 +7416,7 @@ static func advance_round(
 		if p == null:
 			continue
 		var weapon_name: String = IndividualCombat.pick_best_weapon(c)
-		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
+		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name, state.combat.round_number)
 		p.initiative_score = init_score
 
 	# Re-sort turn order by new initiative scores.
@@ -8791,7 +8799,8 @@ static func _npc_execute_attack(
 
 	if use_extra_attack:
 		# 5 Raises dedicated to Extra Attack; no other raise benefit (GDD s40).
-		raises = 5
+		# s24 Knives R7: one Free Raise toward Extra Attack lowers the Raises to declare.
+		raises = 5 - SkillMasterySystem.maneuver_free_raises(skill_name, skill_rank, "extra_attack")
 	elif (is_melee or target_in_melee) and skill_rank >= 5 \
 			and _npc_should_disarm(state, target_id, target):
 		# Disarm (3 Raises): a very skilled attacker strips a dangerous ARMED foe's weapon
@@ -8916,7 +8925,7 @@ static func add_companion(
 	p.character_id = cid
 	p.stance = Enums.Stance.ATTACK
 	p.initiative_score = IndividualCombat.roll_initiative(
-		character, p, dice_engine, IndividualCombat.pick_best_weapon(character))
+		character, p, dice_engine, IndividualCombat.pick_best_weapon(character), state.combat.round_number)
 	state.combat.participants[cid] = p
 	state.combat.turn_order.append(cid)
 	state.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
@@ -8954,7 +8963,7 @@ static func add_enemy(
 	p.character_id = cid
 	p.stance = Enums.Stance.ATTACK
 	p.initiative_score = IndividualCombat.roll_initiative(
-		character, p, dice_engine, IndividualCombat.pick_best_weapon(character))
+		character, p, dice_engine, IndividualCombat.pick_best_weapon(character), state.combat.round_number)
 	state.combat.participants[cid] = p
 	state.combat.turn_order.append(cid)
 	state.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
@@ -10075,8 +10084,13 @@ static func _apply_hit(
 		stv_rolled = 1
 		stv_kept = 1
 
+	# s24 Polearms R5: +1k0 damage vs a mounted or significantly larger opponent — resolve the
+	# defender's mount/size here (the same computation as the to-hit mounted/Burning-Kiss bonus).
+	var dmg_t_p: IndividualCombat.Participant = state.combat.participants.get(target.character_id, null)
+	var dmg_tgt_mounted: bool = dmg_t_p != null and IndividualCombat.CONDITION_MOUNTED in dmg_t_p.conditions
+	var dmg_tgt_large: bool = AdvantageSystem.has_advantage(target, Enums.Advantage.LARGE)
 	var dmg: Dictionary = IndividualCombat.resolve_damage(
-		attacker, weapon_name, raises_for_damage + stv_rolled, feint_bonus, dice_engine, a_p, maneuver == "feint", stv_kept, thrown, damage_mode
+		attacker, weapon_name, raises_for_damage + stv_rolled, feint_bonus, dice_engine, a_p, maneuver == "feint", stv_kept, thrown, damage_mode, dmg_tgt_mounted, dmg_tgt_large
 	)
 	var raw: int = dmg["raw_damage"]
 
