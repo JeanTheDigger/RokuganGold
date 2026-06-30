@@ -21,7 +21,7 @@ const WEAPON_CATALOG: Dictionary = {
 
 	# -- Swords (Kenjutsu) --
 	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "void_point_damage": true},
-	"wakizashi":  {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Small",  "melee": true,  "trait": "agility"},
+	"wakizashi":  {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Small",  "melee": true,  "trait": "agility", "thrown_range": 4},
 	"no_dachi":   {"rolled": 3, "kept": 3, "strength_adds": true,  "skill": "Kenjutsu", "size": "Large",  "melee": true,  "trait": "agility"},
 	"bokken":     {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "doubles_armor_reduction": true},
 	"ninja_to":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
@@ -50,11 +50,11 @@ const WEAPON_CATALOG: Dictionary = {
 	"sadegarami": {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Polearms", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
 
 	# -- Spears --
-	"yari":       {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
+	"yari":       {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 10, "thrown_rolled": 1, "thrown_kept": 2},
 	"kumade":     {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
-	"mai_chong":  {"rolled": 0, "kept": 3, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
+	"mai_chong":  {"rolled": 0, "kept": 3, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 5},
 	"lance":      {"rolled": 3, "kept": 4, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
-	"nage_yari":  {"rolled": 1, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility"},
+	"nage_yari":  {"rolled": 1, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 10},
 
 	# -- Staves (skill "Staves" — the canonical name; bo was previously mislabeled "Bo") --
 	"bo":              {"rolled": 1, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Large",  "melee": true, "trait": "agility"},
@@ -1194,6 +1194,13 @@ static func weapon_range_tiles(weapon_name: String) -> int:
 	return int(get_weapon_profile(weapon_name).get("range_tiles", 0))
 
 
+## Thrown range in tiles for a MELEE weapon that can be hurled as a ranged attack (s40 "Can be
+## thrown up to N' as a ranged weapon"). 0 = not throwable. wakizashi 4 (20') / mai-chong 5 (25') /
+## nage-yari + yari 10 (50'). yari's damage drops to its thrown DR (thrown_rolled/thrown_kept).
+static func weapon_thrown_range(weapon_name: String) -> int:
+	return int(get_weapon_profile(weapon_name).get("thrown_range", 0))
+
+
 static func resolve_attack(
 	attacker: L5RCharacterData,
 	attacker_p: Participant,
@@ -1405,6 +1412,7 @@ static func resolve_damage(
 	attacker_p: Participant = null,
 	was_feint: bool = false,
 	bonus_kept: int = 0,
+	thrown: bool = false,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	# Conjured elemental weapon (s33-s36): fixed DR, no Strength bonus. Inert otherwise.
@@ -1412,6 +1420,11 @@ static func resolve_damage(
 		weapon = attacker_p.conjured_weapon
 	var rolled: int = weapon.get("rolled", 2)
 	var kept: int = weapon.get("kept", 1) + bonus_kept
+	# s40 thrown weapon with a distinct thrown DR (only yari: melee 2k2 → thrown 1k2). Strength
+	# still adds (it is hurled with muscle; the weapon's strength_adds/melee flags are unchanged).
+	if thrown and weapon.has("thrown_rolled"):
+		rolled = int(weapon["thrown_rolled"])
+		kept = int(weapon.get("thrown_kept", 1)) + bonus_kept
 
 	# s54: a spirit/oni creature deals its FIXED stat-block damage (XkY), not the named
 	# weapon profile nor Strength-augmented dice. Mirrors the to-hit override in

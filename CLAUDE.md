@@ -3418,10 +3418,20 @@ use their own `ranged_range_tiles` gate). Verified: helper values (feet/5); shur
 dist-9 target while yumi/no-weapon include it; `execute_ranged_attack` out_of_range @dist9 vs a real
 attack @dist4; a shuriken NPC (range 5) vs a dist-11 target closes to dist 2 (advances) instead of
 shooting. **Bow mount-TN** (dai-kyu +10 on foot, han-kyu/yumi +10 mounted) stays DEFERRED — inert
-until a mount system sets `CONDITION_MOUNTED` for NPCs. DEFERRED (values now in hand from the table,
-each needs its own hook): **thrown** weapons
-(wakizashi 20' / shuriken 25' / tsubute 30' / mai-chong 25' / nage-yari 50' / yari 50' thrown-DR 1k2)
-— a throw-as-ranged action; **lance charge** (3k4 charging mounted, else 1k2 + TN penalty 5 horse/10
+until a mount system sets `CONDITION_MOUNTED` for NPCs. **Thrown weapons wired (tranche 3, 2026-06-29,
+12/12 verified):** a melee weapon with a `thrown_range` can be hurled as a ranged attack —
+`thrown_range` (feet/5) added to wakizashi 4 (20') / mai-chong 5 (25') / nage-yari 10 (50') / yari 10
+(50') + `IndividualCombat.weapon_thrown_range()` (shuriken/tsubute are already ranged weapons, so
+their "thrown" ranges are their `range_tiles`). `execute_ranged_attack` gains a `thrown` flag: it
+range-gates by `thrown_range`, allows a melee weapon only if throwable (else `weapon_not_throwable`),
+and threads `thrown` through `_apply_hit` → `resolve_damage`. Only **yari** changes DR when thrown
+(melee 2k2 → thrown 1k2, via `thrown_rolled`/`thrown_kept`); Strength still adds. Verified: ranges
+(feet/5); yari rolled 5 melee → 4 thrown (1k2+Str3) while wakizashi DR is unchanged; out_of_range
+@dist6 (range 4), weapon_not_throwable for a katana, weapon_is_melee for a non-thrown wakizashi, and
+a real attack @dist4. LIMITATION: the throw is a callable action (PC via future combat UI / a
+deliberate caller) — **NPC auto-throw and the "weapon leaves the hand" one-shot consumption are
+deferred** (no weapon-inventory state; an NPC tracking a thrown-away weapon needs it). DEFERRED
+(values now in hand from the table, each needs its own hook): **lance charge** (3k4 charging mounted, else 1k2 + TN penalty 5 horse/10
 foot) — mounted-charge context; **break thresholds** (kumade 25 / lance 30 / parangu 30 / ninja-to 40)
 — a weapon-durability state; **bow mount-TN** (dai-kyu +10 on foot, han-kyu/yumi +10 mounted) —
 mounted context; **ammo armor-TN mods** (armor-piercing ignores / flesh-cutter + kyoketsu-shogi double

@@ -1683,6 +1683,7 @@ static func execute_ranged_attack(
 	raises: int,
 	dice_engine: DiceEngine,
 	spend_void: bool = false,
+	thrown: bool = false,
 ) -> Dictionary:
 	if CharacterStats.is_dead(attacker):
 		return {"success": false, "reason": "character_is_dead"}
@@ -1731,14 +1732,19 @@ static func execute_ranged_attack(
 		return {"success": false, "reason": "false_realm_blocks_los"}
 
 	# s40 weapon range (owner Equipment table): a target beyond the weapon's max range is out of
-	# range. 0 = no specified range (the prior any-LOS PROVISIONAL behavior).
-	var rng: int = IndividualCombat.weapon_range_tiles(weapon_name)
+	# range. A thrown melee weapon uses its thrown_range; a ranged weapon uses range_tiles.
+	# 0 = no specified range (the prior any-LOS PROVISIONAL behavior).
+	var rng: int = IndividualCombat.weapon_thrown_range(weapon_name) if thrown else IndividualCombat.weapon_range_tiles(weapon_name)
 	if rng > 0 and _chebyshev(apos, tpos) > rng:
 		return {"success": false, "reason": "out_of_range"}
 
-	# Weapon must be ranged.
+	# Weapon eligibility: a normal shot needs a ranged weapon; a throw (s40) needs a melee weapon
+	# that can be hurled (has a thrown_range).
 	var wp: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
-	if wp.get("melee", true):
+	if thrown:
+		if IndividualCombat.weapon_thrown_range(weapon_name) <= 0:
+			return {"success": false, "reason": "weapon_not_throwable"}
+	elif wp.get("melee", true):
 		return {"success": false, "reason": "weapon_is_melee"}
 
 	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
@@ -1815,7 +1821,7 @@ static func execute_ranged_attack(
 	}
 
 	if result.get("hit", false):
-		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, shot_raises, "", result, dice_engine)
+		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, shot_raises, "", result, dice_engine, thrown)
 		log_entry["damage"] = dmg_result.get("damage", 0)
 		log_entry["wounds_inflicted"] = dmg_result.get("wounds", 0)
 		result["damage"] = dmg_result.get("damage", 0)
@@ -9835,6 +9841,7 @@ static func _apply_hit(
 	maneuver: String,
 	attack_result: Dictionary,
 	dice_engine: DiceEngine,
+	thrown: bool = false,
 ) -> Dictionary:
 	var feint_bonus: int = 0
 	var raises_for_damage: int = 0
@@ -9858,7 +9865,7 @@ static func _apply_hit(
 		stv_kept = 1
 
 	var dmg: Dictionary = IndividualCombat.resolve_damage(
-		attacker, weapon_name, raises_for_damage + stv_rolled, feint_bonus, dice_engine, a_p, maneuver == "feint", stv_kept
+		attacker, weapon_name, raises_for_damage + stv_rolled, feint_bonus, dice_engine, a_p, maneuver == "feint", stv_kept, thrown
 	)
 	var raw: int = dmg["raw_damage"]
 
