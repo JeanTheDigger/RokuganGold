@@ -453,11 +453,79 @@ static func apply_training_progress(companion: Dictionary, progress_gained: int)
 
 # s57.39 R3 / s24: commonly-domesticated animals trained by a Rank-3+ character may
 # be trained for use by OTHERS (the trained companion is usable by a character other
-# than the trainer). NO CONSUMER yet — TRAIN_ANIMAL always trains the actor's own
-# companion (owner_id == self, enforced by can_train_subsequent_session) and no
-# objective produces cross-owner training, so this is ready-but-dormant.
+# than the trainer). Wired via the TRAIN_ANIMAL `recipient_id` metadata path — a
+# Rank-3+ trainer produces a companion owned by the recipient. No autonomous NPC trigger
+# exists (the GDD specifies none — it is a deliberate/PC-facing capability).
 static func can_train_for_others(trainer_rank: int) -> bool:
 	return trainer_rank >= MASTERY_TRAIN_FOR_OTHERS_RANK
+
+
+# s24.3 R3: "commonly domesticated animals such as dogs, horses, or falcons" may be
+# trained for others. The Lion warcat is a school specialty, not commonly domesticated,
+# so it is excluded; pigeons (message birds) and the war-trained dog/horse variants are
+# domesticated dog/horse/falcon families and are included.
+const COMMONLY_DOMESTICATED: Array[String] = [
+	"DOG", "WAR_DOG", "RIDING_HORSE", "WARHORSE", "FALCON", "PIGEON",
+]
+
+static func is_commonly_domesticated(species_str: String) -> bool:
+	return species_str in COMMONLY_DOMESTICATED
+
+
+## Gate for a FIRST train-for-others session: a Rank-3 trainer trains a commonly-
+## domesticated animal for a recipient, who will own it (counts against the recipient's
+## cap). Validates trainer rank, species, recipient, recipient cap, and trainer context.
+static func can_train_for_others_first(
+	trainer: L5RCharacterData,
+	recipient: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	species_str: String,
+) -> Dictionary:
+	if not can_train_for_others(SkillResolver.get_skill_rank(trainer, "Animal Handling")):
+		return {"valid": false, "reason": "trainer_below_rank_3"}
+	if recipient == null or CharacterStats.is_dead(recipient):
+		return {"valid": false, "reason": "invalid_recipient"}
+	if not is_commonly_domesticated(species_str):
+		return {"valid": false, "reason": "species_not_commonly_domesticated"}
+	if not SPECIES_TABLE.has(species_str):
+		return {"valid": false, "reason": "invalid_species"}
+	var valid_contexts: Array = [
+		Enums.ContextFlag.AT_OWN_HOLDINGS,
+		Enums.ContextFlag.VISITING,
+		Enums.ContextFlag.AT_COURT,
+	]
+	if not (ctx.context_flag in valid_contexts):
+		return {"valid": false, "reason": "invalid_context"}
+	if not under_cap(recipient):
+		return {"valid": false, "reason": "recipient_at_companion_cap"}
+	return {"valid": true}
+
+
+## Gate for a SUBSEQUENT train-for-others session: the Rank-3 trainer continues training
+## a (commonly-domesticated) companion owned by someone else. Unlike the self path, the
+## owner check is intentionally bypassed (training for another is the point).
+static func can_train_for_others_subsequent(
+	trainer: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	companion: Dictionary,
+) -> Dictionary:
+	if not can_train_for_others(SkillResolver.get_skill_rank(trainer, "Animal Handling")):
+		return {"valid": false, "reason": "trainer_below_rank_3"}
+	if not is_commonly_domesticated(companion.get("species", "")):
+		return {"valid": false, "reason": "species_not_commonly_domesticated"}
+	var valid_contexts: Array = [
+		Enums.ContextFlag.AT_OWN_HOLDINGS,
+		Enums.ContextFlag.VISITING,
+		Enums.ContextFlag.AT_COURT,
+	]
+	if not (ctx.context_flag in valid_contexts):
+		return {"valid": false, "reason": "invalid_context"}
+	if not companion.get("is_alive", false):
+		return {"valid": false, "reason": "companion_not_alive"}
+	if companion.get("fully_trained", false) \
+			and int(companion.get("rebond_sessions_remaining", 0)) <= 0:
+		return {"valid": false, "reason": "already_fully_trained"}
+	return {"valid": true}
 
 
 static func can_command_to_attack(trainer_rank: int) -> bool:

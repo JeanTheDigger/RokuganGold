@@ -459,7 +459,7 @@ static func execute(
 		return _execute_conduct_tea_ceremony(action, character, ctx, dice_engine, characters_by_id)
 
 	if action_id == "TRAIN_ANIMAL":
-		return _execute_train_animal(action, character, ctx, dice_engine)
+		return _execute_train_animal(action, character, ctx, dice_engine, characters_by_id)
 
 	if action_id == "APPLY_TATTOO":
 		return _execute_apply_tattoo(action, character, ctx, dice_engine, characters_by_id)
@@ -5977,16 +5977,30 @@ static func _execute_train_animal(
 	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
+	characters_by_id: Dictionary = {},
 ) -> Dictionary:
 	var is_first_session: bool = action.metadata.get("is_first_session", false)
 	var species_str: String = action.metadata.get("species", "")
 	var companion_id: int = action.metadata.get("companion_id", -1)
 
+	# s24.3 R3 train-for-others: a Rank-3 trainer may train a commonly-domesticated
+	# animal for a recipient, who OWNS the resulting companion (it lives on the
+	# recipient's trained_companions and counts against their cap). recipient_id == -1
+	# or self → the standard own-companion path.
+	var recipient_id: int = action.metadata.get("recipient_id", -1)
+	var for_others: bool = recipient_id >= 0 and recipient_id != character.character_id
+	var owner_char: L5RCharacterData = character
+	if for_others:
+		owner_char = characters_by_id.get(recipient_id)
+
 	if is_first_session:
-		# First session — acquire a new companion
-		var check: Dictionary = AnimalHandlingSystem.can_train_first_session(
-			character, ctx, species_str
-		)
+		# First session — acquire a new companion (for self, or for a recipient at R3+).
+		var check: Dictionary
+		if for_others:
+			check = AnimalHandlingSystem.can_train_for_others_first(
+				character, owner_char, ctx, species_str)
+		else:
+			check = AnimalHandlingSystem.can_train_first_session(character, ctx, species_str)
 		if not check.get("valid", false):
 			return {
 				"success": false,
@@ -6001,10 +6015,10 @@ static func _execute_train_animal(
 		# here we use a transient id from metadata or compute one)
 		var new_id: int = action.metadata.get("new_companion_id", -1)
 		if new_id < 0:
-			new_id = character.character_id * 1000 + character.trained_companions.size()
+			new_id = owner_char.character_id * 1000 + owner_char.trained_companions.size()
 		var companion_name: String = action.metadata.get("companion_name", species_str.to_lower())
 		var new_companion: Dictionary = AnimalHandlingSystem.create_companion(
-			character.character_id,
+			owner_char.character_id,
 			species_str,
 			new_id,
 			companion_name,
@@ -6012,13 +6026,13 @@ static func _execute_train_animal(
 			action.target_province_id,
 			roll_result.get("progress_gained", 0),
 		)
-		character.trained_companions.append(new_companion)
+		owner_char.trained_companions.append(new_companion)
 
 		return {
 			"success": true,
 			"action_id": "TRAIN_ANIMAL",
 			"character_id": character.character_id,
-			"target_npc_id": -1,
+			"target_npc_id": owner_char.character_id if for_others else -1,
 			"target_province_id": action.target_province_id,
 			"ic_day": ctx.ic_day,
 			"season": ctx.season,
@@ -6029,6 +6043,7 @@ static func _execute_train_animal(
 				"is_first_session": true,
 				"companion_id": new_id,
 				"species": species_str,
+				"trained_for_owner_id": owner_char.character_id,
 				"progress_gained": roll_result.get("progress_gained", 0),
 				"roll_success": roll_result.get("success", false),
 				"fully_trained": new_companion.get("fully_trained", false),
@@ -6036,9 +6051,15 @@ static func _execute_train_animal(
 		}
 
 	else:
-		# Subsequent session — advance existing companion
+		# Subsequent session — advance an existing companion (own, or a recipient's at R3+).
+		if for_others and owner_char == null:
+			return {
+				"success": false,
+				"action_id": "TRAIN_ANIMAL",
+				"reason": "invalid_recipient",
+			}
 		var companion: Dictionary = {}
-		for c: Variant in character.trained_companions:
+		for c: Variant in owner_char.trained_companions:
 			var comp: Dictionary = c as Dictionary
 			if comp.get("companion_id", -1) == companion_id:
 				companion = comp
@@ -6051,9 +6072,13 @@ static func _execute_train_animal(
 				"reason": "companion_not_found",
 			}
 
-		var check: Dictionary = AnimalHandlingSystem.can_train_subsequent_session(
-			character, ctx, companion
-		)
+		var check: Dictionary
+		if for_others:
+			check = AnimalHandlingSystem.can_train_for_others_subsequent(
+				character, ctx, companion)
+		else:
+			check = AnimalHandlingSystem.can_train_subsequent_session(
+				character, ctx, companion)
 		if not check.get("valid", false):
 			return {
 				"success": false,

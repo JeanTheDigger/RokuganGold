@@ -3811,12 +3811,23 @@ character)`** → +5 for Engineering R5+ or Sailing R5+ on Cooperative/Cumulativ
   forward-wired on `infrastructure` tags (no design value invented for which settlements are
   crossroads/river-towns/remote).
 - **Craft — NO masteries** (s24 "Mastery Abilities: None"). Nothing to wire.
-- **Animal Handling R3 (train-for-others) — helper added, DORMANT.** `can_train_for_others(rank)`
-  (rank ≥ 3) in `animal_handling_system.gd` (the s57.39 home; s24 and s57.39 R3 AGREE). No consumer
-  yet — TRAIN_ANIMAL always trains the actor's own companion (`owner_id == self`) and no objective
-  produces cross-owner training. The existing R5 (`can_command_to_attack`) / R7
-  (`has_no_flee_override`) helpers remain (also dormant — companion_system doesn't read them; ASCII
-  combat layer, PC-travel HOLD).
+- **Animal Handling R3 (train-for-others) — now WIRED (2026-06-30, runtime-verified 13/13).** s24.3 R3:
+  "commonly domesticated animals (dogs, horses, falcons) may be trained for use by others." TRAIN_ANIMAL
+  gains a `recipient_id` metadata path: a Rank-3+ trainer trains a commonly-domesticated animal that the
+  RECIPIENT owns (the companion lands on the recipient's `trained_companions` with `owner_id == recipient`
+  and counts against the recipient's cap; the trainer's Animal Handling drives the roll). New
+  `AnimalHandlingSystem.can_train_for_others_first` (gates trainer R3+, recipient alive, commonly-
+  domesticated species, recipient cap, context) and `can_train_for_others_subsequent` (same, owner check
+  intentionally bypassed — training for another is the point). `COMMONLY_DOMESTICATED` = DOG/WAR_DOG/
+  RIDING_HORSE/WARHORSE/FALCON/PIGEON (Lion WARCAT excluded — a school specialty). `_execute_train_animal`
+  takes `characters_by_id` and routes both sessions to the for-others path when `recipient_id` is set.
+  **No autonomous NPC trigger** — the GDD specifies none for cross-owner training, so this is a deliberate/
+  PC-facing capability (callable now; like the voluntary-gift transfer, the NPC/PC issuance layer is the
+  remaining bit). Runtime-verified 13/13 (Godot 4.6.2, headless): R3/R2 gate, DOG/WARCAT domesticated
+  check, R3 trains a DOG for a recipient (trainer keeps none, recipient owns it, owner_id + effects
+  correct), R2 trainer / WARCAT / recipient-at-cap all rejected with the right reason, and the self-train
+  path is unchanged (still gated by the actor's own cap). The R5 (`can_command_to_attack`) / R7
+  (`has_no_flee_override`) helpers are LIVE in the ASCII combat layer (s57.39.7/8, PC-travel HOLD).
 - **Animal Handling R7 — NO conflict (resolved 2026-06-30).** Earlier flagged as a possible
   s24-vs-s57.39.8 conflict, but the PROJECT GDD is internally consistent: `s24.3` line 351 says R7 =
   "will not flee from combat even when badly wounded; the Rank 5 default flee-when-wounded behaviour is
