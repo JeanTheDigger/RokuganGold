@@ -1390,6 +1390,13 @@ static func execute_melee_attack(
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, weapon_name)
 	armor_tn += _cover_bonus(state, tpos, apos)
+	# s24 Staves base rule (s24 line 327): a staff attack DOUBLES the defender's worn-armor TN bonus.
+	# get_armor_tn already counts armor_tn_bonus once, so add it once more. The staff-user negates the
+	# doubling at Staves R3 (staff_doubles_armor returns false then). Inert vs an unarmored target.
+	if SkillMasterySystem.staff_doubles_armor(
+			String(IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")),
+			int(attacker.skills.get("Staves", 0))):
+		armor_tn += target.armor_tn_bonus
 	# s40 Lance (owner table): a stationary lance stab is unwieldy — +5 TN mounted / +10 TN on foot.
 	# A charge (is_charge) bypasses this and gets the charge damage instead.
 	if not is_charge:
