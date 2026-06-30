@@ -375,7 +375,10 @@ const SCHOOL_DATA: Dictionary = {
 		"clan": "Crab", "family": "Toritaka",
 		"type": Enums.SchoolType.BUSHI,
 		"benefit": "awareness", "honor": 2.5,
-		"skills": ["Athletics", "Defense", "Hunting", "Intimidation", "Kenjutsu", "Lore: Spirit Realms"],
+		# Animal Handling is a Toritaka Bushi starting skill (s57.39.11 "these schools all
+		# have Animal Handling either as a starting skill, a prerequisite, or a direct
+		# school-bonus specialty") — grants the falcon-companion standing (owner-approved).
+		"skills": ["Animal Handling", "Athletics", "Defense", "Hunting", "Intimidation", "Kenjutsu", "Lore: Spirit Realms"],
 		"wildcards": ["Bugei"],
 		"focus_rings": [Enums.Ring.WATER, Enums.Ring.EARTH],
 		"skill_rank_2": [],

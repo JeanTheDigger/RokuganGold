@@ -3589,11 +3589,13 @@ clobbering a higher-priority standing (e.g. a magistracy). The standing carries 
 via the new `ImmediateNeed.target_species` (copied in `_passthrough`/`_make_need`), which the
 TRAIN_ANIMAL metadata population now reads — so a standing-driven trainer trains the *target* species
 (matching an in-progress companion of that species, else first-session it) instead of the old DOG
-default. `_process_companion_deaths` now stamps `death_ic_day` (the grief clock). **DORMANT for a
-fresh Toritaka:** Toritaka Bushi's SCHOOL_DATA skill list does NOT grant Animal Handling (contradicting
-s57.39.11's prose), so cap 0 at AH rank 0 → the standing evaluates to "clear/none" until a member
-reaches Animal Handling ≥ 1 (seasonal advancement, or a future SCHOOL_DATA correction — a school-design
-edit left to the owner, NOT made here). **(B) s57.39.9 companion healing.**
+default. `_process_companion_deaths` now stamps `death_ic_day` (the grief clock). **LIVE for fresh
+Toritaka (owner-approved 2026-06-30):** "Animal Handling" was added to Toritaka Bushi's SCHOOL_DATA
+skill list (it was absent, contradicting s57.39.11's prose), so every fresh Toritaka Bushi has Animal
+Handling 1 (cap 1) and the falcon standing fires at creation — verified 8/8 generated Toritaka have
+AH≥1 and the standing assigns FALCON, while an Akodo control gets none. (Edit confined to Toritaka
+Bushi; Aerie Falconer / Utaku Horse Master remain unimplemented schools, forward-wired.)
+**(B) s57.39.9 companion healing.**
 `AnimalHandlingSystem.treat_companion_wound(healer, companion, dice, raises)` heals a wounded companion
 the same way a character is healed — Medicine (Wound Treatment)/Intelligence vs the s57.31 BASE_TN,
 consumes a Medicine Kit charge, heal roll 1k1 (+1 die at Medicine R5 mastery, +1/raise), reduces the
