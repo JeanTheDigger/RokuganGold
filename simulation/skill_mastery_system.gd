@@ -239,6 +239,20 @@ static func forgery_detect_rolled_bonus(character: L5RCharacterData) -> int:
 	return 1 if int(character.skills.get("Forgery", 0)) >= MASTERY_RANK_5 else 0
 
 
+# Forgery R3: +1k0 (one rolled die) on the roll that MAKES a forgery — a better forgery is
+# harder to detect (s24 Forgery mastery). The forger's roll total is the forgery's detection
+# TN (owner ruling 2026-06-30, reconciling s12.8 base+raises with the s24 roll-result model),
+# so the mastery die raises that TN. Returns the rolled-die bonus (0 or 1).
+static func forgery_tn_rolled_bonus(character: L5RCharacterData) -> int:
+	return 1 if int(character.skills.get("Forgery", 0)) >= MASTERY_RANK_3 else 0
+
+
+# Forgery R7: +0k1 (one kept die) on the roll that MAKES a forgery (s24 Forgery mastery).
+# Cumulative with R3 (a Rank-7 forger gets +1k1). Returns the kept-die bonus (0 or 1).
+static func forgery_tn_kept_bonus(character: L5RCharacterData) -> int:
+	return 1 if int(character.skills.get("Forgery", 0)) >= MASTERY_RANK_7 else 0
+
+
 # Staves base rule: a staff attack doubles the DEFENDER's worn-armor TN bonus (s24 line 327). The
 # staff-user negates this doubling at Staves R3. Returns true when the attacker wields a staff and
 # lacks R3 (so the defender's armor TN bonus should be added one extra time = doubled).

@@ -967,7 +967,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 Values confirmed against GDD s12.8:
 - FORGE_LETTER_TN: 15/20/25 (minor/moderate/major) — matches GDD exactly.
 - FORGE_ORDER_TN: 20/25/30 (minor/moderate/major) — matches GDD exactly.
-- Detection TN formula: base TN + (Raises × 5) — matches GDD exactly.
+- Detection TN formula: **the forger's actual roll TOTAL** (owner ruling 2026-06-30 —
+  see "s24 Forgery masteries" below). Was "base TN + Raises×5"; switched to the
+  roll-result model to reconcile s12.8 (base+raises) with the s24 Forgery mastery
+  text (R3/R7 add dice "to the roll that determines its quality = its detection TN").
+  A cleaner forgery (higher roll) is harder to detect. On failure detection_tn = 0.
 - Honor cost -0.3 / Infamy +0.1 — matches other Category 6 actions
   (Intercept a Letter, Search Quarters). GDD says "Using a Low Skill per
   Table 2.3, scaled by Honor Rank" — rank-scaling not yet implemented
@@ -3769,6 +3773,36 @@ more often than a Forgery-0 one (239 vs 188 / 400). **BLOCKED (owner decision ne
   layer moves one tile per action with no distance budget (the base "Water Ring feet per Simple" isn't
   modeled either), so the movement masteries have no consumer without a stealth-move-budget model in
   the (PC-travel-HOLD) exploration layer. Deferred, same class as the deferred kata stealth-movement.
+
+### s24 Skill Mastery Abilities — "Low Skill" tranche (Forgery R3/R7; Intimidation/Temptation/Sleight/Stealth already wired or blocked) (2026-06-30, runtime-verified)
+Wired the s24 "Low Skill" masteries the owner pasted. Audit result: **Intimidation R5** (+5 to
+contested rolls) and **Temptation R5** (+5 to contested rolls) were already in
+`SkillMasterySystem.CONTESTED_R5` and live; **Sleight of Hand R5** (conceal a weapon as one size
+smaller) is already gated via `SecretSystem.CONCEAL_WEAPON_SKILL_GATE`; **Stealth** movement
+masteries (R3/R5/R7 half-move / no-penalty-move) are **DEFERRED** — the CombatController stealth
+layer has no per-move-distance budget to attach them to (owner decision pending, flagged). The one
+genuinely-blocked pair, **Forgery R3/R7**, is now wired via the owner ruling below.
+- **Forgery R5 detect gap — FIXED.** `SkillMasterySystem.forgery_detect_rolled_bonus` (+1k0 on a
+  roll to DETECT someone else's forgery) existed but `LetterSystem.auto_detect_forgery` /
+  `deliberate_examine_letter` never applied it — the recipient's Forgery RANK now boosts their
+  Investigation/Perception detection roll (both paths route through one helper; the old local
+  `FORGERY_RANK5_DETECT_BONUS` const removed).
+- **Forgery R3 (+1k0) / R7 (+0k1) — wired via a detection-TN model switch (owner ruling 2026-06-30).**
+  The s24 Forgery masteries add dice "to the roll that determines the forgery's quality — its
+  detection TN," but the project's forge pipeline (s12.8) computed detection TN as `base TN +
+  Raises×5` (a fixed number with no dice roll to boost). Owner authorized **option (a): the forge
+  detection TN becomes the forger's actual roll TOTAL** — reconciling the two models and giving R3/R7
+  a clean hook. New helpers `forgery_tn_rolled_bonus` (1 at Forgery≥R3) / `forgery_tn_kept_bonus`
+  (1 at ≥R7, cumulative → a R7 forger rolls +1k1). All three forge functions
+  (`resolve_fabricate_secret`, `resolve_forge_impersonation_letter`, `resolve_forge_order` in
+  `secret_system.gd`) now pass the mastery bonus dice into the forge `resolve_skill_check` and set
+  `detection_tn = <roll total>` on success (else 0). **Accepted simplification** (documented): the
+  +1k0/+0k1 modify the forge dice pool, so they marginally aid the forge's own success too — a master
+  forger's technique makes the forgery both slightly more likely to pass AND harder to detect later.
+  The CLAUDE.md "Forge Pipeline PROVISIONAL Values Audit" detection-TN note updated to match.
+  Runtime-verified (Godot 4.6.2, headless, 4000 samples/rank): detection_tn == roll_total on EVERY
+  success (0 mismatches, R0–R7); monotonic avg detection TN R2=28.0 → R3=29.7 (+1k0) → R5=31.7 →
+  R7=40.9 (+1k1); failed forge → detection_tn=0; helper values R2(0,0)/R3(1,0)/R7(1,1) exact.
 
 ### s24 Skill Mastery Abilities — Merchant tranche (Commerce/Engineering/Sailing; Craft none) (2026-06-30, runtime-verified 16/16)
 Wired the s24 non-Bugei "Merchant" masteries the owner pasted ("Now these masteries"), all values

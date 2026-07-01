@@ -260,8 +260,11 @@ static func fabricate_secret(
 		return {"success": false, "reason": "no_forgery_skill"}
 
 	var needed: int = tn + (raises_called * 5)
+	# Forgery R3 (+1k0) / R7 (+0k1) improve the forgery — the roll TOTAL is its detection TN.
+	var m_rolled: int = SkillMasterySystem.forgery_tn_rolled_bonus(fabricator)
+	var m_kept: int = SkillMasterySystem.forgery_tn_kept_bonus(fabricator)
 	var roll: Dictionary = SkillResolver.resolve_skill_check(
-		fabricator, dice_engine, "Forgery", needed,
+		fabricator, dice_engine, "Forgery", needed, 0, "", Enums.Trait.NONE, m_rolled, m_kept,
 	)
 	var total: int = roll.get("total", 0)
 	var success: bool = roll.get("success", false)
@@ -274,7 +277,9 @@ static func fabricate_secret(
 	if not success:
 		return {"success": false, "roll_total": total, "tn": needed, "honor_cost": honor_cost}
 
-	var detection_tn: int = tn + (raises_called * 5)
+	# Detection TN = the forger's actual roll total (owner ruling 2026-06-30). A cleaner
+	# forgery (higher roll, incl. R3/R7 mastery dice) is harder to detect later.
+	var detection_tn: int = total
 
 	var secret := SecretData.new()
 	secret.secret_id = secret_id
@@ -719,11 +724,14 @@ static func resolve_forge_impersonation_letter(
 		return {"success": false, "reason": "no_forgery_skill"}
 
 	var needed: int = tn + (raises_called * 5)
+	# Forgery R3 (+1k0) / R7 (+0k1) — the roll TOTAL becomes the detection TN (owner ruling).
+	var m_rolled: int = SkillMasterySystem.forgery_tn_rolled_bonus(forger)
+	var m_kept: int = SkillMasterySystem.forgery_tn_kept_bonus(forger)
 	var result: Dictionary = SkillResolver.resolve_skill_check(
-		forger, dice_engine, "Forgery", needed,
+		forger, dice_engine, "Forgery", needed, 0, "", Enums.Trait.NONE, m_rolled, m_kept,
 	)
 	var success: bool = result.get("success", false)
-	var detection_tn: int = needed if success else 0
+	var detection_tn: int = int(result.get("total", 0)) if success else 0
 
 	HonorGlorySystem.apply_honor_change(forger, CrimeSystem.scale_honor_by_rank(-0.3, forger))
 	HonorGlorySystem.apply_infamy_change(forger, 0.1)
@@ -760,11 +768,14 @@ static func resolve_forge_order(
 		return {"success": false, "reason": "no_forgery_skill"}
 
 	var needed: int = tn + (raises_called * 5)
+	# Forgery R3 (+1k0) / R7 (+0k1) — the roll TOTAL becomes the detection TN (owner ruling).
+	var m_rolled: int = SkillMasterySystem.forgery_tn_rolled_bonus(forger)
+	var m_kept: int = SkillMasterySystem.forgery_tn_kept_bonus(forger)
 	var result: Dictionary = SkillResolver.resolve_skill_check(
-		forger, dice_engine, "Forgery", needed,
+		forger, dice_engine, "Forgery", needed, 0, "", Enums.Trait.NONE, m_rolled, m_kept,
 	)
 	var success: bool = result.get("success", false)
-	var detection_tn: int = needed if success else 0
+	var detection_tn: int = int(result.get("total", 0)) if success else 0
 
 	HonorGlorySystem.apply_honor_change(forger, CrimeSystem.scale_honor_by_rank(-0.3, forger))
 	HonorGlorySystem.apply_infamy_change(forger, 0.1)
