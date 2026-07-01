@@ -3863,8 +3863,15 @@ multi-tile `_npc_move_toward`), so I mirrored it for the player.
   Same PC-travel HOLD live-reachability caveat as the whole CombatController stealth layer — driver-verified,
   not a live session. With this + Forgery R3/R7, the s24 Low-Skill masteries are complete except R7 (blocked).
 
-### Correctness sweep — dropped-effect + dead-function classes (2026-07-01, read-only, no bugs found)
-Two produced-vs-consumed audits; both came back clean (a confirmation, not a fix):
+### Correctness sweep — dropped-effect + dead-function + dead-char classes (2026-07-01, read-only, no bugs found)
+Three audits; all came back clean (a confirmation, not a fix):
+- **Dead-character-guard class — CLEAN in the newest code.** Spot-verified 13 high-risk mutation sites in
+  the 2026-06 art/lifecycle + affliction layers (the least-audited): all 5 art visitor-effect loops
+  (garden/sculpture/painting/bonsai/ikebana), the theater PERFORM performer + witness-polarization loops,
+  and the 5 world-sim affliction/taint daily processors (possession/disease/death-touch/periodic-taint/
+  taint-rank) — every one guards `CharacterStats.is_dead()` on its character loop (possession even
+  re-checks after processing that can kill). The dead-char discipline (dozens of past fixes) holds in the
+  new code too.
 - **Dropped-effect-on-failure class — CLEAN (0 instances).** A rigorous parser scanned every `return {…}`
   block in `action_executor.gd` for the recurring bug where a `success:false` result carries a consumable
   effect key (honor_change / glory_change / infamy / disposition / koku_cost / witness_disposition_loss …)
