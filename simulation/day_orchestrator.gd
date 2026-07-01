@@ -1846,6 +1846,17 @@ static func advance_day(
 			world_states, active_topics, active_okiyas,
 		)
 
+	# Lifecycle cleanup: drop terminal (gone-from-world) art objects from their active
+	# registries — a destroyed garden, dead bonsai, or lost/abandoned-incomplete piece is no
+	# longer a live object (every consumer already skips them; nothing queries them post-terminal).
+	# Matches the _remove_resolved_* pattern the 12 sibling collections have; these 5 newer
+	# registries had missed it, so terminal items accumulated monotonically.
+	_remove_terminal_theater_pieces(theater_pieces)
+	_remove_terminal_gardens(active_gardens)
+	_remove_terminal_bonsai(active_bonsai)
+	_remove_terminal_paintings(active_paintings)
+	_remove_terminal_sculptures(active_sculptures)
+
 	return {
 		"ic_day": ic_day,
 		"season": current_season,
@@ -27818,6 +27829,57 @@ static func _remove_resolved_wars(active_wars: Array) -> void:
 		var war: Variant = active_wars[i]
 		if war is WarData and not (war as WarData).is_active:
 			active_wars.remove_at(i)
+		i -= 1
+
+
+# -- Terminal art-object removal (lifecycle cleanup, matches _remove_resolved_* pattern) -------
+# These 5 art registries are OBJECT registries (a completed painting/garden/piece persists like an
+# inventory item), so only the terminal-FAILURE states are removed: the object no longer exists in
+# the world. Consumers already skip these; nothing queries them post-terminal, and any orphaned ID
+# reference (e.g. a topic subject) fails-lookup gracefully per the project convention.
+
+static func _remove_terminal_theater_pieces(theater_pieces: Array) -> void:
+	var i: int = theater_pieces.size() - 1
+	while i >= 0:
+		var p: Variant = theater_pieces[i]
+		if p is TheaterPieceData and ((p as TheaterPieceData).lost or (p as TheaterPieceData).abandoned_incomplete):
+			theater_pieces.remove_at(i)
+		i -= 1
+
+
+static func _remove_terminal_gardens(active_gardens: Array) -> void:
+	var i: int = active_gardens.size() - 1
+	while i >= 0:
+		var g: Variant = active_gardens[i]
+		if g is GardenData and (g as GardenData).destroyed:
+			active_gardens.remove_at(i)
+		i -= 1
+
+
+static func _remove_terminal_bonsai(active_bonsai: Array) -> void:
+	var i: int = active_bonsai.size() - 1
+	while i >= 0:
+		var b: Variant = active_bonsai[i]
+		if b is BonsaiData and (b as BonsaiData).is_dead:
+			active_bonsai.remove_at(i)
+		i -= 1
+
+
+static func _remove_terminal_paintings(active_paintings: Array) -> void:
+	var i: int = active_paintings.size() - 1
+	while i >= 0:
+		var p: Variant = active_paintings[i]
+		if p is PaintingData and (p as PaintingData).abandoned_incomplete:
+			active_paintings.remove_at(i)
+		i -= 1
+
+
+static func _remove_terminal_sculptures(active_sculptures: Array) -> void:
+	var i: int = active_sculptures.size() - 1
+	while i >= 0:
+		var s: Variant = active_sculptures[i]
+		if s is SculptureData and (s as SculptureData).abandoned_incomplete:
+			active_sculptures.remove_at(i)
 		i -= 1
 
 

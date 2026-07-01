@@ -3893,6 +3893,26 @@ Three audits; all came back clean (a confirmation, not a fix):
   (Doc precision: the earlier s57.39 note calling the two AnimalHandling helpers "LIVE in the ASCII combat
   layer" means the RULES are live inline — the named helpers themselves are unused test-only wrappers.)
 
+### Known Code Issues (found and fixed 2026-07-01, lifecycle-leak sweep — newer art registries)
+- **5 newer art registries never removed terminal objects — monotonic growth leak. FIXED.**
+  The lifecycle-leak class ("a terminal item is skipped but never removed from its `active_*` array") has
+  a `_remove_resolved_*` pass for all 12 older collections (wars/successions/hunts/favors/topics/
+  commitments/courts/hostages/civil-wars/entanglements/…) but the 5 art registries added this year —
+  `theater_pieces`, `active_gardens`, `active_bonsai`, `active_paintings`, `active_sculptures` — had
+  **none**, so a terminal object accumulated forever. These are OBJECT registries (a completed painting/
+  garden/piece persists like an inventory item), so only the terminal-FAILURE states are removed — the
+  object is gone from the world: theater `lost`/`abandoned_incomplete`, garden `destroyed`, bonsai
+  `is_dead`, painting/sculpture `abandoned_incomplete`. **Not a behavior bug** — every consumer already
+  skips terminal items (verified: theater injection/WIP-select, garden/painting/bonsai visitor loops), and
+  nothing queries them post-terminal (unlike crime_records, which need a retention WINDOW, not immediate
+  removal — the distinction: art terminal objects are never read again, so remove-on-terminal is correct,
+  matching wars/commitments). Five `_remove_terminal_*` passes added at the end of `advance_day` (after
+  all daily/seasonal/death processing → same-tick catch), reverse-iteration `remove_at`, mutating the
+  by-reference WorldState arrays exactly like the sibling passes. Completed/canonized pieces, live gardens/
+  bonsai, and completed paintings/sculptures are RETAINED. Orphaned topic→art-ID references fail-lookup
+  gracefully (project convention). Runtime-verified 7/7 (Godot 4.6.2, headless): each registry keeps its
+  non-terminal items and drops its terminal ones; empty + all-terminal edge cases.
+
 ### s24 Skill Mastery Abilities — "Low Skill" tranche (Forgery R3/R7; Intimidation/Temptation/Sleight/Stealth already wired or blocked) (2026-06-30, runtime-verified)
 Wired the s24 "Low Skill" masteries the owner pasted. Audit result: **Intimidation R5** (+5 to
 contested rolls) and **Temptation R5** (+5 to contested rolls) were already in
