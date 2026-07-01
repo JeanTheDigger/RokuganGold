@@ -622,7 +622,8 @@ func _try_move(dx: int, dy: int) -> void:
 	if _combat_controller != null:
 		var result: Dictionary
 		if _stealth_mode:
-			result = _combat_controller.try_stealth_move(dx, dy)
+			# s24 R3/R5: cover up to the Stealth move budget (Water / Water×2 tiles) per action.
+			result = _combat_controller.try_stealth_move_run(dx, dy)
 			# Stealth kill available → execute immediately (DF bump-to-kill).
 			if result.get("stealth_kill_available"):
 				var kill_result: Dictionary = _combat_controller.execute_stealth_kill(

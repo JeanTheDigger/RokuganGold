@@ -1012,6 +1012,35 @@ func try_stealth_move(dx: int, dy: int) -> Dictionary:
 	return stealth_res
 
 
+# s24 Stealth movement masteries (R3/R5): a Stealthed character covers up to
+# SkillMasterySystem.stealth_move_budget tiles per stealth action (base 1, R3 Water, R5 Water×2),
+# stepping in direction (dx, dy). Rolls Stealth per tile (per-tile model — a longer sneak = more
+# exposure). Stops early on a wall/door/enemy/zone-exit (returns that step's result) or once the
+# stealth roll fails (cover blown — you can't keep gliding while exposed). Returns the terminating
+# step's result dict augmented with `tiles_moved`. Budget 1 (no mastery) == a single try_stealth_move,
+# so this is a drop-in replacement for the player command path.
+func try_stealth_move_run(dx: int, dy: int) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"blocked": true, "reason": "player_dead", "tiles_moved": 0}
+
+	var budget: int = SkillMasterySystem.stealth_move_budget(player.character)
+	var tiles: int = 0
+	var last: Dictionary = {}
+	while tiles < budget:
+		var r: Dictionary = try_stealth_move(dx, dy)
+		if not r.get("moved", false):
+			# Wall / closed door / enemy (stealth-kill) / zone exit — did not advance this step.
+			r["tiles_moved"] = tiles
+			return r
+		tiles += 1
+		last = r
+		if not _player_stealth:
+			break  # Cover blown on this tile — the stealth run ends.
+	last["tiles_moved"] = tiles
+	return last
+
+
 # =============================================================================
 # -- Traps (s56.20) -----------------------------------------------------------
 # All paths no-op when the map carries no traps, so trap-free missions (every

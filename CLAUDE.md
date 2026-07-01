@@ -3763,16 +3763,44 @@ detector's Forgery *rank* boosts their Investigation detection roll). Was only a
 — a real gap given "any roll." Now both detection paths route through the helper (the local
 `FORGERY_RANK5_DETECT_BONUS` const removed). Runtime-verified 5/5 (Godot 4.6.2, headless): helper 1@R5 /
 0@R4; Intimidation & Temptation R5 = +5; and a Forgery-5 recipient now auto-detects a forged letter
-more often than a Forgery-0 one (239 vs 188 / 400). **BLOCKED (owner decision needed, NOT invented):**
-- **Forgery R3 (+1k0) / R7 (+0k1) to the Forgery roll RESULT "for establishing the detection TN"** —
-  the project's forge detection TN is `base TN + Raises×5` (s12.8, LOCKED — "matches GDD exactly"),
-  NOT the roll result (the s24 skill-reference RAW). So the roll-result masteries have no faithful
-  hook: honoring them needs either changing `detection_tn` to the forger's roll total (a forge-model
-  change) or converting +1k0/+0k1 to a flat/free-raise TN bonus (an invented number). Flagged.
-- **Stealth R3 (Simple Move = Water×5 ft) / R5 (×10) / R7 (Free Move)** — the CombatController stealth
-  layer moves one tile per action with no distance budget (the base "Water Ring feet per Simple" isn't
-  modeled either), so the movement masteries have no consumer without a stealth-move-budget model in
-  the (PC-travel-HOLD) exploration layer. Deferred, same class as the deferred kata stealth-movement.
+more often than a Forgery-0 one (239 vs 188 / 400). **Both formerly-BLOCKED items now RESOLVED (owner
+rulings, see the dedicated entries below):**
+- **Forgery R3 (+1k0) / R7 (+0k1) — RESOLVED (owner ruling 2026-06-30, option a):** the forge
+  detection TN was switched from `base TN + Raises×5` (s12.8) to the forger's actual roll TOTAL,
+  reconciling s12.8→s24 and giving R3/R7 a clean hook (they add dice to the forge roll). See the
+  "s24 Forgery masteries" entry.
+- **Stealth R3 (Water tiles) / R5 (Water×2 tiles) — RESOLVED (owner ruling 2026-07-01):** the player's
+  stealth move now covers a per-action tile budget (`SkillMasterySystem.stealth_move_budget`), mirroring
+  the NPC multi-tile-move infra. R7 (Free-Move-while-stealthed) stays DEFERRED — no faithful tile value
+  in the real-time exploration model. See the "s24 Stealth movement masteries" entry.
+
+### s24 Stealth movement masteries — R3/R5 player stealth-move budget (2026-07-01, runtime-verified)
+The formerly-deferred s24 Stealth movement masteries (s24 lines 423-427, LOCKED). The base rule limits a
+Stealthed character to Water Ring FEET per Simple Move (sub-tile on the 5-ft grid → a 1-tile creep); R3
+raises it to Water×5 ft = **Water tiles**, R5 to Water×10 ft = **Water×2 tiles** (feet ÷ 5, GDD-exact,
+zero invention). The blocker was that the player's `CombatController.try_stealth_move` moved exactly one
+tile per action with no distance budget — but the NPC side already had one (`_movement_budget` +
+multi-tile `_npc_move_toward`), so I mirrored it for the player.
+- **`SkillMasterySystem.stealth_move_budget(character)`** → tiles per stealth action: base 1 (rank 0-2),
+  R3 `maxi(1, Water)`, R5 `maxi(1, Water×2)`.
+- **`CombatController.try_stealth_move_run(dx, dy)`** — steps in direction (dx,dy) up to the budget,
+  looping the existing `try_stealth_move` (so per-tile Stealth roll, per-tile noise/trap all preserved —
+  **per-tile roll model**, owner-chosen 2026-07-01: a longer sneak = more exposure). Stops early on a
+  wall/door/enemy(→stealth-kill)/zone-exit (returns that step's result) or once the stealth roll fails
+  (`not _player_stealth` — cover blown, can't keep gliding while exposed). Returns the terminating step's
+  result dict + `tiles_moved`. Budget 1 (no mastery) == a single `try_stealth_move` + `tiles_moved`, so
+  it's a drop-in replacement. `ascii_map_view.gd`'s stealth command now calls it (one-line swap; the
+  result contract is unchanged, so the view's blocked/kill/exit/moved handling still works — static-only
+  since AsciiMapView is a scene Node on the PC-travel HOLD).
+- **DEFERRED — R7** ("Free Move Actions may be taken normally while Stealthed"): an action-economy benefit
+  (a Free Move is sub-tile, Water feet) with no faithful tile value in the real-time, one-action-per-round
+  player model. Owner-overridable (would need an invented tile value for the extra Free Move).
+- Runtime-verified (Godot 4.6.2, headless): helper exact (0/2→1, 3/4→Water 3, 5/7→Water×2 6, Water-5 R5→10);
+  on open grass a strong stealther glides the full budget (R2=1, R3=3, R5=6 tiles); a wall halts the run
+  adjacent (tiles_moved=2 at x=4, blocked); a weak stealther on RUBBLE (TN20) averages 1.04 tiles with
+  299/300 runs stopping before budget on a blown roll and **0 over-budget** (the cap + failure-stop hold).
+  Same PC-travel HOLD live-reachability caveat as the whole CombatController stealth layer — driver-verified,
+  not a live session. With this + Forgery R3/R7, the s24 Low-Skill masteries are complete except R7 (blocked).
 
 ### s24 Skill Mastery Abilities — "Low Skill" tranche (Forgery R3/R7; Intimidation/Temptation/Sleight/Stealth already wired or blocked) (2026-06-30, runtime-verified)
 Wired the s24 "Low Skill" masteries the owner pasted. Audit result: **Intimidation R5** (+5 to

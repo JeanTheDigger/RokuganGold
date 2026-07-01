@@ -232,6 +232,22 @@ static func hunting_wilderness_stealth_bonus(character: L5RCharacterData, skill:
 	return 0
 
 
+# Stealth movement masteries (s24 lines 423-427): how far a Stealthed character may move per
+# Simple Move Action, in TILES (1 tile = 5 ft). The base rule limits Stealthed movement to
+# Water Ring FEET per Simple Move (sub-tile on a 5-ft grid → 1 tile: a creep). R3 raises it to
+# Water×5 ft = Water tiles; R5 to Water×10 ft = Water×2 tiles. Values GDD-exact (feet ÷ 5).
+# R7 ("Free Move Actions may be taken normally while Stealthed") is an action-economy benefit
+# with no faithful tile value in the real-time exploration model — DEFERRED (owner-overridable).
+static func stealth_move_budget(character: L5RCharacterData) -> int:
+	var rank: int = int(character.skills.get("Stealth", 0))
+	var water: int = CharacterStats.get_ring_value(character, Enums.Ring.WATER)
+	if rank >= MASTERY_RANK_5:
+		return maxi(1, water * 2)
+	if rank >= MASTERY_RANK_3:
+		return maxi(1, water)
+	return 1
+
+
 # Forgery R5: +1k0 (one rolled die) on ANY roll to DETECT a forgery made by someone else
 # (s24 Forgery mastery). Cross-skill — the detector's Forgery RANK boosts their
 # Investigation/Perception detection roll. Returns the rolled-die bonus (0 or 1).
