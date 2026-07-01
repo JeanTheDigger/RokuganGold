@@ -3746,6 +3746,30 @@ generic WARHORSE vs RIDING_HORSE, which block is the WARCAT, and how to reconcil
 `wound_threshold` with the s54.1 full wound track. That mapping needs owner sign-off before the combat
 adapter (SpiritCombatant-style puppet) + R5 command + R5/R7 flee rules are wired.
 
+### s24 Skill Mastery Abilities — Low-Skills tranche (Forgery/Intimidation/Sleight of Hand/Stealth/Temptation) (2026-07-01, runtime-verified 5/5)
+Audited the five s24 "Low Skill" masteries the owner pasted; wired the one genuine gap, confirmed
+three already live, and documented two as blocked (no invention). **Already wired (confirmed):**
+Intimidation R5 (+5 to Intimidation Contested Rolls) and Temptation R5 (+5 to Temptation Contested
+Rolls) — both in `SkillMasterySystem.CONTESTED_R5`, folded into `resolve_contested_check`; Sleight of
+Hand R5 (conceal small weapons) — `SecretSystem.CONCEAL_WEAPON_SKILL_GATE = 5` gates weapon
+concealment. **NEW — Forgery R5 (detect side).** "+1k0 on any roll to detect a forgery made by
+someone else." New `SkillMasterySystem.forgery_detect_rolled_bonus(character)` (cross-skill: the
+detector's Forgery *rank* boosts their Investigation detection roll). Was only applied on
+`LetterSystem.deliberate_examine_letter`; the passive `auto_detect_forgery` (on-receipt) **missed it**
+— a real gap given "any roll." Now both detection paths route through the helper (the local
+`FORGERY_RANK5_DETECT_BONUS` const removed). Runtime-verified 5/5 (Godot 4.6.2, headless): helper 1@R5 /
+0@R4; Intimidation & Temptation R5 = +5; and a Forgery-5 recipient now auto-detects a forged letter
+more often than a Forgery-0 one (239 vs 188 / 400). **BLOCKED (owner decision needed, NOT invented):**
+- **Forgery R3 (+1k0) / R7 (+0k1) to the Forgery roll RESULT "for establishing the detection TN"** —
+  the project's forge detection TN is `base TN + Raises×5` (s12.8, LOCKED — "matches GDD exactly"),
+  NOT the roll result (the s24 skill-reference RAW). So the roll-result masteries have no faithful
+  hook: honoring them needs either changing `detection_tn` to the forger's roll total (a forge-model
+  change) or converting +1k0/+0k1 to a flat/free-raise TN bonus (an invented number). Flagged.
+- **Stealth R3 (Simple Move = Water×5 ft) / R5 (×10) / R7 (Free Move)** — the CombatController stealth
+  layer moves one tile per action with no distance budget (the base "Water Ring feet per Simple" isn't
+  modeled either), so the movement masteries have no consumer without a stealth-move-budget model in
+  the (PC-travel-HOLD) exploration layer. Deferred, same class as the deferred kata stealth-movement.
+
 ### s24 Skill Mastery Abilities — Merchant tranche (Commerce/Engineering/Sailing; Craft none) (2026-06-30, runtime-verified 16/16)
 Wired the s24 non-Bugei "Merchant" masteries the owner pasted ("Now these masteries"), all values
 GDD-given (zero invention). New `SkillMasterySystem` helpers: **`cooperative_roll_bonus(skill,

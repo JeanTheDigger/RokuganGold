@@ -43,9 +43,6 @@ const MIYA_BONUS: int = -1
 const FREE_LETTERS_PER_DAY: int = 1
 const BATCH_SIZE: int = 4
 
-# Forgery Rank 5 mastery bonus
-const FORGERY_RANK5_DETECT_BONUS: int = 1
-
 # Calligraphy (Cipher) emphasis — s57.30 LOCKED
 const CIPHER_DECEPTION_DISPOSITION_PENALTY: int = -3
 const CIPHER_INSIGHT_BONUS_DICE: int = 1  # +1k0 on future PROBE/READ_CHARACTER
@@ -487,8 +484,12 @@ static func auto_detect_forgery(
 		return false
 	if not has_prior_correspondence(recipient, letter.sender_id, pending_letters):
 		return false
+	# Forgery R5 (s24): +1k0 to any roll to detect a forgery. Applies to the passive
+	# on-receipt detection too ("any roll"), not just deliberate examination.
+	var extra_rolled: int = SkillMasterySystem.forgery_detect_rolled_bonus(recipient)
 	var check: Dictionary = SkillResolver.resolve_skill_check(
 		recipient, dice_engine, "Investigation", letter.forgery_tn,
+		0, "", Enums.Trait.NONE, extra_rolled,
 	)
 	return check.get("success", false)
 
@@ -503,8 +504,7 @@ static func deliberate_examine_letter(
 		return {"detected": false, "no_reference": true}
 	if not letter.is_forged:
 		return {"detected": false, "authentic": true}
-	var forgery_rank: int = examiner.skills.get("Forgery", 0)
-	var extra_rolled: int = FORGERY_RANK5_DETECT_BONUS if forgery_rank >= 5 else 0
+	var extra_rolled: int = SkillMasterySystem.forgery_detect_rolled_bonus(examiner)
 	var check: Dictionary = SkillResolver.resolve_skill_check(
 		examiner, dice_engine, "Investigation", letter.forgery_tn,
 		0, "", Enums.Trait.NONE, extra_rolled,

@@ -232,6 +232,13 @@ static func hunting_wilderness_stealth_bonus(character: L5RCharacterData, skill:
 	return 0
 
 
+# Forgery R5: +1k0 (one rolled die) on ANY roll to DETECT a forgery made by someone else
+# (s24 Forgery mastery). Cross-skill — the detector's Forgery RANK boosts their
+# Investigation/Perception detection roll. Returns the rolled-die bonus (0 or 1).
+static func forgery_detect_rolled_bonus(character: L5RCharacterData) -> int:
+	return 1 if int(character.skills.get("Forgery", 0)) >= MASTERY_RANK_5 else 0
+
+
 # Staves base rule: a staff attack doubles the DEFENDER's worn-armor TN bonus (s24 line 327). The
 # staff-user negates this doubling at Staves R3. Returns true when the attacker wields a staff and
 # lacks R3 (so the defender's armor TN bonus should be added one extra time = doubled).
