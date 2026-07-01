@@ -3795,8 +3795,13 @@ helpers).
   disguise-creation action; the CombatController disguise layer is SPELL-based (Spellcraft/Air), not
   Acting-skill. **Athletics R5** (no terrain penalty) — **NOW WIRED** into the tile-movement layer (see
   the dedicated entry below); **Athletics R3** (moderate/half-difficult) stays deferred (no faithful hook
-  in the binary tile-cost model). **Investigation R3/R7** (extra Search attempts) — action-economy loop absent from
-  the investigation layer. **Divination R5** (2nd roll no-VP) — Divination is not a rolled sim action.
+  in the binary tile-cost model). **Investigation R3/R7** (extra Search attempts) — BLOCKED, not wireable
+  without inventing (scoped 2026-07-01): the masteries modify a per-attempt "re-Search TN increase" (R3
+  negates the 2nd) + an attempt "cap" (R7 grants a 3rd), but `examine_scene` is a SINGLE roll per
+  EXAMINE_CRIME_SCENE (TN = concealment + a DAYS-elapsed penalty, not per-attempt), CrimeRecord has no
+  examination counter, and the re-examine cap consts (SCENE_MAX_REEXAMINATIONS etc.) were REMOVED as
+  invented content in the 2026-05-27 audit. Wiring it means re-adding that removed mechanic + its numbers
+  (owner decision). **Divination R5** (2nd roll no-VP) — Divination is not a rolled sim action.
   **Meditation R5** (Fasting TN −5) — no individual food/water mechanic (starvation is province-level).
   **Sailing R5** (+5 cooperative) — `cooperative_roll_bonus` READY but DORMANT: no Sailing skill check
   is ever rolled via SkillResolver (Sailing only rank-gates captaincy). **Stealth R7** (Free-Move while
