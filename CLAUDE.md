@@ -3774,6 +3774,37 @@ rulings, see the dedicated entries below):**
   the NPC multi-tile-move infra. R7 (Free-Move-while-stealthed) stays DEFERRED — no faithful tile value
   in the real-time exploration model. See the "s24 Stealth movement masteries" entry.
 
+### s24 Skill Mastery Abilities — full-catalog consumer audit (2026-07-01, read-only)
+Swept every s24 mastery (all skills, Ranks 3/5/7 + the universal Rank-10) against its consumer. Result:
+**every mastery with a clean, unambiguous hook is WIRED; the remainder are genuinely blocked on absent
+infra/systems or GDD-silent values (not un-attempted).** `SkillMasterySystem` has ZERO dead functions —
+every homed helper has a live call site (`base_skill`/`insight_bonus` are internal to other consumed
+helpers).
+- **WIRED — social/utility:** universal Rank-10 (+1 FR all rolls, `universal_free_raise` → SkillResolver);
+  Courtier/Etiquette R3/R7 insight (`insight_bonus` → CharacterStats.get_insight) + R5 +1k0 contested;
+  Sincerity/Investigation/Intimidation/Temptation R5 +5 contested (`CONTESTED_R5`); Spellcraft R5 casting
+  (+1k0); Meditation R3/R7 VP cap (2/3); Tea Ceremony R5 (2 VP, action_executor:5742); Calligraphy R5
+  cipher (+10, letter_system/kolat); Medicine R5 heal (+1k0, medicine + animal_handling); Commerce R5
+  ±20% (buy+sell); Engineering R5 +5 cooperative; Hunting R5 +1k0 wilderness Stealth; Animal Handling
+  R3/R5/R7; Forgery R3/R5/R7; Sleight of Hand R5 (conceal weapon); Stealth R3/R5 (move budget).
+- **WIRED — combat (Bugei, tranches 1-7):** Athletics R7 (move burst); Battle R5 (initiative); Defense
+  R3/R5/R7; Horsemanship R3/R5/R7; Iaijutsu R3/R5/R7; Jiujutsu R3/R5/R7; Kenjutsu R3/R5/R7; Kyujutsu
+  R3/R5/R7; Spears R3/R5/R7; Polearms R3/R5/R7; Heavy Weapons R3/R5/R7; Knives R3/R5/R7; War Fan R3/R5/R7;
+  Chain Weapons R3/R5/R7; Staves R3/R5/R7 (+ base doubles-armor); Ninjutsu R3/R5/R7.
+- **DEFERRED / BLOCKED (no invention):** **Acting R3/R5/R7** (disguise TN −5/−10/−15) — no mundane
+  disguise-creation action; the CombatController disguise layer is SPELL-based (Spellcraft/Air), not
+  Acting-skill. **Athletics R3/R5** (terrain movement) — `individual_combat.ATHLETICS_TERRAIN_REDUCTION`
+  const exists but has NO consumer; tile movement uses flat cost (1/2), not the basic/moderate/difficult
+  Water-penalty model. **Investigation R3/R7** (extra Search attempts) — action-economy loop absent from
+  the investigation layer. **Divination R5** (2nd roll no-VP) — Divination is not a rolled sim action.
+  **Meditation R5** (Fasting TN −5) — no individual food/water mechanic (starvation is province-level).
+  **Sailing R5** (+5 cooperative) — `cooperative_roll_bonus` READY but DORMANT: no Sailing skill check
+  is ever rolled via SkillResolver (Sailing only rank-gates captaincy). **Stealth R7** (Free-Move while
+  stealthed) — no faithful tile value in the real-time player model. **Craft** — s24 lists no masteries.
+  (Several blocked items — Acting, Athletics terrain, Stealth R7 — are exploration/combat-layer and
+  headless-only anyway under the PC-travel HOLD.) No new wiring warranted without an owner value/system
+  decision; do not re-audit without those systems.
+
 ### s24 Stealth movement masteries — R3/R5 player stealth-move budget (2026-07-01, runtime-verified)
 The formerly-deferred s24 Stealth movement masteries (s24 lines 423-427, LOCKED). The base rule limits a
 Stealthed character to Water Ring FEET per Simple Move (sub-tile on the 5-ft grid → a 1-tile creep); R3
