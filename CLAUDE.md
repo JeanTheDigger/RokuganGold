@@ -3863,7 +3863,18 @@ multi-tile `_npc_move_toward`), so I mirrored it for the player.
   Same PC-travel HOLD live-reachability caveat as the whole CombatController stealth layer — driver-verified,
   not a live session. With this + Forgery R3/R7, the s24 Low-Skill masteries are complete except R7 (blocked).
 
-### Correctness sweep — dropped-effect + dead-function + dead-char classes (2026-07-01, read-only, no bugs found)
+### Correctness sweep — 5 bug classes (2026-07-01, read-only; 4 clean, 1 leak fixed separately)
+Five audits. Four came back clean; the fifth (lifecycle-leak) found the art-registry leak fixed in the
+"newer art registries" entry below. The clean four:
+- **Unclamped honor/glory/infamy — CLEAN.** Direct `.honor/.glory/.infamy` mutations bypassing
+  `HonorGlorySystem`'s [0,10] clamp: only context-snapshot copies (`ctx.honor = character.honor`) and one
+  safe `character.glory = 0.0` (0 is in range). No unclamped accrual.
+- **Unclamped disposition — CLEAN.** All 16 direct `disposition_values[id] = …` assignments compute a
+  `clampi(old + delta, -100, 100)` one line above (incl. the newer art-system sites day_orchestrator:30518/
+  31006 and the favor-breach floor at 12124). The grep flags were same-line false positives.
+- **Raw-int-vs-enum — CLEAN.** `.tier = <int>` and `.severity = <int>` (should be `TopicData.Tier.*` /
+  `CrimeSeverity.*`): 0 hits. The only `topic_tier: 0` literals are levy_system's `suspicion:false` no-topic
+  branches, never read (consumer does `if not check.suspicion: continue` first).
 Three audits; all came back clean (a confirmation, not a fix):
 - **Dead-character-guard class — CLEAN in the newest code.** Spot-verified 13 high-risk mutation sites in
   the 2026-06 art/lifecycle + affliction layers (the least-audited): all 5 art visitor-effect loops
