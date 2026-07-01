@@ -330,6 +330,17 @@ static func process_seasonal_tick(
 	settlement_meta["_settlements"] = settlements
 	settlement_meta["_worship_maluses"] = worship_maluses
 
+	# s4.3.8 Koku location modifiers, computed per settlement from its type +
+	# infrastructure tags (castle-town ×1.2, port ×1.5, etc.). Previously this dict
+	# was only ever set by tests, so the empire-wide location modifier was dormant
+	# (every settlement generated Koku at ×1.0). Now live.
+	var loc_mods: Dictionary = {}
+	for s: SettlementData in settlements:
+		var m: float = s.koku_location_modifier()
+		if not is_equal_approx(m, 1.0):
+			loc_mods[s.settlement_id] = m
+	settlement_meta["_koku_modifiers"] = loc_mods
+
 	if season == "spring":
 		_lock_planting(provinces, settlements, settlement_meta)
 		# Miya's Blessing fires after planting and BEFORE consumption per

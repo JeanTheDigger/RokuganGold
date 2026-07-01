@@ -40,6 +40,7 @@ static func apply(
 	_apply_disposition(effects, actor, target_id, applied)
 	_apply_recipient_effects(effects, actor, target_id, characters, applied)
 	_apply_koku_cost(effects, actor)
+	_apply_koku_gain(effects, actor)
 	_apply_witness_effects(effects, actor, characters, applied)
 	_apply_witness_gain(effects, actor, characters, applied)
 	_apply_gossip_effects(effects, actor_id, target_id, characters, applied,
@@ -144,6 +145,14 @@ static func _apply_koku_cost(effects: Dictionary, actor: L5RCharacterData) -> vo
 	var cost: float = effects.get("koku_cost", 0.0)
 	if cost > 0.0:
 		actor.koku = maxf(0.0, actor.koku - cost)
+
+
+# -- Koku gain (CONDUCT_COMMERCE personal yield, s55.27 Effect 2) ----------------
+
+static func _apply_koku_gain(effects: Dictionary, actor: L5RCharacterData) -> void:
+	var gain: float = effects.get("commerce_yield_koku", 0.0)
+	if gain > 0.0:
+		actor.koku += gain
 
 
 # -- Witness disposition loss ---------------------------------------------------

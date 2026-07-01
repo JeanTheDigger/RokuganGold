@@ -1,0 +1,134 @@
+class_name ArmorSystem
+## s40 Armor catalog + special-rule TN penalties. Pure functions — no Node, no state.
+## Stats transcribed from the L5R 4e Equipment armor table (owner-provided 2026-06-29);
+## zero invention. The Armor TN bonus and damage Reduction are consumed via the
+## character's armor_tn_bonus / armor_reduction fields (CharacterStats.get_armor_tn,
+## IndividualCombat.total_defender_reduction). The skill-TN penalties are applied in
+## SkillResolver.resolve_skill_check / resolve_contested_check via get_skill_tn_penalty().
+
+const PENALTY_AMOUNT: int = 5        # the standard +5 TN special-rule penalty
+const IRON_PENALTY_AMOUNT: int = 10  # Tetsu-do +10 (or +5 if Strength >= 5)
+const IRON_STRENGTH_RELIEF: int = 5  # Strength threshold that halves the iron penalty
+const RIDING_MOUNTED_TN_BONUS: int = 12  # Riding armor: Armor TN +12 mounted (vs the +4 stored on foot)
+
+# name -> {tn_bonus, reduction, is_heavy, penalty_kind}. Penalty kinds: see ArmorData.
+const ARMOR_CATALOG: Dictionary = {
+	"bogu":          {"tn_bonus": 0,  "reduction": 1, "is_heavy": false, "penalty_kind": "none"},
+	"ashigaru":      {"tn_bonus": 3,  "reduction": 1, "is_heavy": false, "penalty_kind": "none"},
+	"tatami":        {"tn_bonus": 4,  "reduction": 1, "is_heavy": false, "penalty_kind": "none"},
+	"light":         {"tn_bonus": 5,  "reduction": 3, "is_heavy": false, "penalty_kind": "athletics_stealth"},
+	"heavy":         {"tn_bonus": 10, "reduction": 5, "is_heavy": true,  "penalty_kind": "agi_ref"},
+	# Tetsu-do (iron): counts as heavy armor for mechanical effects.
+	"tetsu_do":      {"tn_bonus": 13, "reduction": 8, "is_heavy": true,  "penalty_kind": "agi_ref_iron"},
+	# Riding armor: Armor TN +12 on horseback / +4 otherwise. The off-horseback bonus
+	# (+4) is stored; the mounted +12 is a combat/mount detail not modeled here.
+	"riding":        {"tn_bonus": 4,  "reduction": 4, "is_heavy": false, "penalty_kind": "agi_ref_not_mounted"},
+}
+
+
+# Build a typed ArmorData from the catalog (null for an unknown name).
+static func make_armor(armor_name: String) -> ArmorData:
+	if not ARMOR_CATALOG.has(armor_name):
+		return null
+	var spec: Dictionary = ARMOR_CATALOG[armor_name]
+	var a := ArmorData.new()
+	a.armor_name = armor_name
+	a.tn_bonus = int(spec["tn_bonus"])
+	a.reduction = int(spec["reduction"])
+	a.is_heavy = bool(spec["is_heavy"])
+	a.penalty_kind = String(spec["penalty_kind"])
+	return a
+
+
+# Equip armor on a character: sets armor_worn and mirrors tn_bonus / reduction onto the
+# fast-lookup fields the combat math reads. Passing "" / unknown clears worn armor.
+static func equip(character: L5RCharacterData, armor_name: String) -> void:
+	var a: ArmorData = make_armor(armor_name)
+	character.armor_worn = a
+	if a == null:
+		character.armor_tn_bonus = 0
+		character.armor_reduction = 0
+	else:
+		character.armor_tn_bonus = a.tn_bonus
+		character.armor_reduction = a.reduction
+
+
+# The +TN penalty the worn armor imposes on a specific skill roll (0 if none). POSITIVE =
+# harder; SkillResolver SUBTRACTS this from the roll total (matching the wound-penalty
+# convention). on_horseback exempts Riding armor.
+static func get_skill_tn_penalty(
+	character: L5RCharacterData, skill_name: String, trait_used: Enums.Trait, on_horseback: bool = false
+) -> int:
+	var a: ArmorData = character.armor_worn
+	if a == null:
+		return 0
+	match a.penalty_kind:
+		"athletics_stealth":
+			return PENALTY_AMOUNT if _base_skill(skill_name) in ["Athletics", "Stealth"] else 0
+		"agi_ref":
+			return PENALTY_AMOUNT if _is_agi_ref(trait_used) else 0
+		"agi_ref_iron":
+			if not _is_agi_ref(trait_used):
+				return 0
+			return IRON_STRENGTH_RELIEF if character.strength >= IRON_STRENGTH_RELIEF else IRON_PENALTY_AMOUNT
+		"agi_ref_not_mounted":
+			if on_horseback:
+				return 0
+			return PENALTY_AMOUNT if _is_agi_ref(trait_used) else 0
+	return 0
+
+
+# PROVISIONAL world-gen loadout by school + status (owner has not specified NPC loadouts;
+# every tier is flagged for refinement). Idempotent — safe to call at character creation
+# (status still 1.0) and again after the position/role status is finalized (the bootstrap
+# resync pass). Scheme:
+#   non-bushi              -> unarmored (courtiers/shugenja/monks wear no battle armor)
+#   elite Hida (status>=4) -> tetsu-do (iron, +13/DR8 heavy; the heaviest Wall loadout)
+#   other Hida bushi       -> heavy  (+10/DR5; the iconic Crab Wall infantry — trades
+#                                     Agility/Reflexes for protection, the authentic L5R tank)
+#   Unicorn bushi          -> riding armor (+4/DR4; the cavalry clan — owner ruling 2026-06-29)
+#   bushi, status >= 4.0   -> light  (+5/DR3; only an Athletics/Stealth penalty, a strict
+#                                     combat upgrade for senior officers/lords)
+#   bushi, status >= 2.0   -> tatami (+4/DR1; no penalty — proven samurai's field armor)
+#   other bushi            -> ashigaru (+3/DR1; no penalty — the rank-and-file default)
+# The elite-Hida status>=4 threshold is PROVISIONAL (owner approved iron for elite Hida; the
+# exact cutoff is engine-chosen, matching the light/senior tier).
+const STATUS_LIGHT: float = 4.0
+const STATUS_TATAMI: float = 2.0
+
+static func assign_by_profile(character: L5RCharacterData) -> void:
+	if character.school_type != Enums.SchoolType.BUSHI:
+		equip(character, "")  # clear any prior armor (non-bushi never armored)
+		return
+	if character.family == "Hida":
+		equip(character, "tetsu_do" if character.status >= STATUS_LIGHT else "heavy")
+	elif character.clan == "Unicorn":
+		equip(character, "riding")
+	elif character.status >= STATUS_LIGHT:
+		equip(character, "light")
+	elif character.status >= STATUS_TATAMI:
+		equip(character, "tatami")
+	else:
+		equip(character, "ashigaru")
+
+
+# Extra Armor TN the worn armor grants while MOUNTED, beyond its on-foot tn_bonus (0 if none).
+# Riding armor is +12 Armor TN on horseback vs the +4 stored in armor_tn_bonus -> +8 extra (owner
+# Equipment table; the +8 is the 12-vs-4 delta, not an invented value). Read by
+# IndividualCombat.get_armor_tn only when CONDITION_MOUNTED is set.
+static func mounted_armor_tn_bonus(character: L5RCharacterData) -> int:
+	var a: ArmorData = character.armor_worn
+	if a != null and a.armor_name == "riding":
+		return RIDING_MOUNTED_TN_BONUS - a.tn_bonus
+	return 0
+
+
+static func _is_agi_ref(trait_used: Enums.Trait) -> bool:
+	return trait_used == Enums.Trait.AGILITY or trait_used == Enums.Trait.REFLEXES
+
+
+static func _base_skill(skill_name: String) -> String:
+	var c: int = skill_name.find(":")
+	if c >= 0:
+		return skill_name.substr(0, c).strip_edges()
+	return skill_name

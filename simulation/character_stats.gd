@@ -37,7 +37,8 @@ static func get_insight(character: L5RCharacterData) -> int:
 	var rings_sum: int = 0
 	for ring: Enums.Ring in [Enums.Ring.AIR, Enums.Ring.EARTH, Enums.Ring.FIRE, Enums.Ring.WATER, Enums.Ring.VOID]:
 		rings_sum += get_ring_value(character, ring)
-	return (rings_sum * 10) + get_total_skill_ranks(character)
+	# s24: Courtier/Etiquette Mastery Abilities add +3 (R3) / +7 (R7) Insight.
+	return (rings_sum * 10) + get_total_skill_ranks(character) + SkillMasterySystem.total_insight_bonus(character)
 
 
 static func get_insight_rank(character: L5RCharacterData) -> int:

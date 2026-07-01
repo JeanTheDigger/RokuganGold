@@ -88,9 +88,12 @@ static func apply_self_reroll(
 	var swap: String = entry.get("skill_swap", "")
 	var actual_skill: String = swap if not swap.is_empty() else skill_name
 
+	# allow_reroll=false: the re-roll itself must not trigger another reroll
+	# (single reroll per check). ic_day/context default to -1/{} as before.
 	var result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, actual_skill, tn, raises,
 		emphasis_name, trait_override, bonus_rolled, bonus_kept, flat_bonus,
+		-1, {}, false,
 	)
 	result["rerolled"] = true
 	result["reroll_source"] = entry.get("source", "")
@@ -167,10 +170,12 @@ static func apply_granted_reroll(
 		else:
 			extra_rolled = bd
 
+	# allow_reroll=false: the re-roll itself must not trigger another reroll.
 	var result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, skill_name, tn, raises,
 		emphasis_name, trait_override,
 		bonus_rolled + extra_rolled, bonus_kept + extra_kept, flat_bonus,
+		-1, {}, false,
 	)
 	result["rerolled"] = true
 	result["reroll_source"] = entry.get("source_technique", "")
@@ -178,6 +183,9 @@ static func apply_granted_reroll(
 
 	if not result.get("success", false) and not entry.get("failure_penalty", {}).is_empty():
 		result["failure_penalty"] = entry["failure_penalty"]
+		# Record on the ally (this character) so a daily orchestrator pass can apply the
+		# penalty to its target (the grantor) — apply_granted_reroll has no characters_by_id.
+		character.pending_grant_penalties.append(entry["failure_penalty"])
 
 	return result
 

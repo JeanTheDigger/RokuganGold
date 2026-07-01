@@ -152,6 +152,50 @@ static func apply_technique_flags(character: L5RCharacterData) -> void:
 				character.commerce_honor_exempt = true
 			if s.begins_with("Otomo Courtier") or s.begins_with("Yoritomo Courtier"):
 				character.intimidation_honor_exempt = true
+			# s29.15.24 Self-Reroll resources (charges granted/updated at creation
+			# AND rank-up; weekly refresh + just-in-time spend via RerollSystem).
+			if s.begins_with("Yasuki Courtier") and rank >= 2:
+				_ensure_self_reroll(character, "Yasuki R2", YASUKI_REROLL_SKILLS, rank, "")
+			if s.begins_with("Yoritomo Courtier") and rank >= 3:
+				_ensure_self_reroll(character, "Yoritomo R3", YORITOMO_REROLL_SKILLS, rank, "Intimidation")
+			if s.begins_with("Kasuga Smuggler") and rank >= 5:
+				_ensure_self_reroll(character, "Kasuga R5", KASUGA_SCHOOL_SKILLS, character.void_ring, "")
+
+
+# -- s29.15.24 Self-Reroll resource constants (LOCKED) ------------------------
+# Yasuki R2 "Do As We Say": Sincerity/Intimidation, school_rank charges, weekly.
+const YASUKI_REROLL_SKILLS: Array = ["Sincerity", "Intimidation"]
+# Yoritomo R3 "Command the Winds": Sincerity, school_rank charges, weekly, swap
+# to Intimidation (Control) — Intimidation's default Trait is Willpower, so the
+# swap re-roll substitutes Willpower automatically per the GDD.
+const YORITOMO_REROLL_SKILLS: Array = ["Sincerity"]
+# Kasuga R5: School Skills, Void Ring charges, weekly. Transcribed from the
+# Kasuga Smuggler school skill list (world_generator SCHOOL_DATA).
+const KASUGA_SCHOOL_SKILLS: Array = [
+	"Commerce", "Etiquette", "Investigation", "Sincerity", "Sleight of Hand", "Stealth",
+]
+
+
+# Ensure a self-reroll entry exists for the given source. Created at first
+# qualification; on rank-up the cap is updated and current charges are kept
+# (capped at the new max — no mid-week refill). Entry format owned by RerollSystem.
+static func _ensure_self_reroll(
+	character: L5RCharacterData,
+	source: String,
+	skills: Array,
+	charges_max: int,
+	skill_swap: String,
+) -> void:
+	for entry: Dictionary in character.self_reroll:
+		if entry.get("source", "") == source:
+			entry["charges_max"] = charges_max
+			entry["eligible_skills"] = skills
+			entry["skill_swap"] = skill_swap
+			entry["charges_current"] = mini(entry.get("charges_current", 0), charges_max)
+			return
+	character.self_reroll.append(RerollSystem.create_self_reroll_entry(
+		source, skills, charges_max, RerollSystem.REFRESH_WEEKLY, skill_swap,
+	))
 
 
 # -- School Technique Free Raises (s29.15) -------------------------------------
@@ -574,6 +618,7 @@ static func resolve_skill_check(
 	flat_bonus: int = 0,
 	ic_day: int = -1,
 	context: Dictionary = {},
+	allow_reroll: bool = true,
 ) -> Dictionary:
 	# Determine trait
 	var trait_used: Enums.Trait
@@ -679,13 +724,17 @@ static func resolve_skill_check(
 	# s36 Wisdom & Clarity: +1k0 to Lore recall while the day buff is active
 	var wisdom_mod: int = _get_wisdom_and_clarity_bonus(character, skill_name)
 
+	# s24 Hunting R5: +1k0 to Stealth rolls in wilderness environments (context-gated).
+	var hunting_mod: int = SkillMasterySystem.hunting_wilderness_stealth_bonus(
+		character, skill_name, context.get("wilderness", false))
+
 	# Build the pool: (trait + skill + bonus_rolled) k (trait + bonus_kept)
 	var rolled: int = (
 		trait_value + skill_rank + bonus_rolled + ashes_bonus
 		+ adv_skill.get("rolled", 0) + mutation_mod.get("rolled", 0)
 		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
 		+ kiho_mod.get("rolled", 0) + void_mod.get("rolled", 0) + voice_mod.get("rolled", 0)
-		+ mq_mod.get("rolled", 0) + soul_mod + wisdom_mod
+		+ mq_mod.get("rolled", 0) + soul_mod + wisdom_mod + hunting_mod
 	)
 	var kept: int = (
 		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
@@ -693,10 +742,22 @@ static func resolve_skill_check(
 		+ kiho_mod.get("kept", 0) + void_mod.get("kept", 0) + voice_mod.get("kept", 0)
 		+ mq_mod.get("kept", 0)
 	)
-	var total_bonus: int = flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
-		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn \
-		+ mutation_mod.get("tn", 0) + soft_hearted_tn + darling_bonus \
+	# s24 universal Rank-10 mastery: +1 Free Raise on all rolls using the skill.
+	var mastery_fr: int = SkillMasterySystem.universal_free_raise(skill_rank)
+	# Sign convention (matches wound_penalty / the combat code): a TN PENALTY reduces the roll
+	# total. adv_tn (get_tn_modifier) and soft_hearted_tn are POSITIVE penalties, so they are
+	# SUBTRACTED (combat does the same: `flat_bonus -= get_tn_modifier(...)`). darling_bonus is a
+	# genuine bonus (+). mutation_mod.tn uses MutationSystem's own "positive = benefit" convention,
+	# so it stays additive (its penalties are stored negative there).
+	var total_bonus: int = flat_bonus + wound_penalty + ((technique_fr + mastery_fr) * FREE_RAISE_VALUE) \
+		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) - adv_tn \
+		+ mutation_mod.get("tn", 0) - soft_hearted_tn + darling_bonus \
 		+ _get_possession_terror_penalty(character)
+	# s40 Armor special-rule TN penalty (Light: Athletics/Stealth; Heavy/Iron/Riding:
+	# Agility/Reflexes). A "+N TN" penalty subtracts from the roll total (wound-penalty sign).
+	total_bonus -= ArmorSystem.get_skill_tn_penalty(
+		character, skill_name, trait_used, context.get("on_horseback", false)
+	)
 
 	# Unskilled: no explosions
 	var explodes: bool = skill_rank > 0
@@ -774,10 +835,42 @@ static func resolve_skill_check(
 			result["paragon_duty_activated"] = true
 			character.current_void_points -= 1
 
+	# s29.15.24 Self / Granted Reroll (Yasuki R2 / Yoritomo R3 / Kasuga R5; Ikoma R4 /
+	# Shiba granted). On a failed roll, spend one eligible charge to reroll — the
+	# owner-approved just-in-time NPC policy. Runs AFTER the retroactive Advantage
+	# fixes above (DARK_PARAGON / PARAGON Duty) so it only fires on a genuine failure.
+	# allow_reroll=false on the reroll's own internal roll (set by RerollSystem.apply_*)
+	# prevents recursion / spending multiple charges on one check.
+	if allow_reroll and not result.get("success", false):
+		var rr: Dictionary = RerollSystem.try_self_reroll(
+			character, dice_engine, skill_name, tn, result, raises,
+			emphasis_name, trait_override, bonus_rolled, bonus_kept, flat_bonus,
+		)
+		if rr.get("rerolled", false):
+			return rr
+		rr = RerollSystem.try_granted_reroll(
+			character, dice_engine, skill_name, tn, result, ic_day, raises,
+			emphasis_name, trait_override, bonus_rolled, bonus_kept, flat_bonus,
+		)
+		if rr.get("rerolled", false):
+			return rr
+
 	return result
 
 
 # -- Contested skill check between two characters ------------------------------
+
+# Final contested total for one side (extracted so the initial roll AND a
+# s29.15.24 reroll recompute it identically).
+static func _contested_total(
+	roll: DiceResult, flat_bonus: int, wound_penalty: int, technique_fr: int,
+	adv_free_raises: int, adv_tn: int, character: L5RCharacterData,
+) -> int:
+	# adv_tn (get_tn_modifier) is a POSITIVE penalty → subtract (matches resolve_skill_check + combat).
+	return roll.total + flat_bonus + wound_penalty + (technique_fr * FREE_RAISE_VALUE) \
+		+ (adv_free_raises * FREE_RAISE_VALUE) - adv_tn \
+		+ _get_possession_terror_penalty(character)
+
 
 static func resolve_contested_check(
 	char_a: L5RCharacterData,
@@ -860,27 +953,67 @@ static func resolve_contested_check(
 	var wisdom_a: int = _get_wisdom_and_clarity_bonus(char_a, skill_a)
 	var wisdom_b: int = _get_wisdom_and_clarity_bonus(char_b, skill_b)
 
-	var roll_a: DiceResult = dice_engine.roll_and_keep(
-		tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0) + voice_a.get("rolled", 0) + soul_a + wisdom_a,
-		tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0) + void_a.get("kept", 0) + voice_a.get("kept", 0), sr_a > 0, emph_a
-	)
-	var roll_b: DiceResult = dice_engine.roll_and_keep(
-		tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0) + voice_b.get("rolled", 0) + soul_b + wisdom_b,
-		tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0) + void_b.get("kept", 0) + voice_b.get("kept", 0), sr_b > 0, emph_b
-	)
+	var rolled_a: int = tv_a + sr_a + bonus_rolled_a + ashes_a + adv_a.get("rolled", 0) + imb_a.get("rolled", 0) + kiho_a.get("rolled", 0) + void_a.get("rolled", 0) + voice_a.get("rolled", 0) + soul_a + wisdom_a
+	var kept_a: int = tv_a + adv_a.get("kept", 0) + imb_a.get("kept", 0) + kiho_a.get("kept", 0) + void_a.get("kept", 0) + voice_a.get("kept", 0)
+	var rolled_b: int = tv_b + sr_b + bonus_rolled_b + ashes_b + adv_b.get("rolled", 0) + imb_b.get("rolled", 0) + kiho_b.get("rolled", 0) + void_b.get("rolled", 0) + voice_b.get("rolled", 0) + soul_b + wisdom_b
+	var kept_b: int = tv_b + adv_b.get("kept", 0) + imb_b.get("kept", 0) + kiho_b.get("kept", 0) + void_b.get("kept", 0) + voice_b.get("kept", 0)
 
-	var total_a: int = roll_a.total + flat_bonus_a + wp_a + (tfr_a * FREE_RAISE_VALUE) \
-		+ (adv_a.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_a \
-		+ _get_possession_terror_penalty(char_a)
-	var total_b: int = roll_b.total + flat_bonus_b + wp_b + (tfr_b * FREE_RAISE_VALUE) \
-		+ (adv_b.get("free_raises", 0) * FREE_RAISE_VALUE) + adv_tn_b \
-		+ _get_possession_terror_penalty(char_b)
+	# s24 contested-roll masteries: Rank-5 per-skill bonus (folded into the pool/total)
+	# + the universal Rank-10 free raise (added to the free-raise term).
+	var mas_a: Dictionary = SkillMasterySystem.contested_bonus(skill_a, sr_a)
+	var mas_b: Dictionary = SkillMasterySystem.contested_bonus(skill_b, sr_b)
+	rolled_a += int(mas_a["rolled"])
+	kept_a += int(mas_a["kept"])
+	rolled_b += int(mas_b["rolled"])
+	kept_b += int(mas_b["kept"])
+	var flat_a2: int = flat_bonus_a + int(mas_a["flat"])
+	var flat_b2: int = flat_bonus_b + int(mas_b["flat"])
+	# s40 Armor special-rule TN penalty per side (subtracts from the side's total).
+	flat_a2 -= ArmorSystem.get_skill_tn_penalty(char_a, skill_a, trait_a, context_a.get("on_horseback", false))
+	flat_b2 -= ArmorSystem.get_skill_tn_penalty(char_b, skill_b, trait_b, context_b.get("on_horseback", false))
+	var tfr_a2: int = tfr_a + SkillMasterySystem.universal_free_raise(sr_a)
+	var tfr_b2: int = tfr_b + SkillMasterySystem.universal_free_raise(sr_b)
+
+	var roll_a: DiceResult = dice_engine.roll_and_keep(rolled_a, kept_a, sr_a > 0, emph_a)
+	var roll_b: DiceResult = dice_engine.roll_and_keep(rolled_b, kept_b, sr_b > 0, emph_b)
+
+	var total_a: int = _contested_total(roll_a, flat_a2, wp_a, tfr_a2, adv_a.get("free_raises", 0), adv_tn_a, char_a)
+	var total_b: int = _contested_total(roll_b, flat_b2, wp_b, tfr_b2, adv_b.get("free_raises", 0), adv_tn_b, char_b)
 
 	var winner: String = "a"
 	if total_b > total_a:
 		winner = "b"
 	elif total_a == total_b:
 		winner = "tie"
+
+	# s29.15.24 Self-Reroll on a contested loss (Yasuki R2 / Yoritomo R3 / Kasuga R5):
+	# the strict loser spends one eligible charge to re-roll their own side once, then
+	# re-evaluate. Single reroll — the new loser gets no counter (the reroll is the
+	# loser's reaction to the resolved contest; a tie is not a loss). Skill-swap
+	# (Yoritomo) is not applied in a contest — the same skill is re-rolled. ic_day/context
+	# buffs are preserved (the pool counts already include them).
+	var rerolled: bool = false
+	var reroll_side: String = ""
+	if winner != "tie":
+		var loser_a: bool = winner == "b"
+		var lc: L5RCharacterData = char_a if loser_a else char_b
+		var lskill: String = skill_a if loser_a else skill_b
+		var lidx: int = RerollSystem.find_self_reroll(lc, lskill)
+		if lidx >= 0:
+			lc.self_reroll[lidx]["charges_current"] = lc.self_reroll[lidx].get("charges_current", 1) - 1
+			if loser_a:
+				roll_a = dice_engine.roll_and_keep(rolled_a, kept_a, sr_a > 0, emph_a)
+				total_a = _contested_total(roll_a, flat_a2, wp_a, tfr_a2, adv_a.get("free_raises", 0), adv_tn_a, char_a)
+			else:
+				roll_b = dice_engine.roll_and_keep(rolled_b, kept_b, sr_b > 0, emph_b)
+				total_b = _contested_total(roll_b, flat_b2, wp_b, tfr_b2, adv_b.get("free_raises", 0), adv_tn_b, char_b)
+			winner = "a"
+			if total_b > total_a:
+				winner = "b"
+			elif total_a == total_b:
+				winner = "tie"
+			rerolled = true
+			reroll_side = "a" if loser_a else "b"
 
 	return {
 		"winner": winner,
@@ -890,4 +1023,6 @@ static func resolve_contested_check(
 		"dice_b": roll_b,
 		"wound_penalty_a": wp_a,
 		"wound_penalty_b": wp_b,
+		"rerolled": rerolled,
+		"reroll_side": reroll_side,
 	}

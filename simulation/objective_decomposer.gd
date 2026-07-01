@@ -234,6 +234,20 @@ static func _decompose_hunt_maho(
 		return _make_need("TRAVEL_TO", 2, {
 			"target_intent": target_province,
 		})
+	# At the hotspot: if co-located with a DETECTED Maho Cult / Taint
+	# Manifestation, the hunter shifts from investigation to suppression (s11.11
+	# Phase 5; s11.3.5 names Kuni/Asako/Kuroiban as the cult counter-agents).
+	# Route via MANAGE_TAINT, whose alignment surfaces SUPPRESS_INSURGENCY above
+	# investigation; the Phase-4c precondition gate strips it if not actually
+	# co-located, falling back to the investigation passthrough below. Reads the
+	# per-character context fields (witch-hunters are non-lords, so province_statuses
+	# is unavailable to them).
+	if ctx.active_insurgency_id >= 0 and ctx.active_insurgency_detected \
+			and (ctx.active_insurgency_type == "MAHO_CULT" \
+				or ctx.active_insurgency_type == "TAINT_MANIFESTATION"):
+		return _make_need("MANAGE_TAINT", 2, {
+			"target_province_id": ctx.active_insurgency_province_id,
+		})
 	return _passthrough(objective)
 
 
@@ -1073,12 +1087,35 @@ static func _decompose_eliminate_shadowlands(
 			if p.active_crisis_id >= 0 and p.crisis_type == "shadowlands_incursion":
 				return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": p.province_id})
 
-	# Step 2: Taint insurgency
+	# Step 2: insurgency. Co-located DETECTED case first via per-character context
+	# fields (works for non-lords — province_statuses is lord-only). Maho/Taint ->
+	# MANAGE_TAINT (shugenja-favoured); others -> DEFEND_PROVINCE. The Phase-4c
+	# precondition gate strips suppression if not actually co-located.
+	if ctx.active_insurgency_id >= 0 and ctx.active_insurgency_detected:
+		if ctx.active_insurgency_type == "MAHO_CULT" \
+				or ctx.active_insurgency_type == "TAINT_MANIFESTATION":
+			return _make_need("MANAGE_TAINT", 3, {
+				"target_province_id": ctx.active_insurgency_province_id,
+			})
+		return _make_need("DEFEND_PROVINCE", 3, {
+			"target_province_id": ctx.active_insurgency_province_id,
+		})
+	# Otherwise scan known provinces (lord path) for a detected insurgency.
 	for ps: Variant in ctx.province_statuses:
 		if ps is NPCDataStructures.ProvinceStatus:
 			var p: NPCDataStructures.ProvinceStatus = ps as NPCDataStructures.ProvinceStatus
 			if p.active_insurgency_id >= 0:
-				return _make_need("INVESTIGATE_THREAT", 3, {"target_province_id": p.province_id})
+				# Once DETECTED (Phase 3 done), shift from investigation to
+				# suppression (s11.11 Phase 5): route to the NeedType whose
+				# alignment surfaces SUPPRESS_INSURGENCY. The Phase-4c precondition
+				# gate strips it when the actor is not co-located, falling back to
+				# investigation. Supernatural cults route via MANAGE_TAINT
+				# (shugenja-favoured); undetected still investigates.
+				if not p.insurgency_detected:
+					return _make_need("INVESTIGATE_THREAT", 3, {"target_province_id": p.province_id})
+				if p.insurgency_type == "MAHO_CULT" or p.insurgency_type == "TAINT_MANIFESTATION":
+					return _make_need("MANAGE_TAINT", 3, {"target_province_id": p.province_id})
+				return _make_need("DEFEND_PROVINCE", 3, {"target_province_id": p.province_id})
 
 	# Step 3: Jigoku bleed event topics
 	if not ctx.taint_topic_province_ids.is_empty():
@@ -1222,6 +1259,7 @@ static func _make_need(
 	need.target_army_id = extras.get("target_army_id", -1)
 	need.target_intent = extras.get("target_intent", "")
 	need.target_zone_id = extras.get("target_zone_id", "")
+	need.target_species = extras.get("target_species", "")
 	need.threshold = extras.get("threshold", 0.0)
 	need.threshold_type = extras.get("threshold_type", "")
 	return need
@@ -1240,6 +1278,7 @@ static func _passthrough(objective: Dictionary) -> NPCDataStructures.ImmediateNe
 	need.target_resource = objective.get("target_resource", "")
 	need.target_army_id = objective.get("target_army_id", -1)
 	need.target_intent = objective.get("target_intent", "")
+	need.target_species = objective.get("target_species", "")
 	need.threshold = objective.get("threshold", 0.0)
 	need.threshold_type = objective.get("threshold_type", "")
 	need.source = objective.get("source", "objective")

@@ -92,6 +92,21 @@ func get_real_days_elapsed() -> float:
 const SEASON_BOUNDARIES: Array[int] = [0, 90, 180, 240, 360]
 
 
+## Monotonic season index (year*4 + season-in-year), so two ic_days in the same
+## calendar season of the same year share a key (e.g. per-season once-only gates).
+static func get_absolute_season(ic_day: int) -> int:
+	var doy: int = ic_day % IC_DAYS_PER_YEAR
+	var year: int = ic_day / IC_DAYS_PER_YEAR
+	var s: int = 0
+	if doy >= 240:
+		s = 3
+	elif doy >= 180:
+		s = 2
+	elif doy >= 90:
+		s = 1
+	return year * 4 + s
+
+
 static func get_next_season_start(ic_day: int) -> int:
 	var day_of_year: int = ic_day % IC_DAYS_PER_YEAR
 	var year_base: int = ic_day - day_of_year

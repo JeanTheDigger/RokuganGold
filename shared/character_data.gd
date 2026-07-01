@@ -284,6 +284,10 @@ var combat_ring_deltas: Dictionary = {}
 
 @export var self_reroll: Array = []
 @export var granted_reroll: Array = []
+# s29.15.24: failure_penalty dicts recorded when a granted reroll fires AND the reroll
+# also fails (e.g. Ikoma R4 −0.2 Honor to the bard). Drained by a daily orchestrator
+# pass that applies each to its target via characters_by_id, then clears.
+@export var pending_grant_penalties: Array = []
 @export var enhanced_void: bool = false
 @export var precise_memory: bool = false
 @export var cadence_trained: bool = false
@@ -458,6 +462,10 @@ var taint_benefits_suppressed: bool = false
 
 @export var school_paths: Array = []
 @export var commerce_stigma_applied_ic_day: int = -1
+## s55.27: one CONDUCT_COMMERCE per settlement per character per season. Maps a
+## settlement location_id (String) → the absolute-season index of the last commerce
+## conducted there. Used by the selection gate + executor hard gate.
+@export var commerce_conducted_seasons: Dictionary = {}
 
 # -- Sailing (Section 57.42) ---------------------------------------------------
 

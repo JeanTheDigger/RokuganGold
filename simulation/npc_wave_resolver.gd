@@ -601,11 +601,43 @@ static func _execute_decision(
 	var char_prov: int = sett_prov.get(char_loc, -1)
 	var wpm: Dictionary = wm_all.get(char_prov, {})
 
-	return ActionExecutor.execute(
+	var exec_result: Dictionary = ActionExecutor.execute(
 		action, character, ctx, dice_engine, action_skill_map,
 		military_data, characters_by_id, wpm, doshin_bonus_override,
 		crime_records,
 	)
+	_apply_intimate_visit_bonus(exec_result, action, ctx)
+	return exec_result
+
+
+# s17.59 (LOCKED): a Category-1 social action performed during a Personal Visit
+# gains a flat +3 disposition, added to the action's normal disposition result —
+# the intimate one-on-one setting, away from formal court, deepens the connection.
+# A visit is modelled as the VISITING context (the actor has travelled to another
+# character's holdings) directed at a specific co-located person. The +3 is added
+# to whichever positive disposition the action produced (disposition_change for
+# the contested court actions, recipient_disposition_change for gifts), so it
+# stacks with Raise and gift-quality bonuses. Applied only to positive results,
+# so INTIMIDATE's coercive disposition loss (also a Category-1 entry) is unaffected.
+static func _apply_intimate_visit_bonus(
+	result: Dictionary,
+	action: NPCDataStructures.ScoredAction,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> void:
+	if ctx.context_flag != Enums.ContextFlag.VISITING:
+		return
+	if action.target_npc_id < 0:
+		return
+	if not result.get("success", false):
+		return
+	if not PersonalVisitSystem.is_category_1_action(action.action_id):
+		return
+	var eff: Dictionary = result.get("effects", {})
+	for key: String in ["disposition_change", "recipient_disposition_change"]:
+		var v: int = int(eff.get(key, 0))
+		if v > 0:
+			eff[key] = v + PersonalVisitSystem.INTIMATE_SETTING_BONUS
+	result["effects"] = eff
 
 
 # -- Reactive Event Consumption ------------------------------------------------

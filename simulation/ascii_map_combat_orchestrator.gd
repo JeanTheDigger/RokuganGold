@@ -133,6 +133,8 @@ class TurnState:
 	var granted_simple: int = 0
 	var cast_as_simple: int = 0
 	var free_casts: int = 0
+	## s24 Athletics R7: +1 tile to ONE Move Action per Round. Consumed by the first move that uses it.
+	var athletics_burst_used: bool = false
 
 	func can_use_complex() -> bool:
 		return not complex_used and simple_used == 0
@@ -198,6 +200,11 @@ class MapCombatState:
 	var companion_data: Dictionary = {}
 	## companion_ids who started the mission — denominator for morale casualties.
 	var companion_started_count: int = 0
+	## Trained-animal companions (s57.39). Key: int (puppet character_id, negative by
+	## convention), Value: {owner_id:int, companion:Dictionary, command_target_id:int}.
+	## The puppet is built by AnimalCombatant.to_combatant; the companion Dictionary is
+	## the owner's trained_companions record (drives training tier + rebonding).
+	var animal_data: Dictionary = {}
 	## Mission weather (AsciiMapEnvironment.WeatherState) — drives FireSystem spread
 	## and extinguish at round end (s56.6.6). Wind bearing lives on map.wind_dir.
 	var weather: int = AsciiMapEnvironment.WeatherState.CLEAR
@@ -302,7 +309,7 @@ static func setup_combat(
 		if p == null:
 			continue
 		var weapon_name: String = IndividualCombat.pick_best_weapon(c)
-		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
+		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name, mcs.combat.round_number)
 		p.initiative_score = init_score
 		# s40 dual-wield schools: flag the Participant from the character's off-hand
 		# weapon so the off-hand attack / dominant-hand / two-weapon rules apply.
@@ -324,6 +331,30 @@ static func setup_combat(
 		ts.char_id = cid
 		mcs.turn_states[cid] = ts
 
+	# s40 mount producer: a combatant flagged "mounted" (cavalry / a mounted PC) starts the skirmish
+	# on horseback (CONDITION_MOUNTED, which the combat math already reads — cavalry +1k0, riding-armor
+	# exemption, bow mount-TN, burning-kiss). A "has_mount" flag gives a foot combatant a nearby horse
+	# to mount mid-fight. Both grant has_mount so the mount/dismount actions are available.
+	for entry: Dictionary in combatants_data:
+		var mc: L5RCharacterData = entry["char"]
+		if CharacterStats.is_dead(mc):
+			continue
+		var mp: IndividualCombat.Participant = mcs.combat.participants.get(mc.character_id, null)
+		if mp == null:
+			continue
+		if entry.get("mounted", false):
+			if IndividualCombat.CONDITION_MOUNTED not in mp.conditions:
+				mp.conditions.append(IndividualCombat.CONDITION_MOUNTED)
+			mp.has_mount = true
+			mp.mount_tile = Vector2i(-1, -1)  # on the horse
+		elif entry.get("has_mount", false):
+			mp.has_mount = true
+			mp.mount_tile = mcs.positions.get(mc.character_id, Vector2i(-1, -1))  # horse waits beside them
+		# s24 ready-as-Free-Action: a combatant flagged "weapon_sheathed" starts with their weapon
+		# undrawn (e.g. an iaijutsu duelist) and must Ready it before attacking.
+		if entry.get("weapon_sheathed", false):
+			mp.weapon_ready = false
+
 	mcs.combat_log.append({
 		"type": "combat_started",
 		"round": 1,
@@ -340,6 +371,16 @@ static func setup_combat(
 ## Water kata bonus (s30a: +5 ft = +1 tile in Attack Stance). Callers (NPC AI,
 ## companion AI, and the player-facing turn-based move UI) should use this rather
 ## than MovementSystem.budget(...FREE) directly so the kata is honored uniformly.
+## s24 Athletics R7: +1 tile to ONE Move Action per Round. Available (not yet consumed this Round) when
+## the character is Athletics R7+ and their TurnState burst flag is unset. Returns 0/1 tiles.
+static func _athletics_move_bonus(state: MapCombatState, char_id: int, character: L5RCharacterData) -> int:
+	var bonus: int = SkillMasterySystem.athletics_move_burst(character)
+	if bonus <= 0:
+		return 0
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	return bonus if (ts != null and not ts.athletics_burst_used) else 0
+
+
 static func free_move_budget(state: MapCombatState, char_id: int, character: L5RCharacterData) -> int:
 	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
 	var water: int = _effective_water_ring(p, character)
@@ -354,7 +395,7 @@ static func free_move_budget(state: MapCombatState, char_id: int, character: L5R
 	# s36 The Rushing Wave: Free Move up to Water Ring ×10' (= +Water tiles to the free-move
 	# budget, read from the mover's own effective Water at move time, not fixed at cast time).
 	var rush: int = water if IndividualCombat.get_timed_modifier_total(p, "free_move_tiles") > 0 else 0
-	return base + IndividualCombat.get_kata_free_move_bonus(character, p) + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character) + rush
+	return base + IndividualCombat.get_kata_free_move_bonus(character, p) + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character) + rush + _athletics_move_bonus(state, char_id, character)
 
 
 ## Water Ring for Move-distance purposes, reduced by any timed move penalty
@@ -427,7 +468,7 @@ static func simple_move_budget(state: MapCombatState, char_id: int, character: L
 	if fc > 0:
 		return _flight_simple_budget(water, fc)
 	var base: int = MovementSystem.budget(water, MovementSystem.MoveAction.SIMPLE)
-	return base + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character)
+	return base + IndividualCombat.get_kiho_move_bonus(character, p) + IndividualCombat.get_creature_swift_bonus(character) + _athletics_move_bonus(state, char_id, character)
 
 
 ## When flight ends, the kami set the caster down gently (GDD: Call Upon the Wind
@@ -470,6 +511,8 @@ static func get_reachable_tiles(
 
 	var mover_faction: String = state.factions.get(mover_id, FACTION_NEUTRAL)
 	var flying: bool = _is_flying(state, mover_id)
+	# s24 Athletics R5: this mover crosses difficult terrain (cost 2) at cost 1.
+	var athletics_r5: bool = SkillMasterySystem.athletics_ignores_difficult_terrain(state.combatants.get(mover_id))
 	# Build set of enemy positions to block movement through.
 	var enemy_tiles: Dictionary = {}
 	for cid: int in state.positions.keys():
@@ -520,6 +563,8 @@ static func get_reachable_tiles(
 					# Elevation face: cannot walk up a cliff or off a ledge (s4.4 Z-axis).
 					if MovementSystem.is_cliff_step(state.map, pos.x, pos.y, nx, ny):
 						continue
+					if athletics_r5 and step_cost == 2:
+						step_cost = 1  # s24 Athletics R5: no difficult-terrain penalty.
 
 				var new_cost: int = cost + step_cost
 				if new_cost > move_budget:
@@ -629,12 +674,19 @@ static func get_melee_targets(state: MapCombatState, attacker_id: int) -> Array:
 	return targets
 
 
-## Return all enemy ids with clear line of sight from attacker.
-## PROVISIONAL: ranged weapon ranges not yet specified (Equipment section blocked).
-static func get_ranged_targets(state: MapCombatState, attacker_id: int) -> Array:
+## Return all enemy ids with clear line of sight from attacker. When weapon_name is given and the
+## weapon has a max range (owner Equipment table, s40), targets beyond range are excluded; "" keeps
+## the prior any-LOS behavior (for callers that haven't chosen a ranged weapon yet).
+static func get_ranged_targets(state: MapCombatState, attacker_id: int, weapon_name: String = "") -> Array:
 	var pos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
 	if pos.x < 0:
 		return []
+	var rng: int = IndividualCombat.weapon_range_tiles(weapon_name) if weapon_name != "" else 0
+	# s24 Kyujutsu R5: bow max range +50% — extend the targeting range for the wielder if known.
+	if rng > 0:
+		var rt_attacker: L5RCharacterData = state.combatants.get(attacker_id, null)
+		if rt_attacker != null:
+			rng = IndividualCombat.kyujutsu_extended_range(rt_attacker, weapon_name, rng)
 	var faction: String = state.factions.get(attacker_id, FACTION_NEUTRAL)
 	var targets: Array = []
 	for cid: int in state.positions.keys():
@@ -646,6 +698,8 @@ static func get_ranged_targets(state: MapCombatState, attacker_id: int) -> Array
 		if not _is_targetable(state, cid):
 			continue
 		var tp: Vector2i = state.positions[cid]
+		if rng > 0 and _chebyshev(pos, tp) > rng:
+			continue
 		if _chebyshev(pos, tp) > MELEE_RANGE_TILES and _has_los(state.map, pos, tp) \
 				and not _ray_blocked_by_fog(state, pos, tp) \
 				and not _ray_blocked_by_false_realm(state, attacker_id, pos, tp):
@@ -691,18 +745,30 @@ static func execute_stance_change(
 	if new_stance == Enums.Stance.FULL_ATTACK and IndividualCombat.CONDITION_FATIGUED in p.conditions:
 		return {"success": false, "reason": "fatigued_no_full_attack"}
 
+	# s24 Horsemanship: a mounted combatant cannot take Full Attack Stance without Horsemanship 3+.
+	if new_stance == Enums.Stance.FULL_ATTACK and IndividualCombat.CONDITION_MOUNTED in p.conditions \
+			and not SkillMasterySystem.horsemanship_allows_mounted_full_attack(character):
+		return {"success": false, "reason": "mounted_no_full_attack"}
+
 	# s35 Haze of Battle: a stance-locked target cannot switch away from Full Attack.
 	if new_stance != Enums.Stance.FULL_ATTACK \
 			and IndividualCombat.get_timed_modifier_total(p, "stance_locked") > 0:
 		return {"success": false, "reason": "stance_locked"}
 
+	# GDD Stances: the Full Defense Defense/Reflexes roll "is considered a Complex Action," so
+	# declaring Full Defense requires a Complex available (and consumes it — see _enter_full_defense).
+	if new_stance == Enums.Stance.FULL_DEFENSE and not ts.can_use_complex():
+		return {"success": false, "reason": "no_complex_actions_remaining"}
+
 	p.stance = new_stance as Enums.Stance
 
-	# Full Defense stance: roll Defense now for full_defense_bonus (GDD s40).
-	# Called after stance is assigned so any stance-gated logic inside is correct.
 	if new_stance == Enums.Stance.FULL_DEFENSE:
-		IndividualCombat.roll_full_defense_bonus(character, p, dice_engine)
-	ts.consume_simple()
+		# GDD Stances: roll Defense/Reflexes now (a Complex Action) for the Armor TN bonus; the
+		# character may then take only Free Actions. Assigned after the stance so stance-gated logic
+		# inside is correct.
+		_enter_full_defense(character, p, ts, dice_engine)
+	else:
+		ts.consume_simple()  # changing stance costs a Simple action (existing behavior)
 	ts.stance_changed = true
 
 	state.combat_log.append({
@@ -712,6 +778,118 @@ static func execute_stance_change(
 		"new_stance": new_stance,
 	})
 	return {"success": true, "new_stance": new_stance}
+
+
+## Full Defense per-turn handling (GDD Stances). The Defense/Reflexes roll is made upon declaring
+## the Stance and "is considered a Complex Action, so a character in this Stance may only take Free
+## Actions." Fires on a change TO Full Defense and on maintaining it (re-rolled each turn). s24
+## Defense masteries: R3 may retain the previous (better) roll instead of re-rolling; R7 grants one
+## Simple Action (no attacks) despite the Complex being spent on the defense roll.
+static func _enter_full_defense(character: L5RCharacterData, p: IndividualCombat.Participant, ts: TurnState, dice_engine: DiceEngine) -> void:
+	var def_rank: int = int(character.skills.get("Defense", 0))
+	var prev_bonus: int = p.full_defense_bonus
+	IndividualCombat.roll_full_defense_bonus(character, p, dice_engine)
+	# s24 Defense R3: retain the previous Full-Defense roll rather than re-rolling, if it was better.
+	if def_rank >= 3 and prev_bonus > p.full_defense_bonus:
+		p.full_defense_bonus = prev_bonus
+	# The Defense/Reflexes roll is a Complex Action -> only Free Actions remain this turn.
+	ts.consume_complex()
+	# s24 Defense R7: one Simple Action (no attacks) may still be taken in Full Defense.
+	if def_rank >= 7:
+		ts.granted_simple += 1
+
+
+## Consume a Complex / Simple / Free action by cost string (s40 mount/dismount). Returns false if
+## the budget can't afford it.
+static func _spend_action_cost(ts: TurnState, cost: String) -> bool:
+	match cost:
+		"complex":
+			if not ts.can_use_complex():
+				return false
+			ts.consume_complex()
+		"simple":
+			if not ts.can_use_simple():
+				return false
+			ts.consume_simple()
+		"free":
+			ts.consume_free()
+		_:
+			return false
+	return true
+
+
+## s40 Mount a horse. The combatant must have a horse available (has_mount) and be within 1 tile of
+## where it waits (mount_tile). Cost by Horsemanship: Complex (base) / Simple (R5) / Free (R7).
+static func execute_mount(state: MapCombatState, char_id: int, character: L5RCharacterData) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if ts == null or p == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if IndividualCombat.CONDITION_MOUNTED in p.conditions:
+		return {"success": false, "reason": "already_mounted"}
+	if not p.has_mount:
+		return {"success": false, "reason": "no_horse"}
+	var pos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if p.mount_tile.x >= 0 and _chebyshev(pos, p.mount_tile) > 1:
+		return {"success": false, "reason": "horse_out_of_reach"}
+	if CharacterStats.get_wound_level(character) >= Enums.WoundLevel.DOWN:
+		return {"success": false, "reason": "down_only_free_actions"}
+	var cost: String = SkillMasterySystem.horsemanship_mount_cost(character)
+	if not _spend_action_cost(ts, cost):
+		return {"success": false, "reason": "no_actions_remaining"}
+	p.conditions.append(IndividualCombat.CONDITION_MOUNTED)
+	p.mount_tile = Vector2i(-1, -1)  # now on the horse
+	state.combat_log.append({"type": "mount", "round": state.combat.round_number, "char_id": char_id, "cost": cost})
+	return {"success": true, "cost": cost}
+
+
+## s40 Dismount. Cost by Horsemanship: Simple (base) / Free (R5+). The horse is left at the
+## dismounter's tile (mount_tile) so they can remount it later.
+static func execute_dismount(state: MapCombatState, char_id: int, character: L5RCharacterData) -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if ts == null or p == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if IndividualCombat.CONDITION_MOUNTED not in p.conditions:
+		return {"success": false, "reason": "not_mounted"}
+	var cost: String = SkillMasterySystem.horsemanship_dismount_cost(character)
+	if not _spend_action_cost(ts, cost):
+		return {"success": false, "reason": "no_actions_remaining"}
+	p.conditions.erase(IndividualCombat.CONDITION_MOUNTED)
+	p.mount_tile = state.positions.get(char_id, Vector2i(-1, -1))  # horse waits here
+	state.combat_log.append({"type": "dismount", "round": state.combat.round_number, "char_id": char_id, "cost": cost})
+	return {"success": true, "cost": cost}
+
+
+## s24 Ready (draw / string) a sheathed weapon so it can attack. Cost by SkillMasterySystem.
+## weapon_ready_cost: a melee weapon is readied as a Simple Action, a bow strung as a Complex Action
+## (PROVISIONAL base costs), reduced to Free/Simple by the ready-as-Free-Action masteries (Iaijutsu R3,
+## Kenjutsu R5, Spears/Polearms/Staves R7, Kyujutsu R3). weapon_name "" = the character's best weapon.
+static func execute_ready_weapon(state: MapCombatState, char_id: int, character: L5RCharacterData, weapon_name: String = "") -> Dictionary:
+	if CharacterStats.is_dead(character):
+		return {"success": false, "reason": "character_is_dead"}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if ts == null or p == null:
+		return {"success": false, "reason": "not_in_combat"}
+	if p.weapon_ready:
+		return {"success": false, "reason": "already_ready"}
+	if CharacterStats.get_wound_level(character) >= Enums.WoundLevel.DOWN:
+		return {"success": false, "reason": "down_only_free_actions"}
+	var w: String = weapon_name if weapon_name != "" else IndividualCombat.pick_best_weapon(character)
+	var wp: Dictionary = IndividualCombat.get_weapon_profile(w)
+	var cost: String = SkillMasterySystem.weapon_ready_cost(
+		character, w, String(wp.get("skill", "")), String(wp.get("size", "")))
+	if not _spend_action_cost(ts, cost):
+		return {"success": false, "reason": "no_actions_remaining"}
+	p.weapon_ready = true
+	state.combat_log.append({"type": "ready_weapon", "round": state.combat.round_number,
+		"char_id": char_id, "weapon": w, "cost": cost})
+	return {"success": true, "weapon": w, "cost": cost}
 
 
 ## Move within move_budget tiles (already computed by caller for action type).
@@ -800,6 +978,10 @@ static func execute_move(
 			else:
 				ts.consume_simple()
 		"complex": ts.consume_complex()
+
+	# s24 Athletics R7: the first Move Action of the Round consumes the +1-tile burst.
+	if not ts.athletics_burst_used and SkillMasterySystem.athletics_move_burst(character) > 0:
+		ts.athletics_burst_used = true
 
 	state.combat_log.append({
 		"type": "move",
@@ -1156,6 +1338,8 @@ static func execute_melee_attack(
 	charge_atk_bonus: int = 0,
 	charge_dmg_bonus: int = 0,
 	as_simple: bool = false,
+	is_charge: bool = false,
+	damage_mode: String = "",
 ) -> Dictionary:
 	if CharacterStats.is_dead(attacker):
 		return {"success": false, "reason": "character_is_dead"}
@@ -1194,6 +1378,11 @@ static func execute_melee_attack(
 	if a_p.disarmed and weapon_name != "" and weapon_name != "unarmed":
 		weapon_name = "unarmed"
 
+	# s40 broken weapon (Equipment table break thresholds): a shattered weapon can't strike —
+	# the wielder swings with the broken haft / bare hands until they draw another.
+	if weapon_name in a_p.broken_weapons:
+		weapon_name = "unarmed"
+
 	# Dance of the Flames (s38 Fire): unarmed attacks cost a Simple Action, not Complex.
 	# Simple-cost attack: Dance of the Flames (unarmed kiho) OR a Simple-economy Charge (s54.5).
 	var dance_simple: bool = as_simple or ((weapon_name == "" or weapon_name == "unarmed") and "Dance of the Flames" in a_p.active_kiho)
@@ -1219,6 +1408,12 @@ static func execute_melee_attack(
 	# action-legality check, independent of position, so it precedes the range check.
 	if a_p.stance == Enums.Stance.DEFENSE or a_p.stance == Enums.Stance.FULL_DEFENSE:
 		return {"success": false, "reason": "defense_cannot_attack"}
+
+	# s24 ready-as-Free-Action: a sheathed weapon must be Readied before it can attack (unarmed
+	# strikes need no readying). Default weapon_ready=true, so this is inert unless the combatant
+	# started sheathed.
+	if weapon_name != "" and weapon_name != "unarmed" and not a_p.weapon_ready:
+		return {"success": false, "reason": "weapon_not_ready"}
 
 	# Range check.
 	var apos: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
@@ -1257,6 +1452,19 @@ static func execute_melee_attack(
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, true, is_being_guarded, weapon_name)
 	armor_tn += _cover_bonus(state, tpos, apos)
+	# s24 Staves base rule (s24 line 327): a staff attack DOUBLES the defender's worn-armor TN bonus.
+	# get_armor_tn already counts armor_tn_bonus once, so add it once more. The staff-user negates the
+	# doubling at Staves R3 (staff_doubles_armor returns false then). Inert vs an unarmored target.
+	if SkillMasterySystem.staff_doubles_armor(
+			String(IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")),
+			int(attacker.skills.get("Staves", 0))):
+		armor_tn += target.armor_tn_bonus
+	# s40 Lance (owner table): a stationary lance stab is unwieldy — +5 TN mounted / +10 TN on foot.
+	# A charge (is_charge) bypasses this and gets the charge damage instead.
+	if not is_charge:
+		armor_tn += IndividualCombat.lance_no_charge_tn_penalty(weapon_name, IndividualCombat.CONDITION_MOUNTED in a_p.conditions)
+	# s40 weapon Armor-TN multiplier (owner table): kyoketsu-shogi ×2 — a precise hit is needed.
+	armor_tn *= IndividualCombat.weapon_armor_tn_mult(weapon_name)
 
 	# s54.10 Toshigoku auras + Ancient General Tactical Mastery: set the spirit
 	# attacker's per-attack rolled-die bonuses (always reset to the freshly-computed
@@ -1292,6 +1500,13 @@ static func execute_melee_attack(
 	var atk_pen: int = IndividualCombat.get_timed_modifier_total(t_p, "attacker_penalty") \
 		+ _zone_modifier_total(state, attacker_id, "attack_roll_penalty") \
 		+ _high_ground_attack_bonus(state, apos, tpos)
+	# s24 Chain Weapons R5: +1k0 vs an entangled/Grappled opponent (added as a positive rolled-die
+	# attack modifier through the same channel).
+	var tgt_restrained: bool = t_p != null and (IndividualCombat.CONDITION_GRAPPLED in t_p.conditions \
+		or IndividualCombat.CONDITION_ENTANGLED in t_p.conditions)
+	atk_pen += SkillMasterySystem.chain_vs_restrained_bonus(
+		String(IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")),
+		int(attacker.skills.get("Chain Weapons", 0)), tgt_restrained)
 	# Defender mount/size for the mounted +1k0 (s40) and Burning Kiss of Steel +2k2 (s35).
 	var tgt_mounted: bool = t_p != null and IndividualCombat.CONDITION_MOUNTED in t_p.conditions
 	var tgt_large: bool = AdvantageSystem.has_advantage(target, Enums.Advantage.LARGE)
@@ -1344,7 +1559,7 @@ static func execute_melee_attack(
 		log_entry["reversal_reroll"] = true
 
 	if result.get("hit", false):
-		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, raises, maneuver, result, dice_engine)
+		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, raises, maneuver, result, dice_engine, false, damage_mode)
 		log_entry["damage"] = dmg_result.get("damage", 0)
 		log_entry["wounds_inflicted"] = dmg_result.get("wounds", 0)
 		result["damage"] = dmg_result.get("damage", 0)
@@ -1424,8 +1639,11 @@ static func execute_melee_attack(
 			# s34 The Mountain's Feet: defender's knockdown_resist buff adds extra rolled/kept dice.
 			var kdr_r: int = IndividualCombat.get_timed_modifier_total(t_p, "knockdown_resist_rolled")
 			var kdr_k: int = IndividualCombat.get_timed_modifier_total(t_p, "knockdown_resist_kept")
+			# s24 Heavy Weapons R5: Free Raise toward Knockdown (+5 to the attacker's roll).
+			var atk_skill_kd: String = IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")
+			var kd_mastery_fr: int = SkillMasterySystem.maneuver_free_raises(atk_skill_kd, int(attacker.skills.get(atk_skill_kd, 0)), "knockdown")
 			var kd: Dictionary = IndividualCombat.resolve_knockdown(
-				attacker, target, maneuver == "knockdown_quad", dice_engine, 0, kdr_r, kdr_k
+				attacker, target, maneuver == "knockdown_quad", dice_engine, kd_mastery_fr * 5, kdr_r, kdr_k
 			)
 			# Root the Mountain (s38 Earth): forcing the caster to move requires the
 			# attacker to also win a Contested Earth Roll, or the knockdown is negated.
@@ -1447,6 +1665,9 @@ static func execute_melee_attack(
 			if a_p.disarm_free_raises_pending > 0:
 				result["disarm_free_raises_used"] = a_p.disarm_free_raises_pending
 				a_p.disarm_free_raises_pending = 0
+			# s24 Knives R5: Free Raise toward Disarm (sai/jitte).
+			var atk_skill_dis: String = IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")
+			disarm_free += SkillMasterySystem.maneuver_free_raises(atk_skill_dis, int(attacker.skills.get(atk_skill_dis, 0)), "disarm")
 			if raises + disarm_free >= DISARM_RAISES:
 				var dr: Dictionary = IndividualCombat.resolve_disarm(attacker, target, dice_engine, weapon_name, a_p)
 				result["disarmed"] = dr["disarmed"]
@@ -1673,6 +1894,8 @@ static func execute_ranged_attack(
 	raises: int,
 	dice_engine: DiceEngine,
 	spend_void: bool = false,
+	thrown: bool = false,
+	ammo: String = "",
 ) -> Dictionary:
 	if CharacterStats.is_dead(attacker):
 		return {"success": false, "reason": "character_is_dead"}
@@ -1695,6 +1918,11 @@ static func execute_ranged_attack(
 	# s35 Wings of Fire: the caster's arms control the wings — no weapon/unarmed attacks.
 	if _arms_occupied(state, attacker_id):
 		return {"success": false, "reason": "arms_occupied"}
+
+	# s24 ready-as-Free-Action: a sheathed/unstrung weapon must be Readied before it can fire/throw.
+	# Default weapon_ready=true, so this is inert unless the combatant started sheathed.
+	if weapon_name != "" and weapon_name != "unarmed" and a_p_ins != null and not a_p_ins.weapon_ready:
+		return {"success": false, "reason": "weapon_not_ready"}
 
 	# s36 Stand Against the Waves: a granted_attacks pool lets a ranged attack proceed when the
 	# normal Complex is spent (consumes one granted attack instead).
@@ -1720,9 +1948,31 @@ static func execute_ranged_attack(
 	if _ray_blocked_by_false_realm(state, attacker_id, apos, tpos):
 		return {"success": false, "reason": "false_realm_blocks_los"}
 
-	# Weapon must be ranged.
+	# s40 weapon range (owner Equipment table): a target beyond the weapon's max range is out of
+	# range. A thrown melee weapon uses its thrown_range; a ranged weapon uses range_tiles.
+	# 0 = no specified range (the prior any-LOS PROVISIONAL behavior).
+	var rng: int = IndividualCombat.weapon_thrown_range(weapon_name) if thrown else IndividualCombat.weapon_range_tiles(weapon_name)
+	# s24 Kyujutsu R5: bow maximum range +50% (a thrown weapon is not a bow shot, so unaffected).
+	if not thrown:
+		rng = IndividualCombat.kyujutsu_extended_range(attacker, weapon_name, rng)
+	# s24 Spears R5: a thrown Spears weapon gets +5' (+1 tile) ranged range (s24 line 399).
+	elif rng > 0:
+		rng += SkillMasterySystem.spears_thrown_range_bonus(
+			String(IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")),
+			int(attacker.skills.get("Spears", 0)))
+	# s40 flesh-cutter ammo (owner table): halves the weapon's range.
+	if rng > 0 and IndividualCombat.ammo_range_halved(ammo):
+		rng = rng / 2
+	if rng > 0 and _chebyshev(apos, tpos) > rng:
+		return {"success": false, "reason": "out_of_range"}
+
+	# Weapon eligibility: a normal shot needs a ranged weapon; a throw (s40) needs a melee weapon
+	# that can be hurled (has a thrown_range).
 	var wp: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
-	if wp.get("melee", true):
+	if thrown:
+		if IndividualCombat.weapon_thrown_range(weapon_name) <= 0:
+			return {"success": false, "reason": "weapon_not_throwable"}
+	elif wp.get("melee", true):
 		return {"success": false, "reason": "weapon_is_melee"}
 
 	var a_p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
@@ -1750,6 +2000,15 @@ static func execute_ranged_attack(
 	var is_being_guarded: bool = _is_being_guarded(state, target_id)
 	var armor_tn: int = IndividualCombat.get_armor_tn(target, t_p, dice_engine, false, is_being_guarded, weapon_name)
 	armor_tn += _cover_bonus(state, tpos, apos)
+	# s40 bow mount-TN (owner Equipment table): dai-kyu +10 on foot, han-kyu/yumi +10 mounted.
+	armor_tn += IndividualCombat.weapon_mount_tn_penalty(weapon_name, IndividualCombat.CONDITION_MOUNTED in a_p.conditions)
+	# s40 ammo + weapon Armor-TN penetration (owner table): armor-piercing ammo ignores the target's
+	# worn-armor TN bonus; flesh-cutter ammo (×2) / blowgun (×3) / kyoketsu-shogi (×2) multiply the
+	# Armor TN (a precise hit on a vulnerable spot). Applied to the physical Armor TN (base + cover +
+	# mount), before the magical zone/buff modifiers.
+	if IndividualCombat.ammo_ignores_armor(ammo):
+		armor_tn = maxi(5, armor_tn - target.armor_tn_bonus)
+	armor_tn *= IndividualCombat.ammo_armor_tn_mult(ammo) * IndividualCombat.weapon_armor_tn_mult(weapon_name)
 	# s33 Blessed Wind: +Armor TN vs non-magical ranged attacks only (ranged path).
 	# s33 Summoning the Gale: a target inside an anti-ranged zone is harder to shoot (+15 Armor TN).
 	armor_tn += IndividualCombat.get_timed_modifier_total(t_p, "ranged_armor_tn") \
@@ -1799,7 +2058,7 @@ static func execute_ranged_attack(
 	}
 
 	if result.get("hit", false):
-		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, shot_raises, "", result, dice_engine)
+		var dmg_result: Dictionary = _apply_hit(state, attacker, a_p, target, weapon_name, shot_raises, "", result, dice_engine, thrown)
 		log_entry["damage"] = dmg_result.get("damage", 0)
 		log_entry["wounds_inflicted"] = dmg_result.get("wounds", 0)
 		result["damage"] = dmg_result.get("damage", 0)
@@ -2054,6 +2313,10 @@ static func execute_grapple_initiate(
 		if not IndividualCombat.weapon_can_grapple(weapon_name):
 			return {"success": false, "reason": "weapon_cannot_grapple"}
 		grapple_skill = IndividualCombat.get_weapon_profile(weapon_name).get("skill", "Jiujutsu")
+		# s24 Chain Weapons R3: a chain weapon may initiate a Grapple only at rank 3+.
+		if grapple_skill == "Chain Weapons" \
+				and not SkillMasterySystem.chain_weapon_can_grapple(grapple_skill, int(attacker.skills.get("Chain Weapons", 0))):
+			return {"success": false, "reason": "chain_grapple_requires_rank_3"}
 
 	# Grapple ignores armor TN bonus — target TN = Reflexes × 5 + 5 (GDD s40).
 	var grapple_tn: int = target.reflexes * 5 + 5
@@ -6861,6 +7124,7 @@ static func begin_turn(state: MapCombatState, char_id: int) -> void:
 		ts.free_move_used = false
 		ts.free_actions_used = 0
 		ts.stance_changed = false
+		ts.athletics_burst_used = false  # s24 Athletics R7: one +1-tile burst per Round
 
 
 ## Get the character_id whose turn it currently is.
@@ -6995,10 +7259,23 @@ static func resolve_current_turn(
 	var actor: int = get_current_actor(state)
 	if actor < 0:
 		return {"no_actor": true}
-	# A player character (player-faction, not a companion) yields to input.
+	# A player character (player-faction, not a companion/animal) yields to input.
 	if state.factions.get(actor, FACTION_NEUTRAL) == FACTION_PLAYER \
-			and not state.companion_data.has(actor):
+			and not state.companion_data.has(actor) and not state.animal_data.has(actor):
 		return {"awaiting_player": true, "actor": actor}
+	# Trained-animal companions (s57.39) are engine-controlled puppets with negative ids
+	# living in state.combatants (not chars_by_id) — resolve before the chars_by_id lookup.
+	if state.animal_data.has(actor):
+		var apup: L5RCharacterData = state.combatants.get(actor, null)
+		if apup == null or CharacterStats.is_dead(apup):
+			advance_turn(state, chars_by_id, dice_engine)
+			return {"skipped": actor}
+		update_companion_morale(state, chars_by_id)
+		var ares: Dictionary = execute_animal_turn(state, actor, chars_by_id, dice_engine)
+		ares["actor_type"] = "animal"
+		ares["actor"] = actor
+		advance_turn(state, chars_by_id, dice_engine)
+		return ares
 	var character: L5RCharacterData = chars_by_id.get(actor, null)
 	if character == null or CharacterStats.is_dead(character):
 		advance_turn(state, chars_by_id, dice_engine)
@@ -7269,7 +7546,7 @@ static func advance_round(
 		if p == null:
 			continue
 		var weapon_name: String = IndividualCombat.pick_best_weapon(c)
-		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name)
+		var init_score: int = IndividualCombat.roll_initiative(c, p, dice_engine, weapon_name, state.combat.round_number)
 		p.initiative_score = init_score
 
 	# Re-sort turn order by new initiative scores.
@@ -7842,6 +8119,37 @@ static func execute_npc_turn(
 				actions_taken.append({"action": "climb", "result": eclimb})
 				return {"actions": actions_taken}
 
+	# s40 NPC cavalry (auto-mount + lance charge) — decided BEFORE the stance pick so the maneuver
+	# owns the full action budget (the stance pick would otherwise spend a Simple that the Complex
+	# mount / two-Simple charge needs). Structural AI — the GDD gives no NPC mount/charge policy.
+	if npc.spirit_creature == null \
+			and IndividualCombat.CONDITION_ENTANGLED not in p.conditions \
+			and IndividualCombat.CONDITION_PRONE not in p.conditions \
+			and not ts.is_down_restricted(wl):
+		# Mount an available horse when no enemy is adjacent (gains the cavalry +1k0 and, in riding
+		# armor, +12 Armor TN). A Complex mount (low Horsemanship) ends the turn; a Free R7 mount
+		# falls through to charge the same turn.
+		if p.has_mount and IndividualCombat.CONDITION_MOUNTED not in p.conditions \
+				and not is_in_melee_range_of_enemy(state, npc_id):
+			var mnt: Dictionary = execute_mount(state, npc_id, npc)
+			if mnt.get("success", false):
+				actions_taken.append({"action": "mount", "result": mnt})
+				if not ts.can_use_complex() and not ts.can_use_simple():
+					return {"actions": actions_taken}
+		# Mounted spear-fighter: couch a lance and charge a reachable foe beyond melee. (pick_best_weapon
+		# optimizes stationary damage and returns a yari; the lance is the cavalry charge weapon.)
+		if IndividualCombat.CONDITION_MOUNTED in p.conditions \
+				and String(IndividualCombat.get_weapon_profile(IndividualCombat.pick_best_weapon(npc)).get("skill", "")) == "Spears":
+			var cav_targets: Array = get_melee_targets(state, npc_id) + get_ranged_targets(state, npc_id)
+			var ct: int = _npc_pick_target(state, npc_id, cav_targets, chars_by_id)
+			if ct >= 0 and not (ct in get_melee_targets(state, npc_id)):
+				var lchg: Dictionary = execute_character_charge(
+					state, npc_id, ct, npc,
+					chars_by_id.get(ct, state.combatants.get(ct, null)), "lance", dice_engine)
+				if lchg.get("charged", false):
+					actions_taken.append({"action": "lance_charge", "result": lchg})
+					return {"actions": actions_taken}
+
 	# -- Pick optimal stance -----------------------------------------------
 	var stance_result: Dictionary = _npc_pick_stance(state, npc_id, npc, chars_by_id, dice_engine)
 	if stance_result.get("changed", false):
@@ -7958,8 +8266,13 @@ static func execute_npc_turn(
 	var is_melee_weapon: bool = wp.get("melee", true)
 
 	# -- Move toward target if needed -----------------------------------------
+	# target_in_ranged is weapon-aware (s40 weapon range): a target beyond the NPC's actual ranged
+	# weapon range reads as out-of-range, so the NPC ADVANCES toward it rather than firing a doomed,
+	# turn-wasting shot. Selection (best_target) stays any-LOS so distant foes are still pursued.
+	# Creatures are unaffected (their puppet weapon has no range_tiles → unlimited; they use their
+	# own ranged_range_tiles gate in execute_creature_ranged_attack).
 	var target_in_melee: bool = (best_target in melee_targets)
-	var target_in_ranged: bool = (best_target in ranged_targets)
+	var target_in_ranged: bool = (best_target in get_ranged_targets(state, npc_id, weapon_name))
 
 	# Charge (s54.5/s54.12): a charge-capable creature out of melee but within charge range
 	# enters Full Attack (if able) and closes + strikes in one turn.
@@ -7998,9 +8311,9 @@ static func execute_npc_turn(
 				melee_targets = get_melee_targets(state, npc_id)
 				target_in_melee = (best_target in melee_targets)
 
-	# Re-check targets after movement.
+	# Re-check targets after movement (weapon-aware range, as above).
 	if not target_in_melee:
-		ranged_targets = get_ranged_targets(state, npc_id)
+		ranged_targets = get_ranged_targets(state, npc_id, weapon_name)
 		target_in_ranged = (best_target in ranged_targets)
 
 	# -- Creature melee multi-target attack (s54.12 blue whale Tail Smash / Yamato no Orochi
@@ -8254,6 +8567,11 @@ static func _npc_pick_stance(
 	var desired: Enums.Stance = _npc_desired_stance(state, npc_id, npc, wl, chars_by_id)
 
 	if p.stance == desired:
+		# Maintaining Full Defense still re-rolls the Defense bonus and spends the Complex each turn
+		# (GDD: the roll is made upon declaring the Stance — Stage 2 of every Round).
+		if desired == Enums.Stance.FULL_DEFENSE and ts.can_use_complex():
+			_enter_full_defense(npc, p, ts, dice_engine)
+			return {"changed": false, "maintained_full_defense": true}
 		return {"changed": false}
 
 	# Only change stance if there's a meaningful reason (not just a marginal preference).
@@ -8404,6 +8722,7 @@ static func _npc_move_toward(
 	# Move as far along the path as budget allows (stopping before the target's tile).
 	var dest: Vector2i = state.positions.get(npc_id, Vector2i(-1, -1))
 	var cost_used: int = 0
+	var npc_athletics_r5: bool = SkillMasterySystem.athletics_ignores_difficult_terrain(npc)
 	for step: Vector2i in path:
 		# Don't step onto the target's tile.
 		if step == state.positions.get(target_id, Vector2i(-1, -1)):
@@ -8412,6 +8731,8 @@ static func _npc_move_toward(
 		var step_cost: int = MovementSystem.terrain_cost(tile)
 		if step_cost == 0:
 			break
+		if npc_athletics_r5 and step_cost == 2:
+			step_cost = 1  # s24 Athletics R5: no difficult-terrain penalty.
 		if cost_used + step_cost > budget:
 			break
 		dest = step
@@ -8616,7 +8937,8 @@ static func _npc_execute_attack(
 
 	if use_extra_attack:
 		# 5 Raises dedicated to Extra Attack; no other raise benefit (GDD s40).
-		raises = 5
+		# s24 Knives R7: one Free Raise toward Extra Attack lowers the Raises to declare.
+		raises = 5 - SkillMasterySystem.maneuver_free_raises(skill_name, skill_rank, "extra_attack")
 	elif (is_melee or target_in_melee) and skill_rank >= 5 \
 			and _npc_should_disarm(state, target_id, target):
 		# Disarm (3 Raises): a very skilled attacker strips a dangerous ARMED foe's weapon
@@ -8741,7 +9063,7 @@ static func add_companion(
 	p.character_id = cid
 	p.stance = Enums.Stance.ATTACK
 	p.initiative_score = IndividualCombat.roll_initiative(
-		character, p, dice_engine, IndividualCombat.pick_best_weapon(character))
+		character, p, dice_engine, IndividualCombat.pick_best_weapon(character), state.combat.round_number)
 	state.combat.participants[cid] = p
 	state.combat.turn_order.append(cid)
 	state.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
@@ -8779,7 +9101,7 @@ static func add_enemy(
 	p.character_id = cid
 	p.stance = Enums.Stance.ATTACK
 	p.initiative_score = IndividualCombat.roll_initiative(
-		character, p, dice_engine, IndividualCombat.pick_best_weapon(character))
+		character, p, dice_engine, IndividualCombat.pick_best_weapon(character), state.combat.round_number)
 	state.combat.participants[cid] = p
 	state.combat.turn_order.append(cid)
 	state.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
@@ -8954,6 +9276,229 @@ static func _companion_goal_tile(state: MapCombatState, companion: CompanionData
 			return _player_tile(state)
 
 
+# ── s57.39 Trained-animal companions in combat ──────────────────────────────────
+
+## Add a trained-animal companion puppet to a LIVE skirmish on the owner's
+## (player) faction. `puppet` is from AnimalCombatant.to_combatant; `companion` is
+## the owner's trained_companions record (drives training tier + rebonding); owner_id
+## is the trainer. Mirrors add_companion's participant insertion (initiative, turn-order
+## re-sort, TurnState). Returns false if the puppet id is already a participant.
+static func add_animal_companion(
+	state: MapCombatState,
+	puppet: L5RCharacterData,
+	owner_id: int,
+	companion: Dictionary,
+	x: int, y: int,
+	dice_engine: DiceEngine,
+) -> bool:
+	var aid: int = puppet.character_id
+	if state.combat.participants.has(aid):
+		return false
+	state.combatants[aid] = puppet
+	state.positions[aid] = Vector2i(x, y)
+	state.factions[aid] = FACTION_PLAYER
+	var p := IndividualCombat.Participant.new()
+	p.character_id = aid
+	p.stance = Enums.Stance.ATTACK
+	p.initiative_score = IndividualCombat.roll_initiative(
+		puppet, p, dice_engine, IndividualCombat.pick_best_weapon(puppet), state.combat.round_number)
+	state.combat.participants[aid] = p
+	state.combat.turn_order.append(aid)
+	state.combat.turn_order.sort_custom(func(a: int, b: int) -> bool:
+		var pa: IndividualCombat.Participant = state.combat.participants.get(a, null)
+		var pb: IndividualCombat.Participant = state.combat.participants.get(b, null)
+		var ia: int = pa.initiative_score if pa != null else 0
+		var ib: int = pb.initiative_score if pb != null else 0
+		return ia > ib
+	)
+	var ts := TurnState.new()
+	ts.char_id = aid
+	state.turn_states[aid] = ts
+	state.animal_data[aid] = {"owner_id": owner_id, "companion": companion, "command_target_id": -1}
+	return true
+
+
+## s57.39.7 Rank-5 command-to-attack: the owner commands a trained companion to
+## attack `target_id` (a Simple Action on the owner's turn). Requires: the animal is
+## a trained-animal participant the owner owns; owner alive with Animal Handling 5+;
+## the companion is fully trained and past the rebonding window (s57.39.2 — rebonding
+## animals do not reliably respond to commands); target is a living enemy (not an ally,
+## s57.39.7). Spends a Simple Action from the owner's TurnState. Returns {success, reason}.
+static func command_animal(
+	state: MapCombatState,
+	owner: L5RCharacterData,
+	animal_id: int,
+	target_id: int,
+) -> Dictionary:
+	var entry: Dictionary = state.animal_data.get(animal_id, {})
+	if entry.is_empty():
+		return {"success": false, "reason": "not_an_animal"}
+	if entry.get("owner_id", -1) != owner.character_id:
+		return {"success": false, "reason": "not_owner"}
+	if CharacterStats.is_dead(owner):
+		return {"success": false, "reason": "owner_dead"}
+	if int(owner.skills.get("Animal Handling", 0)) < AnimalHandlingSystem.MASTERY_COMMAND_RANK:
+		return {"success": false, "reason": "owner_below_rank_5"}
+	var companion: Dictionary = entry.get("companion", {})
+	if not companion.get("fully_trained", false):
+		return {"success": false, "reason": "not_fully_trained"}
+	if int(companion.get("rebond_sessions_remaining", 0)) > 0:
+		return {"success": false, "reason": "rebonding"}
+	# Target must be a living enemy of the animal's (player) faction, not an ally.
+	if not state.combat.participants.has(target_id) or target_id in state.fled_ids:
+		return {"success": false, "reason": "invalid_target"}
+	var tgt: L5RCharacterData = state.combatants.get(target_id, null)
+	if tgt == null or CharacterStats.is_dead(tgt):
+		return {"success": false, "reason": "invalid_target"}
+	if not _are_enemies(String(state.factions.get(animal_id, "")), String(state.factions.get(target_id, ""))):
+		return {"success": false, "reason": "target_is_ally"}
+	# The command costs the owner a Simple Action.
+	var ots: TurnState = state.turn_states.get(owner.character_id, null)
+	if ots == null or not ots.can_use_simple():
+		return {"success": false, "reason": "no_action"}
+	ots.consume_simple()
+	entry["command_target_id"] = target_id
+	return {"success": true, "reason": "commanded", "target_id": target_id}
+
+
+## Resolve a trained-animal companion's turn (engine-controlled). Three-tier behavior
+## (s57.39.3): WILD (< 3 sessions) flees any combat; FOLLOWING (3+ sessions, not fully
+## trained) stays near the owner and flees if wounded; TRAINED applies the mastery rules
+## (s57.39.7/8). A trained animal engages its commanded target only when the owner has
+## Animal Handling 5+ (a command is required to attack); a commanded animal that reaches
+## Hurt breaks off and flees unless the owner has Rank 7 (no-flee override). An
+## uncommanded / sub-Rank-5 / rebonding trained animal stays defensively near the owner
+## and flees if wounded (FLAGGED: the trained-uncommanded default is a small s57.39 gap —
+## the skill layer requires R5+command to attack, so an uncommanded animal does not
+## engage; flee-if-Hurt mirrors standard animal psychology, s57.39.7). Returns {actions, ...}.
+static func execute_animal_turn(
+	state: MapCombatState,
+	animal_id: int,
+	chars_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var entry: Dictionary = state.animal_data.get(animal_id, {})
+	if entry.is_empty():
+		return {"actions": [], "reason": "not_an_animal"}
+	var puppet: L5RCharacterData = state.combatants.get(animal_id, null)
+	if puppet == null or CharacterStats.is_dead(puppet) or animal_id in state.fled_ids:
+		return {"actions": [], "reason": "out"}
+	var ts: TurnState = state.turn_states.get(animal_id, null)
+	if ts == null:
+		return {"actions": [], "reason": "not_in_combat"}
+
+	begin_turn(state, animal_id)
+	var ip: IndividualCombat.Participant = state.combat.participants.get(animal_id, null)
+	if ip != null and IndividualCombat.CONDITION_INCAPACITATED in ip.conditions:
+		return {"actions": [], "reason": "incapacitated"}
+	apply_fear_checks(state, animal_id, puppet, dice_engine)
+
+	var companion: Dictionary = entry.get("companion", {})
+	var tier: String = AnimalHandlingSystem.training_tier(companion)
+	var owner_id: int = entry.get("owner_id", -1)
+	var owner: L5RCharacterData = chars_by_id.get(owner_id, state.combatants.get(owner_id, null))
+	var ah_rank: int = 0
+	if owner != null and not CharacterStats.is_dead(owner):
+		ah_rank = int(owner.skills.get("Animal Handling", 0))
+	# s57.39.7 "Hurt"-flee uses the s54.1 first wound threshold (NOT the 8-level WoundLevel
+	# enum — a coarse creature track never reaches the enum's HURT before Dead).
+	var wounded_hurt: bool = puppet.wounds_taken >= AnimalCombatant.flee_wound_threshold(puppet)
+
+	# WILD (s57.39.3 Tier 1): flees any combat outright.
+	if tier == "wild":
+		return _animal_flee(state, animal_id, puppet, dice_engine)
+
+	# A commanded TRAINED animal under an owner with Rank 5+ (and not rebonding) engages.
+	var cmd_target: int = int(entry.get("command_target_id", -1))
+	var commandable: bool = tier == "trained" \
+		and ah_rank >= AnimalHandlingSystem.MASTERY_COMMAND_RANK \
+		and int(companion.get("rebond_sessions_remaining", 0)) == 0
+	if commandable and cmd_target >= 0 and _animal_target_valid(state, cmd_target):
+		# R5 default flee-at-Hurt, overridden by the R7 no-flee mastery (s57.39.8).
+		if wounded_hurt and ah_rank < AnimalHandlingSystem.MASTERY_NO_FLEE_RANK:
+			entry["command_target_id"] = -1
+			return _animal_flee(state, animal_id, puppet, dice_engine)
+		return _animal_engage(state, animal_id, cmd_target, puppet, chars_by_id, dice_engine)
+
+	# FOLLOWING, or TRAINED-but-uncommanded/sub-R5/rebonding: stay near the owner; a badly
+	# wounded animal (Hurt+) flees regardless (standard animal psychology, s57.39.7).
+	if wounded_hurt:
+		return _animal_flee(state, animal_id, puppet, dice_engine)
+	var owner_tile: Vector2i = state.positions.get(owner_id, _player_tile(state))
+	if owner_tile.x >= 0 and state.positions.get(animal_id) != owner_tile:
+		var mv: Dictionary = _companion_step_toward(state, animal_id, owner_tile, puppet, dice_engine)
+		if mv.get("success", false):
+			return {"actions": [{"action": "follow", "result": mv}], "tier": tier}
+	return {"actions": [], "tier": tier, "reason": "stay"}
+
+
+## Engage the commanded target: attack if adjacent, else move toward it.
+static func _animal_engage(
+	state: MapCombatState,
+	animal_id: int,
+	target_id: int,
+	puppet: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var melee: Array = get_melee_targets(state, animal_id)
+	if target_id in melee:
+		var tc: L5RCharacterData = chars_by_id.get(target_id, state.combatants.get(target_id, null))
+		if tc != null and not CharacterStats.is_dead(tc):
+			var atk: Dictionary = _npc_execute_attack(
+				state, animal_id, target_id, puppet, tc,
+				IndividualCombat.pick_best_weapon(puppet), true, dice_engine, false)
+			return {"actions": [{"action": "attack", "result": atk}], "tier": "trained"}
+	# Not adjacent — move toward the commanded target.
+	var budget: int = simple_move_budget(state, animal_id, puppet)
+	var mv: Dictionary = _npc_move_toward(state, animal_id, target_id, puppet, budget, "simple", dice_engine)
+	return {"actions": [{"action": "move", "result": mv}], "tier": "trained"}
+
+
+## s57.39.9 — sync combat deaths back to the companion records. For each animal puppet in
+## the skirmish that has died, mark its companion record `is_alive=false` (the record is the
+## owner's persistent trained_companions entry, referenced in animal_data, so this archives
+## it on the owner). The Tier-4 loss topic + cap recovery are produced by the world-sim pass
+## (DayOrchestrator._process_companion_deaths) from the archived record. Returns the list of
+## {owner_id, companion} that newly died this call (idempotent — already-archived skipped).
+static func sync_companion_deaths(state: MapCombatState) -> Array:
+	var dead: Array = []
+	for aid: int in state.animal_data.keys():
+		var entry: Dictionary = state.animal_data[aid]
+		var pup: L5RCharacterData = state.combatants.get(aid, null)
+		var comp: Dictionary = entry.get("companion", {})
+		if pup != null and CharacterStats.is_dead(pup) and comp.get("is_alive", false):
+			comp["is_alive"] = false
+			dead.append({"owner_id": int(entry.get("owner_id", -1)), "companion": comp})
+	return dead
+
+
+## A fleeing animal moves toward the nearest exit and leaves the scene if it reaches one.
+static func _animal_flee(
+	state: MapCombatState,
+	animal_id: int,
+	puppet: L5RCharacterData,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var exit_tile: Vector2i = _nearest_exit_tile(state, animal_id)
+	if exit_tile.x >= 0 and state.positions.get(animal_id) == exit_tile:
+		state.positions.erase(animal_id)
+		if animal_id not in state.fled_ids:
+			state.fled_ids.append(animal_id)
+		return {"actions": [{"action": "fled"}], "fled": true}
+	var goal: Vector2i = exit_tile if exit_tile.x >= 0 else _away_from_enemies_tile(state, animal_id)
+	var mv: Dictionary = _companion_step_toward(state, animal_id, goal, puppet, dice_engine)
+	return {"actions": [{"action": "flee_move", "result": mv}], "fleeing": true}
+
+
+## True if a commanded target is still a living enemy participant (not fled).
+static func _animal_target_valid(state: MapCombatState, target_id: int) -> bool:
+	if not state.combat.participants.has(target_id) or target_id in state.fled_ids:
+		return false
+	var tc: L5RCharacterData = state.combatants.get(target_id, null)
+	return tc != null and not CharacterStats.is_dead(tc)
+
+
 ## Pick an adjacent enemy to attack, honoring doshin samurai-avoidance.
 static func _companion_pick_enemy(
 	state: MapCombatState,
@@ -8986,11 +9531,14 @@ static func _companion_step_toward(
 	var budget: int = free_move_budget(state, cid, character)
 	var dest: Vector2i = state.positions.get(cid, Vector2i(-1, -1))
 	var cost: int = 0
+	var athletics_r5: bool = SkillMasterySystem.athletics_ignores_difficult_terrain(character)
 	for step: Vector2i in path:
 		# Don't step onto an occupied goal tile (e.g. trailing the player).
 		if step == goal and _player_id_at(state, goal) >= 0:
 			break
 		var tcost: int = MovementSystem.terrain_cost(state.map.get_tile(step.x, step.y))
+		if athletics_r5 and tcost == 2:
+			tcost = 1  # s24 Athletics R5: no difficult-terrain penalty.
 		if tcost == 0 or cost + tcost > budget:
 			break
 		dest = step
@@ -9314,6 +9862,68 @@ static func execute_charge(
 	if cr.charge_diving:
 		IndividualCombat.apply_condition(p, IndividualCombat.CONDITION_PRONE)
 	return {"ok": true, "charged": true, "reached": true, "attack": res, "diving": cr.charge_diving}
+
+
+## s40 Lance charge (owner table) — a MOUNTED character with a charge-capable weapon (lance) closes
+## a gap and strikes for the charge damage (3k4 vs the stationary 1k2), bypassing the lance's
+## no-charge TN penalty. Requires CONDITION_MOUNTED and the target beyond melee but within a Full
+## Move (Water Ring × 4 — the run-up; the exact charge distance is PROVISIONAL, derived from the
+## s4.5 Full-Move budget since the owner table gives no charge range). Enters Full Attack only if
+## able (action economy / Horsemanship R3 gate); the attack is a Complex. Returns {} if it cannot
+## charge (caller falls back to a normal — penalized — lance stab).
+static func execute_character_charge(
+	state: MapCombatState,
+	attacker_id: int,
+	target_id: int,
+	attacker: L5RCharacterData,
+	target: L5RCharacterData,
+	weapon_name: String,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(attacker_id, null)
+	var p: IndividualCombat.Participant = state.combat.participants.get(attacker_id, null)
+	if ts == null or p == null:
+		return {}
+	# A charge is a mounted cavalry maneuver; the weapon must have a charge profile (lance).
+	if IndividualCombat.CONDITION_MOUNTED not in p.conditions:
+		return {}
+	var cb: Dictionary = IndividualCombat.weapon_charge_bonus(weapon_name)
+	if int(cb.get("rolled", 0)) <= 0 and int(cb.get("kept", 0)) <= 0:
+		return {}
+	if CharacterStats.is_dead(attacker) or CharacterStats.is_dead(target):
+		return {}
+	var ap: Vector2i = state.positions.get(attacker_id, Vector2i(-1, -1))
+	var tp: Vector2i = state.positions.get(target_id, Vector2i(-1, -1))
+	if ap.x < 0 or tp.x < 0:
+		return {}
+	var charge_tiles: int = MovementSystem.budget(
+		CharacterStats.get_ring_value(attacker, Enums.Ring.WATER), MovementSystem.MoveAction.FULL_MOVE)
+	if charge_tiles < 1:
+		return {}
+	var dist: int = _chebyshev(ap, tp)
+	# already adjacent (use a normal stab) or unreachable even with the run-up → no charge.
+	if dist <= MELEE_RANGE_TILES or dist > charge_tiles + MELEE_RANGE_TILES:
+		return {}
+	# Enter Full Attack — only if able this turn (Fatigue / Horsemanship R3 mounted gate). Like the
+	# creature charge, the maneuver is two Simples (the mandatory Full-Attack stance change + a
+	# Simple-economy charge attack), so it costs the same full turn as a Complex while fitting the
+	# stance entry. A charger already in Full Attack just spends the one Simple attack.
+	if p.stance != Enums.Stance.FULL_ATTACK:
+		var sc: Dictionary = execute_stance_change(state, attacker_id, Enums.Stance.FULL_ATTACK, attacker, dice)
+		if not sc.get("success", false):
+			return {}
+	if not ts.can_use_simple():
+		return {}
+	# Charge run-up (free move within the charge distance), then the lance attack.
+	_npc_move_toward(state, attacker_id, target_id, attacker, charge_tiles, "free", dice)
+	if not (target_id in get_melee_targets(state, attacker_id)):
+		return {"ok": true, "charged": true, "reached": false}
+	# charge_dmg_bonus adds equally to rolled+kept; the lance charge bonus is symmetric (+2k2). The
+	# attack is Simple-economy (as_simple) and a charge (is_charge → bypasses the no-charge TN).
+	var res: Dictionary = execute_melee_attack(
+		state, attacker_id, target_id, attacker, target, weapon_name, 0, dice,
+		"", false, false, 0, int(cb["rolled"]), true, true)
+	return {"ok": true, "charged": true, "reached": true, "attack": res}
 
 
 ## Strength of the Dead (s54.12 Wanyudo): a Complex-action scream — every mortal enemy within
@@ -9814,6 +10424,8 @@ static func _apply_hit(
 	maneuver: String,
 	attack_result: Dictionary,
 	dice_engine: DiceEngine,
+	thrown: bool = false,
+	damage_mode: String = "",
 ) -> Dictionary:
 	var feint_bonus: int = 0
 	var raises_for_damage: int = 0
@@ -9836,16 +10448,28 @@ static func _apply_hit(
 		stv_rolled = 1
 		stv_kept = 1
 
+	# s24 Polearms R5: +1k0 damage vs a mounted or significantly larger opponent — resolve the
+	# defender's mount/size here (the same computation as the to-hit mounted/Burning-Kiss bonus).
+	var dmg_t_p: IndividualCombat.Participant = state.combat.participants.get(target.character_id, null)
+	var dmg_tgt_mounted: bool = dmg_t_p != null and IndividualCombat.CONDITION_MOUNTED in dmg_t_p.conditions
+	var dmg_tgt_large: bool = AdvantageSystem.has_advantage(target, Enums.Advantage.LARGE)
 	var dmg: Dictionary = IndividualCombat.resolve_damage(
-		attacker, weapon_name, raises_for_damage + stv_rolled, feint_bonus, dice_engine, a_p, maneuver == "feint", stv_kept
+		attacker, weapon_name, raises_for_damage + stv_rolled, feint_bonus, dice_engine, a_p, maneuver == "feint", stv_kept, thrown, damage_mode, dmg_tgt_mounted, dmg_tgt_large
 	)
 	var raw: int = dmg["raw_damage"]
+
+	# s40 weapon break threshold (owner Equipment table): a fragile weapon shatters when the force of
+	# its blow (the raw damage roll) reaches its threshold. This hit still lands; the weapon is marked
+	# broken so future attacks with it fall back to unarmed (execute_melee_attack).
+	var break_at: int = IndividualCombat.weapon_break_threshold(weapon_name)
+	if break_at > 0 and raw >= break_at and a_p != null and weapon_name not in a_p.broken_weapons:
+		a_p.broken_weapons.append(weapon_name)
 
 	# Reduction: base armor + kata/active-kiho Reduction − attacker piercing (s30a/s38).
 	var t_p: IndividualCombat.Participant = state.combat.participants.get(target.character_id, null)
 	var reduction: int = target.armor_reduction
 	if t_p != null:
-		reduction = IndividualCombat.total_defender_reduction(target, t_p, attacker, a_p, weapon_name)
+		reduction = IndividualCombat.total_defender_reduction(target, t_p, attacker, a_p, weapon_name, state.combat.round_number <= 1)
 		# Rising Mountain (s38 Earth): the defender gains Reduction = 2× the attacker's
 		# Raises on this offensive action (spells excluded — this is a weapon strike).
 		if "Rising Mountain" in t_p.active_kiho and raises > 0:

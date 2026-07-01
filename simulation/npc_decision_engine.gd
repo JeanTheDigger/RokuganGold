@@ -60,6 +60,9 @@ static func build_context(
 		ctx.context_flag = world_state.get("context_flag", Enums.ContextFlag.AT_OWN_HOLDINGS) as Enums.ContextFlag
 	ctx.season = world_state.get("season", 0)
 	ctx.ic_day = world_state.get("ic_day", 0)
+	ctx.commerce_settlement_modifier = float(
+		(world_state.get("settlement_koku_modifiers", {}) as Dictionary).get(ctx.location_id, 1.0)
+	)
 	ctx.sublocation = world_state.get("sublocation", Enums.Sublocation.PUBLIC) as Enums.Sublocation
 	var ws_zone_subtype: int = world_state.get("zone_subtype", -1)
 	if ws_zone_subtype >= 0:
@@ -200,6 +203,9 @@ static func build_context(
 	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
 	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [])
 	ctx.active_insurgency_id = world_state.get("active_insurgency_id", -1)
+	ctx.active_insurgency_detected = bool(world_state.get("active_insurgency_detected", false))
+	ctx.active_insurgency_type = world_state.get("active_insurgency_type", "")
+	ctx.active_insurgency_province_id = int(world_state.get("active_insurgency_province_id", -1))
 	ctx.famine_crisis_province_ids = _extract_famine_province_ids(
 		character, world_state.get("active_topics", [])
 	)
@@ -905,6 +911,68 @@ static func _apply_taint_examination_precondition_filter(
 	return _remove_action(options, "EXAMINE_FOR_TAINT")
 
 
+# -- Phase 4c: CONDUCT_COMMERCE Precondition Filter (s55.27 once-per-season) ---
+# Removes CONDUCT_COMMERCE when this character already conducted commerce at the
+# current settlement this season (so they don't waste an AP on a refused action).
+
+static func _apply_commerce_precondition_filter(
+	options: Array,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "CONDUCT_COMMERCE":
+			has_action = true
+			break
+	if not has_action or ctx.location_id == "":
+		return options
+	var abs_season: int = TimeSystem.get_absolute_season(ctx.ic_day)
+	if int(character.commerce_conducted_seasons.get(ctx.location_id, -999)) == abs_season:
+		return _remove_action(options, "CONDUCT_COMMERCE")
+	return options
+
+
+# -- Phase 4c: SUPPRESS_INSURGENCY Precondition Filter (s11.11 Phase 5) -------
+# Removes SUPPRESS_INSURGENCY unless the actor is co-located with a DETECTED
+# insurgency. Suppression requires being physically present in the affected
+# province (GDD: a character is committed "to the province for one season"),
+# and only a detected insurgency can be suppressed (Phase 3 precedes Phase 5).
+# A non-co-located or undetected case falls through to INVESTIGATE/PATROL/travel.
+
+static func _apply_suppress_insurgency_precondition_filter(
+	options: Array,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	var has_action: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "SUPPRESS_INSURGENCY":
+			has_action = true
+			break
+	if not has_action:
+		return options
+	var ins_meta: Dictionary = _pick_co_located_detected_insurgency(ctx)
+	if int(ins_meta.get("insurgency_id", -1)) >= 0:
+		return options
+	return _remove_action(options, "SUPPRESS_INSURGENCY")
+
+
+# Returns {insurgency_id, insurgency_type, province_id} for the actor's
+# co-located DETECTED insurgency, or {} if none. Read from per-character context
+# fields injected by the orchestrator (_inject_insurgency_context), so this works
+# for non-lords too — province_statuses is built lord-only.
+static func _pick_co_located_detected_insurgency(
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Dictionary:
+	if ctx.active_insurgency_id < 0 or not ctx.active_insurgency_detected:
+		return {}
+	return {
+		"insurgency_id": ctx.active_insurgency_id,
+		"insurgency_type": ctx.active_insurgency_type,
+		"province_id": ctx.active_insurgency_province_id,
+	}
+
+
 # -- Phase 4c: CAST_WORLD_IS_TRUTH Precondition Filter (s54.7/s33) ------------
 # CAST_WORLD_IS_TRUTH shares the CONDITION_SLEEPER NeedType with CONDUCT_CONDITIONING
 # (both score 100; competence/Spellcraft breaks the tie). But the magical install needs a
@@ -1307,12 +1375,14 @@ static func run(
 	options = _apply_tattoo_precondition_filter(options, character, ctx, chars_by_id, world_state)
 	options = _apply_terminate_contract_precondition_filter(options, world_state)
 	options = _apply_taint_examination_precondition_filter(options, world_state)
+	options = _apply_suppress_insurgency_precondition_filter(options, ctx)
 	options = _apply_petition_precondition_filter(options, world_state)
 	options = _apply_origami_precondition_filter(options, character, ctx)
 	options = _apply_garden_precondition_filter(options, character, ctx)
 	options = _apply_world_is_truth_precondition_filter(options, character, chars_by_id)
 	options = _apply_protective_ward_precondition_filter(options, character, ctx)
 	options = _apply_commune_precondition_filter(options, character)
+	options = _apply_commerce_precondition_filter(options, character, ctx)
 	options = _apply_arrived_travel_filter(options, need, ctx)
 	options = _apply_compliance_filter(options, ctx)
 
@@ -1611,6 +1681,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PERFORM_RITUAL", "PERFORM_WORSHIP",
 				"ASSESS_PROVINCE_STATUS", "INVESTIGATE_PROVINCE",
 				"INVESTIGATE_RUMOR", "ORDER_PATROL",
+				"SUPPRESS_INSURGENCY",
 				"EXAMINE_LETTER",
 				"SCOUT_ENEMY",
 				"FOUND_VILLAGE", "BUILD_FORTIFICATION", "BUILD_SHRINE",
@@ -1733,6 +1804,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"CONDUCT_COMMERCE", "PURCHASE_MARKET",
 				"EXAMINE_CRIME_SCENE", "EXAMINE_FOR_TAINT", "COMMUNE_KAMI",
 				"INVESTIGATE_PROVINCE",
+				"SUPPRESS_INSURGENCY",
 				"INVOKE_FAVOR",
 				"ISSUE_DUEL_CHALLENGE",
 				"PETITION_ACCESS",
@@ -1763,6 +1835,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST",
 				"DRILL_TROOPS", "EVALUATE_WAR_READINESS",
 				"SCOUT_ENEMY",
+				"SUPPRESS_INSURGENCY",
 				"INTIMIDATE", "NEGOTIATE",
 				"TREAT_WOUND",
 				"TRAIN",
@@ -1849,6 +1922,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"ASSESS_PROVINCE_STATUS": 1,
 		"INVESTIGATE_PROVINCE": 1,
 		"INVESTIGATE_RUMOR": 1,
+		"SUPPRESS_INSURGENCY": 1,
 		"ORDER_PATROL": 1,
 		"ORDER_BATTLE": 1,
 		"CONDUCT_RAID": 1,
@@ -2433,11 +2507,31 @@ static func _best_skill_rank(skill_name: String, skill_ranks: Dictionary) -> int
 	return int(skill_ranks.get(skill_name, 0))
 
 
+# SUPPRESS_INSURGENCY spans three GDD formulas (combat/investigation/spiritual),
+# so no single action_skill_map entry measures it. Competence = the actor's best
+# relevant suppression skill, so a bushi, magistrate-investigator, or shugenja
+# each scores on their real strength (s11.11 Phase 5 formulas).
+const _SUPPRESSION_SKILLS: Array[String] = [
+	"Athletics", "Battle", "Defense", "Horsemanship", "Hunting", "Iaijutsu",
+	"Jiujutsu", "Kenjutsu", "Kyujutsu", "Spears", "Polearms", "Heavy Weapons",
+	"Knives", "War Fan", "Chain Weapons", "Staves", "Ninjutsu",
+	"Investigation", "Lore: Shadowlands", "Lore: Theology", "Sailing",
+]
+
 static func _compute_competence_modifier(
 	action_id: String,
 	skill_ranks: Dictionary,
 	scoring_tables: Dictionary,
 ) -> float:
+	var competence_table_su: Dictionary = scoring_tables.get("competence_table", {})
+	if action_id == "SUPPRESS_INSURGENCY":
+		var best: int = 0
+		for sk: String in _SUPPRESSION_SKILLS:
+			var r: int = int(skill_ranks.get(sk, 0))
+			if r > best:
+				best = r
+		return clampf(float(competence_table_su.get(str(best), competence_table_su.get(best, -20))), -20.0, 20.0)
+
 	var skill_map: Dictionary = scoring_tables.get("action_skill_map", {})
 	var action_skills: Dictionary = skill_map.get(action_id, {})
 
@@ -3246,6 +3340,7 @@ static func build_province_statuses_from_data(
 		for ins: Variant in active_insurgencies:
 			if ins is InsurgencyData and ins.province_id == pd.province_id:
 				ps.insurgency_type = Enums.InsurgencyType.keys()[ins.insurgency_type]
+				ps.insurgency_detected = ins.detected
 				break
 		ps.last_report_ic_day = pd.last_report_ic_day
 		ps.province_taint_level = pd.province_taint_level
@@ -3580,14 +3675,20 @@ static func _populate_action_metadata(
 			"accepted_invitee_ids": ctx.known_objectives.get("hunt_accepted_invitee_ids", []),
 		}
 	elif option.action_id == "TRAIN_ANIMAL":
-		# Prefer a companion already in progress; otherwise first session with DOG default
+		# Prefer a companion already in progress (matching the standing's target species
+		# when one is set, s57.39.11); otherwise first session with the target species
+		# (default DOG when none specified).
+		var want_species: String = need.target_species
 		var in_progress_id: int = -1
 		if character != null:
 			for c_var: Variant in character.trained_companions:
 				var comp: Dictionary = c_var as Dictionary
-				if comp.get("is_alive", false) and not comp.get("fully_trained", false):
-					in_progress_id = comp.get("companion_id", -1)
-					break
+				if not comp.get("is_alive", false) or comp.get("fully_trained", false):
+					continue
+				if want_species != "" and comp.get("species", "") != want_species:
+					continue
+				in_progress_id = comp.get("companion_id", -1)
+				break
 		if in_progress_id >= 0:
 			option.metadata = {
 				"is_first_session": false,
@@ -3595,11 +3696,12 @@ static func _populate_action_metadata(
 				"species": "",
 			}
 		else:
+			var sp: String = want_species if want_species != "" else "DOG"
 			option.metadata = {
 				"is_first_session": true,
 				"companion_id": -1,
-				"species": "DOG",
-				"companion_name": "companion",
+				"species": sp,
+				"companion_name": sp.to_lower(),
 			}
 	elif option.action_id == "ASK_FOR_INTRODUCTION":
 		# Intermediary: highest-disposition Friend+ contact who is not the target (s55.7.3).
@@ -3647,6 +3749,14 @@ static func _populate_action_metadata(
 					ptl = ps.province_taint_level
 					break
 		option.metadata = {"ptl": ptl}
+	elif option.action_id == "SUPPRESS_INSURGENCY":
+		# s11.11 Phase 5: commit to suppressing a co-located, detected insurgency.
+		# Strength is hidden (blind roll per GDD) — only id + type flow to the
+		# executor; the actual roll resolves against TN in the orchestrator writeback.
+		var ins_meta: Dictionary = _pick_co_located_detected_insurgency(ctx)
+		option.metadata = ins_meta
+		if int(ins_meta.get("province_id", -1)) >= 0:
+			option.target_province_id = int(ins_meta.get("province_id", -1))
 	elif option.action_id == "SCOUT_ENEMY":
 		var target_clan_id: String = ""
 		for w: Variant in ctx.active_wars:
@@ -3697,6 +3807,15 @@ static func _populate_action_metadata(
 			"raises": _pick_medicine_raises(ctx),
 			"healing_spell_id": healing_spell,
 		}
+		# s57.39.9: with no wounded ally targeted, a Medicine-skilled handler tends their
+		# own wounded trained companion instead (companions travel with their owner).
+		if option.target_npc_id < 0 and character != null \
+				and int(character.skills.get("Medicine", 0)) >= 1:
+			for c_var: Variant in character.trained_companions:
+				var comp: Dictionary = c_var as Dictionary
+				if comp.get("is_alive", false) and int(comp.get("wound_total", 0)) > 0:
+					option.metadata["treat_companion_id"] = comp.get("companion_id", -1)
+					break
 	elif option.action_id == "FORGE_IMPERSONATION_LETTER":
 		option.metadata = _build_forge_letter_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "FORGE_ORDER":

@@ -375,7 +375,10 @@ const SCHOOL_DATA: Dictionary = {
 		"clan": "Crab", "family": "Toritaka",
 		"type": Enums.SchoolType.BUSHI,
 		"benefit": "awareness", "honor": 2.5,
-		"skills": ["Athletics", "Defense", "Hunting", "Intimidation", "Kenjutsu", "Lore: Spirit Realms"],
+		# Animal Handling is a Toritaka Bushi starting skill (s57.39.11 "these schools all
+		# have Animal Handling either as a starting skill, a prerequisite, or a direct
+		# school-bonus specialty") — grants the falcon-companion standing (owner-approved).
+		"skills": ["Animal Handling", "Athletics", "Defense", "Hunting", "Intimidation", "Kenjutsu", "Lore: Spirit Realms"],
 		"wildcards": ["Bugei"],
 		"focus_rings": [Enums.Ring.WATER, Enums.Ring.EARTH],
 		"skill_rank_2": [],
@@ -709,11 +712,28 @@ static func generate_character(
 	c.age = _generate_age(insight_rank, dice_engine)
 	c.koku = float(insight_rank) * float(dice_engine.rand_int_range(1, 10))
 
+	# Sync the denormalized insight_rank cache from the fully-built sheet (rings + skills +
+	# s24 Courtier/Etiquette masteries). Consumers that read character.insight_rank directly
+	# (spell ML casting gate, kolat, combat) require this — generation set the param-driven
+	# stats but never wrote the field, leaving it stuck at the default 1.
+	c.insight_rank = CharacterStats.get_insight_rank(c)
+
 	SkillResolver.apply_technique_flags(c)
 	if c.school_type == Enums.SchoolType.SHUGENJA:
 		SpellSystem.assign_starting_spells(c, school)
 	_assign_weapons(c)
+	_assign_armor(c)
 	return c
+
+
+## PROVISIONAL world-gen armor loadout — delegates to ArmorSystem.assign_by_profile (school +
+## status tiered: non-bushi unarmored, Hida->heavy, status>=4 light, status>=2 tatami, else
+## ashigaru). At creation status is still 1.0, so most bushi get ashigaru here; WorldBootstrap
+## re-runs assign_by_profile after the position/role status is finalized so senior officers and
+## Hida infantry receive their heavier loadout. The scheme is PROVISIONAL (owner has not
+## specified NPC loadouts) and idempotent.
+static func _assign_armor(c: L5RCharacterData) -> void:
+	ArmorSystem.assign_by_profile(c)
 
 
 static func _assign_weapons(c: L5RCharacterData) -> void:

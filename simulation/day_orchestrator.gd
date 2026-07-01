@@ -145,6 +145,9 @@ static func advance_day(
 			if _pid >= 0:
 				character_province_map[_cpm_c.character_id] = _pid
 
+	_process_companion_owner_deaths(characters, characters_by_id)
+	_process_companion_locations(characters, character_province_map)
+	_process_companion_deaths(characters, active_topics, next_topic_id, ic_day)
 	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
@@ -159,6 +162,7 @@ static func advance_day(
 	# monk pass would otherwise stamp them PERFORM_RITUAL before they get HUNT_MAHO.
 	_assign_witch_hunter_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
+	_assign_animal_companion_standing_objectives(characters, objectives_map, ic_day)
 	_assign_kolat_standing_objectives(characters, objectives_map)
 	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
@@ -206,6 +210,11 @@ static func advance_day(
 	var musha_shugyo_results: Array = _process_musha_shugyo(characters, characters_by_id, ic_day, objectives_map, dice_engine, musha_season_count)
 
 	_apply_cohabitation(characters, characters_by_id)
+
+	# s29.15.24 Ikoma R4 / Shiba Advisor pre-battle inspiration grants (granted_reroll).
+	# Runs after arrivals/co-location settle and before the NPC wave so a grant is active
+	# when the ally rolls. Trigger/ally/expiry mappings PROVISIONAL (see the function).
+	_process_inspiration_grants(characters, active_wars, ic_day, dice_engine)
 
 	var favor_results: Dictionary = _process_favors(favors, ic_day, characters_by_id)
 
@@ -339,6 +348,10 @@ static func advance_day(
 		dice_engine, action_skill_map, characters_by_id, provinces, action_log,
 		approach_penalties, commitments, military_data, settlements
 	)
+
+	# s29.15.24: apply any granted-reroll failure penalties recorded during the wave
+	# (e.g. Ikoma R4 −0.2 Honor to the bard when a granted reroll also failed).
+	_process_grant_failure_penalties(characters, characters_by_id)
 
 	var max_letter_id: int = 0
 	for _l: Variant in pending_letters:
@@ -1248,6 +1261,14 @@ static func advance_day(
 		crime_records,
 	)
 
+	# s11.11 Phase 5: resolve NPC insurgency-suppression commitments (reduces
+	# Strength; defeated insurgencies are removed by the seasonal pass).
+	_process_insurgency_suppression(
+		day_result.get("results", []),
+		insurgencies, characters_by_id, provinces, settlements,
+		active_topics, next_topic_id, ic_day, dice_engine, death_events,
+	)
+
 	_process_intercept_letter_writebacks(
 		day_result.get("results", []),
 		pending_letters, characters_by_id, current_season, dice_engine,
@@ -1757,6 +1778,7 @@ static func advance_day(
 		_process_well_connected_weekly(
 			characters, characters_by_id, active_topics, ic_day,
 		)
+		_process_reroll_refresh_weekly(characters, ic_day)
 
 	if is_season_boundary:
 		_purge_resolved_crime_records(crime_records, ic_day)
@@ -1776,6 +1798,14 @@ static func advance_day(
 			characters, characters_by_id, pending_letters, active_topics,
 			next_topic_id, ic_day,
 		)
+		# Re-sync the PROVISIONAL armor loadout to current status (s40). Promotions (applied
+		# earlier this day), governor appointments, successions, and accumulated Status changes
+		# can move a bushi across a loadout tier (>= 4.0 light / >= 2.0 tatami / else ashigaru;
+		# Hida -> heavy). ArmorSystem.assign_by_profile is idempotent, so this seasonal sweep
+		# upgrades/downgrades worn armor to match; non-bushi stay unarmored. Dead skipped.
+		for _ac: L5RCharacterData in characters:
+			if not CharacterStats.is_dead(_ac):
+				ArmorSystem.assign_by_profile(_ac)
 
 	# s57.57 Path A: daily fugitive sighting via co-location
 	_process_fugitive_sighting_colocation(
@@ -1815,6 +1845,17 @@ static func advance_day(
 			characters, characters_by_id, settlements, dice_engine, worship_state, ic_day,
 			world_states, active_topics, active_okiyas,
 		)
+
+	# Lifecycle cleanup: drop terminal (gone-from-world) art objects from their active
+	# registries — a destroyed garden, dead bonsai, or lost/abandoned-incomplete piece is no
+	# longer a live object (every consumer already skips them; nothing queries them post-terminal).
+	# Matches the _remove_resolved_* pattern the 12 sibling collections have; these 5 newer
+	# registries had missed it, so terminal items accumulated monotonically.
+	_remove_terminal_theater_pieces(theater_pieces)
+	_remove_terminal_gardens(active_gardens)
+	_remove_terminal_bonsai(active_bonsai)
+	_remove_terminal_paintings(active_paintings)
+	_remove_terminal_sculptures(active_sculptures)
 
 	return {
 		"ic_day": ic_day,
@@ -8357,6 +8398,102 @@ static func _seed_crime_topic_to_knowers(
 # objective if they don't already have one. This ensures they participate in
 # the crime topic scan each tick without requiring explicit lord directives.
 
+# s57.39.2 — trained animal companions travel with their owner. Each tick, sync every
+# living owner's alive companions to the owner's current province (location_province_id
+# tracks the owner automatically). Dead owners' companions are left in place for the
+# owner-death transfer pass; an owner with no resolvable province (unplaced) keeps the
+# companions' last known location.
+static func _process_companion_locations(
+	characters: Array,
+	character_province_map: Dictionary,
+) -> void:
+	for owner: L5RCharacterData in characters:
+		if owner == null or CharacterStats.is_dead(owner):
+			continue
+		if owner.trained_companions.is_empty():
+			continue
+		var owner_pid: int = character_province_map.get(owner.character_id, -1)
+		if owner_pid < 0:
+			continue
+		AnimalHandlingSystem.sync_companion_locations(owner, owner_pid)
+
+
+# s57.39.2 — owner-death companion transfer. When a companion's owner dies, each ALIVE
+# companion transitions to the owner's heir (designated_heir_id, if living) per standard
+# inheritance, or becomes a free-roaming wild animal if there is no living heir. Training
+# (training_progress / fully_trained) is preserved; the BOND is not — the heir gets
+# rebond_sessions_remaining=3 (s57.39.2). A wild animal simply leaves the companion system
+# (dropped, not archived — it is not dead). Archived (dead) records stay on the dead owner.
+# Idempotent: a processed dead owner is left with no alive companions, so it is not re-run.
+# Heir = designated_heir_id alive (the same inheritance signal as favor-creditor death).
+static func _process_companion_owner_deaths(
+	characters: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for owner: L5RCharacterData in characters:
+		if owner == null or not CharacterStats.is_dead(owner):
+			continue
+		if owner.trained_companions.is_empty():
+			continue
+		var has_alive: bool = false
+		for c: Variant in owner.trained_companions:
+			if (c as Dictionary).get("is_alive", false):
+				has_alive = true
+				break
+		if not has_alive:
+			continue
+		# Resolve the heir: designated_heir_id, if that character is alive.
+		var heir: L5RCharacterData = null
+		if owner.designated_heir_id >= 0:
+			var cand: L5RCharacterData = characters_by_id.get(owner.designated_heir_id, null)
+			if cand != null and not CharacterStats.is_dead(cand):
+				heir = cand
+		var keep: Array = []
+		for c: Variant in owner.trained_companions:
+			var comp: Dictionary = c as Dictionary
+			if not comp.get("is_alive", false):
+				keep.append(comp)  # archived/dead records remain on the dead owner
+				continue
+			if heir != null:
+				AnimalHandlingSystem.transfer_companion(comp, heir.character_id)
+				heir.trained_companions.append(comp)
+			# else: no living heir — the animal goes wild (dropped from the system).
+		owner.trained_companions = keep
+
+
+# s57.39.9 — companion death resolution. A trained animal that died (in combat, via
+# AsciiMapCombatOrchestrator.sync_companion_deaths which flips is_alive=false on the
+# owner's record) gets resolved here: a Tier-4 PERSONAL loss topic for the owner, the
+# record archived (kept, not deleted), and the cap slot freed (automatic — an is_alive=false
+# record no longer counts). The `companion_death_resolved` flag prevents re-firing; the
+# record persists archived. No Glory/Honor change (s57.39.9).
+static func _process_companion_deaths(
+	characters: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	for owner: L5RCharacterData in characters:
+		if owner == null or CharacterStats.is_dead(owner):
+			continue
+		if owner.trained_companions.is_empty():
+			continue
+		for c: Variant in owner.trained_companions:
+			var comp: Dictionary = c as Dictionary
+			if comp.get("is_alive", true):
+				continue
+			if comp.get("companion_death_resolved", false):
+				continue
+			var topic: TopicData = AnimalHandlingSystem.build_death_topic(
+				owner, comp, next_topic_id[0], ic_day)
+			next_topic_id[0] += 1
+			active_topics.append(topic)
+			if not owner.is_pc and topic.topic_id not in owner.topic_pool:
+				owner.topic_pool.append(topic.topic_id)
+			comp["companion_death_resolved"] = true
+			comp["death_ic_day"] = ic_day  # s57.39.11 grief window for replacement need
+
+
 static func _assign_magistrate_standing_objectives(
 	characters: Array,
 	objectives_map: Dictionary,
@@ -8385,6 +8522,48 @@ static func _assign_magistrate_standing_objectives(
 		objectives["standing"] = {
 			"need_type": "UPHOLD_LAW",
 			"priority": 4,
+			"auto_assigned": true,
+		}
+
+
+# -- Animal Companion Standing Objectives (s57.39.11) -------------------------
+# Toritaka Bushi / (forward-wired) Aerie Falconer, Utaku Horse Master maintain a
+# trained companion of their school's expected species: TRAIN_SKILL at priority 2
+# until satisfied (fully-trained companion), then the standing clears. Re-fires after
+# a 1-season grief window if the companion dies. Never clobbers a higher-priority
+# standing (e.g. a magistracy); only manages its own "animal_companion_standing" slot.
+
+static func _assign_animal_companion_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.is_pc or CharacterStats.is_dead(character):
+			continue
+		var decision: Dictionary = AnimalHandlingSystem.evaluate_companion_standing(
+			character, ic_day)
+		var act: String = decision.get("action", "none")
+		if act == "none":
+			continue
+		var char_id: int = character.character_id
+		if not objectives_map.has(char_id):
+			objectives_map[char_id] = {}
+		var objectives: Dictionary = objectives_map[char_id]
+		var standing: Dictionary = objectives.get("standing", {})
+		if act == "clear":
+			if standing.get("source", "") == "animal_companion_standing":
+				objectives.erase("standing")
+			continue
+		# act == "assign": don't overwrite a higher-priority standing from another pass.
+		if not standing.is_empty() \
+				and standing.get("source", "") != "animal_companion_standing":
+			continue
+		objectives["standing"] = {
+			"need_type": "TRAIN_SKILL",
+			"priority": 2,
+			"target_species": decision.get("species", ""),
+			"source": "animal_companion_standing",
 			"auto_assigned": true,
 		}
 
@@ -12722,6 +12901,159 @@ static func _spy_char_fact_priority(need_type: String) -> Array:
 	return _SPY_CHARACTER_FACT_TYPES.duplicate()
 
 
+# -- s29.15.24 Inspiration grants: Ikoma R4 / Shiba Advisor (granted_reroll) ---
+# Grantor techniques that write a granted_reroll onto an allied bushi before battle.
+# GDD-LOCKED values: Perform: Storytelling/Awareness TN 25 (Ikoma); Lore: War/Int TN 25
+# or Lore: History/Int TN 35 (Shiba); Ikoma bonus = bard Honor Rank unkept; Shiba = pure
+# reroll (0 bonus); uses 1; School-Rank grants per OOC week; Ikoma expires end_of_IC_day;
+# −0.2 Honor failure penalty on the bard. PROVISIONAL engine mappings (GDD line 99/141
+# defers these to engine dev — "fire automatically when a battle is imminent / bushi
+# deploying"):
+#   • Trigger ("battle imminent / deploying") → grantor's clan is in an active war.
+#   • Ally → highest-Kenjutsu/Iaijutsu co-located same-clan bushi without an active grant
+#     (Ikoma "ally" restricted to bushi here — combat rerolls are the high-value case).
+#   • Shiba "end_of_mission" → ic_day + 90 (~one season).
+#   • Mechanism → auto-fired daily writeback (no AP cost; the weekly School-Rank budget is
+#     the limiter), per GDD "NPC ... fire automatically". One ally per fire; the weekly
+#     budget spreads grants to up to School-Rank allies across the week.
+# DEFERRED: the Ikoma −0.2 Honor failure penalty is CARRIED on the entry (LOCKED format)
+# but its APPLICATION to the bard is not yet wired — the spend path surfaces it in the
+# result, but deducting the bard's Honor needs pending-penalty plumbing through
+# characters_by_id (forward-wired, like other emitted-but-unconsumed effect keys).
+const _INSPIRATION_SHIBA_EXPIRY_DAYS: int = 90  # PROVISIONAL: "mission duration" ~ one season
+
+static func _process_inspiration_grants(
+	characters: Array,
+	active_wars: Array,
+	ic_day: int,
+	dice: DiceEngine,
+) -> void:
+	for grantor: L5RCharacterData in characters:
+		if grantor == null or CharacterStats.is_dead(grantor) or grantor.is_pc:
+			continue
+		var is_ikoma: bool = grantor.school.begins_with("Ikoma Bard")
+		var is_shiba: bool = grantor.school.begins_with("Shiba Advisor")
+		if not (is_ikoma or is_shiba):
+			continue
+		var school_rank: int = CharacterStats.get_insight_rank(grantor)
+		if is_ikoma and school_rank < 4:
+			continue
+		if grantor.physical_location.is_empty():
+			continue
+		if not _clan_in_active_war(grantor.clan, active_wars):
+			continue
+		# Weekly School-Rank grant budget (OOC week = 7 IC days).
+		var week: int = ic_day / 7
+		if grantor.supply_ledger.get("inspiration_week", -1) != week:
+			grantor.supply_ledger["inspiration_week"] = week
+			grantor.supply_ledger["inspiration_grants"] = 0
+		var used: int = grantor.supply_ledger.get("inspiration_grants", 0)
+		if used >= school_rank:
+			continue
+		var ally: L5RCharacterData = _pick_inspiration_ally(grantor, characters, ic_day)
+		if ally == null:
+			continue
+		var entry: Dictionary = {}
+		if is_ikoma:
+			var roll: Dictionary = SkillResolver.resolve_skill_check(
+				grantor, dice, "Perform: Storytelling", 25, 0, "", Enums.Trait.AWARENESS,
+			)
+			if not roll.get("success", false):
+				continue
+			var honor_rank: int = HonorGlorySystem.get_honor_rank(grantor)
+			entry = RerollSystem.create_granted_reroll_entry(
+				grantor.character_id, "ikoma_strength_of_tradition", honor_rank, "unkept",
+				1, ic_day, {"target_id": grantor.character_id, "stat": "honor", "value": -0.2},
+			)
+		else:
+			# Shiba: Lore: War TN 25 (preferred) or Lore: History TN 35 — use the stronger.
+			var war_rank: int = grantor.skills.get("Lore: War", 0)
+			var hist_rank: int = grantor.skills.get("Lore: History", 0)
+			var roll: Dictionary
+			if war_rank >= hist_rank:
+				roll = SkillResolver.resolve_skill_check(grantor, dice, "Lore: War", 25, 0, "", Enums.Trait.INTELLIGENCE)
+			else:
+				roll = SkillResolver.resolve_skill_check(grantor, dice, "Lore: History", 35, 0, "", Enums.Trait.INTELLIGENCE)
+			if not roll.get("success", false):
+				continue
+			entry = RerollSystem.create_granted_reroll_entry(
+				grantor.character_id, "shiba_lessons", 0, "unkept",
+				1, ic_day + _INSPIRATION_SHIBA_EXPIRY_DAYS, {},
+			)
+		ally.granted_reroll.append(entry)
+		grantor.supply_ledger["inspiration_grants"] = used + 1
+
+
+static func _clan_in_active_war(clan: String, active_wars: Array) -> bool:
+	if clan.is_empty():
+		return false
+	for war: WarData in active_wars:
+		if war == null or not war.is_active:
+			continue
+		if war.clan_a == clan or war.clan_b == clan:
+			return true
+	return false
+
+
+# Highest-combat co-located same-clan bushi without an active granted reroll. PROVISIONAL.
+static func _pick_inspiration_ally(
+	grantor: L5RCharacterData, characters: Array, ic_day: int,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	var best_skill: int = -1
+	for c: L5RCharacterData in characters:
+		if c == null or c == grantor or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.school_type != Enums.SchoolType.BUSHI or c.clan != grantor.clan:
+			continue
+		if c.physical_location != grantor.physical_location:
+			continue
+		if RerollSystem.find_granted_reroll(c, ic_day) >= 0:
+			continue  # already holds an active grant
+		var skill: int = maxi(c.skills.get("Kenjutsu", 0), c.skills.get("Iaijutsu", 0))
+		if skill > best_skill:
+			best_skill = skill
+			best = c
+	return best
+
+
+# Apply granted-reroll failure penalties recorded on allies during the wave to their
+# targets (the grantor), then clear. s29.15.24 (Ikoma R4 −0.2 Honor to the bard when a
+# granted reroll fires AND the reroll also fails). Target-death-guarded; ally state is
+# irrelevant (the penalty was earned at reroll time).
+static func _process_grant_failure_penalties(
+	characters: Array, characters_by_id: Dictionary,
+) -> void:
+	for c: L5RCharacterData in characters:
+		if c == null or c.pending_grant_penalties.is_empty():
+			continue
+		for pen: Variant in c.pending_grant_penalties:
+			if not pen is Dictionary:
+				continue
+			var p: Dictionary = pen
+			var target: L5RCharacterData = characters_by_id.get(p.get("target_id", -1))
+			if target == null or CharacterStats.is_dead(target):
+				continue
+			if p.get("stat", "") == "honor":
+				HonorGlorySystem.apply_honor_change(target, float(p.get("value", 0.0)))
+		c.pending_grant_penalties.clear()
+
+
+# -- s29.15.24 Reroll charge refresh / expiry (weekly) ------------------------
+# Refills self-reroll charges (Yasuki R2 / Yoritomo R3 / Kasuga R5) to max each
+# OOC week (7 IC days) and prunes expired/used granted-reroll entries. Spend is
+# just-in-time in SkillResolver.resolve_skill_check on a failed roll.
+
+static func _process_reroll_refresh_weekly(characters: Array, ic_day: int) -> void:
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if not c.self_reroll.is_empty():
+			RerollSystem.refresh_weekly_charges(c)
+		if not c.granted_reroll.is_empty():
+			RerollSystem.expire_granted_rerolls(c, ic_day)
+
+
 # -- WELL_CONNECTED weekly secret topic revelation (s45) ----------------------
 
 static func _process_well_connected_weekly(
@@ -12995,6 +13327,198 @@ static func _decay_all_historical_modifiers(
 						continue
 					var days_elapsed: int = ic_day - created_day
 					DispositionSystem.decay_historical_modifier(mod, days_elapsed)
+
+
+# -- Insurgency Suppression Writeback (s11.11 Phase 5, daily) -----------------
+# Resolves NPC SUPPRESS_INSURGENCY commitments. The executor rolled each
+# participant's type-specific formula; here we batch same-day committers per
+# insurgency (coordinated suppression with the leader bonus), call
+# resolve_coordinated_suppression to reduce Strength, and apply the GDD
+# consequences (Stability gain on suppression, Peasant Revolt PU loss, the
+# "ineffective" topic on a wholly-failed attempt, and the Down critical-failure
+# survival roll). _process_insurgencies (seasonal) removes a Strength-0
+# insurgency and resolves its crisis topic.
+#
+# LIMITATION: the graded crit-fail injury penalties (Nicked/Hurt/Crippled,
+# -3/-10/-20 for N seasons, s11.11 line 107) need a timed-skill-penalty layer
+# that does not exist; only the Strength +1 (in resolve_coordinated_suppression)
+# and the Down→death outcome are modelled. The dedicated military-PU commit (a
+# lord committing the garrison so the unit commander rolls instead of a named
+# character) is also deferred — every present named character suppresses
+# personally this pass.
+static func _process_insurgency_suppression(
+	results: Array,
+	insurgencies: Array,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	settlements: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	dice: DiceEngine,
+	death_events: Array,
+) -> Array:
+	var out: Array = []
+	var by_ins: Dictionary = {}
+	for r: Variant in results:
+		if not (r is Dictionary):
+			continue
+		if r.get("action_id", "") != "SUPPRESS_INSURGENCY":
+			continue
+		var eff: Dictionary = r.get("effects", {})
+		if not eff.get("requires_insurgency_suppression", false):
+			continue
+		var iid: int = int(eff.get("target_insurgency_id", -1))
+		if iid < 0:
+			continue
+		if not by_ins.has(iid):
+			by_ins[iid] = []
+		by_ins[iid].append({
+			"cid": int(r.get("character_id", -1)),
+			"roll": int(eff.get("suppression_roll_total", 0)),
+			"is_shugenja": bool(eff.get("is_shugenja", false)),
+			"leader_cap": int(eff.get("leader_capability", 0)),
+		})
+
+	var ins_by_id: Dictionary = {}
+	for ins_v: Variant in insurgencies:
+		if ins_v is InsurgencyData:
+			ins_by_id[ins_v.insurgency_id] = ins_v
+
+	for iid_v: Variant in by_ins.keys():
+		var iid2: int = iid_v
+		var ins: InsurgencyData = ins_by_id.get(iid2, null)
+		if ins == null or ins.strength <= 0:
+			continue
+		var participants: Array = by_ins[iid2]
+		var has_shugenja: bool = false
+		var leader: Dictionary = {}
+		for p: Dictionary in participants:
+			if p["is_shugenja"]:
+				has_shugenja = true
+			if leader.is_empty() or int(p["leader_cap"]) > int(leader["leader_cap"]):
+				leader = p
+		# Leader rolls Battle/Perception once; the total is a flat bonus to every
+		# participant's roll (s11.11 LEADER BONUS).
+		var leader_bonus: int = 0
+		var leader_char: L5RCharacterData = characters_by_id.get(int(leader.get("cid", -1)), null)
+		if leader_char != null:
+			var lb_rolled: int = int(leader_char.skills.get("Battle", 0)) + leader_char.perception
+			leader_bonus = dice.roll_and_keep(
+				maxi(1, lb_rolled), maxi(1, leader_char.perception), true
+			).total
+		var tn: int = InsurgencySystem.get_suppression_tn(ins)
+		var rolls: Array = []
+		for p: Dictionary in participants:
+			rolls.append(int(p["roll"]))
+		var res: Dictionary = InsurgencySystem.resolve_coordinated_suppression(
+			ins, rolls, has_shugenja, leader_bonus
+		)
+		var prov: ProvinceData = provinces.get(ins.province_id, null)
+		# Suppressed → Stability +5 (s11.11 line 101).
+		if res.get("suppressed", false) and prov != null:
+			prov.stability = clampf(prov.stability + 5.0, 0.0, 100.0)
+		# Peasant Revolt → civilian PU loss per successful/partial action (line 147).
+		if ins.insurgency_type == Enums.InsurgencyType.PEASANT_REVOLT and prov != null:
+			var effective_actions: int = 0
+			for o: Variant in res.get("outcomes", []):
+				if o == "success" or o == "partial":
+					effective_actions += 1
+			if effective_actions > 0:
+				_apply_revolt_pu_loss(
+					prov, settlements, float(ins.strength) * 0.1 * float(effective_actions)
+				)
+		# Per-participant critical failure: Down→survival roll, else death (line 107).
+		for p: Dictionary in participants:
+			if int(p["roll"]) + leader_bonus <= tn - InsurgencySystem.CRITICAL_FAIL_MARGIN:
+				_apply_suppression_critical_injury(
+					characters_by_id.get(int(p["cid"]), null), dice, death_events
+				)
+		# No reduction at all → "ineffective" Tier 4 topic (line 105).
+		if int(res.get("strength_change", 0)) >= 0:
+			_create_ineffective_suppression_topic(
+				participants, ins, characters_by_id, active_topics, next_topic_id, ic_day
+			)
+		out.append({
+			"insurgency_id": iid2,
+			"strength_change": int(res.get("strength_change", 0)),
+			"suppressed": res.get("suppressed", false),
+			"participants": participants.size(),
+		})
+	return out
+
+
+static func _apply_revolt_pu_loss(
+	prov: ProvinceData, settlements: Array, pu_loss: float
+) -> void:
+	if pu_loss <= 0.0:
+		return
+	# Reduce the largest settlement's population in the affected province.
+	var largest: SettlementData = null
+	for s_v: Variant in settlements:
+		if not (s_v is SettlementData):
+			continue
+		var s: SettlementData = s_v
+		if s.province_id != prov.province_id:
+			continue
+		if largest == null or s.population_pu > largest.population_pu:
+			largest = s
+	if largest != null:
+		largest.population_pu = maxi(0, largest.population_pu - int(round(pu_loss)))
+
+
+static func _apply_suppression_critical_injury(
+	character: L5RCharacterData, dice: DiceEngine, death_events: Array
+) -> void:
+	if character == null or CharacterStats.is_dead(character):
+		return
+	# Wound Severity table (s11.11 line 107): 1k1. Only the Down (10) outcome is
+	# mechanically modelled here — incapacitated, Earth roll TN 20 to survive.
+	if dice.roll_die(10) < 10:
+		return
+	var earth: int = CharacterStats.get_earth_ring(character)
+	if dice.roll_and_keep(maxi(1, earth), maxi(1, earth), true).total >= 20:
+		return
+	character.wounds_taken = CharacterStats.get_total_wound_capacity(character) + 1
+	death_events.append({
+		"character_id": character.character_id,
+		"is_lord": character.role_position != "",
+		"suspicious_death": false,
+		"killer_id": -1,
+		"cause": "insurgency_suppression",
+	})
+
+
+static func _create_ineffective_suppression_topic(
+	participants: Array,
+	ins: InsurgencyData,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	if participants.is_empty():
+		return
+	var subject_id: int = int(participants[0].get("cid", -1))
+	var subject: L5RCharacterData = characters_by_id.get(subject_id, null)
+	if subject == null or CharacterStats.is_dead(subject):
+		return
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = "ineffective_suppression_char%d_ins%d_d%d" % [subject_id, ins.insurgency_id, ic_day]
+	topic.title = "Ineffective Suppression by %s" % subject.character_name
+	topic.topic_type = "ineffective_suppression"
+	topic.variant = "INEFFECTIVE_SUPPRESSION"
+	topic.tier = TopicData.Tier.TIER_4
+	topic.category = TopicData.Category.POLITICAL
+	topic.subject_character_id = subject_id
+	topic.subject_role = "NEGATIVE"
+	topic.ic_day_created = ic_day
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+	active_topics.append(topic)
+	if subject_id >= 0 and not subject.topic_pool.has(topic.topic_id):
+		subject.topic_pool.append(topic.topic_id)
 
 
 # -- Insurgency Processing (s11.11, season boundary) --------------------------
@@ -18251,6 +18775,8 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"court_settlement_id", "court_session_state",
 		"pending_performance_requests",
 		"zone_subtype", "active_insurgency_id", "action_log",
+		"active_insurgency_detected", "active_insurgency_type",
+		"active_insurgency_province_id",
 		"self_offenses", "wall_statuses", "criminal_recall",
 		"is_patrolled", "phoenix_champion_authority",
 		"settlement_type",
@@ -18576,7 +19102,7 @@ static func _inject_insurgency_context(
 ) -> void:
 	var ins_by_province: Dictionary = {}
 	for ins: InsurgencyData in insurgencies:
-		ins_by_province[ins.province_id] = ins.insurgency_id
+		ins_by_province[ins.province_id] = ins
 
 	for character: L5RCharacterData in characters:
 		if CharacterStats.is_dead(character):
@@ -18589,14 +19115,20 @@ static func _inject_insurgency_context(
 		var pid: int = settlement_province_map.get(sid, -1)
 		if pid < 0:
 			continue
-		var iid: int = ins_by_province.get(pid, -1)
-		if iid < 0:
+		var ins: InsurgencyData = ins_by_province.get(pid, null)
+		if ins == null:
 			continue
 		var ws: Dictionary = world_states.get(character.character_id, {})
 		if ws.is_empty():
 			ws = {}
 			world_states[character.character_id] = ws
-		ws["active_insurgency_id"] = iid
+		# Co-located insurgency: id + detected flag + type + province, injected for
+		# every present character (lords and non-lords) so the decision engine can
+		# route to SUPPRESS_INSURGENCY without the lord-only province_statuses.
+		ws["active_insurgency_id"] = ins.insurgency_id
+		ws["active_insurgency_detected"] = ins.detected
+		ws["active_insurgency_type"] = Enums.InsurgencyType.keys()[ins.insurgency_type]
+		ws["active_insurgency_province_id"] = pid
 
 
 static func _process_crisis_court_calls(
@@ -23697,6 +24229,15 @@ static func _inject_base_character_context(
 	var clan_values: Array = clans.values()
 	var season_name: String = _season_to_name(current_season)
 
+	# s4.3.8 / s55.27: per-settlement Koku location modifier (location_id String →
+	# modifier), built once. Only non-1.0 entries stored; the CONDUCT_COMMERCE yield
+	# defaults to 1.0 for the rest. Shared by reference across all characters.
+	var g_settlement_koku_mods: Dictionary = {}
+	for _s: SettlementData in settlements:
+		var _m: float = _s.koku_location_modifier()
+		if not is_equal_approx(_m, 1.0):
+			g_settlement_koku_mods[str(_s.settlement_id)] = _m
+
 	# Pre-build topics_by_id for champion conclusion injection (s57.54.10b).
 	var g_topics_by_id: Dictionary = {}
 	for _t: Variant in active_topics:
@@ -23743,6 +24284,7 @@ static func _inject_base_character_context(
 			ws["known_objectives"]["taint_corroboration_target_id"] = taint_corr["target_id"]
 			ws["known_objectives"]["taint_corroboration_topic_id"] = taint_corr["topic_id"]
 		ws["trade_routes"] = trade_routes
+		ws["settlement_koku_modifiers"] = g_settlement_koku_mods
 		ws["taint_topic_province_ids"] = taint_province_ids
 		ws["unit_training_counts"] = unit_counts.get(c.clan, {})
 		ws["worship_failing_province_ids"] = g_worship
@@ -27287,6 +27829,57 @@ static func _remove_resolved_wars(active_wars: Array) -> void:
 		var war: Variant = active_wars[i]
 		if war is WarData and not (war as WarData).is_active:
 			active_wars.remove_at(i)
+		i -= 1
+
+
+# -- Terminal art-object removal (lifecycle cleanup, matches _remove_resolved_* pattern) -------
+# These 5 art registries are OBJECT registries (a completed painting/garden/piece persists like an
+# inventory item), so only the terminal-FAILURE states are removed: the object no longer exists in
+# the world. Consumers already skip these; nothing queries them post-terminal, and any orphaned ID
+# reference (e.g. a topic subject) fails-lookup gracefully per the project convention.
+
+static func _remove_terminal_theater_pieces(theater_pieces: Array) -> void:
+	var i: int = theater_pieces.size() - 1
+	while i >= 0:
+		var p: Variant = theater_pieces[i]
+		if p is TheaterPieceData and ((p as TheaterPieceData).lost or (p as TheaterPieceData).abandoned_incomplete):
+			theater_pieces.remove_at(i)
+		i -= 1
+
+
+static func _remove_terminal_gardens(active_gardens: Array) -> void:
+	var i: int = active_gardens.size() - 1
+	while i >= 0:
+		var g: Variant = active_gardens[i]
+		if g is GardenData and (g as GardenData).destroyed:
+			active_gardens.remove_at(i)
+		i -= 1
+
+
+static func _remove_terminal_bonsai(active_bonsai: Array) -> void:
+	var i: int = active_bonsai.size() - 1
+	while i >= 0:
+		var b: Variant = active_bonsai[i]
+		if b is BonsaiData and (b as BonsaiData).is_dead:
+			active_bonsai.remove_at(i)
+		i -= 1
+
+
+static func _remove_terminal_paintings(active_paintings: Array) -> void:
+	var i: int = active_paintings.size() - 1
+	while i >= 0:
+		var p: Variant = active_paintings[i]
+		if p is PaintingData and (p as PaintingData).abandoned_incomplete:
+			active_paintings.remove_at(i)
+		i -= 1
+
+
+static func _remove_terminal_sculptures(active_sculptures: Array) -> void:
+	var i: int = active_sculptures.size() - 1
+	while i >= 0:
+		var s: Variant = active_sculptures[i]
+		if s is SculptureData and (s as SculptureData).abandoned_incomplete:
+			active_sculptures.remove_at(i)
 		i -= 1
 
 

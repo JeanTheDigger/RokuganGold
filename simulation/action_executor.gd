@@ -107,6 +107,12 @@ const ADMIN_BASE_TN: int = 0
 
 const BRIBE_KOKU_COST: float = 5.0
 const PURCHASE_KOKU_COST: float = 1.0
+# CONDUCT_COMMERCE personal yield (s55.27 Effect 2 LOCKED): koku = Commerce rank ×
+# settlement_modifier × CONDUCT_COMMERCE_YIELD_MULT. settlement_modifier is the s4.3.8
+# Koku location modifier (SettlementData.koku_location_modifier), injected into ctx as
+# commerce_settlement_modifier; it is 1.0 at a standard settlement and lifts at castle
+# towns (×1.2), ports (×1.5), etc.
+const CONDUCT_COMMERCE_YIELD_MULT: float = 2.0
 
 
 # -- Main Entry Point ---------------------------------------------------------
@@ -140,6 +146,23 @@ static func execute(
 				"ic_day": ctx.ic_day,
 				"season": ctx.season,
 				"reason": "hostage_restricted",
+				"effects": {},
+			}
+
+	# s55.27: one CONDUCT_COMMERCE per settlement per character per season. Hard gate
+	# (belt-and-suspenders for any path; the NPC engine also filters it at selection).
+	if action_id == "CONDUCT_COMMERCE" and ctx.location_id != "":
+		var abs_season: int = TimeSystem.get_absolute_season(ctx.ic_day)
+		if int(character.commerce_conducted_seasons.get(ctx.location_id, -999)) == abs_season:
+			return {
+				"success": false,
+				"action_id": action_id,
+				"character_id": ctx.character_id,
+				"target_npc_id": action.target_npc_id,
+				"target_province_id": action.target_province_id,
+				"ic_day": ctx.ic_day,
+				"season": ctx.season,
+				"reason": "commerce_already_conducted_this_season",
 				"effects": {},
 			}
 
@@ -187,6 +210,56 @@ static func execute(
 				"requires_petition_resolution": true,
 				"petition_type": ptype,
 				"petition_duration": pdur,
+			},
+		}
+
+	# Insurgency suppression (s11.11 Phase 5). The acting character rolls the
+	# type-specific suppression formula here; the actual Strength reduction,
+	# coordinated leader bonus, and consequences resolve in the orchestrator
+	# writeback (which holds the InsurgencyData + all same-day participants).
+	# Strength is hidden (blind roll per GDD) — the roll total carries forward and
+	# is compared to TN in the writeback.
+	if action_id == "SUPPRESS_INSURGENCY":
+		var s_iid: int = int(action.metadata.get("insurgency_id", -1))
+		var s_itype: String = action.metadata.get("insurgency_type", "")
+		if s_iid < 0:
+			return {
+				"success": false, "action_id": action_id,
+				"character_id": ctx.character_id,
+				"target_npc_id": -1, "target_province_id": action.target_province_id,
+				"ic_day": ctx.ic_day, "season": ctx.season,
+				"reason": "no_detected_insurgency", "effects": {"failed": true},
+			}
+		var s_roll: int
+		var s_is_shug: bool
+		var s_leader_cap: int
+		if ctx.is_lord and character.school_type != Enums.SchoolType.SHUGENJA:
+			# Military-PU commit (s11.11 MILITARY PU SUPPRESSION): a lord directs the
+			# garrison rather than fighting personally; the unit commander rolls
+			# Battle/Perception (base 5k2 if no named commander). Shugenja lords fall
+			# through to the personal path — they bring ritual power (maho/taint).
+			var mil: Dictionary = _roll_insurgency_suppression_military(
+				character, characters_by_id, dice_engine
+			)
+			s_roll = int(mil["roll"])
+			s_is_shug = bool(mil["is_shugenja"])
+			s_leader_cap = int(mil["leader_capability"])
+		else:
+			s_roll = _roll_insurgency_suppression(character, s_itype, dice_engine)
+			s_is_shug = character.school_type == Enums.SchoolType.SHUGENJA
+			s_leader_cap = int(character.skills.get("Battle", 0)) + character.perception
+		return {
+			"success": true, "action_id": action_id,
+			"character_id": ctx.character_id,
+			"target_npc_id": -1, "target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {
+				"requires_insurgency_suppression": true,
+				"target_insurgency_id": s_iid,
+				"insurgency_type": s_itype,
+				"suppression_roll_total": s_roll,
+				"is_shugenja": s_is_shug,
+				"leader_capability": s_leader_cap,
 			},
 		}
 
@@ -386,7 +459,10 @@ static func execute(
 		return _execute_conduct_tea_ceremony(action, character, ctx, dice_engine, characters_by_id)
 
 	if action_id == "TRAIN_ANIMAL":
-		return _execute_train_animal(action, character, ctx, dice_engine)
+		return _execute_train_animal(action, character, ctx, dice_engine, characters_by_id)
+
+	if action_id == "GIVE_COMPANION":
+		return _execute_give_companion(action, character, ctx, characters_by_id)
 
 	if action_id == "APPLY_TATTOO":
 		return _execute_apply_tattoo(action, character, ctx, dice_engine, characters_by_id)
@@ -1285,7 +1361,10 @@ static func _try_execute_covert(
 		"CONCEAL_ITEM":
 			var item_size: String = action.metadata.get("item_size", "MEDIUM")
 			var is_weapon: bool = action.metadata.get("is_weapon", false)
-			var r: Dictionary = SecretSystem.resolve_conceal_item(character, item_size, is_weapon, dice_engine)
+			# s40 ninja-to "counts as Small for concealment": a named weapon's conceal-size override
+			# (if any) supersedes item_size. "" = generic item, keeps item_size.
+			var conceal_weapon: String = action.metadata.get("weapon_name", "")
+			var r: Dictionary = SecretSystem.resolve_conceal_item(character, item_size, is_weapon, dice_engine, conceal_weapon)
 			return _build_covert_result(action, ctx, "Sleight of Hand", r)
 
 		"SEARCH_PERSON":
@@ -1756,6 +1835,38 @@ static func _apply_effects(
 	else:
 		effects = _compute_failure_effects(action_id, result.get("margin", 0))
 
+	# Commerce Rank-5 mastery (s24): a market BUY moves the final price up to 20% in
+	# the actor's favor. PURCHASE_MARKET is the sim's market-buy koku transaction; the
+	# 20% is GDD-locked. (The sell half has no koku-producing sell transaction yet.)
+	if action_id == "PURCHASE_MARKET" and effects.has("koku_cost"):
+		effects["koku_cost"] = float(effects["koku_cost"]) \
+			* SkillMasterySystem.commerce_price_favor_multiplier(_character, true)
+
+	# CONDUCT_COMMERCE personal yield (s55.27 Effect 2 LOCKED): a successful commerce
+	# roll deposits Commerce rank × settlement_modifier × 2 koku to the merchant —
+	# the income channel behind the s55.24 "Accumulate personal wealth" objective.
+	# Commerce Rank-5 mastery (s24): conducting trade is the SELL side, so a Commerce-5
+	# merchant earns up to 20% more (the dormant sell-half now has its consumer).
+	# Honor is NOT charged here — the s57.40 commerce stigma (already wired below) is the
+	# LOCKED honor consequence for public commerce. (s55.27's role-based −0.5 and s57.40's
+	# rank-based penalty are overlapping GDD honor models for the same act; applying both
+	# would double-charge, so only the already-wired s57.40 stigma fires.)
+	if action_id == "CONDUCT_COMMERCE" and result.get("success", false):
+		var commerce_rank: int = int(_character.skills.get("Commerce", 0))
+		# s4.3.8 settlement modifier (port ×1.5, castle-town ×1.2, …) — defaults to the
+		# standard-settlement 1.0 when the settlement has no location-type factors.
+		var settlement_mod: float = ctx.commerce_settlement_modifier
+		var yield_koku: float = float(commerce_rank) \
+			* settlement_mod * CONDUCT_COMMERCE_YIELD_MULT \
+			* SkillMasterySystem.commerce_price_favor_multiplier(_character, false)
+		if yield_koku > 0.0:
+			effects["commerce_yield_koku"] = yield_koku
+		# Record the per-settlement-per-season conduct (s55.27 gate). Pattern B: the
+		# actor's own bookkeeping, applied here rather than via EffectApplicator.
+		if ctx.location_id != "":
+			_character.commerce_conducted_seasons[ctx.location_id] = \
+				TimeSystem.get_absolute_season(ctx.ic_day)
+
 	# Poetry festival glory — s57.30.6: only for poem-letters (attached_poem_item_id set).
 	if action_id == "WRITE_LETTER" and result.get("success", false) \
 			and ctx.festival_glory_poetry > 0.001 \
@@ -1935,6 +2046,101 @@ static func _compute_allied_aid_effects(
 		"promise_debtor_id": target_id,
 		"is_crisis_request": true,
 	}
+
+
+# s11.11 Phase 5 suppression formulas. Each keeps by the GDD-specified stat (not
+# the skill's trait), so the roll is built directly rather than via SkillResolver.
+# All add (Insight Rank × 3). Strength/TN are unknown to the roller (blind roll).
+const _BUGEI_SKILLS: Array[String] = [
+	"Athletics", "Battle", "Defense", "Horsemanship", "Hunting", "Iaijutsu",
+	"Jiujutsu", "Kenjutsu", "Kyujutsu", "Spears", "Polearms", "Heavy Weapons",
+	"Knives", "War Fan", "Chain Weapons", "Staves", "Ninjutsu",
+]
+
+static func _roll_insurgency_suppression(
+	character: L5RCharacterData,
+	itype: String,
+	dice_engine: DiceEngine,
+) -> int:
+	var insight: int = CharacterStats.get_insight_rank(character)
+	var flat: int = insight * 3
+	var rolled: int = 0
+	var kept: int = 0
+	match itype:
+		"MAHO_CULT", "URBAN_CRIMINAL_NETWORK":
+			# Investigation: (Investigation + Perception) k Awareness. Maho: Lore:
+			# Shadowlands may substitute for Investigation; shugenja gain +5.
+			var inv: int = int(character.skills.get("Investigation", 0))
+			if itype == "MAHO_CULT":
+				inv = maxi(inv, int(character.skills.get("Lore: Shadowlands", 0)))
+				if character.school_type == Enums.SchoolType.SHUGENJA:
+					flat += 5
+			rolled = inv + character.perception
+			kept = character.awareness
+		"TAINT_MANIFESTATION":
+			# Spiritual: (Lore: Shadowlands or Theology + Intelligence) k Void.
+			var lore: int = maxi(
+				int(character.skills.get("Lore: Shadowlands", 0)),
+				int(character.skills.get("Lore: Theology", 0)),
+			)
+			rolled = lore + character.intelligence
+			kept = character.void_ring
+		_:
+			# Combat (Ronin Bandit, Peasant Revolt, Nezumi): (Highest Bugei +
+			# Agility) k Earth.
+			var best_bugei: int = 0
+			for sk: String in _BUGEI_SKILLS:
+				var r: int = int(character.skills.get(sk, 0))
+				if r > best_bugei:
+					best_bugei = r
+			rolled = best_bugei + character.agility
+			kept = CharacterStats.get_earth_ring(character)
+	var result: DiceResult = dice_engine.roll_and_keep(maxi(1, rolled), maxi(1, kept), true)
+	return result.total + flat
+
+
+# Military-PU suppression (s11.11): a lord commits the garrison. The unit
+# commander rolls Battle/Perception (no Bugei formula, no Insight bonus — the
+# garrison is an abstracted force). The best co-located military commander leads;
+# with no named commander the GDD base is Battle 3 / Perception 2 (5k2).
+static func _roll_insurgency_suppression_military(
+	lord: L5RCharacterData,
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var best: L5RCharacterData = null
+	var best_cap: int = -1
+	for v: Variant in characters_by_id.values():
+		if not (v is L5RCharacterData):
+			continue
+		var c: L5RCharacterData = v
+		if CharacterStats.is_dead(c):
+			continue
+		if c.military_rank == Enums.MilitaryRank.NONE:
+			continue
+		if c.physical_location != lord.physical_location:
+			continue
+		var cap: int = int(c.skills.get("Battle", 0)) + c.perception
+		if cap > best_cap:
+			best_cap = cap
+			best = c
+	var rolled: int
+	var kept: int
+	var is_shug: bool
+	var cap_out: int
+	if best != null:
+		rolled = int(best.skills.get("Battle", 0)) + best.perception
+		kept = best.perception
+		is_shug = best.school_type == Enums.SchoolType.SHUGENJA
+		cap_out = best_cap
+	else:
+		# GDD base: Battle 3, Perception 2 → 5k2.
+		rolled = 5
+		kept = 2
+		is_shug = false
+		cap_out = 5
+	var total: int = dice_engine.roll_and_keep(maxi(1, rolled), maxi(1, kept), true).total
+	return {"roll": total, "is_shugenja": is_shug, "leader_capability": cap_out}
 
 
 static func _compute_admin_effects(action_id: String, action: NPCDataStructures.ScoredAction = null) -> Dictionary:
@@ -2476,9 +2682,9 @@ static func _execute_fortify_wall_section(
 		}
 
 	var tn: int = WallSystem.get_fortify_tn(si)
-	# s57.41.1: Engineering Rank 5 mastery grants +5 flat bonus on cumulative rolls.
-	var eng_rank: int = character.skills.get("Engineering", 0)
-	var mastery_bonus: int = 5 if eng_rank >= 5 else 0
+	# s57.41.1 / s24: Engineering Rank-5 mastery grants +5 on Cooperative/Cumulative
+	# rolls (the FORTIFY cumulative SI track). Centralized in SkillMasterySystem.
+	var mastery_bonus: int = SkillMasterySystem.cooperative_roll_bonus("Engineering", character)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, "Engineering", tn,
 		0, "", Enums.Trait.NONE, 0, 0, mastery_bonus
@@ -2959,6 +3165,13 @@ static func _execute_treat_wound(
 	dice_engine: DiceEngine,
 	characters_by_id: Dictionary,
 ) -> Dictionary:
+	# s57.39.9: TREAT_WOUND may target a wounded trained companion (a record on the
+	# healer's own trained_companions) instead of a character.
+	var treat_companion_id: int = action.metadata.get("treat_companion_id", -1)
+	if treat_companion_id >= 0:
+		return _execute_treat_companion(
+			action, character, ctx, dice_engine, treat_companion_id)
+
 	var target_id: int = action.target_npc_id
 	if target_id < 0 or characters_by_id.is_empty():
 		return {
@@ -3081,6 +3294,64 @@ static func _execute_treat_wound(
 	}
 
 
+# -- Treat a wounded trained companion (s57.39.9) -----------------------------
+
+static func _execute_treat_companion(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine,
+	companion_id: int,
+) -> Dictionary:
+	var fail := func(reason: String) -> Dictionary:
+		return {
+			"success": false, "action_id": "TREAT_WOUND",
+			"character_id": character.character_id, "target_npc_id": -1,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": reason, "effects": {},
+		}
+
+	var companion: Dictionary = {}
+	for c: Variant in character.trained_companions:
+		var comp: Dictionary = c as Dictionary
+		if comp.get("companion_id", -1) == companion_id:
+			companion = comp
+			break
+	if companion.is_empty():
+		return fail.call("companion_not_found")
+	if not companion.get("is_alive", false):
+		return fail.call("companion_dead")
+	if int(companion.get("wound_total", 0)) <= 0:
+		return fail.call("companion_unwounded")
+	if SkillResolver.get_skill_rank(character, "Medicine") < 1:
+		return fail.call("no_medicine_skill")
+	if not MedicineSystem.has_medicine_kit(character):
+		return fail.call("no_medicine_kit")
+
+	var raises: int = action.metadata.get("raises", 0)
+	var r: Dictionary = AnimalHandlingSystem.treat_companion_wound(
+		character, companion, dice_engine, raises)
+	return {
+		"success": r.get("success", false),
+		"action_id": "TREAT_WOUND",
+		"character_id": character.character_id,
+		"target_npc_id": -1,
+		"target_province_id": action.target_province_id,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"skill_used": "Medicine",
+		"roll_total": r.get("roll_total", 0),
+		"tn": r.get("tn", MedicineSystem.BASE_TN),
+		"raises": raises,
+		"effects": {
+			"wounds_healed": r.get("wounds_healed", 0),
+			"kit_charge_consumed": r.get("kit_charge_consumed", false),
+			"treated_companion_id": companion_id,
+		},
+	}
+
+
 # -- Meditate -----------------------------------------------------------------
 # Meditation (Void Recovery) / Void vs TN 20. Recovers VP per rank mastery.
 # Rank 1–2: 1 VP. Rank 3–6: up to 2 VP. Rank 7+: up to 3 VP (s57.32.3).
@@ -3092,8 +3363,6 @@ static func _execute_meditate(
 	dice_engine: DiceEngine,
 ) -> Dictionary:
 	const MEDITATE_TN: int = 20
-	const MASTERY_RANK3: int = 3
-	const MASTERY_RANK7: int = 7
 
 	if character.current_void_points >= character.max_void_points:
 		return {
@@ -3132,12 +3401,9 @@ static func _execute_meditate(
 	if not check["success"]:
 		return result
 
+	# s24 Meditation R3/R7 VP-recovery cap (base 1 / 2 / 3), centralized in SkillMasterySystem.
 	var med_rank: int = SkillResolver.get_skill_rank(character, "Meditation")
-	var recovery_cap: int = 1
-	if med_rank >= MASTERY_RANK7:
-		recovery_cap = 3
-	elif med_rank >= MASTERY_RANK3:
-		recovery_cap = 2
+	var recovery_cap: int = SkillMasterySystem.meditation_vp_recovery_cap(med_rank)
 
 	var recoverable: int = character.max_void_points - character.current_void_points
 	var recovered: int = mini(recovery_cap, recoverable)
@@ -5714,16 +5980,30 @@ static func _execute_train_animal(
 	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
+	characters_by_id: Dictionary = {},
 ) -> Dictionary:
 	var is_first_session: bool = action.metadata.get("is_first_session", false)
 	var species_str: String = action.metadata.get("species", "")
 	var companion_id: int = action.metadata.get("companion_id", -1)
 
+	# s24.3 R3 train-for-others: a Rank-3 trainer may train a commonly-domesticated
+	# animal for a recipient, who OWNS the resulting companion (it lives on the
+	# recipient's trained_companions and counts against their cap). recipient_id == -1
+	# or self → the standard own-companion path.
+	var recipient_id: int = action.metadata.get("recipient_id", -1)
+	var for_others: bool = recipient_id >= 0 and recipient_id != character.character_id
+	var owner_char: L5RCharacterData = character
+	if for_others:
+		owner_char = characters_by_id.get(recipient_id)
+
 	if is_first_session:
-		# First session — acquire a new companion
-		var check: Dictionary = AnimalHandlingSystem.can_train_first_session(
-			character, ctx, species_str
-		)
+		# First session — acquire a new companion (for self, or for a recipient at R3+).
+		var check: Dictionary
+		if for_others:
+			check = AnimalHandlingSystem.can_train_for_others_first(
+				character, owner_char, ctx, species_str)
+		else:
+			check = AnimalHandlingSystem.can_train_first_session(character, ctx, species_str)
 		if not check.get("valid", false):
 			return {
 				"success": false,
@@ -5738,10 +6018,10 @@ static func _execute_train_animal(
 		# here we use a transient id from metadata or compute one)
 		var new_id: int = action.metadata.get("new_companion_id", -1)
 		if new_id < 0:
-			new_id = character.character_id * 1000 + character.trained_companions.size()
+			new_id = owner_char.character_id * 1000 + owner_char.trained_companions.size()
 		var companion_name: String = action.metadata.get("companion_name", species_str.to_lower())
 		var new_companion: Dictionary = AnimalHandlingSystem.create_companion(
-			character.character_id,
+			owner_char.character_id,
 			species_str,
 			new_id,
 			companion_name,
@@ -5749,13 +6029,13 @@ static func _execute_train_animal(
 			action.target_province_id,
 			roll_result.get("progress_gained", 0),
 		)
-		character.trained_companions.append(new_companion)
+		owner_char.trained_companions.append(new_companion)
 
 		return {
 			"success": true,
 			"action_id": "TRAIN_ANIMAL",
 			"character_id": character.character_id,
-			"target_npc_id": -1,
+			"target_npc_id": owner_char.character_id if for_others else -1,
 			"target_province_id": action.target_province_id,
 			"ic_day": ctx.ic_day,
 			"season": ctx.season,
@@ -5766,6 +6046,7 @@ static func _execute_train_animal(
 				"is_first_session": true,
 				"companion_id": new_id,
 				"species": species_str,
+				"trained_for_owner_id": owner_char.character_id,
 				"progress_gained": roll_result.get("progress_gained", 0),
 				"roll_success": roll_result.get("success", false),
 				"fully_trained": new_companion.get("fully_trained", false),
@@ -5773,9 +6054,15 @@ static func _execute_train_animal(
 		}
 
 	else:
-		# Subsequent session — advance existing companion
+		# Subsequent session — advance an existing companion (own, or a recipient's at R3+).
+		if for_others and owner_char == null:
+			return {
+				"success": false,
+				"action_id": "TRAIN_ANIMAL",
+				"reason": "invalid_recipient",
+			}
 		var companion: Dictionary = {}
-		for c: Variant in character.trained_companions:
+		for c: Variant in owner_char.trained_companions:
 			var comp: Dictionary = c as Dictionary
 			if comp.get("companion_id", -1) == companion_id:
 				companion = comp
@@ -5788,9 +6075,13 @@ static func _execute_train_animal(
 				"reason": "companion_not_found",
 			}
 
-		var check: Dictionary = AnimalHandlingSystem.can_train_subsequent_session(
-			character, ctx, companion
-		)
+		var check: Dictionary
+		if for_others:
+			check = AnimalHandlingSystem.can_train_for_others_subsequent(
+				character, ctx, companion)
+		else:
+			check = AnimalHandlingSystem.can_train_subsequent_session(
+				character, ctx, companion)
 		if not check.get("valid", false):
 			return {
 				"success": false,
@@ -5801,7 +6092,13 @@ static func _execute_train_animal(
 		var roll_result: Dictionary = AnimalHandlingSystem.make_training_roll(
 			character, companion.get("species", "DOG"), dice_engine
 		)
-		AnimalHandlingSystem.apply_training_progress(companion, roll_result.get("progress_gained", 0))
+		# s57.39.2 rebonding: a session on a transferred companion still in its rebonding
+		# window establishes the new owner's bond (decrement) and does NOT add training_progress.
+		var is_rebonding: bool = int(companion.get("rebond_sessions_remaining", 0)) > 0
+		if is_rebonding:
+			AnimalHandlingSystem.apply_rebonding_session(companion)
+		else:
+			AnimalHandlingSystem.apply_training_progress(companion, roll_result.get("progress_gained", 0))
 
 		return {
 			"success": true,
@@ -5818,12 +6115,86 @@ static func _execute_train_animal(
 				"is_first_session": false,
 				"companion_id": companion_id,
 				"species": companion.get("species", ""),
-				"progress_gained": roll_result.get("progress_gained", 0),
+				"is_rebonding": is_rebonding,
+				"rebond_sessions_remaining": companion.get("rebond_sessions_remaining", 0),
+				"progress_gained": 0 if is_rebonding else roll_result.get("progress_gained", 0),
 				"roll_success": roll_result.get("success", false),
 				"fully_trained": companion.get("fully_trained", false),
 				"sessions_completed": companion.get("sessions_completed", 0),
 			},
 		}
+
+
+# -- s57.39.2 GIVE_COMPANION (voluntary gift) ---------------------------------
+# A trainer explicitly transfers a living trained companion to a co-located recipient,
+# who becomes its owner. Training is preserved; the BOND is not — rebond_sessions_remaining
+# is set to 3 (the new owner must rebond before Mastery Abilities work under their rank).
+# PC/deliberate-only: the GDD specifies no autonomous NPC trigger ("the trainer explicitly
+# transfers"), so this is not in any context list / objective_alignment — it is reachable
+# through the executor when a deliberate caller sets companion_id + target_npc_id.
+
+static func _execute_give_companion(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var recipient_id: int = action.target_npc_id
+	var companion_id: int = action.metadata.get("companion_id", -1)
+	var fail := func(reason: String) -> Dictionary:
+		return {
+			"success": false, "action_id": "GIVE_COMPANION",
+			"character_id": character.character_id, "target_npc_id": recipient_id,
+			"target_province_id": -1, "ic_day": ctx.ic_day, "season": ctx.season,
+			"reason": reason, "effects": {},
+		}
+
+	if recipient_id < 0 or recipient_id == character.character_id:
+		return fail.call("invalid_recipient")
+	var recipient: L5RCharacterData = characters_by_id.get(recipient_id)
+	if recipient == null or CharacterStats.is_dead(recipient):
+		return fail.call("invalid_recipient")
+	# The animal is physically handed over — giver and recipient must be co-located.
+	if character.physical_location == "" \
+			or character.physical_location != recipient.physical_location:
+		return fail.call("not_co_located")
+
+	var companion: Dictionary = {}
+	for c: Variant in character.trained_companions:
+		var comp: Dictionary = c as Dictionary
+		if comp.get("companion_id", -1) == companion_id:
+			companion = comp
+			break
+	if companion.is_empty():
+		return fail.call("companion_not_found")
+	if not companion.get("is_alive", false):
+		return fail.call("companion_dead")
+	if not AnimalHandlingSystem.under_cap(recipient):
+		return fail.call("recipient_at_companion_cap")
+
+	# Move the record off the giver, repoint ownership (+rebond), append to the recipient.
+	var keep: Array = []
+	for c: Variant in character.trained_companions:
+		if (c as Dictionary).get("companion_id", -1) != companion_id:
+			keep.append(c)
+	character.trained_companions = keep
+	AnimalHandlingSystem.transfer_companion(companion, recipient_id)
+	recipient.trained_companions.append(companion)
+
+	return {
+		"success": true,
+		"action_id": "GIVE_COMPANION",
+		"character_id": character.character_id,
+		"target_npc_id": recipient_id,
+		"target_province_id": -1,
+		"ic_day": ctx.ic_day,
+		"season": ctx.season,
+		"effects": {
+			"gifted_companion_id": companion_id,
+			"new_owner_id": recipient_id,
+			"rebond_sessions_remaining": companion.get("rebond_sessions_remaining", 0),
+		},
+	}
 
 
 # -- s57.25.3 APPLY_TATTOO ---------------------------------------------------

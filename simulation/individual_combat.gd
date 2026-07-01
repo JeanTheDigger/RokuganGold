@@ -11,25 +11,91 @@ class_name IndividualCombat
 # confirm against Equipment section when that GDD section is locked.
 
 const WEAPON_CATALOG: Dictionary = {
-	# trait: "agility" is standard for melee (s4.5 "Agility for attacks").
-	# Iaijutsu duels use Reflexes — handled directly in resolve_duel_strike(), not via this table.
-	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Medium", "melee": true,  "trait": "agility"},
-	"wakizashi":  {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu",      "size": "Small",  "melee": true,  "trait": "agility"},
-	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
-	"bo":         {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Bo",             "size": "Large",  "melee": true,  "trait": "agility"},
-	# can_grapple: s40 "Weapon Grapples" — chain weapons and certain polearms may
-	# initiate Grapples using the weapon skill. The naginata is the catalog's
-	# grapple-capable polearm; chain weapons (e.g. kusarigama) get can_grapple
-	# when added to the catalog with their own DR.
-	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms",       "size": "Large",  "melee": true,  "trait": "agility", "can_grapple": true},
-	"tetsubo":    {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons",  "size": "Large",  "melee": true,  "trait": "agility"},
-	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu",       "size": "Large",  "melee": false, "trait": "reflexes"},
-	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu",       "size": "Small",  "melee": true,  "trait": "agility"},
-	# Off-hand weapons for the s40 dual-wield combinations (DR from s39 Equipment).
-	# kama: Mantis paired small weapons (s29.9 "Waves Rush to Shore" uses Knives).
-	# war_fan (tessen): Lion katana-and-war-fan (s29.4 "The Commander's Fan").
-	"kama":       {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Knives",         "size": "Small",  "melee": true,  "trait": "agility"},
-	"war_fan":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "War Fan",        "size": "Small",  "melee": true,  "trait": "agility"},
+	# Damage / skill / keywords transcribed from the L5R 4e Equipment tables (owner-provided
+	# 2026-06-29). Core schema: {rolled, kept, strength_adds, skill, size, melee, trait}.
+	# Damage "XkY" → rolled X, kept Y. trait "agility" is standard for melee (s4.5); Iaijutsu duels
+	# use Reflexes — handled in resolve_duel_strike(), not via this table. Optional special-rule keys
+	# (all wired, owner table — see the matching weapon_*/ammo_* helpers + resolve_damage/_apply_hit):
+	#   can_grapple — s40 Weapon Grapples. void_point_damage — katana +1k1 for a Void Point.
+	#   doubles_armor_reduction — bokken. no_explode — shinai. break_threshold — fragile weapons.
+	#   thrown_range[/_rolled/_kept] — a melee weapon hurled as a ranged attack. range_tiles — ranged
+	#   weapon max range (feet/5). mount_tn_when — bow +10 TN mounted/unmounted. charge_rolled/_kept +
+	#   no_charge_tn_mounted/_foot — lance charge. alt_rolled/_kept — two-surface weapons (mode pick).
+	#   armor_tn_mult — blowgun ×3 / kyoketsu-shogi ×2 Armor TN. conceal_size — ninja-to conceals Small.
+	# Ammo (a per-shot caller param, not a catalog key): armor-piercing / flesh-cutter — see ammo_*.
+	# Arrow damage uses the willow-leaf default 2k2 (arrow-type damage variants not modeled).
+
+	# -- Swords (Kenjutsu) --
+	"katana":     {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "void_point_damage": true},
+	"wakizashi":  {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Small",  "melee": true,  "trait": "agility", "thrown_range": 4},
+	"no_dachi":   {"rolled": 3, "kept": 3, "strength_adds": true,  "skill": "Kenjutsu", "size": "Large",  "melee": true,  "trait": "agility"},
+	"bokken":     {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "doubles_armor_reduction": true},
+	# Ninja-to (owner table): a Medium blade that counts as SMALL for concealment (conceal_size).
+	"ninja_to":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "break_threshold": 40, "conceal_size": "SMALL"},
+	"parangu":    {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "break_threshold": 30},
+	"scimitar":   {"rolled": 2, "kept": 3, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility"},
+	"shinai":     {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "Kenjutsu", "size": "Medium", "melee": true,  "trait": "agility", "no_explode": true},
+
+	# -- Knives (kama: Mantis paired small weapon, s29.9; sai/jitte: s24 Knives R5 Disarm) --
+	"tanto":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives", "size": "Small", "melee": true, "trait": "agility"},
+	"aiguchi":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives", "size": "Small", "melee": true, "trait": "agility"},
+	"sai":        {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives", "size": "Small", "melee": true, "trait": "agility"},
+	"jitte":      {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Knives", "size": "Small", "melee": true, "trait": "agility"},
+	"kama":       {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Knives", "size": "Small", "melee": true, "trait": "agility"},
+
+	# -- Heavy Weapons --
+	"tetsubo":    {"rolled": 3, "kept": 3, "strength_adds": true,  "skill": "Heavy Weapons", "size": "Large",  "melee": true, "trait": "agility"},
+	"dai_tsuchi": {"rolled": 5, "kept": 2, "strength_adds": true,  "skill": "Heavy Weapons", "size": "Large",  "melee": true, "trait": "agility"},
+	"masakiri":   {"rolled": 2, "kept": 3, "strength_adds": true,  "skill": "Heavy Weapons", "size": "Medium", "melee": true, "trait": "agility"},
+	"ono":        {"rolled": 0, "kept": 4, "strength_adds": true,  "skill": "Heavy Weapons", "size": "Large",  "melee": true, "trait": "agility"},
+
+	# -- Polearms (sasumata/sadegarami initiate grapples; naginata's legacy can_grapple retained) --
+	"naginata":   {"rolled": 3, "kept": 2, "strength_adds": true,  "skill": "Polearms", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+	"bisento":    {"rolled": 3, "kept": 3, "strength_adds": true,  "skill": "Polearms", "size": "Large", "melee": true, "trait": "agility"},
+	"nagamaki":   {"rolled": 2, "kept": 3, "strength_adds": true,  "skill": "Polearms", "size": "Large", "melee": true, "trait": "agility"},
+	"sasumata":   {"rolled": 0, "kept": 2, "strength_adds": true,  "skill": "Polearms", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+	"sadegarami": {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Polearms", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+
+	# -- Spears --
+	"yari":       {"rolled": 2, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 10, "thrown_rolled": 1, "thrown_kept": 2},
+	"kumade":     {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "break_threshold": 25},
+	"mai_chong":  {"rolled": 0, "kept": 3, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 5},
+	# Lance (owner table): 1k2 stationary, 3k4 when charging mounted; +5 TN mounted / +10 TN on
+	# foot when NOT charging (unwieldy in a stationary stab); breaks at 30. Base catalog is the
+	# stationary value; the charge adds weapon_charge_bonus (3k4-1k2 = +2k2).
+	"lance":      {"rolled": 1, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "break_threshold": 30, "charge_rolled": 3, "charge_kept": 4, "no_charge_tn_mounted": 5, "no_charge_tn_foot": 10},
+	"nage_yari":  {"rolled": 1, "kept": 2, "strength_adds": true,  "skill": "Spears", "size": "Large", "melee": true, "trait": "agility", "thrown_range": 10},
+
+	# -- Staves (skill "Staves" — the canonical name; bo was previously mislabeled "Bo") --
+	"bo":              {"rolled": 1, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Large",  "melee": true, "trait": "agility"},
+	"jo":              {"rolled": 0, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility"},
+	"machi_kanshisha": {"rolled": 0, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility"},
+	"nunchaku":        {"rolled": 1, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Small",  "melee": true, "trait": "agility"},
+	# Sang-kauw (owner table): two striking surfaces — crescent blade 1k2 (primary) / shield bash 2k1 (alt mode).
+	"sang_kauw":       {"rolled": 1, "kept": 2, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility", "alt_rolled": 2, "alt_kept": 1},
+	"tonfa":           {"rolled": 0, "kept": 3, "strength_adds": true, "skill": "Staves", "size": "Medium", "melee": true, "trait": "agility"},
+
+	# -- Chain Weapons (can initiate grapples, s40) --
+	# Kusarigama (owner table): two striking surfaces — kama blade 0k2 (primary) / weighted chain 0k1 (alt mode).
+	"kusarigama":     {"rolled": 0, "kept": 2, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true, "alt_rolled": 0, "alt_kept": 1},
+	"kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true, "armor_tn_mult": 2},
+	"manrikikusari":  {"rolled": 1, "kept": 1, "strength_adds": true, "skill": "Chain Weapons", "size": "Large", "melee": true, "trait": "agility", "can_grapple": true},
+
+	# -- War fans (tessen): Lion katana-and-war-fan (s29.4 "The Commander's Fan") --
+	"war_fan":    {"rolled": 0, "kept": 1, "strength_adds": true,  "skill": "War Fan", "size": "Small", "melee": true, "trait": "agility"},
+
+	# -- Bows (Kyujutsu; Reflexes; no Strength to damage — the bow's Strength rating governs) --
+	"yumi":       {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Large", "melee": false, "trait": "reflexes", "range_tiles": 50, "mount_tn_when": "mounted"},
+	"dai_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes", "range_tiles": 100, "mount_tn_when": "unmounted"},
+	"han_kyu":    {"rolled": 2, "kept": 2, "strength_adds": false, "skill": "Kyujutsu", "size": "Small", "melee": false, "trait": "reflexes", "range_tiles": 20, "mount_tn_when": "mounted"},
+
+	# -- Ninja weapons (Ninjutsu; thrown/ranged, no Strength to damage) --
+	"shuriken":   {"rolled": 1, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Small",  "melee": false, "trait": "agility", "range_tiles": 5},
+	"tsubute":    {"rolled": 1, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Small",  "melee": false, "trait": "agility", "range_tiles": 6},
+	"blowgun":    {"rolled": 0, "kept": 1, "strength_adds": false, "skill": "Ninjutsu", "size": "Medium", "melee": false, "trait": "agility", "range_tiles": 10, "armor_tn_mult": 3},
+
+	# -- Unarmed --
+	"unarmed":    {"rolled": 1, "kept": 1, "strength_adds": true,  "skill": "Jiujutsu", "size": "Small", "melee": true, "trait": "agility"},
 }
 
 const DEFAULT_WEAPON: Dictionary = {
@@ -86,10 +152,9 @@ const MOVEMENT_TERRAIN_WATER_PENALTY: Dictionary = {
 	"difficult": 2,
 }
 
-const ATHLETICS_TERRAIN_REDUCTION: Dictionary = {
-	3: {"basic": 0, "moderate": -1, "difficult": -1},  # Rank 3
-	5: {"basic": 0, "moderate": -1, "difficult": -2},  # Rank 5 (eliminates all)
-}
+# (Athletics R3/R5 terrain masteries are applied inline in get_water_ring_for_terrain() — the
+# former ATHLETICS_TERRAIN_REDUCTION const here was a dead duplicate and was removed. The live
+# tile-movement layer applies R5 via SkillMasterySystem.athletics_ignores_difficult_terrain().)
 
 # -- Off-hand and Extra Attack Constants (s40) ---------------------------------
 
@@ -209,6 +274,10 @@ class Participant:
 	var guard_kata_bonus: int = 0              # extra Armor TN from void_phoenix_guard_bonus kata
 	var extra_attack_used_this_turn: bool = false  # Extra Attack may only be used once per turn
 	var off_hand_attack_used_this_turn: bool = false  # Off-hand attack may only be made once per turn (s40)
+	var broken_weapons: Array = []             # s40 weapon break thresholds: names of weapons that shattered this skirmish
+	var has_mount: bool = false                # s40 mount: the combatant has a horse available (can mount/dismount)
+	var mount_tile: Vector2i = Vector2i(-1, -1)  # where the horse waits when dismounted; (-1,-1) = on the horse / no horse left
+	var weapon_ready: bool = true              # s24 ready-as-Free-Action: weapon drawn/strung (default ready; false = sheathed, must Ready before attacking)
 	# Weapon-grapple state (s40 "Weapon Grapples"): when a character initiates a
 	# grapple with a chain weapon / certain polearm, control rolls use the weapon
 	# skill and Hit deals weapon damage. Empty/"" = ordinary Jiujutsu grapple.
@@ -757,12 +826,19 @@ static func total_defender_reduction(
 	attacker: L5RCharacterData,
 	attacker_p: Participant,
 	weapon_name: String,
+	is_first_round: bool = true,
 ) -> int:
 	var base: int = defender.armor_reduction
+	# s40 weapon special (owner equipment table): a bokken doubles the defender's ARMOR Reduction.
+	if get_weapon_profile(weapon_name).get("doubles_armor_reduction", false):
+		base *= 2
 	var kata: int = get_kata_reduction_bonus(defender, defender_p, weapon_name)
 	var kiho: int = _get_kiho_reduction_bonus(defender, defender_p)
 	var spell: int = get_timed_modifier_total(defender_p, "reduction")  # s34 Armor of Earth etc.
 	var pierce: int = get_kata_opponent_reduction_penalty(attacker, attacker_p, weapon_name)
+	# s24 Bugei reduction-pierce: Heavy Weapons R3 (−2 any round), Spears R3 (−3 first round).
+	var atk_skill: String = get_weapon_profile(weapon_name).get("skill", "")
+	pierce += SkillMasterySystem.weapon_reduction_pierce(atk_skill, int(attacker.skills.get(atk_skill, 0)), is_first_round)
 	return maxi(0, base + kata + kiho + spell - pierce)
 
 
@@ -963,6 +1039,7 @@ static func roll_initiative(
 	participant: Participant,
 	dice_engine: DiceEngine,
 	weapon_name: String = "",
+	round_number: int = -1,
 ) -> int:
 	var kata_init: Dictionary = _get_kata_initiative_modifiers(character, weapon_name)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(character)
@@ -992,6 +1069,11 @@ static func roll_initiative(
 	score += kata_init["flat_bonus"] + adv_init["free_raises"] * 5 - adv_init_tn
 	score += _get_kiho_initiative_bonus(character, participant, weapon_name)
 	score += participant.initiative_modifier  # Song of the World (s38), persistent delta
+	score += SkillMasterySystem.battle_initiative_bonus(character)  # s24 Battle R5: +Battle Rank
+	# s24 Polearms R3: +5 Initiative in the first round of a skirmish (round_number == 1).
+	var init_weapon_skill: String = String(get_weapon_profile(weapon_name).get("skill", "")) if weapon_name != "" else ""
+	score += SkillMasterySystem.polearm_first_round_initiative(
+		init_weapon_skill, int(character.skills.get("Polearms", 0)), round_number)
 
 	# Center Stance carry-over adds +10 to Initiative Score for that round only (s40)
 	if participant.stance == Enums.Stance.CENTER and not participant.center_stance_bonus_used:
@@ -1083,7 +1165,11 @@ static func get_armor_tn(
 	var timed_armor: int = get_timed_modifier_total(participant, "armor_tn")
 	# Touch the Void Dragon (s38): +1 Rank to Reflexes (Air) = +5 Armor TN.
 	var vd_armor: int = vd_ring_bonus(participant, Enums.Ring.AIR) * 5
-	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus + timed_armor + vd_armor
+	# s24 Bugei masteries: Defense R5 (+3 in Defense/Full Defense), War Fan R5/R7 (+1/+3 passive).
+	var bugei_armor: int = SkillMasterySystem.combat_armor_tn_bonus(character, participant.stance)
+	# s40 Riding armor (owner table): +12 Armor TN mounted vs the +4 on foot already in base_tn -> +8 extra.
+	var mounted_armor: int = ArmorSystem.mounted_armor_tn_bonus(character) if CONDITION_MOUNTED in participant.conditions else 0
+	return base_tn + stance_mod + defense_bonus + full_def_bonus + cond_mod + participant.void_armor_tn_bonus + guard_self_mod + guard_protection + kata_bonus + kiho_bonus + dual_wield_bonus + timed_armor + vd_armor + bugei_armor + mounted_armor
 
 
 static func roll_full_defense_bonus(
@@ -1122,6 +1208,119 @@ static func get_weapon_profile(weapon_name: String) -> Dictionary:
 ## True if the named weapon may initiate a Grapple (s40 "Weapon Grapples").
 static func weapon_can_grapple(weapon_name: String) -> bool:
 	return get_weapon_profile(weapon_name).get("can_grapple", false)
+
+
+## Maximum range of a ranged weapon in tiles (1 tile = 5 feet), from the owner Equipment table
+## (s40). 0 = no range limit specified (default — any LOS target, the prior PROVISIONAL behavior).
+static func weapon_range_tiles(weapon_name: String) -> int:
+	return int(get_weapon_profile(weapon_name).get("range_tiles", 0))
+
+
+## Character-aware max range in tiles, applying s24 Kyujutsu R5 (bow max range +50%, line 405).
+## base_rng is the weapon's catalog range; the multiplier applies only to a bow (Kyujutsu skill)
+## wielder at rank 5+. Returns the (ceil'd) extended range; unchanged for everyone else.
+static func kyujutsu_extended_range(character: L5RCharacterData, weapon_name: String, base_rng: int) -> int:
+	if base_rng <= 0 or character == null:
+		return base_rng
+	var wskill: String = String(get_weapon_profile(weapon_name).get("skill", ""))
+	var mult: float = SkillMasterySystem.kyujutsu_range_multiplier(wskill, int(character.skills.get("Kyujutsu", 0)))
+	return int(ceil(base_rng * mult))
+
+
+## Thrown range in tiles for a MELEE weapon that can be hurled as a ranged attack (s40 "Can be
+## thrown up to N' as a ranged weapon"). 0 = not throwable. wakizashi 4 (20') / mai-chong 5 (25') /
+## nage-yari + yari 10 (50'). yari's damage drops to its thrown DR (thrown_rolled/thrown_kept).
+static func weapon_thrown_range(weapon_name: String) -> int:
+	return int(get_weapon_profile(weapon_name).get("thrown_range", 0))
+
+
+## Damage-roll total at/above which a fragile weapon shatters (s40 "Breaks if inflicts N or more
+## damage"): kumade 25 / lance 30 / parangu 30 / ninja-to 40. 0 = unbreakable. The threshold is the
+## raw damage roll (the force of the blow), independent of the target's armor.
+static func weapon_break_threshold(weapon_name: String) -> int:
+	return int(get_weapon_profile(weapon_name).get("break_threshold", 0))
+
+
+const BOW_MOUNT_TN_PENALTY: int = 10  # s40 bow mount-TN penalty (owner Equipment table)
+
+## +TN penalty a bow imposes on its attack roll for being mounted (or on foot), from the owner
+## Equipment table (s40): dai-kyu +10 on FOOT, han-kyu/yumi +10 MOUNTED. 0 if the weapon has no
+## mount sensitivity or the attacker's mounted state doesn't match the penalty condition.
+static func weapon_mount_tn_penalty(weapon_name: String, attacker_mounted: bool) -> int:
+	var when: String = String(get_weapon_profile(weapon_name).get("mount_tn_when", ""))
+	if when == "mounted" and attacker_mounted:
+		return BOW_MOUNT_TN_PENALTY
+	if when == "unmounted" and not attacker_mounted:
+		return BOW_MOUNT_TN_PENALTY
+	return 0
+
+
+## +TN penalty for striking with a lance WITHOUT charging (s40 owner table): +5 mounted, +10 on
+## foot — a lance is unwieldy in a stationary stab. 0 if the weapon has no such profile.
+static func lance_no_charge_tn_penalty(weapon_name: String, attacker_mounted: bool) -> int:
+	var prof: Dictionary = get_weapon_profile(weapon_name)
+	if not prof.has("no_charge_tn_mounted"):
+		return 0
+	return int(prof["no_charge_tn_mounted"]) if attacker_mounted else int(prof["no_charge_tn_foot"])
+
+
+## The +NkN damage a charging weapon adds over its stationary damage (s40 owner table: lance 3k4
+## charging vs 1k2 stationary -> +2k2). Returns {rolled, kept}; {0,0} if no charge profile.
+static func weapon_charge_bonus(weapon_name: String) -> Dictionary:
+	var prof: Dictionary = get_weapon_profile(weapon_name)
+	if not prof.has("charge_rolled"):
+		return {"rolled": 0, "kept": 0}
+	return {
+		"rolled": int(prof["charge_rolled"]) - int(prof["rolled"]),
+		"kept": int(prof["charge_kept"]) - int(prof["kept"]),
+	}
+
+
+# --- s40 ammo + weapon Armor-TN penetration (owner Equipment table) ---
+# A weapon may MULTIPLY the target's Armor TN (blowgun ×3, kyoketsu-shogi ×2 — a precise hit on a
+# vulnerable spot is needed). Ammo modifies a bow shot: armor-piercing IGNORES the target's
+# worn-armor TN bonus; flesh-cutter MULTIPLIES the Armor TN ×2 and halves the weapon's range.
+
+## The Armor-TN multiplier a weapon applies (blowgun 3, kyoketsu-shogi 2; 1 = none).
+static func weapon_armor_tn_mult(weapon_name: String) -> int:
+	return int(get_weapon_profile(weapon_name).get("armor_tn_mult", 1))
+
+## Armor-piercing ammo ignores the target's worn-armor TN bonus (owner table).
+static func ammo_ignores_armor(ammo: String) -> bool:
+	return ammo == "armor_piercing"
+
+## Flesh-cutter ammo multiplies the target's Armor TN ×2 (owner table; 1 for standard/armor-piercing).
+static func ammo_armor_tn_mult(ammo: String) -> int:
+	return 2 if ammo == "flesh_cutter" else 1
+
+## Flesh-cutter ammo halves the weapon's range (owner table).
+static func ammo_range_halved(ammo: String) -> bool:
+	return ammo == "flesh_cutter"
+
+## The concealment-size override for a weapon (owner table): the ninja-to "counts as Small for
+## concealment" despite its Medium size. Returns "SMALL"/"MEDIUM"/"LARGE", or "" if the weapon has no
+## override (the caller keeps the item's own size). Used by SecretSystem.resolve_conceal_item.
+static func weapon_conceal_size(weapon_name: String) -> String:
+	return String(get_weapon_profile(weapon_name).get("conceal_size", ""))
+
+
+## The alternate-mode damage of a two-surface weapon (owner table): kusarigama 0k1 weighted chain,
+## sang-kauw 2k1 shield bash. Returns {rolled, kept}; {} if the weapon has only one mode.
+static func weapon_alt_damage(weapon_name: String) -> Dictionary:
+	var prof: Dictionary = get_weapon_profile(weapon_name)
+	if not prof.has("alt_rolled"):
+		return {}
+	return {"rolled": int(prof["alt_rolled"]), "kept": int(prof["alt_kept"])}
+
+## Blowgun damage scaling (owner table): the dart deals 1k1 at Ninjutsu 3, 2k1 at Ninjutsu 7, over
+## its 0k1 base -> returns the +rolled-dice bonus (0/+1/+2). The poison is the real threat below 3.
+static func blowgun_damage_rolled_bonus(character: L5RCharacterData) -> int:
+	var n: int = int(character.skills.get("Ninjutsu", 0))
+	if n >= 7:
+		return 2
+	if n >= 3:
+		return 1
+	return 0
 
 
 static func resolve_attack(
@@ -1335,6 +1534,10 @@ static func resolve_damage(
 	attacker_p: Participant = null,
 	was_feint: bool = false,
 	bonus_kept: int = 0,
+	thrown: bool = false,
+	damage_mode: String = "",
+	target_mounted: bool = false,
+	target_large: bool = false,
 ) -> Dictionary:
 	var weapon: Dictionary = get_weapon_profile(weapon_name)
 	# Conjured elemental weapon (s33-s36): fixed DR, no Strength bonus. Inert otherwise.
@@ -1342,6 +1545,21 @@ static func resolve_damage(
 		weapon = attacker_p.conjured_weapon
 	var rolled: int = weapon.get("rolled", 2)
 	var kept: int = weapon.get("kept", 1) + bonus_kept
+	# s40 two-mode weapon (owner table): the alternate striking surface (kusarigama weighted chain
+	# 0k1, sang-kauw shield bash 2k1). A per-attack caller choice; Strength still adds for melee.
+	if damage_mode == "alt" and not thrown and weapon.has("alt_rolled"):
+		rolled = int(weapon["alt_rolled"])
+		kept = int(weapon["alt_kept"]) + bonus_kept
+	# s40 thrown weapon with a distinct thrown DR (only yari: melee 2k2 → thrown 1k2). Strength
+	# still adds (it is hurled with muscle; the weapon's strength_adds/melee flags are unchanged).
+	if thrown and weapon.has("thrown_rolled"):
+		rolled = int(weapon["thrown_rolled"])
+		kept = int(weapon.get("thrown_kept", 1)) + bonus_kept
+
+	# s40 Blowgun (owner table): the dart's damage scales with the wielder's Ninjutsu — 1k1 at
+	# rank 3, 2k1 at rank 7 (over the 0k1 base; the poison is the real threat at lower ranks).
+	if attacker != null and weapon_name == "blowgun":
+		rolled += blowgun_damage_rolled_bonus(attacker)
 
 	# s54: a spirit/oni creature deals its FIXED stat-block damage (XkY), not the named
 	# weapon profile nor Strength-augmented dice. Mirrors the to-hit override in
@@ -1403,11 +1621,54 @@ static func resolve_damage(
 		rolled += get_timed_modifier_total(attacker_p, "spell_damage_rolled")
 		kept += get_timed_modifier_total(attacker_p, "spell_damage_kept")
 
+	# s24 Bugei weapon-skill damage masteries: Kenjutsu R3 (+1k0 sword), Jiujutsu R3/R7 (+1k0/+0k1
+	# unarmed). Inert for spirit creatures (fixed stat-block damage, no skills).
+	var bugei_dmg_rank: int = int(attacker.skills.get(dmg_skill, 0)) if not spirit_fixed_damage else 0
+	var bugei_dmg: Dictionary = SkillMasterySystem.weapon_damage_bonus(dmg_skill, bugei_dmg_rank)
+	rolled += int(bugei_dmg["rolled"])
+	kept += int(bugei_dmg["kept"])
+
+	# s24 Polearms R5: +1k0 damage vs a mounted or significantly larger opponent (s24 line 325).
+	# Inert for spirit creatures (bugei_dmg_rank forced to 0 above).
+	var polearm_dmg: Dictionary = SkillMasterySystem.polearm_vs_mounted_larger_bonus(
+		dmg_skill, bugei_dmg_rank, target_mounted, target_large)
+	rolled += int(polearm_dmg["rolled"])
+	kept += int(polearm_dmg["kept"])
+
+	# s24 Staves R7: a small staff (not the Large bo) gets +1k0 damage (s24 line 327).
+	rolled += SkillMasterySystem.staff_small_damage_bonus(dmg_skill, bugei_dmg_rank, String(weapon.get("size", "")))
+
+	# s24 Ninjutsu R3 (+1k0) / R7 (+0k1) damage (s24 line 429). The blowgun is EXCLUDED — it carries
+	# its own owner-table scaling (blowgun_damage_rolled_bonus above), so applying the generic mastery
+	# here too would double-count. Inert for spirits (bugei_dmg_rank forced to 0).
+	if dmg_skill == "Ninjutsu" and weapon_name != "blowgun":
+		if bugei_dmg_rank >= 3:
+			rolled += 1
+		if bugei_dmg_rank >= 7:
+			kept += 1
+
 	# s35 Hungry Blade: while the buff is active, all the wielder's damage dice also explode on an 8 or 9
 	# (once each). Inert (false) for everyone else.
 	var explode_8: bool = attacker_p != null and get_timed_modifier_total(attacker_p, "hungry_blade") > 0
+	# s24 Kenjutsu R7 / Heavy Weapons R7: damage dice explode on 9 AND 10.
+	var explode_9: bool = SkillMasterySystem.weapon_damage_explodes_on_9(dmg_skill, bugei_dmg_rank)
+	# s40 weapon special (owner equipment table): a shinai's damage dice cannot explode.
+	var can_explode: bool = not weapon.get("no_explode", false)
+	# s24 Ninjutsu: ninjutsu weapon damage dice do NOT explode normally (s24 line 427); Ninjutsu R5
+	# restores normal explosion. Applies to all ninjutsu weapons (orthogonal to the blowgun's damage
+	# scaling — this controls explosion, not dice count).
+	if dmg_skill == "Ninjutsu":
+		can_explode = bugei_dmg_rank >= 5
+	# s40 weapon special: a katana wielder may spend a Void Point (just-in-time) for +1k1 damage.
+	# NPC-only auto-spend (PCs choose via the future combat UI), once-per-Round throttle.
+	if weapon.get("void_point_damage", false) and attacker_p != null and not spirit_fixed_damage \
+			and not attacker.is_pc and not attacker_p.void_spent_this_round and VoidSystem.can_spend(attacker):
+		if VoidSystem.spend(attacker):
+			rolled += 1
+			kept += 1
+			attacker_p.void_spent_this_round = true
 	# roll_damage handles the dice pool; we pass strength already absorbed above
-	var result: Dictionary = dice_engine.roll_damage(rolled, kept, 0, 0, explode_8)
+	var result: Dictionary = dice_engine.roll_damage(rolled, kept, 0, 0, explode_8, explode_9, can_explode)
 	var total: int = result["raw"] + feint_bonus + kata_dmg["flat_bonus"]
 
 	return {
@@ -1578,6 +1839,9 @@ static func resolve_off_hand_attack(
 	var wound_penalty: int = CharacterStats.get_wound_penalty(attacker)
 	var size: String = weapon.get("size", "Medium")
 	var off_hand_pen: int = OFF_HAND_PENALTY.get(size, -10)
+	# Knives R3: no off-hand penalty when the off-hand weapon is a knife (s24 line 303).
+	if SkillMasterySystem.knives_negates_offhand_penalty(attacker, skill_name):
+		off_hand_pen = 0
 
 	var rolled: int = attacker.agility + skill_rank
 	var kept: int = attacker.agility
@@ -1636,6 +1900,11 @@ static func resolve_extra_attack(
 	var required_raises: int = EXTRA_ATTACK_BASE_RAISES
 	if attacker_p.dual_wielding and _has_kata_effect(attacker, "fire_extra_attack_3_raises"):
 		required_raises = EXTRA_ATTACK_SPINNING_BLADES_RAISES
+	# s24 Knives R7: one Free Raise toward Extra Attack (s24 line 411) reduces the Raises the
+	# attacker must spend on the first attack by 1 (min 0).
+	var ea_skill: String = String(get_weapon_profile(weapon_name).get("skill", ""))
+	required_raises = maxi(0, required_raises - SkillMasterySystem.maneuver_free_raises(
+		ea_skill, int(attacker.skills.get(ea_skill, 0)), "extra_attack"))
 
 	var attack: Dictionary = resolve_attack(attacker, attacker_p, weapon_name, target_armor_tn, 0, dice_engine,
 		false, false, false, "", adv_context)
@@ -1820,7 +2089,11 @@ static func initiate_grapple(
 		attacker, skill_name, {"is_combat": true, "is_school_skill": is_school_jiu_init}
 	)
 	var adv_jiu_init_tn: int = AdvantageSystem.get_tn_modifier(attacker, {"is_combat": true})
-	var grapple_flat: int = wound_penalty + adv_jiu_init["free_raises"] * 5 - adv_jiu_init_tn
+	# s24 Jiujutsu R5: one Free Raise toward initiating a Grapple (s24 line 387). +5 to the roll
+	# (1 Raise = +5). Only the unarmed Jiujutsu grapple qualifies — a weapon grapple (chain weapon,
+	# skill_name != "Jiujutsu") gets 0 from the helper.
+	var grapple_mastery_fr: int = SkillMasterySystem.maneuver_free_raises(skill_name, jiujutsu, "grapple")
+	var grapple_flat: int = wound_penalty + (adv_jiu_init["free_raises"] + grapple_mastery_fr) * 5 - adv_jiu_init_tn
 
 	# Grapple initiation ignores armor's Armor TN bonus — target TN = Reflexes × 5 + 5
 	var result: Dictionary = dice_engine.roll_check(
@@ -2240,13 +2513,15 @@ static func resolve_duel_focus(
 	def_rolled += def_adv_focus["rolled"]
 	def_kept += def_adv_focus["kept"]
 
-	# +1k1 bonus from winning Assessment by 10+
+	# +1k1 bonus from winning Assessment by 10+ — Iaijutsu R7 upgrades this to +2k2 (s24 line 247).
 	if duel.assessment_bonus_id == duel.challenger_id:
-		ch_rolled += 1
-		ch_kept += 1
+		var ch_an: int = SkillMasterySystem.iaijutsu_assessment_bonus_dice(challenger)
+		ch_rolled += ch_an
+		ch_kept += ch_an
 	elif duel.assessment_bonus_id == duel.defender_id:
-		def_rolled += 1
-		def_kept += 1
+		var def_an: int = SkillMasterySystem.iaijutsu_assessment_bonus_dice(defender)
+		def_rolled += def_an
+		def_kept += def_an
 
 	var ch_explodes: bool = ch_iai > 0
 	var def_explodes: bool = def_iai > 0
@@ -2254,8 +2529,9 @@ static func resolve_duel_focus(
 	var def_wound: int = CharacterStats.get_wound_penalty(defender)
 	var ch_result: DiceResult = dice_engine.roll_and_keep(ch_rolled, ch_kept, ch_explodes)
 	var def_result: DiceResult = dice_engine.roll_and_keep(def_rolled, def_kept, def_explodes)
-	var ch_total: int = ch_result.total + ch_wound
-	var def_total: int = def_result.total + def_wound
+	# Iaijutsu R5: one Free Raise on the Focus roll (+5 to the contested total, s24 line 245).
+	var ch_total: int = ch_result.total + ch_wound + SkillMasterySystem.iaijutsu_focus_free_raise(challenger)
+	var def_total: int = def_result.total + def_wound + SkillMasterySystem.iaijutsu_focus_free_raise(defender)
 
 	var margin: int = ch_total - def_total
 

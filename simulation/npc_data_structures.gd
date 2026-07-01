@@ -17,6 +17,8 @@ class ImmediateNeed:
 	var target_intent: String = ""
 	# Otosan Uchi Governor appointment: zone_id of the district to govern (s2.3.23).
 	var target_zone_id: String = ""
+	## s57.39.11: expected companion species for a TRAIN_SKILL/TRAIN_ANIMAL standing.
+	var target_species: String = ""
 	var threshold: float = 0.0
 	var threshold_type: String = ""
 	var source: String = ""
@@ -105,6 +107,8 @@ class ContextSnapshot:
 	var context_flag: Enums.ContextFlag = Enums.ContextFlag.AT_OWN_HOLDINGS
 	var season: int = 0
 	var ic_day: int = 0
+	## s4.3.8 Koku location modifier at the current settlement (CONDUCT_COMMERCE yield).
+	var commerce_settlement_modifier: float = 1.0
 	var zone_subtype: Enums.ZoneSubtype = Enums.ZoneSubtype.OHIROMA
 	var zone_flags: Dictionary = {}
 	var sublocation: Enums.Sublocation = Enums.Sublocation.PUBLIC
@@ -181,8 +185,12 @@ class ContextSnapshot:
 	var active_wars: Array = []
 	var escalating_conflicts: Array = []
 
-	# Insurgency context (convenience field populated from ProvinceStatus)
+	# Insurgency context (co-located insurgency the actor stands in; injected per
+	# character so it reaches non-lords too — province_statuses is lord-only).
 	var active_insurgency_id: int = -1
+	var active_insurgency_detected: bool = false
+	var active_insurgency_type: String = ""
+	var active_insurgency_province_id: int = -1
 
 	# Shadowlands intelligence (s55.23)
 	var taint_topic_province_ids: Array = []
@@ -254,6 +262,7 @@ class ProvinceStatus:
 	var active_crisis_id: int = -1
 	var active_insurgency_id: int = -1
 	var insurgency_type: String = ""
+	var insurgency_detected: bool = false
 	var rice_stockpile: float = 0.0
 	var starvation_stage: int = 0
 	var last_report_ic_day: int = -1

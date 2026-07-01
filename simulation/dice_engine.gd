@@ -27,7 +27,7 @@ func randf() -> float:
 
 # -- Core Roll & Keep ----------------------------------------------------------
 
-func roll_and_keep(rolled: int, kept: int, explodes: bool = true, emphasis: bool = false, explode_8: bool = false) -> DiceResult:
+func roll_and_keep(rolled: int, kept: int, explodes: bool = true, emphasis: bool = false, explode_8: bool = false, explode_9: bool = false) -> DiceResult:
 	if rolled <= 0 or kept <= 0:
 		return DiceResult.new([], [], 0)
 
@@ -56,14 +56,19 @@ func roll_and_keep(rolled: int, kept: int, explodes: bool = true, emphasis: bool
 
 		var initial_face: int = face
 		var die_total: int = face
+		# s24 Kenjutsu R7 / Heavy Weapons R7: damage dice explode on 9 AND 10 (the 9 also keeps
+		# exploding). Lower the explosion threshold to 9 when explode_9 is set, else the normal 10.
+		var explode_at: int = 9 if explode_9 else 10
 		if explodes:
-			while face == 10:
+			while face >= explode_at:
 				face = _roll_d10()
 				die_total += face
 				explosion_count += 1
 		# s35 Hungry Blade: a damage die whose INITIAL result was 8 or 9 explodes once more (the
 		# bonus die follows the normal 10-chain). 10s already explode above; an 8/9 explodes once.
-		if explode_8 and (initial_face == 8 or initial_face == 9):
+		# When explode_9 is active the initial 9 is already handled by the threshold loop, so only
+		# fire the Hungry-Blade bonus on an initial 8 to avoid double-exploding the same 9.
+		if explode_8 and (initial_face == 8 or (initial_face == 9 and not explode_9)):
 			var bonus: int = _roll_d10()
 			die_total += bonus
 			explosion_count += 1
@@ -154,8 +159,9 @@ func roll_initiative(reflexes: int, insight_rank: int) -> DiceResult:
 
 # -- Damage Roll ---------------------------------------------------------------
 
-func roll_damage(rolled: int, kept: int, strength_bonus: int = 0, reduction: int = 0, explode_8: bool = false) -> Dictionary:
-	var result: DiceResult = roll_and_keep(rolled + strength_bonus, kept, true, false, explode_8)
+func roll_damage(rolled: int, kept: int, strength_bonus: int = 0, reduction: int = 0, explode_8: bool = false, explode_9: bool = false, can_explode: bool = true) -> Dictionary:
+	# can_explode = false for weapons whose damage dice cannot explode (s40 shinai).
+	var result: DiceResult = roll_and_keep(rolled + strength_bonus, kept, can_explode, false, explode_8, explode_9)
 	var raw_damage: int = result.total
 	var final_damage: int = maxi(0, raw_damage - reduction)
 

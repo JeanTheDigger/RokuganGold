@@ -342,6 +342,39 @@ const OTOSAN_UCHI_PU: int = 100
 ## this picks deterministically: the lowest-id VILLAGE in a MOUNTAINS province (the
 ## most overlooked, remote site), falling back to any VILLAGE, then any settlement.
 ## Initialises the vault to 0 (Coin funds it during play).
+# s4.3.8 / s2.3: the Empire's explicitly-named commercial hubs carry location-type
+# `infrastructure` tags (consumed by SettlementData.koku_location_modifier), so their
+# Koku generation + CONDUCT_COMMERCE yield lift above the standard ×1.0. TRANSCRIBED, not
+# derived — the sim has no road geometry (ProvinceData.roads is unpopulated), so only the
+# GDD's explicitly-designated crossroads/port provinces are tagged; everything else stays
+# ×1.0. Extensible: add a province → [tags] entry as more s2.3 designations are transcribed.
+#   Ryoko (Ryoko Owari Toshi) — port + crossroads = ×1.95 (the canonical s4.3.8 example).
+#   Tonfajutsen (Crossroads Castle) — "a central crossroads for troop movements and trade".
+#   Beiden — "the crossroads of the Empire" (Beiden Pass + Shamate Pass). Yogo seat, so the
+#     settlement is a castle → ×1.2 (castle-town) × 1.3 (crossroads) = ×1.56.
+const COMMERCIAL_INFRASTRUCTURE: Dictionary = {
+	"Ryoko": ["port", "crossroads"],
+	"Tonfajutsen": ["crossroads"],
+	"Beiden": ["crossroads"],
+}
+
+static func _tag_commercial_infrastructure(
+	settlements: Array,
+	province_name_to_id: Dictionary,
+) -> void:
+	for prov_name: String in COMMERCIAL_INFRASTRUCTURE:
+		var pid: int = province_name_to_id.get(prov_name, -1)
+		if pid < 0:
+			continue
+		var tags: Array = COMMERCIAL_INFRASTRUCTURE[prov_name]
+		for s: SettlementData in settlements:
+			if s.province_id != pid:
+				continue
+			for tag: String in tags:
+				if tag not in s.infrastructure:
+					s.infrastructure.append(tag)
+
+
 static func _designate_hidden_temple(settlements: Array, provinces: Dictionary) -> void:
 	var chosen: SettlementData = null
 	for s: SettlementData in settlements:
@@ -412,6 +445,8 @@ static func bootstrap_world(
 
 	_wire_adjacencies(provinces, province_name_to_id)
 
+	_tag_commercial_infrastructure(settlements, province_name_to_id)
+
 	next_settlement_id = _create_wall_towers(
 		provinces, province_name_to_id, settlements, next_settlement_id,
 	)
@@ -477,6 +512,20 @@ static func bootstrap_world(
 	# Governors were created during the population pass with governed_zone_id set
 	# to the deterministic district zone_id; the zone graph exists only now.
 	_link_otosan_uchi_governors(characters, zone_result["navigation_zones"])
+
+	# Resync the denormalized insight_rank cache after ALL world-gen character mutations
+	# (generate_character set it, but assign_derived_advantages / Kolat master skill boosts /
+	# Kuroiban can change skills afterward). Single idempotent pass — the canonical computed
+	# rank, so the spell ML gate / kolat / combat consumers are correct from world start.
+	for _ic: L5RCharacterData in characters:
+		_ic.insight_rank = CharacterStats.get_insight_rank(_ic)
+
+	# Refine the PROVISIONAL armor loadout now that position/role status is finalized.
+	# generate_character ran assign_by_profile at status 1.0 (most bushi -> ashigaru); re-run it
+	# so senior officers/lords (status >= 4 light, >= 2 tatami) and Hida Wall infantry (heavy)
+	# receive their tiered loadout. Idempotent; non-bushi stay unarmored.
+	for _ac: L5RCharacterData in characters:
+		ArmorSystem.assign_by_profile(_ac)
 
 	return {
 		"provinces": provinces,

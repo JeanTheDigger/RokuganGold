@@ -565,6 +565,9 @@ static func process_seasonal_advancement(characters: Array, world_state: Diction
 
 		var new_rank: int = CharacterStats.get_insight_rank(character)
 		var ranked_up: bool = new_rank > old_rank
+		# Keep the denormalized insight_rank cache in lockstep with the computed rank so the
+		# spell ML casting gate / kolat / combat consumers stay correct after advancement.
+		character.insight_rank = new_rank
 
 		if ranked_up or spend_result["advancements"].size() > 0 \
 				or not kata_learned.is_empty() or not kiho_learned.is_empty():

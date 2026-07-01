@@ -967,7 +967,11 @@ For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 Values confirmed against GDD s12.8:
 - FORGE_LETTER_TN: 15/20/25 (minor/moderate/major) — matches GDD exactly.
 - FORGE_ORDER_TN: 20/25/30 (minor/moderate/major) — matches GDD exactly.
-- Detection TN formula: base TN + (Raises × 5) — matches GDD exactly.
+- Detection TN formula: **the forger's actual roll TOTAL** (owner ruling 2026-06-30 —
+  see "s24 Forgery masteries" below). Was "base TN + Raises×5"; switched to the
+  roll-result model to reconcile s12.8 (base+raises) with the s24 Forgery mastery
+  text (R3/R7 add dice "to the roll that determines its quality = its detection TN").
+  A cleaner forgery (higher roll) is harder to detect. On failure detection_tn = 0.
 - Honor cost -0.3 / Infamy +0.1 — matches other Category 6 actions
   (Intercept a Letter, Search Quarters). GDD says "Using a Low Skill per
   Table 2.3, scaled by Honor Rank" — rank-scaling not yet implemented
@@ -3213,6 +3217,95 @@ All 135 files in `/simulation/` audited against GDD. Summary:
   filtering. Granted reroll: ally-granted entry with optional bonus dice. Weekly
   refresh cycle. DISCERN_NEED ActionID routed into NPC decision loop with school leans
   (Yasuki/Doji courtiers +15), accessible in AT_COURT and VISITING contexts.
+  **SELF-REROLL now WIRED end-to-end (2026-06-29, owner-approved just-in-time spend
+  policy).** RerollSystem was previously built but had ZERO production callers — no
+  character ever held a charge and nothing spent one. Closed all three sides:
+  (1) **Population** — `SkillResolver.apply_technique_flags` (called at creation +
+  rank-up) now grants self_reroll entries via `_ensure_self_reroll()` for the three
+  LOCKED self-reroll schools: Yasuki Courtier R2 (Sincerity/Intimidation, school-rank
+  charges), Yoritomo Courtier R3 (Sincerity, school-rank charges, skill_swap→Intimidation),
+  Kasuga Smuggler R5 (the six Kasuga school skills, Void-Ring charges); all weekly refresh,
+  insight rank used as the school-rank proxy (file convention). Idempotent on rank-up
+  (updates cap, keeps current charges — no mid-week refill). New consts YASUKI_REROLL_SKILLS
+  / YORITOMO_REROLL_SKILLS / KASUGA_SCHOOL_SKILLS. (2) **Spend** — `resolve_skill_check`
+  gains `allow_reroll: bool = true` (last param) and, after the retroactive Advantage
+  fixes (DARK_PARAGON / PARAGON Duty), on a genuine failure calls
+  `RerollSystem.try_self_reroll` then `try_granted_reroll`; the owner-approved policy is
+  "spend one available eligible charge on a failed eligible roll" (matches the kiho
+  just-in-time precedent). Recursion guard: `RerollSystem.apply_self_reroll` /
+  `apply_granted_reroll` pass `allow_reroll=false` on their own re-roll, so exactly ONE
+  charge is spent per check. (3) **Refresh** — `DayOrchestrator._process_reroll_refresh_weekly`
+  runs on the existing 7-IC-day weekly boundary (alongside spy_network/well_connected),
+  refilling self-reroll charges to max and pruning expired/used granted entries.
+  The SkillResolver↔RerollSystem circular static dependency parses + imports clean.
+  Yoritomo swap: Intimidation's default Trait is Willpower, so the Sincerity→Intimidation
+  swap auto-substitutes Willpower per GDD. LIMITATIONS / DEFERRED: (a) **Granted-reroll
+  POPULATION now WIRED (2026-06-29, owner-approved recommended-default mappings)** —
+  `DayOrchestrator._process_inspiration_grants` (daily, after arrivals/co-location, before
+  the NPC wave) auto-fires Ikoma R4 "Strength of Tradition" (Ikoma Bard rank 4+; Perform:
+  Storytelling/Awareness TN 25 → `granted_reroll{bonus = bard Honor Rank unkept, uses 1,
+  expires end_of_IC_day, failure_penalty −0.2 Honor to bard}`) and Shiba Advisor "Lessons
+  Never Forgotten" (Lore: War/Int TN 25 or Lore: History/Int TN 35 → pure reroll, uses 1,
+  expires ic_day+90) onto an allied bushi. All GDD NUMBERS locked; PROVISIONAL engine
+  mappings (GDD line 99/141 defers them): trigger "battle imminent / deploying" → grantor's
+  clan in an active war; ally → highest-Kenjutsu/Iaijutsu co-located same-clan bushi without
+  an active grant; Shiba "end_of_mission" → ic_day+90 (~one season); mechanism → auto-fire
+  daily writeback (no AP cost; School-Rank-grants-per-OOC-week budget on the grantor via
+  `supply_ledger`, one ally/fire so the weekly budget spreads to up to School-Rank allies);
+  Ikoma "ally" restricted to bushi (the combat-reroll high-value case). The granted-reroll
+  SPEND path (try_granted_reroll in resolve_skill_check / resolve_contested_check) is now
+  runtime-proven for the first time. **Ikoma −0.2 Honor failure penalty now APPLIED
+  (2026-06-29):** when a granted reroll fires AND the reroll also fails, `apply_granted_reroll`
+  records the entry's `failure_penalty` on the ally (new `L5RCharacterData.pending_grant_penalties`,
+  since RerollSystem has the ally but not the bard); `DayOrchestrator._process_grant_failure_penalties`
+  (daily, right after the NPC wave) drains each character's pending penalties and applies them to
+  the target (the bard) via characters_by_id (`HonorGlorySystem.apply_honor_change`), then clears —
+  target-death-guarded, idempotent. Runtime-verified 10/10 (records on fail, drains −0.2, no penalty
+  on success, dead-target skip+clear, idempotent re-drain). STILL DEFERRED: Shiba's "Raises bestow
+  additional allies" is modeled as one-ally-per-fire under the weekly budget rather than a declared
+  multi-ally single fire. Grant-pass runtime-verified 23/23 (grant formats, war/co-location/rank/
+  budget gating, best-ally order, end-to-end consume). (b) Contested rolls ARE now covered too (2026-06-29):
+  `resolve_contested_check` lets the strict LOSER spend one eligible charge to re-roll
+  their own side once, then re-evaluates the winner — a single reroll, the new loser
+  gets no counter (the tabletop reaction model; a tie is not a loss). Refactored the
+  per-side total into `_contested_total()` (DRY, behavior-preserving) so the initial
+  roll and the reroll recompute identically. The Yoritomo skill-swap is NOT applied in
+  a contest (the same skill is re-rolled); ic_day/context buffs ARE preserved (the pool
+  counts already include them). So Yasuki R2 / Kasuga R5 social CONTESTS (intimidation
+  vs Willpower, sincerity-deceit) now reroll, alongside the TN-based path. (c) The
+  resolve_skill_check reroll re-roll drops ic_day/context (passes -1/{}),
+  matching the LOCKED RerollSystem behavior — minor (day-buffs not re-applied to the
+  reroll). Runtime-verified 32/32 via headless drivers (17 population: gates, charges,
+  skills, swap, idempotency, below-threshold negatives; 15 spend/refresh/swap: just-in-time
+  fire, single-charge-per-check, success no-spend, eligibility gate, exhaustion, weekly
+  refill, Willpower swap).
+- **s24 Skill Mastery Abilities — roll-applicable tranche WIRED (2026-06-29).** The GDD
+  s24 skills reference (FULLY LOCKED) defines every L5R 4e per-skill Mastery Ability
+  (Ranks 3/5/7 + a universal Rank-10), but there was NO general skill-mastery system —
+  `resolve_skill_check`/`resolve_contested_check` applied none. New `simulation/skill_mastery_system.gd`
+  (SkillMasterySystem, pure data + helpers) is the s24 implementation home. Tranche 1 wires
+  the roll-applicable masteries into the two SkillResolver chokepoints (all values LOCKED,
+  zero invention): (1) **universal Rank-10** — +1 Free Raise on ALL rolls using a skill,
+  added to the free-raise term in both `resolve_skill_check` and `resolve_contested_check`;
+  (2) **Rank-5 contested-roll masteries** — Courtier +1k0, Etiquette +1k0, Sincerity +5,
+  Investigation +5, Intimidation +5, Temptation +5 ("to all Contested Rolls using <skill>"),
+  folded per-side into the contested pool/total (the per-side total was already DRY'd into
+  `_contested_total`, so the reroll recompute picks them up identically). `base_skill()`
+  strips "Parent: Sub" so the lookup keys on the base skill. Runtime-verified 16/16 (helper
+  values + rank gate; clean isolation — a mastery skill vs a non-mastery skill at equal
+  rank/trait: Sincerity-5 +5 → 65% win vs a 49% baseline, Courtier-5 +1k0 → 55%, rank-4 no
+  mastery → 49%; R10 free raise lifts rank-10 success 1981 vs 1755/2000 at TN 35). Self/
+  contested reroll drivers re-pass 15/15 each (no regression — same function). DEFERRED
+  (all LOCKED in s24, each needs a different consumer): **insight** masteries (Courtier/
+  Etiquette R3 +3 / R7 +7 → CharacterStats.get_insight — affects the foundational insight
+  stat, held back deliberately); **casting** (Spellcraft R5 +1k0 → SpellSystem.resolve_cast);
+  **TN reduction** (Acting R3/5/7 disguise); **VP/recovery** (Meditation R3/5/7, Divination
+  R5); **conditional** (Hunting R5 +1k0 Stealth in wilderness — needs a wilderness context);
+  **action-economy** (Investigation R3/R7 extra Search attempts); and the **combat/movement**
+  masteries (Defense, Kenjutsu, Iaijutsu, War Fan, Athletics, Stealth, Battle, Horsemanship,
+  Jiujutsu, weapon skills — the s40 layer). Already hand-wired elsewhere: Calligraphy R5
+  (cipher), Engineering R5 (+5 cooperative), Tea Ceremony R5 (2 VP), Medicine R5 (+1k0 heal);
+  Commerce R5 (±20% price) explicitly deferred (s57.40.8).
 - **SkillResolver Centralization** — All skill rolls now route through
   `SkillResolver.resolve_skill_check()` and `resolve_contested_check()` for uniform
   technique bonus, wound penalty, emphasis, and from_the_ashes handling. Replaces
@@ -3228,6 +3321,968 @@ All 135 files in `/simulation/` audited against GDD. Summary:
 - **s57.47 Violation of Emperor's Peace** — CAPITAL crime type added (execution without
   seppuku option, Imperial jurisdiction). Wired into full crime/investigation pipeline
   and Winter Court Emperor's Peace enforcement (v624).
+
+### Known Code Issues (found and fixed 2026-06-29, SkillResolver TN-penalty sign inversion)
+- **`resolve_skill_check` / `resolve_contested_check` ADDED positive TN penalties (made rolls
+  EASIER). FIXED.** The `total_bonus` convention is the wound-penalty one: it is added to the roll
+  total, so a TN PENALTY must be NEGATIVE (reduce the total). The combat code follows this — it
+  SUBTRACTS `get_tn_modifier` (`flat_bonus -= get_tn_modifier(...)`, `- adv_init_tn`,
+  `- adv_def_tn`). But `skill_resolver` ADDED `adv_tn` (`get_tn_modifier`, which only returns
+  positive penalties) and `soft_hearted_tn` (=10), so disadvantage TN penalties and SOFT_HEARTED's
+  "+10 TN" actually made skill rolls EASIER. Changed both to subtract in `resolve_skill_check` and
+  `adv_tn` in `_contested_total`. `darling_bonus` (a real bonus) and `mutation_mod.tn` (which uses
+  MutationSystem's own "positive = benefit" convention) correctly stay additive. Runtime-verified:
+  SOFT_HEARTED Courtier success 3665→1935, the FAILURE_OF_BUSHIDO(Courage)-vs-Shadowlands penalty
+  2433→1531 — both now correctly HARDER.
+- **MutationSystem DISCOLORED_SKIN stored a +5 TN penalty with the wrong sign. FIXED.** The `dtn`
+  field there uses "positive = benefit (adds to the roll total)" (its own comment + the taint-rank
+  benefit line), but DISCOLORED_SKIN's "+5 TN all Social rolls" penalty did `dtn += 5` (making
+  social rolls EASIER). Changed to `dtn -= 5`. Verified: DISCOLORED_SKIN social success 3928→3674
+  (harder), non-social rolls unaffected. (This is the only wrong-signed mutation penalty; the
+  rolled/kept mutation modifiers were already correct.)
+
+### s40 Armor System — full L5R 4e Equipment table (2026-06-29, owner-provided, runtime-verified)
+`simulation/armor_system.gd` (ArmorSystem, pure class) + an extended `shared/armor_data.gd`
+(ArmorData gains `reduction`, `penalty_kind`) wire armor end-to-end from the owner-provided armor
+table (zero invention). **Catalog** (`ARMOR_CATALOG`, 7 types): bogu (+0/DR1), ashigaru (+3/DR1),
+tatami (+4/DR1), light (+5/DR3), heavy (+10/DR5, heavy), tetsu_do/iron (+13/DR8, heavy), riding
+(+4 off-horse/DR4). **equip(character, name)** sets `armor_worn` and mirrors tn_bonus → `armor_tn_bonus`
+(read by `CharacterStats.get_armor_tn`) and reduction → `armor_reduction` (read by
+`total_defender_reduction`) — so the Armor TN bonus and damage Reduction were already plumbed via
+those fields; this populates them correctly. **Special-rule TN penalties (the missing piece) wired
+into SkillResolver** (`resolve_skill_check` + `resolve_contested_check`, per side) via
+`get_skill_tn_penalty`: Light → +5 TN to Athletics & Stealth; Heavy → +5 to Agility/Reflexes-trait
+rolls; Tetsu-do → +10 (or +5 if Strength ≥ 5) to Agi/Ref; Riding → +5 Agi/Ref except on horseback
+(`context["on_horseback"]`). Penalties subtract from the roll total (the wound-penalty sign
+convention). **TN SIGN BUG FIXED (2026-06-29):** while wiring armor I found `resolve_skill_check`
+was ADDING `adv_tn`/`soft_hearted_tn` to `total_bonus` (which is itself ADDED to the roll), so
+those Disadvantage/Soft-Hearted +TN *penalties* were making rolls EASIER — a real pre-existing
+inversion. `total_bonus` is added to the total and compared `>= TN`, so a penalty must subtract.
+Fixed: `resolve_skill_check` subtracts `adv_tn`/`soft_hearted_tn` (and the new armor penalty);
+`_contested_total` and the contested-check flats subtract `adv_tn` and the armor penalty too. Also
+fixed `MutationSystem.DISCOLORED_SKIN` (its `dtn` convention is "positive = benefit", so the +5 TN
+social penalty must be `dtn -= 5`). Runtime-verified 4/4: SOFT_HEARTED, DISCOLORED_SKIN (social
+only, non-social untouched), and a FAILURE_OF_BUSHIDO +5-vs-Shadowlands disadvantage all now LOWER
+success; the new armor penalty is on the same corrected path. **World-gen loadout (PROVISIONAL,
+owner has not specified NPC loadouts — flagged for refinement; REFINED 2026-06-29):**
+`ArmorSystem.assign_by_profile(character)` is school+clan+status tiered — non-bushi unarmored;
+**elite Hida (status ≥ 4) → tetsu-do** (iron, +13/DR8, the heaviest Wall loadout) / other Hida →
+heavy (+10/DR5, the iconic Crab Wall tank, trades Agi/Ref); **Unicorn bushi → riding armor** (+4/DR4,
+the cavalry clan); bushi status ≥ 4.0 → light (+5/DR3, only Athletics/Stealth penalty — a strict
+combat upgrade for senior officers/lords); status ≥ 2.0 → tatami (+4/DR1, no penalty); else →
+ashigaru (+3/DR1, no penalty). The elite-Hida iron + Unicorn-riding assignments are an **owner ruling
+(2026-06-29)**; the status-≥4 "elite" cutoff is engine-chosen (PROVISIONAL). Verified on a real world
+(seed 777): 288 Unicorn bushi all riding, 9 elite Hida iron / 104 Hida heavy, 1743 non-bushi bare.
+Idempotent: `generate_character._assign_armor` delegates to it at creation (status still 1.0 → most
+bushi ashigaru), and `WorldBootstrap` re-runs it after position/role status is finalized so the
+tiers apply. **Re-armor on promotion (2026-06-29):** a seasonal sweep in `DayOrchestrator.advance_day`
+(inside the `is_season_boundary` block, after promotions/strategic-reviews/appointments settle)
+re-runs `assign_by_profile` over all living characters, so a bushi promoted/appointed/succeeded across
+a loadout tier (or whose accumulated Status crossed 2.0/4.0) upgrades or downgrades their worn armor
+to match — idempotent, dead-skipped, non-bushi stay bare. Runtime-verified: a Toritaka bushi bumped
+to status 4.0 upgrades ashigaru→light through the sweep on a real bootstrapped world. Verified: profile driver 10/10 (each tier + Hida-beats-status + non-bushi-always-bare +
+idempotent); full bootstrapped world (3815 living chars) → bushi 2072 = heavy 113 / light 121 /
+tatami 691 / ashigaru 1147, non-bushi 1743 all unarmored, ZERO non-bushi armored. Catalog/penalty
+verified 20/20 (catalog stats, equip mirroring, get_armor_tn +10, all four penalty rules, end-to-end
+heavy armor drops Kenjutsu-Agility success 2398→1470/4000 while leaving Courtier-Awareness untouched).
+DEFERRED: per-armor combat interactions beyond TN/reduction (riding's mounted +12 ATN; arrow
+armor-piercing / double-armor weapon rules from the weapon tables).
+
+### s40 Weapon Catalog — full L5R 4e Equipment tables (2026-06-29, owner-provided, runtime-verified)
+`IndividualCombat.WEAPON_CATALOG` expanded from 10 to ~40 weapons, transcribed from the L5R 4e
+Equipment tables the owner pasted 2026-06-29 (zero invention — owner-provided stats). Adds every
+melee category so the Bugei weapon-skill masteries are no longer inert: **Swords** (katana,
+wakizashi, no_dachi, bokken, ninja_to, parangu, scimitar, shinai → Kenjutsu), **Knives** (tanto,
+aiguchi, sai, jitte, kama), **Heavy Weapons** (tetsubo, dai_tsuchi, masakiri, ono), **Polearms**
+(naginata, bisento, nagamaki, sasumata, sadegarami), **Spears** (yari, kumade, mai_chong, lance,
+nage_yari — NEW skill, was inert), **Staves** (bo, jo, machi_kanshisha, nunchaku, sang_kauw, tonfa
+— NEW), **Chain Weapons** (kusarigama, kyoketsu_shogi, manrikikusari — NEW, all can_grapple),
+**War Fan**, **Bows** (yumi, dai_kyu, han_kyu → Kyujutsu), **Ninja** (shuriken, tsubute, blowgun →
+Ninjutsu). **Corrected 3 wrong existing values** against the table: wakizashi 3k2→2k2, tetsubo
+3k2→3k3, bo 2k2→1k2. **Skill-name fix:** the bo's skill `"Bo"`→`"Staves"` (the canonical name used
+everywhere else — world-gen pools, mutation_system, kolat, the Musubi kata); the two
+combat_controller peasant `{"Bo":1}` assignments updated to `{"Staves":1}` to match. Schema
+unchanged ({rolled, kept, strength_adds, skill, size, melee, trait, [can_grapple]}); sasumata/
+sadegarami/chain weapons get can_grapple. **Weapon special rules — the owner's pasted Equipment
+table DOES include the full "Special rules" text (verified 2026-06-29; the catalog had only mined
+the stat lines).** First wired tranche (the three iconic sword rules, all exact from the table,
+runtime-verified 9/9): **shinai** "damage dice cannot explode" → `no_explode` flag + a `can_explode`
+param on `DiceEngine.roll_damage` (shinai max raw 10 vs katana 63 over 8000 rolls); **bokken**
+"Reduction from armor is doubled against a bokken" → `doubles_armor_reduction` flag read in
+`total_defender_reduction` (armor Reduction 3→6 vs bokken, normal vs katana); **katana** "spend a
+Void Point to increase damage by 1k1" → `void_point_damage` flag, NPC-only just-in-time auto-spend
+in `resolve_damage` (6k2→7k3, VP 3→2, once-per-Round throttle; PC VP NOT auto-spent — future combat
+UI). **Weapon ranges wired (tranche 2, 2026-06-29, 13/13 + 4/4 verified):** the Equipment section
+now exists, so `s40_combat.md:271`'s "ranged ranges PROVISIONAL — any LOS target" is resolved.
+`range_tiles` (feet/5) added to the 6 ranged weapons (dai-kyu 100, yumi 50, han-kyu 20, shuriken 5,
+tsubute 6, blowgun 10) + `IndividualCombat.weapon_range_tiles()`; `execute_ranged_attack` rejects a
+target beyond range (`out_of_range`), and `get_ranged_targets(state, id, weapon_name)` gained an
+optional weapon arg that range-filters (default "" = unlimited = prior behavior). The NPC turn's
+`target_in_ranged` is now weapon-aware, so an archer/thrower with an out-of-range target ADVANCES
+(via the free-move block) instead of firing a doomed turn-wasting shot — selection stays any-LOS so
+distant foes are still pursued; creatures unaffected (puppet weapon has no `range_tiles`, and they
+use their own `ranged_range_tiles` gate). Verified: helper values (feet/5); shuriken excludes a
+dist-9 target while yumi/no-weapon include it; `execute_ranged_attack` out_of_range @dist9 vs a real
+attack @dist4; a shuriken NPC (range 5) vs a dist-11 target closes to dist 2 (advances) instead of
+shooting. **Mount producer + bow mount-TN wired (tranche 5, 2026-06-29, 10/10 verified):** the engine
+already had `CONDITION_MOUNTED` and combat READS of it (the s40 cavalry +1k0 vs unmounted in
+`resolve_attack`, riding-armor exemption, burning-kiss bonus) but NOTHING ever set it — so all of it
+was inert. Added the PRODUCER: `setup_combat` honors a `"mounted": true` flag per combatant (cavalry /
+a mounted PC starts the skirmish on horseback → appends `CONDITION_MOUNTED`). This **revived the
+already-wired cavalry +1k0** (mounted attacker 2452/4000 hits vs foot 2060) and unblocked **bow
+mount-TN** (owner table: dai-kyu +10 attack TN on foot, han-kyu/yumi +10 mounted) via
+`IndividualCombat.weapon_mount_tn_penalty()` + `mount_tn_when` on the bows, applied to the shot's
+Armor TN in `execute_ranged_attack` (mounted yumi archer 1537/4000 hits vs foot 2961 — the +10
+penalty). Verified: the flag sets the condition; helper values; the cavalry +1k0 and bow penalty both
+move hit-rates the right way.
+**Riding-armor mounted +12 ATN wired (tranche 7, 2026-06-30, 8/8 verified):** the owner table gives
+riding armor +12 Armor TN mounted / +4 on foot; `armor_tn_bonus` stores the +4, so a mounted rider
+needs the +8 delta. `ArmorSystem.mounted_armor_tn_bonus(character)` (= `RIDING_MOUNTED_TN_BONUS 12` −
+the worn `tn_bonus`; 0 for non-riding armor) is added in `IndividualCombat.get_armor_tn` only when
+`CONDITION_MOUNTED` is set, on the main return path (consistent with every other situational bonus
+skipping the flat-footed early returns). Verified: mounted riding ATN 32 vs foot 24 (+8); a mounted
+light-armor combatant gets no mount bonus (25); the +8 is the 12−4 delta. So Unicorn cavalry in
+riding armor are now tankier on horseback, the loadout's whole point.
+**Lance charge for characters wired (tranche 8, 2026-06-30, 16/16 verified, owner-directed):** the
+owner table gives the lance 1k2 stationary / 3k4 charging mounted, with a +5 TN (mounted) / +10 TN
+(foot) penalty when NOT charging. The base catalog became the stationary 1k2 (was wrongly 3k4) plus
+`charge_rolled 3 / charge_kept 4` and the two no-charge penalties. `IndividualCombat.weapon_charge_bonus`
+(+2k2 = 3k4−1k2) + `lance_no_charge_tn_penalty`. `execute_melee_attack` gains `is_charge` — a non-charge
+lance attack adds the no-charge TN penalty (skipped when charging). New `execute_character_charge`: a
+MOUNTED character with a charge-capable weapon closes a gap beyond melee but within a Full Move
+(Water×4 run-up — PROVISIONAL, derived from the s4.5 Full-Move budget since the owner table gives no
+charge range), enters Full Attack if able (Horsemanship R3 gate), and strikes for the charge damage as
+a two-Simple turn (stance + Simple-economy attack, mirroring the creature charge economy). Verified
+16/16 (Godot 4.6.2): helper values, charge closes a 6-tile gap + reaches + enters Full Attack, charge
+out-damages and out-hits the stationary stab (no +5 TN), and all four rejections (on-foot / non-charge
+weapon / adjacent target / no charge profile). STILL DEFERRED: the foot-soldier braced-lance defensive
+use beyond the +10 TN penalty.
+**NPC cavalry AI wired (tranche 10, 2026-06-30, 8/8 verified, owner-directed):** the mount/charge
+actions were callable but no NPC used them. A single cavalry block in `execute_npc_turn`, decided
+BEFORE the stance pick (so the maneuver owns the full action budget — the stance pick spends a Simple
+that the Complex mount / two-Simple charge needs; the bug that made a post-stance hook silently bail).
+(1) **Auto-mount:** an unmounted combatant with a horse in reach (`has_mount`) and no adjacent enemy
+mounts up (Complex at low Horsemanship ends the turn; a Free R7 mount falls through to charge the same
+turn). (2) **Auto-lance-charge:** a mounted spear-fighter (`pick_best_weapon` skill == "Spears")
+couches a **lance** (the cavalry charge weapon — pick_best_weapon returns a yari for stationary damage,
+so the charge explicitly switches to the lance) and charges a reachable foe beyond melee via
+`execute_character_charge`. Structural AI — the GDD gives no NPC mount/charge policy. Runtime-verified
+8/8 (Godot 4.6.2): a foot cavalry NPC mounts up and is now mounted; a mounted lancer charges + closes
+to melee; a mounted katana NPC does NOT lance-charge (still acts); a horseless NPC does not mount; an
+adjacent mounted lancer attacks (no charge — already in melee). Prior cavalry drivers re-pass
+(mount 32/32, lance 16/16, ammo 21/21, riding 8/8 — no regression). Auto-dismount AI is deliberately
+not wired (no clear benefit heuristic, and the GDD gives no NPC dismount policy); the PC mount/charge
+commands remain on the turn-based-UI HOLD.
+**Mount/dismount ACTION wired (tranche 6, 2026-06-30, 32/32 verified, owner-directed):** a combatant
+with a horse can now mount/dismount mid-fight, and the Unicorn cavalry actually wear riding armor (the
+armor loadout is no longer deferred — `ArmorSystem.assign_by_profile` gives every Unicorn bushi
+`riding` and elite Hida `tetsu_do`/iron, owner ruling 2026-06-29). New `Participant.has_mount` +
+`mount_tile`; `setup_combat` honors two flags — `"mounted": true` (starts on the horse →
+CONDITION_MOUNTED + has_mount, mount_tile=(-1,-1), e.g. a battlefield cavalry NPC) and
+`"has_mount": true` (a foot combatant with a horse waiting beside them → has_mount, mount_tile =
+their tile). `execute_mount` (within 1 tile of `mount_tile`, not already mounted, horse present) and
+`execute_dismount` (leaves the horse at the dismounter's tile so it can be remounted) spend the
+**owner-provided Horsemanship action costs** via `SkillMasterySystem.horsemanship_mount_cost`
+(Complex base → Simple at R5 → Free at R7) / `horsemanship_dismount_cost` (Simple base → Free at R5+),
+routed through a shared `_spend_action_cost(ts, cost)`. Rejections: already_mounted / no_horse /
+horse_out_of_reach / not_mounted / down_only_free_actions / no_actions_remaining. The Horsemanship R3
+mounted-Full-Attack gate (added with the producer) is now exercised end-to-end. Runtime-verified
+32/32 (Godot 4.6.2): cost helpers by rank, both setup flags, dismount/mount round-trip + action-economy
+(free dismount keeps the Complex; complex mount spends it), all five rejections, and the R3 Full-Attack
+gate (rank-5 mounted CAN, rank-2 CANNOT). NPC/PC turn-loop auto-mount AI and the PC mount command are
+deferred to the turn-based UI (same PC-travel HOLD) — the actions are callable now. **Thrown weapons wired (tranche 3, 2026-06-29,
+12/12 verified):** a melee weapon with a `thrown_range` can be hurled as a ranged attack —
+`thrown_range` (feet/5) added to wakizashi 4 (20') / mai-chong 5 (25') / nage-yari 10 (50') / yari 10
+(50') + `IndividualCombat.weapon_thrown_range()` (shuriken/tsubute are already ranged weapons, so
+their "thrown" ranges are their `range_tiles`). `execute_ranged_attack` gains a `thrown` flag: it
+range-gates by `thrown_range`, allows a melee weapon only if throwable (else `weapon_not_throwable`),
+and threads `thrown` through `_apply_hit` → `resolve_damage`. Only **yari** changes DR when thrown
+(melee 2k2 → thrown 1k2, via `thrown_rolled`/`thrown_kept`); Strength still adds. Verified: ranges
+(feet/5); yari rolled 5 melee → 4 thrown (1k2+Str3) while wakizashi DR is unchanged; out_of_range
+@dist6 (range 4), weapon_not_throwable for a katana, weapon_is_melee for a non-thrown wakizashi, and
+a real attack @dist4. LIMITATION: the throw is a callable action (PC via future combat UI / a
+deliberate caller) — **NPC auto-throw and the "weapon leaves the hand" one-shot consumption are
+deferred** (no weapon-inventory state; an NPC tracking a thrown-away weapon needs it). **Break
+thresholds wired (tranche 4, 2026-06-29, 9/9 verified):** a fragile weapon shatters when the force
+of its blow (the raw damage roll) reaches its threshold — `break_threshold` added to kumade 25 /
+lance 30 / parangu 30 / ninja-to 40 + `IndividualCombat.weapon_break_threshold()`. New
+`Participant.broken_weapons` (per-skirmish); `_apply_hit` marks the attacker's weapon broken when
+`raw >= threshold` (that hit still lands), and `execute_melee_attack` substitutes "unarmed" for a
+broken weapon (mirrors the existing disarmed→unarmed fallback). "Inflicts N damage" = the raw damage
+roll (the blow's force, independent of the target's armor — documented interpretation). Verified:
+helper values; a Str-10 parangu shatters on a 30+ roll and is recorded on the attacker; an
+unbreakable katana never breaks over 200 Str-10 hits; a broken parangu → the attacker swings
+unarmed. **Ammo + weapon Armor-TN penetration wired (tranche 9, 2026-06-30, 21/21 verified):** the
+owner table's ranged penetration rules. `execute_ranged_attack` gains an `ammo` param (default "" =
+standard): **armor-piercing** ammo ignores the target's worn-armor TN bonus (`ammo_ignores_armor` →
+`armor_tn -= target.armor_tn_bonus`, floored 5); **flesh-cutter** ammo ×2 Armor TN AND halves the
+weapon's range (`ammo_armor_tn_mult` / `ammo_range_halved`). Weapon Armor-TN multipliers
+(`weapon_armor_tn_mult`, catalog `armor_tn_mult`): blowgun ×3 (applied in the ranged path),
+kyoketsu-shogi ×2 (applied in `execute_melee_attack`) — a precise hit on a vulnerable spot. Blowgun
+damage scales with Ninjutsu (`blowgun_damage_rolled_bonus`: +1 rolled at rank 3 → 1k1, +2 at rank 7 →
+2k1, over the 0k1 base — the poison is the threat below rank 3), applied in `resolve_damage`.
+Runtime-verified 21/21 (Godot 4.6.2): all helper values, armor-piercing hits more vs heavy armor while
+flesh-cutter hits less (×2 ATN), flesh-cutter halves a yumi's range (out of range at dist-30), blowgun
+×3 ATN hits far less than a yumi, blowgun damage scales 0→8.4 mean from Ninjutsu 0→7. The `ammo`
+selection is a per-shot caller parameter (PC via the future combat UI / NPC AI); the kyoketsu-shogi /
+blowgun multipliers are intrinsic weapon properties.
+**Two-damage-mode + ninja-to conceal wired (tranche 11, 2026-06-30, 22/22 verified):** the last two
+weapon special rules. **Two-mode** (owner table): kusarigama kama 0k2 (primary) / weighted chain 0k1
+(alt), sang-kauw crescent 1k2 (primary) / shield bash 2k1 (alt). New catalog `alt_rolled`/`alt_kept`
++ `IndividualCombat.weapon_alt_damage`; `resolve_damage` gains a `damage_mode` param (""=primary,
+"alt"=the alternate surface), threaded through `_apply_hit` and `execute_melee_attack`. A per-attack
+caller choice (PC via the future combat UI; NPC defaults to primary, which is the higher-average mode
+for both — kept dice dominate, so no NPC switch heuristic is invented). **Ninja-to** "counts as Small
+for concealment" (owner table): a Medium blade that conceals as SMALL. New ninja_to catalog
+`conceal_size: "SMALL"` + `IndividualCombat.weapon_conceal_size`; `SecretSystem.resolve_conceal_item`
+gains an optional `weapon_name` whose conceal-size override supersedes the passed item_size (""=generic
+item, keeps its size). Wired into the CONCEAL_ITEM executor (reads `weapon_name` from metadata). The
+weapon Sleight-of-Hand-5 conceal gate still applies. Runtime-verified 10/10 (two-mode: alt damage
+differs, primary out-damages the keep-1 alt for both weapons, katana ignores the param, alt reaches
+execute_melee_attack) + 12/12 (ninja-to conceals at TN 10 despite Medium/Large item_size, katana keeps
+its size, concealed more often than a generic Medium item, the SoH-5 gate still blocks rank 3). Prior
+combat drivers re-pass (lance 16/16, ammo 21/21, cavalry 8/8, mount 32/32 — no regression from the
+resolve_damage/execute_melee_attack signature additions). **With this, every owner-table weapon special
+rule is wired.** Arrow types
+(bow damage uses the willow-leaf 2k2 default). Verified 16/16 (each new skill resolves to a weapon
+via pick_best_weapon, Spears R3 reduction-pierce now fires end-to-end, corrected values, katana
+unchanged) + the two prior Bugei drivers re-pass 22/22 and 9/9 (no regression). Armor table also
+owner-provided (Bogu/Ashigaru/Tatami/Light/Heavy/Tetsu-do/Riding) — NOT yet added (ArmorData
+catalog + the Athletics/Stealth/Agility/Reflexes TN-penalty special rules are a follow-up).
+**Weapon-catalog + armor completeness audit (2026-06-30, 829/829 + 42/42 verified):** a verification
+pass after the special-rule work — no gaps found, the only change was refreshing the now-stale
+WEAPON_CATALOG header comment (it claimed special rules were "NOT yet modeled" — they all are).
+**Weapon audit (829/829):** all 44 catalog weapons are well-formed (required keys, known size tier,
+`resolve_damage` runs), `pick_best_weapon` returns a deterministic default per skill (Kenjutsu→katana,
+Spears→yari, …) + `unarmed` for no skills (every skill has a default), the corrected owner-table values
+hold (wakizashi 2k2, tetsubo 3k3, bo 1k2, lance 1k2, yari thrown 1k2), every special-rule helper fires
+for its weapon, and — the key check — **every key on every catalog entry is a known/consumed key** (no
+orphan/dead special-rule key), and the bow ranges match the table (feet/5). Non-default weapons (lance,
+ninja-to, …) are reachable by explicit caller choice, not `pick_best_weapon` (by design — it picks the
+first weapon of the best skill). **Armor audit (42/42):** every armor's `get_skill_tn_penalty` fires
+correctly end-to-end through `SkillResolver` — light +5 Athletics/Stealth (by skill name) only; heavy
++5 / tetsu-do +10 (or +5 at Strength ≥ 5) / riding +5 on any Agility/Reflexes-trait roll; riding exempt
+on horseback; bogu/ashigaru/tatami none. The penalty statistically lowers an Agility-trait roll
+(unarmored 3507 → heavy 2426 / 4000) while leaving an Awareness-trait roll unchanged (3568 vs 3558),
+riding mounted beats on-foot (3546 vs 2388), and the contested path applies it per side (heavy a-wins
+1194 vs bare 1918). `equip()` mirrors all 7 armors' TN bonus + Reduction onto the fast-lookup fields,
+and unarmored clears them. **The s40 weapon + armor equipment layer is complete and fully wired.**
+**Per-armor combat-interaction sweep (2026-06-30, 17/17 verified):** a follow-up confirming the
+weapon↔armor and armor↔combat interactions — no gaps, no code change. The full Reduction pipeline is
+wired (`_apply_hit`: `armor_reduction` → `total_defender_reduction` [base + bokken-double + kata/kiho/
+spell − kata/Bugei pierce] → `WoundSystem.apply_damage`): bokken doubles a defender's armor Reduction
+(heavy 5→10, tetsu-do 8→16, unarmored 0→0; katana unaffected), the net reaches WoundSystem (raw 20 −
+red 5 = 15; floored at 0 for raw 3 / red 10), and riding's +12 mounted ATN composes (mounted 27 vs
+on-foot 19). **`is_heavy` is a descriptive/forward-wiring flag with no distinct consumer** — correctly
+set for heavy + tetsu-do, false for the rest; the heavy-armor mechanical effect is the `penalty_kind`-
+driven Agi/Ref TN penalty (already wired), and the owner table specifies no further heavy-only mechanic,
+so none is invented. Every armor↔combat interaction stated in the owner tables is wired.
+
+### s57.39 Animal Handling — lifecycle tranche 4: school standing needs + companion healing (2026-06-30, runtime-verified 14/14)
+Two more world-sim-live lifecycle pieces. **(A) s57.39.11 school companion standing need.**
+`AnimalHandlingSystem.evaluate_companion_standing(character, ic_day)` decides the school-driven
+standing (returns `{action: assign|clear|none, species}`): a member of a school in
+`SCHOOL_EXPECTED_SPECIES` (only **Toritaka Bushi → FALCON** exists in SCHOOL_DATA today; **Aerie
+Falconer** / **Utaku Horse Master → riding horse/warhorse** are GDD-named but unimplemented schools,
+forward-wired) should hold a TRAIN_SKILL standing for its species until it has a fully-trained one
+(then the standing clears, s57.39.11), keep training an in-progress one, grieve a 1-season window
+after a loss (`GRIEF_REPLACEMENT_DAYS=90`, PROVISIONAL low end of the GDD 1–2 season range) before
+seeking a replacement, and never pursue past its cap. `DayOrchestrator._assign_animal_companion_standing_objectives`
+(daily, after the monk pass) assigns/clears the `animal_companion_standing` standing slot without
+clobbering a higher-priority standing (e.g. a magistracy). The standing carries the expected species
+via the new `ImmediateNeed.target_species` (copied in `_passthrough`/`_make_need`), which the
+TRAIN_ANIMAL metadata population now reads — so a standing-driven trainer trains the *target* species
+(matching an in-progress companion of that species, else first-session it) instead of the old DOG
+default. `_process_companion_deaths` now stamps `death_ic_day` (the grief clock). **LIVE for fresh
+Toritaka (owner-approved 2026-06-30):** "Animal Handling" was added to Toritaka Bushi's SCHOOL_DATA
+skill list (it was absent, contradicting s57.39.11's prose), so every fresh Toritaka Bushi has Animal
+Handling 1 (cap 1) and the falcon standing fires at creation — verified 8/8 generated Toritaka have
+AH≥1 and the standing assigns FALCON, while an Akodo control gets none. (Edit confined to Toritaka
+Bushi; Aerie Falconer / Utaku Horse Master remain unimplemented schools, forward-wired.)
+**(B) s57.39.9 companion healing.**
+`AnimalHandlingSystem.treat_companion_wound(healer, companion, dice, raises)` heals a wounded companion
+the same way a character is healed — Medicine (Wound Treatment)/Intelligence vs the s57.31 BASE_TN,
+consumes a Medicine Kit charge, heal roll 1k1 (+1 die at Medicine R5 mastery, +1/raise), reduces the
+companion's `wound_total`. New `ActionExecutor._execute_treat_companion` (TREAT_WOUND companion path,
+fired when metadata carries `treat_companion_id`): gates companion_not_found/companion_dead/
+companion_unwounded/no_medicine_skill/no_medicine_kit. NPC metadata trigger: with no wounded ally
+targeted, a Medicine-skilled handler tends its own wounded companion. Forward-wired in practice (no
+companion is wounded in the live world-sim yet — wounds come from the ASCII combat layer on the
+PC-travel HOLD), but fires automatically the moment a companion is wounded. Runtime-verified 14/14
+(Godot 4.6.2, headless): standing policy (assign FALCON at AH3 / clear at AH0-no-slot / none for Akodo /
+keep-training in-progress / clear when fully-trained / grieving vs past-grief / Utaku warhorse satisfies);
+species-aware TRAIN_ANIMAL metadata; companion treat success + wound reduced (8→4) + effects, and the
+unwounded / no-kit rejections.
+
+### s57.39 Animal Handling — lifecycle tranche 5: voluntary-gift transfer (2026-06-30, runtime-verified 10/10)
+The second of the two s57.39.2 ownership-transfer routes (death-of-owner→heir was tranche 3). New
+`GIVE_COMPANION` ActionID (`ActionExecutor._execute_give_companion`, an early-return handler taking
+`characters_by_id`, like TRANSFER_KOKU/MENTOR): a trainer hands a living trained companion to a
+co-located recipient, who becomes its owner — the record moves off the giver's `trained_companions`
+onto the recipient's, `transfer_companion` repoints `owner_id` and resets the bond
+(`rebond_sessions_remaining=3`), and the training (`training_progress`/`fully_trained`) is preserved
+(s57.39.2: "retains what it was taught… what does NOT transfer is the bond"). Gates: invalid/self
+recipient, dead recipient, not co-located (the animal is physically handed over), companion not
+found/dead, recipient at cap. **PC/deliberate-only — no autonomous NPC trigger** (the GDD says "the
+trainer explicitly transfers," specifying no NPC rule), so it is NOT in any context list /
+objective_alignment; it is reachable through the executor when a deliberate caller sets `companion_id`
++ `target_npc_id` (same pattern as s24.3 R3 train-for-others). Runtime-verified 10/10 (Godot 4.6.2,
+headless): gift moves the record giver→recipient, owner_id repointed, training preserved, bond reset
+to 3, effects correct; not-co-located / recipient-at-cap / self-gift all rejected with the right
+reason. **With this, both s57.39.2 transfer routes are complete.** The only REMAINING s57.39 piece is
+PC command-issuance for animals on the ASCII map (the live combat command UI, on the PC-travel HOLD).
+
+### s57.39 Animal Handling — lifecycle tranche 3: owner-death transfer + rebonding (2026-06-30, runtime-verified 18/18)
+The other "companions persist in the world" pillar (s57.39.2). `DayOrchestrator._process_companion_owner_deaths(characters,
+characters_by_id)` (daily pass, before the locations/death passes): when a companion's owner is dead,
+each ALIVE companion transfers to the owner's heir (`designated_heir_id`, if that character is living —
+the same inheritance signal as favor-creditor death) or becomes a free-roaming WILD animal (dropped from
+the system, not archived — it is not dead) when there is no living heir. Archived (dead) records stay on
+the dead owner. Idempotent (a processed dead owner is left with no alive companions). On transfer,
+`AnimalHandlingSystem.transfer_companion(comp, new_owner_id)` preserves training (training_progress /
+fully_trained) but NOT the bond — repoints owner_id and sets `rebond_sessions_remaining = REBOND_SESSIONS`
+(3, s57.39.2), so the new owner's Mastery Abilities (command, no-flee) are gated until they rebond.
+**Rebonding wired** (otherwise the transferred animal could never be commanded — `command_animal` gates
+on rebond==0): `can_train_subsequent_session` now allows a fully-trained companion that is still rebonding;
+the TRAIN_ANIMAL subsequent-session executor decrements `rebond_sessions_remaining` (via
+`apply_rebonding_session`, floor 0) on a rebonding session and adds NO training_progress (s57.39.2: those
+sessions establish the bond, not the training). Heir resolution uses `designated_heir_id` alive (no
+eldest-child fallback — matches the established favor-death model; documented). Runtime-verified 18/18
+(Godot 4.6.2): transfer_companion repoint+rebond+training-preserved, rebonding decrement floor,
+can_train allows-rebonding/blocks-bonded, transfer-to-living-heir, idempotent, no-heir→wild,
+dead-heir→wild, archived-stays + alive-transfers. Voluntary-gift transfer (the other s57.39.2 transfer
+path) reuses `transfer_companion` — its ActionID/UI is the remaining bit.
+
+### s57.39 Animal Handling — lifecycle tranche 2: companion death (2026-06-30, runtime-verified 21/21)
+The direct consequence of the combat tranche — a trained animal that dies in a skirmish is now
+resolved (s57.39.9). Two halves, decoupled: **combat side** — `AsciiMapCombatOrchestrator.sync_companion_deaths(state)`
+marks each dead animal puppet's companion record `is_alive=false` (the record is the owner's persistent
+`trained_companions` entry, referenced in `animal_data`, so it archives on the owner); returns the
+{owner_id, companion} list, idempotent (already-archived skipped). **World-sim side** —
+`DayOrchestrator._process_companion_deaths(characters, active_topics, next_topic_id, ic_day)` (a daily
+pass, wired beside `_process_companion_locations`) scans living owners' companions for `is_alive=false` +
+not-yet-`companion_death_resolved`, builds the owner's Tier-4 PERSONAL loss topic via
+`AnimalHandlingSystem.build_death_topic` ("[Owner] lost their [species] [name]", subject=owner,
+subject_role NEUTRAL, **no Glory/Honor** per s57.39.9), appends it, seeds the owner's topic_pool (non-PC),
+and sets the resolved flag. The record is **archived, not deleted** (s57.39.9); the cap slot frees
+automatically (`count_active_companions` skips `is_alive=false`). Decoupling means the death is recorded
+in combat and the topic fires in the world-sim even though the live mission→world pipeline is deferred
+(PC-travel HOLD). Runtime-verified 21/21 (Godot 4.6.2): death-topic fidelity (Tier-4/PERSONAL/owner-
+subject/NEUTRAL/readable title/species_display), combat sync flips the record + idempotent, world pass
+creates the topic + counter advance + owner pool + resolved flag + **cap recovery**, world pass
+idempotent, dead-owner skipped. `sync_companion_deaths` is the API the deferred mission-resolution glue
+calls; the world pass already runs live each tick.
+
+### s57.39 Animal Handling — combat tranche B: orchestrator integration + turn AI (2026-06-30, runtime-verified 15/15)
+Trained-animal companions now FIGHT on the ASCII map (the headline "can fight"). Wired into
+`AsciiMapCombatOrchestrator`: new `MapCombatState.animal_data` ({owner_id, companion record,
+command_target_id}); `add_animal_companion(state, puppet, owner_id, companion, x, y, dice)` inserts an
+`AnimalCombatant` puppet on the owner's (player) faction (initiative roll, turn-order re-sort, TurnState
+— mirrors add_companion); `command_animal(state, owner, animal_id, target_id)` is the **s57.39.7 Rank-5
+command-to-attack** (Simple Action on the owner's turn; gates: owner alive + Animal Handling 5+, the
+companion fully trained + past the rebonding window, target a living enemy not an ally → reasons
+owner_below_rank_5 / not_fully_trained / rebonding / target_is_ally / invalid_target / no_action);
+`execute_animal_turn(...)` is the engine-controlled AI, wired into `resolve_current_turn` (animals are
+negative-id puppets in `state.combatants`, not `chars_by_id`, so they resolve before the chars lookup
+and never yield to player input). **Three-tier behavior (s57.39.3):** WILD (<3 sessions) flees any
+combat; FOLLOWING (3+ sessions, untrained) and a TRAINED-but-uncommanded/sub-R5/rebonding animal stay
+near the owner and flee if wounded; a TRAINED animal under an Animal-Handling-5+ owner with a live
+command ENGAGES (attack if adjacent, else move toward the target). **R5 Hurt-flee / R7 no-flee
+(s57.39.7/8):** a commanded animal that reaches its "Hurt" threshold breaks off and flees (command
+cleared) unless the owner has Animal Handling 7+ (no-flee override). **"Hurt" reconciliation (real bug
+caught + fixed):** the 8-level WoundLevel enum is NOT usable — a coarse s54.1 creature track (Dog `[12]`,
+Falcon `[5]`) never reaches the enum's HURT before Dead, so the flee would never fire. `AnimalCombatant.flee_wound_threshold()`
+uses the s54.1 FIRST wound threshold, which equals s54.1's explicit stated flee points exactly (Dog 12,
+Falcon 5) — GDD values, no invention (PROVISIONAL only where s54.1's prose flee point is higher, e.g.
+Pony "32" vs first-threshold 16). FLAGGED minor s57.39 gap: the trained-uncommanded default (stay
+defensively near owner, no attack — the skill layer requires R5+command to engage). Runtime-verified
+15/15 (Godot 4.6.2): add+command, engage-attacks-foe, R5 Hurt-flee + command-clear, R7 no-flee engages,
+WILD auto-flee, all three command gates. **PC command issuance + companion-into-mission spawn are the
+remaining wiring** (the future turn-based PC UI / mission-launch glue, same PC-travel HOLD as the whole
+ASCII stack); `command_animal`/`add_animal_companion` are the ready APIs.
+
+### s57.39 Animal Handling — combat tranche A: species stat table + companion→combatant adapter (2026-06-30, runtime-verified 26/26)
+The data + converter foundation for trained-animal combat (owner confirmed the species→s54.1
+mapping). `simulation/animal_combatant.gd` (AnimalCombatant, pure class) mirrors `SpiritCombatant`:
+`catalog()` is the 6-species combat stat table (PIGEON excluded — a message bird), each a
+`SpiritCreatureData` transcribed WHOLE from its s54.1 block per the **owner-confirmed mapping**
+(DOG→Dog (Inu), WAR_DOG→Unicorn War Dog, FALCON→Falcon, RIDING_HORSE→Rokugani Pony, WARHORSE→Unicorn
+Riding Horse, WARCAT→Lion; Utaku Battle Steed stays school-only). `to_combatant(companion, instance_id)`
+builds the combat puppet via `SpiritCombatant.to_character_data` (reusing the verified to-hit / damage /
+wound-track overrides through the attached SpiritCreatureData), carrying the companion's NAME and current
+WOUND_TOTAL (a wounded animal fights wounded); returns null for a dead/archived or non-combat (PIGEON)
+companion. realm = NINGEN_DO (natural mortal animals). **Reconciliation (resolved per s57.39.7 "use its
+species stat block (Section 54 creature entries)"):** combat uses the s54.1 stat block whole — rings,
+named traits, initiative, attack/damage dice, Armor TN, Reduction, AND the s54.1 wound track
+(`wound_thresholds`+`wounds_dead`); s57.39.6's per-species `wound_threshold` stays the world-sim
+companion-record value (+ the Rank-5 Hurt-flee threshold), a separate field. **FLAGGED for owner
+review:** s57.39.9 says the companion Armor TN is "default 15 for most trained animals (warcats/warhorses
+higher per s54)", which conflicts with the varied s54.1 Armor TN (Dog 20, Falcon 30, …). This follows
+s57.39.7 and uses the s54.1 value; a `USE_S57_39_9_FLAT_ARMOR_TN` toggle (default false) flips to the
+flat-15 companion rule (warcat/warhorse exempt) if the owner prefers it. Runtime-verified 26/26 (Godot
+4.6.2): catalogue completeness, s54.1 stat-block fidelity (DOG/WARCAT/WARHORSE/FALCON spot-checks),
+adapter carries name+wounds + attaches spirit_creature, dead/PIGEON → null. NOT yet wired into the
+orchestrator (combat tranche B: add companions to setup_combat + animal turn AI with the three-tier
+behavior + R5 command-to-attack + R5 Hurt-flee / R7 no-flee). Same PC-travel HOLD as the whole ASCII
+stack — headless-verified, not live.
+
+### s57.39 Animal Handling — in-game companion lifecycle (now unblocked by s40), tranche 1: travel-with-owner (2026-06-30, runtime-verified 7/7)
+The s57.39 TRAINING pipeline (TRAIN_ANIMAL executor, companion records on
+`L5RCharacterData.trained_companions`, cap, tiers, mastery gates) was already built, but the
+**in-game lifecycle was entirely unwired** — `day_orchestrator` never touched `trained_companions`,
+so companions never travelled with their owner, never died/transferred, had no standing needs, and
+never entered combat. s40 (the ASCII combat layer) now exists, lifting the original "deferred (blocked
+on s40/s56)" gate. Building the lifecycle one tranche at a time. **Tranche 1 — travel-with-owner
+(s57.39.2, fully unambiguous, zero stat-block dependency):** `AnimalHandlingSystem.sync_companion_locations(owner,
+province_id)` sets each ALIVE companion's `location_province_id` to the owner's province (archived
+`is_alive==false` records untouched). `DayOrchestrator._process_companion_locations(characters,
+character_province_map)` runs each tick right after `character_province_map` is built (so it tracks
+travel arrivals), skipping dead/companion-less/unplaced owners. Runtime-verified 7/7 (Godot 4.6.2):
+2 alive companions follow the owner province→province, the archived one stays put, no-companion owner
+is a 0 no-op. 2 files parse clean.
+**REMAINING tranches (all pure s57.39 LOCKED spec):** owner-death transfer → heir/wild + rebonding
+decrement (s57.39.2); companion death → Tier-4 Personal topic + cap recovery + archival (s57.39.9);
+TREAT_WOUND on a companion (s57.39.9); Toritaka/Aerie/Utaku standing companion needs + loss re-fire
+(s57.39.11); voluntary-gift transfer. **COMBAT tranche (the "can fight" headline) is OWNER-GATED:**
+s54.1 has full stat blocks for the species (Dog/War Dog/Falcon/three horse breeds/Lion/Cat), but the
+species→s54.1-block MAPPING has genuine ambiguities I will NOT invent — which s54.1 horse block is the
+generic WARHORSE vs RIDING_HORSE, which block is the WARCAT, and how to reconcile s57.39.6's
+`wound_threshold` with the s54.1 full wound track. That mapping needs owner sign-off before the combat
+adapter (SpiritCombatant-style puppet) + R5 command + R5/R7 flee rules are wired.
+
+### s24 Skill Mastery Abilities — Low-Skills tranche (Forgery/Intimidation/Sleight of Hand/Stealth/Temptation) (2026-07-01, runtime-verified 5/5)
+Audited the five s24 "Low Skill" masteries the owner pasted; wired the one genuine gap, confirmed
+three already live, and documented two as blocked (no invention). **Already wired (confirmed):**
+Intimidation R5 (+5 to Intimidation Contested Rolls) and Temptation R5 (+5 to Temptation Contested
+Rolls) — both in `SkillMasterySystem.CONTESTED_R5`, folded into `resolve_contested_check`; Sleight of
+Hand R5 (conceal small weapons) — `SecretSystem.CONCEAL_WEAPON_SKILL_GATE = 5` gates weapon
+concealment. **NEW — Forgery R5 (detect side).** "+1k0 on any roll to detect a forgery made by
+someone else." New `SkillMasterySystem.forgery_detect_rolled_bonus(character)` (cross-skill: the
+detector's Forgery *rank* boosts their Investigation detection roll). Was only applied on
+`LetterSystem.deliberate_examine_letter`; the passive `auto_detect_forgery` (on-receipt) **missed it**
+— a real gap given "any roll." Now both detection paths route through the helper (the local
+`FORGERY_RANK5_DETECT_BONUS` const removed). Runtime-verified 5/5 (Godot 4.6.2, headless): helper 1@R5 /
+0@R4; Intimidation & Temptation R5 = +5; and a Forgery-5 recipient now auto-detects a forged letter
+more often than a Forgery-0 one (239 vs 188 / 400). **Both formerly-BLOCKED items now RESOLVED (owner
+rulings, see the dedicated entries below):**
+- **Forgery R3 (+1k0) / R7 (+0k1) — RESOLVED (owner ruling 2026-06-30, option a):** the forge
+  detection TN was switched from `base TN + Raises×5` (s12.8) to the forger's actual roll TOTAL,
+  reconciling s12.8→s24 and giving R3/R7 a clean hook (they add dice to the forge roll). See the
+  "s24 Forgery masteries" entry.
+- **Stealth R3 (Water tiles) / R5 (Water×2 tiles) — RESOLVED (owner ruling 2026-07-01):** the player's
+  stealth move now covers a per-action tile budget (`SkillMasterySystem.stealth_move_budget`), mirroring
+  the NPC multi-tile-move infra. R7 (Free-Move-while-stealthed) stays DEFERRED — no faithful tile value
+  in the real-time exploration model. See the "s24 Stealth movement masteries" entry.
+
+### s24 Skill Mastery Abilities — full-catalog consumer audit (2026-07-01, read-only)
+Swept every s24 mastery (all skills, Ranks 3/5/7 + the universal Rank-10) against its consumer. Result:
+**every mastery with a clean, unambiguous hook is WIRED; the remainder are genuinely blocked on absent
+infra/systems or GDD-silent values (not un-attempted).** `SkillMasterySystem` has ZERO dead functions —
+every homed helper has a live call site (`base_skill`/`insight_bonus` are internal to other consumed
+helpers).
+- **WIRED — social/utility:** universal Rank-10 (+1 FR all rolls, `universal_free_raise` → SkillResolver);
+  Courtier/Etiquette R3/R7 insight (`insight_bonus` → CharacterStats.get_insight) + R5 +1k0 contested;
+  Sincerity/Investigation/Intimidation/Temptation R5 +5 contested (`CONTESTED_R5`); Spellcraft R5 casting
+  (+1k0); Meditation R3/R7 VP cap (2/3); Tea Ceremony R5 (2 VP, action_executor:5742); Calligraphy R5
+  cipher (+10, letter_system/kolat); Medicine R5 heal (+1k0, medicine + animal_handling); Commerce R5
+  ±20% (buy+sell); Engineering R5 +5 cooperative; Hunting R5 +1k0 wilderness Stealth; Animal Handling
+  R3/R5/R7; Forgery R3/R5/R7; Sleight of Hand R5 (conceal weapon); Stealth R3/R5 (move budget).
+- **WIRED — combat (Bugei, tranches 1-7):** Athletics R7 (move burst); Battle R5 (initiative); Defense
+  R3/R5/R7; Horsemanship R3/R5/R7; Iaijutsu R3/R5/R7; Jiujutsu R3/R5/R7; Kenjutsu R3/R5/R7; Kyujutsu
+  R3/R5/R7; Spears R3/R5/R7; Polearms R3/R5/R7; Heavy Weapons R3/R5/R7; Knives R3/R5/R7; War Fan R3/R5/R7;
+  Chain Weapons R3/R5/R7; Staves R3/R5/R7 (+ base doubles-armor); Ninjutsu R3/R5/R7.
+- **DEFERRED / BLOCKED (no invention):** **Acting R3/R5/R7** (disguise TN −5/−10/−15) — no mundane
+  disguise-creation action; the CombatController disguise layer is SPELL-based (Spellcraft/Air), not
+  Acting-skill. **Athletics R5** (no terrain penalty) — **NOW WIRED** into the tile-movement layer (see
+  the dedicated entry below); **Athletics R3** (moderate/half-difficult) stays deferred (no faithful hook
+  in the binary tile-cost model). **Investigation R3/R7** (extra Search attempts) — BLOCKED, not wireable
+  without inventing (scoped 2026-07-01): the masteries modify a per-attempt "re-Search TN increase" (R3
+  negates the 2nd) + an attempt "cap" (R7 grants a 3rd), but `examine_scene` is a SINGLE roll per
+  EXAMINE_CRIME_SCENE (TN = concealment + a DAYS-elapsed penalty, not per-attempt), CrimeRecord has no
+  examination counter, and the re-examine cap consts (SCENE_MAX_REEXAMINATIONS etc.) were REMOVED as
+  invented content in the 2026-05-27 audit. Wiring it means re-adding that removed mechanic + its numbers
+  (owner decision). **Divination R5** (2nd roll no-VP) — Divination is not a rolled sim action.
+  **Meditation R5** (Fasting TN −5) — no individual food/water mechanic (starvation is province-level).
+  **Sailing R5** (+5 cooperative) — `cooperative_roll_bonus` READY but DORMANT: no Sailing skill check
+  is ever rolled via SkillResolver (Sailing only rank-gates captaincy). **Stealth R7** (Free-Move while
+  stealthed) — no faithful tile value in the real-time player model. **Craft** — s24 lists no masteries.
+  (Several blocked items — Acting, Athletics terrain, Stealth R7 — are exploration/combat-layer and
+  headless-only anyway under the PC-travel HOLD.) No new wiring warranted without an owner value/system
+  decision; do not re-audit without those systems.
+
+### s24 Athletics R5 terrain mastery — wired into tile movement + dead const removed (2026-07-01, runtime-verified)
+Athletics R5 (s24: "No movement penalties regardless of terrain") is now wired into the LIVE tile-movement
+layer. The R3/R5 logic already existed in `IndividualCombat.get_water_ring_for_terrain` (the basic/moderate/
+difficult Water-Ring-penalty model), but its only callers (`get_*_move_feet`) had ZERO consumers — a dormant
+feet model the tile layer never touches (tile movement uses `MovementSystem.terrain_cost`, flat 1/2). The
+faithful, zero-invention tile hook: a difficult-terrain tile costs 2 (its "penalty" = the extra +1), so R5
+makes such tiles cost 1 for that mover — a **uniform** "no penalty" needing NO per-tile tier mapping.
+- **`SkillMasterySystem.athletics_ignores_difficult_terrain(character)`** → true at Athletics ≥ 5 (null-safe).
+- Applied at the **4 movement-COST sites** (each reduces `cost==2 → 1` when the mover has R5; the mover's
+  character is in scope at every one — `state.combatants[id]` / `npc` / `character` / `es.character`):
+  `AsciiMapCombatOrchestrator.get_reachable_tiles` (mirrors its existing per-mover `flying` override),
+  the NPC path-move loop, the companion/free-move loop, and `CombatController._npc_move_toward`.
+  `MovementSystem.check_step`'s `.cost` is NOT consumed for any budget (callers read only `.ok`/`.is_door`/
+  `.is_exit`), so it needed no change. Flyers unaffected (their branch already forces cost 1).
+- **Athletics R3 stays DEFERRED**: "moderate no longer impedes / difficult −1 instead of −2" has no faithful
+  hook in the binary tile-cost model (no moderate tier; a half-penalty on a +1 cost isn't integer). It
+  remains represented only in the dormant feet model.
+- **Dead const removed:** `IndividualCombat.ATHLETICS_TERRAIN_REDUCTION` was a never-read duplicate of the
+  inline R3/R5 logic in `get_water_ring_for_terrain` — deleted (replaced with a pointer comment).
+- Runtime-verified (Godot 4.6.2, headless): helper exact (0-4→false, 5/7→true, null→false); in a live
+  `get_reachable_tiles` across two full-height CROPS columns (cost 2), an Athletics-5 mover reaches x=8 vs
+  a non-mastery / R3 mover's x=6 (crosses difficult terrain at cost 1 → 2 tiles farther); R3 == no-mastery
+  (confirming it's not tile-wired). Same PC-travel HOLD live-reachability caveat as the whole tile-combat
+  layer — driver-verified, not a live session.
+
+### s24 Stealth movement masteries — R3/R5 player stealth-move budget (2026-07-01, runtime-verified)
+The formerly-deferred s24 Stealth movement masteries (s24 lines 423-427, LOCKED). The base rule limits a
+Stealthed character to Water Ring FEET per Simple Move (sub-tile on the 5-ft grid → a 1-tile creep); R3
+raises it to Water×5 ft = **Water tiles**, R5 to Water×10 ft = **Water×2 tiles** (feet ÷ 5, GDD-exact,
+zero invention). The blocker was that the player's `CombatController.try_stealth_move` moved exactly one
+tile per action with no distance budget — but the NPC side already had one (`_movement_budget` +
+multi-tile `_npc_move_toward`), so I mirrored it for the player.
+- **`SkillMasterySystem.stealth_move_budget(character)`** → tiles per stealth action: base 1 (rank 0-2),
+  R3 `maxi(1, Water)`, R5 `maxi(1, Water×2)`.
+- **`CombatController.try_stealth_move_run(dx, dy)`** — steps in direction (dx,dy) up to the budget,
+  looping the existing `try_stealth_move` (so per-tile Stealth roll, per-tile noise/trap all preserved —
+  **per-tile roll model**, owner-chosen 2026-07-01: a longer sneak = more exposure). Stops early on a
+  wall/door/enemy(→stealth-kill)/zone-exit (returns that step's result) or once the stealth roll fails
+  (`not _player_stealth` — cover blown, can't keep gliding while exposed). Returns the terminating step's
+  result dict + `tiles_moved`. Budget 1 (no mastery) == a single `try_stealth_move` + `tiles_moved`, so
+  it's a drop-in replacement. `ascii_map_view.gd`'s stealth command now calls it (one-line swap; the
+  result contract is unchanged, so the view's blocked/kill/exit/moved handling still works — static-only
+  since AsciiMapView is a scene Node on the PC-travel HOLD).
+- **DEFERRED — R7** ("Free Move Actions may be taken normally while Stealthed"): an action-economy benefit
+  (a Free Move is sub-tile, Water feet) with no faithful tile value in the real-time, one-action-per-round
+  player model. Owner-overridable (would need an invented tile value for the extra Free Move).
+- Runtime-verified (Godot 4.6.2, headless): helper exact (0/2→1, 3/4→Water 3, 5/7→Water×2 6, Water-5 R5→10);
+  on open grass a strong stealther glides the full budget (R2=1, R3=3, R5=6 tiles); a wall halts the run
+  adjacent (tiles_moved=2 at x=4, blocked); a weak stealther on RUBBLE (TN20) averages 1.04 tiles with
+  299/300 runs stopping before budget on a blown roll and **0 over-budget** (the cap + failure-stop hold).
+  Same PC-travel HOLD live-reachability caveat as the whole CombatController stealth layer — driver-verified,
+  not a live session. With this + Forgery R3/R7, the s24 Low-Skill masteries are complete except R7 (blocked).
+
+### Correctness sweep — 5 bug classes (2026-07-01, read-only; 4 clean, 1 leak fixed separately)
+Five audits. Four came back clean; the fifth (lifecycle-leak) found the art-registry leak fixed in the
+"newer art registries" entry below. The clean four:
+- **Unclamped honor/glory/infamy — CLEAN.** Direct `.honor/.glory/.infamy` mutations bypassing
+  `HonorGlorySystem`'s [0,10] clamp: only context-snapshot copies (`ctx.honor = character.honor`) and one
+  safe `character.glory = 0.0` (0 is in range). No unclamped accrual.
+- **Unclamped disposition — CLEAN.** All 16 direct `disposition_values[id] = …` assignments compute a
+  `clampi(old + delta, -100, 100)` one line above (incl. the newer art-system sites day_orchestrator:30518/
+  31006 and the favor-breach floor at 12124). The grep flags were same-line false positives.
+- **Raw-int-vs-enum — CLEAN.** `.tier = <int>` and `.severity = <int>` (should be `TopicData.Tier.*` /
+  `CrimeSeverity.*`): 0 hits. The only `topic_tier: 0` literals are levy_system's `suspicion:false` no-topic
+  branches, never read (consumer does `if not check.suspicion: continue` first).
+Three audits; all came back clean (a confirmation, not a fix):
+- **Dead-character-guard class — CLEAN in the newest code.** Spot-verified 13 high-risk mutation sites in
+  the 2026-06 art/lifecycle + affliction layers (the least-audited): all 5 art visitor-effect loops
+  (garden/sculpture/painting/bonsai/ikebana), the theater PERFORM performer + witness-polarization loops,
+  and the 5 world-sim affliction/taint daily processors (possession/disease/death-touch/periodic-taint/
+  taint-rank) — every one guards `CharacterStats.is_dead()` on its character loop (possession even
+  re-checks after processing that can kill). The dead-char discipline (dozens of past fixes) holds in the
+  new code too.
+- **Dropped-effect-on-failure class — CLEAN (0 instances).** A rigorous parser scanned every `return {…}`
+  block in `action_executor.gd` for the recurring bug where a `success:false` result carries a consumable
+  effect key (honor_change / glory_change / infamy / disposition / koku_cost / witness_disposition_loss …)
+  but omits `effects.failed=true`, so `EffectApplicator`'s line-27 gate silently drops it (the ancestors:
+  DISPATCH_COURTIER, SEAL_WALL_BREACH, ARRANGE_MARRIAGE, INTIMIDATE). Zero survive — every failure path that
+  carries a cost now correctly sets `failed:true`. The class is fully patched.
+- **Dead static functions — 81 candidates, ALL benign (no functional bug).** Swept the newer system files
+  (theater/garden/sculpture/painting/origami/ikebana/geisha/animal_handling/companion/artisan/spiritual_*/
+  fire/trap/kolat_*) for `static func`s with no production call site. Every candidate is one of: (a)
+  **forward-wiring for a deferred layer** (the s56.16 spiritual-encounter combat loop, the companion command
+  UI, the removed artisan NPC pipeline — all documented deferred), or (b) a **dead pure-system helper
+  duplicate superseded by live orchestrator-local / inline logic** — the systems FUNCTION, the pure helper is
+  just unused. Spot-verified three: `AnimalHandlingSystem.can_command_to_attack`/`has_no_flee_override` (the
+  R5-command / R7-no-flee RULES are live inline in `AsciiMapCombatOrchestrator.command_animal`/
+  `execute_animal_turn` via the `MASTERY_*_RANK` constants; the helpers are test-only), `PaintingSystem.inject_painting_context`
+  (live via the orchestrator's own `DayOrchestrator._inject_painting_context`), and `FireSystem.standing_damage`/
+  `passthrough_damage` (live via the orchestrator's `_fire_damage_for`). NOT removed — tests reference them and
+  the project deliberately keeps forward-wired functions; do not mistake these 81 for bugs on a future sweep.
+  (Doc precision: the earlier s57.39 note calling the two AnimalHandling helpers "LIVE in the ASCII combat
+  layer" means the RULES are live inline — the named helpers themselves are unused test-only wrappers.)
+
+### Known Code Issues (found and fixed 2026-07-01, lifecycle-leak sweep — newer art registries)
+- **5 newer art registries never removed terminal objects — monotonic growth leak. FIXED.**
+  The lifecycle-leak class ("a terminal item is skipped but never removed from its `active_*` array") has
+  a `_remove_resolved_*` pass for all 12 older collections (wars/successions/hunts/favors/topics/
+  commitments/courts/hostages/civil-wars/entanglements/…) but the 5 art registries added this year —
+  `theater_pieces`, `active_gardens`, `active_bonsai`, `active_paintings`, `active_sculptures` — had
+  **none**, so a terminal object accumulated forever. These are OBJECT registries (a completed painting/
+  garden/piece persists like an inventory item), so only the terminal-FAILURE states are removed — the
+  object is gone from the world: theater `lost`/`abandoned_incomplete`, garden `destroyed`, bonsai
+  `is_dead`, painting/sculpture `abandoned_incomplete`. **Not a behavior bug** — every consumer already
+  skips terminal items (verified: theater injection/WIP-select, garden/painting/bonsai visitor loops), and
+  nothing queries them post-terminal (unlike crime_records, which need a retention WINDOW, not immediate
+  removal — the distinction: art terminal objects are never read again, so remove-on-terminal is correct,
+  matching wars/commitments). Five `_remove_terminal_*` passes added at the end of `advance_day` (after
+  all daily/seasonal/death processing → same-tick catch), reverse-iteration `remove_at`, mutating the
+  by-reference WorldState arrays exactly like the sibling passes. Completed/canonized pieces, live gardens/
+  bonsai, and completed paintings/sculptures are RETAINED. Orphaned topic→art-ID references fail-lookup
+  gracefully (project convention). Runtime-verified 7/7 (Godot 4.6.2, headless): each registry keeps its
+  non-terminal items and drops its terminal ones; empty + all-terminal edge cases.
+
+### s24 Skill Mastery Abilities — "Low Skill" tranche (Forgery R3/R7; Intimidation/Temptation/Sleight/Stealth already wired or blocked) (2026-06-30, runtime-verified)
+Wired the s24 "Low Skill" masteries the owner pasted. Audit result: **Intimidation R5** (+5 to
+contested rolls) and **Temptation R5** (+5 to contested rolls) were already in
+`SkillMasterySystem.CONTESTED_R5` and live; **Sleight of Hand R5** (conceal a weapon as one size
+smaller) is already gated via `SecretSystem.CONCEAL_WEAPON_SKILL_GATE`; **Stealth** movement
+masteries (R3/R5/R7 half-move / no-penalty-move) are **DEFERRED** — the CombatController stealth
+layer has no per-move-distance budget to attach them to (owner decision pending, flagged). The one
+genuinely-blocked pair, **Forgery R3/R7**, is now wired via the owner ruling below.
+- **Forgery R5 detect gap — FIXED.** `SkillMasterySystem.forgery_detect_rolled_bonus` (+1k0 on a
+  roll to DETECT someone else's forgery) existed but `LetterSystem.auto_detect_forgery` /
+  `deliberate_examine_letter` never applied it — the recipient's Forgery RANK now boosts their
+  Investigation/Perception detection roll (both paths route through one helper; the old local
+  `FORGERY_RANK5_DETECT_BONUS` const removed).
+- **Forgery R3 (+1k0) / R7 (+0k1) — wired via a detection-TN model switch (owner ruling 2026-06-30).**
+  The s24 Forgery masteries add dice "to the roll that determines the forgery's quality — its
+  detection TN," but the project's forge pipeline (s12.8) computed detection TN as `base TN +
+  Raises×5` (a fixed number with no dice roll to boost). Owner authorized **option (a): the forge
+  detection TN becomes the forger's actual roll TOTAL** — reconciling the two models and giving R3/R7
+  a clean hook. New helpers `forgery_tn_rolled_bonus` (1 at Forgery≥R3) / `forgery_tn_kept_bonus`
+  (1 at ≥R7, cumulative → a R7 forger rolls +1k1). All three forge functions
+  (`resolve_fabricate_secret`, `resolve_forge_impersonation_letter`, `resolve_forge_order` in
+  `secret_system.gd`) now pass the mastery bonus dice into the forge `resolve_skill_check` and set
+  `detection_tn = <roll total>` on success (else 0). **Accepted simplification** (documented): the
+  +1k0/+0k1 modify the forge dice pool, so they marginally aid the forge's own success too — a master
+  forger's technique makes the forgery both slightly more likely to pass AND harder to detect later.
+  The CLAUDE.md "Forge Pipeline PROVISIONAL Values Audit" detection-TN note updated to match.
+  Runtime-verified (Godot 4.6.2, headless, 4000 samples/rank): detection_tn == roll_total on EVERY
+  success (0 mismatches, R0–R7); monotonic avg detection TN R2=28.0 → R3=29.7 (+1k0) → R5=31.7 →
+  R7=40.9 (+1k1); failed forge → detection_tn=0; helper values R2(0,0)/R3(1,0)/R7(1,1) exact.
+
+### s24 Skill Mastery Abilities — Merchant tranche (Commerce/Engineering/Sailing; Craft none) (2026-06-30, runtime-verified 16/16)
+Wired the s24 non-Bugei "Merchant" masteries the owner pasted ("Now these masteries"), all values
+GDD-given (zero invention). New `SkillMasterySystem` helpers: **`cooperative_roll_bonus(skill,
+character)`** → +5 for Engineering R5+ or Sailing R5+ on Cooperative/Cumulative rolls, and
+**`commerce_price_favor_multiplier(character, is_buying)`** → 0.8 buy / 1.2 sell for Commerce R5+
+(the GDD-locked ±20% in the actor's favor), 1.0 otherwise.
+- **Engineering R5 — LIVE, centralized.** The +5 cumulative bonus was already inline in
+  `ActionExecutor._execute_fortify_wall_section` (FORTIFY_WALL_SECTION SI track, s57.41); replaced
+  the inline `5 if eng_rank>=5 else 0` with `cooperative_roll_bonus("Engineering", character)`
+  (behavior-preserving — verified 5 at R5, 0 at R4).
+- **Sailing R5 — READY but DORMANT.** Folded into the same helper, but **no Sailing skill check
+  exists anywhere in the sim** (Sailing is only rank-gated for captaincy in SailingSystem, never
+  rolled via SkillResolver), so the bonus has no consumer until a cooperative/cumulative Sailing
+  roll is added. Documented, not dead-wired.
+- **Commerce R5 — buy half LIVE.** Wired the buyer-favor into **PURCHASE_MARKET** (the sim's only
+  market-buy koku transaction): in `ActionExecutor.execute`'s post-effects block, a successful
+  PURCHASE_MARKET's `koku_cost` (consumed by `EffectApplicator._apply_koku_cost`) is multiplied by
+  `commerce_price_favor_multiplier(_character, true)` → a Commerce-5 buyer pays 0.8 koku vs 1.0.
+  This supersedes the old "Commerce R5 explicitly deferred (s57.40.8)" note — the owner re-authorized
+  it by pasting the s24 mastery; the 20% is GDD-given so no invention.
+- **Commerce R5 — sell half now LIVE (2026-06-30, runtime-verified 8/8).** The sell side had no
+  koku-producing consumer because **CONDUCT_COMMERCE produced no koku** (the executor returned a
+  flavor-only `{"effect":"commerce_conducted"}`). Built the missing income channel, which is
+  **GDD-LOCKED**: s55.27 Effect 2 ("Personal yield: `Commerce rank × settlement_modifier × 2`,
+  deposited to the character's koku") + s55.24 ("Accumulate personal wealth"). On a successful
+  CONDUCT_COMMERCE roll, `ActionExecutor.execute`'s post-effects block emits
+  `commerce_yield_koku = Commerce rank × CONDUCT_COMMERCE_STANDARD_MODIFIER(1.0) ×
+  CONDUCT_COMMERCE_YIELD_MULT(2.0) × commerce_price_favor_multiplier(_character, false)` — so a
+  Commerce-5 merchant earns ×1.2 (the SELL side of the mastery: conducting trade = selling). New
+  `EffectApplicator._apply_koku_gain` deposits it to `actor.koku`. **settlement_modifier defaults to
+  the s4.3.8 standard-settlement value 1.0** at the time, but is now LIVE (see "s4.3.8 settlement
+  Koku location modifier" below) — castle-town ×1.2 and island-port ×1.5 lift the yield; the
+  crossroads/coastal/river/remote tiers forward-wire on explicit world-gen `infrastructure` tags.
+  **Honor is NOT charged here** — the s57.40 commerce stigma (already wired,
+  rank-scaled, LOCKED) is the honor consequence for public commerce; s55.27's role-based −0.5 and
+  s57.40's rank-based penalty are overlapping GDD honor models for the same act, so only the
+  already-wired s57.40 stigma fires (no double-charge). Runtime-verified 8/8 (Godot 4.6.2, headless):
+  sell R5=1.2 / R4=1.0 / buy R5=0.8; a Commerce-5 CONDUCT_COMMERCE emits yield 12.0 (5×1×2×1.2),
+  Commerce-4 emits 8.0 (4×1×2×1.0); EffectApplicator deposits the gain (3→15); a failed result
+  deposits nothing.
+- **s55.27 once-per-settlement-per-season gate now LIVE (2026-06-30, runtime-verified 17/17).**
+  Closes the prior limitation. New `L5RCharacterData.commerce_conducted_seasons: Dictionary`
+  (settlement location_id → the absolute-season index of the last commerce there; @export → persists)
+  + `TimeSystem.get_absolute_season(ic_day)` (monotonic `year*4 + season-in-year`, so two ic_days in
+  the same calendar season share a key). Two enforcement points: (1) **executor hard gate** — a
+  CONDUCT_COMMERCE at a settlement where `commerce_conducted_seasons[location] == current absolute
+  season` is refused (`commerce_already_conducted_this_season`, no roll, no yield), and a successful
+  conduct records the season (Pattern B); (2) **NPC selection gate** —
+  `NPCDecisionEngine._apply_commerce_precondition_filter` (Phase 4c) removes CONDUCT_COMMERCE from the
+  option set when already conducted at the current settlement this season, so a merchant doesn't waste
+  an AP on a refused action. Both key on `ctx.location_id` (the settlement) + the absolute season, so a
+  merchant may still conduct commerce in *different* settlements the same season and at the *same*
+  settlement in a *later* season. Runtime-verified 17/17 (Godot 4.6.2, headless): abs-season boundaries
+  (day 0/89/90/240/360 → 0/0/1/3/4); first conduct succeeds + records + yields; second same-settlement-
+  same-season refused with reason + no yield; different settlement same season allowed; same settlement
+  next season allowed + record updated; the precondition filter removes/keeps CONDUCT_COMMERCE correctly
+  (already-conducted vs fresh settlement).
+- **s4.3.8 settlement Koku location modifier — now LIVE empire-wide (2026-06-30, runtime-verified 13/13).**
+  The s4.3.8 location-modifier table (castle-town ×1.2, port ×1.5, crossroads ×1.3, coastal ×1.3,
+  river-town ×1.2, remote ×0.7) was **dormant in production**: `resource_tick.KOKU_LOCATION_MODIFIERS`
+  existed but its `_koku_modifiers` source was only ever set by tests, so every settlement generated
+  Koku at ×1.0. New `SettlementData.koku_location_modifier()` computes the multiplicative product per
+  settlement from **GDD-grounded signals, no invention**: settlement_type ∈ {FAMILY_CASTLE, CASTLE} →
+  castle-town ×1.2 (it contains a major castle), plus explicit `infrastructure` tags
+  (`KOKU_LOC_INFRA_FACTORS`: port/crossroads/coastal/river_town/remote). Only `"port"` is placed at
+  world-gen today (island ports, in `world_bootstrap`); the other tags **forward-wire** (lift as a
+  one-line world-gen data edit when designated, or when coordinate/road/river data exists — coastal at
+  the settlement level genuinely needs coordinates to avoid over-applying to inland settlements in a
+  coastal province). `ResourceTick.process_seasonal_tick` now stamps `settlement_meta["_koku_modifiers"]`
+  from every settlement's modifier, so the seasonal Koku tick honors it empire-wide (dozens of castle
+  settlements now generate ×1.2; island ports ×1.5). Conflict-zone/bandit maluses stay dynamic
+  (garrison/war passes), unchanged. **CONDUCT_COMMERCE yield wired to the real modifier**: the orchestrator
+  builds a `settlement_koku_modifiers` map (location_id String → modifier, non-1.0 only) once per day in
+  `_inject_base_character_context` and injects it into every character's world_state; `build_context`
+  reads it into the new `ContextSnapshot.commerce_settlement_modifier`; the executor yield uses it
+  (the now-dead `CONDUCT_COMMERCE_STANDARD_MODIFIER` const removed). Runtime-verified 13/13 (Godot 4.6.2,
+  headless): modifier computation (village 1.0 / castle 1.2 / village+port 1.5 / castle+port 1.8 /
+  crossroads+coastal 1.69); `process_seasonal_tick` stamps non-1.0 entries (castle 1.2, port 1.5) and
+  omits standard villages; Koku generation reflects the modifier (castle:village:port = 1.2:1.0:1.5,
+  isolating from the under-garrison ×0.8 malus); a Commerce-5 merchant at a port earns yield 18.0
+  (5×1.5×2×1.2). LIMITATION: castle-town and island-port are the only DERIVED factors; the named
+  commercial hubs are now tagged (below), but crossroads/river-town/remote for un-named settlements
+  forward-wire on `infrastructure` tags (no design value invented for which generic village is a
+  crossroads).
+- **s2.3 named commercial hubs tagged (2026-06-30, runtime-verified 6/6).** The GDD's explicitly-named
+  crossroads/port settlements now carry `infrastructure` tags at world-gen, lifting their s4.3.8 Koku
+  modifier above ×1.0. **TRANSCRIBED, not derived** — the sim has no road geometry (`ProvinceData.roads`
+  is unpopulated), so only the GDD's explicitly-designated provinces are tagged (everything else stays
+  ×1.0). `WorldBootstrap.COMMERCIAL_INFRASTRUCTURE` (province name → tags) + `_tag_commercial_infrastructure`
+  (runs after `_wire_adjacencies`): **Ryoko** (Ryoko Owari Toshi) → port+crossroads, **Tonfajutsen**
+  (Crossroads Castle, "a central crossroads for troop movements and trade") → crossroads, **Beiden**
+  ("the crossroads of the Empire") → crossroads. Verified on a REAL bootstrapped world: Ryoko Mura =
+  **×1.95** (exactly the canonical s4.3.8 port×crossroads example), Tonfajutsen Mura = ×1.3, Kyuden Yogo
+  (Beiden, the Yogo seat → a castle, so ×1.2 castle-town × ×1.3 crossroads) = ×1.56, and exactly 3
+  settlements carry the tags (no over-tagging). The table is extensible — adding a province→tags entry
+  is the way to transcribe more s2.3 designations (e.g. more "port city" hubs) as they're confirmed.
+  Note the bootstrap creates generic per-province settlements (`{prov} Mura` / `Kyuden {family}`), not
+  the named cities, so the tag lands on the province's settlement; Ryoko/Tonfajutsen are non-seat
+  villages (clean ×1.95 / ×1.3), Beiden is the Yogo castle (the +castle-town stack is faithful — it IS
+  an administrative seat AND a crossroads; the GDD pins only Ryoko's exact ×1.95).
+- **Craft — NO masteries** (s24 "Mastery Abilities: None"). Nothing to wire.
+- **Animal Handling R3 (train-for-others) — now WIRED (2026-06-30, runtime-verified 13/13).** s24.3 R3:
+  "commonly domesticated animals (dogs, horses, falcons) may be trained for use by others." TRAIN_ANIMAL
+  gains a `recipient_id` metadata path: a Rank-3+ trainer trains a commonly-domesticated animal that the
+  RECIPIENT owns (the companion lands on the recipient's `trained_companions` with `owner_id == recipient`
+  and counts against the recipient's cap; the trainer's Animal Handling drives the roll). New
+  `AnimalHandlingSystem.can_train_for_others_first` (gates trainer R3+, recipient alive, commonly-
+  domesticated species, recipient cap, context) and `can_train_for_others_subsequent` (same, owner check
+  intentionally bypassed — training for another is the point). `COMMONLY_DOMESTICATED` = DOG/WAR_DOG/
+  RIDING_HORSE/WARHORSE/FALCON/PIGEON (Lion WARCAT excluded — a school specialty). `_execute_train_animal`
+  takes `characters_by_id` and routes both sessions to the for-others path when `recipient_id` is set.
+  **No autonomous NPC trigger** — the GDD specifies none for cross-owner training, so this is a deliberate/
+  PC-facing capability (callable now; like the voluntary-gift transfer, the NPC/PC issuance layer is the
+  remaining bit). Runtime-verified 13/13 (Godot 4.6.2, headless): R3/R2 gate, DOG/WARCAT domesticated
+  check, R3 trains a DOG for a recipient (trainer keeps none, recipient owns it, owner_id + effects
+  correct), R2 trainer / WARCAT / recipient-at-cap all rejected with the right reason, and the self-train
+  path is unchanged (still gated by the actor's own cap). The R5 (`can_command_to_attack`) / R7
+  (`has_no_flee_override`) helpers are LIVE in the ASCII combat layer (s57.39.7/8, PC-travel HOLD).
+- **Animal Handling R7 — NO conflict (resolved 2026-06-30).** Earlier flagged as a possible
+  s24-vs-s57.39.8 conflict, but the PROJECT GDD is internally consistent: `s24.3` line 351 says R7 =
+  "will not flee from combat even when badly wounded; the Rank 5 default flee-when-wounded behaviour is
+  overridden" — the **Never-Flees** override, matching `s57.39.8` exactly. The "issued commands
+  non-verbally" R7 exists only in the external L5R 4e book (pasted by the owner), which the project GDD
+  deliberately did not adopt. The implementation (`has_no_flee_override`) matches both project sections;
+  nothing to adjudicate.
+Runtime-verified 16/16 (Godot 4.6.2, headless): cooperative bonus 5/0 for Eng/Sailing R5/R4, 0 for a
+non-coop skill; Commerce 0.8 buy / 1.2 sell / 1.0 below R5; PURCHASE_MARKET base 1.0 → 0.8 for a
+Commerce-5 buyer vs 1.0 otherwise; AH R3 train-for-others gate; AH R7 no-flee (s57.39.8) retained.
+3 files parse clean.
+
+### s24 Skill Mastery Abilities + Insight wiring (2026-06-29, runtime-verified)
+`simulation/skill_mastery_system.gd` (SkillMasterySystem, pure class) is the s24 home for the
+roll/insight-applicable Mastery Abilities. **Five tranches:**
+- **Bugei combat masteries — tranche 1 (this tranche, 22/22 verified):** the attacker/defender
+  stat-value masteries (s24.2), folded into IndividualCombat alongside the existing `_get_kata_*`
+  hooks. **resolve_damage:** Kenjutsu R3 (+1k0 sword), Jiujutsu R3 (+1k0 unarmed) / R7 (+0k1), and
+  the **explode-on-9** masteries Kenjutsu R7 + Heavy Weapons R7 (new `explode_9` mode on
+  `DiceEngine.roll_and_keep`/`roll_damage` — lowers the explosion threshold to 9; zero-regression:
+  default false keeps threshold 10, and the existing `explode_8` Hungry-Blade guard reduces to its
+  prior form when `explode_9` is false). **get_armor_tn:** Defense R5 (+3 in Defense/Full Defense,
+  ON TOP of the base stance bonus which already includes Defense Rank) + War Fan R5/R7 (+1/+3
+  passive). **roll_initiative:** Battle R5 (+Battle Rank, all combat is skirmish-scale). The
+  damage/explode/War-Fan masteries fire in NPC **summary combat** (live: duels, assassination
+  bodyguard fights, hunts — verified katana mean 20.3→21.3→26.2 across Ken2/3/7, unarmed
+  10.6→11.4→19.0 across Jiu2/3/7); Defense-stance (+3 over R4's base, =+4 total: +1 base rank +3
+  mastery) and Battle-initiative (+5 mean delta) fire in the turn-based orchestrator.
+  **Bugei tranche 2 (reduction-pierce + ranged + maneuvers — 18/18 verified, owner authorized
+  treating ASCII combat as accessible):** Heavy Weapons R3 (opponent Reduction −2, any round) +
+  Spears R3 (−3 first round) → `total_defender_reduction` (gains an `is_first_round` flag; Heavy
+  is live via tetsubo, Spears inert — no Spears weapon); Kyujutsu R7 (Bow Strength +1 → +1 damage
+  die, yumi, verified 12.2→15.3) → resolve_damage; Heavy Weapons R5 (Free Raise toward Knockdown,
+  +5 to the attacker roll) + Knives R5 (toward Disarm) → orchestrator maneuver resolution.
+  **Catalog limit:** only Kenjutsu/Knives/Heavy Weapons/Polearms/Kyujutsu/War Fan/Jiujutsu/Bo have
+  weapons, so Spears/Chain/Staves masteries are correct-but-inert (the staff weapon's skill is "Bo",
+  not "Staves"). Jiujutsu-R5-grapple / Knives-R7-extra-attack helpers exist but aren't wired into
+  their maneuver sites yet (forward-wired). **Bugei tranche 3 (duel Focus + off-hand, 11/11
+  verified 2026-06-29):** the contained, value-LOCKED masteries with existing combat hooks —
+  **Iaijutsu R5** (one Free Raise on the Focus roll = +5 to the contested Focus total, the codebase
+  1-Raise=+5 convention; s24 line 245) and **Iaijutsu R7** (the Assessment-win Focus bonus is +2k2
+  instead of +1k1 when a duelist's Assessment beat the opponent's by 10+; s24 line 247) → folded
+  into `IndividualCombat.resolve_duel_focus` (`iaijutsu_focus_free_raise` / `iaijutsu_assessment_bonus_dice`);
+  **Knives R3** (no off-hand size penalty when the off-hand WEAPON is a knife; s24 line 303) →
+  `resolve_off_hand_attack` (`knives_negates_offhand_penalty`). Runtime-verified 11/11: helper
+  determinism (R5→+5/R4→0, R7→2 dice/R5→1, Knives R3 knife→true / non-knife / R2→false), off-hand
+  end-to-end (tanto Small penalty 0 at Knives 3 vs −5 at Knives 2), and a Focus integration smoke (an
+  assessment-bonus holder first-strikes 4968/6000 vs a no-bonus 2098/6000 — the +2k2 path fires; two
+  symmetric Iai-5 duelists are ~50/50, the +5 free raise cancels with no side bias).
+  **Bugei tranche 4 (the now-unblocked masteries, 25/25 verified 2026-06-30):** five masteries with
+  existing consumers, all values LOCKED in s24, zero invention. **Polearms R5** (+1k0 damage vs a
+  mounted OR significantly larger opponent; s24 line 325) → `SkillMasterySystem.polearm_vs_mounted_larger_bonus`
+  folded into `resolve_damage` (which gained `target_mounted`/`target_large` params, threaded from
+  `_apply_hit` via `CONDITION_MOUNTED` + `Enums.Advantage.LARGE` — the same defender mount/size the
+  to-hit mounted/Burning-Kiss bonus already computes; the mount system this session is what unblocked
+  it). **Polearms R3** (+5 Initiative in the FIRST round only; s24 line 323) → `polearm_first_round_initiative`
+  in `roll_initiative` (which gained a `round_number` param, passed `state.combat.round_number` at all
+  4 call sites — setup is round 1, advance_round re-rolls use the incremented round, so the bonus is
+  round-1-only). **Knives R7** (Free Raise toward Extra Attack; s24 line 411) → `maneuver_free_raises(...,"extra_attack")`
+  lowers the NPC's declared Extra-Attack Raises 5→4 in `_npc_execute_attack` AND `resolve_extra_attack`'s
+  `required_raises` metadata. **Jiujutsu R5** (Free Raise toward initiating a Grapple; s24 line 387) →
+  `maneuver_free_raises(...,"grapple")` adds +5 to `grapple_flat` in `IndividualCombat.initiate_grapple`
+  (unarmed Jiujutsu only — a weapon grapple's skill != "Jiujutsu" gets 0). **Kyujutsu R5** (bow max
+  range +50%; s24 line 405) → `SkillMasterySystem.kyujutsu_range_multiplier` + `IndividualCombat.kyujutsu_extended_range`
+  applied in `execute_ranged_attack`'s range gate (before flesh-cutter halving) AND `get_ranged_targets`
+  (so a Kyujutsu-5 archer can both select and shoot a target at extended range). Runtime-verified 25/25
+  (Godot 4.6.2, headless): all helper gates (skill/rank/round); Polearms R5 naginata +1.1 mean damage
+  vs both mounted and large at N=8000 (the +1k0 survives the keep ~as often as expected); Polearms R3
+  init round-1 avg +5.3 over round-2; Knives R7 required_raises 5→4 (R5 stays 5); Jiujutsu R5 grapple
+  1110/1200 successes vs 701/1200 at rank 4 (TN 25); Kyujutsu R5 yumi range 50→75 (R4 unchanged). Plus
+  a 6/6 orchestrator regression smoke (all changed signatures resolve end-to-end; all added params
+  default-inert so non-mastery characters are unaffected).
+  **Bugei tranche 5 (Defense R3/R7 + GDD Full-Defense fidelity, 20/20 verified 2026-06-30, owner-provided
+  Stances spec):** the owner pasted the LOCKED Stances rules, which resolved two open questions: the Full
+  Defense Defense/Reflexes roll is made "upon declaring his Stance" (each turn) and "is considered a Complex
+  Action, so a character in this Stance may only take Free Actions." Brought Full Defense into line with the
+  spec AND wired the two masteries that depend on it. New `AsciiMapCombatOrchestrator._enter_full_defense`
+  (called on a change TO Full Defense via `execute_stance_change`, and on maintaining it via the
+  `_npc_pick_stance` maintain branch): (1) rolls the Defense bonus — **Defense R3** (s24) retains the
+  previous (better) roll instead of re-rolling; (2) **consumes the Complex** (the defense roll is a Complex
+  Action → `consume_complex()` zeroes Simple+Complex availability, leaving only Free Actions — the GDD's
+  "only Free Actions"); (3) **Defense R7** (s24) grants one Simple Action via `ts.granted_simple += 1` (the
+  existing Move-grant pool — a Move is the canonical in-combat Simple). `execute_stance_change` now gates a
+  Full-Defense declaration on `can_use_complex()` (the defense roll needs a Complex) and routes Full Defense
+  through `_enter_full_defense` (Complex) instead of the generic stance-change Simple. **This is a real
+  Full-Defense behavior change** (previously Full Defense only blocked attacks and left a Simple free; now it
+  permits only Free Actions, faithful to the LOCKED spec). Runtime-verified 20/20 (Godot 4.6.2): base Full
+  Defense spends the Complex (Simple move blocked, Free move allowed, attack blocked, bonus reaches Armor TN);
+  R7 grants exactly one Simple (first Simple move allowed, second blocked, attack still blocked); R3 retains a
+  high previous bonus while a non-R3 (Def 2) re-rolls and loses it; the Complex gate refuses Full Defense after
+  a Simple is already spent. Plus 6/6 orchestrator regression (no break) + an NPC-turn smoke (no crash).
+  LIMITATIONS: the `_npc_pick_stance` maintain branch is **forward-wiring** — `_npc_desired_stance` never
+  returns FULL_DEFENSE (the NPC AI tops out at Defense), so an NPC reaches Full Defense only via Shadowed
+  Mountain (reactive, a separate path) or an explicit declaration; the per-turn re-roll/lockdown therefore
+  fires only for a PC (future turn UI) or any caller that explicitly declares/maintains Full Defense. The
+  companion-turn path doesn't re-declare stance, so a companion *maintaining* Full Defense across rounds
+  won't re-roll (companions are command-driven and rarely turtle; the change-TO path covers them). The
+  attack-block reason for a Full-Defense actor is now `no_complex_actions_remaining` (the economy gate fires
+  before the `defense_cannot_attack` stance check, which remains the backstop for plain Defense stance).
+  **Bugei tranche 6 (Chain / Staves / Spears / Hunting, 27/27 + Staves-base 6/6 verified 2026-06-30):**
+  the masteries that reuse existing mechanics or have a GDD-stated base rule. **Chain Weapons R7** (Free
+  Raise toward Disarm AND Knockdown) and **Staves R5** (Free Raise toward Knockdown) → `maneuver_free_raises`
+  (auto-consumed at the existing disarm/knockdown maneuver sites, which derive the skill from the weapon).
+  **Chain Weapons R3** (a chain weapon may grapple only at rank 3+) → gate in `execute_grapple_initiate`
+  (`chain_grapple_requires_rank_3` below R3 — previously any chain wielder could weapon-grapple).
+  **Chain Weapons R5** (+1k0 vs an entangled/Grappled opponent) → the existing `atk_pen` rolled-die channel
+  in `execute_melee_attack`. **Staves R7** (a small staff — not the Large bo — gets +1k0 damage) →
+  `resolve_damage`. **Spears R5** (+5' = +1 tile thrown range) → `execute_ranged_attack`. **Hunting R5**
+  (+1k0 Stealth in wilderness) → `SkillResolver.resolve_skill_check`, gated on `context["wilderness"]` (the
+  read is wired; the wilderness-flag PRODUCERS are the mission/world-sim layer — forward-wired). **Staves
+  base rule + R3** (isolated commit, a real balance change): a staff attack DOUBLES the defender's worn-armor
+  TN bonus (s24 line 327), wired in `execute_melee_attack` (add `target.armor_tn_bonus` once more); the
+  staff-user negates it at Staves R3. Inert vs an unarmored target and for non-staff weapons; applies to the
+  primary melee path only (extra-attack/off-hand staff strikes don't double — documented limitation).
+  Runtime-verified: 27/27 (helper gates + end-to-end grapple rank-gate, jo-vs-bo damage, yari thrown
+  reach 10→11, wilderness Stealth lift) + 6/6 Staves-base (bo vs light-armor hits 1215 [Staves2 doubled]
+  vs 1452 [Staves3 negated], ~equal vs unarmored, katana unaffected) + 6/6 regression.
+  **GENUINELY BLOCKED (needs an owner decision — NOT wired, to avoid inventing):**
+  (1) **Ready-as-Free-Action** (Iaijutsu R3, Kenjutsu R5, Spears R7, Polearms R7, Kyujutsu R3) — the GDD
+  specifies NO base "Ready/Sheathe a weapon" action cost anywhere (only the masteries say "ready as a Free
+  Action"), there is no weapon-ready/sheathe state in the engine (weapons start ready), and the duel system
+  doesn't model the draw. Wiring these needs the owner to supply the base Ready cost + a weapon-ready
+  subsystem; inventing the base cost is forbidden. (2) **Ninjutsu R3/R5/R7** (+1k0 / explode-normally /
+  +0k1) — conflicts with the owner-provided blowgun damage scaling (`blowgun_damage_rolled_bonus`, +1 rolled
+  at R3 / +2 at R7), which diverges from the generic s24 Ninjutsu mastery (R7 should be +0k1, not +2k0).
+  **Ninjutsu R3/R7 ARE wired** (this session) for shuriken/tsubute — the generic s24 damage masteries (+1k0 /
+  +0k1) applied in `resolve_damage` to ninjutsu weapons OTHER than the blowgun (which keeps its owner-table
+  scaling, so it is excluded to avoid double-counting).
+  **Bugei tranche 7 (the last three, owner-authorized "do all 3", 23/23 verified 2026-06-30):** the owner
+  approved making the design calls the GDD left open, using L5R 4e core values as PROVISIONAL (flagged).
+  (1) **Ninjutsu R5** (ninjutsu damage dice "explode normally — they do not normally", s24 line 427): in
+  `resolve_damage`, ninjutsu weapons get `can_explode = (Ninjutsu rank >= 5)` — orthogonal to the blowgun's
+  damage scaling (this controls explosion, not dice count), so it applies to all three ninjutsu weapons
+  cleanly. Verified: shuriken max 10 (R4, no explode) → 39 (R5, explodes), mean rises. (2) **Athletics R7**
+  (+1 tile to ONE Move Action per Round, s24): new `TurnState.athletics_burst_used` (reset each turn = each
+  Round for one actor); `_athletics_move_bonus` adds +1 to `free_move_budget`/`simple_move_budget` while the
+  flag is unset; the first move of the Round consumes it (`execute_move`). The "total unchanged" cap is not
+  enforced (a single +1 move never approaches the WR×4 round max — documented simplification). Verified:
+  free budget 3→4 on the first move, drops back after, returns next Round. (3) **Ready-as-Free-Action
+  subsystem** (Iaijutsu R3, Kenjutsu R5, Spears R7, Polearms R7, Staves R7, Kyujutsu R3): new
+  `Participant.weapon_ready: bool = true` (default ready → existing combat UNCHANGED; a `"weapon_sheathed":
+  true` setup flag starts a combatant — e.g. an iaijutsu duelist — with the weapon undrawn).
+  `execute_ready_weapon` draws/strings the weapon, spending `SkillMasterySystem.weapon_ready_cost`: a melee
+  weapon = Simple, a bow = Complex to string (**PROVISIONAL** L5R 4e core base costs — the project GDD gives
+  none, owner-authorized), reduced to Free by Iaijutsu R3 (katana) / Kenjutsu R5 (sword) / Spears R7 /
+  Polearms R7 / Staves R7 (Large staff only), and to Simple by Kyujutsu R3 (string a bow). `execute_melee_attack`
+  and `execute_ranged_attack` reject a non-unarmed attack while `not weapon_ready` (`weapon_not_ready`).
+  Verified 9-entry cost matrix + end-to-end (a sheathed duelist can't attack; Kenjutsu R5 readies the katana
+  for Free and still attacks the same turn; a Kenjutsu-2 spends a Simple to ready). LIMITATIONS: weapon
+  switching mid-combat is not modeled (one weapon per combatant via `pick_best_weapon`); the duel system
+  doesn't yet flag its duelists `weapon_sheathed` (the subsystem is ready for it — a future duel-entry hook);
+  no NPC AI auto-readies (a sheathed NPC would need a turn-loop hook — forward-wired, fires only for an
+  explicitly-sheathed combatant); sheathing (the reverse) isn't modeled (the masteries are about drawing).
+  6/6 + 20/20 regression confirm default-ready combat is unaffected. **With this, EVERY s24 Bugei combat
+  mastery is wired** — the only PROVISIONAL values are the Ready base costs (melee Simple / bow Complex),
+  flagged for owner override; nothing else was invented.
+- **Meditation VP-recovery cap (9/9 verified):** Meditation R3 restores up to 2 VP,
+  R7 up to 3 VP per meditation session (base 1; s24 line 145). Was already functionally correct,
+  hardcoded in `ActionExecutor._execute_meditate` (predates SkillMasterySystem); centralized into
+  `SkillMasterySystem.meditation_vp_recovery_cap(rank)` (behavior-preserving) so the cap lives in
+  the s24 home. The other VP-recovery sites (TEA_CEREMONY, s37 Drawing the Void) are distinct
+  mechanics and correctly do NOT use the Meditation cap. NO CONSUMER (documented, not wired):
+  Meditation R5 Fasting TN−5 (no individual food/water mechanic — starvation is province-level)
+  and Divination R5 free-second-roll (Divination is not a sim action, GM-flavor).
+- **Spellcraft R5 casting mastery (5/5 verified):** +1k0 on Spell Casting Rolls
+  (s24 line 153). `SkillMasterySystem.spellcraft_casting_rolled_bonus(character)` (+1 rolled die
+  at Spellcraft rank 5) folded into `SpellSystem.resolve_cast`'s `roll_dice` (before the maxi(1)
+  floor + the ward `−XkX` penalties, so a strong ward can still eat it — the correct interaction).
+  Deliberately NOT given the universal R10 Free Raise: the Spell Casting Roll is Ring + School Rank,
+  NOT a Spellcraft skill roll, so R10 applies only to actual Spellcraft skill rolls (already covered
+  by the SkillResolver universal wiring). Verified: Spellcraft-5 casting total mean 28.3 vs the
+  Spellcraft-4 baseline 26.6.
+- **Roll-applicable masteries (prior tranche, commit fe2a6dc, 16/16 verified):** universal
+  Rank-10 (+1 Free Raise on ALL rolls with the skill) + the Rank-5 contested-roll masteries
+  (Courtier/Etiquette +1k0; Sincerity/Investigation/Intimidation/Temptation +5). Folded into
+  `SkillResolver.resolve_skill_check` (universal FR added to `total_bonus`) and
+  `resolve_contested_check` (both sides get their universal FR + contested {rolled,kept,flat}).
+  All values LOCKED in s24 (lines 31/57/67/85/121/409/437). `base_skill()` strips "Parent: Sub".
+- **Insight masteries + stale-field bug (this tranche, 11/11 verified):** Courtier/Etiquette are
+  the ONLY two skills with Insight-bonus masteries — **R3 +3, R7 +7 Insight total** (supersedes,
+  not cumulative; s24 lines 57/67). `SkillMasterySystem.insight_bonus(skill, rank)` +
+  `total_insight_bonus(character)` fold into `CharacterStats.get_insight` =
+  `(rings×10) + total_skill_ranks + total_insight_bonus`.
+- **BUG FOUND + FIXED — denormalized `insight_rank` cache was never written in production.**
+  `CharacterStats.get_insight_rank()` is COMPUTED/canonical, but the stored `@export var
+  insight_rank` field on L5RCharacterData (read directly by `SpellSystem.can_cast`'s ML casting
+  gate at spell_system.gd:1629, `school_rank = caster.insight_rank` at :1045, kolat, combat) was
+  left at its default **1** — `WorldGenerator.generate_character` takes an `insight_rank` PARAM
+  that drives trait/skill assignment but never did `c.insight_rank = …`. Empirically confirmed: a
+  Rank-3 Isawa shugenja had stored=1 / computed=3 and **could not cast any ML2+ spell** (every NPC
+  shugenja was crippled to ML1). FIXED at all three write points (the field is a cache → sync it
+  to the computed canonical, zero invention): (1) `generate_character` sets
+  `c.insight_rank = CharacterStats.get_insight_rank(c)` after the sheet is built (before
+  `apply_technique_flags`, which uses it as the reroll school-rank proxy) — covers all creation
+  paths (population gen, gempukku all route through generate_character); (2) `WorldBootstrap`
+  re-syncs every character at the END of world-gen, after the post-creation skill mutations that
+  DO change Insight (`AdvantageSystem.assign_derived_advantages` grants a rank-1 Lore skill;
+  `KolatMasterSelector` boosts a master's Sect skills; Kuroiban selection) — a single idempotent
+  pass so masters/advantaged characters aren't left stale; (3) `NPCAdvancement` sets
+  `character.insight_rank = new_rank` each seasonal advancement pass (lockstep with the computed
+  rank — the cadence at which Insight rank actually changes per s52 Part 3; covers PCs too, the
+  pass only skips the dead); (4) `WorldStateSaver.load_world` backfills every living character's
+  cache after load (idempotent — heals pre-fix saves stuck at 1, no-op for post-fix saves).
+  **PC coverage:** there is no separate PC sheet-construction path — a PC is an ordinary character
+  (built via generate_character) with `is_pc=true` flipped later, so all four sync points apply to
+  PCs identically. Verified: stored=3=computed + ML2 castable on an isolated Rank-3 Isawa; Courtier
+  R3→156 / R7→164 insight; and a FULL bootstrapped world (3819 living characters, incl. 228 rank-≥2
+  shugenja the bug had crippled) shows ZERO stale insight caches. KNOWN RESIDUAL: the not-yet-live
+  CombatController exploration-training skill gain (combat_controller.gd:505) would stale the cache
+  until the next season — benign (a +1 skill rank can't cross a 25-point Insight threshold in one
+  step) and on the PC-travel HOLD; resync there when that layer goes live.
 
 ### s30 / s30a Katas — Combat Effects WIRED into s40 (2026-06-06)
 `simulation/kata_system.gd` contains all 43 katas (eligibility, XP deduction, NPC

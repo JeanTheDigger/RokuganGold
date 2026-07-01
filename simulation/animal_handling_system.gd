@@ -63,8 +63,14 @@ const SPECIES_TABLE: Dictionary = {
 }
 
 # -- Rank Mastery thresholds ---------------------------------------------------
+const MASTERY_TRAIN_FOR_OTHERS_RANK: int = 3  # s57.39 R3 / s24 (agree)
 const MASTERY_COMMAND_RANK: int = 5
 const MASTERY_NO_FLEE_RANK: int = 7
+# R7 = the "Never Flees" no-flee override (has_no_flee_override below). The project GDD is
+# internally consistent: s24.3 ("will not flee from combat even when badly wounded; the Rank 5
+# default flee-when-wounded behaviour is overridden") AND s57.39.8 both specify no-flee. (The
+# external L5R 4e book's "issued commands non-verbally" R7 was deliberately NOT adopted by the
+# project GDD — so there is no conflict and nothing to adjudicate.)
 
 # -- Training tier thresholds (s57.39.3) ---------------------------------------
 const TRAINING_TIER_FOLLOWING_SESSION: int = 3  # from 3rd session onward → "following"
@@ -113,6 +119,101 @@ static func under_cap(character: L5RCharacterData) -> bool:
 	var skill_rank: int = SkillResolver.get_skill_rank(character, "Animal Handling")
 	var cap: int = get_companion_cap(skill_rank)
 	return count_active_companions(character) < cap
+
+
+# -- s57.39.11 School-driven companion standing need ---------------------------
+
+## Schools with a hard standing need for a companion of a specific species (priority 2).
+## Only "Toritaka Bushi" exists in SCHOOL_DATA today; "Aerie Falconer" and
+## "Utaku Horse Master" are GDD-named but unimplemented schools — forward-wired (they
+## lift automatically if added to world generation). Utaku Horse Master accepts either
+## a riding horse or a warhorse (the GDD's "character's choice at creation").
+## NOTE: Toritaka Bushi's SCHOOL_DATA skill list does NOT currently grant Animal Handling
+## (contradicting s57.39.11's prose), so this standing is DORMANT for a fresh Toritaka
+## (cap 0 at AH rank 0); it activates once a member has Animal Handling ≥ 1 (via seasonal
+## advancement, or a future SCHOOL_DATA correction — a school-design edit left to the owner).
+const SCHOOL_EXPECTED_SPECIES: Dictionary = {
+	"Toritaka Bushi": ["FALCON"],
+	"Aerie Falconer": ["FALCON"],
+	"Utaku Horse Master": ["RIDING_HORSE", "WARHORSE"],
+}
+## s57.39.11: the NPC grieves 1–2 IC seasons before seeking a replacement companion.
+## PROVISIONAL — the GDD gives a 1–2 season range; this uses the low end (one season).
+const GRIEF_REPLACEMENT_DAYS: int = 90
+
+## Decides the s57.39.11 school companion standing for a character. Returns
+## {action: "assign"|"clear"|"none", species: String}:
+##   none   — not a relevant school (no standing to manage).
+##   assign — the character should hold a TRAIN_SKILL standing for `species`
+##            (acquire a new one, or keep training the in-progress one).
+##   clear  — any prior animal-companion standing should be dropped (satisfied with a
+##            fully-trained companion, grieving a recent loss, or no open slot).
+static func evaluate_companion_standing(character: L5RCharacterData, ic_day: int) -> Dictionary:
+	var expected: Array = SCHOOL_EXPECTED_SPECIES.get(character.school, [])
+	if expected.is_empty():
+		return {"action": "none", "species": ""}
+	var inprogress_species: String = ""
+	var has_fulltrained: bool = false
+	var last_death: int = -1
+	for c: Variant in character.trained_companions:
+		var comp: Dictionary = c as Dictionary
+		var sp: String = comp.get("species", "")
+		if sp not in expected:
+			continue
+		if comp.get("is_alive", false):
+			if comp.get("fully_trained", false):
+				has_fulltrained = true
+			elif inprogress_species == "":
+				inprogress_species = sp
+		else:
+			last_death = maxi(last_death, int(comp.get("death_ic_day", -1)))
+	if has_fulltrained:
+		return {"action": "clear", "species": ""}  # satisfied (s57.39.11: standing clears)
+	if inprogress_species != "":
+		return {"action": "assign", "species": inprogress_species}  # keep training it
+	if last_death >= 0 and ic_day - last_death < GRIEF_REPLACEMENT_DAYS:
+		return {"action": "clear", "species": ""}  # grieving before replacement
+	if not under_cap(character):
+		return {"action": "clear", "species": ""}  # no open companion slot
+	return {"action": "assign", "species": String(expected[0])}  # acquire
+
+
+# -- s57.39.9 Companion healing ------------------------------------------------
+
+## Heal a wounded trained companion with Medicine (Wound Treatment) — the same
+## mechanism as healing a character (s57.39.9): consumes a Medicine Kit charge, rolls
+## Medicine / Intelligence vs the s57.31 base TN, and on success reduces the companion's
+## wound_total (the heal roll is 1k1, +1 die at Medicine Rank 5 mastery, +1 die per
+## raise). Returns {success, roll_total, tn, wounds_healed, kit_charge_consumed}. The
+## companion's `wound_total` is mutated in place on success.
+static func treat_companion_wound(
+	healer: L5RCharacterData,
+	companion: Dictionary,
+	dice: DiceEngine,
+	raises: int = 0,
+) -> Dictionary:
+	var tn: int = MedicineSystem.BASE_TN
+	var check: Dictionary = SkillResolver.resolve_skill_check(
+		healer, dice, "Medicine", tn, raises, "Wound Treatment", Enums.Trait.INTELLIGENCE)
+	MedicineSystem.consume_kit_charge(healer)
+	var result: Dictionary = {
+		"success": check.get("success", false),
+		"roll_total": check.get("total", 0),
+		"tn": tn,
+		"wounds_healed": 0,
+		"kit_charge_consumed": true,
+	}
+	if not check.get("success", false):
+		return result
+	var medicine_rank: int = SkillResolver.get_skill_rank(healer, "Medicine")
+	var mastery_bonus: int = 1 if medicine_rank >= MedicineSystem.MEDICINE_MASTERY_RANK else 0
+	var healing_dice: int = 1 + mastery_bonus + raises
+	var heal_roll: int = dice.roll_and_keep(healing_dice, 1).total
+	var before: int = int(companion.get("wound_total", 0))
+	var after: int = maxi(0, before - heal_roll)
+	companion["wound_total"] = after
+	result["wounds_healed"] = before - after
+	return result
 
 
 # -- Training tier (s57.39.3) -------------------------------------------------
@@ -169,7 +270,10 @@ static func can_train_subsequent_session(
 		return {"valid": false, "reason": "invalid_context"}
 	if not companion.get("is_alive", false):
 		return {"valid": false, "reason": "companion_not_alive"}
-	if companion.get("fully_trained", false):
+	# A fully-trained companion is no longer trainable — UNLESS it is in the rebonding
+	# window after an ownership transfer (s57.39.2): those TRAIN_ANIMAL sessions establish
+	# the new owner's bond (they do not add training_progress).
+	if companion.get("fully_trained", false) and int(companion.get("rebond_sessions_remaining", 0)) <= 0:
 		return {"valid": false, "reason": "already_fully_trained"}
 	if companion.get("owner_id", -1) != character.character_id:
 		return {"valid": false, "reason": "not_owner"}
@@ -261,6 +365,74 @@ static func create_companion(
 	}
 
 
+# -- Ownership transfer + rebonding (s57.39.2) --------------------------------
+
+## Transfer a companion to a new owner, preserving its training (training_progress /
+## fully_trained) but NOT the bond: owner_id is repointed and rebond_sessions_remaining is
+## set to REBOND_SESSIONS (3) — the new owner must establish their own bond before the
+## Mastery Abilities (commanding, no-flee) function (s57.39.2). Mutates the companion record.
+const REBOND_SESSIONS: int = 3
+
+static func transfer_companion(companion: Dictionary, new_owner_id: int) -> void:
+	companion["owner_id"] = new_owner_id
+	companion["rebond_sessions_remaining"] = REBOND_SESSIONS
+
+
+## A rebonding TRAIN_ANIMAL session (s57.39.2): decrement rebond_sessions_remaining by 1
+## (floor 0). These sessions do NOT modify training_progress (the animal is already trained).
+## Returns the remaining count.
+static func apply_rebonding_session(companion: Dictionary) -> int:
+	var rem: int = maxi(0, int(companion.get("rebond_sessions_remaining", 0)) - 1)
+	companion["rebond_sessions_remaining"] = rem
+	return rem
+
+
+# -- Travel with owner (s57.39.2) ---------------------------------------------
+
+## Companions travel with their owner automatically: set each ALIVE companion's
+## location_province_id to the owner's current province. Dead companions (archived
+## records, is_alive false) are left untouched. Returns the number synced.
+static func sync_companion_locations(owner: L5RCharacterData, owner_province_id: int) -> int:
+	var synced: int = 0
+	for c: Variant in owner.trained_companions:
+		var comp: Dictionary = c as Dictionary
+		if comp.get("is_alive", false):
+			comp["location_province_id"] = owner_province_id
+			synced += 1
+	return synced
+
+
+# -- Companion death (s57.39.9) -----------------------------------------------
+
+## A readable species name for topic text ("WAR_DOG" → "war dog").
+static func species_display(species: String) -> String:
+	return species.to_lower().replace("_", " ")
+
+
+## Build the owner's Tier-4 PERSONAL loss topic for a dead companion (s57.39.9):
+## "[Owner] lost their [species] [name]." NO Glory or Honor change — a personal loss,
+## not a reputation event. subject = the owner; subject_role NEUTRAL (the dead entity is
+## an animal, not a character, and no reputation valence attaches). The caller assigns the
+## topic_id (passed in) and appends to active_topics. Cap recovery is automatic — an
+## archived (is_alive=false) record no longer counts in count_active_companions.
+static func build_death_topic(owner: L5RCharacterData, companion: Dictionary, topic_id: int, ic_day: int) -> TopicData:
+	var t := TopicData.new()
+	t.topic_id = topic_id
+	var sp: String = species_display(String(companion.get("species", "animal")))
+	var nm: String = String(companion.get("name", ""))
+	t.slug = "companion_death_%d_%d" % [owner.character_id, int(companion.get("companion_id", 0))]
+	t.title = "%s lost their %s %s" % [owner.character_name, sp, nm]
+	t.topic_type = "companion_death"
+	t.variant = "companion_death"
+	t.tier = TopicData.Tier.TIER_4
+	t.category = TopicData.Category.PERSONAL
+	t.momentum = TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4)
+	t.subject_character_id = owner.character_id
+	t.subject_role = "NEUTRAL"
+	t.ic_day_created = ic_day
+	return t
+
+
 ## Apply progress from a subsequent TRAIN_ANIMAL session to a companion.
 ## Mutates the companion dictionary. Returns updated companion.
 static func apply_training_progress(companion: Dictionary, progress_gained: int) -> Dictionary:
@@ -278,6 +450,83 @@ static func apply_training_progress(companion: Dictionary, progress_gained: int)
 
 
 # -- Mastery checks (for ASCII-layer use) --------------------------------------
+
+# s57.39 R3 / s24: commonly-domesticated animals trained by a Rank-3+ character may
+# be trained for use by OTHERS (the trained companion is usable by a character other
+# than the trainer). Wired via the TRAIN_ANIMAL `recipient_id` metadata path — a
+# Rank-3+ trainer produces a companion owned by the recipient. No autonomous NPC trigger
+# exists (the GDD specifies none — it is a deliberate/PC-facing capability).
+static func can_train_for_others(trainer_rank: int) -> bool:
+	return trainer_rank >= MASTERY_TRAIN_FOR_OTHERS_RANK
+
+
+# s24.3 R3: "commonly domesticated animals such as dogs, horses, or falcons" may be
+# trained for others. The Lion warcat is a school specialty, not commonly domesticated,
+# so it is excluded; pigeons (message birds) and the war-trained dog/horse variants are
+# domesticated dog/horse/falcon families and are included.
+const COMMONLY_DOMESTICATED: Array[String] = [
+	"DOG", "WAR_DOG", "RIDING_HORSE", "WARHORSE", "FALCON", "PIGEON",
+]
+
+static func is_commonly_domesticated(species_str: String) -> bool:
+	return species_str in COMMONLY_DOMESTICATED
+
+
+## Gate for a FIRST train-for-others session: a Rank-3 trainer trains a commonly-
+## domesticated animal for a recipient, who will own it (counts against the recipient's
+## cap). Validates trainer rank, species, recipient, recipient cap, and trainer context.
+static func can_train_for_others_first(
+	trainer: L5RCharacterData,
+	recipient: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	species_str: String,
+) -> Dictionary:
+	if not can_train_for_others(SkillResolver.get_skill_rank(trainer, "Animal Handling")):
+		return {"valid": false, "reason": "trainer_below_rank_3"}
+	if recipient == null or CharacterStats.is_dead(recipient):
+		return {"valid": false, "reason": "invalid_recipient"}
+	if not is_commonly_domesticated(species_str):
+		return {"valid": false, "reason": "species_not_commonly_domesticated"}
+	if not SPECIES_TABLE.has(species_str):
+		return {"valid": false, "reason": "invalid_species"}
+	var valid_contexts: Array = [
+		Enums.ContextFlag.AT_OWN_HOLDINGS,
+		Enums.ContextFlag.VISITING,
+		Enums.ContextFlag.AT_COURT,
+	]
+	if not (ctx.context_flag in valid_contexts):
+		return {"valid": false, "reason": "invalid_context"}
+	if not under_cap(recipient):
+		return {"valid": false, "reason": "recipient_at_companion_cap"}
+	return {"valid": true}
+
+
+## Gate for a SUBSEQUENT train-for-others session: the Rank-3 trainer continues training
+## a (commonly-domesticated) companion owned by someone else. Unlike the self path, the
+## owner check is intentionally bypassed (training for another is the point).
+static func can_train_for_others_subsequent(
+	trainer: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	companion: Dictionary,
+) -> Dictionary:
+	if not can_train_for_others(SkillResolver.get_skill_rank(trainer, "Animal Handling")):
+		return {"valid": false, "reason": "trainer_below_rank_3"}
+	if not is_commonly_domesticated(companion.get("species", "")):
+		return {"valid": false, "reason": "species_not_commonly_domesticated"}
+	var valid_contexts: Array = [
+		Enums.ContextFlag.AT_OWN_HOLDINGS,
+		Enums.ContextFlag.VISITING,
+		Enums.ContextFlag.AT_COURT,
+	]
+	if not (ctx.context_flag in valid_contexts):
+		return {"valid": false, "reason": "invalid_context"}
+	if not companion.get("is_alive", false):
+		return {"valid": false, "reason": "companion_not_alive"}
+	if companion.get("fully_trained", false) \
+			and int(companion.get("rebond_sessions_remaining", 0)) <= 0:
+		return {"valid": false, "reason": "already_fully_trained"}
+	return {"valid": true}
+
 
 static func can_command_to_attack(trainer_rank: int) -> bool:
 	return trainer_rank >= MASTERY_COMMAND_RANK

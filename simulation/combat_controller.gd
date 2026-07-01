@@ -341,7 +341,7 @@ func _create_unit_character(unit_type: String, variance_seed: int) -> L5RCharact
 			c.agility = 2; c.intelligence = 2
 			c.strength = 2; c.perception = 2
 			c.void_ring = 1
-			c.skills = {"Bo": 1}  # farm tools — closest weapon skill
+			c.skills = {"Staves": 1}  # farm tools — closest weapon skill (bo uses the Staves skill)
 
 		"BANDIT_THUG":
 			c.reflexes = 2; c.awareness = 2
@@ -357,7 +357,7 @@ func _create_unit_character(unit_type: String, variance_seed: int) -> L5RCharact
 			c.agility = 2; c.intelligence = 2
 			c.strength = 2; c.perception = 2
 			c.void_ring = 1
-			c.skills = {"Bo": 1}
+			c.skills = {"Staves": 1}
 
 		"REBEL_ASHIGARU":
 			c.reflexes = 2; c.awareness = 2
@@ -1012,6 +1012,35 @@ func try_stealth_move(dx: int, dy: int) -> Dictionary:
 	return stealth_res
 
 
+# s24 Stealth movement masteries (R3/R5): a Stealthed character covers up to
+# SkillMasterySystem.stealth_move_budget tiles per stealth action (base 1, R3 Water, R5 Water×2),
+# stepping in direction (dx, dy). Rolls Stealth per tile (per-tile model — a longer sneak = more
+# exposure). Stops early on a wall/door/enemy/zone-exit (returns that step's result) or once the
+# stealth roll fails (cover blown — you can't keep gliding while exposed). Returns the terminating
+# step's result dict augmented with `tiles_moved`. Budget 1 (no mastery) == a single try_stealth_move,
+# so this is a drop-in replacement for the player command path.
+func try_stealth_move_run(dx: int, dy: int) -> Dictionary:
+	var player: EntityState = get_player()
+	if player == null or _is_entity_dead(player):
+		return {"blocked": true, "reason": "player_dead", "tiles_moved": 0}
+
+	var budget: int = SkillMasterySystem.stealth_move_budget(player.character)
+	var tiles: int = 0
+	var last: Dictionary = {}
+	while tiles < budget:
+		var r: Dictionary = try_stealth_move(dx, dy)
+		if not r.get("moved", false):
+			# Wall / closed door / enemy (stealth-kill) / zone exit — did not advance this step.
+			r["tiles_moved"] = tiles
+			return r
+		tiles += 1
+		last = r
+		if not _player_stealth:
+			break  # Cover blown on this tile — the stealth run ends.
+	last["tiles_moved"] = tiles
+	return last
+
+
 # =============================================================================
 # -- Traps (s56.20) -----------------------------------------------------------
 # All paths no-op when the map carries no traps, so trap-free missions (every
@@ -1629,6 +1658,7 @@ func _npc_move_toward(es: EntityState, tx: int, ty: int, budget: int) -> bool:
 
 	var moved: bool = false
 	var remaining: int = budget
+	var athletics_r5: bool = SkillMasterySystem.athletics_ignores_difficult_terrain(es.character)
 	for step_vec: Vector2i in path:
 		if remaining <= 0:
 			break
@@ -1644,6 +1674,8 @@ func _npc_move_toward(es: EntityState, tx: int, ty: int, budget: int) -> bool:
 		var cost: int = MovementSystem.terrain_cost(tile)
 		if cost == 0:
 			break
+		if athletics_r5 and cost == 2:
+			cost = 1  # s24 Athletics R5: no difficult-terrain penalty.
 		if remaining < cost:
 			break
 		# Check no other entity is at that tile.
