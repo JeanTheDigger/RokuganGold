@@ -511,6 +511,8 @@ static func get_reachable_tiles(
 
 	var mover_faction: String = state.factions.get(mover_id, FACTION_NEUTRAL)
 	var flying: bool = _is_flying(state, mover_id)
+	# s24 Athletics R5: this mover crosses difficult terrain (cost 2) at cost 1.
+	var athletics_r5: bool = SkillMasterySystem.athletics_ignores_difficult_terrain(state.combatants.get(mover_id))
 	# Build set of enemy positions to block movement through.
 	var enemy_tiles: Dictionary = {}
 	for cid: int in state.positions.keys():
@@ -561,6 +563,8 @@ static func get_reachable_tiles(
 					# Elevation face: cannot walk up a cliff or off a ledge (s4.4 Z-axis).
 					if MovementSystem.is_cliff_step(state.map, pos.x, pos.y, nx, ny):
 						continue
+					if athletics_r5 and step_cost == 2:
+						step_cost = 1  # s24 Athletics R5: no difficult-terrain penalty.
 
 				var new_cost: int = cost + step_cost
 				if new_cost > move_budget:
@@ -8718,6 +8722,7 @@ static func _npc_move_toward(
 	# Move as far along the path as budget allows (stopping before the target's tile).
 	var dest: Vector2i = state.positions.get(npc_id, Vector2i(-1, -1))
 	var cost_used: int = 0
+	var npc_athletics_r5: bool = SkillMasterySystem.athletics_ignores_difficult_terrain(npc)
 	for step: Vector2i in path:
 		# Don't step onto the target's tile.
 		if step == state.positions.get(target_id, Vector2i(-1, -1)):
@@ -8726,6 +8731,8 @@ static func _npc_move_toward(
 		var step_cost: int = MovementSystem.terrain_cost(tile)
 		if step_cost == 0:
 			break
+		if npc_athletics_r5 and step_cost == 2:
+			step_cost = 1  # s24 Athletics R5: no difficult-terrain penalty.
 		if cost_used + step_cost > budget:
 			break
 		dest = step
@@ -9524,11 +9531,14 @@ static func _companion_step_toward(
 	var budget: int = free_move_budget(state, cid, character)
 	var dest: Vector2i = state.positions.get(cid, Vector2i(-1, -1))
 	var cost: int = 0
+	var athletics_r5: bool = SkillMasterySystem.athletics_ignores_difficult_terrain(character)
 	for step: Vector2i in path:
 		# Don't step onto an occupied goal tile (e.g. trailing the player).
 		if step == goal and _player_id_at(state, goal) >= 0:
 			break
 		var tcost: int = MovementSystem.terrain_cost(state.map.get_tile(step.x, step.y))
+		if athletics_r5 and tcost == 2:
+			tcost = 1  # s24 Athletics R5: no difficult-terrain penalty.
 		if tcost == 0 or cost + tcost > budget:
 			break
 		dest = step

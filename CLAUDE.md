@@ -3793,9 +3793,9 @@ helpers).
   Chain Weapons R3/R5/R7; Staves R3/R5/R7 (+ base doubles-armor); Ninjutsu R3/R5/R7.
 - **DEFERRED / BLOCKED (no invention):** **Acting R3/R5/R7** (disguise TN −5/−10/−15) — no mundane
   disguise-creation action; the CombatController disguise layer is SPELL-based (Spellcraft/Air), not
-  Acting-skill. **Athletics R3/R5** (terrain movement) — `individual_combat.ATHLETICS_TERRAIN_REDUCTION`
-  const exists but has NO consumer; tile movement uses flat cost (1/2), not the basic/moderate/difficult
-  Water-penalty model. **Investigation R3/R7** (extra Search attempts) — action-economy loop absent from
+  Acting-skill. **Athletics R5** (no terrain penalty) — **NOW WIRED** into the tile-movement layer (see
+  the dedicated entry below); **Athletics R3** (moderate/half-difficult) stays deferred (no faithful hook
+  in the binary tile-cost model). **Investigation R3/R7** (extra Search attempts) — action-economy loop absent from
   the investigation layer. **Divination R5** (2nd roll no-VP) — Divination is not a rolled sim action.
   **Meditation R5** (Fasting TN −5) — no individual food/water mechanic (starvation is province-level).
   **Sailing R5** (+5 cooperative) — `cooperative_roll_bonus` READY but DORMANT: no Sailing skill check
@@ -3804,6 +3804,31 @@ helpers).
   (Several blocked items — Acting, Athletics terrain, Stealth R7 — are exploration/combat-layer and
   headless-only anyway under the PC-travel HOLD.) No new wiring warranted without an owner value/system
   decision; do not re-audit without those systems.
+
+### s24 Athletics R5 terrain mastery — wired into tile movement + dead const removed (2026-07-01, runtime-verified)
+Athletics R5 (s24: "No movement penalties regardless of terrain") is now wired into the LIVE tile-movement
+layer. The R3/R5 logic already existed in `IndividualCombat.get_water_ring_for_terrain` (the basic/moderate/
+difficult Water-Ring-penalty model), but its only callers (`get_*_move_feet`) had ZERO consumers — a dormant
+feet model the tile layer never touches (tile movement uses `MovementSystem.terrain_cost`, flat 1/2). The
+faithful, zero-invention tile hook: a difficult-terrain tile costs 2 (its "penalty" = the extra +1), so R5
+makes such tiles cost 1 for that mover — a **uniform** "no penalty" needing NO per-tile tier mapping.
+- **`SkillMasterySystem.athletics_ignores_difficult_terrain(character)`** → true at Athletics ≥ 5 (null-safe).
+- Applied at the **4 movement-COST sites** (each reduces `cost==2 → 1` when the mover has R5; the mover's
+  character is in scope at every one — `state.combatants[id]` / `npc` / `character` / `es.character`):
+  `AsciiMapCombatOrchestrator.get_reachable_tiles` (mirrors its existing per-mover `flying` override),
+  the NPC path-move loop, the companion/free-move loop, and `CombatController._npc_move_toward`.
+  `MovementSystem.check_step`'s `.cost` is NOT consumed for any budget (callers read only `.ok`/`.is_door`/
+  `.is_exit`), so it needed no change. Flyers unaffected (their branch already forces cost 1).
+- **Athletics R3 stays DEFERRED**: "moderate no longer impedes / difficult −1 instead of −2" has no faithful
+  hook in the binary tile-cost model (no moderate tier; a half-penalty on a +1 cost isn't integer). It
+  remains represented only in the dormant feet model.
+- **Dead const removed:** `IndividualCombat.ATHLETICS_TERRAIN_REDUCTION` was a never-read duplicate of the
+  inline R3/R5 logic in `get_water_ring_for_terrain` — deleted (replaced with a pointer comment).
+- Runtime-verified (Godot 4.6.2, headless): helper exact (0-4→false, 5/7→true, null→false); in a live
+  `get_reachable_tiles` across two full-height CROPS columns (cost 2), an Athletics-5 mover reaches x=8 vs
+  a non-mastery / R3 mover's x=6 (crosses difficult terrain at cost 1 → 2 tiles farther); R3 == no-mastery
+  (confirming it's not tile-wired). Same PC-travel HOLD live-reachability caveat as the whole tile-combat
+  layer — driver-verified, not a live session.
 
 ### s24 Stealth movement masteries — R3/R5 player stealth-move budget (2026-07-01, runtime-verified)
 The formerly-deferred s24 Stealth movement masteries (s24 lines 423-427, LOCKED). The base rule limits a

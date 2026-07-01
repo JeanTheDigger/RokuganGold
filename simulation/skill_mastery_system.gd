@@ -283,6 +283,18 @@ static func athletics_move_burst(character: L5RCharacterData) -> int:
 	return 1 if int(character.skills.get("Athletics", 0)) >= MASTERY_RANK_7 else 0
 
 
+# Athletics R5 (s24): "No movement penalties regardless of terrain." In the tile-movement model a
+# difficult-terrain tile costs 2 (its "penalty" is the extra +1 cost); R5 makes such tiles cost 1
+# for that mover — a uniform "no penalty," so no per-tile tier mapping is needed. Returns true at
+# Athletics ≥ 5. (Athletics R3, "moderate no longer impedes / difficult −1 instead of −2," has no
+# faithful hook in the binary tile-cost model — no moderate tier, and a half-penalty on a +1 cost
+# isn't integer — so R3 stays deferred to the dormant feet model in IndividualCombat.)
+static func athletics_ignores_difficult_terrain(character: L5RCharacterData) -> bool:
+	if character == null:
+		return false
+	return int(character.skills.get("Athletics", 0)) >= MASTERY_RANK_5
+
+
 # Action cost to READY (draw / string) a weapon (s24 "ready as a Free Action" masteries). Returns
 # "free" / "simple" / "complex". The BASE costs are PROVISIONAL L5R 4e core values (the project GDD
 # gives no base): a melee weapon is readied/sheathed as a Simple Action; a bow must be strung as a

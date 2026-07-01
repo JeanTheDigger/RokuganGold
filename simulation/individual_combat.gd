@@ -152,10 +152,9 @@ const MOVEMENT_TERRAIN_WATER_PENALTY: Dictionary = {
 	"difficult": 2,
 }
 
-const ATHLETICS_TERRAIN_REDUCTION: Dictionary = {
-	3: {"basic": 0, "moderate": -1, "difficult": -1},  # Rank 3
-	5: {"basic": 0, "moderate": -1, "difficult": -2},  # Rank 5 (eliminates all)
-}
+# (Athletics R3/R5 terrain masteries are applied inline in get_water_ring_for_terrain() — the
+# former ATHLETICS_TERRAIN_REDUCTION const here was a dead duplicate and was removed. The live
+# tile-movement layer applies R5 via SkillMasterySystem.athletics_ignores_difficult_terrain().)
 
 # -- Off-hand and Extra Attack Constants (s40) ---------------------------------
 

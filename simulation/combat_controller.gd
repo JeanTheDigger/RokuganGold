@@ -1658,6 +1658,7 @@ func _npc_move_toward(es: EntityState, tx: int, ty: int, budget: int) -> bool:
 
 	var moved: bool = false
 	var remaining: int = budget
+	var athletics_r5: bool = SkillMasterySystem.athletics_ignores_difficult_terrain(es.character)
 	for step_vec: Vector2i in path:
 		if remaining <= 0:
 			break
@@ -1673,6 +1674,8 @@ func _npc_move_toward(es: EntityState, tx: int, ty: int, budget: int) -> bool:
 		var cost: int = MovementSystem.terrain_cost(tile)
 		if cost == 0:
 			break
+		if athletics_r5 and cost == 2:
+			cost = 1  # s24 Athletics R5: no difficult-terrain penalty.
 		if remaining < cost:
 			break
 		# Check no other entity is at that tile.
