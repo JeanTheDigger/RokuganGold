@@ -3863,6 +3863,29 @@ multi-tile `_npc_move_toward`), so I mirrored it for the player.
   Same PC-travel HOLD live-reachability caveat as the whole CombatController stealth layer — driver-verified,
   not a live session. With this + Forgery R3/R7, the s24 Low-Skill masteries are complete except R7 (blocked).
 
+### Correctness sweep — dropped-effect + dead-function classes (2026-07-01, read-only, no bugs found)
+Two produced-vs-consumed audits; both came back clean (a confirmation, not a fix):
+- **Dropped-effect-on-failure class — CLEAN (0 instances).** A rigorous parser scanned every `return {…}`
+  block in `action_executor.gd` for the recurring bug where a `success:false` result carries a consumable
+  effect key (honor_change / glory_change / infamy / disposition / koku_cost / witness_disposition_loss …)
+  but omits `effects.failed=true`, so `EffectApplicator`'s line-27 gate silently drops it (the ancestors:
+  DISPATCH_COURTIER, SEAL_WALL_BREACH, ARRANGE_MARRIAGE, INTIMIDATE). Zero survive — every failure path that
+  carries a cost now correctly sets `failed:true`. The class is fully patched.
+- **Dead static functions — 81 candidates, ALL benign (no functional bug).** Swept the newer system files
+  (theater/garden/sculpture/painting/origami/ikebana/geisha/animal_handling/companion/artisan/spiritual_*/
+  fire/trap/kolat_*) for `static func`s with no production call site. Every candidate is one of: (a)
+  **forward-wiring for a deferred layer** (the s56.16 spiritual-encounter combat loop, the companion command
+  UI, the removed artisan NPC pipeline — all documented deferred), or (b) a **dead pure-system helper
+  duplicate superseded by live orchestrator-local / inline logic** — the systems FUNCTION, the pure helper is
+  just unused. Spot-verified three: `AnimalHandlingSystem.can_command_to_attack`/`has_no_flee_override` (the
+  R5-command / R7-no-flee RULES are live inline in `AsciiMapCombatOrchestrator.command_animal`/
+  `execute_animal_turn` via the `MASTERY_*_RANK` constants; the helpers are test-only), `PaintingSystem.inject_painting_context`
+  (live via the orchestrator's own `DayOrchestrator._inject_painting_context`), and `FireSystem.standing_damage`/
+  `passthrough_damage` (live via the orchestrator's `_fire_damage_for`). NOT removed — tests reference them and
+  the project deliberately keeps forward-wired functions; do not mistake these 81 for bugs on a future sweep.
+  (Doc precision: the earlier s57.39 note calling the two AnimalHandling helpers "LIVE in the ASCII combat
+  layer" means the RULES are live inline — the named helpers themselves are unused test-only wrappers.)
+
 ### s24 Skill Mastery Abilities — "Low Skill" tranche (Forgery R3/R7; Intimidation/Temptation/Sleight/Stealth already wired or blocked) (2026-06-30, runtime-verified)
 Wired the s24 "Low Skill" masteries the owner pasted. Audit result: **Intimidation R5** (+5 to
 contested rolls) and **Temptation R5** (+5 to contested rolls) were already in
