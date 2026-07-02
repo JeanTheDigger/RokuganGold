@@ -389,6 +389,11 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id, dice_engine,
 	)
 
+	# s57.18: a lord's ORDER_DEPLOY toward a coastal target sails their clan fleet there.
+	_process_fleet_deployment_writebacks(
+		day_result.get("results", []), ships, characters_by_id, water_subtiles,
+	)
+
 	var crime_results: Array = _process_crime_detection(
 		day_result.get("results", []),
 		characters_by_id,
@@ -19956,6 +19961,51 @@ static func _disembark_ship_passengers(
 			continue
 		if c.aboard_ship_id == mover_id:
 			SailingSystem.disembark(c, dest_settlement)
+
+
+## s57.18: DEPLOY_ARMY covers fleets ("a fleet is an army of ship Companies"). When a
+## lord fires ORDER_DEPLOY toward a province, their clan's idle fleet ships sail there
+## via NavalMovementSystem.begin_voyage. Self-gating: begin_voyage only succeeds when
+## the target province has a coastal port the ship can reach by water — so land
+## deployments, inland targets, and the (empty) pre-map graph are all harmless no-ops.
+## Named vessels (personal transport, owner-patron) are NOT fleet assets and are
+## excluded. Ships already there, moving, destroyed, or captured are skipped.
+## LIMITATION (tuning): every reachable idle clan ship deploys (the whole available
+## fleet); once inter-port distance data exists this could restrict to the nearest.
+## Same-clan multi-lord deploys the same tick resolve last-target-wins.
+static func _process_fleet_deployment_writebacks(
+	day_results: Array,
+	ships: Array,
+	characters_by_id: Dictionary,
+	water_subtiles: Array,
+) -> void:
+	if ships.is_empty() or water_subtiles.is_empty():
+		return
+
+	var clan_targets: Dictionary = {}  # owning_clan -> target province id
+	for entry: Dictionary in day_results:
+		if entry.get("action_id", "") != "ORDER_DEPLOY" or not entry.get("success", false):
+			continue
+		var target_prov: int = entry.get("target_province_id", -1)
+		if target_prov < 0:
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(entry.get("character_id", -1))
+		if lord == null or CharacterStats.is_dead(lord) or lord.clan.is_empty():
+			continue
+		clan_targets[lord.clan] = target_prov
+	if clan_targets.is_empty():
+		return
+
+	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
+	for ship: ShipData in ships:
+		if ship.is_destroyed or ship.is_captured or ship.is_moving:
+			continue
+		if not clan_targets.has(ship.owning_clan):
+			continue
+		var dest_prov: int = clan_targets[ship.owning_clan]
+		if ship.current_province_id == dest_prov and ship.current_subtile_id < 0:
+			continue  # fleet already in port at the destination
+		NavalMovementSystem.begin_voyage(ship, index, dest_prov)
 
 
 static func _process_naval_battle_triggers(
