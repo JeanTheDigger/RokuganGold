@@ -455,6 +455,9 @@ static func execute(
 	if action_id == "REQUEST_PERFORMANCE":
 		return _execute_request_performance(action, character, ctx)
 
+	if action_id == "REQUEST_PASSAGE":
+		return _execute_request_passage(action, character)
+
 	if action_id == "CONDUCT_TEA_CEREMONY":
 		return _execute_conduct_tea_ceremony(action, character, ctx, dice_engine, characters_by_id)
 
@@ -5604,6 +5607,51 @@ static func _execute_transfer_koku(
 		"recipient_id": recipient_id,
 		"requires_koku_transfer_fulfillment": true,
 		"disposition_change": 3,
+	}
+
+
+# -- REQUEST_PASSAGE (s57.42.6-7) ----------------------------------------------
+# The requester asks a vessel's captain/owner for sea passage to a destination. The
+# executor only PACKAGES the request (it has no vessel/decider collections); the day
+# writeback (_process_passage_writebacks) applies the s57.42 throttle, evaluates
+# acceptance, boards the requester, and launches the vessel's voyage. 0 AP,
+# Category 11 (s57.42.6). Metadata carries the vessel/decider/destination that the
+# (map-gated) co-located-vessel discovery supplies.
+
+static func _execute_request_passage(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+) -> Dictionary:
+	var meta: Dictionary = action.metadata
+	var vessel_id: int = int(meta.get("vessel_id", -1))
+	var decider_id: int = int(meta.get("decider_id", -1))
+	var destination_province: int = int(meta.get("destination_province", -1))
+	if vessel_id < 0 or decider_id < 0 or destination_province < 0:
+		return {
+			"success": false,
+			"action_id": "REQUEST_PASSAGE",
+			"character_id": character.character_id,
+			"reason": "no_passage_target",
+		}
+	return {
+		"success": true,
+		"action_id": "REQUEST_PASSAGE",
+		"character_id": character.character_id,
+		"target_npc_id": decider_id,
+		"target_province_id": destination_province,
+		"effects": {
+			"requires_passage_resolution": true,
+			"vessel_id": vessel_id,
+			"decider_id": decider_id,
+			"destination_province": destination_province,
+			"koku_offered": float(meta.get("koku_offered", 0.0)),
+			"schedule_compatible": bool(meta.get("schedule_compatible", true)),
+			"standing_orders_refuse": bool(meta.get("standing_orders_refuse", false)),
+			"polite": bool(meta.get("polite", true)),
+			"is_owner_grant": bool(meta.get("is_owner_grant", false)),
+			"last_refused_day": int(meta.get("last_refused_day", -1)),
+			"rude_refusal": bool(meta.get("rude_refusal", false)),
+		},
 	}
 
 

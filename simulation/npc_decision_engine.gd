@@ -749,6 +749,29 @@ static func _apply_protective_ward_precondition_filter(
 	return options
 
 
+# -- Phase 4c: Passage Precondition Filter (s57.42.6) ------------------------
+# Removes REQUEST_PASSAGE unless a co-located vessel has been discovered for this
+# character (passage_vessel_id injected). Until the water map + co-located-vessel
+# injection exist there is no vessel to ask, so the request is never a wasteful
+# no-op selection — it self-gates here.
+
+static func _apply_passage_precondition_filter(
+	options: Array,
+	_character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	var present: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "REQUEST_PASSAGE":
+			present = true
+			break
+	if not present:
+		return options
+	if int(ctx.known_objectives.get("passage_vessel_id", -1)) < 0:
+		return _remove_action(options, "REQUEST_PASSAGE")
+	return options
+
+
 # -- Phase 4c: Garden / Bonsai Precondition Filter (s57.23a) ------------------
 # Removes garden and bonsai actions when required state is absent.
 
@@ -1388,6 +1411,8 @@ static func run(
 	options = _apply_garden_precondition_filter(options, character, ctx)
 	options = _apply_world_is_truth_precondition_filter(options, character, chars_by_id)
 	options = _apply_protective_ward_precondition_filter(options, character, ctx)
+
+	options = _apply_passage_precondition_filter(options, character, ctx)
 	options = _apply_commune_precondition_filter(options, character)
 	options = _apply_commerce_precondition_filter(options, character, ctx)
 	options = _apply_arrived_travel_filter(options, need, ctx)
@@ -1820,6 +1845,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PETITION_RONIN",
 				"HIRE_RONIN",
 				"TERMINATE_CONTRACT",
+				"REQUEST_PASSAGE",
 				"CRAFT",
 				"CULTIVATE_GARDEN", "TEND_BONSAI", "DISPLAY_BONSAI",
 				"COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
@@ -1990,6 +2016,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"INVOKE_FAVOR": 1,
 		"TREAT_WOUND": 1,
 		"REQUEST_PERFORMANCE": 0,
+		"REQUEST_PASSAGE": 0,
 		"ANNOUNCE_HUNT": 0,
 		"REQUEST_HUNT_INVITATION": 0,
 		"CANCEL_HUNT": 0,
@@ -3495,6 +3522,19 @@ static func _populate_action_metadata(
 			option.metadata["is_named_vessel"] = true
 			option.metadata["vessel_purpose"] = NamedVesselData.Purpose.TRANSPORT
 			option.metadata["vessel_owner_id"] = ctx.character_id
+	elif option.action_id == "REQUEST_PASSAGE":
+		# Destination = the travel target; the vessel + its decider (captain/owner) come
+		# from co-located-vessel discovery, injected via known_objectives when the water
+		# map exists. Until then vessel_id is -1 and the precondition filter removes the
+		# action (and the executor would no-op), so this is turnkey, not wasteful.
+		option.metadata = {
+			"vessel_id": ctx.known_objectives.get("passage_vessel_id", -1),
+			"decider_id": ctx.known_objectives.get("passage_decider_id", -1),
+			"destination_province": need.target_province_id,
+			"koku_offered": float(ctx.known_objectives.get("passage_koku_offered", 0.0)),
+			"schedule_compatible": bool(ctx.known_objectives.get("passage_schedule_compatible", true)),
+			"polite": true,
+		}
 	elif option.action_id == "GOSSIP":
 		var subject: int = need.target_npc_id if need.target_npc_id >= 0 else -1
 		if subject < 0:

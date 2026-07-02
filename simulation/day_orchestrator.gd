@@ -395,6 +395,12 @@ static func advance_day(
 		day_result.get("results", []), ships, characters_by_id, water_subtiles,
 	)
 
+	# s57.42: resolve REQUEST_PASSAGE — board the requester and launch the vessel voyage.
+	_process_passage_writebacks(
+		day_result.get("results", []), characters_by_id, ships, named_vessels,
+		water_subtiles, ic_day,
+	)
+
 	var crime_results: Array = _process_crime_detection(
 		day_result.get("results", []),
 		characters_by_id,
@@ -20010,6 +20016,79 @@ static func _process_fleet_deployment_writebacks(
 		if ship.current_province_id == dest_prov and ship.current_subtile_id < 0:
 			continue  # fleet already in port at the destination
 		NavalMovementSystem.begin_voyage(ship, index, dest_prov)
+
+
+## s57.42.6-7: resolve REQUEST_PASSAGE. The executor packaged each request; here the
+## decider (captain/owner) evaluates acceptance, and on accept the requester boards
+## (aboard_ship_id) and the vessel launches its voyage toward the destination province
+## (existing disembark hook drops the passenger on arrival). Applies the daily throttle
+## and rude-refusal disposition shift. Handles both named vessels and fleet ships
+## (shared id space). Inert until the water graph + a passage request exist.
+## LIMITATION: owner-granted-passage 3-point Obligation (s57.42.7) is not created here
+## (obligation-system follow-on); per-captain refusal cooldown is metadata-supplied.
+static func _process_passage_writebacks(
+	day_results: Array,
+	characters_by_id: Dictionary,
+	ships: Array,
+	named_vessels: Array,
+	water_subtiles: Array,
+	ic_day: int,
+) -> void:
+	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
+	var vessel_by_id: Dictionary = {}
+	for s: ShipData in ships:
+		vessel_by_id[s.ship_id] = s
+	for v: NamedVesselData in named_vessels:
+		vessel_by_id[v.vessel_id] = v
+
+	for entry: Dictionary in day_results:
+		if entry.get("action_id", "") != "REQUEST_PASSAGE" or not entry.get("success", false):
+			continue
+		var effects: Dictionary = entry.get("effects", {})
+		if not effects.get("requires_passage_resolution", false):
+			continue
+		var requester: L5RCharacterData = characters_by_id.get(entry.get("character_id", -1))
+		var decider: L5RCharacterData = characters_by_id.get(effects.get("decider_id", -1))
+		if requester == null or CharacterStats.is_dead(requester):
+			continue
+		if decider == null or CharacterStats.is_dead(decider):
+			continue
+
+		# Daily throttle + per-captain refusal cooldown (s57.42.6-7).
+		if not SailingSystem.can_request_passage(
+				requester.passage_request_count_today, ic_day,
+				int(effects.get("last_refused_day", -1))):
+			continue
+		requester.passage_request_count_today += 1
+
+		var disposition: int = requester_disposition_from(decider, requester.character_id)
+		var eval: Dictionary = SailingSystem.evaluate_passage_request(
+			decider, disposition,
+			float(effects.get("koku_offered", 0.0)),
+			bool(effects.get("schedule_compatible", true)),
+			bool(effects.get("standing_orders_refuse", false)),
+			requester.status,
+			bool(effects.get("polite", true)),
+		)
+		if eval.get("accepted", false):
+			var vessel_id: int = int(effects.get("vessel_id", -1))
+			var dest_prov: int = int(effects.get("destination_province", -1))
+			requester.aboard_ship_id = vessel_id
+			var vessel: Object = vessel_by_id.get(vessel_id)
+			if vessel != null and not vessel.is_moving \
+					and vessel.voyage_destination_province != dest_prov:
+				NavalMovementSystem.begin_voyage(vessel, index, dest_prov)
+		else:
+			# Rude refusal costs the requester disposition (polite refusal is free).
+			var shift: int = SailingSystem.refusal_disposition_shift(
+				bool(effects.get("rude_refusal", false)), 3)
+			if shift != 0:
+				var cur: int = decider.disposition_values.get(requester.character_id, 0)
+				decider.disposition_values[requester.character_id] = clampi(cur + shift, -100, 100)
+
+
+static func requester_disposition_from(decider: L5RCharacterData, requester_id: int) -> int:
+	return decider.disposition_values.get(requester_id, 0)
 
 
 static func _process_naval_battle_triggers(
