@@ -78,6 +78,12 @@ var last_targeted_province_id: Array[int] = [-1]
 
 # -- Naval System (s11.9) -----------------------------------------------------
 var ships: Array[ShipData] = []
+## Named-NPC individual vessels (owner-patron pattern, s57.42.2) — distinct from
+## military fleet ships above.
+var named_vessels: Array[NamedVesselData] = []
+## Shared ship/vessel ID counter for both ships and named_vessels (a named vessel
+## may join a battle wrapped as a ship Company, so IDs must not collide).
+var next_ship_id: Array[int] = [1]
 
 # -- Gempukku / Population (s52) -----------------------------------------------
 var children: Array[ChildRecord] = []
@@ -392,6 +398,8 @@ func advance_one_day() -> Dictionary:
 		active_okiyas,
 		next_okiya_id,
 		navigation_zones,
+		named_vessels,
+		next_ship_id,
 	)
 	_apply_succession_updates(result)
 	return result

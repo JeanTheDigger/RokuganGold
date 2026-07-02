@@ -253,10 +253,28 @@ static func validate_temple(
 	return {"valid": true}
 
 
+## A ship is commissioned at a PORT CITY the lord controls (owner ruling 2026-07-02,
+## per s57.20 "settlement with shipbuilding capability"). Port city = a settlement
+## carrying "port" infrastructure OR a CITY-type settlement in a coastal province.
+## Replaces the previous "shipyard" gate: no settlement is ever given "shipyard"
+## infrastructure at world-gen, so that gate made COMMISSION_SHIP impossible to
+## satisfy. `is_coastal_province` is supplied by the caller (the commissioning
+## settlement's province.is_coastal).
+static func is_port_city(settlement: SettlementData, is_coastal_province: bool) -> bool:
+	if settlement == null:
+		return false
+	if settlement.has_infrastructure("port"):
+		return true
+	if is_coastal_province and settlement.settlement_type == Enums.SettlementType.CITY:
+		return true
+	return false
+
+
 static func validate_ship_commission(
 	character: L5RCharacterData,
 	ship_class: Enums.ShipClass,
 	settlement: SettlementData,
+	is_coastal_province: bool = false,
 ) -> Dictionary:
 	if not has_authority(ConstructionData.ConstructionType.SHIP, character):
 		return {"valid": false, "reason": "insufficient_authority"}
@@ -267,8 +285,8 @@ static func validate_ship_commission(
 	if settlement.koku_stockpile < cost:
 		return {"valid": false, "reason": "insufficient_koku"}
 
-	if not settlement.has_infrastructure("shipyard"):
-		return {"valid": false, "reason": "no_shipyard"}
+	if not is_port_city(settlement, is_coastal_province):
+		return {"valid": false, "reason": "no_port_city"}
 
 	return {"valid": true}
 

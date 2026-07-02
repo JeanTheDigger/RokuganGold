@@ -4476,6 +4476,12 @@ static func _execute_construction(
 		"dedicated_fortune": meta.get("dedicated_fortune", -1),
 		"ship_class": meta.get("ship_class", -1),
 		"shrine_tier": meta.get("shrine_tier", "roadside"),
+		# COMMISSION_SHIP: produce an owner-patron NamedVesselData (s57.42.2) instead
+		# of a military ShipData when the metadata requests it. Default false = the
+		# existing lord/military clan-ship path.
+		"is_named_vessel": meta.get("is_named_vessel", false),
+		"vessel_owner_id": meta.get("vessel_owner_id", -1),
+		"vessel_purpose": meta.get("vessel_purpose", 0),
 	}
 
 	return {

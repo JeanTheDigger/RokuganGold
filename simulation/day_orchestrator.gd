@@ -109,6 +109,8 @@ static func advance_day(
 	active_okiyas: Array = [],
 	next_okiya_id: Array = [1],
 	navigation_zones: Array = [],
+	named_vessels: Array = [],
+	next_ship_id: Array = [1],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -148,7 +150,7 @@ static func advance_day(
 	_process_companion_owner_deaths(characters, characters_by_id)
 	_process_companion_locations(characters, character_province_map)
 	_process_companion_deaths(characters, active_topics, next_topic_id, ic_day)
-	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
+	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state, named_vessels)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
@@ -1608,6 +1610,7 @@ static func advance_day(
 		_process_construction_completions(
 			constructions, settlements, provinces, ships, dice_engine,
 			next_settlement_id, active_topics, next_topic_id, ic_day,
+			named_vessels, next_ship_id,
 		)
 		_process_organic_villages(
 			provinces, settlements, next_settlement_id,
@@ -22203,6 +22206,9 @@ static func _process_construction_effects(
 		var dedicated_fortune: int = int(effects.get("dedicated_fortune", -1))
 		var ship_class_val: int = int(effects.get("ship_class", -1))
 		var shrine_tier: String = effects.get("shrine_tier", "roadside")
+		var is_named_vessel: bool = effects.get("is_named_vessel", false)
+		var vessel_owner_id: int = int(effects.get("vessel_owner_id", -1))
+		var vessel_purpose: int = int(effects.get("vessel_purpose", 0))
 
 		var result: Dictionary = _apply_construction_order(
 			action_id, character as L5RCharacterData, province_id, settlement_id,
@@ -22210,6 +22216,7 @@ static func _process_construction_effects(
 			provinces, settlements, constructions,
 			next_settlement_id, next_construction_id, ic_day,
 			ships, dice_engine,
+			is_named_vessel, vessel_owner_id, vessel_purpose,
 		)
 		result["character_id"] = char_id
 		result["action_id"] = action_id
@@ -22235,6 +22242,9 @@ static func _apply_construction_order(
 	ic_day: int,
 	ships: Array,
 	_dice_engine: DiceEngine,
+	is_named_vessel: bool = false,
+	vessel_owner_id: int = -1,
+	vessel_purpose: int = 0,
 ) -> Dictionary:
 	var province: Variant = provinces.get(province_id)
 
@@ -22374,8 +22384,10 @@ static func _apply_construction_order(
 				return {"applied": false, "reason": "settlement_not_found"}
 
 			var sc: Enums.ShipClass = ship_class_val as Enums.ShipClass
+			var ship_prov: Variant = provinces.get((target_settlement_2 as SettlementData).province_id)
+			var ship_coastal: bool = ship_prov != null and (ship_prov as ProvinceData).is_coastal
 			var valid_6: Dictionary = ConstructionSystem.validate_ship_commission(
-				character, sc, target_settlement_2 as SettlementData,
+				character, sc, target_settlement_2 as SettlementData, ship_coastal,
 			)
 			if not valid_6.get("valid", false):
 				return {"applied": false, "reason": valid_6.get("reason", "invalid")}
@@ -22390,6 +22402,13 @@ static func _apply_construction_order(
 				(target_settlement_2 as SettlementData).province_id, ic_day,
 				cost_2, 0.0, 0.0, settlement_id, false, -1, ship_class_val,
 			)
+			# Stamp ownership + named-vessel intent so the completion writeback can
+			# build the correct model (military ShipData vs NamedVesselData) without
+			# a later character lookup.
+			cd_4.owning_clan = character.clan
+			cd_4.is_named_vessel = is_named_vessel
+			cd_4.vessel_owner_id = vessel_owner_id if vessel_owner_id >= 0 else character.character_id
+			cd_4.vessel_purpose = vessel_purpose
 			next_construction_id[0] += 1
 			constructions.append(cd_4)
 			return {"applied": true, "type": "ship", "queued": true, "construction_id": cd_4.construction_id}
@@ -22407,6 +22426,8 @@ static func _process_construction_completions(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	named_vessels: Array = [],
+	next_ship_id: Array = [1],
 ) -> void:
 	var completed: Array = ConstructionSystem.tick_construction_queue(constructions)
 
@@ -22464,22 +22485,43 @@ static func _process_construction_completions(
 					(target_s as SettlementData).infrastructure.append("forge")
 
 			ConstructionData.ConstructionType.SHIP:
-				var ship := ShipData.new()
-				ship.ship_id = next_settlement_id[0]
-				next_settlement_id[0] += 1
-				ship.ship_class = cd.ship_class
-				ship.current_province_id = cd.province_id
-				ship.ic_day_launched = ic_day
-				var stats: Dictionary = NavalSystem.SHIP_STATS.get(ship.ship_class, {})
-				ship.max_health = int(stats.get("health", 100))
-				ship.health = ship.max_health
-				ship.attack = int(stats.get("attack", 3))
-				ship.defense = int(stats.get("defense", 3))
-				ship.morale = int(stats.get("morale", 12))
-				ship.morale_defense = int(stats.get("morale_defense", 4))
-				ship.cargo_capacity = float(stats.get("cargo", 0.3))
-				ship.construction_cost = float(stats.get("construction_cost", 3.0))
-				ships.append(ship)
+				if cd.is_named_vessel:
+					# Owner-patron individual vessel (s57.42.2) — a NamedVesselData,
+					# not a military fleet Company.
+					var vessel := NamedVesselData.new()
+					vessel.vessel_id = next_ship_id[0]
+					next_ship_id[0] += 1
+					vessel.ship_class = cd.ship_class
+					vessel.owner_id = cd.vessel_owner_id
+					vessel.captain_id = cd.vessel_owner_id
+					vessel.owning_clan = cd.owning_clan
+					vessel.purpose = cd.vessel_purpose
+					vessel.current_province_id = cd.province_id
+					vessel.ic_day_launched = ic_day
+					var vstats: Dictionary = NavalSystem.SHIP_STATS.get(vessel.ship_class, {})
+					vessel.cargo_capacity = float(vstats.get("cargo", 0.3))
+					named_vessels.append(vessel)
+				else:
+					var ship := ShipData.new()
+					ship.ship_id = next_ship_id[0]
+					next_ship_id[0] += 1
+					ship.ship_class = cd.ship_class
+					# owning_clan is required for naval-battle pairing and the
+					# naval-threat scan; without it a commissioned ship counted for
+					# nothing (previously never set).
+					ship.owning_clan = cd.owning_clan
+					ship.current_province_id = cd.province_id
+					ship.ic_day_launched = ic_day
+					var stats: Dictionary = NavalSystem.SHIP_STATS.get(ship.ship_class, {})
+					ship.max_health = int(stats.get("health", 100))
+					ship.health = ship.max_health
+					ship.attack = int(stats.get("attack", 3))
+					ship.defense = int(stats.get("defense", 3))
+					ship.morale = int(stats.get("morale", 12))
+					ship.morale_defense = int(stats.get("morale_defense", 4))
+					ship.cargo_capacity = float(stats.get("cargo", 0.3))
+					ship.construction_cost = float(stats.get("construction_cost", 3.0))
+					ships.append(ship)
 
 		_generate_construction_topic(
 			cd, active_topics, next_topic_id, ic_day,
@@ -22599,13 +22641,12 @@ static func _populate_infrastructure_intelligence(
 	settlements: Array,
 	ships: Array,
 	worship_state: Dictionary,
+	named_vessels: Array = [],
 ) -> void:
 	var worship_failing: Dictionary = {}  # province_id → clan
 	var border_no_fort: Dictionary = {}  # province_id → clan
 	var surplus_pu: Dictionary = {}  # province_id → clan
 	var coastal: bool = false
-	var has_naval_assets_flag: bool = false
-	var naval_threat: bool = false
 
 	var province_settlements: Dictionary = {}
 	for s: SettlementData in settlements:
@@ -22661,30 +22702,32 @@ static func _populate_infrastructure_intelligence(
 		if prov.is_coastal:
 			coastal = true
 
-	# Coastal / naval detection
-	for s: ShipData in ships:
-		if not s.is_destroyed:
-			has_naval_assets_flag = true
-			break
-
-	# Naval threat: at war AND enemy clan has ships
+	# Per-clan naval assets/threat (s57.18). A clan controls naval assets iff it owns
+	# at least one non-destroyed ship (military ShipData) or named vessel (owner-patron,
+	# s57.42.2). A clan is naval-threatened iff it is at war with a clan that has ships.
 	var clans_with_ships: Dictionary = {}
 	for s: ShipData in ships:
 		if not s.is_destroyed and not s.owning_clan.is_empty():
 			clans_with_ships[s.owning_clan] = true
+	for v: NamedVesselData in named_vessels:
+		if not v.is_destroyed and not v.owning_clan.is_empty():
+			clans_with_ships[v.owning_clan] = true
+
+	var naval_threatened_clans: Dictionary = {}
 	for w: Variant in world_states.get("active_wars", []):
 		if w is WarData:
 			var wd: WarData = w as WarData
-			if clans_with_ships.has(wd.clan_a) or clans_with_ships.has(wd.clan_b):
-				naval_threat = true
-				break
+			if clans_with_ships.has(wd.clan_a):
+				naval_threatened_clans[wd.clan_b] = true
+			if clans_with_ships.has(wd.clan_b):
+				naval_threatened_clans[wd.clan_a] = true
 
 	world_states["_worship_failing_province_ids"] = worship_failing
 	world_states["_border_province_ids_without_fort"] = border_no_fort
 	world_states["_surplus_pu_province_ids"] = surplus_pu
 	world_states["_is_coastal"] = coastal
-	world_states["_has_naval_assets"] = has_naval_assets_flag
-	world_states["_has_naval_threat"] = naval_threat
+	world_states["_clans_with_ships"] = clans_with_ships
+	world_states["_naval_threatened_clans"] = naval_threatened_clans
 
 
 # -- Vacancy Intelligence Population (s57.20.3) --------------------------------
@@ -24221,8 +24264,12 @@ static func _inject_base_character_context(
 	var g_surplus: Dictionary = world_states.get("_surplus_pu_province_ids", {})
 	var g_festival: Dictionary = world_states.get("_festival_flags", {})
 	var g_is_coastal: bool = world_states.get("_is_coastal", false)
-	var g_has_naval_assets: bool = world_states.get("_has_naval_assets", false)
-	var g_has_naval_threat: bool = world_states.get("_has_naval_threat", false)
+	# Per-clan naval flags (s57.18): a lord has naval assets iff their clan owns/
+	# controls at least one ship; naval-threatened iff at war with a clan that has
+	# ships. Populated per-clan by _populate_infrastructure_intelligence (replaces the
+	# previous global "any ship anywhere → everyone true" bool).
+	var g_clans_with_ships: Dictionary = world_states.get("_clans_with_ships", {})
+	var g_naval_threatened_clans: Dictionary = world_states.get("_naval_threatened_clans", {})
 	var g_active_wars: Array = WarSystem.wars_to_context_array(active_wars)
 
 	var province_values: Array = provinces.values()
@@ -24292,8 +24339,8 @@ static func _inject_base_character_context(
 		ws["surplus_pu_province_ids"] = g_surplus
 		ws["active_wars"] = g_active_wars
 		ws["is_coastal"] = g_is_coastal
-		ws["has_naval_assets"] = g_has_naval_assets
-		ws["has_naval_threat"] = g_has_naval_threat
+		ws["has_naval_assets"] = g_clans_with_ships.has(c.clan)
+		ws["has_naval_threat"] = g_naval_threatened_clans.has(c.clan)
 		ws["known_clan_strengths"] = g_clan_strengths
 		ws["escalating_conflicts"] = _filter_escalating_conflicts_for_clan(
 			g_escalating_conflicts, c.clan, active_wars
