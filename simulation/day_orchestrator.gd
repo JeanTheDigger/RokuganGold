@@ -326,6 +326,11 @@ static func advance_day(
 		ships, named_vessels, water_subtiles, characters_by_id, settlements,
 		insurgencies, dice_engine,
 	)
+	# s57.43.7: resolve any pirate interceptions from movement into naval battles.
+	var pirate_encounter_results: Array = _process_pirate_encounter_writebacks(
+		naval_movement_results, ships, named_vessels, characters_by_id,
+		naval_weather, dice_engine,
+	)
 	var naval_battle_results: Array = _process_naval_battle_triggers(
 		ships, named_vessels, characters_by_id, active_wars, naval_weather, dice_engine,
 	)
@@ -1943,6 +1948,7 @@ static func advance_day(
 		"naval_weather": naval_weather,
 		"naval_movement_results": naval_movement_results,
 		"naval_battle_results": naval_battle_results,
+		"pirate_encounter_results": pirate_encounter_results,
 		"naval_topics": naval_topics,
 		"musha_shugyo_results": musha_shugyo_results,
 		"gempukku_results": gempukku_results,
@@ -20016,6 +20022,79 @@ static func _process_fleet_deployment_writebacks(
 		if ship.current_province_id == dest_prov and ship.current_subtile_id < 0:
 			continue  # fleet already in port at the destination
 		NavalMovementSystem.begin_voyage(ship, index, dest_prov)
+
+
+## PROVISIONAL: a pirate (Wako) fleet of Strength N fields N Kobune warships. The GDD
+## (s11.9 line 73) fixes the pirate ship TYPE (Kobune, warship stats) but gives fleet
+## Strength as a scalar with no ships-per-Strength ratio; 1:1 is the minimal
+## coefficient-free choice, flagged for owner tuning.
+const _PIRATE_KOBUNE_PER_STRENGTH: int = 1
+
+
+## s57.43.7 / s57.18: resolve a pirate interception recorded during ship movement into
+## a naval summary battle. The intercepted NPC ship/vessel fights a pirate (Wako) fleet
+## of Kobune warships (s11.9: "the fleet engages the pirate fleet using naval combat
+## stats"), reusing the existing naval combat + mutation path. Both resolution branches
+## (naval_mass_battle / deck_skirmish) summary-resolve for NPC ships — the deck_skirmish
+## ASCII individual boarding mission applies only when a PC is aboard (future; no
+## PC/crew layer here). Lone-defender: the intercepted ship fights alone (each ship in a
+## fleet rolls interception separately). Returns the battle results for the day log.
+static func _process_pirate_encounter_writebacks(
+	naval_movement_results: Array,
+	ships: Array,
+	named_vessels: Array,
+	characters_by_id: Dictionary,
+	weather: int,
+	dice_engine: DiceEngine,
+) -> Array:
+	var battle_results: Array = []
+	var ships_by_id: Dictionary = {}
+	for s: ShipData in ships:
+		ships_by_id[s.ship_id] = s
+	var vessels_by_id: Dictionary = {}
+	for v: NamedVesselData in named_vessels:
+		vessels_by_id[v.vessel_id] = v
+
+	for r: Dictionary in naval_movement_results:
+		if not r.get("intercepted", false):
+			continue
+		var strength: int = int(r.get("pirate_strength", 0))
+		if strength <= 0:
+			continue
+
+		# The intercepted mover, as a ShipData Company (a vessel wraps to one).
+		var def_ship: ShipData = null
+		if r.has("ship_id"):
+			var target_ship: ShipData = ships_by_id.get(int(r["ship_id"]))
+			if target_ship != null and not target_ship.is_destroyed:
+				def_ship = target_ship
+		elif r.has("vessel_id"):
+			var target_vessel: NamedVesselData = vessels_by_id.get(int(r["vessel_id"]))
+			if target_vessel != null and not target_vessel.is_destroyed:
+				def_ship = target_vessel.to_ship_data(target_vessel.owning_clan)
+		if def_ship == null:
+			continue
+
+		# Pirate fleet: Strength x _PIRATE_KOBUNE_PER_STRENGTH Kobune warships (Wako).
+		var pirate_ships: Array = []
+		var pirate_count: int = strength * _PIRATE_KOBUNE_PER_STRENGTH
+		for i: int in pirate_count:
+			pirate_ships.append(NavalSystem.create_ship(-1000 - i, Enums.ShipClass.KOBUNE, "Wako"))
+
+		var battle: Dictionary = _resolve_naval_engagement(
+			pirate_ships, [def_ship], weather, dice_engine,
+			characters_by_id, "Wako", def_ship.owning_clan,
+		)
+		battle["attacker_clan"] = "Wako"
+		battle["defender_clan"] = def_ship.owning_clan
+		battle["subtile_id"] = int(r.get("subtile", -1))
+		battle["is_pirate_encounter"] = true
+		battle["pirate_strength"] = strength
+		battle["resolution"] = r.get("resolution", "")
+		_apply_naval_battle_mutations([battle], ships, named_vessels, characters_by_id)
+		battle_results.append(battle)
+
+	return battle_results
 
 
 ## s57.42.6-7: resolve REQUEST_PASSAGE. The executor packaged each request; here the
