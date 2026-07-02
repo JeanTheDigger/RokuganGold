@@ -49,6 +49,16 @@ extends Resource
 @export var destination_subtile_id: int = -1
 @export var movement_days_remaining: int = 0
 
+## Multi-hop voyage state (s11.9 sub-tile movement, s57.43 voyage). The remaining
+## water sub-tile ids to traverse AFTER the current hop (destination_subtile_id is
+## the current hop's target). Empty = single-hop / not on a voyage. Populated by
+## NavalMovementSystem.begin_voyage; drained one hop at a time by step_movement.
+@export var voyage_route: PackedInt32Array = PackedInt32Array()
+
+## Province the voyage terminates at (the ship docks there on arrival). -1 = no
+## voyage destination (a bare single-hop just stops at the sub-tile).
+@export var voyage_destination_province: int = -1
+
 ## Construction cost in koku.
 @export var construction_cost: float = 0.0
 

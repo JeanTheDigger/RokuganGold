@@ -84,6 +84,10 @@ var named_vessels: Array[NamedVesselData] = []
 ## Shared ship/vessel ID counter for both ships and named_vessels (a named vessel
 ## may join a battle wrapped as a ship Company, so IDs must not collide).
 var next_ship_id: Array[int] = [1]
+## Water-movement graph nodes (river/lake/coastal/ocean sub-tiles) for naval voyage
+## movement (s11.9). Empty until real world-map coordinates exist — the naval
+## movement engine is inert on an empty graph and turnkey once populated.
+var water_subtiles: Array[WaterSubtileData] = []
 
 # -- Gempukku / Population (s52) -----------------------------------------------
 var children: Array[ChildRecord] = []
@@ -400,6 +404,7 @@ func advance_one_day() -> Dictionary:
 		navigation_zones,
 		named_vessels,
 		next_ship_id,
+		water_subtiles,
 	)
 	_apply_succession_updates(result)
 	return result

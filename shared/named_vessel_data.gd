@@ -47,6 +47,13 @@ enum Purpose { WARSHIP, TRANSPORT }
 @export var destination_subtile_id: int = -1
 @export var movement_days_remaining: int = 0
 
+## Multi-hop voyage state — same shape as ShipData (NavalMovementSystem.step_movement
+## operates on either model by duck typing). Remaining water sub-tile ids after the
+## current hop; empty = single-hop / not voyaging. Voyage docks at the destination
+## province on arrival.
+@export var voyage_route: PackedInt32Array = PackedInt32Array()
+@export var voyage_destination_province: int = -1
+
 ## Cargo capacity in Rice/Koku units (flavor per s11.9 — no goods-transport mechanic).
 @export var cargo_capacity: float = 0.0
 

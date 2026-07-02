@@ -111,6 +111,7 @@ static func advance_day(
 	navigation_zones: Array = [],
 	named_vessels: Array = [],
 	next_ship_id: Array = [1],
+	water_subtiles: Array = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -322,7 +323,7 @@ static func advance_day(
 		dice_engine, _season_to_name(current_season), season_meta,
 	)
 	var naval_movement_results: Array = _process_ship_movement(
-		ships, dice_engine,
+		ships, named_vessels, water_subtiles, characters_by_id, settlements, dice_engine,
 	)
 	var naval_battle_results: Array = _process_naval_battle_triggers(
 		ships, named_vessels, characters_by_id, active_wars, naval_weather, dice_engine,
@@ -19884,47 +19885,77 @@ static func _process_naval_weather(
 
 static func _process_ship_movement(
 	ships: Array,
+	named_vessels: Array,
+	water_subtiles: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
 	dice_engine: DiceEngine,
 ) -> Array:
+	# Inert until the water-movement graph is populated (location data). build_index
+	# returns {} on an empty graph and step_movement is a no-op on non-moving movers.
+	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
+	var province_settlement: Dictionary = _build_province_settlement_map(settlements)
+
 	var results: Array = []
 	for ship: ShipData in ships:
-		if ship.is_destroyed or ship.is_captured:
+		if ship.is_destroyed or ship.is_captured or not ship.is_moving:
 			continue
-		if not ship.is_moving:
+		var r: Dictionary = NavalMovementSystem.step_movement(ship, index, dice_engine)
+		if r.get("moved", false):
+			r["ship_id"] = ship.ship_id
+			if r.get("voyage_complete", false):
+				_disembark_ship_passengers(
+					ship.ship_id, r.get("docked_province", -1),
+					characters_by_id, province_settlement,
+				)
+			results.append(r)
+
+	for vessel: NamedVesselData in named_vessels:
+		if vessel.is_destroyed or not vessel.is_moving:
 			continue
-
-		ship.movement_days_remaining -= 1
-
-		if ship.movement_days_remaining <= 0:
-			ship.is_moving = false
-			var prev_subtile: int = ship.current_subtile_id
-			ship.current_subtile_id = ship.destination_subtile_id
-			ship.destination_subtile_id = -1
-			ship.movement_days_remaining = 0
-
-			var deep_ocean_loss: bool = false
-			var loss_chance: float = NavalSystem.get_deep_ocean_loss_chance(ship.ship_class)
-			if loss_chance > 0.0:
-				var roll: int = dice_engine.rand_int_range(1, 100)
-				if roll <= ceili(loss_chance * 100.0):
-					deep_ocean_loss = true
-					ship.is_destroyed = true
-
-			results.append({
-				"ship_id": ship.ship_id,
-				"arrived": true,
-				"from_subtile": prev_subtile,
-				"to_subtile": ship.current_subtile_id,
-				"deep_ocean_loss": deep_ocean_loss,
-			})
-		else:
-			results.append({
-				"ship_id": ship.ship_id,
-				"arrived": false,
-				"days_remaining": ship.movement_days_remaining,
-			})
+		var vr: Dictionary = NavalMovementSystem.step_movement(vessel, index, dice_engine)
+		if vr.get("moved", false):
+			vr["vessel_id"] = vessel.vessel_id
+			if vr.get("voyage_complete", false):
+				_disembark_ship_passengers(
+					vessel.vessel_id, vr.get("docked_province", -1),
+					characters_by_id, province_settlement,
+				)
+			results.append(vr)
 
 	return results
+
+
+## Province id -> first settlement id (String) in that province, for placing
+## disembarked passengers. Empty until settlements carry province ids at world-gen.
+static func _build_province_settlement_map(settlements: Array) -> Dictionary:
+	var out: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s == null:
+			continue
+		if not out.has(s.province_id):
+			out[s.province_id] = str(s.settlement_id)
+	return out
+
+
+## Passengers aboard a ship/vessel (aboard_ship_id == mover id) disembark to the
+## destination province's settlement on voyage completion (s57.42.8). ship_id and
+## vessel_id share one global counter, so aboard_ship_id references either.
+static func _disembark_ship_passengers(
+	mover_id: int, docked_province: int,
+	characters_by_id: Dictionary, province_settlement: Dictionary,
+) -> void:
+	if mover_id < 0 or docked_province < 0:
+		return
+	var dest_settlement: String = province_settlement.get(docked_province, "")
+	if dest_settlement.is_empty():
+		return
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.aboard_ship_id == mover_id:
+			SailingSystem.disembark(c, dest_settlement)
 
 
 static func _process_naval_battle_triggers(
