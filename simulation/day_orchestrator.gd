@@ -20064,16 +20064,30 @@ static func _process_pirate_encounter_writebacks(
 			continue
 
 		# The intercepted mover, as a ShipData Company (a vessel wraps to one).
+		var mover_id: int = -1
 		var def_ship: ShipData = null
 		if r.has("ship_id"):
-			var target_ship: ShipData = ships_by_id.get(int(r["ship_id"]))
+			mover_id = int(r["ship_id"])
+			var target_ship: ShipData = ships_by_id.get(mover_id)
 			if target_ship != null and not target_ship.is_destroyed:
 				def_ship = target_ship
 		elif r.has("vessel_id"):
-			var target_vessel: NamedVesselData = vessels_by_id.get(int(r["vessel_id"]))
+			mover_id = int(r["vessel_id"])
+			var target_vessel: NamedVesselData = vessels_by_id.get(mover_id)
 			if target_vessel != null and not target_vessel.is_destroyed:
 				def_ship = target_vessel.to_ship_data(target_vessel.owning_clan)
 		if def_ship == null:
+			continue
+
+		# s57.43 / s56.18: if a PC is aboard the intercepted ship, the encounter is the
+		# ASCII deck-skirmish boarding MISSION (map + pirate boarders), not a summary
+		# roll — NPCs summary-resolve, PCs play it out. Emit the mission package as a
+		# launch request; the (held) mission-entry layer consumes it. Pending the
+		# PC-travel HOLD, this is the built-and-verified substrate, not live.
+		if _pc_aboard(mover_id, characters_by_id):
+			battle_results.append(_build_pirate_boarding_mission(
+				def_ship.ship_class, strength, mover_id, int(r.get("subtile", -1)),
+			))
 			continue
 
 		# Pirate fleet: Strength x _PIRATE_KOBUNE_PER_STRENGTH Kobune warships (Wako).
@@ -20098,14 +20112,68 @@ static func _process_pirate_encounter_writebacks(
 	return battle_results
 
 
+## True if any living PC is aboard the ship/vessel `mover_id` (aboard_ship_id).
+static func _pc_aboard(mover_id: int, characters_by_id: Dictionary) -> bool:
+	if mover_id < 0:
+		return false
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c != null and c.is_pc and not CharacterStats.is_dead(c) and c.aboard_ship_id == mover_id:
+			return true
+	return false
+
+
+## Build the ASCII deck-skirmish boarding-mission package (s56.18 Ship Boarding
+## template + a wako pirate boarder roster) for a PC whose ship is intercepted. The PC
+## DEFENDS their ship (BoardingMode.DEFENSE); the boarders are a RONIN_BANDIT roster of
+## the pirate Strength (wako = masterless raiders — the existing GDD-grounded roster, no
+## invented pirate stat block). Ship-class -> deck template is a structural size map.
+## Returned as a launch request; the (held) mission-entry layer consumes it live.
+static func _build_pirate_boarding_mission(
+	target_ship_class: int, pirate_strength: int, mover_id: int, subtile: int,
+) -> Dictionary:
+	var ship_type: int = _ship_class_to_boarding_type(target_ship_class)
+	var seed_str: String = "pirate_boarding_%d_%d" % [mover_id, subtile]
+	var deck: ShipBoardingMapData = ShipBoardingGenerator.generate(
+		seed_str, ship_type, ShipBoardingMapData.BoardingMode.DEFENSE,
+	)
+	var roster: Dictionary = RosterCompositionSystem.compose_roster(
+		RosterCompositionSystem.SEED_RONIN_BANDIT, pirate_strength,
+		{"stability": 75}, hash(seed_str),
+	)
+	return {
+		"is_pirate_encounter": true,
+		"pc_boarding_mission": true,
+		"map": deck,
+		"roster": roster,
+		"boarding_mode": ShipBoardingMapData.BoardingMode.DEFENSE,
+		"ship_type": ship_type,
+		"pirate_strength": pirate_strength,
+		"mover_id": mover_id,
+		"subtile_id": subtile,
+	}
+
+
+## Map a naval ship class to the closest Ship Boarding deck template size (s56.18).
+static func _ship_class_to_boarding_type(ship_class: int) -> int:
+	match ship_class:
+		Enums.ShipClass.KOBUNE, Enums.ShipClass.SAMPAN, Enums.ShipClass.MERCHANT_BARGE:
+			return ShipBoardingMapData.ShipType.KOBUNE
+		Enums.ShipClass.SENGOKOBUNE, Enums.ShipClass.TORTOISE_OCEANGOING:
+			return ShipBoardingMapData.ShipType.SENGOKUBUNE
+		Enums.ShipClass.ATAKEBUNE, Enums.ShipClass.KOUTETSUKAN:
+			return ShipBoardingMapData.ShipType.ATAKEBUNE
+	return ShipBoardingMapData.ShipType.KOBUNE
+
+
 ## s57.42.6-7: resolve REQUEST_PASSAGE. The executor packaged each request; here the
 ## decider (captain/owner) evaluates acceptance, and on accept the requester boards
 ## (aboard_ship_id) and the vessel launches its voyage toward the destination province
 ## (existing disembark hook drops the passenger on arrival). Applies the daily throttle
-## and rude-refusal disposition shift. Handles both named vessels and fleet ships
-## (shared id space). Inert until the water graph + a passage request exist.
-## LIMITATION: owner-granted-passage 3-point Obligation (s57.42.7) is not created here
-## (obligation-system follow-on); per-captain refusal cooldown is metadata-supplied.
+## and rude-refusal disposition shift, and creates the owner-granted-passage Obligation
+## (MINOR favor). Handles both named vessels and fleet ships (shared id space). Inert
+## until the water graph + a passage request exist. Per-captain refusal cooldown is
+## metadata-supplied.
 static func _process_passage_writebacks(
 	day_results: Array,
 	characters_by_id: Dictionary,
