@@ -323,7 +323,8 @@ static func advance_day(
 		dice_engine, _season_to_name(current_season), season_meta,
 	)
 	var naval_movement_results: Array = _process_ship_movement(
-		ships, named_vessels, water_subtiles, characters_by_id, settlements, dice_engine,
+		ships, named_vessels, water_subtiles, characters_by_id, settlements,
+		insurgencies, dice_engine,
 	)
 	var naval_battle_results: Array = _process_naval_battle_triggers(
 		ships, named_vessels, characters_by_id, active_wars, naval_weather, dice_engine,
@@ -19894,18 +19895,21 @@ static func _process_ship_movement(
 	water_subtiles: Array,
 	characters_by_id: Dictionary,
 	settlements: Array,
+	insurgencies: Array,
 	dice_engine: DiceEngine,
 ) -> Array:
 	# Inert until the water-movement graph is populated (location data). build_index
 	# returns {} on an empty graph and step_movement is a no-op on non-moving movers.
 	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
 	var province_settlement: Dictionary = _build_province_settlement_map(settlements)
+	# Per-sub-tile pirate hazard from active PIRATE_FLEET insurgencies (s57.43.7).
+	var pirate_map: Dictionary = NavalMovementSystem.build_pirate_strength_map(index, insurgencies)
 
 	var results: Array = []
 	for ship: ShipData in ships:
 		if ship.is_destroyed or ship.is_captured or not ship.is_moving:
 			continue
-		var r: Dictionary = NavalMovementSystem.step_movement(ship, index, dice_engine)
+		var r: Dictionary = NavalMovementSystem.step_movement(ship, index, dice_engine, pirate_map)
 		if r.get("moved", false):
 			r["ship_id"] = ship.ship_id
 			if r.get("voyage_complete", false):
@@ -19918,7 +19922,7 @@ static func _process_ship_movement(
 	for vessel: NamedVesselData in named_vessels:
 		if vessel.is_destroyed or not vessel.is_moving:
 			continue
-		var vr: Dictionary = NavalMovementSystem.step_movement(vessel, index, dice_engine)
+		var vr: Dictionary = NavalMovementSystem.step_movement(vessel, index, dice_engine, pirate_map)
 		if vr.get("moved", false):
 			vr["vessel_id"] = vessel.vessel_id
 			if vr.get("voyage_complete", false):

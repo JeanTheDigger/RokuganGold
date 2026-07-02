@@ -121,6 +121,37 @@ static func route_day_cost(route: PackedInt32Array, ship_class: int) -> int:
 	return route.size() * maxi(1, NavalSystem.get_movement_days(ship_class))
 
 
+# -- Pirate Hazard (s57.43.7) --------------------------------------------------
+
+## Map subtile_id -> pirate fleet strength lurking on it, derived from active
+## PIRATE_FLEET insurgencies (s11.11): a sub-tile that ports to a pirate-infested
+## province carries that insurgency's strength (pirates operate off the coast they
+## infest). Strongest infestation wins per sub-tile. Empty if no pirate fleets or no
+## graph. Consumed by step_movement for the per-hop interception roll.
+static func build_pirate_strength_map(index: Dictionary, insurgencies: Array) -> Dictionary:
+	var out: Dictionary = {}
+	if index.is_empty():
+		return out
+	var pirate_provinces: Dictionary = {}  # province_id -> max strength
+	for ins: InsurgencyData in insurgencies:
+		if ins == null or ins.insurgency_type != Enums.InsurgencyType.PIRATE_FLEET:
+			continue
+		if ins.strength <= 0 or ins.province_id < 0:
+			continue
+		pirate_provinces[ins.province_id] = maxi(pirate_provinces.get(ins.province_id, 0), ins.strength)
+	if pirate_provinces.is_empty():
+		return out
+	for subtile_id: int in index:
+		var st: WaterSubtileData = index[subtile_id]
+		var best: int = 0
+		for prov: int in st.port_province_ids:
+			if pirate_provinces.has(prov):
+				best = maxi(best, pirate_provinces[prov])
+		if best > 0:
+			out[subtile_id] = best
+	return out
+
+
 # -- Voyage Commands -----------------------------------------------------------
 
 ## Begin a voyage: route the mover (ship or vessel) from where it is now to a port of
@@ -177,7 +208,8 @@ static func begin_voyage(mover: Object, index: Dictionary, dest_province: int) -
 ## multi-hop voyages. On entering an OCEAN sub-tile a non-ocean-capable class rolls
 ## deep-ocean loss (NavalSystem). On voyage completion the mover docks at its
 ## voyage_destination_province (current_subtile_id -> -1). Returns a per-day result.
-static func step_movement(mover: Object, index: Dictionary, dice: DiceEngine) -> Dictionary:
+static func step_movement(mover: Object, index: Dictionary, dice: DiceEngine,
+		pirate_strength_by_subtile: Dictionary = {}) -> Dictionary:
 	if not mover.is_moving:
 		return {"moved": false}
 
@@ -208,6 +240,22 @@ static func step_movement(mover: Object, index: Dictionary, dice: DiceEngine) ->
 			"from_subtile": prev_subtile, "to_subtile": mover.current_subtile_id,
 		}
 
+	# Pirate interception for the sub-tile just entered (s57.43.7). Detection only:
+	# the mover keeps sailing and the caller resolves the encounter (naval mass battle
+	# vs deck skirmish) downstream — pirate-fleet combat composition + the ASCII
+	# skirmish layer are separate. The chance + resolution branch are GDD-sourced.
+	var pirate_strength: int = pirate_strength_by_subtile.get(mover.current_subtile_id, 0)
+	var interception: Dictionary = {}
+	if pirate_strength > 0 and dice != null:
+		var chance: float = SailingSystem.pirate_interception_chance(pirate_strength)
+		if dice.rand_int_range(1, 100) <= ceili(chance * 100.0):
+			interception = {
+				"intercepted": true,
+				"pirate_strength": pirate_strength,
+				"resolution": SailingSystem.interception_resolution(pirate_strength),
+				"subtile": mover.current_subtile_id,
+			}
+
 	# More hops on the voyage → launch the next one.
 	if mover.voyage_route.size() > 0:
 		var next_hop: int = mover.voyage_route[0]
@@ -217,11 +265,13 @@ static func step_movement(mover: Object, index: Dictionary, dice: DiceEngine) ->
 		mover.voyage_route = remaining
 		mover.destination_subtile_id = next_hop
 		mover.movement_days_remaining = maxi(1, NavalSystem.get_movement_days(mover.ship_class))
-		return {
+		var hop_result: Dictionary = {
 			"moved": true, "arrived": false, "hop_complete": true,
 			"from_subtile": prev_subtile, "to_subtile": mover.current_subtile_id,
 			"days_remaining": mover.movement_days_remaining,
 		}
+		hop_result.merge(interception)
+		return hop_result
 
 	# Voyage complete (or single-hop finished).
 	mover.is_moving = false
@@ -232,12 +282,16 @@ static func step_movement(mover: Object, index: Dictionary, dice: DiceEngine) ->
 		mover.current_province_id = docked_province
 		mover.current_subtile_id = -1  # docked at the destination settlement
 		mover.voyage_destination_province = -1
-		return {
+		var dock_result: Dictionary = {
 			"moved": true, "arrived": true, "voyage_complete": true,
 			"from_subtile": prev_subtile, "docked_province": docked_province,
 		}
+		dock_result.merge(interception)
+		return dock_result
 	# Bare single-hop with no voyage destination — just stop at the sub-tile.
-	return {
+	var stop_result: Dictionary = {
 		"moved": true, "arrived": true,
 		"from_subtile": prev_subtile, "to_subtile": mover.current_subtile_id,
 	}
+	stop_result.merge(interception)
+	return stop_result
