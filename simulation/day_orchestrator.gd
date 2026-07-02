@@ -256,6 +256,7 @@ static func advance_day(
 	)
 	_set_court_context_flags(active_courts, world_states)
 	_inject_hunt_context(active_hunts, world_states, active_topics)
+	_inject_passage_context(world_states, named_vessels, character_province_map)
 	_inject_compliance_context(active_intimidations, world_states)
 	_inject_theater_context(theater_pieces, characters, world_states)
 	_inject_senbazuru_context(active_senbazurus, characters, world_states)
@@ -403,7 +404,7 @@ static func advance_day(
 	# s57.42: resolve REQUEST_PASSAGE — board the requester and launch the vessel voyage.
 	_process_passage_writebacks(
 		day_result.get("results", []), characters_by_id, ships, named_vessels,
-		water_subtiles, ic_day,
+		water_subtiles, ic_day, favors,
 	)
 
 	var crime_results: Array = _process_crime_detection(
@@ -20112,6 +20113,7 @@ static func _process_passage_writebacks(
 	named_vessels: Array,
 	water_subtiles: Array,
 	ic_day: int,
+	favors: Array = [],
 ) -> void:
 	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
 	var vessel_by_id: Dictionary = {}
@@ -20157,6 +20159,20 @@ static func _process_passage_writebacks(
 			if vessel != null and not vessel.is_moving \
 					and vessel.voyage_destination_province != dest_prov:
 				NavalMovementSystem.begin_voyage(vessel, index, dest_prov)
+			# s57.42.7: owner-granted passage creates a soft Obligation on the requester
+			# (Obligation Advantage, 3-point) — modeled as a MINOR favor since the GDD
+			# says it is "repaid through normal favour mechanics" (a future letter of
+			# introduction = Minor per s12.10). Creditor = the granting owner.
+			if bool(effects.get("is_owner_grant", false)):
+				var max_fid: int = 0
+				for f: Variant in favors:
+					if f is FavorData and (f as FavorData).favor_id >= max_fid:
+						max_fid = (f as FavorData).favor_id + 1
+				favors.append(FavorSystem.offer_favor(
+					FavorData.FavorType.GENERAL, FavorData.FavorTier.MINOR,
+					decider.character_id, requester.character_id, ic_day,
+					"Owner-granted sea passage", "OWNER_PASSAGE", max_fid,
+				))
 		else:
 			# Rude refusal costs the requester disposition (polite refusal is free).
 			var shift: int = SailingSystem.refusal_disposition_shift(
@@ -27331,6 +27347,46 @@ static func _secret_is_exposed(secret_id: int, active_secrets: Array) -> bool:
 		if s != null and s.secret_id == secret_id:
 			return s.exposed or s.exposed_publicly
 	return true  # secret no longer exists — leverage gone
+
+
+## s57.42.6: co-located-vessel discovery for REQUEST_PASSAGE. A character in a port
+## where an owner-patron NAMED vessel is docked (s57.42.45: military ships can't be
+## asked directly) can ask that vessel's captain (co-located) for passage; inject the
+## vessel + decider into their known_objectives so the passage precondition filter
+## keeps REQUEST_PASSAGE and its metadata resolves. The requester's own vessel is
+## excluded (they'd just use it). The "vessel schedule matches the destination" signal
+## stays map-gated (defaults compatible); begin_voyage self-gates on route reachability.
+static func _inject_passage_context(
+	world_states: Dictionary,
+	named_vessels: Array,
+	character_province_map: Dictionary,
+) -> void:
+	var vessel_by_province: Dictionary = {}
+	for v: NamedVesselData in named_vessels:
+		if v.is_destroyed or v.is_moving or v.current_province_id < 0:
+			continue
+		var decider: int = v.captain_id if v.captain_id >= 0 else v.owner_id
+		if decider < 0:
+			continue
+		if not vessel_by_province.has(v.current_province_id):
+			vessel_by_province[v.current_province_id] = v
+	if vessel_by_province.is_empty():
+		return
+
+	for char_id: Variant in world_states:
+		if char_id is not int:
+			continue
+		var prov: int = int(character_province_map.get(char_id, -1))
+		if prov < 0 or not vessel_by_province.has(prov):
+			continue
+		var vessel: NamedVesselData = vessel_by_province[prov]
+		if vessel.owner_id == int(char_id) or vessel.captain_id == int(char_id):
+			continue
+		var ws: Dictionary = world_states[char_id]
+		var known_objs: Dictionary = ws.get("known_objectives", {})
+		known_objs["passage_vessel_id"] = vessel.vessel_id
+		known_objs["passage_decider_id"] = vessel.captain_id if vessel.captain_id >= 0 else vessel.owner_id
+		ws["known_objectives"] = known_objs
 
 
 static func _inject_hunt_context(
