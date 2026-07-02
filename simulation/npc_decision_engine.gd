@@ -717,6 +717,13 @@ static func _apply_origami_precondition_filter(
 
 const _PROTECTIVE_WARD_SPELLS: Array[String] = ["soul_of_stone", "jurojins_balm", "stones_endurance"]
 
+# s57.42.2: the merchant families own personal (owner-patron) vessels, so when one of
+# their lords commissions a ship (COMMISSION_SHIP) it is a NAMED TRANSPORT vessel, not
+# a military fleet hull. PROVISIONAL trigger (family-membership gate) — the GDD gives
+# no military-vs-personal COMMISSION_SHIP split; flagged for owner tuning. Mirrors
+# WorldBootstrap.MERCHANT_VESSEL_FAMILIES (kept local to decouple the engine).
+const _NAMED_VESSEL_FAMILIES: Array[String] = ["Yasuki", "Daidoji", "Kasuga", "Yoritomo"]
+
 static func _apply_protective_ward_precondition_filter(
 	options: Array,
 	character: L5RCharacterData,
@@ -3482,6 +3489,12 @@ static func _populate_action_metadata(
 			"settlement_id": need.target_settlement_id,
 			"target_intent": need.target_intent,
 		}
+		if option.action_id == "COMMISSION_SHIP" and ctx.family in _NAMED_VESSEL_FAMILIES:
+			# A merchant-family lord commissions a personal transport vessel (s57.42.2),
+			# not a military fleet ship. Executor + construction already branch on these.
+			option.metadata["is_named_vessel"] = true
+			option.metadata["vessel_purpose"] = NamedVesselData.Purpose.TRANSPORT
+			option.metadata["vessel_owner_id"] = ctx.character_id
 	elif option.action_id == "GOSSIP":
 		var subject: int = need.target_npc_id if need.target_npc_id >= 0 else -1
 		if subject < 0:
