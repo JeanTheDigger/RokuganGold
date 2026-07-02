@@ -325,9 +325,9 @@ static func advance_day(
 		ships, dice_engine,
 	)
 	var naval_battle_results: Array = _process_naval_battle_triggers(
-		ships, characters_by_id, active_wars, naval_weather, dice_engine,
+		ships, named_vessels, characters_by_id, active_wars, naval_weather, dice_engine,
 	)
-	_apply_naval_battle_mutations(naval_battle_results, ships, characters_by_id)
+	_apply_naval_battle_mutations(naval_battle_results, ships, named_vessels, characters_by_id)
 
 	_inject_urgency_data(
 		world_states, characters, favors, active_tethers, active_sieges,
@@ -19929,6 +19929,7 @@ static func _process_ship_movement(
 
 static func _process_naval_battle_triggers(
 	ships: Array,
+	named_vessels: Array,
 	characters_by_id: Dictionary,
 	active_wars: Array,
 	weather: int,
@@ -19943,6 +19944,18 @@ static func _process_naval_battle_triggers(
 		if not ships_by_subtile.has(ship.current_subtile_id):
 			ships_by_subtile[ship.current_subtile_id] = []
 		ships_by_subtile[ship.current_subtile_id].append(ship)
+
+	# Named vessels co-located at a sea sub-tile may JOIN a battle there as a single
+	# unit if their owner/captain opts in (s57.42/43 crossover). Docked vessels
+	# (subtile < 0) never join, same as ships. Forward-wired: inert until sub-tile
+	# naval movement exists (nothing reaches a sea sub-tile yet).
+	var vessels_by_subtile: Dictionary = {}
+	for v: NamedVesselData in named_vessels:
+		if v.is_destroyed or v.current_subtile_id < 0:
+			continue
+		if not vessels_by_subtile.has(v.current_subtile_id):
+			vessels_by_subtile[v.current_subtile_id] = []
+		vessels_by_subtile[v.current_subtile_id].append(v)
 
 	var results: Array = []
 	var processed_subtiles: Array = []
@@ -19970,6 +19983,18 @@ static func _process_naval_battle_triggers(
 			continue
 
 		processed_subtiles.append(subtile_id)
+
+		# Individual named vessels join their clan's side if the owner opts in
+		# (personality/virtue, tilted by purpose). Wrapped as a one-ship Company;
+		# the wrapper's ship_id is the vessel_id (globally unique), so the writeback
+		# maps damage/destruction back to the NamedVesselData.
+		for v: NamedVesselData in vessels_by_subtile.get(subtile_id, []):
+			var v_owner: L5RCharacterData = characters_by_id.get(v.owner_id)
+			if not NamedVesselData.owner_opts_into_battle(v_owner, v.purpose):
+				continue
+			if not clans_at.has(v.owning_clan):
+				clans_at[v.owning_clan] = []
+			clans_at[v.owning_clan].append(v.to_ship_data(v.owning_clan))
 
 		for pair: Array in hostile_pairs:
 			var attacker_clan: String = pair[0]
@@ -20079,11 +20104,17 @@ static func _compute_captain_bonus(captain: L5RCharacterData) -> Dictionary:
 static func _apply_naval_battle_mutations(
 	naval_battle_results: Array,
 	ships: Array,
+	named_vessels: Array,
 	characters_by_id: Dictionary,
 ) -> void:
 	var ships_by_id: Dictionary = {}
 	for s: ShipData in ships:
 		ships_by_id[s.ship_id] = s
+	# A named vessel that joined a battle appears as a wrapper whose company_id is
+	# its vessel_id (not in `ships`); map destruction/capture back to the vessel.
+	var vessels_by_id: Dictionary = {}
+	for v: NamedVesselData in named_vessels:
+		vessels_by_id[v.vessel_id] = v
 
 	for result: Dictionary in naval_battle_results:
 		var all_states: Array = []
@@ -20094,6 +20125,11 @@ static func _apply_naval_battle_mutations(
 			var ship_id: int = bc.get("company_id", -1)
 			var ship: ShipData = ships_by_id.get(ship_id)
 			if ship == null:
+				var vessel: NamedVesselData = vessels_by_id.get(ship_id)
+				if vessel != null and (bc.get("is_destroyed", false) or bc.get("is_captured", false)):
+					# A named vessel lost in the battle it joined leaves play (no
+					# separate capture state on the vessel model).
+					vessel.is_destroyed = true
 				continue
 
 			ship.health = bc.get("current_health", ship.health)
