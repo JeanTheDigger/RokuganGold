@@ -192,6 +192,12 @@ func _bootstrap_fresh_world() -> void:
 	for nv: NamedVesselData in boot_vessels:
 		WorldState.named_vessels.append(nv)
 	WorldState.next_ship_id[0] = result.get("next_ship_id", 1)
+	# Water-movement graph — empty in production (placeholder seeding is opt-in in
+	# bootstrap_world), so the naval movement engine stays inert until real map data.
+	var boot_subtiles: Array = result.get("water_subtiles", [])
+	WorldState.water_subtiles.clear()
+	for st: WaterSubtileData in boot_subtiles:
+		WorldState.water_subtiles.append(st)
 
 	var clan_champions: Dictionary = result.get("clan_champions", {})
 	for clan_name: String in clan_champions:

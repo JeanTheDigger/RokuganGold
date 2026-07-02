@@ -398,6 +398,7 @@ static func _designate_hidden_temple(settlements: Array, provinces: Dictionary) 
 
 static func bootstrap_world(
 	dice: DiceEngine,
+	seed_placeholder_water_graph: bool = false,
 ) -> Dictionary:
 	var provinces: Dictionary = {}
 	var settlements: Array[SettlementData] = []
@@ -534,6 +535,15 @@ static func bootstrap_world(
 		pop_result.get("clan_champions", {}), next_ship_id,
 	)
 
+	# Placeholder water-movement graph — OFF by default so production ships with an
+	# EMPTY graph (the naval movement engine is inert on it, i.e. correct-but-unmapped
+	# geography) until the real world-map coordinates exist. Opt in (dev / demo) to
+	# get a coherent coastal sea-lane connecting every clan's real dock province, which
+	# activates the whole deploy/passage/voyage chain end to end.
+	var water_subtiles: Array = []
+	if seed_placeholder_water_graph:
+		water_subtiles = _seed_placeholder_water_graph(provinces)
+
 	return {
 		"provinces": provinces,
 		"settlements": settlements,
@@ -558,6 +568,7 @@ static func bootstrap_world(
 		"ships": navy_result["ships"],
 		"named_vessels": navy_result["named_vessels"],
 		"next_ship_id": next_ship_id[0],
+		"water_subtiles": water_subtiles,
 	}
 
 
@@ -672,6 +683,44 @@ static func _seed_named_merchant_vessels(
 			var vstats: Dictionary = NavalSystem.SHIP_STATS.get(vessel.ship_class, {})
 			vessel.cargo_capacity = float(vstats.get("cargo", 0.3))
 			named_vessels.append(vessel)
+
+
+# -- Placeholder Water-Movement Graph (dev/demo only) -------------------------
+# A coherent stand-in for the real s11.9 sub-tile geography: one COASTAL port
+# sub-tile per clan dock province (the SAME provinces the fleets/vessels are seeded
+# at), linked in a single coastal sea lane so every port is reachable from every
+# other. All-coastal so EVERY seeded ship class (Kobune included) can traverse it.
+# This is a PLACEHOLDER — the real graph replaces it with surveyed coordinates,
+# adjacency, ocean sub-tiles, and pirate lanes. Off by default (see bootstrap_world).
+static func _seed_placeholder_water_graph(provinces: Dictionary) -> Array:
+	var clan_port: Dictionary = _find_clan_dock_provinces(provinces)
+	# Distinct dock provinces, deterministic order.
+	var dock_provinces: Array = []
+	for clan_name: String in clan_port:
+		var pid: int = int(clan_port[clan_name])
+		if pid >= 0 and pid not in dock_provinces:
+			dock_provinces.append(pid)
+	dock_provinces.sort()
+
+	var subtiles: Array = []
+	var next_id: int = 1
+	var prev_id: int = -1
+	for dock_prov: int in dock_provinces:
+		var st := WaterSubtileData.new()
+		st.subtile_id = next_id
+		st.water_type = Enums.WaterSubtileType.COASTAL
+		st.port_province_ids = PackedInt32Array([dock_prov])
+		if prev_id >= 0:
+			st.adjacent_subtile_ids = PackedInt32Array([prev_id])
+			# Make the chain bidirectional: link the previous sub-tile forward to this.
+			var prev_st: WaterSubtileData = subtiles[subtiles.size() - 1]
+			var fwd: PackedInt32Array = prev_st.adjacent_subtile_ids
+			fwd.append(next_id)
+			prev_st.adjacent_subtile_ids = fwd
+		subtiles.append(st)
+		prev_id = next_id
+		next_id += 1
+	return subtiles
 
 
 static func _get_base_pu(
