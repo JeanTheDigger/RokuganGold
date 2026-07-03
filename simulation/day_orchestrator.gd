@@ -257,6 +257,9 @@ static func advance_day(
 	_set_court_context_flags(active_courts, world_states)
 	_inject_hunt_context(active_hunts, world_states, active_topics)
 	_inject_passage_context(world_states, named_vessels, character_province_map)
+	# s55.11 / s29.15.24: prune INTERVENE_CAPTAIN action_blocks that have broken
+	# (aggressor disembarked / captain incapacitated) before the wave reads them.
+	_process_action_block_breaks(characters, characters_by_id, ships, named_vessels)
 	_inject_compliance_context(active_intimidations, world_states)
 	_inject_theater_context(theater_pieces, characters, world_states)
 	_inject_senbazuru_context(active_senbazurus, characters, world_states)
@@ -423,6 +426,14 @@ static func advance_day(
 	# the daily drift pass (below) resolves the same tick.
 	_process_jump_overboard_writebacks(
 		day_result.get("results", []), characters_by_id,
+	)
+
+	# s55.11: a ship captain may intervene against a hostile action fired between two
+	# co-aboard passengers (writes an action_block to the aggressor on success). Also
+	# resolves the victim-initiates / captain-permission break conditions from the day.
+	_process_intervene_captain_writebacks(
+		day_result.get("results", []), characters_by_id, ships, named_vessels,
+		dice_engine, active_topics, next_topic_id, ic_day,
 	)
 
 	var crime_results: Array = _process_crime_detection(
@@ -20882,6 +20893,268 @@ static func _process_jump_overboard_writebacks(
 		_cast_character_into_drift(
 			jumper, bool(effects.get("in_mantis", false)),
 			bool(effects.get("near_shore", false)))
+
+
+# s55.11 INTERVENE_CAPTAIN failure consequences (LOCKED).
+const INTERVENE_FAIL_GLORY: float = -0.3
+const INTERVENE_CRIT_EXTRA_GLORY: float = -0.2
+const INTERVENE_WITNESS_DISPOSITION: int = -5
+const INTERVENE_AGGRESSOR_DISPOSITION: int = -10
+const INTERVENE_CRIT_MARGIN: int = 10  # aggressor total exceeds captain by 10+ = critical
+const INTERVENE_BREAK_CONDITIONS: Array = [
+	"voyage_end", "captain_permission", "victim_initiates_hostile", "captain_incapacitated",
+]
+
+
+## s55.11: the captain-authority reactive containment action. When a passenger fires a
+## hostile-tagged action against another passenger aboard the same ship and the ship's
+## captain is aboard and able, the captain may intervene (Trigger 1/2 collapse to "a
+## hostile action was fired aboard"). Owner ruling (deterministic, duty default): the
+## captain intervenes unless their Shourido virtue is Kyoryoku or Ishi (the two negative
+## leans that stand aside). On intervention: contested captain's best(Intimidation,
+## Courtier) + Willpower vs the aggressor's Willpower. Success writes a voyage-scoped
+## "hostile_tagged" action_block to the aggressor protecting the victim (the s29.15.24
+## consumer then denies the aggressor's hostile actions against that victim). Failure:
+## captain Glory −0.3, aboard witnesses −5 disposition toward the captain, aggressor −10.
+## Critical failure (aggressor total exceeds captain by 10+): extra Glory −0.2, a Tier 4
+## "publicly defied" topic, and a cumulative −1k0 on this captain's later intervention
+## rolls this voyage. Also resolves the two event-driven break conditions from the day's
+## actions: the protected victim attacking the aggressor (victim_initiates_hostile), and
+## the aggressor's successful NEGOTIATE with the captain (captain_permission). Inert until
+## voyages carry hostile passenger pairs with the captain aboard (map-gated, PC-flavored).
+static func _process_intervene_captain_writebacks(
+	day_results: Array, characters_by_id: Dictionary,
+	ships: Array, named_vessels: Array, dice_engine: DiceEngine,
+	active_topics: Array, next_topic_id: Array, ic_day: int,
+) -> void:
+	# ship/vessel id -> {captain_id, name}
+	var ship_meta: Dictionary = {}
+	for s: ShipData in ships:
+		ship_meta[s.ship_id] = {"captain_id": s.captain_id, "name": s.ship_name}
+	for v: NamedVesselData in named_vessels:
+		ship_meta[v.vessel_id] = {"captain_id": v.captain_id, "name": v.vessel_name}
+
+	for entry: Dictionary in day_results:
+		var aid: String = entry.get("action_id", "")
+		if aid not in NPCDecisionEngine.HOSTILE_ACTIONS:
+			continue
+		var aggressor: L5RCharacterData = characters_by_id.get(entry.get("character_id", -1))
+		var victim: L5RCharacterData = characters_by_id.get(entry.get("target_npc_id", -1))
+		if aggressor == null or victim == null or aggressor == victim:
+			continue
+
+		# Break: if this hostile action is the PROTECTED party striking their aggressor,
+		# that aggressor's block protecting them breaks (self-defence, s55.11 condition 3).
+		# Here `aggressor`/`victim` are this action's actor/target; the prior block lives on
+		# the target (the earlier aggressor) with blocker_id == the actor (the protected one).
+		_break_intervene_block(victim, aggressor.character_id)
+
+		# Only aboard-vs-aboard (same ship) with the captain aboard triggers intervention.
+		var ship_id: int = aggressor.aboard_ship_id
+		if ship_id < 0 or victim.aboard_ship_id != ship_id:
+			continue
+		if not ship_meta.has(ship_id):
+			continue
+		var captain_id: int = int(ship_meta[ship_id]["captain_id"])
+		if captain_id < 0 or captain_id == aggressor.character_id or captain_id == victim.character_id:
+			continue
+		var captain: L5RCharacterData = characters_by_id.get(captain_id)
+		if captain == null or CharacterStats.is_dead(captain):
+			continue
+		if CharacterStats.get_wound_level(captain) >= Enums.WoundLevel.DOWN:
+			continue  # captain incapacitated — no authority to intervene
+		# Already protecting this victim from this aggressor (don't re-fire).
+		if _has_active_intervene_block(aggressor, victim.character_id):
+			continue
+		# Owner gate (option 1): only Kyoryoku / Ishi stand aside.
+		if not _intervene_captain_should_intervene(captain):
+			continue
+
+		_resolve_intervene_captain(
+			captain, aggressor, victim, ship_id, str(ship_meta[ship_id]["name"]),
+			characters_by_id, dice_engine, active_topics, next_topic_id, ic_day)
+
+	# Break: captain_permission — a successful NEGOTIATE by an aggressor with a captain
+	# who blocked them lifts that captain's intervention blocks on the aggressor.
+	for entry2: Dictionary in day_results:
+		if entry2.get("action_id", "") != "NEGOTIATE" or not entry2.get("success", false):
+			continue
+		var neg_actor: L5RCharacterData = characters_by_id.get(entry2.get("character_id", -1))
+		var neg_target: int = int(entry2.get("target_npc_id", -1))
+		if neg_actor == null or neg_target < 0:
+			continue
+		_break_intervene_blocks_by_captain(neg_actor, neg_target)
+
+
+## Owner ruling (deterministic, duty default, s55.11): a captain intervenes to keep order
+## unless their Shourido virtue leans them away (Kyoryoku sees conflict as useful, Ishi
+## finds it beneath them). Every other virtue — all Bushido, and the neutral Shourido —
+## intervenes.
+static func _intervene_captain_should_intervene(captain: L5RCharacterData) -> bool:
+	var sv: int = captain.shourido_virtue
+	if sv == Enums.ShouridoVirtue.KYORYOKU or sv == Enums.ShouridoVirtue.ISHI:
+		return false
+	return true
+
+
+## The captain rolls whichever of Intimidation / Courtier they are stronger in (s55.11).
+static func _best_intervene_skill(captain: L5RCharacterData) -> String:
+	var intim: int = int(captain.skills.get("Intimidation", 0))
+	var court: int = int(captain.skills.get("Courtier", 0))
+	return "Intimidation" if intim >= court else "Courtier"
+
+
+## True if the aggressor already holds an active INTERVENE_CAPTAIN action_block protecting
+## the given victim (blocker_id).
+static func _has_active_intervene_block(aggressor: L5RCharacterData, victim_id: int) -> bool:
+	for block: Dictionary in aggressor.action_blocks:
+		if (
+			block.get("source_technique", "") == "INTERVENE_CAPTAIN"
+			and int(block.get("blocker_id", -1)) == victim_id
+		):
+			return true
+	return false
+
+
+## Resolve one intervention: contested roll, then success (write the block) or failure /
+## critical-failure consequences.
+static func _resolve_intervene_captain(
+	captain: L5RCharacterData, aggressor: L5RCharacterData, victim: L5RCharacterData,
+	ship_id: int, ship_name: String, characters_by_id: Dictionary, dice_engine: DiceEngine,
+	active_topics: Array, next_topic_id: Array, ic_day: int,
+) -> void:
+	var skill: String = _best_intervene_skill(captain)
+	# Cumulative −1k0 per prior critical failure this voyage (−rolled dice on the captain).
+	var pen: int = -captain.intervene_crit_penalty
+	var result: Dictionary = SkillResolver.resolve_contested_check(
+		captain, aggressor, dice_engine, skill, "", "", "",
+		Enums.Trait.WILLPOWER, Enums.Trait.WILLPOWER, pen, 0)
+	var cap_total: int = int(result.get("total_a", 0))
+	var agg_total: int = int(result.get("total_b", 0))
+
+	if result.get("winner", "") == "a":
+		# Success — the aggressor is barred from hostile actions against the victim for
+		# the rest of the voyage (s29.15.24 action_block on the aggressor's sheet).
+		aggressor.action_blocks.append({
+			"blocker_id": victim.character_id,
+			"source_technique": "INTERVENE_CAPTAIN",
+			"blocked_action_ids": "hostile_tagged",
+			"expires": "voyage_end",
+			"break_conditions": INTERVENE_BREAK_CONDITIONS.duplicate(),
+			"captain_id": captain.character_id,
+			"ship_id": ship_id,
+		})
+		return
+
+	# Failure consequences.
+	HonorGlorySystem.apply_glory_change(captain, INTERVENE_FAIL_GLORY)
+	# Aboard witnesses (excluding captain + aggressor) sour toward the captain.
+	for cid: int in characters_by_id:
+		var w: L5RCharacterData = characters_by_id[cid]
+		if w == null or CharacterStats.is_dead(w):
+			continue
+		if w.aboard_ship_id != ship_id or w == captain or w == aggressor:
+			continue
+		_shift_disposition(w, captain.character_id, INTERVENE_WITNESS_DISPOSITION)
+	_shift_disposition(aggressor, captain.character_id, INTERVENE_AGGRESSOR_DISPOSITION)
+
+	# Critical failure — the aggressor's total exceeds the captain's by 10+.
+	if agg_total - cap_total >= INTERVENE_CRIT_MARGIN:
+		HonorGlorySystem.apply_glory_change(captain, INTERVENE_CRIT_EXTRA_GLORY)
+		captain.intervene_crit_penalty += 1  # cumulative −1k0 on later rolls this voyage
+		if not next_topic_id.is_empty():
+			var tid: int = next_topic_id[0]
+			next_topic_id[0] = tid + 1
+			var title: String = "%s was publicly defied aboard %s" % [
+				captain.character_name, ship_name if not ship_name.is_empty() else "their ship"]
+			var topic: TopicData = TopicMomentumSystem.create_topic(
+				tid, title, TopicData.Tier.TIER_4, TopicData.Category.POLITICAL,
+				ic_day, 0.0, [], captain.clan, "", captain.character_id,
+				"authority_defied", "intervene_defied")
+			topic.slug = "intervene_defied_%d_%d" % [captain.character_id, ic_day]
+			active_topics.append(topic)
+
+
+## Apply a one-time clamped disposition shift (s55.11 temporary modifiers; standard decay
+## handled by the historical-modifier system).
+static func _shift_disposition(holder: L5RCharacterData, toward_id: int, delta: int) -> void:
+	var cur: int = holder.disposition_values.get(toward_id, 0)
+	holder.disposition_values[toward_id] = clampi(cur + delta, -100, 100)
+
+
+## Remove any INTERVENE_CAPTAIN block on `aggressor` that protects `victim_id`
+## (victim_initiates_hostile break, s55.11).
+static func _break_intervene_block(aggressor: L5RCharacterData, victim_id: int) -> void:
+	if aggressor.action_blocks.is_empty():
+		return
+	var kept: Array = []
+	for block: Dictionary in aggressor.action_blocks:
+		if (
+			block.get("source_technique", "") == "INTERVENE_CAPTAIN"
+			and int(block.get("blocker_id", -1)) == victim_id
+		):
+			continue
+		kept.append(block)
+	aggressor.action_blocks = kept
+
+
+## Remove INTERVENE_CAPTAIN blocks on `aggressor` written by `captain_id`
+## (captain_permission break, s55.11).
+static func _break_intervene_blocks_by_captain(aggressor: L5RCharacterData, captain_id: int) -> void:
+	if aggressor.action_blocks.is_empty():
+		return
+	var kept: Array = []
+	for block: Dictionary in aggressor.action_blocks:
+		if (
+			block.get("source_technique", "") == "INTERVENE_CAPTAIN"
+			and int(block.get("captain_id", -1)) == captain_id
+		):
+			continue
+		kept.append(block)
+	aggressor.action_blocks = kept
+
+
+## s55.11 / s29.15.24 daily break-condition pass for INTERVENE_CAPTAIN action_blocks.
+## Removes a block when the aggressor has disembarked the block's ship (voyage_end) or the
+## writing captain is dead/incapacitated (captain_incapacitated). Also clears a captain's
+## cumulative crit penalty once they are no longer aboard a moving voyage (disembarked).
+## The other two break conditions (victim_initiates_hostile, captain_permission) are
+## event-driven from the day's actions in _process_intervene_captain_writebacks.
+static func _process_action_block_breaks(
+	characters: Array, characters_by_id: Dictionary, ships: Array, named_vessels: Array,
+) -> void:
+	# Which ship ids are currently underway (for the crit-penalty clear on dock).
+	var moving_ship: Dictionary = {}
+	for s: ShipData in ships:
+		if s.is_moving:
+			moving_ship[s.ship_id] = true
+	for v: NamedVesselData in named_vessels:
+		if v.is_moving:
+			moving_ship[v.vessel_id] = true
+
+	for c: L5RCharacterData in characters:
+		if c == null:
+			continue
+		# Clear a captain's voyage crit penalty once they are no longer aboard a moving ship.
+		if c.intervene_crit_penalty > 0 and c.aboard_ship_id < 0:
+			c.intervene_crit_penalty = 0
+		if c.action_blocks.is_empty():
+			continue
+		var kept: Array = []
+		for block: Dictionary in c.action_blocks:
+			if block.get("source_technique", "") != "INTERVENE_CAPTAIN":
+				kept.append(block)  # leave non-INTERVENE blocks to their own systems
+				continue
+			# voyage_end: the blocked aggressor is no longer aboard the block's ship.
+			if c.aboard_ship_id != int(block.get("ship_id", -2)):
+				continue
+			# captain_incapacitated: the writing captain is dead / Down / Out.
+			var cap: L5RCharacterData = characters_by_id.get(int(block.get("captain_id", -1)))
+			if cap == null or CharacterStats.is_dead(cap) \
+					or CharacterStats.get_wound_level(cap) >= Enums.WoundLevel.DOWN:
+				continue
+			kept.append(block)
+		c.action_blocks = kept
 
 
 ## s57.43.6 shipwreck drift — resolve one IC day for every adrift character. Each

@@ -492,6 +492,11 @@ var taint_benefits_suppressed: bool = false
 # let a caller know the ship is coastal.
 @export var drift_near_shore: bool = false
 
+# s55.11 INTERVENE_CAPTAIN: cumulative −1k0 penalty on this captain's subsequent
+# intervention rolls this voyage (one per critical failure). Cleared on disembark
+# (when the captain's ship next docks). 0 = no penalty.
+@export var intervene_crit_penalty: int = 0
+
 # -- Tattoo Ability State (Section 57.25.11) -----------------------------------
 
 @export var mantis_tattoo: bool = false
