@@ -497,6 +497,13 @@ var taint_benefits_suppressed: bool = false
 # (when the captain's ship next docks). 0 = no penalty.
 @export var intervene_crit_penalty: int = 0
 
+# s57.42.7 owner-granted passage (by letter): the named vessel this character has been
+# granted passage on and its destination province. When the character is co-located with
+# that docked vessel at its port, they board (and the vessel sails toward the destination).
+# Cleared on boarding, or if the vessel is destroyed. -1 = no pending grant.
+@export var passage_granted_vessel_id: int = -1
+@export var passage_granted_destination: int = -1
+
 # -- Tattoo Ability State (Section 57.25.11) -----------------------------------
 
 @export var mantis_tattoo: bool = false

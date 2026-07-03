@@ -335,6 +335,11 @@ static func advance_day(
 	_process_ship_departures(
 		ships, water_subtiles, characters_by_id, settlements, objectives_map, ic_day,
 	)
+	# s57.42.7: an owner-granted passenger co-located with their docked vessel boards it
+	# (and the vessel sails toward the granted destination).
+	_process_granted_passenger_boarding(
+		characters, named_vessels, water_subtiles, settlements,
+	)
 	var naval_movement_results: Array = _process_ship_movement(
 		ships, named_vessels, water_subtiles, characters_by_id, settlements,
 		insurgencies, dice_engine, provinces, active_wars, pending_letters, ic_day,
@@ -1478,6 +1483,13 @@ static func advance_day(
 	# to recommend a vassal (added to the soliciting authority's met_characters).
 	_process_governor_solicitation_delivery(
 		pending_letters, characters, characters_by_id,
+	)
+
+	# s57.42.7: a delivered passage-request letter to a ship owner is evaluated; on
+	# acceptance the owner grants passage (3-point Obligation) and dispatches response
+	# letters (to the requester and the captain).
+	_process_passage_request_letter_delivery(
+		pending_letters, characters_by_id, named_vessels, favors, next_letter_id, ic_day,
 	)
 
 	var reply_letters: Array = []
@@ -20605,6 +20617,145 @@ static func _manifest_rank(c: L5RCharacterData, owner_family: String, owner_clan
 	if owner_clan != "" and c.clan == owner_clan:
 		return 1
 	return 2
+
+
+## s57.42.7 owner-override letter flow. A requester petitions a remote ship owner by
+## letter (LetterData.passage_request); on delivery the owner evaluates acceptance via
+## the standard passage logic (disposition / koku / schedule / standing orders / status,
+## SailingSystem.evaluate_passage_request). On acceptance the owner grants passage on
+## their best suitable named vessel: a 3-point Obligation on the requester (owner-grant
+## MINOR favor, the same Obligation the co-located owner grant creates), the requester's
+## pending-passage grant is set (they board when co-located with the docked vessel — see
+## _process_granted_passenger_boarding), and the owner dispatches the two response letters
+## the GDD specifies — the acceptance response to the requester and the order-to-accept to
+## the captain. On refusal a polite refusal letter is returned (owner letters are polite
+## by default → no disposition shift, s57.42.7). The captain-order letter is informational:
+## "the captain does not refuse their owner" (s57.42.2), so compliance is already encoded
+## in the requester's grant + the boarding pass. Only owner-patron NAMED vessels are
+## grantable (military command-appointment ships require the daimyo-petition path, not
+## modeled here). Inert until a producer fires the request letter and water coordinates
+## let the granted voyage launch (PC-flavored / map-gated, like the rest of the layer).
+static func _process_passage_request_letter_delivery(
+	pending_letters: Array, characters_by_id: Dictionary, named_vessels: Array,
+	favors: Array, next_letter_id: Array, ic_day: int,
+) -> void:
+	for letter: Variant in pending_letters:
+		var l: LetterData = letter as LetterData
+		if l == null or not l.delivered or not l.passage_request:
+			continue
+		l.passage_request = false  # mark processed (delivered letters persist in the pool)
+		var owner: L5RCharacterData = characters_by_id.get(l.recipient_id)
+		var requester: L5RCharacterData = characters_by_id.get(l.sender_id)
+		if owner == null or CharacterStats.is_dead(owner):
+			continue
+		if requester == null or CharacterStats.is_dead(requester):
+			continue
+
+		var vessel: NamedVesselData = _owner_best_passage_vessel(
+			owner, named_vessels, l.passage_destination_province)
+		var accepted: bool = false
+		if vessel != null:
+			var disposition: int = owner.disposition_values.get(requester.character_id, 0)
+			var eval: Dictionary = SailingSystem.evaluate_passage_request(
+				owner, disposition, l.passage_koku_offered, true, false, requester.status, true)
+			accepted = eval.get("accepted", false)
+
+		if accepted:
+			requester.passage_granted_vessel_id = vessel.vessel_id
+			requester.passage_granted_destination = l.passage_destination_province
+			# 3-point Obligation on the requester (owner-granted passage, s57.42.7).
+			var max_fid: int = 0
+			for f: Variant in favors:
+				if f is FavorData and (f as FavorData).favor_id >= max_fid:
+					max_fid = (f as FavorData).favor_id + 1
+			favors.append(FavorSystem.offer_favor(
+				FavorData.FavorType.GENERAL, FavorData.FavorTier.MINOR,
+				owner.character_id, requester.character_id, ic_day,
+				"Owner-granted sea passage", "OWNER_PASSAGE", max_fid))
+			# The order-to-accept letter to the captain (informational — the captain
+			# complies with their owner; boarding is driven by the requester's grant).
+			if vessel.captain_id >= 0 and vessel.captain_id != owner.character_id:
+				_dispatch_passage_letter(
+					pending_letters, next_letter_id, ic_day,
+					owner.character_id, vessel.captain_id)
+		# Acceptance / refusal response letter back to the requester.
+		_dispatch_passage_letter(
+			pending_letters, next_letter_id, ic_day, owner.character_id, requester.character_id)
+
+
+## The owner's best owner-patron vessel for a passage grant: an undestroyed NAMED vessel
+## they own (owner_id) with a captain, preferring one already docked (not moving) — a
+## ship in port can take the passenger without a special trip. Returns null if the owner
+## owns no grantable vessel (military command-appointment ships are not owner-grantable).
+static func _owner_best_passage_vessel(
+	owner: L5RCharacterData, named_vessels: Array, _dest_province: int,
+) -> NamedVesselData:
+	var docked: NamedVesselData = null
+	var any: NamedVesselData = null
+	for v: NamedVesselData in named_vessels:
+		if v == null or v.is_destroyed or v.owner_id != owner.character_id or v.captain_id < 0:
+			continue
+		if any == null:
+			any = v
+		if not v.is_moving:
+			docked = v
+			break
+	return docked if docked != null else any
+
+
+## Dispatch a plain passage-flow response/order letter (informational — the mechanical
+## effects live on the grant + boarding pass). Enters the standard delivery pipeline.
+static func _dispatch_passage_letter(
+	pending_letters: Array, next_letter_id: Array, ic_day: int,
+	sender_id: int, recipient_id: int,
+) -> void:
+	var letter := LetterData.new()
+	letter.letter_id = next_letter_id[0]
+	next_letter_id[0] += 1
+	letter.sender_id = sender_id
+	letter.recipient_id = recipient_id
+	letter.ic_day_sent = ic_day
+	letter.ic_day_arrival = -1
+	pending_letters.append(letter)
+
+
+## s57.42.7: board a character who holds an owner-granted passage (passage_granted_vessel_id)
+## once they are co-located with that vessel while it is docked at its port, then launch the
+## vessel toward the granted destination (begin_voyage self-gates on the water graph). The
+## grant persists across voyages until fulfilled — if the vessel sailed without them, they
+## board the next time it is in port (s57.42.7); it clears only on boarding or if the vessel
+## is destroyed. Inert until named vessels dock at known ports with the passenger present.
+static func _process_granted_passenger_boarding(
+	characters: Array, named_vessels: Array, water_subtiles: Array, settlements: Array,
+) -> void:
+	if named_vessels.is_empty():
+		return
+	var vessel_by_id: Dictionary = {}
+	for v: NamedVesselData in named_vessels:
+		vessel_by_id[v.vessel_id] = v
+	var province_settlement: Dictionary = _build_province_settlement_map(settlements)
+	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c) or c.passage_granted_vessel_id < 0:
+			continue
+		if c.aboard_ship_id >= 0:
+			continue  # already aboard something
+		var v: NamedVesselData = vessel_by_id.get(c.passage_granted_vessel_id)
+		if v == null or v.is_destroyed:
+			c.passage_granted_vessel_id = -1
+			c.passage_granted_destination = -1
+			continue
+		if v.is_moving:
+			continue  # vessel at sea — wait for it to return to port
+		var port: String = province_settlement.get(v.current_province_id, "")
+		if port.is_empty() or c.physical_location != port or TravelSystem.is_traveling(c):
+			continue
+		c.aboard_ship_id = v.vessel_id
+		var dest: int = c.passage_granted_destination
+		c.passage_granted_vessel_id = -1
+		c.passage_granted_destination = -1
+		if dest >= 0 and not v.is_moving:
+			NavalMovementSystem.begin_voyage(v, index, dest)
 
 
 static func _process_naval_battle_triggers(
