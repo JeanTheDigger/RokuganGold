@@ -618,8 +618,52 @@ static func _seed_starting_navies(
 			_add_fleet_ships(ships, clan_name, int(spec[2]), int(spec[3]), dock_prov, owner_id, next_ship_id)
 
 	_seed_named_merchant_vessels(named_vessels, characters, clan_port, next_ship_id)
+	_seed_ship_crews(ships, characters)
 
 	return {"ships": ships, "named_vessels": named_vessels}
+
+
+## s57.43.4 (3a seeding): assign standing named samurai crew to the fleet warships.
+## Each ship gets up to its class slot count of the owning clan's junior bushi
+## (living, non-PC, no role/office), lowest-status-first; a Mantis ship also gets one
+## Yoritomo Shugenja (strict crew cap). A character serves one ship. If the clan pool
+## runs dry the slot stays empty (the ship sails short-handed — a real, notable state).
+static func _seed_ship_crews(ships: Array, characters: Array) -> void:
+	var bushi_by_clan: Dictionary = {}     # clan -> Array[L5RCharacterData], status asc
+	var yoritomo_shugenja: Array = []      # Mantis Yoritomo shugenja, status asc
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.assigned_ship_id >= 0 or c.role_position != "":
+			continue
+		if c.school_type == Enums.SchoolType.BUSHI:
+			if not bushi_by_clan.has(c.clan):
+				bushi_by_clan[c.clan] = []
+			bushi_by_clan[c.clan].append(c)
+		elif c.school_type == Enums.SchoolType.SHUGENJA \
+				and c.clan == "Mantis" and c.family == "Yoritomo":
+			yoritomo_shugenja.append(c)
+
+	var by_status := func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+		return a.status < b.status
+	for clan: String in bushi_by_clan:
+		(bushi_by_clan[clan] as Array).sort_custom(by_status)
+	yoritomo_shugenja.sort_custom(by_status)
+
+	for ship: ShipData in ships:
+		var slots: int = SailingSystem.crew_slots_for_class(ship.ship_class)
+		var pool: Array = bushi_by_clan.get(ship.owning_clan, [])
+		var filled: int = 0
+		while filled < slots and not pool.is_empty():
+			var crew: L5RCharacterData = pool.pop_front()
+			crew.assigned_ship_id = ship.ship_id
+			filled += 1
+		if ship.owning_clan == "Mantis":
+			for _s: int in SailingSystem.MANTIS_SHUGENJA_CREW_SLOT:
+				if yoritomo_shugenja.is_empty():
+					break
+				var sh: L5RCharacterData = yoritomo_shugenja.pop_front()
+				sh.assigned_ship_id = ship.ship_id
 
 
 # Prefer a coastal province holding a port/CITY settlement; else the first coastal

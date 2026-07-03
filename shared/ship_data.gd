@@ -21,6 +21,10 @@ extends Resource
 
 ## IC day this ship sails from its current port (-1 = not scheduled). s57.42.7.
 @export var departure_tick: int = -1
+## Destination province of a scheduled-but-not-yet-launched voyage (s57.43.4): set
+## when a deploy order is received; the ship musters its crew until departure_tick,
+## then launches toward here. -1 = no scheduled voyage.
+@export var pending_destination_province: int = -1
 
 ## Province ID where this ship is currently located.
 @export var current_province_id: int = -1

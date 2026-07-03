@@ -713,6 +713,10 @@
     "TRANSMIT_VIA_TEAR": 80,
     "WRITE_LETTER": 40
   },
+  "REPORT_TO_SHIP": {
+    "BEGIN_TRAVEL": 100,
+    "DO_NOTHING": 0
+  },
   "REQUEST_AID": {
     "CHARM": 65,
     "DELIVER_GIFT": 65,

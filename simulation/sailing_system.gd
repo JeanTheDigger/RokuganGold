@@ -50,6 +50,30 @@ const DRIFT_CEILING_DAYS: int = 6
 const DRIFT_SWIM_TN: int = 25
 const DRIFT_NON_SWIMMER_PENALTY: int = 10
 
+# Named samurai crew (s57.43.4). Fleet warships carry standing named crew; merchant/
+# civilian classes carry none. Slot counts are PROVISIONAL (owner-set): the GDD marks
+# them "PROVISIONAL pending balancing" — Kobune a handful, larger more, Atakebune many.
+const CREW_SLOTS_BY_CLASS: Dictionary = {
+	Enums.ShipClass.SAMPAN: 0,
+	Enums.ShipClass.MERCHANT_BARGE: 0,
+	Enums.ShipClass.KOBUNE: 2,
+	Enums.ShipClass.SENGOKOBUNE: 4,
+	Enums.ShipClass.KOUTETSUKAN: 5,
+	Enums.ShipClass.ATAKEBUNE: 8,
+	Enums.ShipClass.TORTOISE_OCEANGOING: 3,
+}
+# A Mantis fleet ship carries one additional Yoritomo Shugenja crew slot (strict cap
+# 1, crew-only; s57.43.4) on top of the class count.
+const MANTIS_SHUGENJA_CREW_SLOT: int = 1
+# Muster delay (owner-set, s57.43.4): a deploy order sets departure_tick this many IC
+# days out so notified crew can travel to the port and board before the ship sails.
+const MUSTER_DELAY_IC_DAYS: int = 7
+
+
+## Named crew slots for a ship class (s57.43.4). 0 for merchant/civilian classes.
+static func crew_slots_for_class(ship_class: int) -> int:
+	return int(CREW_SLOTS_BY_CLASS.get(ship_class, 0))
+
 
 # === CAPTAIN REQUIREMENTS (s57.42.3) =========================================
 

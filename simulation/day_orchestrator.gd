@@ -327,6 +327,11 @@ static func advance_day(
 	var naval_weather: int = _process_naval_weather(
 		dice_engine, _season_to_name(current_season), season_meta,
 	)
+	# s57.43.4: fleet ships that have finished mustering (departure_tick reached) launch
+	# now — present assigned crew board, absent crew miss the sailing.
+	_process_ship_departures(
+		ships, water_subtiles, characters_by_id, settlements, objectives_map, ic_day,
+	)
 	var naval_movement_results: Array = _process_ship_movement(
 		ships, named_vessels, water_subtiles, characters_by_id, settlements,
 		insurgencies, dice_engine, provinces, active_wars, pending_letters, ic_day,
@@ -403,6 +408,7 @@ static func advance_day(
 	# s57.18: a lord's ORDER_DEPLOY toward a coastal target sails their clan fleet there.
 	_process_fleet_deployment_writebacks(
 		day_result.get("results", []), ships, characters_by_id, water_subtiles,
+		ic_day, objectives_map, settlements,
 	)
 
 	# s57.42: resolve REQUEST_PASSAGE — board the requester and launch the vessel voyage.
@@ -19936,6 +19942,77 @@ static func _process_naval_weather(
 	return weather
 
 
+## s57.43.4: launch fleet ships whose muster window has closed. A ship with a scheduled
+## departure (departure_tick set by a deploy order) sails once ic_day reaches that tick:
+## assigned crew standing at the home port (present, not traveling) board; crew who did
+## not arrive in time miss the sailing (they keep their crew assignment for the next
+## voyage). REPORT_TO_SHIP objectives are cleared for all assigned crew (the muster is
+## over). begin_voyage launches the ship toward pending_destination_province; the schedule
+## clears whether the voyage starts or fails (a failure — e.g. no water route — is not
+## re-attempted, so the ship does not muster forever). Inert until the water graph exists
+## (begin_voyage returns no_water_graph, but the schedule still clears so it does not
+## latch). Named vessels are not fleet assets and have no crew-muster path.
+static func _process_ship_departures(
+	ships: Array,
+	water_subtiles: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> void:
+	if ships.is_empty():
+		return
+	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
+	var province_settlement: Dictionary = _build_province_settlement_map(settlements)
+	for ship: ShipData in ships:
+		if ship.is_destroyed or ship.is_captured or ship.is_moving:
+			continue
+		if ship.departure_tick < 0 or ship.departure_tick > ic_day:
+			continue
+		if ship.pending_destination_province < 0:
+			ship.departure_tick = -1
+			continue
+		var port_settlement: String = province_settlement.get(ship.current_province_id, "")
+		# Board present crew; clear every assigned crew member's muster objective.
+		for cid: int in characters_by_id:
+			var c: L5RCharacterData = characters_by_id[cid]
+			if c == null or CharacterStats.is_dead(c) or c.assigned_ship_id != ship.ship_id:
+				continue
+			if (
+				not port_settlement.is_empty()
+				and c.physical_location == port_settlement
+				and not TravelSystem.is_traveling(c)
+				and c.aboard_ship_id < 0
+			):
+				c.aboard_ship_id = ship.ship_id
+			_clear_ship_departure_objective(c, ship.ship_id, objectives_map)
+		var launch: Dictionary = NavalMovementSystem.begin_voyage(
+			ship, index, ship.pending_destination_province)
+		# Clear the schedule regardless — a failed launch is not re-mustered.
+		ship.departure_tick = -1
+		ship.pending_destination_province = -1
+		if not launch.get("success", false):
+			continue
+
+
+## Clear a crew member's REPORT_TO_SHIP muster objective for the given ship once the
+## departure resolves (boarded or missed). Only removes the primary if it is this ship's
+## muster objective (source "ship_departure", matching ship_id) — a crew member reassigned
+## to a real objective mid-muster is left untouched.
+static func _clear_ship_departure_objective(
+	c: L5RCharacterData, ship_id: int, objectives_map: Dictionary,
+) -> void:
+	if not objectives_map.has(c.character_id):
+		return
+	var obj: Dictionary = objectives_map[c.character_id]
+	var primary: Dictionary = obj.get("primary", {})
+	if (
+		primary.get("source", "") == "ship_departure"
+		and int(primary.get("ship_id", -1)) == ship_id
+	):
+		obj.erase("primary")
+
+
 static func _process_ship_movement(
 	ships: Array,
 	named_vessels: Array,
@@ -20129,6 +20206,9 @@ static func _process_fleet_deployment_writebacks(
 	ships: Array,
 	characters_by_id: Dictionary,
 	water_subtiles: Array,
+	ic_day: int = -1,
+	objectives_map: Dictionary = {},
+	settlements: Array = [],
 ) -> void:
 	if ships.is_empty() or water_subtiles.is_empty():
 		return
@@ -20147,16 +20227,53 @@ static func _process_fleet_deployment_writebacks(
 	if clan_targets.is_empty():
 		return
 
-	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
+	# s57.43.4: a deploy order does not launch immediately — it schedules a departure
+	# MUSTER_DELAY IC days out and calls the ship's named crew, who travel to the port
+	# and board before it sails (the muster launch pass fires the voyage at departure).
+	var province_settlement: Dictionary = _build_province_settlement_map(settlements)
 	for ship: ShipData in ships:
 		if ship.is_destroyed or ship.is_captured or ship.is_moving:
 			continue
+		if ship.departure_tick >= 0:
+			continue  # already mustering for a departure
 		if not clan_targets.has(ship.owning_clan):
 			continue
 		var dest_prov: int = clan_targets[ship.owning_clan]
 		if ship.current_province_id == dest_prov and ship.current_subtile_id < 0:
 			continue  # fleet already in port at the destination
-		NavalMovementSystem.begin_voyage(ship, index, dest_prov)
+		ship.departure_tick = ic_day + SailingSystem.MUSTER_DELAY_IC_DAYS
+		ship.pending_destination_province = dest_prov
+		_notify_ship_crew(ship, characters_by_id, objectives_map, province_settlement, ic_day)
+
+
+## s57.43.4: call a ship's named crew to muster. Each living assigned crew member gets
+## a REPORT_TO_SHIP primary objective (priority 1, overriding all others) targeting the
+## ship's home port — co-located crew are already there and wait; distant crew travel.
+## (The GDD's conversation-vs-letter notification is cosmetic; the objective is the
+## mechanic.) Crew who do not reach the port by departure miss the sailing.
+static func _notify_ship_crew(
+	ship: ShipData, characters_by_id: Dictionary, objectives_map: Dictionary,
+	province_settlement: Dictionary, ic_day: int,
+) -> void:
+	var port_settlement: String = province_settlement.get(ship.current_province_id, "")
+	# target_settlement_id is an int (the arrived-travel filter matches ctx.location_id
+	# against str(target_settlement_id)); the province map stores stringified ids.
+	var port_sid: int = port_settlement.to_int() if not port_settlement.is_empty() else -1
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c) or c.assigned_ship_id != ship.ship_id:
+			continue
+		if not objectives_map.has(c.character_id):
+			objectives_map[c.character_id] = {}
+		objectives_map[c.character_id]["primary"] = {
+			"need_type": "REPORT_TO_SHIP",
+			"target_province_id": ship.current_province_id,
+			"target_settlement_id": port_sid,
+			"priority": 1,
+			"source": "ship_departure",
+			"ship_id": ship.ship_id,
+			"assigned_ic_day": ic_day,
+		}
 
 
 ## PROVISIONAL: a pirate (Wako) fleet of Strength N fields N Kobune warships. The GDD
