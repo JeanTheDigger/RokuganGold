@@ -2069,6 +2069,7 @@ static func _get_ap_cost(action_id: String) -> int:
 		"TREAT_WOUND": 1,
 		"REQUEST_PERFORMANCE": 0,
 		"REQUEST_PASSAGE": 0,
+		"JUMP_OVERBOARD": 0,
 		"ANNOUNCE_HUNT": 0,
 		"REQUEST_HUNT_INVITATION": 0,
 		"CANCEL_HUNT": 0,

@@ -485,6 +485,12 @@ var taint_benefits_suppressed: bool = false
 # raise the day-1 landfall chance.
 @export var drift_day: int = 0
 @export var drift_in_mantis_waters: bool = false
+# s57.43.6 JUMP_OVERBOARD near-shore drift: true when the character went overboard
+# within 1 sub-tile of land (coastal). Coastal drift uses the lower swim TN and a
+# successful swim reaches shore that day; open-ocean drift (shipwreck / a jump far
+# from land) leaves this false. Map-gated: defaults false until water coordinates
+# let a caller know the ship is coastal.
+@export var drift_near_shore: bool = false
 
 # -- Tattoo Ability State (Section 57.25.11) -----------------------------------
 

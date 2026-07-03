@@ -458,6 +458,9 @@ static func execute(
 	if action_id == "REQUEST_PASSAGE":
 		return _execute_request_passage(action, character)
 
+	if action_id == "JUMP_OVERBOARD":
+		return _execute_jump_overboard(action, character)
+
 	if action_id == "CONDUCT_TEA_CEREMONY":
 		return _execute_conduct_tea_ceremony(action, character, ctx, dice_engine, characters_by_id)
 
@@ -5651,6 +5654,37 @@ static func _execute_request_passage(
 			"is_owner_grant": bool(meta.get("is_owner_grant", false)),
 			"last_refused_day": int(meta.get("last_refused_day", -1)),
 			"rude_refusal": bool(meta.get("rude_refusal", false)),
+		},
+	}
+
+
+# -- JUMP_OVERBOARD (s57.43.6) --------------------------------------------------
+# A deliberate 0-AP escape: an aboard character throws themselves off the ship into
+# the water, entering the drift state (the day writeback casts them into drift; the
+# daily drift pass then resolves swim-to-shore / drowning / rescue). Rare — the GDD
+# frames it as a desperate PC escape from a hostile or unwanted voyage. near_shore /
+# in_mantis are map-gated metadata (default open ocean). Fails if not aboard.
+
+static func _execute_jump_overboard(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+) -> Dictionary:
+	if character.aboard_ship_id < 0:
+		return {
+			"success": false,
+			"action_id": "JUMP_OVERBOARD",
+			"character_id": character.character_id,
+			"reason": "not_aboard",
+		}
+	var meta: Dictionary = action.metadata
+	return {
+		"success": true,
+		"action_id": "JUMP_OVERBOARD",
+		"character_id": character.character_id,
+		"effects": {
+			"requires_jump_overboard_drift": true,
+			"near_shore": bool(meta.get("near_shore", false)),
+			"in_mantis": bool(meta.get("in_mantis", false)),
 		},
 	}
 

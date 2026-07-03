@@ -49,6 +49,10 @@ const DRIFT_CEILING_DAYS: int = 6
 # vs TN 25; a non-swimmer (no Athletics rank) suffers +10 TN ("they cannot swim").
 const DRIFT_SWIM_TN: int = 25
 const DRIFT_NON_SWIMMER_PENALTY: int = 10
+# Coastal JUMP_OVERBOARD (s57.43.6): a character overboard within 1 sub-tile of land
+# rolls Athletics (Swimming) + Strength vs the lower TN 15, and a success swims to
+# shore that day (open ocean stays TN 25/day). Non-swimmer +10 applies to both.
+const COASTAL_SWIM_TN: int = 15
 
 # Named samurai crew (s57.43.4). Fleet warships carry standing named crew; merchant/
 # civilian classes carry none. Slot counts are PROVISIONAL (owner-set): the GDD marks
@@ -275,9 +279,10 @@ static func shipwreck_landfall_chance(drift_day: int, in_mantis_waters: bool = f
 ## Open-ocean Swimming TN for a drifting character (s57.43.6): base 25, +10 for a
 ## non-swimmer (Athletics rank 0 — without Athletics rank/Swimming emphasis "they
 ## cannot swim").
-static func drift_swim_tn(character: L5RCharacterData) -> int:
+static func drift_swim_tn(character: L5RCharacterData, near_shore: bool = false) -> int:
 	var athletics: int = int(character.skills.get("Athletics", 0))
-	return DRIFT_SWIM_TN + (DRIFT_NON_SWIMMER_PENALTY if athletics <= 0 else 0)
+	var base: int = COASTAL_SWIM_TN if near_shore else DRIFT_SWIM_TN
+	return base + (DRIFT_NON_SWIMMER_PENALTY if athletics <= 0 else 0)
 
 
 ## s57.43.8: when a destination port is non-dockable on arrival (hostile, blockaded,

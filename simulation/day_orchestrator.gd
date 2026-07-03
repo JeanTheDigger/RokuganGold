@@ -419,6 +419,12 @@ static func advance_day(
 		water_subtiles, ic_day, favors, characters, objectives_map,
 	)
 
+	# s57.43.6: a deliberate JUMP_OVERBOARD casts the actor into the drift state, which
+	# the daily drift pass (below) resolves the same tick.
+	_process_jump_overboard_writebacks(
+		day_result.get("results", []), characters_by_id,
+	)
+
 	var crime_results: Array = _process_crime_detection(
 		day_result.get("results", []),
 		characters_by_id,
@@ -20834,9 +20840,48 @@ static func _cast_aboard_into_drift(
 			continue
 		if c.aboard_ship_id != ship_id:
 			continue
-		c.aboard_ship_id = -1
-		c.drift_day = 1
-		c.drift_in_mantis_waters = in_mantis
+		_cast_character_into_drift(c, in_mantis, false)
+
+
+## s57.43.6: cast a single aboard character into the drift state (JUMP_OVERBOARD, or a
+## per-character rescue-failure path). Clears aboard_ship_id and starts drift day 1;
+## near_shore selects the coastal swim resolution (TN 15, swim-to-shore) over open
+## ocean (TN 25/day). No-op if the character is not aboard.
+static func _cast_character_into_drift(
+	c: L5RCharacterData, in_mantis: bool, near_shore: bool,
+) -> void:
+	if c == null or CharacterStats.is_dead(c) or c.aboard_ship_id < 0:
+		return
+	c.aboard_ship_id = -1
+	c.drift_day = 1
+	c.drift_in_mantis_waters = in_mantis
+	c.drift_near_shore = near_shore
+
+
+## s57.43.6: resolve JUMP_OVERBOARD results from the day's actions. A character who
+## deliberately went overboard is cast into the drift state (the daily drift pass then
+## resolves swim-to-shore / drowning / rescue). in_mantis and near_shore come from the
+## action metadata (map-gated; both default false — open ocean — until water
+## coordinates supply them). PC-facing: the GDD frames JUMP_OVERBOARD as a desperate
+## player escape from a hostile/unwanted voyage on the ship ASCII map; there is no
+## autonomous NPC producer (passengers and crew board voluntarily toward their own
+## destination), so this fires only when a deliberate caller (the future PC ship layer)
+## emits the action. Runs before the daily drift pass so the jump resolves the same tick.
+static func _process_jump_overboard_writebacks(
+	day_results: Array, characters_by_id: Dictionary,
+) -> void:
+	for entry: Dictionary in day_results:
+		if entry.get("action_id", "") != "JUMP_OVERBOARD" or not entry.get("success", false):
+			continue
+		var effects: Dictionary = entry.get("effects", {})
+		if not effects.get("requires_jump_overboard_drift", false):
+			continue
+		var jumper: L5RCharacterData = characters_by_id.get(entry.get("character_id", -1))
+		if jumper == null:
+			continue
+		_cast_character_into_drift(
+			jumper, bool(effects.get("in_mantis", false)),
+			bool(effects.get("near_shore", false)))
 
 
 ## s57.43.6 shipwreck drift — resolve one IC day for every adrift character. Each
@@ -20868,29 +20913,44 @@ static func _process_shipwreck_drift(
 			_apply_drift_death(c, "lost_at_sea", death_events, active_topics, next_topic_id, ic_day)
 			continue
 
-		# Landfall / rescue check first (resolves before the Swimming roll).
-		var chance: float = SailingSystem.shipwreck_landfall_chance(
-			c.drift_day, c.drift_in_mantis_waters)
-		if dice_engine.randf() < chance:
-			# Washed ashore / rescued — the drift ends; they keep their last location
-			# (nearest-shore placement is geography-blocked, PROVISIONAL).
-			c.drift_day = 0
-			c.drift_in_mantis_waters = false
-			continue
+		# Open-ocean drift: a random landfall/rescue check resolves before the Swimming
+		# roll (Rokugan's coasts are near most sea routes). A coastal JUMP_OVERBOARD
+		# (s57.43.6, within 1 sub-tile of land) skips this — its Swimming roll IS the
+		# landfall mechanism (a success swims to shore), so it is not left to the random
+		# open-ocean chance.
+		if not c.drift_near_shore:
+			var chance: float = SailingSystem.shipwreck_landfall_chance(
+				c.drift_day, c.drift_in_mantis_waters)
+			if dice_engine.randf() < chance:
+				# Washed ashore / rescued — the drift ends; they keep their last location
+				# (nearest-shore placement is geography-blocked, PROVISIONAL).
+				_clear_drift_state(c)
+				continue
 
 		# Water-affinity shugenja: a water kami keeps them afloat this day.
 		if _drift_water_kami_saves(c):
 			c.drift_day += 1
 			continue
 
-		# Open-ocean Swimming roll — failure drowns.
-		var tn: int = SailingSystem.drift_swim_tn(c)
+		# Swimming roll — coastal TN 15 (success reaches shore that day), open-ocean
+		# TN 25 (success survives another day); failure drowns.
+		var tn: int = SailingSystem.drift_swim_tn(c, c.drift_near_shore)
 		var roll: Dictionary = SkillResolver.resolve_skill_check(
 			c, dice_engine, "Athletics", tn, 0, "Swimming")
 		if roll.get("success", false):
-			c.drift_day += 1
+			if c.drift_near_shore:
+				_clear_drift_state(c)  # swam to the nearby shore
+			else:
+				c.drift_day += 1
 		else:
 			_apply_drift_death(c, "drowned", death_events, active_topics, next_topic_id, ic_day)
+
+
+## Clear a character's drift state (survived: landfall / rescue / coastal swim to shore).
+static func _clear_drift_state(c: L5RCharacterData) -> void:
+	c.drift_day = 0
+	c.drift_in_mantis_waters = false
+	c.drift_near_shore = false
 
 
 ## True if the character is a shugenja whose Water affinity lets them Commune for a
@@ -20919,13 +20979,11 @@ static func _apply_drift_death(
 		var gd: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.GREAT_DESTINY)
 		if gd != null:
 			gd.metadata["last_triggered_ic_year"] = ic_year
-		c.drift_day = 0
-		c.drift_in_mantis_waters = false
+		_clear_drift_state(c)
 		return
 	var earth: int = CharacterStats.get_ring_value(c, Enums.Ring.EARTH)
 	c.wounds_taken = earth * 5 * 5
-	c.drift_day = 0
-	c.drift_in_mantis_waters = false
+	_clear_drift_state(c)
 	death_events.append({
 		"character_id": c.character_id,
 		"is_lord": c.role_position != "",
