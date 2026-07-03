@@ -1231,6 +1231,12 @@ static func advance_day(
 		if _pv != null and not CharacterStats.is_dead(_pv) and not _pv.poison_affliction.is_empty():
 			DiseaseSystem.process_poison_daily(_pv)
 
+	# s57.43.6 shipwreck drift: resolve one IC day for anyone cast into open ocean by
+	# a sinking ship (naval battle). A drowned/lost-at-sea lord → death_events for
+	# same-tick succession below.
+	_process_shipwreck_drift(
+		characters, dice_engine, death_events, active_topics, next_topic_id, ic_day)
+
 	# s33 The World is Truth: a DORMANT magically-installed sleeper reverts when its 1-month
 	# window lapses (the rewritten memories fade). Active/permanent sleepers are untouched.
 	for _sl: L5RCharacterData in characters:
@@ -20567,6 +20573,9 @@ static func _apply_naval_battle_mutations(
 					# A named vessel lost in the battle it joined leaves play (no
 					# separate capture state on the vessel model).
 					vessel.is_destroyed = true
+					if bc.get("is_destroyed", false):
+						_cast_aboard_into_drift(
+							ship_id, vessel.owning_clan == "Mantis", characters_by_id)
 				continue
 
 			ship.health = bc.get("current_health", ship.health)
@@ -20574,6 +20583,9 @@ static func _apply_naval_battle_mutations(
 			if bc.get("is_destroyed", false):
 				ship.is_destroyed = true
 				ship.health = 0
+				# s57.43.6: a sinking ship casts everyone aboard into open-ocean drift.
+				_cast_aboard_into_drift(
+					ship_id, ship.owning_clan == "Mantis", characters_by_id)
 
 			if bc.get("is_captured", false):
 				ship.is_captured = true
@@ -20588,6 +20600,129 @@ static func _apply_naval_battle_mutations(
 			var dead_ship: ShipData = ships_by_id.get(dead_ship_id)
 			if dead_ship != null:
 				dead_ship.captain_id = -1
+
+
+## s57.43.6: cast every living character aboard the wrecked ship/vessel `ship_id`
+## into open-ocean drift (drift_day 1). Their aboard_ship_id clears — the ship is
+## gone. `in_mantis` raises the day-1 landfall chance (PROVISIONAL proxy: the sunk
+## ship's owning clan is Mantis, since sub-tile water geography does not exist yet).
+static func _cast_aboard_into_drift(
+	ship_id: int, in_mantis: bool, characters_by_id: Dictionary,
+) -> void:
+	for c: L5RCharacterData in characters_by_id.values():
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.aboard_ship_id != ship_id:
+			continue
+		c.aboard_ship_id = -1
+		c.drift_day = 1
+		c.drift_in_mantis_waters = in_mantis
+
+
+## s57.43.6 shipwreck drift — resolve one IC day for every adrift character. Each
+## day: a landfall/rescue check (chance by drift day, Mantis waters raise day 1);
+## a character who makes landfall is saved (drift clears) and does NOT roll Swimming
+## that day. Otherwise an open-ocean Swimming roll (Athletics/Strength vs TN 25, +10
+## non-swimmer) — failure is death by drowning. A Water-affinity shugenja calls a
+## water kami (Commune) and is saved from the day's drowning (PROVISIONAL: modeled
+## as auto-surviving the Swimming roll — "success saves the character", s57.43.6,
+## and a Water shugenja's commune is a near-certain success; the exact Commune TN is
+## unspecified). A 6-IC-day ceiling: beyond it, death at sea. Drownings append to
+## death_events so a drowned lord triggers same-tick succession (mirrors the
+## possession/disease passes). Rescue-by-searching-ally and same-day companion
+## rescue (s57.43.6) are co-op play features on the PC-travel HOLD.
+static func _process_shipwreck_drift(
+	characters: Array,
+	dice_engine: DiceEngine,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c) or c.drift_day < 1:
+			continue
+
+		# Hard ceiling: beyond 6 IC days adrift, lost at sea.
+		if c.drift_day > SailingSystem.DRIFT_CEILING_DAYS:
+			_apply_drift_death(c, "lost_at_sea", death_events, active_topics, next_topic_id, ic_day)
+			continue
+
+		# Landfall / rescue check first (resolves before the Swimming roll).
+		var chance: float = SailingSystem.shipwreck_landfall_chance(
+			c.drift_day, c.drift_in_mantis_waters)
+		if dice_engine.randf() < chance:
+			# Washed ashore / rescued — the drift ends; they keep their last location
+			# (nearest-shore placement is geography-blocked, PROVISIONAL).
+			c.drift_day = 0
+			c.drift_in_mantis_waters = false
+			continue
+
+		# Water-affinity shugenja: a water kami keeps them afloat this day.
+		if _drift_water_kami_saves(c):
+			c.drift_day += 1
+			continue
+
+		# Open-ocean Swimming roll — failure drowns.
+		var tn: int = SailingSystem.drift_swim_tn(c)
+		var roll: Dictionary = SkillResolver.resolve_skill_check(
+			c, dice_engine, "Athletics", tn, 0, "Swimming")
+		if roll.get("success", false):
+			c.drift_day += 1
+		else:
+			_apply_drift_death(c, "drowned", death_events, active_topics, next_topic_id, ic_day)
+
+
+## True if the character is a shugenja whose Water affinity lets them Commune for a
+## water kami's aid (s57.43.6). PROVISIONAL: affinity is read from the school's
+## element affinity where available; otherwise a Water-ring-primary shugenja.
+static func _drift_water_kami_saves(c: L5RCharacterData) -> bool:
+	if not SpellSystem.is_shugenja(c):
+		return false
+	return c.affinity_element == Enums.Ring.WATER
+
+
+## Accidental shipwreck death (s57.43.6): GREAT_DESTINY cheats death (washed ashore,
+## drift clears); otherwise lethal wounds + a death_event (accidental — no killer,
+## not suspicious) and a Tier 4 PERSONAL "lost at sea" topic (NEUTRAL subject_role
+## per the dead-character rule). Clears the drift state.
+static func _apply_drift_death(
+	c: L5RCharacterData,
+	cause: String,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(c, ic_year):
+		var gd: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.GREAT_DESTINY)
+		if gd != null:
+			gd.metadata["last_triggered_ic_year"] = ic_year
+		c.drift_day = 0
+		c.drift_in_mantis_waters = false
+		return
+	var earth: int = CharacterStats.get_ring_value(c, Enums.Ring.EARTH)
+	c.wounds_taken = earth * 5 * 5
+	c.drift_day = 0
+	c.drift_in_mantis_waters = false
+	death_events.append({
+		"character_id": c.character_id,
+		"is_lord": c.role_position != "",
+		"cause": cause,
+		"suspicious_death": false,
+		"ic_day": ic_day,
+		"killer_id": -1,
+	})
+	if not next_topic_id.is_empty():
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] = tid + 1
+		var title: String = "%s was lost at sea" % c.character_name
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid, title, TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+			ic_day, 0.0, [], c.clan, "", c.character_id, "death", "lost_at_sea")
+		topic.slug = "lost_at_sea_%d" % c.character_id
+		active_topics.append(topic)
 
 
 static func _process_naval_war_scores(

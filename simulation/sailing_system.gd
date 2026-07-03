@@ -45,6 +45,10 @@ const DRIFT_LANDFALL_CHANCE: Array[float] = [0.0, 0.10, 0.25, 0.40, 0.60]
 const DRIFT_LANDFALL_CAP: float = 0.60
 const DRIFT_MANTIS_DAY1: float = 0.30
 const DRIFT_CEILING_DAYS: int = 6
+# Open-ocean Swimming roll each drift day (s57.43.6): Athletics (Swimming) + Strength
+# vs TN 25; a non-swimmer (no Athletics rank) suffers +10 TN ("they cannot swim").
+const DRIFT_SWIM_TN: int = 25
+const DRIFT_NON_SWIMMER_PENALTY: int = 10
 
 
 # === CAPTAIN REQUIREMENTS (s57.42.3) =========================================
@@ -242,3 +246,11 @@ static func shipwreck_landfall_chance(drift_day: int, in_mantis_waters: bool = f
 	if drift_day < DRIFT_LANDFALL_CHANCE.size():
 		return DRIFT_LANDFALL_CHANCE[drift_day]
 	return DRIFT_LANDFALL_CAP
+
+
+## Open-ocean Swimming TN for a drifting character (s57.43.6): base 25, +10 for a
+## non-swimmer (Athletics rank 0 — without Athletics rank/Swimming emphasis "they
+## cannot swim").
+static func drift_swim_tn(character: L5RCharacterData) -> int:
+	var athletics: int = int(character.skills.get("Athletics", 0))
+	return DRIFT_SWIM_TN + (DRIFT_NON_SWIMMER_PENALTY if athletics <= 0 else 0)

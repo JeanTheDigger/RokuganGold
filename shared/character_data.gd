@@ -473,6 +473,13 @@ var taint_benefits_suppressed: bool = false
 @export var passage_request_count_today: int = 0
 @export var assigned_ship_id: int = -1
 
+# Shipwreck drift state (s57.43.6): when the ship is wrecked the character is cast
+# into an open-ocean drift. drift_day 0 = not adrift; >= 1 = the current drift day
+# (a landfall/rescue check + Swimming roll resolve once per IC day). Mantis waters
+# raise the day-1 landfall chance.
+@export var drift_day: int = 0
+@export var drift_in_mantis_waters: bool = false
+
 # -- Tattoo Ability State (Section 57.25.11) -----------------------------------
 
 @export var mantis_tattoo: bool = false
