@@ -329,7 +329,7 @@ static func advance_day(
 	)
 	var naval_movement_results: Array = _process_ship_movement(
 		ships, named_vessels, water_subtiles, characters_by_id, settlements,
-		insurgencies, dice_engine,
+		insurgencies, dice_engine, provinces, active_wars,
 	)
 	# s57.43.7: resolve any pirate interceptions from movement into naval battles.
 	var pirate_encounter_results: Array = _process_pirate_encounter_writebacks(
@@ -19941,6 +19941,8 @@ static func _process_ship_movement(
 	settlements: Array,
 	insurgencies: Array,
 	dice_engine: DiceEngine,
+	provinces: Dictionary = {},
+	active_wars: Array = [],
 ) -> Array:
 	# Inert until the water-movement graph is populated (location data). build_index
 	# returns {} on an empty graph and step_movement is a no-op on non-moving movers.
@@ -19957,10 +19959,9 @@ static func _process_ship_movement(
 		if r.get("moved", false):
 			r["ship_id"] = ship.ship_id
 			if r.get("voyage_complete", false):
-				_disembark_ship_passengers(
-					ship.ship_id, r.get("docked_province", -1),
-					characters_by_id, province_settlement,
-				)
+				_resolve_arrival(
+					ship, ship.ship_id, r, characters_by_id, province_settlement,
+					provinces, active_wars, index)
 			results.append(r)
 
 	for vessel: NamedVesselData in named_vessels:
@@ -19970,13 +19971,60 @@ static func _process_ship_movement(
 		if vr.get("moved", false):
 			vr["vessel_id"] = vessel.vessel_id
 			if vr.get("voyage_complete", false):
-				_disembark_ship_passengers(
-					vessel.vessel_id, vr.get("docked_province", -1),
-					characters_by_id, province_settlement,
-				)
+				_resolve_arrival(
+					vessel, vessel.vessel_id, vr, characters_by_id, province_settlement,
+					provinces, active_wars, index)
 			results.append(vr)
 
 	return results
+
+
+## s57.43.8 arrival: if the destination port is dockable, passengers disembark. If
+## not (currently: the port province's clan is at war with the ship's clan — the
+## other GDD disruptions, naval blockade / pirate-captured / disaster, have no world-
+## state producer yet and are forward-wired), the captain decides (s57.42.7 authority
+## is theirs): "run" docks anyway; "divert"/"retreat" return to the safe origin port
+## (a fresh voyage back — passengers stay aboard). A return that cannot be routed
+## (no origin, same province, no water route) falls back to docking so passengers are
+## never stranded. Annotates the movement result with the disruption outcome.
+static func _resolve_arrival(
+	mover: Object, mover_id: int, result: Dictionary,
+	characters_by_id: Dictionary, province_settlement: Dictionary,
+	provinces: Dictionary, active_wars: Array, index: Dictionary,
+) -> void:
+	var docked_province: int = int(result.get("docked_province", -1))
+	if _port_dockable(docked_province, str(mover.get("owning_clan")), provinces, active_wars):
+		_disembark_ship_passengers(mover_id, docked_province, characters_by_id, province_settlement)
+		return
+	result["arrival_disrupted"] = true
+	var captain: L5RCharacterData = characters_by_id.get(int(mover.get("captain_id")))
+	var decision: String = SailingSystem.captain_disruption_decision(captain)
+	result["disruption_decision"] = decision
+	if decision == "run":
+		_disembark_ship_passengers(mover_id, docked_province, characters_by_id, province_settlement)
+		return
+	# divert / retreat → sail back to the safe origin port; passengers stay aboard.
+	var origin: int = int(mover.get("voyage_origin_province"))
+	if origin >= 0 and origin != docked_province:
+		var back: Dictionary = NavalMovementSystem.begin_voyage(mover, index, origin)
+		if back.get("success", false):
+			result["returning_to_origin"] = origin
+			return
+	# No safe return possible → dock anyway rather than strand passengers.
+	_disembark_ship_passengers(mover_id, docked_province, characters_by_id, province_settlement)
+
+
+## True if a ship of `ship_clan` can dock at `province_id` (s57.43.8): the port's
+## province clan is not at war with the ship's clan. Unknown province / clan = dockable.
+static func _port_dockable(
+	province_id: int, ship_clan: String, provinces: Dictionary, active_wars: Array,
+) -> bool:
+	if province_id < 0 or ship_clan.is_empty():
+		return true
+	var prov: ProvinceData = provinces.get(province_id)
+	if prov == null or prov.clan.is_empty() or prov.clan == ship_clan:
+		return true
+	return not WarSystem.are_clans_at_war(active_wars, ship_clan, prov.clan)
 
 
 ## Province id -> first settlement id (String) in that province, for placing

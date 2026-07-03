@@ -58,6 +58,9 @@ extends Resource
 ## Province the voyage terminates at (the ship docks there on arrival). -1 = no
 ## voyage destination (a bare single-hop just stops at the sub-tile).
 @export var voyage_destination_province: int = -1
+## Origin province of the current voyage (set at begin_voyage) — the safe port a
+## disrupted arrival returns to (s57.43.8). -1 = not voyaging.
+@export var voyage_origin_province: int = -1
 
 ## Construction cost in koku.
 @export var construction_cost: float = 0.0

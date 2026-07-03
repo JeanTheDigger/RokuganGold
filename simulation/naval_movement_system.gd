@@ -184,6 +184,7 @@ static func begin_voyage(mover: Object, index: Dictionary, dest_province: int) -
 		return {"success": false, "reason": "no_route"}
 
 	# Undock into the water at the origin sub-tile, then launch the first hop.
+	mover.voyage_origin_province = mover.current_province_id
 	mover.current_subtile_id = origin
 	mover.voyage_destination_province = dest_province
 	var hop_cost: int = maxi(1, NavalSystem.get_movement_days(ship_class))

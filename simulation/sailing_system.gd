@@ -254,3 +254,23 @@ static func shipwreck_landfall_chance(drift_day: int, in_mantis_waters: bool = f
 static func drift_swim_tn(character: L5RCharacterData) -> int:
 	var athletics: int = int(character.skills.get("Athletics", 0))
 	return DRIFT_SWIM_TN + (DRIFT_NON_SWIMMER_PENALTY if athletics <= 0 else 0)
+
+
+## s57.43.8: when a destination port is non-dockable on arrival (hostile, blockaded,
+## besieged, captured, or struck by disaster), the captain decides what to do. The
+## decision is personality-led: Yu (Courage) runs the blockade, Seigyo (Control)
+## diverts to a safe port, Chugi (Duty) retreats to fulfil the owner's intent; a
+## captainless ship turns back. Returns "run" / "divert" / "retreat". The engine
+## applies "run" as docking anyway; "divert"/"retreat" both return to the safe
+## origin port (nearest-friendly-port and offshore-hold need port-adjacency /
+## cargo-spoilage data the world map does not yet carry).
+static func captain_disruption_decision(captain: L5RCharacterData) -> String:
+	if captain == null or CharacterStats.is_dead(captain):
+		return "retreat"
+	if captain.bushido_virtue == Enums.BushidoVirtue.YU:
+		return "run"
+	if captain.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+		return "divert"
+	if captain.bushido_virtue == Enums.BushidoVirtue.CHUGI:
+		return "retreat"
+	return "retreat"

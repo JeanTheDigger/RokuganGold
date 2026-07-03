@@ -53,6 +53,9 @@ enum Purpose { WARSHIP, TRANSPORT }
 ## province on arrival.
 @export var voyage_route: PackedInt32Array = PackedInt32Array()
 @export var voyage_destination_province: int = -1
+## Origin province of the current voyage (set at begin_voyage) — the safe port a
+## disrupted arrival returns to (s57.43.8). -1 = not voyaging.
+@export var voyage_origin_province: int = -1
 
 ## Cargo capacity in Rice/Koku units (flavor per s11.9 — no goods-transport mechanic).
 @export var cargo_capacity: float = 0.0
