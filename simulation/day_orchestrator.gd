@@ -283,6 +283,10 @@ static func advance_day(
 	# governance/court/worship (AT_OWN_HOLDINGS already permits TRAIN/MENTOR). AT_DOJO is
 	# reserved for future per-character zone-position tracking (a PC standing in the dojo).
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
+	# Aboard a vessel (s57.43.5): AT_SHIP supersedes any settlement context —
+	# a character with aboard_ship_id >= 0 is on the ship, not at a port/court/
+	# holding. Runs last so it overrides the settlement-level setters above.
+	_set_ship_context_flags(characters, world_states)
 	_inject_settlement_type(characters, settlements, world_states)
 	_pickup_ambient_public_records(characters, settlements, ic_day)
 
@@ -19088,6 +19092,25 @@ static func _set_visiting_context_flags(
 				ws = {}
 				world_states[character.character_id] = ws
 			ws["context_flag"] = Enums.ContextFlag.VISITING
+
+
+## Assigns AT_SHIP context to every living character aboard a vessel (s57.43.5).
+## Overrides any settlement-level context flag set by the sibling passes — being
+## aboard supersedes VISITING/AT_TEMPLE/AT_COURT/etc. context_flag is cleared and
+## recomputed daily, so a character reverts to normal context on disembark.
+static func _set_ship_context_flags(
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.aboard_ship_id < 0:
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			world_states[character.character_id] = ws
+		ws["context_flag"] = Enums.ContextFlag.AT_SHIP
 
 
 static func _inject_settlement_type(

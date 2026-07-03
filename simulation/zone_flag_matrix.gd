@@ -410,6 +410,21 @@ const ZONE_FLAGS: Dictionary = {
 		"garden_eligible": false,
 		"shrine_eligible": false,
 	},
+	# Ship interior (s57.43): a vessel has none of the settlement-zone art/garden/
+	# shrine affordances. Worship at the ship's Suitengu shrine (s57.43.5) is
+	# granted through the AT_SHIP action list, not this zone-flag slot — aboard
+	# characters carry no zone_subtype, so these flags are a structural descriptor
+	# only (all false: no court performance, no art display, no garden, no bonsai).
+	Enums.ZoneSubtype.SHIP_INTERIOR: {
+		"performance_permitted": false,
+		"wall_art_slot": false,
+		"displayed_art_slot": false,
+		"fusuma_slot": false,
+		"tokonoma": false,
+		"bonsai_display_slot": false,
+		"garden_eligible": false,
+		"shrine_eligible": false,
+	},
 }
 
 

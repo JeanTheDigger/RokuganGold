@@ -71,6 +71,7 @@ enum ContextFlag {
 	AT_TEMPLE,
 	AT_DOJO,
 	AT_WALL_TOWER,
+	AT_SHIP,  # aboard a vessel underway or docked (s57.43); applies while aboard_ship_id >= 0
 }
 
 enum BushidoVirtue {
@@ -286,6 +287,8 @@ enum ZoneSubtype {
 	TOMB,
 	# Guarded strongroom (s2.3.23 — locked coffers in vault bays)
 	TREASURY_VAULT,
+	# Ship interior — the deck/cabin/hold of a vessel underway (s57.43 ship Lesser Zone)
+	SHIP_INTERIOR,
 }
 
 # Three-tier zone hierarchy — Greater Zone is the top container.

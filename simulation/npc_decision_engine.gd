@@ -17,6 +17,16 @@ const KOLAT_ACTION_POOL: Array[String] = [
 	"USE_CLOUDS_EYES", "DELIVER_SEALED_LETTER",
 ]
 
+# The 9 person-to-person Kolat ActionIDs available AT_SHIP (s57.43.5) — they
+# require only a co-located target and its state, not settlement/Hidden-Temple
+# infrastructure. Every other KOLAT_ACTION_POOL entry is blocked aboard ship.
+const _AT_SHIP_KOLAT_AVAILABLE: Array[String] = [
+	"TRANSMIT_VIA_TEAR", "SUBMIT_KOLAT_REPORT", "ANONYMOUS_TIP",
+	"ROUTE_ANONYMOUS_INTELLIGENCE", "CONDUCT_CONDITIONING",
+	"MAINTAIN_SLEEPER_CONTACT", "ACTIVATE_SLEEPER",
+	"APPROACH_FOR_RECRUITMENT", "ARCHIVE_TOPIC",
+]
+
 
 # -- Phase 1: Build Context ----------------------------------------------------
 
@@ -478,6 +488,17 @@ static func generate_options(
 		for ka: String in KOLAT_ACTION_POOL:
 			if ka not in available_actions:
 				available_actions.append(ka)
+		# Kolat at sea (s57.43.5): infrastructure-dependent Kolat actions require a
+		# specific settlement asset or Hidden-Temple presence and are blocked
+		# AT_SHIP; only the 9 person-to-person actions (co-located target + state)
+		# survive. This never triggers in the live sim today (AT_SHIP is a
+		# PC-aboard context and PCs do not run the NPC engine), but keeps the
+		# unlock faithful for when PCs-aboard and Kolat-at-sea both go live.
+		if ctx.context_flag == Enums.ContextFlag.AT_SHIP:
+			available_actions = available_actions.filter(
+				func(a: String) -> bool:
+					return a not in KOLAT_ACTION_POOL or a in _AT_SHIP_KOLAT_AVAILABLE
+			)
 
 	if need.need_type == "RESPOND_TO_SEPPUKU":
 		available_actions = ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]
@@ -1919,6 +1940,37 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"DISPATCH_COURTIER", "DECLARE_WALL_EMERGENCY",
 				"TREAT_WOUND",
 				"TRAIN",
+				"DO_NOTHING", "REST",
+			]
+		Enums.ContextFlag.AT_SHIP:
+			# Aboard a vessel (aboard_ship_id >= 0) — s57.43.5. The ship is not a
+			# province, court, or the character's holdings, so all lord-tier
+			# holdings actions and court-audience actions (PUBLIC_PERFORMANCE,
+			# PUBLIC_DECLARATION, CALL_COURT, ORDER_*, SET_*, CONDUCT_COMMERCE,
+			# PURCHASE_MARKET, CULTIVATE/MAINTAIN_GARDEN, INVESTIGATE_PROVINCE,
+			# REQUEST_ART/PERFORMANCE) are blocked. BEGIN_TRAVEL/CHANGE_DESTINATION
+			# are not passenger-firable — the captain controls the route.
+			return [
+				# Social (Categories 1, 3, 4, 5) — target co-located characters aboard.
+				"CHARM", "NEGOTIATE", "PERSUADE", "INTIMIDATE",
+				"LISTEN_REFLECT", "IMPRESS", "DELIVER_GIFT", "OFFER_FAVOR",
+				"PERFORM_FOR", "PLAY_GAME", "GOSSIP", "DISCLOSE",
+				"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+				"PUBLIC_INSULT", "PUBLIC_DEBATE", "PROVOKE_EMOTION",
+				"READ_CHARACTER", "PROBE", "ASK_FOR_INTRODUCTION", "DISCERN_NEED",
+				# Covert (Category 6) — confined space, detection is easier.
+				"EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS",
+				"FABRICATE_SECRET", "BRIBE_FOR_INFO",
+				# Personal development (Category 11) — portable practice only.
+				"TRAIN", "MEDITATE", "MENTOR", "TREAT_WOUND",
+				"LEARN_THEATER_PIECE", "COMPOSE_THEATER_PIECE",
+				"COMPOSE_PAINTING", "COMPOSE_SCULPTURE", "CRAFT",
+				"APPLY_TATTOO", "TRAIN_ANIMAL",
+				# Communication (Category 10) — dispatch deferred to port arrival.
+				"WRITE_LETTER", "SEND_INVITATION", "ASSIGN_VASSAL_OBJECTIVE",
+				# Spiritual (Category 12) + Honor & Dueling (Category 13).
+				"PERFORM_WORSHIP", "PUBLIC_ATONEMENT", "ISSUE_DUEL_CHALLENGE",
+				# Passive.
 				"DO_NOTHING", "REST",
 			]
 		_:
