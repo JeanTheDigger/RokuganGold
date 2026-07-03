@@ -90,6 +90,10 @@ static func build_context(
 	ctx.court_session_state = world_state.get("court_session_state", {})
 	ctx.court_settlement_id = world_state.get("court_settlement_id", -1)
 	ctx.compliance_intimidators = world_state.get("compliance_intimidators", [])
+	# s29.15.24 action-block validation (populated only when non-empty). The daily
+	# break-condition pass prunes expired/broken entries, so this holds active blocks.
+	if not character.action_blocks.is_empty():
+		ctx.action_blocks = character.action_blocks
 
 	# Stats
 	ctx.skill_ranks = character.skills.duplicate()
@@ -598,6 +602,41 @@ static func _apply_compliance_filter(
 			continue
 		filtered.append(option)
 	return filtered
+
+
+# -- s29.15.24 Action-Block Validation Filter ---------------------------------
+# The unified action-block consumer (Ide R5 peace_locked, Miya R3/R4, Otomo R3,
+# INTERVENE_CAPTAIN). Each active block on the character names a protected party
+# (blocker_id) and the actions denied against them (blocked_action_ids =
+# "hostile_tagged" → the HOSTILE_ACTIONS set, or an explicit Array[String]). An
+# option whose target is a protected party and whose action_id is denied is removed.
+static func _apply_action_block_filter(
+	options: Array,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	if ctx.action_blocks.is_empty():
+		return options
+	var filtered: Array = []
+	for option: NPCDataStructures.ScoredAction in options:
+		if _option_denied_by_block(option, ctx.action_blocks):
+			continue
+		filtered.append(option)
+	return filtered
+
+
+static func _option_denied_by_block(
+	option: NPCDataStructures.ScoredAction, blocks: Array,
+) -> bool:
+	for block: Dictionary in blocks:
+		if int(block.get("blocker_id", -1)) != option.target_npc_id:
+			continue
+		var banned: Variant = block.get("blocked_action_ids", "hostile_tagged")
+		if banned is String and banned == "hostile_tagged":
+			if option.action_id in HOSTILE_ACTIONS:
+				return true
+		elif banned is Array and option.action_id in banned:
+			return true
+	return false
 
 
 # -- Phase 4b: Allowlist Filter (s57.1) ----------------------------------------
@@ -1438,6 +1477,7 @@ static func run(
 	options = _apply_commerce_precondition_filter(options, character, ctx)
 	options = _apply_arrived_travel_filter(options, need, ctx)
 	options = _apply_compliance_filter(options, ctx)
+	options = _apply_action_block_filter(options, ctx)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
