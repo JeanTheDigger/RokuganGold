@@ -406,9 +406,11 @@ static func advance_day(
 	)
 
 	# s57.42: resolve REQUEST_PASSAGE — board the requester and launch the vessel voyage.
+	# s57.43.4: at voyage launch, generate the named-passenger manifest (co-travelers
+	# bound for the same destination, cap 3).
 	_process_passage_writebacks(
 		day_result.get("results", []), characters_by_id, ships, named_vessels,
-		water_subtiles, ic_day, favors,
+		water_subtiles, ic_day, favors, characters, objectives_map,
 	)
 
 	var crime_results: Array = _process_crime_detection(
@@ -20205,6 +20207,8 @@ static func _process_passage_writebacks(
 	water_subtiles: Array,
 	ic_day: int,
 	favors: Array = [],
+	characters: Array = [],
+	objectives_map: Dictionary = {},
 ) -> void:
 	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
 	var vessel_by_id: Dictionary = {}
@@ -20247,9 +20251,18 @@ static func _process_passage_writebacks(
 			var dest_prov: int = int(effects.get("destination_province", -1))
 			requester.aboard_ship_id = vessel_id
 			var vessel: Object = vessel_by_id.get(vessel_id)
+			var launched: bool = false
 			if vessel != null and not vessel.is_moving \
 					and vessel.voyage_destination_province != dest_prov:
-				NavalMovementSystem.begin_voyage(vessel, index, dest_prov)
+				var voyage: Dictionary = NavalMovementSystem.begin_voyage(vessel, index, dest_prov)
+				launched = bool(voyage.get("success", false))
+			# s57.43.4: the manifest is fixed at departure — when the voyage actually
+			# launches, add co-located co-travellers bound for the same destination.
+			if launched:
+				_generate_passenger_manifest(
+					vessel, decider, requester, vessel_id, dest_prov,
+					characters, objectives_map, characters_by_id,
+				)
 			# s57.42.7: owner-granted passage creates a soft Obligation on the requester
 			# (Obligation Advantage, 3-point) — modeled as a MINOR favor since the GDD
 			# says it is "repaid through normal favour mechanics" (a future letter of
@@ -20275,6 +20288,80 @@ static func _process_passage_writebacks(
 
 static func requester_disposition_from(decider: L5RCharacterData, requester_id: int) -> int:
 	return decider.disposition_values.get(requester_id, 0)
+
+
+## s57.43.4 passenger manifest cap — up to 3 accepted named passengers per voyage
+## (LOCKED). Formal retinues accompanying a lord do not count against this cap.
+const MANIFEST_CAP: int = 3
+
+
+## s57.43.4: at voyage launch, fill the passenger manifest with co-located named
+## NPCs bound for the same destination. Each candidate goes through the captain's
+## (decider's) standard passage acceptance (s57.42.7) — no NPC is auto-assigned.
+## Preference order: the ship owner's family, then clan, then anyone else bound for
+## the destination (the "upgrade the search" fallback so a PC rarely travels alone).
+## The requester is manifest passenger #1, so at most MANIFEST_CAP-1 more board.
+## Candidates are the co-located living non-PC characters at the port whose primary
+## objective targets the destination province — the "genuine world-state need"
+## proxy for "whose decision engine would fire REQUEST_PASSAGE for that destination"
+## (s57.43.4). Manifest additions board via the captain, so no owner-grant Obligation
+## is created (that is specific to owner-granted passage). Inert until the water
+## graph makes voyages actually launch.
+static func _generate_passenger_manifest(
+	vessel: Object,
+	decider: L5RCharacterData,
+	requester: L5RCharacterData,
+	vessel_id: int,
+	dest_prov: int,
+	characters: Array,
+	objectives_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> void:
+	var port: String = requester.physical_location
+	if port.is_empty() or dest_prov < 0:
+		return
+	var owner_clan: String = str(vessel.get("owning_clan"))
+	var owner: L5RCharacterData = characters_by_id.get(int(vessel.get("owner_id")))
+	var owner_family: String = owner.family if owner != null else ""
+
+	var candidates: Array = []
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.character_id == requester.character_id or c.character_id == decider.character_id:
+			continue
+		if c.aboard_ship_id >= 0:
+			continue
+		if c.physical_location != port or TravelSystem.is_traveling(c):
+			continue
+		var primary: Dictionary = objectives_map.get(c.character_id, {}).get("primary", {})
+		if int(primary.get("target_province_id", -1)) != dest_prov:
+			continue
+		candidates.append(c)
+
+	# Prefer owner family, then owner clan, then anyone else (stable within a tier).
+	candidates.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+		return _manifest_rank(a, owner_family, owner_clan) < _manifest_rank(b, owner_family, owner_clan))
+
+	var slots: int = MANIFEST_CAP - 1
+	for c: L5RCharacterData in candidates:
+		if slots <= 0:
+			break
+		var disp: int = decider.disposition_values.get(c.character_id, 0)
+		var eval: Dictionary = SailingSystem.evaluate_passage_request(
+			decider, disp, 0.0, true, false, c.status, true)
+		if eval.get("accepted", false):
+			c.aboard_ship_id = vessel_id
+			slots -= 1
+
+
+## Manifest preference rank (lower = preferred): 0 owner-family, 1 owner-clan, 2 other.
+static func _manifest_rank(c: L5RCharacterData, owner_family: String, owner_clan: String) -> int:
+	if owner_family != "" and c.family == owner_family:
+		return 0
+	if owner_clan != "" and c.clan == owner_clan:
+		return 1
+	return 2
 
 
 static func _process_naval_battle_triggers(
