@@ -256,7 +256,7 @@ static func advance_day(
 	)
 	_set_court_context_flags(active_courts, world_states)
 	_inject_hunt_context(active_hunts, world_states, active_topics)
-	_inject_passage_context(world_states, named_vessels, character_province_map)
+	_inject_passage_context(world_states, named_vessels, character_province_map, characters_by_id)
 	# s55.11 / s29.15.24: prune INTERVENE_CAPTAIN action_blocks that have broken
 	# (aggressor disembarked / captain incapacitated) before the wave reads them.
 	_process_action_block_breaks(characters, characters_by_id, ships, named_vessels)
@@ -28500,6 +28500,7 @@ static func _inject_passage_context(
 	world_states: Dictionary,
 	named_vessels: Array,
 	character_province_map: Dictionary,
+	characters_by_id: Dictionary = {},
 ) -> void:
 	var vessel_by_province: Dictionary = {}
 	for v: NamedVesselData in named_vessels:
@@ -28522,10 +28523,24 @@ static func _inject_passage_context(
 		var vessel: NamedVesselData = vessel_by_province[prov]
 		if vessel.owner_id == int(char_id) or vessel.captain_id == int(char_id):
 			continue
+		var decider_id: int = vessel.captain_id if vessel.captain_id >= 0 else vessel.owner_id
 		var ws: Dictionary = world_states[char_id]
 		var known_objs: Dictionary = ws.get("known_objectives", {})
 		known_objs["passage_vessel_id"] = vessel.vessel_id
-		known_objs["passage_decider_id"] = vessel.captain_id if vessel.captain_id >= 0 else vessel.owner_id
+		known_objs["passage_decider_id"] = decider_id
+		# s57.42.6 (LOCKED): a requester below Acquaintance (disposition < 11) toward the
+		# decider must offer koku to bridge the gap (1 koku ≈ 1 goodwill point). Offer just
+		# enough to reach the threshold, capped at koku on hand — a rational minimum offer.
+		# Acquaintance+ rides free (offer 0). The decider's Jin/Seigyo/Rei leans still tip
+		# marginal cases at acceptance time. Koku is not deducted (an acceptance signal).
+		var requester: L5RCharacterData = characters_by_id.get(int(char_id))
+		if requester != null:
+			var disp: int = requester.disposition_values.get(decider_id, 0)
+			var offer: float = 0.0
+			if disp < SailingSystem.FREE_PASSAGE_DISPOSITION:
+				var gap: int = SailingSystem.FREE_PASSAGE_DISPOSITION - disp
+				offer = minf(requester.koku, float(gap))
+			known_objs["passage_koku_offered"] = offer
 		ws["known_objectives"] = known_objs
 
 
