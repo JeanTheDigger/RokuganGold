@@ -497,6 +497,12 @@ var taint_benefits_suppressed: bool = false
 # (when the captain's ship next docks). 0 = no penalty.
 @export var intervene_crit_penalty: int = 0
 
+# s57.43.8 route-disruption influence: set true when a passenger aboard this captain's
+# ship successfully persuades them (NEGOTIATE / PERSUADE / BRIBE_FOR_INFO) during the
+# voyage. A persuaded neutral/default captain runs the disrupted port (pushes through to
+# the destination) instead of retreating. Consumed + cleared at the arrival decision.
+@export var route_persuaded: bool = false
+
 # s57.42.7 owner-granted passage (by letter): the named vessel this character has been
 # granted passage on and its destination province. When the character is co-located with
 # that docked vessel at its port, they board (and the vessel sails toward the destination).

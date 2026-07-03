@@ -293,7 +293,15 @@ static func drift_swim_tn(character: L5RCharacterData, near_shore: bool = false)
 ## applies "run" as docking anyway; "divert"/"retreat" both return to the safe
 ## origin port (nearest-friendly-port and offshore-hold need port-adjacency /
 ## cargo-spoilage data the world map does not yet carry).
-static func captain_disruption_decision(captain: L5RCharacterData) -> String:
+## The captain's disrupted-arrival decision (s57.43.8). Virtue-committed captains follow
+## their nature: Yu (Courage) runs the blockade, Seigyo (Control) diverts safely, Chugi
+## (Duty) retreats to fulfil the owner's original intent. A passenger who persuaded the
+## captain during the voyage (passenger_persuaded, s57.43.8) sways only the neutral/default
+## captain — otherwise-retreating — to run for the destination the passenger wants; the
+## three committed virtues hold firm ("the captain's judgement remains final").
+static func captain_disruption_decision(
+	captain: L5RCharacterData, passenger_persuaded: bool = false,
+) -> String:
 	if captain == null or CharacterStats.is_dead(captain):
 		return "retreat"
 	if captain.bushido_virtue == Enums.BushidoVirtue.YU:
@@ -302,4 +310,7 @@ static func captain_disruption_decision(captain: L5RCharacterData) -> String:
 		return "divert"
 	if captain.bushido_virtue == Enums.BushidoVirtue.CHUGI:
 		return "retreat"
+	# Neutral/default captain: a persuaded captain pushes through to the destination.
+	if passenger_persuaded:
+		return "run"
 	return "retreat"

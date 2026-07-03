@@ -441,6 +441,12 @@ static func advance_day(
 		dice_engine, active_topics, next_topic_id, ic_day,
 	)
 
+	# s57.43.8: an aboard passenger persuading the captain (NEGOTIATE / PERSUADE /
+	# BRIBE_FOR_INFO) leans a later disrupted-arrival decision toward running the port.
+	_process_route_influence_writebacks(
+		day_result.get("results", []), characters_by_id, ships, named_vessels,
+	)
+
 	var crime_results: Array = _process_crime_detection(
 		day_result.get("results", []),
 		characters_by_id,
@@ -20105,14 +20111,19 @@ static func _resolve_arrival(
 	pending_letters: Array = [], ic_day: int = -1,
 ) -> void:
 	var docked_province: int = int(result.get("docked_province", -1))
+	# s57.43.8: consume any passenger persuasion accumulated this voyage — it is spent at
+	# the arrival decision and never carries to the captain's next voyage.
+	var captain: L5RCharacterData = characters_by_id.get(int(mover.get("captain_id")))
+	var persuaded: bool = captain != null and captain.route_persuaded
+	if captain != null:
+		captain.route_persuaded = false
 	if _port_dockable(docked_province, str(mover.get("owning_clan")), provinces, active_wars):
 		_disembark_ship_passengers(
 			mover_id, docked_province, characters_by_id, province_settlement,
 			pending_letters, ic_day)
 		return
 	result["arrival_disrupted"] = true
-	var captain: L5RCharacterData = characters_by_id.get(int(mover.get("captain_id")))
-	var decision: String = SailingSystem.captain_disruption_decision(captain)
+	var decision: String = SailingSystem.captain_disruption_decision(captain, persuaded)
 	result["disruption_decision"] = decision
 	if decision == "run":
 		_disembark_ship_passengers(
@@ -20130,6 +20141,37 @@ static func _resolve_arrival(
 	_disembark_ship_passengers(
 		mover_id, docked_province, characters_by_id, province_settlement,
 		pending_letters, ic_day)
+
+
+## s57.43.8: a passenger aboard may lean the captain's disrupted-arrival decision by
+## persuading them mid-voyage. When an aboard passenger successfully fires NEGOTIATE,
+## PERSUADE, or BRIBE_FOR_INFO at their ship's captain, flag the captain as persuaded —
+## a neutral/default captain then runs the disrupted port for the destination instead of
+## retreating (the flag is consumed at the arrival decision; virtue-committed captains
+## hold firm — "the captain's judgement remains final"). The captain's authority is
+## unchanged; this only sways the otherwise-retreating case.
+static func _process_route_influence_writebacks(
+	day_results: Array, characters_by_id: Dictionary, ships: Array, named_vessels: Array,
+) -> void:
+	const PERSUASION_ACTIONS := ["NEGOTIATE", "PERSUADE", "BRIBE_FOR_INFO"]
+	var captain_of: Dictionary = {}
+	for s: ShipData in ships:
+		captain_of[s.ship_id] = s.captain_id
+	for v: NamedVesselData in named_vessels:
+		captain_of[v.vessel_id] = v.captain_id
+	for entry: Dictionary in day_results:
+		if entry.get("action_id", "") not in PERSUASION_ACTIONS or not entry.get("success", false):
+			continue
+		var actor: L5RCharacterData = characters_by_id.get(entry.get("character_id", -1))
+		if actor == null or actor.aboard_ship_id < 0:
+			continue
+		var captain_id: int = int(captain_of.get(actor.aboard_ship_id, -1))
+		if captain_id < 0 or int(entry.get("target_npc_id", -1)) != captain_id:
+			continue
+		var captain: L5RCharacterData = characters_by_id.get(captain_id)
+		if captain == null or CharacterStats.is_dead(captain):
+			continue
+		captain.route_persuaded = true
 
 
 ## True if a ship of `ship_clan` can dock at `province_id` (s57.43.8): the port's
