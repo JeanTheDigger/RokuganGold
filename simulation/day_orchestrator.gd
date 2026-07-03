@@ -347,12 +347,14 @@ static func advance_day(
 	# s57.43.7: resolve any pirate interceptions from movement into naval battles.
 	var pirate_encounter_results: Array = _process_pirate_encounter_writebacks(
 		naval_movement_results, ships, named_vessels, characters_by_id,
-		naval_weather, dice_engine,
+		naval_weather, dice_engine, active_hostages, death_events, ic_day,
 	)
 	var naval_battle_results: Array = _process_naval_battle_triggers(
 		ships, named_vessels, characters_by_id, active_wars, naval_weather, dice_engine,
 	)
-	_apply_naval_battle_mutations(naval_battle_results, ships, named_vessels, characters_by_id)
+	_apply_naval_battle_mutations(
+		naval_battle_results, ships, named_vessels, characters_by_id,
+		active_hostages, death_events, dice_engine, ic_day)
 
 	_inject_urgency_data(
 		world_states, characters, favors, active_tethers, active_sieges,
@@ -20369,6 +20371,9 @@ static func _process_pirate_encounter_writebacks(
 	characters_by_id: Dictionary,
 	weather: int,
 	dice_engine: DiceEngine,
+	active_hostages: Array = [],
+	death_events: Array = [],
+	ic_day: int = -1,
 ) -> Array:
 	var battle_results: Array = []
 	var ships_by_id: Dictionary = {}
@@ -20428,7 +20433,9 @@ static func _process_pirate_encounter_writebacks(
 		battle["is_pirate_encounter"] = true
 		battle["pirate_strength"] = strength
 		battle["resolution"] = r.get("resolution", "")
-		_apply_naval_battle_mutations([battle], ships, named_vessels, characters_by_id)
+		_apply_naval_battle_mutations(
+			[battle], ships, named_vessels, characters_by_id,
+			active_hostages, death_events, dice_engine, ic_day)
 		battle_results.append(battle)
 
 	return battle_results
@@ -20979,6 +20986,10 @@ static func _apply_naval_battle_mutations(
 	ships: Array,
 	named_vessels: Array,
 	characters_by_id: Dictionary,
+	active_hostages: Array = [],
+	death_events: Array = [],
+	dice_engine: DiceEngine = null,
+	ic_day: int = -1,
 ) -> void:
 	var ships_by_id: Dictionary = {}
 	for s: ShipData in ships:
@@ -21006,6 +21017,14 @@ static func _apply_naval_battle_mutations(
 					if bc.get("is_destroyed", false):
 						_cast_aboard_into_drift(
 							ship_id, vessel.owning_clan == "Mantis", characters_by_id)
+					elif bc.get("is_captured", false):
+						# s57.43.7 / s22.9: a captured (surrendered) vessel's aboard named
+						# characters become the captor's hostages.
+						var vcaptor_side: String = "attacker" if bc["side"] == "defender" else "defender"
+						_capture_aboard_as_hostages(
+							ship_id, result.get(vcaptor_side + "_clan", ""),
+							characters_by_id, active_hostages, death_events,
+							dice_engine, ic_day)
 				continue
 
 			ship.health = bc.get("current_health", ship.health)
@@ -21021,6 +21040,12 @@ static func _apply_naval_battle_mutations(
 				ship.is_captured = true
 				var captor_side: String = "attacker" if bc["side"] == "defender" else "defender"
 				ship.captured_by_clan = result.get(captor_side + "_clan", "")
+				# s57.43.7 / s22.9: a captured (surrendered) ship's aboard named
+				# characters — the captain and any REQUEST_PASSAGE passengers —
+				# become the captor's hostages.
+				_capture_aboard_as_hostages(
+					ship_id, ship.captured_by_clan, characters_by_id,
+					active_hostages, death_events, dice_engine, ic_day)
 
 		var captain_deaths: Array = result.get("captain_deaths", [])
 		for cd: Dictionary in captain_deaths:
@@ -21045,6 +21070,64 @@ static func _cast_aboard_into_drift(
 		if c.aboard_ship_id != ship_id:
 			continue
 		_cast_character_into_drift(c, in_mantis, false)
+
+
+## s57.43.7 / s22.9: a captured (surrendered) ship's aboard named characters become the
+## captor's hostages. Per s22.9a (LOCKED) a Yu (Courage) or Ishi (Determination) bushi
+## may die resisting capture rather than submit — taken alive at only 50% / 30% — while
+## GREAT_DESTINY (s45) spares a resister (taken alive after all). Survivors gain
+## captive_status + a hostage record and leave the ship (aboard_ship_id clears — they
+## are the captor's prisoners, no longer aboard the surrendered vessel in the world-sim).
+## captor_clan records the holding faction ("Wako" for pirates) so a future ransom path
+## can find them; the record's captor_id is -1 (a pirate fleet has no named captor) and
+## settlement_id is "" (taken at sea), so the settlement-escape and war-termination
+## release paths do NOT fire. A pirate-captured samurai therefore persists as a hostage
+## until a s22.9 pirate-ransom release path exists (forward-wired; no ransom mechanic is
+## invented here). A null dice_engine defensively takes everyone alive (no death without RNG).
+static func _capture_aboard_as_hostages(
+	ship_id: int, captor_clan: String,
+	characters_by_id: Dictionary, active_hostages: Array,
+	death_events: Array, dice_engine: DiceEngine, ic_day: int,
+) -> void:
+	for c: L5RCharacterData in characters_by_id.values():
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.aboard_ship_id != ship_id or c.captive_status != "":
+			continue
+		var likelihood: float = HostageSystem.get_capture_likelihood_modifier(
+			c.bushido_virtue, c.shourido_virtue)
+		var taken_alive: bool = (
+			likelihood >= 1.0
+			or dice_engine == null
+			or dice_engine.rand_int_range(1, 100) <= int(likelihood * 100.0))
+		c.aboard_ship_id = -1
+		if not taken_alive and not _spare_capture_resister(c, ic_day):
+			# s22.9a: died resisting capture (an honorable combat death, not suspicious).
+			var earth: int = CharacterStats.get_ring_value(c, Enums.Ring.EARTH)
+			c.wounds_taken = earth * 25  # guaranteed lethal (Earth x 5 x 5)
+			death_events.append({
+				"character_id": c.character_id,
+				"is_lord": c.role_position != "",
+				"cause": "died_resisting_capture",
+				"suspicious_death": false,
+				"ic_day": ic_day,
+			})
+			continue
+		c.captive_status = captor_clan if captor_clan != "" else "-1"
+		active_hostages.append(HostageSystem.capture_hostage(
+			c.character_id, -1, HostageSystem.CaptureSource.BATTLE_CAPTURE, "", ic_day))
+
+
+## GREAT_DESTINY (s45) spares a capture-resister from death — they are taken alive after
+## all. Returns true if spared (the caller then treats them as a captured hostage).
+static func _spare_capture_resister(c: L5RCharacterData, ic_day: int) -> bool:
+	var ic_year: int = (ic_day / TimeSystem.IC_DAYS_PER_YEAR) if ic_day >= 0 else 0
+	if not AdvantageSystem.check_great_destiny(c, ic_year):
+		return false
+	var gd: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.GREAT_DESTINY)
+	if gd != null:
+		gd.metadata["last_triggered_ic_year"] = ic_year
+	return true
 
 
 ## s57.43.6: cast a single aboard character into the drift state (JUMP_OVERBOARD, or a
