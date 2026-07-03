@@ -473,6 +473,12 @@ var taint_benefits_suppressed: bool = false
 @export var passage_request_count_today: int = 0
 @export var assigned_ship_id: int = -1
 
+# Outbound letters written while aboard a ship (s57.43.5): WRITE_LETTER /
+# SEND_INVITATION are available AT_SHIP but dispatch is deferred — letters accumulate
+# here during the voyage and flush into the pipeline (from the port of arrival) when
+# aboard_ship_id clears.
+@export var outbound_letter_queue: Array[LetterData] = []
+
 # Shipwreck drift state (s57.43.6): when the ship is wrecked the character is cast
 # into an open-ocean drift. drift_day 0 = not adrift; >= 1 = the current drift day
 # (a landfall/rescue check + Swimming roll resolve once per IC day). Mantis waters

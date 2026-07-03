@@ -329,7 +329,7 @@ static func advance_day(
 	)
 	var naval_movement_results: Array = _process_ship_movement(
 		ships, named_vessels, water_subtiles, characters_by_id, settlements,
-		insurgencies, dice_engine, provinces, active_wars,
+		insurgencies, dice_engine, provinces, active_wars, pending_letters, ic_day,
 	)
 	# s57.43.7: resolve any pirate interceptions from movement into naval battles.
 	var pirate_encounter_results: Array = _process_pirate_encounter_writebacks(
@@ -1423,6 +1423,9 @@ static func advance_day(
 	var letter_topics_by_id: Dictionary = {}
 	for _lt: TopicData in active_topics:
 		letter_topics_by_id[_lt.topic_id] = _lt
+	# s57.43.5: letters written by a character while aboard a ship this tick are held
+	# in their outbound queue (dispatch deferred to port arrival), not delivered now.
+	_queue_aboard_outbound_letters(characters_by_id, pending_letters, ic_day)
 	var letter_results: Array = LetterSystem.process_pending_letters(
 		pending_letters, characters_by_id, ic_day, current_season, action_log,
 		active_wars if active_wars != null else [], dice_engine, letter_topics_by_id,
@@ -19943,6 +19946,8 @@ static func _process_ship_movement(
 	dice_engine: DiceEngine,
 	provinces: Dictionary = {},
 	active_wars: Array = [],
+	pending_letters: Array = [],
+	ic_day: int = -1,
 ) -> Array:
 	# Inert until the water-movement graph is populated (location data). build_index
 	# returns {} on an empty graph and step_movement is a no-op on non-moving movers.
@@ -19961,7 +19966,7 @@ static func _process_ship_movement(
 			if r.get("voyage_complete", false):
 				_resolve_arrival(
 					ship, ship.ship_id, r, characters_by_id, province_settlement,
-					provinces, active_wars, index)
+					provinces, active_wars, index, pending_letters, ic_day)
 			results.append(r)
 
 	for vessel: NamedVesselData in named_vessels:
@@ -19973,7 +19978,7 @@ static func _process_ship_movement(
 			if vr.get("voyage_complete", false):
 				_resolve_arrival(
 					vessel, vessel.vessel_id, vr, characters_by_id, province_settlement,
-					provinces, active_wars, index)
+					provinces, active_wars, index, pending_letters, ic_day)
 			results.append(vr)
 
 	return results
@@ -19991,17 +19996,22 @@ static func _resolve_arrival(
 	mover: Object, mover_id: int, result: Dictionary,
 	characters_by_id: Dictionary, province_settlement: Dictionary,
 	provinces: Dictionary, active_wars: Array, index: Dictionary,
+	pending_letters: Array = [], ic_day: int = -1,
 ) -> void:
 	var docked_province: int = int(result.get("docked_province", -1))
 	if _port_dockable(docked_province, str(mover.get("owning_clan")), provinces, active_wars):
-		_disembark_ship_passengers(mover_id, docked_province, characters_by_id, province_settlement)
+		_disembark_ship_passengers(
+			mover_id, docked_province, characters_by_id, province_settlement,
+			pending_letters, ic_day)
 		return
 	result["arrival_disrupted"] = true
 	var captain: L5RCharacterData = characters_by_id.get(int(mover.get("captain_id")))
 	var decision: String = SailingSystem.captain_disruption_decision(captain)
 	result["disruption_decision"] = decision
 	if decision == "run":
-		_disembark_ship_passengers(mover_id, docked_province, characters_by_id, province_settlement)
+		_disembark_ship_passengers(
+			mover_id, docked_province, characters_by_id, province_settlement,
+			pending_letters, ic_day)
 		return
 	# divert / retreat → sail back to the safe origin port; passengers stay aboard.
 	var origin: int = int(mover.get("voyage_origin_province"))
@@ -20011,7 +20021,9 @@ static func _resolve_arrival(
 			result["returning_to_origin"] = origin
 			return
 	# No safe return possible → dock anyway rather than strand passengers.
-	_disembark_ship_passengers(mover_id, docked_province, characters_by_id, province_settlement)
+	_disembark_ship_passengers(
+		mover_id, docked_province, characters_by_id, province_settlement,
+		pending_letters, ic_day)
 
 
 ## True if a ship of `ship_clan` can dock at `province_id` (s57.43.8): the port's
@@ -20041,10 +20053,13 @@ static func _build_province_settlement_map(settlements: Array) -> Dictionary:
 
 ## Passengers aboard a ship/vessel (aboard_ship_id == mover id) disembark to the
 ## destination province's settlement on voyage completion (s57.42.8). ship_id and
-## vessel_id share one global counter, so aboard_ship_id references either.
+## vessel_id share one global counter, so aboard_ship_id references either. On
+## disembark the passenger's deferred outbound letters (s57.43.5) flush into the
+## pipeline, dispatched from the port of arrival.
 static func _disembark_ship_passengers(
 	mover_id: int, docked_province: int,
 	characters_by_id: Dictionary, province_settlement: Dictionary,
+	pending_letters: Array = [], ic_day: int = -1,
 ) -> void:
 	if mover_id < 0 or docked_province < 0:
 		return
@@ -20057,6 +20072,46 @@ static func _disembark_ship_passengers(
 			continue
 		if c.aboard_ship_id == mover_id:
 			SailingSystem.disembark(c, dest_settlement)
+			_flush_outbound_letter_queue(c, pending_letters, ic_day)
+
+
+## s57.43.5: dispatch a disembarked passenger's queued outbound letters from the port
+## of arrival — re-stamp ic_day_sent to the arrival day so delivery times from the
+## port (ic_day_arrival cleared for the pipeline to recompute), then enter them into
+## pending_letters. Orders/letters propagate from the port, not from mid-voyage.
+static func _flush_outbound_letter_queue(
+	c: L5RCharacterData, pending_letters: Array, ic_day: int,
+) -> void:
+	if c.outbound_letter_queue.is_empty():
+		return
+	for letter: LetterData in c.outbound_letter_queue:
+		if letter == null:
+			continue
+		if ic_day >= 0:
+			letter.ic_day_sent = ic_day
+			letter.ic_day_arrival = -1
+		pending_letters.append(letter)
+	c.outbound_letter_queue.clear()
+
+
+## s57.43.5: pull letters written this tick by an aboard character out of the delivery
+## pipeline into that sender's outbound queue (dispatch deferred to port arrival).
+## Guarded on ic_day_sent == ic_day so in-transit letters sent before boarding are
+## untouched. LIMITATION: catches the primary aboard letter channels (AP-loop
+## WRITE_LETTER, daily letter pass), which create before delivery; the rare aboard
+## letter created by a later writeback this tick is not deferred.
+static func _queue_aboard_outbound_letters(
+	characters_by_id: Dictionary, pending_letters: Array, ic_day: int,
+) -> void:
+	for i: int in range(pending_letters.size() - 1, -1, -1):
+		var letter: LetterData = pending_letters[i]
+		if letter == null or letter.delivered or letter.ic_day_sent != ic_day:
+			continue
+		var sender: L5RCharacterData = characters_by_id.get(letter.sender_id)
+		if sender == null or sender.aboard_ship_id < 0:
+			continue
+		sender.outbound_letter_queue.append(letter)
+		pending_letters.remove_at(i)
 
 
 ## s57.18: DEPLOY_ARMY covers fleets ("a fleet is an army of ship Companies"). When a
