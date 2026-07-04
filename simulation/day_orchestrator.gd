@@ -355,6 +355,12 @@ static func advance_day(
 	_apply_naval_battle_mutations(
 		naval_battle_results, ships, named_vessels, characters_by_id,
 		active_hostages, death_events, dice_engine, ic_day)
+	# s11.9: a non-native clan that captures a signature ship (Atakebune/Koutetsukan)
+	# resolves its fate (destroy default / keep / return) by the captor champion's
+	# personality, with the keep/return political consequences.
+	_process_signature_ship_captures(
+		naval_battle_results, ships, named_vessels, characters, characters_by_id,
+		active_topics, next_topic_id, favors, world_states["clan_baselines"], ic_day)
 
 	_inject_urgency_data(
 		world_states, characters, favors, active_tethers, active_sieges,
@@ -21169,6 +21175,146 @@ static func _process_jump_overboard_writebacks(
 		_cast_character_into_drift(
 			jumper, bool(effects.get("in_mantis", false)),
 			bool(effects.get("near_shore", false)))
+
+
+# s11.9 signature-ship capture (Atakebune/Koutetsukan). Owner rulings 2026-07-04:
+# topic Tier 2; Blood Feud = a permanent CollectiveDisposition shift to the
+# blood-enemy tier (subsumes the "−1 disposition/season while retained"); the
+# gracious-return Honor recovery is +0.5; the decider is the captor clan champion.
+const SIGNATURE_RETURN_HONOR_RECOVERY: float = 0.5
+# DispositionSystem.Tier.BLOOD_ENEMY onset (s12.2: [-100, -61]) — a Blood Feud drives
+# the two clans' collective baseline to at least blood-enemy standing.
+const SIGNATURE_BLOOD_FEUD_BASELINE: int = -61
+
+
+## s11.9: resolve the fate of every signature ship (Atakebune/Koutetsukan) captured
+## by a NON-native clan in the day's naval battles. Native recapture (a clan retaking
+## its own signature ship) follows the normal prize rules and is skipped. The captor
+## clan's champion decides (personality-driven, s11.9); a captor with no living
+## champion falls to the "destroy" default. Only war-driven clan battles are scanned
+## (pirates are not a clan). Inert until the water graph makes naval battles fire.
+static func _process_signature_ship_captures(
+	naval_battle_results: Array,
+	ships: Array,
+	named_vessels: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	favors: Array,
+	clan_baselines: Dictionary,
+	ic_day: int,
+) -> void:
+	var vessel_by_id: Dictionary = {}
+	for s: ShipData in ships:
+		vessel_by_id[s.ship_id] = s
+	for v: NamedVesselData in named_vessels:
+		vessel_by_id[v.vessel_id] = v
+
+	for battle: Dictionary in naval_battle_results:
+		for cap: Dictionary in battle.get("captured_ships", []):
+			var cls: int = int(cap.get("ship_class", -1))
+			if not NavalSystem.is_signature_ship(cls):
+				continue
+			var native_clan: String = NavalSystem.get_signature_clan(cls)
+			var captor_side: String = str(cap.get("captured_by", ""))
+			var captor_clan: String = str(battle.get(captor_side + "_clan", ""))
+			# Non-native captor only (a clan retaking its own ship = ordinary prize).
+			if captor_clan.is_empty() or captor_clan == native_clan:
+				continue
+			var ship_obj: Object = vessel_by_id.get(int(cap.get("ship_id", -1)))
+			var champ: L5RCharacterData = characters_by_id.get(
+				_extrad_find_clan_champion_id(captor_clan, characters))
+			var decision: String = _evaluate_signature_capture(champ)
+			_apply_signature_capture_decision(
+				decision, cls, native_clan, captor_clan, champ, ship_obj,
+				active_topics, next_topic_id, favors, clan_baselines,
+				characters, ic_day)
+
+
+## The captor champion's destroy/keep/return choice (s11.9), routed through the LOCKED
+## NavalSystem.evaluate_signature_capture_decision virtue mapping. Bushido virtue
+## decides first (Yu/Chugi/Meiyo → destroy, Makoto/Jin → return); a pragmatic Shourido
+## lean (Seigyo/Kanpeki/Kyoryoku → keep) only shows when Bushido is destroy/neutral.
+## No champion → "destroy" (the low-political-risk default most captors choose).
+static func _evaluate_signature_capture(champion: L5RCharacterData) -> String:
+	if champion == null or CharacterStats.is_dead(champion):
+		return "destroy"
+	var bv: Variant = Enums.BushidoVirtue.find_key(champion.bushido_virtue)
+	var d: String = NavalSystem.evaluate_signature_capture_decision(str(bv) if bv != null else "")
+	if d != "destroy":
+		return d
+	var sv: Variant = Enums.ShouridoVirtue.find_key(champion.shourido_virtue)
+	if NavalSystem.evaluate_signature_capture_decision(str(sv) if sv != null else "") == "keep":
+		return "keep"
+	return "destroy"
+
+
+static func _apply_signature_capture_decision(
+	decision: String, ship_class: int, native_clan: String, captor_clan: String,
+	champ: L5RCharacterData, ship_obj: Object,
+	active_topics: Array, next_topic_id: Array, favors: Array,
+	clan_baselines: Dictionary, characters: Array, ic_day: int,
+) -> void:
+	var ship_disp: String = _signature_ship_display(ship_class)
+	var ship: ShipData = ship_obj as ShipData
+	match decision:
+		"destroy":
+			# Default: the captor scuttles the prize. No lingering complication.
+			if ship != null:
+				ship.is_destroyed = true
+				ship.health = 0
+				ship.is_captured = false
+		"keep":
+			# The captor retains the prize (a deliberate, provocative act).
+			if ship != null:
+				ship.is_captured = true
+				ship.captured_by_clan = captor_clan
+			# Tier 2 political crisis topic (owner ruling).
+			var topic := TopicData.new()
+			next_topic_id[0] += 1
+			topic.topic_id = next_topic_id[0]
+			topic.tier = TopicData.Tier.TIER_2
+			topic.category = TopicData.Category.POLITICAL
+			topic.title = "%s holds a stolen %s" % [captor_clan, ship_disp]
+			topic.slug = "signature_ship_held_%d" % topic.topic_id
+			topic.topic_type = "signature_ship_held"
+			topic.subject_character_id = champ.character_id if champ != null else -1
+			topic.subject_role = "NEUTRAL"
+			topic.ic_day_created = ic_day
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_2)
+			active_topics.append(topic)
+			# Blood Feud: drive the two clans to (at least) blood-enemy collective
+			# standing — a permanent shift that subsumes the −1/season drift.
+			var key: String = CollectiveDisposition.make_pair_key(native_clan, captor_clan)
+			clan_baselines[key] = mini(
+				int(clan_baselines.get(key, 0)), SIGNATURE_BLOOD_FEUD_BASELINE)
+		"return":
+			# Gracious return under diplomatic pressure: the ship goes home, the
+			# native clan owes a major favor, and the returner recovers some Honor.
+			if ship != null:
+				ship.is_captured = false
+			var native_champ_id: int = _extrad_find_clan_champion_id(native_clan, characters)
+			if champ != null and native_champ_id >= 0:
+				var max_fid: int = 0
+				for f: Variant in favors:
+					if f is FavorData and (f as FavorData).favor_id >= max_fid:
+						max_fid = (f as FavorData).favor_id + 1
+				favors.append(FavorSystem.offer_favor(
+					FavorData.FavorType.GENERAL, FavorData.FavorTier.MAJOR,
+					champ.character_id, native_champ_id, ic_day,
+					"Returned a captured %s" % ship_disp, "SIGNATURE_RETURN", max_fid))
+			if champ != null:
+				HonorGlorySystem.apply_honor_change(champ, SIGNATURE_RETURN_HONOR_RECOVERY)
+
+
+static func _signature_ship_display(ship_class: int) -> String:
+	match ship_class:
+		Enums.ShipClass.ATAKEBUNE:
+			return "Atakebune"
+		Enums.ShipClass.KOUTETSUKAN:
+			return "Koutetsukan"
+	return "signature ship"
 
 
 # s55.11 INTERVENE_CAPTAIN failure consequences (LOCKED).
