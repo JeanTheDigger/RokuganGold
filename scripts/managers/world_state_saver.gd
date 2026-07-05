@@ -524,6 +524,7 @@ func _save_json_state(ws: Node, base: String) -> bool:
 		# Kolat secrecy & Imperial counter-response (s54.7i)
 		"kolat_exposure_level": ws.kolat_exposure_level,
 		"imperial_awareness_level": ws.imperial_awareness_level,
+		"kolat_secrecy": ws.kolat_secrecy,
 	}
 
 	var path: String = base + "state.json"
@@ -599,6 +600,28 @@ func _load_json_state(ws: Node, base: String) -> void:
 	# Kolat secrecy & Imperial counter-response (s54.7i)
 	ws.kolat_exposure_level = int(state.get("kolat_exposure_level", 0))
 	ws.imperial_awareness_level = int(state.get("imperial_awareness_level", 0))
+	# Authoritative endgame bundle. Seed a fresh bundle from the legacy scalars for
+	# pre-s54.7i-wiring saves, then overlay the persisted bundle if present.
+	ws.kolat_secrecy = KolatSecrecy.new_bundle()
+	ws.kolat_secrecy["exposure"] = ws.kolat_exposure_level
+	ws.kolat_secrecy["awareness"] = ws.imperial_awareness_level
+	var raw_secrecy: Variant = state.get("kolat_secrecy", {})
+	if raw_secrecy is Dictionary:
+		for sk: Variant in (raw_secrecy as Dictionary):
+			ws.kolat_secrecy[String(sk)] = (raw_secrecy as Dictionary)[sk]
+	# JSON int-array fields load back as floats — coerce id arrays to ints.
+	for id_key: String in ["identified_ids", "backup_ids", "awareness_cases"]:
+		var raw_ids: Array = ws.kolat_secrecy.get(id_key, [])
+		var coerced: Array = []
+		for v: Variant in raw_ids:
+			coerced.append(int(v))
+		ws.kolat_secrecy[id_key] = coerced
+	ws.kolat_secrecy["candidate_id"] = int(ws.kolat_secrecy.get("candidate_id", -1))
+	ws.kolat_secrecy["installed_ic_day"] = int(ws.kolat_secrecy.get("installed_ic_day", -1))
+	ws.kolat_secrecy["victory_ic_day"] = int(ws.kolat_secrecy.get("victory_ic_day", -1))
+	ws.kolat_secrecy["exposure"] = int(ws.kolat_secrecy.get("exposure", 0))
+	ws.kolat_secrecy["awareness"] = int(ws.kolat_secrecy.get("awareness", 0))
+	KolatSecrecy.ensure_bundle(ws.kolat_secrecy)
 
 	# NPC engine
 	# JSON serialises int dict keys as strings — convert back to int keys on load.

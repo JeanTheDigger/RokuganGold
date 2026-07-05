@@ -237,6 +237,79 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Systems Added 2026-07-05 (s54.7i Kolat endgame loop — win condition, secrecy, Imperial counter-response, owner-approved, runtime-verified 44/44)
+Wires the previously-dormant `KolatSecrecy` data layer into the live loop, closing the
+conspiracy's endgame: the secrecy scalars now MOVE with real events, Tiger cultivates a
+candidate toward the throne, and the Empire fights back covertly. All numeric deltas /
+thresholds are GDD-locked (s54.7i); the code supplies only the event→delta mappings and
+the structural mechanisms (no invented game design — owner-approved 2026-07-05).
+- **State consolidation.** All endgame world-state lives in one mutable `kolat_secrecy`
+  Dictionary bundle (`KolatSecrecy.new_bundle`): exposure, awareness, response_active,
+  identified_ids, candidate_id/backup_ids/pipeline_stage/installed_ic_day, victory_ic_day,
+  awareness_cases (dedup), go_dark, purge_done, task_force_flagged. Added as a `WorldState`
+  field, passed by reference as the trailing `advance_day` param, mutated in place, persisted
+  by `WorldStateSaver` as one JSON blob (int/id-array coercion on load; the legacy
+  `kolat_exposure_level`/`imperial_awareness_level` scalars are seeded from / kept for the
+  bundle). `KolatSecrecy.ensure_bundle` heals a partial/empty bundle from any legacy caller.
+  Save/load round-trip runtime-verified (ints survive JSON, identified lookup intact).
+- **Phase 1 — scalar event hooks (all deltas GDD-locked).** `_process_kolat_death_exposure`
+  (before `death_events.clear()`): a Kolat-commissioned assassination that kills a magistrate
+  → exposure −5 (Lotus silences an investigator quietly). `_process_kolat_conviction_secrecy`
+  (after conviction): a traced Kolat covert killing → exposure +15 (org attribution) + awareness
+  +5; a convicted conscious member → exposure +10; a convicted Master → awareness +20 + identify.
+  `_process_kolat_investigation_awareness` (daily): an UNDER_INVESTIGATION record naming a
+  conscious Kolat member → awareness +5, once per case (dedup via bundle `awareness_cases`).
+  Threaded into `_process_kolat_writebacks` (Cloud RESURRECT_TOPIC −5, traced-merchant
+  SPONSOR_INSURGENCY +5) and `_process_witness_tampering_writebacks` (Coin BRIBE_WITNESS that
+  buries a report implicating the conspiracy −3). "Conscious member" = `kolat_sect != NONE`
+  (a Dream sleeper's conviction does NOT expose the conspiracy — an unwitting asset).
+- **Phase 2a — Imperial court seat refill (fixes a pre-existing never-refilled gap).** The 5
+  singleton court officers (Imperial Advisor / Chancellor / Herald / Treasurer / Voice of the
+  Emperor), created at world-gen with the Emperor as lord, were NEVER refilled on death — the
+  court hollowed out over a long run AND a dead Advisor permanently broke the Cunning/Warlike
+  Governor-appointment delegation. `_populate_vacancy_intelligence`'s Emperor block now adds an
+  Emperor FILL_VACANCY vacancy for any officer seat with no living holder; `_find_imperial_court_candidate`
+  scores available senior courtiers (no role, or a Senior Courtier ready for promotion; Status ≥ 3)
+  on Status×3 + Courtier+Etiquette + disposition-toward-Emperor×0.1 + Imperial-clan / traditional-family
+  bias (Advisor/Chancellor/Treasurer→Otomo, Herald→Miya, Voice→Seppun). Reuses the existing wired
+  APPOINT_TO_POSITION path. Structural (mirrors the Governor scorer), not invented design.
+- **Phase 2b — Tiger candidate pipeline + win condition (`_process_kolat_endgame`, seasonal).**
+  Requires a living Tiger (pipeline pauses without the routing node). Selects the best eligible
+  candidate vehicle (`KolatSecrecy.is_candidate_eligible`: a conscious Kolat member OR a Dream
+  sleeper) by court-appointment score (Status + Courtier/Etiquette + at-capital bonus), preferring
+  a backup on compromise/death. Stage machine driven by the candidate's REAL court state:
+  identified → cultivating (a conscious member gets a kolat objective — RAISE_DISPOSITION toward
+  the Emperor at the capital, else TRAVEL_TO the capital — so they win a vacant Imperial-proximity
+  seat through the normal appointment scorer; NO rigged appointment) → positioned (holds a senior
+  court role at the capital) → installed (holds a Regent/Advisor/Chancellor/Voice seat, records
+  `installed_ic_day`) → compromised (identified by the Empire → reset, elevate a backup). Up to 2
+  backups maintained; the pipeline mirrors onto Tiger's `special_data` (s54.7i record). Win check:
+  an installed candidate held one full IC year with awareness < 70 (and not compromised) → sets
+  `victory_ic_day` + returns a `kolat_victory` world-state event (fires once; the game does not end).
+- **Phase 3 — Imperial counter-response tiers (`_process_kolat_imperial_response`).** By awareness
+  tier (s54.7i, covert/deniable): ≥30 sets `imperial_response_active` + surfaces `kolat_active_provinces`
+  (provinces hosting an identified member, via `character_province_map`); ≥50 (Confirmed) adds Tiger's
+  "degrade Imperial task force" `kolat_strategic_priorities` entry (once); ≥90 (Significantly mapped)
+  sets `go_dark` — identified members suspend operations (their kolat objective slot cleared, and the
+  daily `_assign_kolat_standing_objectives` / `_assign_kolat_opportunistic_objectives` passes skip them);
+  =100 (Full knowledge) fires a one-shot covert purge (`purge_done`) — every identified living member is
+  quietly broken (kolat_sect→NONE, is_kolat_master→false, kolat/dirty/operational koku seized, objective
+  cleared), returned as a `kolat_purge` event, no public topic (s54.7i "broken quietly"). The identified
+  list is fed only by the Phase-1 awareness events (Master conviction / key discovery).
+- **Runtime-verified (Godot 4.6.2, headless driver `tests/verify_kolat_endgame.gd`, 44/44):** scalar/
+  bundle helpers; every event hook (Lotus −5, member +10, master +10/+20+identify, traced +15/+5,
+  investigation +5 dedup, non-Kolat no-op); the full pipeline (selects the eligible Kolat courtier over
+  a higher-Status non-member rival, cultivating→positioned→installed, cultivation objective installed,
+  Tiger mirror, win fires after 1 IC year + doesn't re-fire, awareness≥70 blocks); response tiers
+  (response flag, tier-50 task-force priority + active province, tier-90 go-dark + slot clear, tier-100
+  purge + funds seized + no re-fire). Save/load JSON coercion round-trip separately verified. Full
+  project `--import` parse-clean. LIMITATIONS / DEFERRED (unchanged design gaps, not this pass):
+  Tiger's Conclave loop, Tear routing, per-Master network-record lifecycle, heir-designation record,
+  and the topic/spell/insurgency-dependent executors. The candidate cultivation drives a conscious
+  member via the kolat objective slot; a sleeper candidate relies on its installed command (no
+  cultivation objective). The `_apply_appointment` executor sets role_position (what every consumer
+  checks) but not lord_id for the refilled court seats — documented, harmless.
+
 ### Known Code Issues (found and fixed 2026-05-18)
 - **DayOrchestrator._decay_civil_war_scars() — inverted filter. FIXED.**
   Was `if base_remaining < 0: remaining.append(entry)` — kept only negative

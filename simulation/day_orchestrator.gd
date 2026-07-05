@@ -112,8 +112,12 @@ static func advance_day(
 	named_vessels: Array = [],
 	next_ship_id: Array = [1],
 	water_subtiles: Array = [],
+	kolat_secrecy: Dictionary = {},
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
+	# s54.7i Kolat endgame bundle — heal a partial/empty bundle so every pass can
+	# read every key. Empty {} arrives from any legacy caller not yet threading it.
+	KolatSecrecy.ensure_bundle(kolat_secrecy)
 
 	time_system.advance_tick()
 
@@ -166,8 +170,8 @@ static func advance_day(
 	_assign_witch_hunter_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
 	_assign_animal_companion_standing_objectives(characters, objectives_map, ic_day)
-	_assign_kolat_standing_objectives(characters, objectives_map)
-	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id)
+	_assign_kolat_standing_objectives(characters, objectives_map, kolat_secrecy)
+	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id, kolat_secrecy)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 
 	_populate_military_data(military_data, companies)
@@ -483,7 +487,7 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id,
 		active_topics, next_topic_id, insurgencies, next_insurgency_id,
 		ic_day, current_season, pending_letters, next_letter_id, settlements,
-		objectives_map,
+		objectives_map, kolat_secrecy,
 	)
 
 	_process_scene_examination_writebacks(
@@ -541,7 +545,7 @@ static func advance_day(
 		crime_records, characters_by_id,
 		active_topics, next_topic_id, ic_day, world_states,
 		active_secrets, next_secret_id, next_case_id, dice_engine,
-		death_events,
+		death_events, kolat_secrecy,
 	)
 
 	_process_commune_writebacks(
@@ -1297,6 +1301,9 @@ static func advance_day(
 
 	_process_kolat_master_succession(death_events, characters, characters_by_id, crime_records, dice_engine)
 	_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
+	# s54.7i: a Kolat-commissioned assassination that silenced a magistrate lowers
+	# public exposure (Lotus). Reads death_events before they are cleared.
+	_process_kolat_death_exposure(death_events, characters_by_id, kolat_secrecy)
 
 	death_events.clear()
 
@@ -1448,6 +1455,16 @@ static func advance_day(
 		conviction_results, crime_records, characters_by_id, navigation_zones,
 	)
 
+	# s54.7i Kolat secrecy: a traced Kolat assassination, a convicted member, or a
+	# convicted Master move the exposure/awareness scalars; an investigation naming
+	# a Kolat operative raises Imperial awareness.
+	_process_kolat_conviction_secrecy(
+		conviction_results, crime_records, characters_by_id, kolat_secrecy,
+	)
+	_process_kolat_investigation_awareness(
+		crime_records, characters_by_id, kolat_secrecy,
+	)
+
 	var info_results: Array = _process_info_events(
 		day_result.get("applied", []),
 		characters_by_id,
@@ -1524,6 +1541,7 @@ static func advance_day(
 	var insurgency_results: Dictionary = {}
 	var military_seasonal_result: Dictionary = {}
 	var wall_seasonal_result: Dictionary = {}
+	var kolat_endgame_result: Dictionary = {}
 	var gempukku_results: Dictionary = {}
 	var advancement_results: Dictionary = {}
 	var ronin_results: Dictionary = {}
@@ -1587,6 +1605,12 @@ static func advance_day(
 		)
 		_process_kolat_bribes_seasonal(characters, provinces)
 		_process_kolat_network_seasonal(characters, active_topics, next_topic_id, ic_day)
+		# s54.7i Kolat endgame: exposure decay, Tiger's candidate pipeline, Imperial
+		# counter-response tiers, and the win-condition check.
+		kolat_endgame_result = _process_kolat_endgame(
+			characters, characters_by_id, objectives_map, world_states,
+			character_province_map, ic_day, kolat_secrecy,
+		)
 		wall_seasonal_result = _process_wall_seasonal_pressure(
 			settlements, provinces, current_season, season_meta
 		)
@@ -2005,6 +2029,7 @@ static func advance_day(
 		"edict_results": edict_results,
 		"active_edicts": active_edicts,
 		"wall_seasonal": wall_seasonal_result,
+		"kolat_endgame": kolat_endgame_result,
 		"wall_engineering_results": wall_engineering_results,
 		"sortie_results": sortie_results,
 		"storm_assault_results": storm_assault_results,
@@ -4019,6 +4044,7 @@ static func _process_kolat_writebacks(
 	next_letter_id: Array = [1],
 	settlements: Array = [],
 	objectives_map: Dictionary = {},
+	kolat_secrecy: Dictionary = {},
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -4076,6 +4102,9 @@ static func _process_kolat_writebacks(
 				var actor: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
 				if actor != null and not CharacterStats.is_dead(actor):
 					HonorGlorySystem.apply_honor_change(actor, -float(effects.get("honor_loss", 0.5)))
+				# s54.7i: Cloud resurrecting cover topics muddies the evidence (exposure −5).
+				KolatSecrecy.bump(kolat_secrecy, "exposure",
+					KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.CLOUD_RESURRECT))
 
 			"SPONSOR_INSURGENCY":
 				if not effects.get("seeds_insurgency", false):
@@ -4119,6 +4148,9 @@ static func _process_kolat_writebacks(
 						"investigation", "sponsor_insurgency_trail",
 					)
 					active_topics.append(trail)
+					# s54.7i: the funding traced to a named merchant network (exposure +5).
+					KolatSecrecy.bump(kolat_secrecy, "exposure",
+						KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.TRACED_MERCHANT_NETWORK))
 
 			"BRIBE_GARRISON_COMMANDER":
 				var b_province: int = r.get("target_province_id", -1)
@@ -6244,6 +6276,7 @@ static func _process_witness_tampering_writebacks(
 	next_case_id: Array = [1],
 	dice_engine: DiceEngine = null,
 	death_events: Array = [],
+	kolat_secrecy: Dictionary = {},
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -6266,6 +6299,13 @@ static func _process_witness_tampering_writebacks(
 
 			if success:
 				record.witnesses.erase(witness_id)
+				# s54.7i: a Kolat member burying a report that implicates the
+				# conspiracy (the perpetrator is a Kolat member) lowers exposure (−3).
+				if action_id == "BRIBE_WITNESS" \
+						and _is_kolat_member(characters_by_id.get(criminal_id)) \
+						and _is_kolat_member(characters_by_id.get(record.perpetrator_id)):
+					KolatSecrecy.bump(kolat_secrecy, "exposure",
+						KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.COIN_BRIBE))
 				if action_id == "BRIBE_WITNESS":
 					var witness: L5RCharacterData = characters_by_id.get(witness_id)
 					var criminal: L5RCharacterData = characters_by_id.get(criminal_id)
@@ -8665,13 +8705,19 @@ static func _assign_animal_companion_standing_objectives(
 static func _assign_kolat_standing_objectives(
 	characters: Array,
 	objectives_map: Dictionary,
+	kolat_secrecy: Dictionary = {},
 ) -> void:
+	var go_dark: bool = kolat_secrecy.get("go_dark", false)
+	var identified: Array = kolat_secrecy.get("identified_ids", [])
 	for character: L5RCharacterData in characters:
 		if character.is_pc:
 			continue
 		if not KolatSystem.is_master(character):
 			continue
 		if CharacterStats.is_dead(character):
+			continue
+		# s54.7i tier-90: an identified Master suspends operations (goes dark).
+		if go_dark and character.character_id in identified:
 			continue
 
 		var mandate: String = KolatSystem.standing_needtype_for_sect(character.kolat_sect)
@@ -8808,11 +8854,17 @@ static func _assign_kolat_opportunistic_objectives(
 	characters: Array,
 	objectives_map: Dictionary,
 	characters_by_id: Dictionary,
+	kolat_secrecy: Dictionary = {},
 ) -> void:
+	var go_dark: bool = kolat_secrecy.get("go_dark", false)
+	var identified: Array = kolat_secrecy.get("identified_ids", [])
 	for character: L5RCharacterData in characters:
 		if character.is_pc or CharacterStats.is_dead(character):
 			continue
 		if not KolatSystem.is_master(character):
+			continue
+		# s54.7i tier-90: an identified Master suspends operations (goes dark).
+		if go_dark and character.character_id in identified:
 			continue
 
 		var char_id: int = character.character_id
@@ -24604,6 +24656,35 @@ static func _populate_vacancy_intelligence(
 					"seasons_vacant": 0,
 				})
 
+			# Imperial court seat refill (s11.5 / s54.7i): the five singleton court
+			# officers (Advisor, Chancellor, Herald, Treasurer, Voice) are created at
+			# world-gen with the Emperor as lord but were never refilled on death,
+			# leaving the court hollow (and breaking the Cunning/Warlike Governor
+			# delegation, which needs a living Advisor). Any officer seat with no
+			# living holder becomes an Emperor vacancy; the candidate is the best
+			# available courtier, biased to the seat's traditional Imperial family.
+			var held_court: Dictionary = {}
+			for hc: L5RCharacterData in characters:
+				if CharacterStats.is_dead(hc):
+					continue
+				if hc.role_position in _IMPERIAL_COURT_SEATS:
+					held_court[hc.role_position] = true
+			for seat_name: String in _IMPERIAL_COURT_SEATS:
+				if held_court.has(seat_name):
+					continue
+				var court_cand: int = _find_imperial_court_candidate(
+					emperor_char, seat_name, characters,
+				)
+				if not lord_vacancies.has(emperor_id):
+					lord_vacancies[emperor_id] = []
+				lord_vacancies[emperor_id].append({
+					"position_type": seat_name,
+					"priority": 2,
+					"province_id": -1,
+					"candidate_id": court_cand,
+					"seasons_vacant": 0,
+				})
+
 	# Inherit seasons_vacant from persistent registry
 	var registry: Dictionary = season_meta.get("vacancy_registry", {})
 	var new_registry: Dictionary = {}
@@ -24912,6 +24993,58 @@ static func _find_champion_recommendation(
 		var total: float = skill_score + status_score
 		if total > best_score:
 			best_score = total
+			best_id = c.character_id
+	return best_id
+
+
+# Refillable singleton Imperial court seats (s11.5). Created at world-gen with the
+# Emperor as lord; refilled on death by the Emperor's FILL_VACANCY pass.
+const _IMPERIAL_COURT_SEATS: Array[String] = [
+	RoleRegistry.IMPERIAL_ADVISOR, RoleRegistry.IMPERIAL_CHANCELLOR,
+	RoleRegistry.IMPERIAL_HERALD, RoleRegistry.IMPERIAL_TREASURER,
+	RoleRegistry.VOICE_OF_EMPEROR,
+]
+# Traditional Imperial family for each seat (world-gen assignment, s2.1). The
+# refill biases toward it but does not require it.
+const _IMPERIAL_SEAT_FAMILY: Dictionary = {
+	RoleRegistry.IMPERIAL_ADVISOR: "Otomo",
+	RoleRegistry.IMPERIAL_CHANCELLOR: "Otomo",
+	RoleRegistry.IMPERIAL_HERALD: "Miya",
+	RoleRegistry.IMPERIAL_TREASURER: "Otomo",
+	RoleRegistry.VOICE_OF_EMPEROR: "Seppun",
+}
+
+
+## Best candidate for a vacant Imperial court seat. Eligible = an available
+## senior courtier (no role, or a Senior Courtier ready for promotion). Scored on
+## court standing (Status), court competence (Courtier + Etiquette), disposition
+## toward the Emperor, and Imperial-clan / traditional-family bias. The
+## disposition term is the lever the Kolat candidate-cultivation objective builds
+## (s54.7i) — a well-backed candidate genuinely out-scores rivals for the seat.
+static func _find_imperial_court_candidate(
+	emperor: L5RCharacterData, seat_name: String, characters: Array,
+) -> int:
+	if emperor == null or CharacterStats.is_dead(emperor):
+		return -1
+	var pref_family: String = String(_IMPERIAL_SEAT_FAMILY.get(seat_name, ""))
+	var best_id: int = -1
+	var best_score: float = -1.0
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if not (c.role_position.is_empty() or c.role_position == RoleRegistry.SENIOR_COURTIER):
+			continue  # not available (holds a lordship / magistracy / other seat)
+		if c.status < 3.0:
+			continue  # Imperial court seats go to senior figures
+		var court: float = float(c.skills.get("Courtier", 0)) + float(c.skills.get("Etiquette", 0))
+		var score: float = c.status * 3.0 + court
+		score += float(c.disposition_values.get(emperor.character_id, 0)) * 0.1
+		if c.clan == "Imperial":
+			score += 5.0
+		if not pref_family.is_empty() and c.family == pref_family:
+			score += 5.0
+		if score > best_score:
+			best_score = score
 			best_id = c.character_id
 	return best_id
 
@@ -33737,3 +33870,414 @@ static func _apply_fool_impression(
 
 
 
+
+
+# =============================================================================
+# KOLAT ENDGAME — secrecy scalars, candidate pipeline, Imperial response (s54.7i)
+# =============================================================================
+# Wires the previously-dormant KolatSecrecy data layer into the live loop. The
+# secrecy scalars (exposure / awareness) are moved by real operation and
+# investigation events; Tiger cultivates a candidate toward an Imperial-proximity
+# seat; the Empire's covert counter-response escalates by awareness tier. All
+# numeric deltas and thresholds are GDD-locked in s54.7i — the code here supplies
+# only the event→delta mappings and the structural mechanisms.
+
+const _KOLAT_SENIOR_COURT_ROLES: Array[String] = [
+	"Senior Courtier", "Imperial Herald", "Imperial Treasurer",
+	"Sentaku Tribunal Chair", "Sentaku Tribunal Member", "Governor",
+]
+
+
+## A conscious Kolat member (Sect agent or Master). Sleepers are excluded —
+## an unwitting asset's conviction does not expose the conspiracy (s54.7i).
+static func _is_kolat_member(c: L5RCharacterData) -> bool:
+	return c != null and c.kolat_sect != Enums.KolatSect.NONE
+
+
+# -- Daily event hooks --------------------------------------------------------
+
+## Lotus silencing an investigator before they report (s54.7i, exposure −5): a
+## Kolat-commissioned assassination that kills a magistrate. Reads death_events
+## before they are cleared. The +15 org-attribution fires later, at trace time.
+static func _process_kolat_death_exposure(
+	death_events: Array, characters_by_id: Dictionary, kolat_secrecy: Dictionary,
+) -> void:
+	if kolat_secrecy.is_empty():
+		return
+	for ev: Variant in death_events:
+		if not ev is Dictionary:
+			continue
+		var e: Dictionary = ev as Dictionary
+		if String(e.get("cause", "")) != "assassination":
+			continue
+		var commissioner: L5RCharacterData = characters_by_id.get(int(e.get("commissioner_id", -1)))
+		if not _is_kolat_member(commissioner):
+			continue
+		var victim: L5RCharacterData = characters_by_id.get(int(e.get("character_id", -1)))
+		if victim == null:
+			continue
+		if victim.role_position in RoleRegistry.MAGISTRATE_POSITIONS:
+			KolatSecrecy.bump(kolat_secrecy, "exposure",
+				KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.LOTUS_ELIMINATE))
+
+
+## Conviction-driven secrecy movement (s54.7i). Runs after conviction processing.
+##  - Traced Kolat assassination (commissioner is a member): exposure +15
+##    (org attribution) AND awareness +5 (the trace reached an operative).
+##  - A convicted conscious member: exposure +10 (cover tied to crime).
+##  - A convicted Master: awareness +20 (capture+interrogation) + identify.
+static func _process_kolat_conviction_secrecy(
+	conviction_results: Array, crime_records: Array,
+	characters_by_id: Dictionary, kolat_secrecy: Dictionary,
+) -> void:
+	if kolat_secrecy.is_empty():
+		return
+	for conv: Variant in conviction_results:
+		if not conv is Dictionary:
+			continue
+		var cv: Dictionary = conv as Dictionary
+		if cv.get("outcome", "") != "convicted":
+			continue
+		var case_id: int = int(cv.get("case_id", -1))
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+
+		# Traced covert killing → organisation attribution.
+		if int(cv.get("crime_type", -1)) == Enums.CrimeType.UNSANCTIONED_COVERT_KILLING \
+				and record.commissioner_id >= 0:
+			var comm: L5RCharacterData = characters_by_id.get(record.commissioner_id)
+			if _is_kolat_member(comm):
+				KolatSecrecy.bump(kolat_secrecy, "exposure",
+					KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.ORG_ASSASSINATION))
+				KolatSecrecy.bump(kolat_secrecy, "awareness",
+					KolatSecrecy.awareness_delta(KolatSecrecy.AwarenessEvent.JADE_INTERNAL))
+
+		# A convicted conscious member's cover is publicly tied to crime.
+		var perp: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+		if _is_kolat_member(perp):
+			KolatSecrecy.bump(kolat_secrecy, "exposure",
+				KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.COVER_IDENTITY_CRIMINAL))
+			if perp.is_kolat_master:
+				KolatSecrecy.bump(kolat_secrecy, "awareness",
+					KolatSecrecy.awareness_delta(KolatSecrecy.AwarenessEvent.MASTER_INTERROGATED))
+				KolatSecrecy.identify(kolat_secrecy, perp.character_id)
+
+
+## Investigation reaching an operative internally (s54.7i, awareness +5): an
+## UNDER_INVESTIGATION crime record names a conscious Kolat member (perpetrator
+## or known suspect). Once per case (dedup via bundle awareness_cases).
+static func _process_kolat_investigation_awareness(
+	crime_records: Array, characters_by_id: Dictionary, kolat_secrecy: Dictionary,
+) -> void:
+	if kolat_secrecy.is_empty():
+		return
+	var flagged: Array = kolat_secrecy.get("awareness_cases", [])
+	for r: CrimeRecord in crime_records:
+		if r.legal_status != Enums.LegalStatus.UNDER_INVESTIGATION:
+			continue
+		if r.case_id in flagged:
+			continue
+		var named: Array = [r.perpetrator_id]
+		named.append_array(r.known_suspects)
+		var hit: bool = false
+		for nid: Variant in named:
+			if _is_kolat_member(characters_by_id.get(int(nid))):
+				hit = true
+				break
+		if hit:
+			KolatSecrecy.bump(kolat_secrecy, "awareness",
+				KolatSecrecy.awareness_delta(KolatSecrecy.AwarenessEvent.JADE_INTERNAL))
+			flagged.append(r.case_id)
+	kolat_secrecy["awareness_cases"] = flagged
+
+
+# -- Seasonal endgame pass ----------------------------------------------------
+
+## The seasonal Kolat endgame: exposure decay, response-state recompute, Tiger's
+## candidate pipeline, Imperial counter-response, and the win-condition check.
+## Returns a Dictionary merged into the advance_day result (kolat_victory /
+## kolat_purge world-state events, when they fire).
+static func _process_kolat_endgame(
+	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
+	world_states: Dictionary, character_province_map: Dictionary,
+	ic_day: int, kolat_secrecy: Dictionary,
+) -> Dictionary:
+	var result: Dictionary = {}
+	if kolat_secrecy.is_empty():
+		return result
+
+	# 1. Natural exposure decay + Imperial suppression (s54.7i, −2/season).
+	kolat_secrecy["exposure"] = KolatSecrecy.apply_seasonal_exposure_decay(
+		int(kolat_secrecy.get("exposure", 0)), int(kolat_secrecy.get("awareness", 0)))
+	# Prune awareness dedup list to live records is unnecessary — case ids are
+	# monotonic and the list is small; retention is harmless.
+
+	# 2. Imperial response state, broadcast for the magistrate/opportunistic passes.
+	var awareness: int = int(kolat_secrecy.get("awareness", 0))
+	kolat_secrecy["response_active"] = KolatSecrecy.is_response_active(awareness)
+	world_states["imperial_response_active"] = kolat_secrecy["response_active"]
+
+	# 3. Tiger's candidate pipeline (s54.7i).
+	_process_kolat_candidate_pipeline(
+		characters, characters_by_id, objectives_map, world_states, ic_day, kolat_secrecy)
+
+	# 4. Imperial counter-response tiers (s54.7i).
+	var purge: Dictionary = _process_kolat_imperial_response(
+		characters, characters_by_id, objectives_map, world_states,
+		character_province_map, kolat_secrecy)
+	if not purge.is_empty():
+		result["kolat_purge"] = purge
+
+	# 5. Win condition (s54.7i): installed candidate held one IC year, awareness < 70.
+	if String(kolat_secrecy.get("pipeline_stage", "")) == "installed" \
+			and int(kolat_secrecy.get("victory_ic_day", -1)) < 0:
+		var cand: L5RCharacterData = characters_by_id.get(int(kolat_secrecy.get("candidate_id", -1)))
+		if KolatSecrecy.check_win_condition(
+				cand, int(kolat_secrecy.get("installed_ic_day", -1)), ic_day, awareness):
+			kolat_secrecy["victory_ic_day"] = ic_day
+			result["kolat_victory"] = {
+				"ic_day": ic_day,
+				"candidate_id": int(kolat_secrecy.get("candidate_id", -1)),
+			}
+	return result
+
+
+## The living Tiger Master (routing node), or null. The pipeline pauses without one.
+static func _find_living_tiger(characters: Array) -> L5RCharacterData:
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.kolat_sect == Enums.KolatSect.TIGER and c.is_kolat_master:
+			return c
+	return null
+
+
+## Tiger's candidate pipeline (s54.7i). Selects/validates the primary candidate,
+## advances the stage from the candidate's real court standing, installs a
+## cultivation objective for a conscious member, maintains up to two backups, and
+## mirrors the fields onto Tiger's special_data (GDD courtesy record).
+static func _process_kolat_candidate_pipeline(
+	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
+	world_states: Dictionary, ic_day: int, kolat_secrecy: Dictionary,
+) -> void:
+	var tiger: L5RCharacterData = _find_living_tiger(characters)
+	if tiger == null:
+		return  # no routing node — pipeline pauses until a Tiger is seated
+
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id)
+	var capital_loc: String = ""
+	if emperor != null and not CharacterStats.is_dead(emperor):
+		capital_loc = emperor.physical_location  # the Emperor sits at the capital
+
+	var identified: Array = kolat_secrecy.get("identified_ids", [])
+	var cand_id: int = int(kolat_secrecy.get("candidate_id", -1))
+	var cand: L5RCharacterData = characters_by_id.get(cand_id)
+	var stage: String = String(kolat_secrecy.get("pipeline_stage", ""))
+
+	# Compromise / death → drop the primary and elevate a backup (or reselect).
+	var invalid: bool = cand == null or CharacterStats.is_dead(cand) or cand_id in identified
+	if invalid:
+		if cand != null and cand_id in identified:
+			kolat_secrecy["pipeline_stage"] = "compromised"  # discovery (s54.7i)
+		cand_id = _kolat_elevate_or_select(
+			characters, cand_id, identified, capital_loc, kolat_secrecy)
+		kolat_secrecy["candidate_id"] = cand_id
+		kolat_secrecy["installed_ic_day"] = -1
+		kolat_secrecy["pipeline_stage"] = "identified" if cand_id >= 0 else ""
+		cand = characters_by_id.get(cand_id)
+		stage = String(kolat_secrecy.get("pipeline_stage", ""))
+
+	if cand == null:
+		_kolat_mirror_candidate(tiger, kolat_secrecy)
+		return
+
+	# Advance stage by the candidate's real court state.
+	var role: String = cand.role_position
+	var at_capital: bool = not capital_loc.is_empty() and cand.physical_location == capital_loc
+	if role in KolatSecrecy.IMPERIAL_PROXIMITY_ROLES:
+		if stage != "installed":
+			kolat_secrecy["pipeline_stage"] = "installed"
+			kolat_secrecy["installed_ic_day"] = ic_day
+	elif role in _KOLAT_SENIOR_COURT_ROLES and at_capital:
+		kolat_secrecy["pipeline_stage"] = "positioned"
+	else:
+		# Cultivating: a conscious member gets a Kolat objective pushing them toward
+		# the Imperial court (build disposition with the Emperor at the capital, so
+		# they win a vacant Imperial-proximity seat through the normal appointment
+		# scorer — no rigged appointment). Sleeper candidates are driven by their
+		# installed command and are not given an objective here.
+		if not kolat_secrecy.get("go_dark", false) \
+				and cand.kolat_sect != Enums.KolatSect.NONE and not cand.is_pc:
+			_kolat_install_cultivation(objectives_map, cand, emperor_id, capital_loc, at_capital)
+		kolat_secrecy["pipeline_stage"] = "cultivating"
+
+	# Maintain up to two backup candidates.
+	kolat_secrecy["backup_ids"] = _kolat_select_backups(
+		characters, cand_id, identified, capital_loc, 2)
+	_kolat_mirror_candidate(tiger, kolat_secrecy)
+
+
+## Elevate the highest-scored valid backup to primary; else select a fresh
+## candidate. Returns the new candidate id (-1 if none available).
+static func _kolat_elevate_or_select(
+	characters: Array, prev_id: int, identified: Array, capital_loc: String,
+	kolat_secrecy: Dictionary,
+) -> int:
+	for b_id: Variant in kolat_secrecy.get("backup_ids", []):
+		var bid: int = int(b_id)
+		if bid == prev_id or bid in identified:
+			continue
+		var b: L5RCharacterData = null
+		for c: L5RCharacterData in characters:
+			if c.character_id == bid:
+				b = c
+				break
+		if b != null and KolatSecrecy.is_candidate_eligible(b):
+			return bid
+	return _kolat_best_candidate(characters, prev_id, identified, capital_loc)
+
+
+## Best fresh candidate: highest court-appointment score among eligible vehicles
+## (conscious member or Dream sleeper), excluding `exclude_id` and identified ids.
+static func _kolat_best_candidate(
+	characters: Array, exclude_id: int, identified: Array, capital_loc: String,
+) -> int:
+	var best_id: int = -1
+	var best_score: float = -1.0
+	for c: L5RCharacterData in characters:
+		if c.character_id == exclude_id or c.character_id in identified:
+			continue
+		if not KolatSecrecy.is_candidate_eligible(c):
+			continue
+		var at_cap: bool = not capital_loc.is_empty() and c.physical_location == capital_loc
+		var s: float = KolatSecrecy.candidate_score(c, at_cap)
+		if s > best_score:
+			best_score = s
+			best_id = c.character_id
+	return best_id
+
+
+## Up to `limit` backup candidates, ordered best-first, excluding the primary.
+static func _kolat_select_backups(
+	characters: Array, primary_id: int, identified: Array, capital_loc: String, limit: int,
+) -> Array:
+	var scored: Array = []
+	for c: L5RCharacterData in characters:
+		if c.character_id == primary_id or c.character_id in identified:
+			continue
+		if not KolatSecrecy.is_candidate_eligible(c):
+			continue
+		var at_cap: bool = not capital_loc.is_empty() and c.physical_location == capital_loc
+		scored.append({"id": c.character_id, "score": KolatSecrecy.candidate_score(c, at_cap)})
+	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["score"] > b["score"])
+	var out: Array = []
+	for i: int in range(mini(limit, scored.size())):
+		out.append(int(scored[i]["id"]))
+	return out
+
+
+## Install the candidate cultivation Kolat objective: at the capital → build
+## disposition with the Emperor; otherwise travel to the capital first.
+static func _kolat_install_cultivation(
+	objectives_map: Dictionary, cand: L5RCharacterData,
+	emperor_id: int, capital_loc: String, at_capital: bool,
+) -> void:
+	if not objectives_map.has(cand.character_id):
+		objectives_map[cand.character_id] = {}
+	var obj: Dictionary = {
+		"priority": 3,
+		"kolat_objective": true,
+		"source": "kolat_candidate_cultivation",
+		"target_npc_id": -1,
+		"target_settlement_id": -1,
+		"target_province_id": -1,
+	}
+	if at_capital and emperor_id >= 0:
+		obj["need_type"] = "RAISE_DISPOSITION"
+		obj["target_npc_id"] = emperor_id
+	elif not capital_loc.is_empty():
+		obj["need_type"] = "TRAVEL_TO"
+		obj["target_settlement_id"] = int(capital_loc) if capital_loc.is_valid_int() else -1
+	else:
+		return  # no capital reference yet — nothing actionable
+	objectives_map[cand.character_id]["kolat"] = obj
+
+
+## Mirror the candidate pipeline fields onto Tiger's special_data (s54.7i record).
+static func _kolat_mirror_candidate(tiger: L5RCharacterData, kolat_secrecy: Dictionary) -> void:
+	tiger.special_data["kolat_primary_candidate_npc_id"] = int(kolat_secrecy.get("candidate_id", -1))
+	tiger.special_data["kolat_backup_candidate_npc_ids"] = kolat_secrecy.get("backup_ids", []).duplicate()
+	tiger.special_data["kolat_candidate_pipeline_stage"] = String(kolat_secrecy.get("pipeline_stage", ""))
+
+
+## Imperial counter-response tiers (s54.7i). Covert, institutional, deniable.
+## Returns a purge report Dictionary when the tier-100 purge fires (else {}).
+static func _process_kolat_imperial_response(
+	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
+	world_states: Dictionary, character_province_map: Dictionary, kolat_secrecy: Dictionary,
+) -> Dictionary:
+	var awareness: int = int(kolat_secrecy.get("awareness", 0))
+	var tier: int = KolatSecrecy.response_tier(awareness)
+
+	# Provinces hosting an identified member — surfaced so the magistrate patrol
+	# pass can bias investigation there (structural, no invented number).
+	var active_provs: Array = []
+	if tier >= KolatSecrecy.ResponseTier.SUSPICIOUS:
+		for mid: Variant in kolat_secrecy.get("identified_ids", []):
+			var m: L5RCharacterData = characters_by_id.get(int(mid))
+			if m != null and not CharacterStats.is_dead(m):
+				var prov: int = int(character_province_map.get(m.character_id, -1))
+				if prov >= 0 and prov not in active_provs:
+					active_provs.append(prov)
+	world_states["kolat_active_provinces"] = active_provs
+
+	# Tier 50+ (Confirmed): Tiger adds the "degrade Imperial task force" priority.
+	if tier >= KolatSecrecy.ResponseTier.CONFIRMED_THREAT \
+			and not kolat_secrecy.get("task_force_flagged", false):
+		var tiger: L5RCharacterData = _find_living_tiger(characters)
+		if tiger != null:
+			var priorities: Array = tiger.special_data.get("kolat_strategic_priorities", [])
+			priorities.append({
+				"target_description": "degrade Imperial task force",
+				"source": "imperial_response",
+			})
+			tiger.special_data["kolat_strategic_priorities"] = priorities
+			kolat_secrecy["task_force_flagged"] = true
+
+	# Tier 90+ (Significantly mapped): identified members go dark — suspend
+	# operations. Their Kolat objective slot is cleared and the opportunistic /
+	# standing passes skip them while go_dark is set.
+	kolat_secrecy["go_dark"] = tier >= KolatSecrecy.ResponseTier.SIGNIFICANTLY_MAPPED
+	if kolat_secrecy["go_dark"]:
+		for mid: Variant in kolat_secrecy.get("identified_ids", []):
+			var objs: Dictionary = objectives_map.get(int(mid), {})
+			if objs.has("kolat"):
+				objs.erase("kolat")
+
+	# Tier 100 (Full knowledge): one-shot covert purge of every identified member.
+	if tier >= KolatSecrecy.ResponseTier.FULL_KNOWLEDGE \
+			and not kolat_secrecy.get("purge_done", false):
+		var broken: Array = []
+		for mid: Variant in kolat_secrecy.get("identified_ids", []):
+			var m: L5RCharacterData = characters_by_id.get(int(mid))
+			if m == null or CharacterStats.is_dead(m):
+				continue
+			# Quietly broken (s54.7i): affiliation severed, funds seized, tasks cleared.
+			m.kolat_sect = Enums.KolatSect.NONE
+			m.is_kolat_master = false
+			m.kolat_koku = 0
+			m.dirty_koku = 0
+			m.operational_koku = 0
+			var objs2: Dictionary = objectives_map.get(int(mid), {})
+			if objs2.has("kolat"):
+				objs2.erase("kolat")
+			broken.append(int(mid))
+		kolat_secrecy["purge_done"] = true
+		return {"broken_ids": broken, "count": broken.size()}
+	return {}
