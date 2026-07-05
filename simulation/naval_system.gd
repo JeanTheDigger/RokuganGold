@@ -363,8 +363,15 @@ static func get_boarding_attack_modifier(is_first_round: bool) -> int:
 
 
 static func compute_capture_prize_value(ship_class: int) -> float:
+	# s11.9: prize Koku = half construction cost. A construction_cost of -1.0 means
+	# the GDD does not specify a cost for this class (merchant barge, sampan,
+	# koutetsukan, atakebune) — an unspecified cost has no defined prize, so return
+	# 0.0 rather than a spurious negative (-0.5).
 	var stats: Dictionary = SHIP_STATS.get(ship_class, {})
-	return stats.get("construction_cost", 0.0) * 0.5
+	var cost: float = stats.get("construction_cost", 0.0)
+	if cost < 0.0:
+		return 0.0
+	return cost * 0.5
 
 
 static func evaluate_signature_capture_decision(virtue: String) -> String:

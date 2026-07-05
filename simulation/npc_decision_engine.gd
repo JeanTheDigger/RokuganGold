@@ -17,6 +17,16 @@ const KOLAT_ACTION_POOL: Array[String] = [
 	"USE_CLOUDS_EYES", "DELIVER_SEALED_LETTER",
 ]
 
+# The 9 person-to-person Kolat ActionIDs available AT_SHIP (s57.43.5) — they
+# require only a co-located target and its state, not settlement/Hidden-Temple
+# infrastructure. Every other KOLAT_ACTION_POOL entry is blocked aboard ship.
+const _AT_SHIP_KOLAT_AVAILABLE: Array[String] = [
+	"TRANSMIT_VIA_TEAR", "SUBMIT_KOLAT_REPORT", "ANONYMOUS_TIP",
+	"ROUTE_ANONYMOUS_INTELLIGENCE", "CONDUCT_CONDITIONING",
+	"MAINTAIN_SLEEPER_CONTACT", "ACTIVATE_SLEEPER",
+	"APPROACH_FOR_RECRUITMENT", "ARCHIVE_TOPIC",
+]
+
 
 # -- Phase 1: Build Context ----------------------------------------------------
 
@@ -80,6 +90,10 @@ static func build_context(
 	ctx.court_session_state = world_state.get("court_session_state", {})
 	ctx.court_settlement_id = world_state.get("court_settlement_id", -1)
 	ctx.compliance_intimidators = world_state.get("compliance_intimidators", [])
+	# s29.15.24 action-block validation (populated only when non-empty). The daily
+	# break-condition pass prunes expired/broken entries, so this holds active blocks.
+	if not character.action_blocks.is_empty():
+		ctx.action_blocks = character.action_blocks
 
 	# Stats
 	ctx.skill_ranks = character.skills.duplicate()
@@ -478,6 +492,17 @@ static func generate_options(
 		for ka: String in KOLAT_ACTION_POOL:
 			if ka not in available_actions:
 				available_actions.append(ka)
+		# Kolat at sea (s57.43.5): infrastructure-dependent Kolat actions require a
+		# specific settlement asset or Hidden-Temple presence and are blocked
+		# AT_SHIP; only the 9 person-to-person actions (co-located target + state)
+		# survive. This never triggers in the live sim today (AT_SHIP is a
+		# PC-aboard context and PCs do not run the NPC engine), but keeps the
+		# unlock faithful for when PCs-aboard and Kolat-at-sea both go live.
+		if ctx.context_flag == Enums.ContextFlag.AT_SHIP:
+			available_actions = available_actions.filter(
+				func(a: String) -> bool:
+					return a not in KOLAT_ACTION_POOL or a in _AT_SHIP_KOLAT_AVAILABLE
+			)
 
 	if need.need_type == "RESPOND_TO_SEPPUKU":
 		available_actions = ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]
@@ -577,6 +602,41 @@ static func _apply_compliance_filter(
 			continue
 		filtered.append(option)
 	return filtered
+
+
+# -- s29.15.24 Action-Block Validation Filter ---------------------------------
+# The unified action-block consumer (Ide R5 peace_locked, Miya R3/R4, Otomo R3,
+# INTERVENE_CAPTAIN). Each active block on the character names a protected party
+# (blocker_id) and the actions denied against them (blocked_action_ids =
+# "hostile_tagged" → the HOSTILE_ACTIONS set, or an explicit Array[String]). An
+# option whose target is a protected party and whose action_id is denied is removed.
+static func _apply_action_block_filter(
+	options: Array,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	if ctx.action_blocks.is_empty():
+		return options
+	var filtered: Array = []
+	for option: NPCDataStructures.ScoredAction in options:
+		if _option_denied_by_block(option, ctx.action_blocks):
+			continue
+		filtered.append(option)
+	return filtered
+
+
+static func _option_denied_by_block(
+	option: NPCDataStructures.ScoredAction, blocks: Array,
+) -> bool:
+	for block: Dictionary in blocks:
+		if int(block.get("blocker_id", -1)) != option.target_npc_id:
+			continue
+		var banned: Variant = block.get("blocked_action_ids", "hostile_tagged")
+		if banned is String and banned == "hostile_tagged":
+			if option.action_id in HOSTILE_ACTIONS:
+				return true
+		elif banned is Array and option.action_id in banned:
+			return true
+	return false
 
 
 # -- Phase 4b: Allowlist Filter (s57.1) ----------------------------------------
@@ -717,6 +777,13 @@ static func _apply_origami_precondition_filter(
 
 const _PROTECTIVE_WARD_SPELLS: Array[String] = ["soul_of_stone", "jurojins_balm", "stones_endurance"]
 
+# s57.42.2: the merchant families own personal (owner-patron) vessels, so when one of
+# their lords commissions a ship (COMMISSION_SHIP) it is a NAMED TRANSPORT vessel, not
+# a military fleet hull. PROVISIONAL trigger (family-membership gate) — the GDD gives
+# no military-vs-personal COMMISSION_SHIP split; flagged for owner tuning. Mirrors
+# WorldBootstrap.MERCHANT_VESSEL_FAMILIES (kept local to decouple the engine).
+const _NAMED_VESSEL_FAMILIES: Array[String] = ["Yasuki", "Daidoji", "Kasuga", "Yoritomo"]
+
 static func _apply_protective_ward_precondition_filter(
 	options: Array,
 	character: L5RCharacterData,
@@ -739,6 +806,29 @@ static func _apply_protective_ward_precondition_filter(
 				break
 	if not should_keep:
 		return _remove_action(options, "CAST_PROTECTIVE_WARD")
+	return options
+
+
+# -- Phase 4c: Passage Precondition Filter (s57.42.6) ------------------------
+# Removes REQUEST_PASSAGE unless a co-located vessel has been discovered for this
+# character (passage_vessel_id injected). Until the water map + co-located-vessel
+# injection exist there is no vessel to ask, so the request is never a wasteful
+# no-op selection — it self-gates here.
+
+static func _apply_passage_precondition_filter(
+	options: Array,
+	_character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	var present: bool = false
+	for option: NPCDataStructures.ScoredAction in options:
+		if option.action_id == "REQUEST_PASSAGE":
+			present = true
+			break
+	if not present:
+		return options
+	if int(ctx.known_objectives.get("passage_vessel_id", -1)) < 0:
+		return _remove_action(options, "REQUEST_PASSAGE")
 	return options
 
 
@@ -1381,10 +1471,13 @@ static func run(
 	options = _apply_garden_precondition_filter(options, character, ctx)
 	options = _apply_world_is_truth_precondition_filter(options, character, chars_by_id)
 	options = _apply_protective_ward_precondition_filter(options, character, ctx)
+
+	options = _apply_passage_precondition_filter(options, character, ctx)
 	options = _apply_commune_precondition_filter(options, character)
 	options = _apply_commerce_precondition_filter(options, character, ctx)
 	options = _apply_arrived_travel_filter(options, need, ctx)
 	options = _apply_compliance_filter(options, ctx)
+	options = _apply_action_block_filter(options, ctx)
 
 	# Phase 5
 	score_all(options, need, ctx, scoring_tables,
@@ -1813,6 +1906,7 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"PETITION_RONIN",
 				"HIRE_RONIN",
 				"TERMINATE_CONTRACT",
+				"REQUEST_PASSAGE",
 				"CRAFT",
 				"CULTIVATE_GARDEN", "TEND_BONSAI", "DISPLAY_BONSAI",
 				"COMPOSE_PAINTING", "DISPLAY_PAINTING", "PRESENT_EMAKIMONO",
@@ -1886,6 +1980,37 @@ static func _get_actions_for_context(context_flag: Enums.ContextFlag) -> Array:
 				"DISPATCH_COURTIER", "DECLARE_WALL_EMERGENCY",
 				"TREAT_WOUND",
 				"TRAIN",
+				"DO_NOTHING", "REST",
+			]
+		Enums.ContextFlag.AT_SHIP:
+			# Aboard a vessel (aboard_ship_id >= 0) — s57.43.5. The ship is not a
+			# province, court, or the character's holdings, so all lord-tier
+			# holdings actions and court-audience actions (PUBLIC_PERFORMANCE,
+			# PUBLIC_DECLARATION, CALL_COURT, ORDER_*, SET_*, CONDUCT_COMMERCE,
+			# PURCHASE_MARKET, CULTIVATE/MAINTAIN_GARDEN, INVESTIGATE_PROVINCE,
+			# REQUEST_ART/PERFORMANCE) are blocked. BEGIN_TRAVEL/CHANGE_DESTINATION
+			# are not passenger-firable — the captain controls the route.
+			return [
+				# Social (Categories 1, 3, 4, 5) — target co-located characters aboard.
+				"CHARM", "NEGOTIATE", "PERSUADE", "INTIMIDATE",
+				"LISTEN_REFLECT", "IMPRESS", "DELIVER_GIFT", "OFFER_FAVOR",
+				"PERFORM_FOR", "PLAY_GAME", "GOSSIP", "DISCLOSE",
+				"EXPOSE_SECRET_PRIVATELY", "EXPOSE_SECRET_PUBLICLY",
+				"PUBLIC_INSULT", "PUBLIC_DEBATE", "PROVOKE_EMOTION",
+				"READ_CHARACTER", "PROBE", "ASK_FOR_INTRODUCTION", "DISCERN_NEED",
+				# Covert (Category 6) — confined space, detection is easier.
+				"EAVESDROP", "INTERCEPT_LETTER", "SEARCH_QUARTERS",
+				"FABRICATE_SECRET", "BRIBE_FOR_INFO",
+				# Personal development (Category 11) — portable practice only.
+				"TRAIN", "MEDITATE", "MENTOR", "TREAT_WOUND",
+				"LEARN_THEATER_PIECE", "COMPOSE_THEATER_PIECE",
+				"COMPOSE_PAINTING", "COMPOSE_SCULPTURE", "CRAFT",
+				"APPLY_TATTOO", "TRAIN_ANIMAL",
+				# Communication (Category 10) — dispatch deferred to port arrival.
+				"WRITE_LETTER", "SEND_INVITATION", "ASSIGN_VASSAL_OBJECTIVE",
+				# Spiritual (Category 12) + Honor & Dueling (Category 13).
+				"PERFORM_WORSHIP", "PUBLIC_ATONEMENT", "ISSUE_DUEL_CHALLENGE",
+				# Passive.
 				"DO_NOTHING", "REST",
 			]
 		_:
@@ -1983,6 +2108,8 @@ static func _get_ap_cost(action_id: String) -> int:
 		"INVOKE_FAVOR": 1,
 		"TREAT_WOUND": 1,
 		"REQUEST_PERFORMANCE": 0,
+		"REQUEST_PASSAGE": 0,
+		"JUMP_OVERBOARD": 0,
 		"ANNOUNCE_HUNT": 0,
 		"REQUEST_HUNT_INVITATION": 0,
 		"CANCEL_HUNT": 0,
@@ -3481,6 +3608,25 @@ static func _populate_action_metadata(
 			"province_id": need.target_province_id,
 			"settlement_id": need.target_settlement_id,
 			"target_intent": need.target_intent,
+		}
+		if option.action_id == "COMMISSION_SHIP" and ctx.family in _NAMED_VESSEL_FAMILIES:
+			# A merchant-family lord commissions a personal transport vessel (s57.42.2),
+			# not a military fleet ship. Executor + construction already branch on these.
+			option.metadata["is_named_vessel"] = true
+			option.metadata["vessel_purpose"] = NamedVesselData.Purpose.TRANSPORT
+			option.metadata["vessel_owner_id"] = ctx.character_id
+	elif option.action_id == "REQUEST_PASSAGE":
+		# Destination = the travel target; the vessel + its decider (captain/owner) come
+		# from co-located-vessel discovery, injected via known_objectives when the water
+		# map exists. Until then vessel_id is -1 and the precondition filter removes the
+		# action (and the executor would no-op), so this is turnkey, not wasteful.
+		option.metadata = {
+			"vessel_id": ctx.known_objectives.get("passage_vessel_id", -1),
+			"decider_id": ctx.known_objectives.get("passage_decider_id", -1),
+			"destination_province": need.target_province_id,
+			"koku_offered": float(ctx.known_objectives.get("passage_koku_offered", 0.0)),
+			"schedule_compatible": bool(ctx.known_objectives.get("passage_schedule_compatible", true)),
+			"polite": true,
 		}
 	elif option.action_id == "GOSSIP":
 		var subject: int = need.target_npc_id if need.target_npc_id >= 0 else -1

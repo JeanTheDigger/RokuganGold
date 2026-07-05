@@ -18,6 +18,8 @@ const DIR_COURTS := "courts/"
 const DIR_EDICTS := "edicts/"
 const DIR_HORDES := "hordes/"
 const DIR_SHIPS := "ships/"
+const DIR_NAMED_VESSELS := "named_vessels/"
+const DIR_WATER_SUBTILES := "water_subtiles/"
 const DIR_CHILDREN := "children/"
 const DIR_CONSTRUCTIONS := "constructions/"
 const DIR_COURT_COMMITMENTS := "court_commitments/"
@@ -64,6 +66,8 @@ func save_world(ws: Node) -> bool:
 	ok = _save_resource_array(ws.active_edicts, base + DIR_EDICTS, "edict_id") and ok
 	ok = _save_resource_array_by_index(ws.active_hordes, base + DIR_HORDES) and ok
 	ok = _save_resource_array(ws.ships, base + DIR_SHIPS, "ship_id") and ok
+	ok = _save_resource_array(ws.named_vessels, base + DIR_NAMED_VESSELS, "vessel_id") and ok
+	ok = _save_resource_array(ws.water_subtiles, base + DIR_WATER_SUBTILES, "subtile_id") and ok
 	ok = _save_resource_array(ws.children, base + DIR_CHILDREN, "child_id") and ok
 	ok = _save_resource_array(ws.constructions, base + DIR_CONSTRUCTIONS, "construction_id") and ok
 	ok = _save_resource_array_by_index(ws.court_commitments, base + DIR_COURT_COMMITMENTS) and ok
@@ -129,6 +133,8 @@ func load_world(ws: Node) -> bool:
 	ws.active_edicts.assign(_load_resource_array(base + DIR_EDICTS))
 	ws.active_hordes.assign(_load_resource_array(base + DIR_HORDES))
 	ws.ships.assign(_load_resource_array(base + DIR_SHIPS))
+	ws.named_vessels.assign(_load_resource_array(base + DIR_NAMED_VESSELS))
+	ws.water_subtiles.assign(_load_resource_array(base + DIR_WATER_SUBTILES))
 	ws.children.assign(_load_resource_array(base + DIR_CHILDREN))
 	ws.constructions.assign(_load_resource_array(base + DIR_CONSTRUCTIONS))
 	ws.court_commitments.assign(_load_resource_array(base + DIR_COURT_COMMITMENTS))
@@ -441,6 +447,7 @@ func _save_json_state(ws: Node, base: String) -> bool:
 		"next_succession_id": ws.next_succession_id[0],
 		"next_company_id": ws.next_company_id[0],
 		"next_war_id": ws.next_war_id[0],
+		"next_ship_id": ws.next_ship_id[0],
 		"next_court_id": ws.next_court_id[0],
 		"next_edict_id": ws.next_edict_id[0],
 		"next_character_id": ws.next_character_id[0],
@@ -558,6 +565,7 @@ func _load_json_state(ws: Node, base: String) -> void:
 	_restore_counter(ws.next_succession_id, state, "next_succession_id")
 	_restore_counter(ws.next_company_id, state, "next_company_id")
 	_restore_counter(ws.next_war_id, state, "next_war_id")
+	_restore_counter(ws.next_ship_id, state, "next_ship_id")
 	_restore_counter(ws.next_court_id, state, "next_court_id")
 	_restore_counter(ws.next_edict_id, state, "next_edict_id")
 	_restore_counter(ws.next_character_id, state, "next_character_id")
@@ -656,6 +664,10 @@ func _restore_counter(counter_arr: Array[int], state: Dictionary, key: String) -
 
 func _reconcile_id_counters(ws: Node) -> void:
 	_ensure_counter_above(ws.next_character_id, ws.characters, "character_id")
+	# next_ship_id is shared across military ships (ship_id) and named vessels
+	# (vessel_id) — keep it above both.
+	_ensure_counter_above(ws.next_ship_id, ws.ships, "ship_id")
+	_ensure_counter_above(ws.next_ship_id, ws.named_vessels, "vessel_id")
 	_ensure_counter_above(ws.next_topic_id, ws.active_topics, "topic_id")
 	_ensure_counter_above(ws.next_secret_id, ws.active_secrets, "secret_id")
 	_ensure_counter_above(ws.next_tattoo_id, ws.tattoos, "tattoo_id")
@@ -727,6 +739,8 @@ func _ensure_dirs(base: String) -> void:
 		base + DIR_EDICTS,
 		base + DIR_HORDES,
 		base + DIR_SHIPS,
+		base + DIR_NAMED_VESSELS,
+		base + DIR_WATER_SUBTILES,
 		base + DIR_CHILDREN,
 		base + DIR_CONSTRUCTIONS,
 		base + DIR_COURT_COMMITMENTS,

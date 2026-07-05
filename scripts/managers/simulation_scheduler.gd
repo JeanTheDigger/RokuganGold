@@ -182,6 +182,23 @@ func _bootstrap_fresh_world() -> void:
 	WorldState.next_character_id[0] = result.get("next_character_id", 10000)
 	WorldState.next_settlement_id[0] = result.get("next_settlement_id", 5000)
 
+	# Starting navies (Naval Tranche 2).
+	var boot_ships: Array = result.get("ships", [])
+	WorldState.ships.clear()
+	for sh: ShipData in boot_ships:
+		WorldState.ships.append(sh)
+	var boot_vessels: Array = result.get("named_vessels", [])
+	WorldState.named_vessels.clear()
+	for nv: NamedVesselData in boot_vessels:
+		WorldState.named_vessels.append(nv)
+	WorldState.next_ship_id[0] = result.get("next_ship_id", 1)
+	# Water-movement graph — empty in production (placeholder seeding is opt-in in
+	# bootstrap_world), so the naval movement engine stays inert until real map data.
+	var boot_subtiles: Array = result.get("water_subtiles", [])
+	WorldState.water_subtiles.clear()
+	for st: WaterSubtileData in boot_subtiles:
+		WorldState.water_subtiles.append(st)
+
 	var clan_champions: Dictionary = result.get("clan_champions", {})
 	for clan_name: String in clan_champions:
 		var cd: ClanData = WorldState.clans.get(clan_name)

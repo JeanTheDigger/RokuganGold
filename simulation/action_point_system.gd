@@ -23,6 +23,11 @@ static func reset_daily_ap(character: L5RCharacterData) -> void:
 		character.action_points_current = 0
 		character.action_points_max = 0
 		return
+	# s57.43.6 shipwreck drift: adrift in open ocean, the character cannot act.
+	if character.drift_day >= 1:
+		character.action_points_current = 0
+		character.action_points_max = 0
+		return
 	if character.is_pc:
 		# PCs never enter the NPC wave; AP accrues to banked_ap instead (s60.5).
 		character.action_points_current = 0

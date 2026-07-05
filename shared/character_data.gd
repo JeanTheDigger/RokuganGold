@@ -473,6 +473,43 @@ var taint_benefits_suppressed: bool = false
 @export var passage_request_count_today: int = 0
 @export var assigned_ship_id: int = -1
 
+# Outbound letters written while aboard a ship (s57.43.5): WRITE_LETTER /
+# SEND_INVITATION are available AT_SHIP but dispatch is deferred — letters accumulate
+# here during the voyage and flush into the pipeline (from the port of arrival) when
+# aboard_ship_id clears.
+@export var outbound_letter_queue: Array[LetterData] = []
+
+# Shipwreck drift state (s57.43.6): when the ship is wrecked the character is cast
+# into an open-ocean drift. drift_day 0 = not adrift; >= 1 = the current drift day
+# (a landfall/rescue check + Swimming roll resolve once per IC day). Mantis waters
+# raise the day-1 landfall chance.
+@export var drift_day: int = 0
+@export var drift_in_mantis_waters: bool = false
+# s57.43.6 JUMP_OVERBOARD near-shore drift: true when the character went overboard
+# within 1 sub-tile of land (coastal). Coastal drift uses the lower swim TN and a
+# successful swim reaches shore that day; open-ocean drift (shipwreck / a jump far
+# from land) leaves this false. Map-gated: defaults false until water coordinates
+# let a caller know the ship is coastal.
+@export var drift_near_shore: bool = false
+
+# s55.11 INTERVENE_CAPTAIN: cumulative −1k0 penalty on this captain's subsequent
+# intervention rolls this voyage (one per critical failure). Cleared on disembark
+# (when the captain's ship next docks). 0 = no penalty.
+@export var intervene_crit_penalty: int = 0
+
+# s57.43.8 route-disruption influence: set true when a passenger aboard this captain's
+# ship successfully persuades them (NEGOTIATE / PERSUADE / BRIBE_FOR_INFO) during the
+# voyage. A persuaded neutral/default captain runs the disrupted port (pushes through to
+# the destination) instead of retreating. Consumed + cleared at the arrival decision.
+@export var route_persuaded: bool = false
+
+# s57.42.7 owner-granted passage (by letter): the named vessel this character has been
+# granted passage on and its destination province. When the character is co-located with
+# that docked vessel at its port, they board (and the vessel sails toward the destination).
+# Cleared on boarding, or if the vessel is destroyed. -1 = no pending grant.
+@export var passage_granted_vessel_id: int = -1
+@export var passage_granted_destination: int = -1
+
 # -- Tattoo Ability State (Section 57.25.11) -----------------------------------
 
 @export var mantis_tattoo: bool = false

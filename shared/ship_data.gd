@@ -21,6 +21,10 @@ extends Resource
 
 ## IC day this ship sails from its current port (-1 = not scheduled). s57.42.7.
 @export var departure_tick: int = -1
+## Destination province of a scheduled-but-not-yet-launched voyage (s57.43.4): set
+## when a deploy order is received; the ship musters its crew until departure_tick,
+## then launches toward here. -1 = no scheduled voyage.
+@export var pending_destination_province: int = -1
 
 ## Province ID where this ship is currently located.
 @export var current_province_id: int = -1
@@ -48,6 +52,19 @@ extends Resource
 @export var is_moving: bool = false
 @export var destination_subtile_id: int = -1
 @export var movement_days_remaining: int = 0
+
+## Multi-hop voyage state (s11.9 sub-tile movement, s57.43 voyage). The remaining
+## water sub-tile ids to traverse AFTER the current hop (destination_subtile_id is
+## the current hop's target). Empty = single-hop / not on a voyage. Populated by
+## NavalMovementSystem.begin_voyage; drained one hop at a time by step_movement.
+@export var voyage_route: PackedInt32Array = PackedInt32Array()
+
+## Province the voyage terminates at (the ship docks there on arrival). -1 = no
+## voyage destination (a bare single-hop just stops at the sub-tile).
+@export var voyage_destination_province: int = -1
+## Origin province of the current voyage (set at begin_voyage) — the safe port a
+## disrupted arrival returns to (s57.43.8). -1 = not voyaging.
+@export var voyage_origin_province: int = -1
 
 ## Construction cost in koku.
 @export var construction_cost: float = 0.0

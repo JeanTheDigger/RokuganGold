@@ -45,6 +45,38 @@ const DRIFT_LANDFALL_CHANCE: Array[float] = [0.0, 0.10, 0.25, 0.40, 0.60]
 const DRIFT_LANDFALL_CAP: float = 0.60
 const DRIFT_MANTIS_DAY1: float = 0.30
 const DRIFT_CEILING_DAYS: int = 6
+# Open-ocean Swimming roll each drift day (s57.43.6): Athletics (Swimming) + Strength
+# vs TN 25; a non-swimmer (no Athletics rank) suffers +10 TN ("they cannot swim").
+const DRIFT_SWIM_TN: int = 25
+const DRIFT_NON_SWIMMER_PENALTY: int = 10
+# Coastal JUMP_OVERBOARD (s57.43.6): a character overboard within 1 sub-tile of land
+# rolls Athletics (Swimming) + Strength vs the lower TN 15, and a success swims to
+# shore that day (open ocean stays TN 25/day). Non-swimmer +10 applies to both.
+const COASTAL_SWIM_TN: int = 15
+
+# Named samurai crew (s57.43.4). Fleet warships carry standing named crew; merchant/
+# civilian classes carry none. Slot counts are PROVISIONAL (owner-set): the GDD marks
+# them "PROVISIONAL pending balancing" — Kobune a handful, larger more, Atakebune many.
+const CREW_SLOTS_BY_CLASS: Dictionary = {
+	Enums.ShipClass.SAMPAN: 0,
+	Enums.ShipClass.MERCHANT_BARGE: 0,
+	Enums.ShipClass.KOBUNE: 2,
+	Enums.ShipClass.SENGOKOBUNE: 4,
+	Enums.ShipClass.KOUTETSUKAN: 5,
+	Enums.ShipClass.ATAKEBUNE: 8,
+	Enums.ShipClass.TORTOISE_OCEANGOING: 3,
+}
+# A Mantis fleet ship carries one additional Yoritomo Shugenja crew slot (strict cap
+# 1, crew-only; s57.43.4) on top of the class count.
+const MANTIS_SHUGENJA_CREW_SLOT: int = 1
+# Muster delay (owner-set, s57.43.4): a deploy order sets departure_tick this many IC
+# days out so notified crew can travel to the port and board before the ship sails.
+const MUSTER_DELAY_IC_DAYS: int = 7
+
+
+## Named crew slots for a ship class (s57.43.4). 0 for merchant/civilian classes.
+static func crew_slots_for_class(ship_class: int) -> int:
+	return int(CREW_SLOTS_BY_CLASS.get(ship_class, 0))
 
 
 # === CAPTAIN REQUIREMENTS (s57.42.3) =========================================
@@ -242,3 +274,43 @@ static func shipwreck_landfall_chance(drift_day: int, in_mantis_waters: bool = f
 	if drift_day < DRIFT_LANDFALL_CHANCE.size():
 		return DRIFT_LANDFALL_CHANCE[drift_day]
 	return DRIFT_LANDFALL_CAP
+
+
+## Open-ocean Swimming TN for a drifting character (s57.43.6): base 25, +10 for a
+## non-swimmer (Athletics rank 0 — without Athletics rank/Swimming emphasis "they
+## cannot swim").
+static func drift_swim_tn(character: L5RCharacterData, near_shore: bool = false) -> int:
+	var athletics: int = int(character.skills.get("Athletics", 0))
+	var base: int = COASTAL_SWIM_TN if near_shore else DRIFT_SWIM_TN
+	return base + (DRIFT_NON_SWIMMER_PENALTY if athletics <= 0 else 0)
+
+
+## s57.43.8: when a destination port is non-dockable on arrival (hostile, blockaded,
+## besieged, captured, or struck by disaster), the captain decides what to do. The
+## decision is personality-led: Yu (Courage) runs the blockade, Seigyo (Control)
+## diverts to a safe port, Chugi (Duty) retreats to fulfil the owner's intent; a
+## captainless ship turns back. Returns "run" / "divert" / "retreat". The engine
+## applies "run" as docking anyway; "divert"/"retreat" both return to the safe
+## origin port (nearest-friendly-port and offshore-hold need port-adjacency /
+## cargo-spoilage data the world map does not yet carry).
+## The captain's disrupted-arrival decision (s57.43.8). Virtue-committed captains follow
+## their nature: Yu (Courage) runs the blockade, Seigyo (Control) diverts safely, Chugi
+## (Duty) retreats to fulfil the owner's original intent. A passenger who persuaded the
+## captain during the voyage (passenger_persuaded, s57.43.8) sways only the neutral/default
+## captain — otherwise-retreating — to run for the destination the passenger wants; the
+## three committed virtues hold firm ("the captain's judgement remains final").
+static func captain_disruption_decision(
+	captain: L5RCharacterData, passenger_persuaded: bool = false,
+) -> String:
+	if captain == null or CharacterStats.is_dead(captain):
+		return "retreat"
+	if captain.bushido_virtue == Enums.BushidoVirtue.YU:
+		return "run"
+	if captain.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+		return "divert"
+	if captain.bushido_virtue == Enums.BushidoVirtue.CHUGI:
+		return "retreat"
+	# Neutral/default captain: a persuaded captain pushes through to the destination.
+	if passenger_persuaded:
+		return "run"
+	return "retreat"

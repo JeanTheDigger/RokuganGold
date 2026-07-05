@@ -48,6 +48,13 @@ extends Resource
 @export var meeting_settlement_id: int = -1
 @export var meeting_deadline_ic_day: int = -1
 
+# s57.42.7 owner-override passage request: a requester petitions a remote ship owner
+# by letter for sea passage. On delivery the owner evaluates and, on acceptance, grants
+# passage (3-point Obligation) and dispatches acceptance/order response letters.
+@export var passage_request: bool = false
+@export var passage_destination_province: int = -1
+@export var passage_koku_offered: float = 0.0
+
 # Otosan Uchi Governor solicitation (s2.3.23 Candidate Solicitation Fallback): the
 # Sentaku name / zone_id of the vacant district the sender is soliciting a Governor
 # recommendation for; "" for ordinary letters. On delivery, the recipient Clan

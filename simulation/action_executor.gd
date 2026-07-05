@@ -455,6 +455,12 @@ static func execute(
 	if action_id == "REQUEST_PERFORMANCE":
 		return _execute_request_performance(action, character, ctx)
 
+	if action_id == "REQUEST_PASSAGE":
+		return _execute_request_passage(action, character)
+
+	if action_id == "JUMP_OVERBOARD":
+		return _execute_jump_overboard(action, character)
+
 	if action_id == "CONDUCT_TEA_CEREMONY":
 		return _execute_conduct_tea_ceremony(action, character, ctx, dice_engine, characters_by_id)
 
@@ -4476,6 +4482,12 @@ static func _execute_construction(
 		"dedicated_fortune": meta.get("dedicated_fortune", -1),
 		"ship_class": meta.get("ship_class", -1),
 		"shrine_tier": meta.get("shrine_tier", "roadside"),
+		# COMMISSION_SHIP: produce an owner-patron NamedVesselData (s57.42.2) instead
+		# of a military ShipData when the metadata requests it. Default false = the
+		# existing lord/military clan-ship path.
+		"is_named_vessel": meta.get("is_named_vessel", false),
+		"vessel_owner_id": meta.get("vessel_owner_id", -1),
+		"vessel_purpose": meta.get("vessel_purpose", 0),
 	}
 
 	return {
@@ -5598,6 +5610,82 @@ static func _execute_transfer_koku(
 		"recipient_id": recipient_id,
 		"requires_koku_transfer_fulfillment": true,
 		"disposition_change": 3,
+	}
+
+
+# -- REQUEST_PASSAGE (s57.42.6-7) ----------------------------------------------
+# The requester asks a vessel's captain/owner for sea passage to a destination. The
+# executor only PACKAGES the request (it has no vessel/decider collections); the day
+# writeback (_process_passage_writebacks) applies the s57.42 throttle, evaluates
+# acceptance, boards the requester, and launches the vessel's voyage. 0 AP,
+# Category 11 (s57.42.6). Metadata carries the vessel/decider/destination that the
+# (map-gated) co-located-vessel discovery supplies.
+
+static func _execute_request_passage(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+) -> Dictionary:
+	var meta: Dictionary = action.metadata
+	var vessel_id: int = int(meta.get("vessel_id", -1))
+	var decider_id: int = int(meta.get("decider_id", -1))
+	var destination_province: int = int(meta.get("destination_province", -1))
+	if vessel_id < 0 or decider_id < 0 or destination_province < 0:
+		return {
+			"success": false,
+			"action_id": "REQUEST_PASSAGE",
+			"character_id": character.character_id,
+			"reason": "no_passage_target",
+		}
+	return {
+		"success": true,
+		"action_id": "REQUEST_PASSAGE",
+		"character_id": character.character_id,
+		"target_npc_id": decider_id,
+		"target_province_id": destination_province,
+		"effects": {
+			"requires_passage_resolution": true,
+			"vessel_id": vessel_id,
+			"decider_id": decider_id,
+			"destination_province": destination_province,
+			"koku_offered": float(meta.get("koku_offered", 0.0)),
+			"schedule_compatible": bool(meta.get("schedule_compatible", true)),
+			"standing_orders_refuse": bool(meta.get("standing_orders_refuse", false)),
+			"polite": bool(meta.get("polite", true)),
+			"is_owner_grant": bool(meta.get("is_owner_grant", false)),
+			"last_refused_day": int(meta.get("last_refused_day", -1)),
+			"rude_refusal": bool(meta.get("rude_refusal", false)),
+		},
+	}
+
+
+# -- JUMP_OVERBOARD (s57.43.6) --------------------------------------------------
+# A deliberate 0-AP escape: an aboard character throws themselves off the ship into
+# the water, entering the drift state (the day writeback casts them into drift; the
+# daily drift pass then resolves swim-to-shore / drowning / rescue). Rare — the GDD
+# frames it as a desperate PC escape from a hostile or unwanted voyage. near_shore /
+# in_mantis are map-gated metadata (default open ocean). Fails if not aboard.
+
+static func _execute_jump_overboard(
+	action: NPCDataStructures.ScoredAction,
+	character: L5RCharacterData,
+) -> Dictionary:
+	if character.aboard_ship_id < 0:
+		return {
+			"success": false,
+			"action_id": "JUMP_OVERBOARD",
+			"character_id": character.character_id,
+			"reason": "not_aboard",
+		}
+	var meta: Dictionary = action.metadata
+	return {
+		"success": true,
+		"action_id": "JUMP_OVERBOARD",
+		"character_id": character.character_id,
+		"effects": {
+			"requires_jump_overboard_drift": true,
+			"near_shore": bool(meta.get("near_shore", false)),
+			"in_mantis": bool(meta.get("in_mantis", false)),
+		},
 	}
 
 

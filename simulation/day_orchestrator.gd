@@ -109,6 +109,9 @@ static func advance_day(
 	active_okiyas: Array = [],
 	next_okiya_id: Array = [1],
 	navigation_zones: Array = [],
+	named_vessels: Array = [],
+	next_ship_id: Array = [1],
+	water_subtiles: Array = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 
@@ -148,7 +151,7 @@ static func advance_day(
 	_process_companion_owner_deaths(characters, characters_by_id)
 	_process_companion_locations(characters, character_province_map)
 	_process_companion_deaths(characters, active_topics, next_topic_id, ic_day)
-	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state)
+	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state, named_vessels)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
@@ -253,6 +256,10 @@ static func advance_day(
 	)
 	_set_court_context_flags(active_courts, world_states)
 	_inject_hunt_context(active_hunts, world_states, active_topics)
+	_inject_passage_context(world_states, named_vessels, character_province_map, characters_by_id)
+	# s55.11 / s29.15.24: prune INTERVENE_CAPTAIN action_blocks that have broken
+	# (aggressor disembarked / captain incapacitated) before the wave reads them.
+	_process_action_block_breaks(characters, characters_by_id, ships, named_vessels)
 	_inject_compliance_context(active_intimidations, world_states)
 	_inject_theater_context(theater_pieces, characters, world_states)
 	_inject_senbazuru_context(active_senbazurus, characters, world_states)
@@ -279,6 +286,10 @@ static func advance_day(
 	# governance/court/worship (AT_OWN_HOLDINGS already permits TRAIN/MENTOR). AT_DOJO is
 	# reserved for future per-character zone-position tracking (a PC standing in the dojo).
 	_set_visiting_context_flags(characters, settlements, provinces, world_states)
+	# Aboard a vessel (s57.43.5): AT_SHIP supersedes any settlement context —
+	# a character with aboard_ship_id >= 0 is on the ship, not at a port/court/
+	# holding. Runs last so it overrides the settlement-level setters above.
+	_set_ship_context_flags(characters, world_states)
 	_inject_settlement_type(characters, settlements, world_states)
 	_pickup_ambient_public_records(characters, settlements, ic_day)
 
@@ -319,13 +330,37 @@ static func advance_day(
 	var naval_weather: int = _process_naval_weather(
 		dice_engine, _season_to_name(current_season), season_meta,
 	)
+	# s57.43.4: fleet ships that have finished mustering (departure_tick reached) launch
+	# now — present assigned crew board, absent crew miss the sailing.
+	_process_ship_departures(
+		ships, water_subtiles, characters_by_id, settlements, objectives_map, ic_day,
+	)
+	# s57.42.7: an owner-granted passenger co-located with their docked vessel boards it
+	# (and the vessel sails toward the granted destination).
+	_process_granted_passenger_boarding(
+		characters, named_vessels, water_subtiles, settlements,
+	)
 	var naval_movement_results: Array = _process_ship_movement(
-		ships, dice_engine,
+		ships, named_vessels, water_subtiles, characters_by_id, settlements,
+		insurgencies, dice_engine, provinces, active_wars, pending_letters, ic_day,
+	)
+	# s57.43.7: resolve any pirate interceptions from movement into naval battles.
+	var pirate_encounter_results: Array = _process_pirate_encounter_writebacks(
+		naval_movement_results, ships, named_vessels, characters_by_id,
+		naval_weather, dice_engine, active_hostages, death_events, ic_day,
 	)
 	var naval_battle_results: Array = _process_naval_battle_triggers(
-		ships, characters_by_id, active_wars, naval_weather, dice_engine,
+		ships, named_vessels, characters_by_id, active_wars, naval_weather, dice_engine,
 	)
-	_apply_naval_battle_mutations(naval_battle_results, ships, characters_by_id)
+	_apply_naval_battle_mutations(
+		naval_battle_results, ships, named_vessels, characters_by_id,
+		active_hostages, death_events, dice_engine, ic_day)
+	# s11.9: a non-native clan that captures a signature ship (Atakebune/Koutetsukan)
+	# resolves its fate (destroy default / keep / return) by the captor champion's
+	# personality, with the keep/return political consequences.
+	_process_signature_ship_captures(
+		naval_battle_results, ships, named_vessels, characters, characters_by_id,
+		active_topics, next_topic_id, favors, world_states["clan_baselines"], ic_day)
 
 	_inject_urgency_data(
 		world_states, characters, favors, active_tethers, active_sieges,
@@ -384,6 +419,40 @@ static func advance_day(
 
 	_process_duel_response_writebacks(
 		day_result.get("results", []), characters_by_id, dice_engine,
+	)
+
+	# s57.18: a lord's ORDER_DEPLOY toward a coastal target sails their clan fleet there.
+	_process_fleet_deployment_writebacks(
+		day_result.get("results", []), ships, characters_by_id, water_subtiles,
+		ic_day, objectives_map, settlements,
+	)
+
+	# s57.42: resolve REQUEST_PASSAGE — board the requester and launch the vessel voyage.
+	# s57.43.4: at voyage launch, generate the named-passenger manifest (co-travelers
+	# bound for the same destination, cap 3).
+	_process_passage_writebacks(
+		day_result.get("results", []), characters_by_id, ships, named_vessels,
+		water_subtiles, ic_day, favors, characters, objectives_map,
+	)
+
+	# s57.43.6: a deliberate JUMP_OVERBOARD casts the actor into the drift state, which
+	# the daily drift pass (below) resolves the same tick.
+	_process_jump_overboard_writebacks(
+		day_result.get("results", []), characters_by_id,
+	)
+
+	# s55.11: a ship captain may intervene against a hostile action fired between two
+	# co-aboard passengers (writes an action_block to the aggressor on success). Also
+	# resolves the victim-initiates / captain-permission break conditions from the day.
+	_process_intervene_captain_writebacks(
+		day_result.get("results", []), characters_by_id, ships, named_vessels,
+		dice_engine, active_topics, next_topic_id, ic_day,
+	)
+
+	# s57.43.8: an aboard passenger persuading the captain (NEGOTIATE / PERSUADE /
+	# BRIBE_FOR_INFO) leans a later disrupted-arrival decision toward running the port.
+	_process_route_influence_writebacks(
+		day_result.get("results", []), characters_by_id, ships, named_vessels,
 	)
 
 	var crime_results: Array = _process_crime_detection(
@@ -1204,6 +1273,12 @@ static func advance_day(
 		if _pv != null and not CharacterStats.is_dead(_pv) and not _pv.poison_affliction.is_empty():
 			DiseaseSystem.process_poison_daily(_pv)
 
+	# s57.43.6 shipwreck drift: resolve one IC day for anyone cast into open ocean by
+	# a sinking ship (naval battle). A drowned/lost-at-sea lord → death_events for
+	# same-tick succession below.
+	_process_shipwreck_drift(
+		characters, dice_engine, death_events, active_topics, next_topic_id, ic_day)
+
 	# s33 The World is Truth: a DORMANT magically-installed sleeper reverts when its 1-month
 	# window lapses (the rewritten memories fade). Active/permanent sleepers are untouched.
 	for _sl: L5RCharacterData in characters:
@@ -1390,6 +1465,9 @@ static func advance_day(
 	var letter_topics_by_id: Dictionary = {}
 	for _lt: TopicData in active_topics:
 		letter_topics_by_id[_lt.topic_id] = _lt
+	# s57.43.5: letters written by a character while aboard a ship this tick are held
+	# in their outbound queue (dispatch deferred to port arrival), not delivered now.
+	_queue_aboard_outbound_letters(characters_by_id, pending_letters, ic_day)
 	var letter_results: Array = LetterSystem.process_pending_letters(
 		pending_letters, characters_by_id, ic_day, current_season, action_log,
 		active_wars if active_wars != null else [], dice_engine, letter_topics_by_id,
@@ -1419,6 +1497,13 @@ static func advance_day(
 	# to recommend a vassal (added to the soliciting authority's met_characters).
 	_process_governor_solicitation_delivery(
 		pending_letters, characters, characters_by_id,
+	)
+
+	# s57.42.7: a delivered passage-request letter to a ship owner is evaluated; on
+	# acceptance the owner grants passage (3-point Obligation) and dispatches response
+	# letters (to the requester and the captain).
+	_process_passage_request_letter_delivery(
+		pending_letters, characters_by_id, named_vessels, favors, next_letter_id, ic_day,
 	)
 
 	var reply_letters: Array = []
@@ -1608,6 +1693,7 @@ static func advance_day(
 		_process_construction_completions(
 			constructions, settlements, provinces, ships, dice_engine,
 			next_settlement_id, active_topics, next_topic_id, ic_day,
+			named_vessels, next_ship_id,
 		)
 		_process_organic_villages(
 			provinces, settlements, next_settlement_id,
@@ -1927,6 +2013,7 @@ static func advance_day(
 		"naval_weather": naval_weather,
 		"naval_movement_results": naval_movement_results,
 		"naval_battle_results": naval_battle_results,
+		"pirate_encounter_results": pirate_encounter_results,
 		"naval_topics": naval_topics,
 		"musha_shugyo_results": musha_shugyo_results,
 		"gempukku_results": gempukku_results,
@@ -19067,6 +19154,25 @@ static func _set_visiting_context_flags(
 			ws["context_flag"] = Enums.ContextFlag.VISITING
 
 
+## Assigns AT_SHIP context to every living character aboard a vessel (s57.43.5).
+## Overrides any settlement-level context flag set by the sibling passes — being
+## aboard supersedes VISITING/AT_TEMPLE/AT_COURT/etc. context_flag is cleared and
+## recomputed daily, so a character reverts to normal context on disembark.
+static func _set_ship_context_flags(
+	characters: Array,
+	world_states: Dictionary,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.aboard_ship_id < 0:
+			continue
+		var ws: Dictionary = world_states.get(character.character_id, {})
+		if ws.is_empty():
+			world_states[character.character_id] = ws
+		ws["context_flag"] = Enums.ContextFlag.AT_SHIP
+
+
 static func _inject_settlement_type(
 	characters: Array,
 	settlements: Array,
@@ -19879,53 +19985,837 @@ static func _process_naval_weather(
 	return weather
 
 
+## s57.43.4: launch fleet ships whose muster window has closed. A ship with a scheduled
+## departure (departure_tick set by a deploy order) sails once ic_day reaches that tick:
+## assigned crew standing at the home port (present, not traveling) board; crew who did
+## not arrive in time miss the sailing (they keep their crew assignment for the next
+## voyage). REPORT_TO_SHIP objectives are cleared for all assigned crew (the muster is
+## over). begin_voyage launches the ship toward pending_destination_province; the schedule
+## clears whether the voyage starts or fails (a failure — e.g. no water route — is not
+## re-attempted, so the ship does not muster forever). Inert until the water graph exists
+## (begin_voyage returns no_water_graph, but the schedule still clears so it does not
+## latch). Named vessels are not fleet assets and have no crew-muster path.
+static func _process_ship_departures(
+	ships: Array,
+	water_subtiles: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> void:
+	if ships.is_empty():
+		return
+	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
+	var province_settlement: Dictionary = _build_province_settlement_map(settlements)
+	for ship: ShipData in ships:
+		if ship.is_destroyed or ship.is_captured or ship.is_moving:
+			continue
+		if ship.departure_tick < 0 or ship.departure_tick > ic_day:
+			continue
+		if ship.pending_destination_province < 0:
+			ship.departure_tick = -1
+			continue
+		var port_settlement: String = province_settlement.get(ship.current_province_id, "")
+		# Board present crew; clear every assigned crew member's muster objective.
+		for cid: int in characters_by_id:
+			var c: L5RCharacterData = characters_by_id[cid]
+			if c == null or CharacterStats.is_dead(c) or c.assigned_ship_id != ship.ship_id:
+				continue
+			if (
+				not port_settlement.is_empty()
+				and c.physical_location == port_settlement
+				and not TravelSystem.is_traveling(c)
+				and c.aboard_ship_id < 0
+			):
+				c.aboard_ship_id = ship.ship_id
+			_clear_ship_departure_objective(c, ship.ship_id, objectives_map)
+		var launch: Dictionary = NavalMovementSystem.begin_voyage(
+			ship, index, ship.pending_destination_province)
+		# Clear the schedule regardless — a failed launch is not re-mustered.
+		ship.departure_tick = -1
+		ship.pending_destination_province = -1
+		if not launch.get("success", false):
+			continue
+
+
+## Clear a crew member's REPORT_TO_SHIP muster objective for the given ship once the
+## departure resolves (boarded or missed). Only removes the primary if it is this ship's
+## muster objective (source "ship_departure", matching ship_id) — a crew member reassigned
+## to a real objective mid-muster is left untouched.
+static func _clear_ship_departure_objective(
+	c: L5RCharacterData, ship_id: int, objectives_map: Dictionary,
+) -> void:
+	if not objectives_map.has(c.character_id):
+		return
+	var obj: Dictionary = objectives_map[c.character_id]
+	var primary: Dictionary = obj.get("primary", {})
+	if (
+		primary.get("source", "") == "ship_departure"
+		and int(primary.get("ship_id", -1)) == ship_id
+	):
+		obj.erase("primary")
+
+
 static func _process_ship_movement(
 	ships: Array,
+	named_vessels: Array,
+	water_subtiles: Array,
+	characters_by_id: Dictionary,
+	settlements: Array,
+	insurgencies: Array,
 	dice_engine: DiceEngine,
+	provinces: Dictionary = {},
+	active_wars: Array = [],
+	pending_letters: Array = [],
+	ic_day: int = -1,
 ) -> Array:
+	# Inert until the water-movement graph is populated (location data). build_index
+	# returns {} on an empty graph and step_movement is a no-op on non-moving movers.
+	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
+	var province_settlement: Dictionary = _build_province_settlement_map(settlements)
+	# Per-sub-tile pirate hazard from active PIRATE_FLEET insurgencies (s57.43.7).
+	var pirate_map: Dictionary = NavalMovementSystem.build_pirate_strength_map(index, insurgencies)
+
 	var results: Array = []
 	for ship: ShipData in ships:
-		if ship.is_destroyed or ship.is_captured:
+		if ship.is_destroyed or ship.is_captured or not ship.is_moving:
 			continue
-		if not ship.is_moving:
+		var r: Dictionary = NavalMovementSystem.step_movement(ship, index, dice_engine, pirate_map)
+		if r.get("moved", false):
+			r["ship_id"] = ship.ship_id
+			if r.get("voyage_complete", false):
+				_resolve_arrival(
+					ship, ship.ship_id, r, characters_by_id, province_settlement,
+					provinces, active_wars, index, pending_letters, ic_day)
+			results.append(r)
+
+	for vessel: NamedVesselData in named_vessels:
+		if vessel.is_destroyed or not vessel.is_moving:
 			continue
-
-		ship.movement_days_remaining -= 1
-
-		if ship.movement_days_remaining <= 0:
-			ship.is_moving = false
-			var prev_subtile: int = ship.current_subtile_id
-			ship.current_subtile_id = ship.destination_subtile_id
-			ship.destination_subtile_id = -1
-			ship.movement_days_remaining = 0
-
-			var deep_ocean_loss: bool = false
-			var loss_chance: float = NavalSystem.get_deep_ocean_loss_chance(ship.ship_class)
-			if loss_chance > 0.0:
-				var roll: int = dice_engine.rand_int_range(1, 100)
-				if roll <= ceili(loss_chance * 100.0):
-					deep_ocean_loss = true
-					ship.is_destroyed = true
-
-			results.append({
-				"ship_id": ship.ship_id,
-				"arrived": true,
-				"from_subtile": prev_subtile,
-				"to_subtile": ship.current_subtile_id,
-				"deep_ocean_loss": deep_ocean_loss,
-			})
-		else:
-			results.append({
-				"ship_id": ship.ship_id,
-				"arrived": false,
-				"days_remaining": ship.movement_days_remaining,
-			})
+		var vr: Dictionary = NavalMovementSystem.step_movement(vessel, index, dice_engine, pirate_map)
+		if vr.get("moved", false):
+			vr["vessel_id"] = vessel.vessel_id
+			if vr.get("voyage_complete", false):
+				_resolve_arrival(
+					vessel, vessel.vessel_id, vr, characters_by_id, province_settlement,
+					provinces, active_wars, index, pending_letters, ic_day)
+			results.append(vr)
 
 	return results
 
 
+## s57.43.8 arrival: if the destination port is dockable, passengers disembark. If
+## not (currently: the port province's clan is at war with the ship's clan — the
+## other GDD disruptions, naval blockade / pirate-captured / disaster, have no world-
+## state producer yet and are forward-wired), the captain decides (s57.42.7 authority
+## is theirs): "run" docks anyway; "divert"/"retreat" return to the safe origin port
+## (a fresh voyage back — passengers stay aboard). A return that cannot be routed
+## (no origin, same province, no water route) falls back to docking so passengers are
+## never stranded. Annotates the movement result with the disruption outcome.
+static func _resolve_arrival(
+	mover: Object, mover_id: int, result: Dictionary,
+	characters_by_id: Dictionary, province_settlement: Dictionary,
+	provinces: Dictionary, active_wars: Array, index: Dictionary,
+	pending_letters: Array = [], ic_day: int = -1,
+) -> void:
+	var docked_province: int = int(result.get("docked_province", -1))
+	# s57.43.8: consume any passenger persuasion accumulated this voyage — it is spent at
+	# the arrival decision and never carries to the captain's next voyage.
+	var captain: L5RCharacterData = characters_by_id.get(int(mover.get("captain_id")))
+	var persuaded: bool = captain != null and captain.route_persuaded
+	if captain != null:
+		captain.route_persuaded = false
+	if _port_dockable(docked_province, str(mover.get("owning_clan")), provinces, active_wars):
+		_disembark_ship_passengers(
+			mover_id, docked_province, characters_by_id, province_settlement,
+			pending_letters, ic_day)
+		return
+	result["arrival_disrupted"] = true
+	var decision: String = SailingSystem.captain_disruption_decision(captain, persuaded)
+	result["disruption_decision"] = decision
+	if decision == "run":
+		_disembark_ship_passengers(
+			mover_id, docked_province, characters_by_id, province_settlement,
+			pending_letters, ic_day)
+		return
+	# divert / retreat → sail back to the safe origin port; passengers stay aboard.
+	var origin: int = int(mover.get("voyage_origin_province"))
+	if origin >= 0 and origin != docked_province:
+		var back: Dictionary = NavalMovementSystem.begin_voyage(mover, index, origin)
+		if back.get("success", false):
+			result["returning_to_origin"] = origin
+			return
+	# No safe return possible → dock anyway rather than strand passengers.
+	_disembark_ship_passengers(
+		mover_id, docked_province, characters_by_id, province_settlement,
+		pending_letters, ic_day)
+
+
+## s57.43.8: a passenger aboard may lean the captain's disrupted-arrival decision by
+## persuading them mid-voyage. When an aboard passenger successfully fires NEGOTIATE,
+## PERSUADE, or BRIBE_FOR_INFO at their ship's captain, flag the captain as persuaded —
+## a neutral/default captain then runs the disrupted port for the destination instead of
+## retreating (the flag is consumed at the arrival decision; virtue-committed captains
+## hold firm — "the captain's judgement remains final"). The captain's authority is
+## unchanged; this only sways the otherwise-retreating case.
+static func _process_route_influence_writebacks(
+	day_results: Array, characters_by_id: Dictionary, ships: Array, named_vessels: Array,
+) -> void:
+	const PERSUASION_ACTIONS := ["NEGOTIATE", "PERSUADE", "BRIBE_FOR_INFO"]
+	var captain_of: Dictionary = {}
+	for s: ShipData in ships:
+		captain_of[s.ship_id] = s.captain_id
+	for v: NamedVesselData in named_vessels:
+		captain_of[v.vessel_id] = v.captain_id
+	for entry: Dictionary in day_results:
+		if entry.get("action_id", "") not in PERSUASION_ACTIONS or not entry.get("success", false):
+			continue
+		var actor: L5RCharacterData = characters_by_id.get(entry.get("character_id", -1))
+		if actor == null or actor.aboard_ship_id < 0:
+			continue
+		var captain_id: int = int(captain_of.get(actor.aboard_ship_id, -1))
+		if captain_id < 0 or int(entry.get("target_npc_id", -1)) != captain_id:
+			continue
+		var captain: L5RCharacterData = characters_by_id.get(captain_id)
+		if captain == null or CharacterStats.is_dead(captain):
+			continue
+		captain.route_persuaded = true
+
+
+## True if a ship of `ship_clan` can dock at `province_id` (s57.43.8): the port's
+## province clan is not at war with the ship's clan. Unknown province / clan = dockable.
+static func _port_dockable(
+	province_id: int, ship_clan: String, provinces: Dictionary, active_wars: Array,
+) -> bool:
+	if province_id < 0 or ship_clan.is_empty():
+		return true
+	var prov: ProvinceData = provinces.get(province_id)
+	if prov == null or prov.clan.is_empty() or prov.clan == ship_clan:
+		return true
+	return not WarSystem.are_clans_at_war(active_wars, ship_clan, prov.clan)
+
+
+## Province id -> first settlement id (String) in that province, for placing
+## disembarked passengers. Empty until settlements carry province ids at world-gen.
+static func _build_province_settlement_map(settlements: Array) -> Dictionary:
+	var out: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s == null:
+			continue
+		if not out.has(s.province_id):
+			out[s.province_id] = str(s.settlement_id)
+	return out
+
+
+## Passengers aboard a ship/vessel (aboard_ship_id == mover id) disembark to the
+## destination province's settlement on voyage completion (s57.42.8). ship_id and
+## vessel_id share one global counter, so aboard_ship_id references either. On
+## disembark the passenger's deferred outbound letters (s57.43.5) flush into the
+## pipeline, dispatched from the port of arrival.
+static func _disembark_ship_passengers(
+	mover_id: int, docked_province: int,
+	characters_by_id: Dictionary, province_settlement: Dictionary,
+	pending_letters: Array = [], ic_day: int = -1,
+) -> void:
+	if mover_id < 0 or docked_province < 0:
+		return
+	var dest_settlement: String = province_settlement.get(docked_province, "")
+	if dest_settlement.is_empty():
+		return
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.aboard_ship_id == mover_id:
+			SailingSystem.disembark(c, dest_settlement)
+			_flush_outbound_letter_queue(c, pending_letters, ic_day)
+
+
+## s57.43.5: dispatch a disembarked passenger's queued outbound letters from the port
+## of arrival — re-stamp ic_day_sent to the arrival day so delivery times from the
+## port (ic_day_arrival cleared for the pipeline to recompute), then enter them into
+## pending_letters. Orders/letters propagate from the port, not from mid-voyage.
+static func _flush_outbound_letter_queue(
+	c: L5RCharacterData, pending_letters: Array, ic_day: int,
+) -> void:
+	if c.outbound_letter_queue.is_empty():
+		return
+	for letter: LetterData in c.outbound_letter_queue:
+		if letter == null:
+			continue
+		if ic_day >= 0:
+			letter.ic_day_sent = ic_day
+			letter.ic_day_arrival = -1
+		pending_letters.append(letter)
+	c.outbound_letter_queue.clear()
+
+
+## s57.43.5: pull letters written this tick by an aboard character out of the delivery
+## pipeline into that sender's outbound queue (dispatch deferred to port arrival).
+## Guarded on ic_day_sent == ic_day so in-transit letters sent before boarding are
+## untouched. LIMITATION: catches the primary aboard letter channels (AP-loop
+## WRITE_LETTER, daily letter pass), which create before delivery; the rare aboard
+## letter created by a later writeback this tick is not deferred.
+static func _queue_aboard_outbound_letters(
+	characters_by_id: Dictionary, pending_letters: Array, ic_day: int,
+) -> void:
+	for i: int in range(pending_letters.size() - 1, -1, -1):
+		var letter: LetterData = pending_letters[i]
+		if letter == null or letter.delivered or letter.ic_day_sent != ic_day:
+			continue
+		var sender: L5RCharacterData = characters_by_id.get(letter.sender_id)
+		if sender == null or sender.aboard_ship_id < 0:
+			continue
+		sender.outbound_letter_queue.append(letter)
+		pending_letters.remove_at(i)
+
+
+## s57.18: DEPLOY_ARMY covers fleets ("a fleet is an army of ship Companies"). When a
+## lord fires ORDER_DEPLOY toward a province, their clan's idle fleet ships sail there
+## via NavalMovementSystem.begin_voyage. Self-gating: begin_voyage only succeeds when
+## the target province has a coastal port the ship can reach by water — so land
+## deployments, inland targets, and the (empty) pre-map graph are all harmless no-ops.
+## Named vessels (personal transport, owner-patron) are NOT fleet assets and are
+## excluded. Ships already there, moving, destroyed, or captured are skipped.
+## LIMITATION (tuning): every reachable idle clan ship deploys (the whole available
+## fleet); once inter-port distance data exists this could restrict to the nearest.
+## Same-clan multi-lord deploys the same tick resolve last-target-wins.
+static func _process_fleet_deployment_writebacks(
+	day_results: Array,
+	ships: Array,
+	characters_by_id: Dictionary,
+	water_subtiles: Array,
+	ic_day: int = -1,
+	objectives_map: Dictionary = {},
+	settlements: Array = [],
+) -> void:
+	if ships.is_empty() or water_subtiles.is_empty():
+		return
+
+	var clan_targets: Dictionary = {}  # owning_clan -> target province id
+	for entry: Dictionary in day_results:
+		if entry.get("action_id", "") != "ORDER_DEPLOY" or not entry.get("success", false):
+			continue
+		var target_prov: int = entry.get("target_province_id", -1)
+		if target_prov < 0:
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(entry.get("character_id", -1))
+		if lord == null or CharacterStats.is_dead(lord) or lord.clan.is_empty():
+			continue
+		clan_targets[lord.clan] = target_prov
+	if clan_targets.is_empty():
+		return
+
+	# s57.43.4: a deploy order does not launch immediately — it schedules a departure
+	# MUSTER_DELAY IC days out and calls the ship's named crew, who travel to the port
+	# and board before it sails (the muster launch pass fires the voyage at departure).
+	var province_settlement: Dictionary = _build_province_settlement_map(settlements)
+	for ship: ShipData in ships:
+		if ship.is_destroyed or ship.is_captured or ship.is_moving:
+			continue
+		if ship.departure_tick >= 0:
+			continue  # already mustering for a departure
+		if not clan_targets.has(ship.owning_clan):
+			continue
+		var dest_prov: int = clan_targets[ship.owning_clan]
+		if ship.current_province_id == dest_prov and ship.current_subtile_id < 0:
+			continue  # fleet already in port at the destination
+		ship.departure_tick = ic_day + SailingSystem.MUSTER_DELAY_IC_DAYS
+		ship.pending_destination_province = dest_prov
+		_notify_ship_crew(ship, characters_by_id, objectives_map, province_settlement, ic_day)
+
+
+## s57.43.4: call a ship's named crew to muster. Each living assigned crew member gets
+## a REPORT_TO_SHIP primary objective (priority 1, overriding all others) targeting the
+## ship's home port — co-located crew are already there and wait; distant crew travel.
+## (The GDD's conversation-vs-letter notification is cosmetic; the objective is the
+## mechanic.) Crew who do not reach the port by departure miss the sailing.
+static func _notify_ship_crew(
+	ship: ShipData, characters_by_id: Dictionary, objectives_map: Dictionary,
+	province_settlement: Dictionary, ic_day: int,
+) -> void:
+	var port_settlement: String = province_settlement.get(ship.current_province_id, "")
+	# target_settlement_id is an int (the arrived-travel filter matches ctx.location_id
+	# against str(target_settlement_id)); the province map stores stringified ids.
+	var port_sid: int = port_settlement.to_int() if not port_settlement.is_empty() else -1
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c) or c.assigned_ship_id != ship.ship_id:
+			continue
+		if not objectives_map.has(c.character_id):
+			objectives_map[c.character_id] = {}
+		objectives_map[c.character_id]["primary"] = {
+			"need_type": "REPORT_TO_SHIP",
+			"target_province_id": ship.current_province_id,
+			"target_settlement_id": port_sid,
+			"priority": 1,
+			"source": "ship_departure",
+			"ship_id": ship.ship_id,
+			"assigned_ic_day": ic_day,
+		}
+
+
+## PROVISIONAL: a pirate (Wako) fleet of Strength N fields N Kobune warships. The GDD
+## (s11.9 line 73) fixes the pirate ship TYPE (Kobune, warship stats) but gives fleet
+## Strength as a scalar with no ships-per-Strength ratio; 1:1 is the minimal
+## coefficient-free choice, flagged for owner tuning.
+const _PIRATE_KOBUNE_PER_STRENGTH: int = 1
+
+
+## s57.43.7 / s57.18: resolve a pirate interception recorded during ship movement into
+## a naval summary battle. The intercepted NPC ship/vessel fights a pirate (Wako) fleet
+## of Kobune warships (s11.9: "the fleet engages the pirate fleet using naval combat
+## stats"), reusing the existing naval combat + mutation path. Both resolution branches
+## (naval_mass_battle / deck_skirmish) summary-resolve for NPC ships — the deck_skirmish
+## ASCII individual boarding mission applies only when a PC is aboard (future; no
+## PC/crew layer here). Lone-defender: the intercepted ship fights alone (each ship in a
+## fleet rolls interception separately). Returns the battle results for the day log.
+static func _process_pirate_encounter_writebacks(
+	naval_movement_results: Array,
+	ships: Array,
+	named_vessels: Array,
+	characters_by_id: Dictionary,
+	weather: int,
+	dice_engine: DiceEngine,
+	active_hostages: Array = [],
+	death_events: Array = [],
+	ic_day: int = -1,
+) -> Array:
+	var battle_results: Array = []
+	var ships_by_id: Dictionary = {}
+	for s: ShipData in ships:
+		ships_by_id[s.ship_id] = s
+	var vessels_by_id: Dictionary = {}
+	for v: NamedVesselData in named_vessels:
+		vessels_by_id[v.vessel_id] = v
+
+	for r: Dictionary in naval_movement_results:
+		if not r.get("intercepted", false):
+			continue
+		var strength: int = int(r.get("pirate_strength", 0))
+		if strength <= 0:
+			continue
+
+		# The intercepted mover, as a ShipData Company (a vessel wraps to one).
+		var mover_id: int = -1
+		var def_ship: ShipData = null
+		if r.has("ship_id"):
+			mover_id = int(r["ship_id"])
+			var target_ship: ShipData = ships_by_id.get(mover_id)
+			if target_ship != null and not target_ship.is_destroyed:
+				def_ship = target_ship
+		elif r.has("vessel_id"):
+			mover_id = int(r["vessel_id"])
+			var target_vessel: NamedVesselData = vessels_by_id.get(mover_id)
+			if target_vessel != null and not target_vessel.is_destroyed:
+				def_ship = target_vessel.to_ship_data(target_vessel.owning_clan)
+		if def_ship == null:
+			continue
+
+		# s57.43 / s56.18: if a PC is aboard the intercepted ship, the encounter is the
+		# ASCII deck-skirmish boarding MISSION (map + pirate boarders), not a summary
+		# roll — NPCs summary-resolve, PCs play it out. Emit the mission package as a
+		# launch request; the (held) mission-entry layer consumes it. Pending the
+		# PC-travel HOLD, this is the built-and-verified substrate, not live.
+		if _pc_aboard(mover_id, characters_by_id):
+			battle_results.append(_build_pirate_boarding_mission(
+				def_ship.ship_class, strength, mover_id, int(r.get("subtile", -1)),
+			))
+			continue
+
+		# Pirate fleet: Strength x _PIRATE_KOBUNE_PER_STRENGTH Kobune warships (Wako).
+		var pirate_ships: Array = []
+		var pirate_count: int = strength * _PIRATE_KOBUNE_PER_STRENGTH
+		for i: int in pirate_count:
+			pirate_ships.append(NavalSystem.create_ship(-1000 - i, Enums.ShipClass.KOBUNE, "Wako"))
+
+		var battle: Dictionary = _resolve_naval_engagement(
+			pirate_ships, [def_ship], weather, dice_engine,
+			characters_by_id, "Wako", def_ship.owning_clan,
+		)
+		battle["attacker_clan"] = "Wako"
+		battle["defender_clan"] = def_ship.owning_clan
+		battle["subtile_id"] = int(r.get("subtile", -1))
+		battle["is_pirate_encounter"] = true
+		battle["pirate_strength"] = strength
+		battle["resolution"] = r.get("resolution", "")
+		_apply_naval_battle_mutations(
+			[battle], ships, named_vessels, characters_by_id,
+			active_hostages, death_events, dice_engine, ic_day)
+		battle_results.append(battle)
+
+	return battle_results
+
+
+## True if any living PC is aboard the ship/vessel `mover_id` (aboard_ship_id).
+static func _pc_aboard(mover_id: int, characters_by_id: Dictionary) -> bool:
+	if mover_id < 0:
+		return false
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c != null and c.is_pc and not CharacterStats.is_dead(c) and c.aboard_ship_id == mover_id:
+			return true
+	return false
+
+
+## Build the ASCII deck-skirmish boarding-mission package (s56.18 Ship Boarding
+## template + a wako pirate boarder roster) for a PC whose ship is intercepted. The PC
+## DEFENDS their ship (BoardingMode.DEFENSE); the boarders are a RONIN_BANDIT roster of
+## the pirate Strength (wako = masterless raiders — the existing GDD-grounded roster, no
+## invented pirate stat block). Ship-class -> deck template is a structural size map.
+## Returned as a launch request; the (held) mission-entry layer consumes it live.
+static func _build_pirate_boarding_mission(
+	target_ship_class: int, pirate_strength: int, mover_id: int, subtile: int,
+) -> Dictionary:
+	var ship_type: int = _ship_class_to_boarding_type(target_ship_class)
+	var seed_str: String = "pirate_boarding_%d_%d" % [mover_id, subtile]
+	var deck: ShipBoardingMapData = ShipBoardingGenerator.generate(
+		seed_str, ship_type, ShipBoardingMapData.BoardingMode.DEFENSE,
+	)
+	var roster: Dictionary = RosterCompositionSystem.compose_roster(
+		RosterCompositionSystem.SEED_RONIN_BANDIT, pirate_strength,
+		{"stability": 75}, hash(seed_str),
+	)
+	return {
+		"is_pirate_encounter": true,
+		"pc_boarding_mission": true,
+		"map": deck,
+		"roster": roster,
+		"boarding_mode": ShipBoardingMapData.BoardingMode.DEFENSE,
+		"ship_type": ship_type,
+		"pirate_strength": pirate_strength,
+		"mover_id": mover_id,
+		"subtile_id": subtile,
+	}
+
+
+## Map a naval ship class to the closest Ship Boarding deck template size (s56.18).
+static func _ship_class_to_boarding_type(ship_class: int) -> int:
+	match ship_class:
+		Enums.ShipClass.KOBUNE, Enums.ShipClass.SAMPAN, Enums.ShipClass.MERCHANT_BARGE:
+			return ShipBoardingMapData.ShipType.KOBUNE
+		Enums.ShipClass.SENGOKOBUNE, Enums.ShipClass.TORTOISE_OCEANGOING:
+			return ShipBoardingMapData.ShipType.SENGOKUBUNE
+		Enums.ShipClass.ATAKEBUNE, Enums.ShipClass.KOUTETSUKAN:
+			return ShipBoardingMapData.ShipType.ATAKEBUNE
+	return ShipBoardingMapData.ShipType.KOBUNE
+
+
+## s57.42.6-7: resolve REQUEST_PASSAGE. The executor packaged each request; here the
+## decider (captain/owner) evaluates acceptance, and on accept the requester boards
+## (aboard_ship_id) and the vessel launches its voyage toward the destination province
+## (existing disembark hook drops the passenger on arrival). Applies the daily throttle
+## and rude-refusal disposition shift, and creates the owner-granted-passage Obligation
+## (MINOR favor). Handles both named vessels and fleet ships (shared id space). Inert
+## until the water graph + a passage request exist. Per-captain refusal cooldown is
+## metadata-supplied.
+static func _process_passage_writebacks(
+	day_results: Array,
+	characters_by_id: Dictionary,
+	ships: Array,
+	named_vessels: Array,
+	water_subtiles: Array,
+	ic_day: int,
+	favors: Array = [],
+	characters: Array = [],
+	objectives_map: Dictionary = {},
+) -> void:
+	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
+	var vessel_by_id: Dictionary = {}
+	for s: ShipData in ships:
+		vessel_by_id[s.ship_id] = s
+	for v: NamedVesselData in named_vessels:
+		vessel_by_id[v.vessel_id] = v
+
+	for entry: Dictionary in day_results:
+		if entry.get("action_id", "") != "REQUEST_PASSAGE" or not entry.get("success", false):
+			continue
+		var effects: Dictionary = entry.get("effects", {})
+		if not effects.get("requires_passage_resolution", false):
+			continue
+		var requester: L5RCharacterData = characters_by_id.get(entry.get("character_id", -1))
+		var decider: L5RCharacterData = characters_by_id.get(effects.get("decider_id", -1))
+		if requester == null or CharacterStats.is_dead(requester):
+			continue
+		if decider == null or CharacterStats.is_dead(decider):
+			continue
+
+		# Daily throttle + per-captain refusal cooldown (s57.42.6-7).
+		if not SailingSystem.can_request_passage(
+				requester.passage_request_count_today, ic_day,
+				int(effects.get("last_refused_day", -1))):
+			continue
+		requester.passage_request_count_today += 1
+
+		var disposition: int = requester_disposition_from(decider, requester.character_id)
+		var eval: Dictionary = SailingSystem.evaluate_passage_request(
+			decider, disposition,
+			float(effects.get("koku_offered", 0.0)),
+			bool(effects.get("schedule_compatible", true)),
+			bool(effects.get("standing_orders_refuse", false)),
+			requester.status,
+			bool(effects.get("polite", true)),
+		)
+		if eval.get("accepted", false):
+			var vessel_id: int = int(effects.get("vessel_id", -1))
+			var dest_prov: int = int(effects.get("destination_province", -1))
+			requester.aboard_ship_id = vessel_id
+			var vessel: Object = vessel_by_id.get(vessel_id)
+			var launched: bool = false
+			if vessel != null and not vessel.is_moving \
+					and vessel.voyage_destination_province != dest_prov:
+				var voyage: Dictionary = NavalMovementSystem.begin_voyage(vessel, index, dest_prov)
+				launched = bool(voyage.get("success", false))
+			# s57.43.4: the manifest is fixed at departure — when the voyage actually
+			# launches, add co-located co-travellers bound for the same destination.
+			if launched:
+				_generate_passenger_manifest(
+					vessel, decider, requester, vessel_id, dest_prov,
+					characters, objectives_map, characters_by_id,
+				)
+			# s57.42.7: owner-granted passage creates a soft Obligation on the requester
+			# (Obligation Advantage, 3-point) — modeled as a MINOR favor since the GDD
+			# says it is "repaid through normal favour mechanics" (a future letter of
+			# introduction = Minor per s12.10). Creditor = the granting owner.
+			if bool(effects.get("is_owner_grant", false)):
+				var max_fid: int = 0
+				for f: Variant in favors:
+					if f is FavorData and (f as FavorData).favor_id >= max_fid:
+						max_fid = (f as FavorData).favor_id + 1
+				favors.append(FavorSystem.offer_favor(
+					FavorData.FavorType.GENERAL, FavorData.FavorTier.MINOR,
+					decider.character_id, requester.character_id, ic_day,
+					"Owner-granted sea passage", "OWNER_PASSAGE", max_fid,
+				))
+		else:
+			# Rude refusal costs the requester disposition (polite refusal is free).
+			var shift: int = SailingSystem.refusal_disposition_shift(
+				bool(effects.get("rude_refusal", false)), 3)
+			if shift != 0:
+				var cur: int = decider.disposition_values.get(requester.character_id, 0)
+				decider.disposition_values[requester.character_id] = clampi(cur + shift, -100, 100)
+
+
+static func requester_disposition_from(decider: L5RCharacterData, requester_id: int) -> int:
+	return decider.disposition_values.get(requester_id, 0)
+
+
+## s57.43.4 passenger manifest cap — up to 3 accepted named passengers per voyage
+## (LOCKED). Formal retinues accompanying a lord do not count against this cap.
+const MANIFEST_CAP: int = 3
+
+
+## s57.43.4: at voyage launch, fill the passenger manifest with co-located named
+## NPCs bound for the same destination. Each candidate goes through the captain's
+## (decider's) standard passage acceptance (s57.42.7) — no NPC is auto-assigned.
+## Preference order: the ship owner's family, then clan, then anyone else bound for
+## the destination (the "upgrade the search" fallback so a PC rarely travels alone).
+## The requester is manifest passenger #1, so at most MANIFEST_CAP-1 more board.
+## Candidates are the co-located living non-PC characters at the port whose primary
+## objective targets the destination province — the "genuine world-state need"
+## proxy for "whose decision engine would fire REQUEST_PASSAGE for that destination"
+## (s57.43.4). Manifest additions board via the captain, so no owner-grant Obligation
+## is created (that is specific to owner-granted passage). Inert until the water
+## graph makes voyages actually launch.
+static func _generate_passenger_manifest(
+	vessel: Object,
+	decider: L5RCharacterData,
+	requester: L5RCharacterData,
+	vessel_id: int,
+	dest_prov: int,
+	characters: Array,
+	objectives_map: Dictionary,
+	characters_by_id: Dictionary,
+) -> void:
+	var port: String = requester.physical_location
+	if port.is_empty() or dest_prov < 0:
+		return
+	var owner_clan: String = str(vessel.get("owning_clan"))
+	var owner: L5RCharacterData = characters_by_id.get(int(vessel.get("owner_id")))
+	var owner_family: String = owner.family if owner != null else ""
+
+	var candidates: Array = []
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.character_id == requester.character_id or c.character_id == decider.character_id:
+			continue
+		if c.aboard_ship_id >= 0:
+			continue
+		if c.physical_location != port or TravelSystem.is_traveling(c):
+			continue
+		var primary: Dictionary = objectives_map.get(c.character_id, {}).get("primary", {})
+		if int(primary.get("target_province_id", -1)) != dest_prov:
+			continue
+		candidates.append(c)
+
+	# Prefer owner family, then owner clan, then anyone else (stable within a tier).
+	candidates.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+		return _manifest_rank(a, owner_family, owner_clan) < _manifest_rank(b, owner_family, owner_clan))
+
+	var slots: int = MANIFEST_CAP - 1
+	for c: L5RCharacterData in candidates:
+		if slots <= 0:
+			break
+		var disp: int = decider.disposition_values.get(c.character_id, 0)
+		var eval: Dictionary = SailingSystem.evaluate_passage_request(
+			decider, disp, 0.0, true, false, c.status, true)
+		if eval.get("accepted", false):
+			c.aboard_ship_id = vessel_id
+			slots -= 1
+
+
+## Manifest preference rank (lower = preferred): 0 owner-family, 1 owner-clan, 2 other.
+static func _manifest_rank(c: L5RCharacterData, owner_family: String, owner_clan: String) -> int:
+	if owner_family != "" and c.family == owner_family:
+		return 0
+	if owner_clan != "" and c.clan == owner_clan:
+		return 1
+	return 2
+
+
+## s57.42.7 owner-override letter flow. A requester petitions a remote ship owner by
+## letter (LetterData.passage_request); on delivery the owner evaluates acceptance via
+## the standard passage logic (disposition / koku / schedule / standing orders / status,
+## SailingSystem.evaluate_passage_request). On acceptance the owner grants passage on
+## their best suitable named vessel: a 3-point Obligation on the requester (owner-grant
+## MINOR favor, the same Obligation the co-located owner grant creates), the requester's
+## pending-passage grant is set (they board when co-located with the docked vessel — see
+## _process_granted_passenger_boarding), and the owner dispatches the two response letters
+## the GDD specifies — the acceptance response to the requester and the order-to-accept to
+## the captain. On refusal a polite refusal letter is returned (owner letters are polite
+## by default → no disposition shift, s57.42.7). The captain-order letter is informational:
+## "the captain does not refuse their owner" (s57.42.2), so compliance is already encoded
+## in the requester's grant + the boarding pass. Only owner-patron NAMED vessels are
+## grantable (military command-appointment ships require the daimyo-petition path, not
+## modeled here). Inert until a producer fires the request letter and water coordinates
+## let the granted voyage launch (PC-flavored / map-gated, like the rest of the layer).
+static func _process_passage_request_letter_delivery(
+	pending_letters: Array, characters_by_id: Dictionary, named_vessels: Array,
+	favors: Array, next_letter_id: Array, ic_day: int,
+) -> void:
+	for letter: Variant in pending_letters:
+		var l: LetterData = letter as LetterData
+		if l == null or not l.delivered or not l.passage_request:
+			continue
+		l.passage_request = false  # mark processed (delivered letters persist in the pool)
+		var owner: L5RCharacterData = characters_by_id.get(l.recipient_id)
+		var requester: L5RCharacterData = characters_by_id.get(l.sender_id)
+		if owner == null or CharacterStats.is_dead(owner):
+			continue
+		if requester == null or CharacterStats.is_dead(requester):
+			continue
+
+		var vessel: NamedVesselData = _owner_best_passage_vessel(
+			owner, named_vessels, l.passage_destination_province)
+		var accepted: bool = false
+		if vessel != null:
+			var disposition: int = owner.disposition_values.get(requester.character_id, 0)
+			var eval: Dictionary = SailingSystem.evaluate_passage_request(
+				owner, disposition, l.passage_koku_offered, true, false, requester.status, true)
+			accepted = eval.get("accepted", false)
+
+		if accepted:
+			requester.passage_granted_vessel_id = vessel.vessel_id
+			requester.passage_granted_destination = l.passage_destination_province
+			# 3-point Obligation on the requester (owner-granted passage, s57.42.7).
+			var max_fid: int = 0
+			for f: Variant in favors:
+				if f is FavorData and (f as FavorData).favor_id >= max_fid:
+					max_fid = (f as FavorData).favor_id + 1
+			favors.append(FavorSystem.offer_favor(
+				FavorData.FavorType.GENERAL, FavorData.FavorTier.MINOR,
+				owner.character_id, requester.character_id, ic_day,
+				"Owner-granted sea passage", "OWNER_PASSAGE", max_fid))
+			# The order-to-accept letter to the captain (informational — the captain
+			# complies with their owner; boarding is driven by the requester's grant).
+			if vessel.captain_id >= 0 and vessel.captain_id != owner.character_id:
+				_dispatch_passage_letter(
+					pending_letters, next_letter_id, ic_day,
+					owner.character_id, vessel.captain_id)
+		# Acceptance / refusal response letter back to the requester.
+		_dispatch_passage_letter(
+			pending_letters, next_letter_id, ic_day, owner.character_id, requester.character_id)
+
+
+## The owner's best owner-patron vessel for a passage grant: an undestroyed NAMED vessel
+## they own (owner_id) with a captain, preferring one already docked (not moving) — a
+## ship in port can take the passenger without a special trip. Returns null if the owner
+## owns no grantable vessel (military command-appointment ships are not owner-grantable).
+static func _owner_best_passage_vessel(
+	owner: L5RCharacterData, named_vessels: Array, _dest_province: int,
+) -> NamedVesselData:
+	var docked: NamedVesselData = null
+	var any: NamedVesselData = null
+	for v: NamedVesselData in named_vessels:
+		if v == null or v.is_destroyed or v.owner_id != owner.character_id or v.captain_id < 0:
+			continue
+		if any == null:
+			any = v
+		if not v.is_moving:
+			docked = v
+			break
+	return docked if docked != null else any
+
+
+## Dispatch a plain passage-flow response/order letter (informational — the mechanical
+## effects live on the grant + boarding pass). Enters the standard delivery pipeline.
+static func _dispatch_passage_letter(
+	pending_letters: Array, next_letter_id: Array, ic_day: int,
+	sender_id: int, recipient_id: int,
+) -> void:
+	var letter := LetterData.new()
+	letter.letter_id = next_letter_id[0]
+	next_letter_id[0] += 1
+	letter.sender_id = sender_id
+	letter.recipient_id = recipient_id
+	letter.ic_day_sent = ic_day
+	letter.ic_day_arrival = -1
+	pending_letters.append(letter)
+
+
+## s57.42.7: board a character who holds an owner-granted passage (passage_granted_vessel_id)
+## once they are co-located with that vessel while it is docked at its port, then launch the
+## vessel toward the granted destination (begin_voyage self-gates on the water graph). The
+## grant persists across voyages until fulfilled — if the vessel sailed without them, they
+## board the next time it is in port (s57.42.7); it clears only on boarding or if the vessel
+## is destroyed. Inert until named vessels dock at known ports with the passenger present.
+static func _process_granted_passenger_boarding(
+	characters: Array, named_vessels: Array, water_subtiles: Array, settlements: Array,
+) -> void:
+	if named_vessels.is_empty():
+		return
+	var vessel_by_id: Dictionary = {}
+	for v: NamedVesselData in named_vessels:
+		vessel_by_id[v.vessel_id] = v
+	var province_settlement: Dictionary = _build_province_settlement_map(settlements)
+	var index: Dictionary = NavalMovementSystem.build_index(water_subtiles)
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c) or c.passage_granted_vessel_id < 0:
+			continue
+		if c.aboard_ship_id >= 0:
+			continue  # already aboard something
+		var v: NamedVesselData = vessel_by_id.get(c.passage_granted_vessel_id)
+		if v == null or v.is_destroyed:
+			c.passage_granted_vessel_id = -1
+			c.passage_granted_destination = -1
+			continue
+		if v.is_moving:
+			continue  # vessel at sea — wait for it to return to port
+		var port: String = province_settlement.get(v.current_province_id, "")
+		if port.is_empty() or c.physical_location != port or TravelSystem.is_traveling(c):
+			continue
+		c.aboard_ship_id = v.vessel_id
+		var dest: int = c.passage_granted_destination
+		c.passage_granted_vessel_id = -1
+		c.passage_granted_destination = -1
+		if dest >= 0 and not v.is_moving:
+			NavalMovementSystem.begin_voyage(v, index, dest)
+
+
 static func _process_naval_battle_triggers(
 	ships: Array,
+	named_vessels: Array,
 	characters_by_id: Dictionary,
 	active_wars: Array,
 	weather: int,
@@ -19940,6 +20830,18 @@ static func _process_naval_battle_triggers(
 		if not ships_by_subtile.has(ship.current_subtile_id):
 			ships_by_subtile[ship.current_subtile_id] = []
 		ships_by_subtile[ship.current_subtile_id].append(ship)
+
+	# Named vessels co-located at a sea sub-tile may JOIN a battle there as a single
+	# unit if their owner/captain opts in (s57.42/43 crossover). Docked vessels
+	# (subtile < 0) never join, same as ships. Forward-wired: inert until sub-tile
+	# naval movement exists (nothing reaches a sea sub-tile yet).
+	var vessels_by_subtile: Dictionary = {}
+	for v: NamedVesselData in named_vessels:
+		if v.is_destroyed or v.current_subtile_id < 0:
+			continue
+		if not vessels_by_subtile.has(v.current_subtile_id):
+			vessels_by_subtile[v.current_subtile_id] = []
+		vessels_by_subtile[v.current_subtile_id].append(v)
 
 	var results: Array = []
 	var processed_subtiles: Array = []
@@ -19967,6 +20869,18 @@ static func _process_naval_battle_triggers(
 			continue
 
 		processed_subtiles.append(subtile_id)
+
+		# Individual named vessels join their clan's side if the owner opts in
+		# (personality/virtue, tilted by purpose). Wrapped as a one-ship Company;
+		# the wrapper's ship_id is the vessel_id (globally unique), so the writeback
+		# maps damage/destruction back to the NamedVesselData.
+		for v: NamedVesselData in vessels_by_subtile.get(subtile_id, []):
+			var v_owner: L5RCharacterData = characters_by_id.get(v.owner_id)
+			if not NamedVesselData.owner_opts_into_battle(v_owner, v.purpose):
+				continue
+			if not clans_at.has(v.owning_clan):
+				clans_at[v.owning_clan] = []
+			clans_at[v.owning_clan].append(v.to_ship_data(v.owning_clan))
 
 		for pair: Array in hostile_pairs:
 			var attacker_clan: String = pair[0]
@@ -20076,11 +20990,21 @@ static func _compute_captain_bonus(captain: L5RCharacterData) -> Dictionary:
 static func _apply_naval_battle_mutations(
 	naval_battle_results: Array,
 	ships: Array,
+	named_vessels: Array,
 	characters_by_id: Dictionary,
+	active_hostages: Array = [],
+	death_events: Array = [],
+	dice_engine: DiceEngine = null,
+	ic_day: int = -1,
 ) -> void:
 	var ships_by_id: Dictionary = {}
 	for s: ShipData in ships:
 		ships_by_id[s.ship_id] = s
+	# A named vessel that joined a battle appears as a wrapper whose company_id is
+	# its vessel_id (not in `ships`); map destruction/capture back to the vessel.
+	var vessels_by_id: Dictionary = {}
+	for v: NamedVesselData in named_vessels:
+		vessels_by_id[v.vessel_id] = v
 
 	for result: Dictionary in naval_battle_results:
 		var all_states: Array = []
@@ -20091,6 +21015,22 @@ static func _apply_naval_battle_mutations(
 			var ship_id: int = bc.get("company_id", -1)
 			var ship: ShipData = ships_by_id.get(ship_id)
 			if ship == null:
+				var vessel: NamedVesselData = vessels_by_id.get(ship_id)
+				if vessel != null and (bc.get("is_destroyed", false) or bc.get("is_captured", false)):
+					# A named vessel lost in the battle it joined leaves play (no
+					# separate capture state on the vessel model).
+					vessel.is_destroyed = true
+					if bc.get("is_destroyed", false):
+						_cast_aboard_into_drift(
+							ship_id, vessel.owning_clan == "Mantis", characters_by_id)
+					elif bc.get("is_captured", false):
+						# s57.43.7 / s22.9: a captured (surrendered) vessel's aboard named
+						# characters become the captor's hostages.
+						var vcaptor_side: String = "attacker" if bc["side"] == "defender" else "defender"
+						_capture_aboard_as_hostages(
+							ship_id, result.get(vcaptor_side + "_clan", ""),
+							characters_by_id, active_hostages, death_events,
+							dice_engine, ic_day)
 				continue
 
 			ship.health = bc.get("current_health", ship.health)
@@ -20098,11 +21038,20 @@ static func _apply_naval_battle_mutations(
 			if bc.get("is_destroyed", false):
 				ship.is_destroyed = true
 				ship.health = 0
+				# s57.43.6: a sinking ship casts everyone aboard into open-ocean drift.
+				_cast_aboard_into_drift(
+					ship_id, ship.owning_clan == "Mantis", characters_by_id)
 
 			if bc.get("is_captured", false):
 				ship.is_captured = true
 				var captor_side: String = "attacker" if bc["side"] == "defender" else "defender"
 				ship.captured_by_clan = result.get(captor_side + "_clan", "")
+				# s57.43.7 / s22.9: a captured (surrendered) ship's aboard named
+				# characters — the captain and any REQUEST_PASSAGE passengers —
+				# become the captor's hostages.
+				_capture_aboard_as_hostages(
+					ship_id, ship.captured_by_clan, characters_by_id,
+					active_hostages, death_events, dice_engine, ic_day)
 
 		var captain_deaths: Array = result.get("captain_deaths", [])
 		for cd: Dictionary in captain_deaths:
@@ -20112,6 +21061,641 @@ static func _apply_naval_battle_mutations(
 			var dead_ship: ShipData = ships_by_id.get(dead_ship_id)
 			if dead_ship != null:
 				dead_ship.captain_id = -1
+
+
+## s57.43.6: cast every living character aboard the wrecked ship/vessel `ship_id`
+## into open-ocean drift (drift_day 1). Their aboard_ship_id clears — the ship is
+## gone. `in_mantis` raises the day-1 landfall chance (PROVISIONAL proxy: the sunk
+## ship's owning clan is Mantis, since sub-tile water geography does not exist yet).
+static func _cast_aboard_into_drift(
+	ship_id: int, in_mantis: bool, characters_by_id: Dictionary,
+) -> void:
+	for c: L5RCharacterData in characters_by_id.values():
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.aboard_ship_id != ship_id:
+			continue
+		_cast_character_into_drift(c, in_mantis, false)
+
+
+## s57.43.7 / s22.9: a captured (surrendered) ship's aboard named characters become the
+## captor's hostages. Per s22.9a (LOCKED) a Yu (Courage) or Ishi (Determination) bushi
+## may die resisting capture rather than submit — taken alive at only 50% / 30% — while
+## GREAT_DESTINY (s45) spares a resister (taken alive after all). Survivors gain
+## captive_status + a hostage record and leave the ship (aboard_ship_id clears — they
+## are the captor's prisoners, no longer aboard the surrendered vessel in the world-sim).
+## captor_clan records the holding faction ("Wako" for pirates) so a future ransom path
+## can find them; the record's captor_id is -1 (a pirate fleet has no named captor) and
+## settlement_id is "" (taken at sea), so the settlement-escape and war-termination
+## release paths do NOT fire. A pirate-captured samurai therefore persists as a hostage
+## until a s22.9 pirate-ransom release path exists (forward-wired; no ransom mechanic is
+## invented here). A null dice_engine defensively takes everyone alive (no death without RNG).
+static func _capture_aboard_as_hostages(
+	ship_id: int, captor_clan: String,
+	characters_by_id: Dictionary, active_hostages: Array,
+	death_events: Array, dice_engine: DiceEngine, ic_day: int,
+) -> void:
+	for c: L5RCharacterData in characters_by_id.values():
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if c.aboard_ship_id != ship_id or c.captive_status != "":
+			continue
+		var likelihood: float = HostageSystem.get_capture_likelihood_modifier(
+			c.bushido_virtue, c.shourido_virtue)
+		var taken_alive: bool = (
+			likelihood >= 1.0
+			or dice_engine == null
+			or dice_engine.rand_int_range(1, 100) <= int(likelihood * 100.0))
+		c.aboard_ship_id = -1
+		if not taken_alive and not _spare_capture_resister(c, ic_day):
+			# s22.9a: died resisting capture (an honorable combat death, not suspicious).
+			var earth: int = CharacterStats.get_ring_value(c, Enums.Ring.EARTH)
+			c.wounds_taken = earth * 25  # guaranteed lethal (Earth x 5 x 5)
+			death_events.append({
+				"character_id": c.character_id,
+				"is_lord": c.role_position != "",
+				"cause": "died_resisting_capture",
+				"suspicious_death": false,
+				"ic_day": ic_day,
+			})
+			continue
+		c.captive_status = captor_clan if captor_clan != "" else "-1"
+		active_hostages.append(HostageSystem.capture_hostage(
+			c.character_id, -1, HostageSystem.CaptureSource.BATTLE_CAPTURE, "", ic_day))
+
+
+## GREAT_DESTINY (s45) spares a capture-resister from death — they are taken alive after
+## all. Returns true if spared (the caller then treats them as a captured hostage).
+static func _spare_capture_resister(c: L5RCharacterData, ic_day: int) -> bool:
+	var ic_year: int = (ic_day / TimeSystem.IC_DAYS_PER_YEAR) if ic_day >= 0 else 0
+	if not AdvantageSystem.check_great_destiny(c, ic_year):
+		return false
+	var gd: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.GREAT_DESTINY)
+	if gd != null:
+		gd.metadata["last_triggered_ic_year"] = ic_year
+	return true
+
+
+## s57.43.6: cast a single aboard character into the drift state (JUMP_OVERBOARD, or a
+## per-character rescue-failure path). Clears aboard_ship_id and starts drift day 1;
+## near_shore selects the coastal swim resolution (TN 15, swim-to-shore) over open
+## ocean (TN 25/day). No-op if the character is not aboard.
+static func _cast_character_into_drift(
+	c: L5RCharacterData, in_mantis: bool, near_shore: bool,
+) -> void:
+	if c == null or CharacterStats.is_dead(c) or c.aboard_ship_id < 0:
+		return
+	c.aboard_ship_id = -1
+	c.drift_day = 1
+	c.drift_in_mantis_waters = in_mantis
+	c.drift_near_shore = near_shore
+
+
+## s57.43.6: resolve JUMP_OVERBOARD results from the day's actions. A character who
+## deliberately went overboard is cast into the drift state (the daily drift pass then
+## resolves swim-to-shore / drowning / rescue). in_mantis and near_shore come from the
+## action metadata (map-gated; both default false — open ocean — until water
+## coordinates supply them). PC-facing: the GDD frames JUMP_OVERBOARD as a desperate
+## player escape from a hostile/unwanted voyage on the ship ASCII map; there is no
+## autonomous NPC producer (passengers and crew board voluntarily toward their own
+## destination), so this fires only when a deliberate caller (the future PC ship layer)
+## emits the action. Runs before the daily drift pass so the jump resolves the same tick.
+static func _process_jump_overboard_writebacks(
+	day_results: Array, characters_by_id: Dictionary,
+) -> void:
+	for entry: Dictionary in day_results:
+		if entry.get("action_id", "") != "JUMP_OVERBOARD" or not entry.get("success", false):
+			continue
+		var effects: Dictionary = entry.get("effects", {})
+		if not effects.get("requires_jump_overboard_drift", false):
+			continue
+		var jumper: L5RCharacterData = characters_by_id.get(entry.get("character_id", -1))
+		if jumper == null:
+			continue
+		_cast_character_into_drift(
+			jumper, bool(effects.get("in_mantis", false)),
+			bool(effects.get("near_shore", false)))
+
+
+# s11.9 signature-ship capture (Atakebune/Koutetsukan). Owner rulings 2026-07-04:
+# topic Tier 2; Blood Feud = a permanent CollectiveDisposition shift to the
+# blood-enemy tier (subsumes the "−1 disposition/season while retained"); the
+# gracious-return Honor recovery is +0.5; the decider is the captor clan champion.
+const SIGNATURE_RETURN_HONOR_RECOVERY: float = 0.5
+# DispositionSystem.Tier.BLOOD_ENEMY onset (s12.2: [-100, -61]) — a Blood Feud drives
+# the two clans' collective baseline to at least blood-enemy standing.
+const SIGNATURE_BLOOD_FEUD_BASELINE: int = -61
+
+
+## s11.9: resolve the fate of every signature ship (Atakebune/Koutetsukan) captured
+## by a NON-native clan in the day's naval battles. Native recapture (a clan retaking
+## its own signature ship) follows the normal prize rules and is skipped. The captor
+## clan's champion decides (personality-driven, s11.9); a captor with no living
+## champion falls to the "destroy" default. Only war-driven clan battles are scanned
+## (pirates are not a clan). Inert until the water graph makes naval battles fire.
+static func _process_signature_ship_captures(
+	naval_battle_results: Array,
+	ships: Array,
+	named_vessels: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	favors: Array,
+	clan_baselines: Dictionary,
+	ic_day: int,
+) -> void:
+	var vessel_by_id: Dictionary = {}
+	for s: ShipData in ships:
+		vessel_by_id[s.ship_id] = s
+	for v: NamedVesselData in named_vessels:
+		vessel_by_id[v.vessel_id] = v
+
+	for battle: Dictionary in naval_battle_results:
+		for cap: Dictionary in battle.get("captured_ships", []):
+			var cls: int = int(cap.get("ship_class", -1))
+			if not NavalSystem.is_signature_ship(cls):
+				continue
+			var native_clan: String = NavalSystem.get_signature_clan(cls)
+			var captor_side: String = str(cap.get("captured_by", ""))
+			var captor_clan: String = str(battle.get(captor_side + "_clan", ""))
+			# Non-native captor only (a clan retaking its own ship = ordinary prize).
+			if captor_clan.is_empty() or captor_clan == native_clan:
+				continue
+			var ship_obj: Object = vessel_by_id.get(int(cap.get("ship_id", -1)))
+			var champ: L5RCharacterData = characters_by_id.get(
+				_extrad_find_clan_champion_id(captor_clan, characters))
+			var decision: String = _evaluate_signature_capture(champ)
+			_apply_signature_capture_decision(
+				decision, cls, native_clan, captor_clan, champ, ship_obj,
+				active_topics, next_topic_id, favors, clan_baselines,
+				characters, ic_day)
+
+
+## The captor champion's destroy/keep/return choice (s11.9), routed through the LOCKED
+## NavalSystem.evaluate_signature_capture_decision virtue mapping. Bushido virtue
+## decides first (Yu/Chugi/Meiyo → destroy, Makoto/Jin → return); a pragmatic Shourido
+## lean (Seigyo/Kanpeki/Kyoryoku → keep) only shows when Bushido is destroy/neutral.
+## No champion → "destroy" (the low-political-risk default most captors choose).
+static func _evaluate_signature_capture(champion: L5RCharacterData) -> String:
+	if champion == null or CharacterStats.is_dead(champion):
+		return "destroy"
+	var bv: Variant = Enums.BushidoVirtue.find_key(champion.bushido_virtue)
+	var d: String = NavalSystem.evaluate_signature_capture_decision(str(bv) if bv != null else "")
+	if d != "destroy":
+		return d
+	var sv: Variant = Enums.ShouridoVirtue.find_key(champion.shourido_virtue)
+	if NavalSystem.evaluate_signature_capture_decision(str(sv) if sv != null else "") == "keep":
+		return "keep"
+	return "destroy"
+
+
+static func _apply_signature_capture_decision(
+	decision: String, ship_class: int, native_clan: String, captor_clan: String,
+	champ: L5RCharacterData, ship_obj: Object,
+	active_topics: Array, next_topic_id: Array, favors: Array,
+	clan_baselines: Dictionary, characters: Array, ic_day: int,
+) -> void:
+	var ship_disp: String = _signature_ship_display(ship_class)
+	var ship: ShipData = ship_obj as ShipData
+	match decision:
+		"destroy":
+			# Default: the captor scuttles the prize. No lingering complication.
+			if ship != null:
+				ship.is_destroyed = true
+				ship.health = 0
+				ship.is_captured = false
+		"keep":
+			# The captor retains the prize (a deliberate, provocative act).
+			if ship != null:
+				ship.is_captured = true
+				ship.captured_by_clan = captor_clan
+			# Tier 2 political crisis topic (owner ruling).
+			var topic := TopicData.new()
+			next_topic_id[0] += 1
+			topic.topic_id = next_topic_id[0]
+			topic.tier = TopicData.Tier.TIER_2
+			topic.category = TopicData.Category.POLITICAL
+			topic.title = "%s holds a stolen %s" % [captor_clan, ship_disp]
+			topic.slug = "signature_ship_held_%d" % topic.topic_id
+			topic.topic_type = "signature_ship_held"
+			topic.subject_character_id = champ.character_id if champ != null else -1
+			topic.subject_role = "NEUTRAL"
+			topic.ic_day_created = ic_day
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_2)
+			active_topics.append(topic)
+			# Blood Feud: drive the two clans to (at least) blood-enemy collective
+			# standing — a permanent shift that subsumes the −1/season drift.
+			var key: String = CollectiveDisposition.make_pair_key(native_clan, captor_clan)
+			clan_baselines[key] = mini(
+				int(clan_baselines.get(key, 0)), SIGNATURE_BLOOD_FEUD_BASELINE)
+		"return":
+			# Gracious return under diplomatic pressure: the ship goes home, the
+			# native clan owes a major favor, and the returner recovers some Honor.
+			if ship != null:
+				ship.is_captured = false
+			var native_champ_id: int = _extrad_find_clan_champion_id(native_clan, characters)
+			if champ != null and native_champ_id >= 0:
+				var max_fid: int = 0
+				for f: Variant in favors:
+					if f is FavorData and (f as FavorData).favor_id >= max_fid:
+						max_fid = (f as FavorData).favor_id + 1
+				favors.append(FavorSystem.offer_favor(
+					FavorData.FavorType.GENERAL, FavorData.FavorTier.MAJOR,
+					champ.character_id, native_champ_id, ic_day,
+					"Returned a captured %s" % ship_disp, "SIGNATURE_RETURN", max_fid))
+			if champ != null:
+				HonorGlorySystem.apply_honor_change(champ, SIGNATURE_RETURN_HONOR_RECOVERY)
+
+
+static func _signature_ship_display(ship_class: int) -> String:
+	match ship_class:
+		Enums.ShipClass.ATAKEBUNE:
+			return "Atakebune"
+		Enums.ShipClass.KOUTETSUKAN:
+			return "Koutetsukan"
+	return "signature ship"
+
+
+# s55.11 INTERVENE_CAPTAIN failure consequences (LOCKED).
+const INTERVENE_FAIL_GLORY: float = -0.3
+const INTERVENE_CRIT_EXTRA_GLORY: float = -0.2
+const INTERVENE_WITNESS_DISPOSITION: int = -5
+const INTERVENE_AGGRESSOR_DISPOSITION: int = -10
+const INTERVENE_CRIT_MARGIN: int = 10  # aggressor total exceeds captain by 10+ = critical
+const INTERVENE_BREAK_CONDITIONS: Array = [
+	"voyage_end", "captain_permission", "victim_initiates_hostile", "captain_incapacitated",
+]
+
+
+## s55.11: the captain-authority reactive containment action. When a passenger fires a
+## hostile-tagged action against another passenger aboard the same ship and the ship's
+## captain is aboard and able, the captain may intervene (Trigger 1/2 collapse to "a
+## hostile action was fired aboard"). Owner ruling (deterministic, duty default): the
+## captain intervenes unless their Shourido virtue is Kyoryoku or Ishi (the two negative
+## leans that stand aside). On intervention: contested captain's best(Intimidation,
+## Courtier) + Willpower vs the aggressor's Willpower. Success writes a voyage-scoped
+## "hostile_tagged" action_block to the aggressor protecting the victim (the s29.15.24
+## consumer then denies the aggressor's hostile actions against that victim). Failure:
+## captain Glory −0.3, aboard witnesses −5 disposition toward the captain, aggressor −10.
+## Critical failure (aggressor total exceeds captain by 10+): extra Glory −0.2, a Tier 4
+## "publicly defied" topic, and a cumulative −1k0 on this captain's later intervention
+## rolls this voyage. Also resolves the two event-driven break conditions from the day's
+## actions: the protected victim attacking the aggressor (victim_initiates_hostile), and
+## the aggressor's successful NEGOTIATE with the captain (captain_permission). Inert until
+## voyages carry hostile passenger pairs with the captain aboard (map-gated, PC-flavored).
+static func _process_intervene_captain_writebacks(
+	day_results: Array, characters_by_id: Dictionary,
+	ships: Array, named_vessels: Array, dice_engine: DiceEngine,
+	active_topics: Array, next_topic_id: Array, ic_day: int,
+) -> void:
+	# ship/vessel id -> {captain_id, name}
+	var ship_meta: Dictionary = {}
+	for s: ShipData in ships:
+		ship_meta[s.ship_id] = {"captain_id": s.captain_id, "name": s.ship_name}
+	for v: NamedVesselData in named_vessels:
+		ship_meta[v.vessel_id] = {"captain_id": v.captain_id, "name": v.vessel_name}
+
+	for entry: Dictionary in day_results:
+		var aid: String = entry.get("action_id", "")
+		if aid not in NPCDecisionEngine.HOSTILE_ACTIONS:
+			continue
+		var aggressor: L5RCharacterData = characters_by_id.get(entry.get("character_id", -1))
+		var victim: L5RCharacterData = characters_by_id.get(entry.get("target_npc_id", -1))
+		if aggressor == null or victim == null or aggressor == victim:
+			continue
+
+		# Break: if this hostile action is the PROTECTED party striking their aggressor,
+		# that aggressor's block protecting them breaks (self-defence, s55.11 condition 3).
+		# Here `aggressor`/`victim` are this action's actor/target; the prior block lives on
+		# the target (the earlier aggressor) with blocker_id == the actor (the protected one).
+		_break_intervene_block(victim, aggressor.character_id)
+
+		# Only aboard-vs-aboard (same ship) with the captain aboard triggers intervention.
+		var ship_id: int = aggressor.aboard_ship_id
+		if ship_id < 0 or victim.aboard_ship_id != ship_id:
+			continue
+		if not ship_meta.has(ship_id):
+			continue
+		var captain_id: int = int(ship_meta[ship_id]["captain_id"])
+		if captain_id < 0 or captain_id == aggressor.character_id or captain_id == victim.character_id:
+			continue
+		var captain: L5RCharacterData = characters_by_id.get(captain_id)
+		if captain == null or CharacterStats.is_dead(captain):
+			continue
+		if CharacterStats.get_wound_level(captain) >= Enums.WoundLevel.DOWN:
+			continue  # captain incapacitated — no authority to intervene
+		# Already protecting this victim from this aggressor (don't re-fire).
+		if _has_active_intervene_block(aggressor, victim.character_id):
+			continue
+		# Owner gate (option 1): only Kyoryoku / Ishi stand aside.
+		if not _intervene_captain_should_intervene(captain):
+			continue
+
+		_resolve_intervene_captain(
+			captain, aggressor, victim, ship_id, str(ship_meta[ship_id]["name"]),
+			characters_by_id, dice_engine, active_topics, next_topic_id, ic_day)
+
+	# Break: captain_permission — a successful NEGOTIATE by an aggressor with a captain
+	# who blocked them lifts that captain's intervention blocks on the aggressor.
+	for entry2: Dictionary in day_results:
+		if entry2.get("action_id", "") != "NEGOTIATE" or not entry2.get("success", false):
+			continue
+		var neg_actor: L5RCharacterData = characters_by_id.get(entry2.get("character_id", -1))
+		var neg_target: int = int(entry2.get("target_npc_id", -1))
+		if neg_actor == null or neg_target < 0:
+			continue
+		_break_intervene_blocks_by_captain(neg_actor, neg_target)
+
+
+## Owner ruling (deterministic, duty default, s55.11): a captain intervenes to keep order
+## unless their Shourido virtue leans them away (Kyoryoku sees conflict as useful, Ishi
+## finds it beneath them). Every other virtue — all Bushido, and the neutral Shourido —
+## intervenes.
+static func _intervene_captain_should_intervene(captain: L5RCharacterData) -> bool:
+	var sv: int = captain.shourido_virtue
+	if sv == Enums.ShouridoVirtue.KYORYOKU or sv == Enums.ShouridoVirtue.ISHI:
+		return false
+	return true
+
+
+## The captain rolls whichever of Intimidation / Courtier they are stronger in (s55.11).
+static func _best_intervene_skill(captain: L5RCharacterData) -> String:
+	var intim: int = int(captain.skills.get("Intimidation", 0))
+	var court: int = int(captain.skills.get("Courtier", 0))
+	return "Intimidation" if intim >= court else "Courtier"
+
+
+## True if the aggressor already holds an active INTERVENE_CAPTAIN action_block protecting
+## the given victim (blocker_id).
+static func _has_active_intervene_block(aggressor: L5RCharacterData, victim_id: int) -> bool:
+	for block: Dictionary in aggressor.action_blocks:
+		if (
+			block.get("source_technique", "") == "INTERVENE_CAPTAIN"
+			and int(block.get("blocker_id", -1)) == victim_id
+		):
+			return true
+	return false
+
+
+## Resolve one intervention: contested roll, then success (write the block) or failure /
+## critical-failure consequences.
+static func _resolve_intervene_captain(
+	captain: L5RCharacterData, aggressor: L5RCharacterData, victim: L5RCharacterData,
+	ship_id: int, ship_name: String, characters_by_id: Dictionary, dice_engine: DiceEngine,
+	active_topics: Array, next_topic_id: Array, ic_day: int,
+) -> void:
+	var skill: String = _best_intervene_skill(captain)
+	# Cumulative −1k0 per prior critical failure this voyage (−rolled dice on the captain).
+	var pen: int = -captain.intervene_crit_penalty
+	var result: Dictionary = SkillResolver.resolve_contested_check(
+		captain, aggressor, dice_engine, skill, "", "", "",
+		Enums.Trait.WILLPOWER, Enums.Trait.WILLPOWER, pen, 0)
+	var cap_total: int = int(result.get("total_a", 0))
+	var agg_total: int = int(result.get("total_b", 0))
+
+	if result.get("winner", "") == "a":
+		# Success — the aggressor is barred from hostile actions against the victim for
+		# the rest of the voyage (s29.15.24 action_block on the aggressor's sheet).
+		aggressor.action_blocks.append({
+			"blocker_id": victim.character_id,
+			"source_technique": "INTERVENE_CAPTAIN",
+			"blocked_action_ids": "hostile_tagged",
+			"expires": "voyage_end",
+			"break_conditions": INTERVENE_BREAK_CONDITIONS.duplicate(),
+			"captain_id": captain.character_id,
+			"ship_id": ship_id,
+		})
+		return
+
+	# Failure consequences.
+	HonorGlorySystem.apply_glory_change(captain, INTERVENE_FAIL_GLORY)
+	# Aboard witnesses (excluding captain + aggressor) sour toward the captain.
+	for cid: int in characters_by_id:
+		var w: L5RCharacterData = characters_by_id[cid]
+		if w == null or CharacterStats.is_dead(w):
+			continue
+		if w.aboard_ship_id != ship_id or w == captain or w == aggressor:
+			continue
+		_shift_disposition(w, captain.character_id, INTERVENE_WITNESS_DISPOSITION)
+	_shift_disposition(aggressor, captain.character_id, INTERVENE_AGGRESSOR_DISPOSITION)
+
+	# Critical failure — the aggressor's total exceeds the captain's by 10+.
+	if agg_total - cap_total >= INTERVENE_CRIT_MARGIN:
+		HonorGlorySystem.apply_glory_change(captain, INTERVENE_CRIT_EXTRA_GLORY)
+		captain.intervene_crit_penalty += 1  # cumulative −1k0 on later rolls this voyage
+		if not next_topic_id.is_empty():
+			var tid: int = next_topic_id[0]
+			next_topic_id[0] = tid + 1
+			var title: String = "%s was publicly defied aboard %s" % [
+				captain.character_name, ship_name if not ship_name.is_empty() else "their ship"]
+			var topic: TopicData = TopicMomentumSystem.create_topic(
+				tid, title, TopicData.Tier.TIER_4, TopicData.Category.POLITICAL,
+				ic_day, 0.0, [], captain.clan, "", captain.character_id,
+				"authority_defied", "intervene_defied")
+			topic.slug = "intervene_defied_%d_%d" % [captain.character_id, ic_day]
+			active_topics.append(topic)
+
+
+## Apply a one-time clamped disposition shift (s55.11 temporary modifiers; standard decay
+## handled by the historical-modifier system).
+static func _shift_disposition(holder: L5RCharacterData, toward_id: int, delta: int) -> void:
+	var cur: int = holder.disposition_values.get(toward_id, 0)
+	holder.disposition_values[toward_id] = clampi(cur + delta, -100, 100)
+
+
+## Remove any INTERVENE_CAPTAIN block on `aggressor` that protects `victim_id`
+## (victim_initiates_hostile break, s55.11).
+static func _break_intervene_block(aggressor: L5RCharacterData, victim_id: int) -> void:
+	if aggressor.action_blocks.is_empty():
+		return
+	var kept: Array = []
+	for block: Dictionary in aggressor.action_blocks:
+		if (
+			block.get("source_technique", "") == "INTERVENE_CAPTAIN"
+			and int(block.get("blocker_id", -1)) == victim_id
+		):
+			continue
+		kept.append(block)
+	aggressor.action_blocks = kept
+
+
+## Remove INTERVENE_CAPTAIN blocks on `aggressor` written by `captain_id`
+## (captain_permission break, s55.11).
+static func _break_intervene_blocks_by_captain(aggressor: L5RCharacterData, captain_id: int) -> void:
+	if aggressor.action_blocks.is_empty():
+		return
+	var kept: Array = []
+	for block: Dictionary in aggressor.action_blocks:
+		if (
+			block.get("source_technique", "") == "INTERVENE_CAPTAIN"
+			and int(block.get("captain_id", -1)) == captain_id
+		):
+			continue
+		kept.append(block)
+	aggressor.action_blocks = kept
+
+
+## s55.11 / s29.15.24 daily break-condition pass for INTERVENE_CAPTAIN action_blocks.
+## Removes a block when the aggressor has disembarked the block's ship (voyage_end) or the
+## writing captain is dead/incapacitated (captain_incapacitated). Also clears a captain's
+## cumulative crit penalty once they are no longer aboard a moving voyage (disembarked).
+## The other two break conditions (victim_initiates_hostile, captain_permission) are
+## event-driven from the day's actions in _process_intervene_captain_writebacks.
+static func _process_action_block_breaks(
+	characters: Array, characters_by_id: Dictionary, ships: Array, named_vessels: Array,
+) -> void:
+	# Which ship ids are currently underway (for the crit-penalty clear on dock).
+	var moving_ship: Dictionary = {}
+	for s: ShipData in ships:
+		if s.is_moving:
+			moving_ship[s.ship_id] = true
+	for v: NamedVesselData in named_vessels:
+		if v.is_moving:
+			moving_ship[v.vessel_id] = true
+
+	for c: L5RCharacterData in characters:
+		if c == null:
+			continue
+		# Clear a captain's voyage crit penalty once they are no longer aboard a moving ship.
+		if c.intervene_crit_penalty > 0 and c.aboard_ship_id < 0:
+			c.intervene_crit_penalty = 0
+		if c.action_blocks.is_empty():
+			continue
+		var kept: Array = []
+		for block: Dictionary in c.action_blocks:
+			if block.get("source_technique", "") != "INTERVENE_CAPTAIN":
+				kept.append(block)  # leave non-INTERVENE blocks to their own systems
+				continue
+			# voyage_end: the blocked aggressor is no longer aboard the block's ship.
+			if c.aboard_ship_id != int(block.get("ship_id", -2)):
+				continue
+			# captain_incapacitated: the writing captain is dead / Down / Out.
+			var cap: L5RCharacterData = characters_by_id.get(int(block.get("captain_id", -1)))
+			if cap == null or CharacterStats.is_dead(cap) \
+					or CharacterStats.get_wound_level(cap) >= Enums.WoundLevel.DOWN:
+				continue
+			kept.append(block)
+		c.action_blocks = kept
+
+
+## s57.43.6 shipwreck drift — resolve one IC day for every adrift character. Each
+## day: a landfall/rescue check (chance by drift day, Mantis waters raise day 1);
+## a character who makes landfall is saved (drift clears) and does NOT roll Swimming
+## that day. Otherwise an open-ocean Swimming roll (Athletics/Strength vs TN 25, +10
+## non-swimmer) — failure is death by drowning. A Water-affinity shugenja calls a
+## water kami (Commune) and is saved from the day's drowning (PROVISIONAL: modeled
+## as auto-surviving the Swimming roll — "success saves the character", s57.43.6,
+## and a Water shugenja's commune is a near-certain success; the exact Commune TN is
+## unspecified). A 6-IC-day ceiling: beyond it, death at sea. Drownings append to
+## death_events so a drowned lord triggers same-tick succession (mirrors the
+## possession/disease passes). Rescue-by-searching-ally and same-day companion
+## rescue (s57.43.6) are co-op play features on the PC-travel HOLD.
+static func _process_shipwreck_drift(
+	characters: Array,
+	dice_engine: DiceEngine,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c) or c.drift_day < 1:
+			continue
+
+		# Hard ceiling: beyond 6 IC days adrift, lost at sea.
+		if c.drift_day > SailingSystem.DRIFT_CEILING_DAYS:
+			_apply_drift_death(c, "lost_at_sea", death_events, active_topics, next_topic_id, ic_day)
+			continue
+
+		# Open-ocean drift: a random landfall/rescue check resolves before the Swimming
+		# roll (Rokugan's coasts are near most sea routes). A coastal JUMP_OVERBOARD
+		# (s57.43.6, within 1 sub-tile of land) skips this — its Swimming roll IS the
+		# landfall mechanism (a success swims to shore), so it is not left to the random
+		# open-ocean chance.
+		if not c.drift_near_shore:
+			var chance: float = SailingSystem.shipwreck_landfall_chance(
+				c.drift_day, c.drift_in_mantis_waters)
+			if dice_engine.randf() < chance:
+				# Washed ashore / rescued — the drift ends; they keep their last location
+				# (nearest-shore placement is geography-blocked, PROVISIONAL).
+				_clear_drift_state(c)
+				continue
+
+		# Water-affinity shugenja: a water kami keeps them afloat this day.
+		if _drift_water_kami_saves(c):
+			c.drift_day += 1
+			continue
+
+		# Swimming roll — coastal TN 15 (success reaches shore that day), open-ocean
+		# TN 25 (success survives another day); failure drowns.
+		var tn: int = SailingSystem.drift_swim_tn(c, c.drift_near_shore)
+		var roll: Dictionary = SkillResolver.resolve_skill_check(
+			c, dice_engine, "Athletics", tn, 0, "Swimming")
+		if roll.get("success", false):
+			if c.drift_near_shore:
+				_clear_drift_state(c)  # swam to the nearby shore
+			else:
+				c.drift_day += 1
+		else:
+			_apply_drift_death(c, "drowned", death_events, active_topics, next_topic_id, ic_day)
+
+
+## Clear a character's drift state (survived: landfall / rescue / coastal swim to shore).
+static func _clear_drift_state(c: L5RCharacterData) -> void:
+	c.drift_day = 0
+	c.drift_in_mantis_waters = false
+	c.drift_near_shore = false
+
+
+## True if the character is a shugenja whose Water affinity lets them Commune for a
+## water kami's aid (s57.43.6). PROVISIONAL: affinity is read from the school's
+## element affinity where available; otherwise a Water-ring-primary shugenja.
+static func _drift_water_kami_saves(c: L5RCharacterData) -> bool:
+	if not SpellSystem.is_shugenja(c):
+		return false
+	return c.affinity_element == Enums.Ring.WATER
+
+
+## Accidental shipwreck death (s57.43.6): GREAT_DESTINY cheats death (washed ashore,
+## drift clears); otherwise lethal wounds + a death_event (accidental — no killer,
+## not suspicious) and a Tier 4 PERSONAL "lost at sea" topic (NEUTRAL subject_role
+## per the dead-character rule). Clears the drift state.
+static func _apply_drift_death(
+	c: L5RCharacterData,
+	cause: String,
+	death_events: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	var ic_year: int = ic_day / TimeSystem.IC_DAYS_PER_YEAR
+	if AdvantageSystem.check_great_destiny(c, ic_year):
+		var gd: AdvantageData = AdvantageSystem.get_advantage(c, Enums.Advantage.GREAT_DESTINY)
+		if gd != null:
+			gd.metadata["last_triggered_ic_year"] = ic_year
+		_clear_drift_state(c)
+		return
+	var earth: int = CharacterStats.get_ring_value(c, Enums.Ring.EARTH)
+	c.wounds_taken = earth * 5 * 5
+	_clear_drift_state(c)
+	death_events.append({
+		"character_id": c.character_id,
+		"is_lord": c.role_position != "",
+		"cause": cause,
+		"suspicious_death": false,
+		"ic_day": ic_day,
+		"killer_id": -1,
+	})
+	if not next_topic_id.is_empty():
+		var tid: int = next_topic_id[0]
+		next_topic_id[0] = tid + 1
+		var title: String = "%s was lost at sea" % c.character_name
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			tid, title, TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
+			ic_day, 0.0, [], c.clan, "", c.character_id, "death", "lost_at_sea")
+		topic.slug = "lost_at_sea_%d" % c.character_id
+		active_topics.append(topic)
 
 
 static func _process_naval_war_scores(
@@ -22203,6 +23787,9 @@ static func _process_construction_effects(
 		var dedicated_fortune: int = int(effects.get("dedicated_fortune", -1))
 		var ship_class_val: int = int(effects.get("ship_class", -1))
 		var shrine_tier: String = effects.get("shrine_tier", "roadside")
+		var is_named_vessel: bool = effects.get("is_named_vessel", false)
+		var vessel_owner_id: int = int(effects.get("vessel_owner_id", -1))
+		var vessel_purpose: int = int(effects.get("vessel_purpose", 0))
 
 		var result: Dictionary = _apply_construction_order(
 			action_id, character as L5RCharacterData, province_id, settlement_id,
@@ -22210,6 +23797,7 @@ static func _process_construction_effects(
 			provinces, settlements, constructions,
 			next_settlement_id, next_construction_id, ic_day,
 			ships, dice_engine,
+			is_named_vessel, vessel_owner_id, vessel_purpose,
 		)
 		result["character_id"] = char_id
 		result["action_id"] = action_id
@@ -22235,6 +23823,9 @@ static func _apply_construction_order(
 	ic_day: int,
 	ships: Array,
 	_dice_engine: DiceEngine,
+	is_named_vessel: bool = false,
+	vessel_owner_id: int = -1,
+	vessel_purpose: int = 0,
 ) -> Dictionary:
 	var province: Variant = provinces.get(province_id)
 
@@ -22374,8 +23965,10 @@ static func _apply_construction_order(
 				return {"applied": false, "reason": "settlement_not_found"}
 
 			var sc: Enums.ShipClass = ship_class_val as Enums.ShipClass
+			var ship_prov: Variant = provinces.get((target_settlement_2 as SettlementData).province_id)
+			var ship_coastal: bool = ship_prov != null and (ship_prov as ProvinceData).is_coastal
 			var valid_6: Dictionary = ConstructionSystem.validate_ship_commission(
-				character, sc, target_settlement_2 as SettlementData,
+				character, sc, target_settlement_2 as SettlementData, ship_coastal,
 			)
 			if not valid_6.get("valid", false):
 				return {"applied": false, "reason": valid_6.get("reason", "invalid")}
@@ -22390,6 +23983,13 @@ static func _apply_construction_order(
 				(target_settlement_2 as SettlementData).province_id, ic_day,
 				cost_2, 0.0, 0.0, settlement_id, false, -1, ship_class_val,
 			)
+			# Stamp ownership + named-vessel intent so the completion writeback can
+			# build the correct model (military ShipData vs NamedVesselData) without
+			# a later character lookup.
+			cd_4.owning_clan = character.clan
+			cd_4.is_named_vessel = is_named_vessel
+			cd_4.vessel_owner_id = vessel_owner_id if vessel_owner_id >= 0 else character.character_id
+			cd_4.vessel_purpose = vessel_purpose
 			next_construction_id[0] += 1
 			constructions.append(cd_4)
 			return {"applied": true, "type": "ship", "queued": true, "construction_id": cd_4.construction_id}
@@ -22407,6 +24007,8 @@ static func _process_construction_completions(
 	active_topics: Array,
 	next_topic_id: Array,
 	ic_day: int,
+	named_vessels: Array = [],
+	next_ship_id: Array = [1],
 ) -> void:
 	var completed: Array = ConstructionSystem.tick_construction_queue(constructions)
 
@@ -22464,22 +24066,43 @@ static func _process_construction_completions(
 					(target_s as SettlementData).infrastructure.append("forge")
 
 			ConstructionData.ConstructionType.SHIP:
-				var ship := ShipData.new()
-				ship.ship_id = next_settlement_id[0]
-				next_settlement_id[0] += 1
-				ship.ship_class = cd.ship_class
-				ship.current_province_id = cd.province_id
-				ship.ic_day_launched = ic_day
-				var stats: Dictionary = NavalSystem.SHIP_STATS.get(ship.ship_class, {})
-				ship.max_health = int(stats.get("health", 100))
-				ship.health = ship.max_health
-				ship.attack = int(stats.get("attack", 3))
-				ship.defense = int(stats.get("defense", 3))
-				ship.morale = int(stats.get("morale", 12))
-				ship.morale_defense = int(stats.get("morale_defense", 4))
-				ship.cargo_capacity = float(stats.get("cargo", 0.3))
-				ship.construction_cost = float(stats.get("construction_cost", 3.0))
-				ships.append(ship)
+				if cd.is_named_vessel:
+					# Owner-patron individual vessel (s57.42.2) — a NamedVesselData,
+					# not a military fleet Company.
+					var vessel := NamedVesselData.new()
+					vessel.vessel_id = next_ship_id[0]
+					next_ship_id[0] += 1
+					vessel.ship_class = cd.ship_class
+					vessel.owner_id = cd.vessel_owner_id
+					vessel.captain_id = cd.vessel_owner_id
+					vessel.owning_clan = cd.owning_clan
+					vessel.purpose = cd.vessel_purpose
+					vessel.current_province_id = cd.province_id
+					vessel.ic_day_launched = ic_day
+					var vstats: Dictionary = NavalSystem.SHIP_STATS.get(vessel.ship_class, {})
+					vessel.cargo_capacity = float(vstats.get("cargo", 0.3))
+					named_vessels.append(vessel)
+				else:
+					var ship := ShipData.new()
+					ship.ship_id = next_ship_id[0]
+					next_ship_id[0] += 1
+					ship.ship_class = cd.ship_class
+					# owning_clan is required for naval-battle pairing and the
+					# naval-threat scan; without it a commissioned ship counted for
+					# nothing (previously never set).
+					ship.owning_clan = cd.owning_clan
+					ship.current_province_id = cd.province_id
+					ship.ic_day_launched = ic_day
+					var stats: Dictionary = NavalSystem.SHIP_STATS.get(ship.ship_class, {})
+					ship.max_health = int(stats.get("health", 100))
+					ship.health = ship.max_health
+					ship.attack = int(stats.get("attack", 3))
+					ship.defense = int(stats.get("defense", 3))
+					ship.morale = int(stats.get("morale", 12))
+					ship.morale_defense = int(stats.get("morale_defense", 4))
+					ship.cargo_capacity = float(stats.get("cargo", 0.3))
+					ship.construction_cost = float(stats.get("construction_cost", 3.0))
+					ships.append(ship)
 
 		_generate_construction_topic(
 			cd, active_topics, next_topic_id, ic_day,
@@ -22599,13 +24222,12 @@ static func _populate_infrastructure_intelligence(
 	settlements: Array,
 	ships: Array,
 	worship_state: Dictionary,
+	named_vessels: Array = [],
 ) -> void:
 	var worship_failing: Dictionary = {}  # province_id → clan
 	var border_no_fort: Dictionary = {}  # province_id → clan
 	var surplus_pu: Dictionary = {}  # province_id → clan
 	var coastal: bool = false
-	var has_naval_assets_flag: bool = false
-	var naval_threat: bool = false
 
 	var province_settlements: Dictionary = {}
 	for s: SettlementData in settlements:
@@ -22661,30 +24283,32 @@ static func _populate_infrastructure_intelligence(
 		if prov.is_coastal:
 			coastal = true
 
-	# Coastal / naval detection
-	for s: ShipData in ships:
-		if not s.is_destroyed:
-			has_naval_assets_flag = true
-			break
-
-	# Naval threat: at war AND enemy clan has ships
+	# Per-clan naval assets/threat (s57.18). A clan controls naval assets iff it owns
+	# at least one non-destroyed ship (military ShipData) or named vessel (owner-patron,
+	# s57.42.2). A clan is naval-threatened iff it is at war with a clan that has ships.
 	var clans_with_ships: Dictionary = {}
 	for s: ShipData in ships:
 		if not s.is_destroyed and not s.owning_clan.is_empty():
 			clans_with_ships[s.owning_clan] = true
+	for v: NamedVesselData in named_vessels:
+		if not v.is_destroyed and not v.owning_clan.is_empty():
+			clans_with_ships[v.owning_clan] = true
+
+	var naval_threatened_clans: Dictionary = {}
 	for w: Variant in world_states.get("active_wars", []):
 		if w is WarData:
 			var wd: WarData = w as WarData
-			if clans_with_ships.has(wd.clan_a) or clans_with_ships.has(wd.clan_b):
-				naval_threat = true
-				break
+			if clans_with_ships.has(wd.clan_a):
+				naval_threatened_clans[wd.clan_b] = true
+			if clans_with_ships.has(wd.clan_b):
+				naval_threatened_clans[wd.clan_a] = true
 
 	world_states["_worship_failing_province_ids"] = worship_failing
 	world_states["_border_province_ids_without_fort"] = border_no_fort
 	world_states["_surplus_pu_province_ids"] = surplus_pu
 	world_states["_is_coastal"] = coastal
-	world_states["_has_naval_assets"] = has_naval_assets_flag
-	world_states["_has_naval_threat"] = naval_threat
+	world_states["_clans_with_ships"] = clans_with_ships
+	world_states["_naval_threatened_clans"] = naval_threatened_clans
 
 
 # -- Vacancy Intelligence Population (s57.20.3) --------------------------------
@@ -24221,8 +25845,12 @@ static func _inject_base_character_context(
 	var g_surplus: Dictionary = world_states.get("_surplus_pu_province_ids", {})
 	var g_festival: Dictionary = world_states.get("_festival_flags", {})
 	var g_is_coastal: bool = world_states.get("_is_coastal", false)
-	var g_has_naval_assets: bool = world_states.get("_has_naval_assets", false)
-	var g_has_naval_threat: bool = world_states.get("_has_naval_threat", false)
+	# Per-clan naval flags (s57.18): a lord has naval assets iff their clan owns/
+	# controls at least one ship; naval-threatened iff at war with a clan that has
+	# ships. Populated per-clan by _populate_infrastructure_intelligence (replaces the
+	# previous global "any ship anywhere → everyone true" bool).
+	var g_clans_with_ships: Dictionary = world_states.get("_clans_with_ships", {})
+	var g_naval_threatened_clans: Dictionary = world_states.get("_naval_threatened_clans", {})
 	var g_active_wars: Array = WarSystem.wars_to_context_array(active_wars)
 
 	var province_values: Array = provinces.values()
@@ -24292,8 +25920,8 @@ static func _inject_base_character_context(
 		ws["surplus_pu_province_ids"] = g_surplus
 		ws["active_wars"] = g_active_wars
 		ws["is_coastal"] = g_is_coastal
-		ws["has_naval_assets"] = g_has_naval_assets
-		ws["has_naval_threat"] = g_has_naval_threat
+		ws["has_naval_assets"] = g_clans_with_ships.has(c.clan)
+		ws["has_naval_threat"] = g_naval_threatened_clans.has(c.clan)
 		ws["known_clan_strengths"] = g_clan_strengths
 		ws["escalating_conflicts"] = _filter_escalating_conflicts_for_clan(
 			g_escalating_conflicts, c.clan, active_wars
@@ -27005,6 +28633,61 @@ static func _secret_is_exposed(secret_id: int, active_secrets: Array) -> bool:
 		if s != null and s.secret_id == secret_id:
 			return s.exposed or s.exposed_publicly
 	return true  # secret no longer exists — leverage gone
+
+
+## s57.42.6: co-located-vessel discovery for REQUEST_PASSAGE. A character in a port
+## where an owner-patron NAMED vessel is docked (s57.42.45: military ships can't be
+## asked directly) can ask that vessel's captain (co-located) for passage; inject the
+## vessel + decider into their known_objectives so the passage precondition filter
+## keeps REQUEST_PASSAGE and its metadata resolves. The requester's own vessel is
+## excluded (they'd just use it). The "vessel schedule matches the destination" signal
+## stays map-gated (defaults compatible); begin_voyage self-gates on route reachability.
+static func _inject_passage_context(
+	world_states: Dictionary,
+	named_vessels: Array,
+	character_province_map: Dictionary,
+	characters_by_id: Dictionary = {},
+) -> void:
+	var vessel_by_province: Dictionary = {}
+	for v: NamedVesselData in named_vessels:
+		if v.is_destroyed or v.is_moving or v.current_province_id < 0:
+			continue
+		var decider: int = v.captain_id if v.captain_id >= 0 else v.owner_id
+		if decider < 0:
+			continue
+		if not vessel_by_province.has(v.current_province_id):
+			vessel_by_province[v.current_province_id] = v
+	if vessel_by_province.is_empty():
+		return
+
+	for char_id: Variant in world_states:
+		if char_id is not int:
+			continue
+		var prov: int = int(character_province_map.get(char_id, -1))
+		if prov < 0 or not vessel_by_province.has(prov):
+			continue
+		var vessel: NamedVesselData = vessel_by_province[prov]
+		if vessel.owner_id == int(char_id) or vessel.captain_id == int(char_id):
+			continue
+		var decider_id: int = vessel.captain_id if vessel.captain_id >= 0 else vessel.owner_id
+		var ws: Dictionary = world_states[char_id]
+		var known_objs: Dictionary = ws.get("known_objectives", {})
+		known_objs["passage_vessel_id"] = vessel.vessel_id
+		known_objs["passage_decider_id"] = decider_id
+		# s57.42.6 (LOCKED): a requester below Acquaintance (disposition < 11) toward the
+		# decider must offer koku to bridge the gap (1 koku ≈ 1 goodwill point). Offer just
+		# enough to reach the threshold, capped at koku on hand — a rational minimum offer.
+		# Acquaintance+ rides free (offer 0). The decider's Jin/Seigyo/Rei leans still tip
+		# marginal cases at acceptance time. Koku is not deducted (an acceptance signal).
+		var requester: L5RCharacterData = characters_by_id.get(int(char_id))
+		if requester != null:
+			var disp: int = requester.disposition_values.get(decider_id, 0)
+			var offer: float = 0.0
+			if disp < SailingSystem.FREE_PASSAGE_DISPOSITION:
+				var gap: int = SailingSystem.FREE_PASSAGE_DISPOSITION - disp
+				offer = minf(requester.koku, float(gap))
+			known_objs["passage_koku_offered"] = offer
+		ws["known_objectives"] = known_objs
 
 
 static func _inject_hunt_context(

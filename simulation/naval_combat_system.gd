@@ -336,6 +336,15 @@ static func _resolve_naval_round(
 		if def_dmg > 0:
 			_ensure_trigger(pending_morale_triggers, atk)
 
+	# Koutetsukan ram — its ONLY attack (boarding-immune per _can_engage, no ranged).
+	# Without this a Koutetsukan is inert: it can neither damage nor be damaged by a
+	# boarding fleet, stalemating to MAX_ROUNDS. Fires once per battle (ram_used) on
+	# the ship's first active round at its column-matched enemy (else the highest-
+	# health active enemy). s11.9: +8 Attack, 5 self-damage. Joins the pending pool so
+	# ram + boarding damage resolve simultaneously (the standard round model).
+	_resolve_koutetsukan_rams(attackers, defenders, pending_damage, pending_morale_triggers)
+	_resolve_koutetsukan_rams(defenders, attackers, pending_damage, pending_morale_triggers)
+
 	# Kobune ranged support from reserve row
 	_resolve_kobune_ranged_fire(active_atk_r2, active_def_r1, weather, dice_engine, pending_damage, pending_morale_triggers)
 	_resolve_kobune_ranged_fire(active_def_r2, active_atk_r1, weather, dice_engine, pending_damage, pending_morale_triggers)
@@ -412,7 +421,13 @@ static func _compute_naval_damage(
 	var bonus: int = 0
 
 	if is_first_round:
-		bonus += NavalSystem.get_boarding_attack_modifier(true)
+		# s11.9: the −2 first-round boarding penalty is the "disadvantage of crossing
+		# between ships" — it applies only to the BOARDING side, not the defender
+		# repelling boarders on their own deck. The engagement attacker is the boarder.
+		if attacker.get("side", "") == "attacker":
+			bonus += NavalSystem.get_boarding_attack_modifier(true)
+		# The Kobune +1 round-1 bonus (archers loose before ships close) applies to any
+		# front-row Kobune on round 1 — both sides.
 		if attacker["ship_class"] == Enums.ShipClass.KOBUNE:
 			bonus += NavalSystem.KOBUNE_FIRST_ROUND_ATTACK_BONUS
 
@@ -470,6 +485,56 @@ static func resolve_ram_in_battle(
 		"damage_dealt": damage,
 		"self_damage": self_damage,
 	}
+
+
+# -- Koutetsukan Ram in the Round Loop (once per battle) ------------------------
+# The Koutetsukan is boarding-immune and has no ranged support, so the ram is its
+# only way to deal damage. This wires it into NPC round resolution (NPC ram-firing
+# policy — the GDD gives the ram's effect but no timing/target rule): each active
+# Koutetsukan that has not yet rammed picks a target and rams on its first active
+# round. Damage uses the same deterministic form as resolve_ram_in_battle (eff_attack
+# + 8 − target Defense; 5 self-damage) and is added to the pending pool. A Koutetsukan
+# is a valid ram target (ramming is how an enemy engages an iron turtle, s11.9).
+
+static func _resolve_koutetsukan_rams(
+	own_side: Array,
+	enemy_side: Array,
+	pending_damage: Dictionary,
+	pending_morale_triggers: Dictionary,
+) -> void:
+	for bc: Dictionary in own_side:
+		if bc["ship_class"] != Enums.ShipClass.KOUTETSUKAN:
+			continue
+		if not is_active(bc):
+			continue
+		if bc.get("ram_used", false):
+			continue
+		var target: Dictionary = _pick_ram_target(bc, enemy_side)
+		if target.is_empty():
+			continue
+		bc["ram_used"] = true
+		var atk_val: int = _get_eff_attack(bc) + NavalSystem.RAM_ATTACK_BONUS
+		var def_val: int = _get_eff_defense(target)
+		var dmg: int = maxi(atk_val - def_val, 0)
+		if dmg > 0:
+			_add_pending(pending_damage, target, dmg)
+			_ensure_trigger(pending_morale_triggers, target)
+		# Self-damage from the ram (structural — does not trigger the crew's morale).
+		_add_pending(pending_damage, bc, NavalSystem.RAM_SELF_DAMAGE)
+
+
+## Ram target: an active enemy in the ramming ship's column (bow-on charge), else
+## the highest-current-health active enemy (charge the biggest threat). {} if none.
+static func _pick_ram_target(ram_ship: Dictionary, enemy_side: Array) -> Dictionary:
+	var best: Dictionary = {}
+	for e: Dictionary in enemy_side:
+		if not is_active(e):
+			continue
+		if e["column"] == ram_ship["column"]:
+			return e
+		if best.is_empty() or e["current_health"] > best["current_health"]:
+			best = e
+	return best
 
 
 # -- Kobune Ranged Fire (Reserve Row) -------------------------------------------

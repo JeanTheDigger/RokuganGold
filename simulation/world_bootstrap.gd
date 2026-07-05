@@ -398,6 +398,7 @@ static func _designate_hidden_temple(settlements: Array, provinces: Dictionary) 
 
 static func bootstrap_world(
 	dice: DiceEngine,
+	seed_placeholder_water_graph: bool = false,
 ) -> Dictionary:
 	var provinces: Dictionary = {}
 	var settlements: Array[SettlementData] = []
@@ -527,6 +528,22 @@ static func bootstrap_world(
 	for _ac: L5RCharacterData in characters:
 		ArmorSystem.assign_by_profile(_ac)
 
+	# -- Starting navies (Naval Tranche 2, owner-approved 2026-07-02) ---------
+	var next_ship_id: Array = [1]
+	var navy_result: Dictionary = _seed_starting_navies(
+		settlements, provinces, characters,
+		pop_result.get("clan_champions", {}), next_ship_id,
+	)
+
+	# Placeholder water-movement graph — OFF by default so production ships with an
+	# EMPTY graph (the naval movement engine is inert on it, i.e. correct-but-unmapped
+	# geography) until the real world-map coordinates exist. Opt in (dev / demo) to
+	# get a coherent coastal sea-lane connecting every clan's real dock province, which
+	# activates the whole deploy/passage/voyage chain end to end.
+	var water_subtiles: Array = []
+	if seed_placeholder_water_graph:
+		water_subtiles = _seed_placeholder_water_graph(provinces)
+
 	return {
 		"provinces": provinces,
 		"settlements": settlements,
@@ -548,7 +565,206 @@ static func bootstrap_world(
 		"greater_zones": zone_result["greater_zones"],
 		"navigation_zones": zone_result["navigation_zones"],
 		"lesser_zones": zone_result["lesser_zones"],
+		"ships": navy_result["ships"],
+		"named_vessels": navy_result["named_vessels"],
+		"next_ship_id": next_ship_id[0],
+		"water_subtiles": water_subtiles,
 	}
+
+
+# -- Starting Navies (Naval Tranche 2) ----------------------------------------
+# Seed each coastal clan a mass-combat fleet plus a handful of named merchant
+# vessels. ALL COUNTS PROVISIONAL — the GDD gives no starting fleet sizes
+# (owner-approved 2026-07-02). Ships dock (current_subtile_id = -1) in a coastal
+# province the clan controls; owning_clan set, owner_id = clan champion,
+# captain_id = -1 (docked reserve, combat handles a null captain). Capital ships
+# respect clan exclusivity (Atakebune=Mantis, Koutetsukan=Crab, Tortoise=Tortoise).
+#
+# clan -> [kobune, sengokobune, capital_ship_class (-1 = none), capital_count]
+const STARTING_FLEETS: Dictionary = {
+	"Mantis":   [26, 10, Enums.ShipClass.ATAKEBUNE, 4],
+	"Crane":    [20, 8, -1, 0],
+	"Phoenix":  [10, 4, -1, 0],
+	"Crab":     [9, 3, Enums.ShipClass.KOUTETSUKAN, 2],
+	"Imperial": [7, 3, -1, 0],
+	"Tortoise": [0, 0, Enums.ShipClass.TORTOISE_OCEANGOING, 6],
+}
+
+# Merchant/smuggler families that seed a personal TRANSPORT vessel (s57.42.2).
+const MERCHANT_VESSEL_FAMILIES: Array[String] = ["Yasuki", "Daidoji", "Kasuga", "Yoritomo"]
+const NAMED_VESSELS_PER_FAMILY: int = 3
+
+
+static func _seed_starting_navies(
+	_settlements: Array,
+	provinces: Dictionary,
+	characters: Array,
+	clan_champions: Dictionary,
+	next_ship_id: Array,
+) -> Dictionary:
+	var ships: Array = []
+	var named_vessels: Array = []
+
+	# clan -> a coastal province_id it controls (dock location).
+	var clan_port: Dictionary = _find_clan_dock_provinces(provinces)
+
+	for clan_name: String in STARTING_FLEETS:
+		var spec: Array = STARTING_FLEETS[clan_name]
+		var dock_prov: int = int(clan_port.get(clan_name, -1))
+		var owner_id: int = int(clan_champions.get(clan_name, -1))
+		_add_fleet_ships(ships, clan_name, Enums.ShipClass.KOBUNE, int(spec[0]), dock_prov, owner_id, next_ship_id)
+		_add_fleet_ships(ships, clan_name, Enums.ShipClass.SENGOKOBUNE, int(spec[1]), dock_prov, owner_id, next_ship_id)
+		if int(spec[2]) >= 0 and int(spec[3]) > 0:
+			_add_fleet_ships(ships, clan_name, int(spec[2]), int(spec[3]), dock_prov, owner_id, next_ship_id)
+
+	_seed_named_merchant_vessels(named_vessels, characters, clan_port, next_ship_id)
+	_seed_ship_crews(ships, characters)
+
+	return {"ships": ships, "named_vessels": named_vessels}
+
+
+## s57.43.4 (3a seeding): assign standing named samurai crew to the fleet warships.
+## Each ship gets up to its class slot count of the owning clan's junior bushi
+## (living, non-PC, no role/office), lowest-status-first; a Mantis ship also gets one
+## Yoritomo Shugenja (strict crew cap). A character serves one ship. If the clan pool
+## runs dry the slot stays empty (the ship sails short-handed — a real, notable state).
+static func _seed_ship_crews(ships: Array, characters: Array) -> void:
+	var bushi_by_clan: Dictionary = {}     # clan -> Array[L5RCharacterData], status asc
+	var yoritomo_shugenja: Array = []      # Mantis Yoritomo shugenja, status asc
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.assigned_ship_id >= 0 or c.role_position != "":
+			continue
+		if c.school_type == Enums.SchoolType.BUSHI:
+			if not bushi_by_clan.has(c.clan):
+				bushi_by_clan[c.clan] = []
+			bushi_by_clan[c.clan].append(c)
+		elif c.school_type == Enums.SchoolType.SHUGENJA \
+				and c.clan == "Mantis" and c.family == "Yoritomo":
+			yoritomo_shugenja.append(c)
+
+	var by_status := func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+		return a.status < b.status
+	for clan: String in bushi_by_clan:
+		(bushi_by_clan[clan] as Array).sort_custom(by_status)
+	yoritomo_shugenja.sort_custom(by_status)
+
+	for ship: ShipData in ships:
+		var slots: int = SailingSystem.crew_slots_for_class(ship.ship_class)
+		var pool: Array = bushi_by_clan.get(ship.owning_clan, [])
+		var filled: int = 0
+		while filled < slots and not pool.is_empty():
+			var crew: L5RCharacterData = pool.pop_front()
+			crew.assigned_ship_id = ship.ship_id
+			filled += 1
+		if ship.owning_clan == "Mantis":
+			for _s: int in SailingSystem.MANTIS_SHUGENJA_CREW_SLOT:
+				if yoritomo_shugenja.is_empty():
+					break
+				var sh: L5RCharacterData = yoritomo_shugenja.pop_front()
+				sh.assigned_ship_id = ship.ship_id
+
+
+# Prefer a coastal province holding a port/CITY settlement; else the first coastal
+# province the clan owns. Returns clan -> province_id.
+static func _find_clan_dock_provinces(provinces: Dictionary) -> Dictionary:
+	var clan_port: Dictionary = {}
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid]
+		if not prov.is_coastal or prov.clan.is_empty():
+			continue
+		# First coastal province per clan is fine as a dock (location is cosmetic
+		# until sub-tile naval movement exists).
+		if not clan_port.has(prov.clan):
+			clan_port[prov.clan] = prov.province_id
+	return clan_port
+
+
+static func _add_fleet_ships(
+	ships: Array, clan: String, ship_class: int, count: int,
+	dock_province_id: int, owner_id: int, next_ship_id: Array,
+) -> void:
+	for _i: int in count:
+		var ship: ShipData = NavalSystem.create_ship(next_ship_id[0], ship_class, clan)
+		next_ship_id[0] += 1
+		ship.owner_id = owner_id
+		ship.current_province_id = dock_province_id
+		ship.current_subtile_id = -1
+		ships.append(ship)
+
+
+static func _seed_named_merchant_vessels(
+	named_vessels: Array, characters: Array, clan_port: Dictionary, next_ship_id: Array,
+) -> void:
+	# Group living members of each merchant family, highest Commerce first.
+	var by_family: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.family in MERCHANT_VESSEL_FAMILIES:
+			if not by_family.has(c.family):
+				by_family[c.family] = []
+			by_family[c.family].append(c)
+
+	for fam: String in MERCHANT_VESSEL_FAMILIES:
+		var members: Array = by_family.get(fam, [])
+		members.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+			return a.skills.get("Commerce", 0) > b.skills.get("Commerce", 0))
+		var take: int = mini(NAMED_VESSELS_PER_FAMILY, members.size())
+		for idx: int in take:
+			var owner: L5RCharacterData = members[idx]
+			var vessel := NamedVesselData.new()
+			vessel.vessel_id = next_ship_id[0]
+			next_ship_id[0] += 1
+			vessel.ship_class = Enums.ShipClass.KOBUNE
+			vessel.owner_id = owner.character_id
+			vessel.captain_id = owner.character_id
+			vessel.owning_clan = owner.clan
+			vessel.purpose = NamedVesselData.Purpose.TRANSPORT
+			vessel.current_province_id = int(clan_port.get(owner.clan, -1))
+			vessel.current_subtile_id = -1
+			var vstats: Dictionary = NavalSystem.SHIP_STATS.get(vessel.ship_class, {})
+			vessel.cargo_capacity = float(vstats.get("cargo", 0.3))
+			named_vessels.append(vessel)
+
+
+# -- Placeholder Water-Movement Graph (dev/demo only) -------------------------
+# A coherent stand-in for the real s11.9 sub-tile geography: one COASTAL port
+# sub-tile per clan dock province (the SAME provinces the fleets/vessels are seeded
+# at), linked in a single coastal sea lane so every port is reachable from every
+# other. All-coastal so EVERY seeded ship class (Kobune included) can traverse it.
+# This is a PLACEHOLDER — the real graph replaces it with surveyed coordinates,
+# adjacency, ocean sub-tiles, and pirate lanes. Off by default (see bootstrap_world).
+static func _seed_placeholder_water_graph(provinces: Dictionary) -> Array:
+	var clan_port: Dictionary = _find_clan_dock_provinces(provinces)
+	# Distinct dock provinces, deterministic order.
+	var dock_provinces: Array = []
+	for clan_name: String in clan_port:
+		var pid: int = int(clan_port[clan_name])
+		if pid >= 0 and pid not in dock_provinces:
+			dock_provinces.append(pid)
+	dock_provinces.sort()
+
+	var subtiles: Array = []
+	var next_id: int = 1
+	var prev_id: int = -1
+	for dock_prov: int in dock_provinces:
+		var st := WaterSubtileData.new()
+		st.subtile_id = next_id
+		st.water_type = Enums.WaterSubtileType.COASTAL
+		st.port_province_ids = PackedInt32Array([dock_prov])
+		if prev_id >= 0:
+			st.adjacent_subtile_ids = PackedInt32Array([prev_id])
+			# Make the chain bidirectional: link the previous sub-tile forward to this.
+			var prev_st: WaterSubtileData = subtiles[subtiles.size() - 1]
+			var fwd: PackedInt32Array = prev_st.adjacent_subtile_ids
+			fwd.append(next_id)
+			prev_st.adjacent_subtile_ids = fwd
+		subtiles.append(st)
+		prev_id = next_id
+		next_id += 1
+	return subtiles
 
 
 static func _get_base_pu(
