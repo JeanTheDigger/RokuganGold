@@ -279,7 +279,9 @@ func test_maho_cult_strength_10_adds_oni_seed() -> void:
 	assert_false(oni.is_empty())
 	assert_eq(oni["seed_type"],   QuestSeedSelector.SEED_ONI_MANIFESTATION)
 	assert_eq(oni["strength"],    10)
-	assert_false(oni["roster_ready"])
+	# roster_ready flipped true (2026-07-05): the s54.5 oni stat blocks now exist,
+	# so a solo BOSS-tier oni roster is composed (s56.1.2 boss encounter).
+	assert_true(oni["roster_ready"])
 
 
 func test_maho_cult_strength_9_no_oni_seed() -> void:

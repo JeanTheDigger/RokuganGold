@@ -310,6 +310,37 @@ the structural mechanisms (no invented game design — owner-approved 2026-07-05
   cultivation objective). The `_apply_appointment` executor sets role_position (what every consumer
   checks) but not lord_id for the refilled court seats — documented, harmless.
 
+### Systems Added 2026-07-05 (s56.1.2 Oni Manifestation roster — gate lifted, runtime-verified 17/17)
+The ONI_MANIFESTATION quest seed was hardcoded `roster_ready: false` for TWO reasons; only
+one was ever the real blocker and it is now resolved. The **stat blocks** exist (OniBestiary,
+35 named oni, runtime-verified) — the gate stayed shut on "s54 oni stat blocks not yet
+transcribed." Lifted it with a solo named-boss roster, no invented mechanics.
+- **`QuestSeedSelector._oni_seed_entry`** flips `roster_ready` → true. The trigger logic
+  (Maho Cult Strength 10, or extreme PTL per s16.3) was already GDD-locked and wired; only
+  the roster was missing.
+- **`RosterCompositionSystem._compose_oni_manifestation`** (new `SEED_ONI_MANIFESTATION = 101`
+  case): GDD s56.1.2 says "a named Oni has manifested. Boss-tier encounter" and specifies NO
+  escort composition, so the roster is exactly ONE oni (solo boss, `has_named_npc_slot`, no
+  individual variance). Selection is structural, not invented: a deterministic pick from
+  `OniBestiary.boss_ids()` — the oni tagged `SpiritCreatureData.Tier.BOSS` in the s54.5
+  transcription (20 of them), sorted for reproducibility, chosen by the seed RNG. The chosen
+  oni id is the group's `unit_type`, placed at the leader slot.
+- **`OniBestiary.boss_ids()`** (new helper): the BOSS-tier oni ids, sorted. Naturally excludes
+  the spawn-only helper blocks (tasu_spawn / wakeru_lesser / *_spawn are not BOSS tier).
+- **Pipeline:** `MissionBuilder.assemble` now composes the oni roster, generates a terrain
+  template (generic — a boss manifests on whatever terrain; `_OBJECTIVES_BY_SEED` already maps
+  it to KILL_LEADER), and populates the single boss. The live combat spawn resolves the placed
+  oni id via `SpiritCombatant.spawn_by_id` — that spawn path is on the PC-travel HOLD, so the
+  headless-testable extent is seed→roster→map→population (consistent with the rest of the s56
+  layer). Runtime-verified (Godot 4.6.2, `tests/verify_oni_manifestation.gd`, 17/17): boss_ids
+  all resolvable BOSS oni + sorted + spawn-helpers excluded; solo-boss roster (count 1, leader,
+  no variance, deterministic); the cult-Strength-10 seed carries roster_ready=true; and the
+  end-to-end assemble produces a non-empty package placing a BOSS oni. Full project `--import`
+  parse-clean. NO invented numbers: solo-boss is the literal GDD reading, BOSS-tier is the
+  existing transcription tag, strength stays the GDD-triggered 10 (a solo boss doesn't scale a
+  headcount). DEFERRED (unchanged): the live PC-facing spawn + combat (PC-travel HOLD), and
+  allied-force / spiritual-overlap rosters (separate seeds).
+
 ### Known Code Issues (found and fixed 2026-05-18)
 - **DayOrchestrator._decay_civil_war_scars() — inverted filter. FIXED.**
   Was `if base_remaining < 0: remaining.append(entry)` — kept only negative

@@ -221,7 +221,11 @@ static func _ptl_only_taint_seed(province: ProvinceData) -> Dictionary:
 
 
 ## Oni Manifestation — Named Oni boss encounter (s56.1.2).
-## roster_ready = false: Named Oni stat blocks not yet in GDD s54.
+## roster_ready = true (2026-07-05): the s54.5 oni stat blocks now exist
+## (OniBestiary), so RosterCompositionSystem composes a solo BOSS-tier oni. The
+## GDD specifies no escort, so the roster is the single named boss (no invented
+## headcounts). The live combat spawn is on the PC-travel HOLD; roster + map +
+## population are headless-testable now.
 static func _oni_seed_entry(source_insurgency_id: int) -> Dictionary:
 	return {
 		"seed_type":             SEED_ONI_MANIFESTATION,
@@ -230,7 +234,7 @@ static func _oni_seed_entry(source_insurgency_id: int) -> Dictionary:
 		"strength":              10,
 		"options":               {},
 		"source_insurgency_id":  source_insurgency_id,
-		"roster_ready":          false,
+		"roster_ready":          true,
 	}
 
 
