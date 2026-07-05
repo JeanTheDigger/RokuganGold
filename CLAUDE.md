@@ -5288,10 +5288,17 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
     retreat/failure spike); both default-inert and persist via WorldStateSaver's Resource array.
   - **Wiring:** these are pure, callable systems — the live consumer is the deferred ASCII combat
     turn loop. No orchestrator/seasonal wiring this tranche (NPCs don't resolve these; the
-    intensity-spike decay in the seasonal pass is forward-wired with no producer yet). Godot/GUT
-    unavailable here — validated by static review + parse-trace (DiceResult.total, Enums.Trait /
-    Ring / TerrainType members, CharacterStats.is_dead, SpellSystem.get_ring_value,
-    SkillResolver.resolve_skill_check signatures all confirmed). DEFERRED: live creature combat
+    intensity-spike decay in the seasonal pass is forward-wired with no producer yet).
+    **SpiritualRitualSystem RUNTIME-VERIFIED (2026-07-05, Godot 4.6.2, `tests/verify_spiritual_ritual.gd`,
+    29/29)** — upgrades the prior static-only claim: durations 10/20/30/50, the counter-ring table
+    (Fire→Water/Water→Earth/Earth→Fire/Air→Earth/Void→chosen), per-round resolution (took-damage +
+    wrong/undeclared-Void-counter → no progress; a strong shugenja progresses >150/200 realm rounds),
+    summary stacking (two shugenja out-progress one, a dead shugenja contributes 0, stops once the
+    needed duration is met with no over-count), the outcome spectrum (exactly-half → RETREAT boundary
+    confirmed), and apply_resolution's event mutation (FULL banks+resolves, PARTIAL banks cumulative,
+    RETREAT/FAILURE bank nothing + one-season spike, affliction check Catastrophic-only). No bugs found
+    — the ritual math is GDD-faithful. (The rest of s56.16 — SpiritBestiary pools, SpiritualExposureSystem,
+    the encounter/combat loop — remains validated by static review + parse-trace.) DEFERRED: live creature combat
     + special abilities (incorporeal/swarm/wail/hunger-pull/fire-trail), the Gaki-do exposure
     mechanic (Willpower erosion / Willpower-0 transformation / Buruburu attachment / Jigoku-
     corrupted Shozai-gaki).
