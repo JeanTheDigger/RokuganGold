@@ -1943,8 +1943,11 @@ static func advance_day(
 	)
 
 	# s2.4.13 D2 — Shireikan reinforce below-minimum Towers from surplus Towers.
+	# s2.4.13 D7 — Shireikan refill jade-depleted Towers from the reserve pool,
+	# keeping the sortie loop alive (a Tower no longer permanently stalls at 0 jade).
 	if is_season_boundary:
 		_process_shireikan_troop_redeployment(characters, settlements, provinces)
+		_process_wall_jade_resupply(characters, settlements, provinces)
 
 	# OOC Day Tick — fires every 4 IC days (one real-world day, per GDD s13 /
 	# s57.44.2). Runs Wind-Down selection and Void Point refresh for all
@@ -9509,13 +9512,9 @@ static func _assign_taisa_sortie_standing_objectives(
 			ss = (province as ProvinceData).shadowlands_strength
 
 		var garrison_above_minimum: bool = not WallSystem.is_garrison_below_minimum(tower.garrison_pu)
-		# Jade-critical threshold mirrors _set_wall_tower_context_flags: enough jade
-		# for one Small sortie's allocation (s2.4.15).
-		var min_jade: float = float(
-			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
-			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
-		)
-		var jade_critical: bool = tower.jade_stockpile <= min_jade
+		# Jade-critical threshold: enough jade for one Small sortie's allocation
+		# (s2.4.11 D5 / s2.4.15). Centralized in WallSystem.
+		var jade_critical: bool = WallSystem.is_jade_critical(tower.jade_stockpile, tower.garrison_pu)
 
 		var validation: Dictionary = WallSystem.validate_sortie(
 			ss, tower.wall_si, garrison_above_minimum, jade_critical, false,
@@ -9691,6 +9690,116 @@ static func _process_shireikan_troop_redeployment(
 				"to_tower": target.wall_tower_number,
 				"transferred_pu": transfer,
 			})
+
+	return results
+
+
+# -- Wall Jade Resupply — s2.4.11 D5 / s2.4.13 D7 / s2.4.14 D7 / s2.4.15 ------
+# Closes the sortie-loop gap: without a refill pipeline a Tower permanently
+# stops sortieing once its jade depletes. Per s2.4.13 D7 the Shireikan "retains
+# a jade reserve" and, when a Tower flags jade critical, "draw[s] from the
+# Shireikan's jade reserve immediately". Per s2.4.14 D7 the Champion tops the
+# supply chain by purchasing jade from mines each season. No mine/forced-sale/
+# clan-jade subsystem exists yet (s2.4.14 map/economy dependency), so the
+# Champion's mine-purchasing output is abstracted into a fixed per-half seasonal
+# delivery to each Shireikan's reserve — the SAME abstraction the Ashigaru auto-
+# flow uses for garrison_pu (s2.4.12: a structural per-season flow, no lord
+# action). Distribution priority follows s2.4.13 D7: critical Towers first (no
+# deliberation), then SS Medium/High (active sortie fronts), then the rest —
+# each refilled to the LOCKED routine target (Small + Medium sortie coverage,
+# s2.4.11 D5). Runs seasonally, alongside the troop redeployment.
+#
+# PROVISIONAL (GDD leaves reserve sizing "dynamic … not a fixed formula",
+# s2.4.13 D3): the per-season delivery and the reserve cap. Sized from the
+# GDD-LOCKED routine target — one half is 6 Towers, so a delivery that can refill
+# all six to routine keeps the loop alive, and the cap holds ~two seasons of that
+# (matching the Champion's s2.4.14 D7 "two full seasons of Wall consumption"
+# stockpile target, adapted per-half). garrison_pu is itself PROVISIONAL, so
+# these re-tune together in Phase 3.
+const SHIREIKAN_JADE_DELIVERY_PER_SEASON: float = 12.0
+const SHIREIKAN_JADE_RESERVE_CAP: float = 24.0
+static func _process_wall_jade_resupply(
+	characters: Array,
+	settlements: Array,
+	provinces: Dictionary,
+) -> Array:
+	var results: Array = []
+
+	var towers_by_number: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER and s.wall_tower_number >= 1:
+			towers_by_number[s.wall_tower_number] = s
+	if towers_by_number.is_empty():
+		return results
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.military_rank != Enums.MilitaryRank.SHIREIKAN:
+			continue
+
+		# Seat at Tower 3 → Southern half (1-6); Tower 10 → Northern half (7-12).
+		var seat: int = -1
+		for num: int in towers_by_number:
+			if str((towers_by_number[num] as SettlementData).settlement_id) == character.physical_location:
+				seat = num
+				break
+		var half: Array = range(1, 7) if seat <= 6 else range(7, 13)
+
+		var half_towers: Array = []
+		for num: int in half:
+			if towers_by_number.has(num):
+				half_towers.append(towers_by_number[num])
+
+		# Seasonal delivery from the (abstracted) Champion supply chain into the
+		# Shireikan's reserve, capped at a healthy level.
+		var reserve: float = float(character.supply_ledger.get("wall_jade_reserve", 0.0))
+		reserve = minf(SHIREIKAN_JADE_RESERVE_CAP, reserve + SHIREIKAN_JADE_DELIVERY_PER_SEASON)
+
+		# Order towers: critical first (no deliberation), then SS Medium/High
+		# active fronts, then the rest. Only towers below the routine target need
+		# a refill at all.
+		var needy: Array = []
+		for t: SettlementData in half_towers:
+			var target_jade: float = WallSystem.jade_routine_target(t.garrison_pu)
+			if t.jade_stockpile >= target_jade:
+				continue
+			var ss: int = 0
+			var prov: Variant = provinces.get(t.province_id, null)
+			if prov is ProvinceData:
+				ss = (prov as ProvinceData).shadowlands_strength
+			var crit: bool = WallSystem.is_jade_critical(t.jade_stockpile, t.garrison_pu)
+			var ss_tier: String = WallSystem.get_ss_tier(ss)
+			var active: bool = ss_tier == "medium" or ss_tier == "high"
+			# Priority rank: 0 critical, 1 active front, 2 routine top-up.
+			var rank: int = 2
+			if crit:
+				rank = 0
+			elif active:
+				rank = 1
+			needy.append({"tower": t, "rank": rank, "target": target_jade})
+		needy.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return int(a["rank"]) < int(b["rank"]))
+
+		for entry: Dictionary in needy:
+			if reserve <= 0.0:
+				break
+			var t: SettlementData = entry["tower"]
+			var target_jade: float = entry["target"]
+			var need: float = target_jade - t.jade_stockpile
+			if need <= 0.0:
+				continue
+			var give: float = minf(need, reserve)
+			t.jade_stockpile += give
+			reserve -= give
+			results.append({
+				"shireikan_id": character.character_id,
+				"tower": t.wall_tower_number,
+				"jade_delivered": give,
+				"was_critical": entry["rank"] == 0,
+			})
+
+		character.supply_ledger["wall_jade_reserve"] = reserve
 
 	return results
 
@@ -19014,11 +19123,7 @@ static func _set_wall_tower_context_flags(
 		wstat.garrison_shortage_letter_season = tower.garrison_shortage_letter_season
 		wstat.garrison_shortage_courtier_dispatched = tower.garrison_shortage_courtier_dispatched
 		wstat.garrison_shortage_courtier_refused = tower.garrison_shortage_courtier_refused
-		var min_jade: float = float(
-			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
-			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
-		)
-		wstat.jade_stockpile_critical = tower.jade_stockpile <= min_jade
+		wstat.jade_stockpile_critical = WallSystem.is_jade_critical(tower.jade_stockpile, tower.garrison_pu)
 
 		ws["context_flag"] = Enums.ContextFlag.AT_WALL_TOWER
 		ws["zone_subtype"] = Enums.ZoneSubtype.WALL_TOWER
@@ -19130,11 +19235,7 @@ static func _inject_champion_wall_status(
 	wstat.garrison_shortage_letter_season = tower.garrison_shortage_letter_season
 	wstat.garrison_shortage_courtier_dispatched = tower.garrison_shortage_courtier_dispatched
 	wstat.garrison_shortage_courtier_refused = tower.garrison_shortage_courtier_refused
-	var min_jade: float = float(
-		int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
-		* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
-	)
-	wstat.jade_stockpile_critical = tower.jade_stockpile <= min_jade
+	wstat.jade_stockpile_critical = WallSystem.is_jade_critical(tower.jade_stockpile, tower.garrison_pu)
 	existing = existing.duplicate()
 	existing.append(wstat)
 	ws["wall_statuses"] = existing
