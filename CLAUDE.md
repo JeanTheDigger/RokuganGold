@@ -237,6 +237,61 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Systems Added 2026-07-06 (Kaiu Wall D5/D6/D7 — jade resupply, Jade Petal Tea, garrison Taint removal; owner-directed "keep implementing the wall elements", runtime-verified 26/18/12)
+Closes three of the Wall supply/support gaps the Phase-3 notes had left deferred. All
+world-sim-live (seasonal passes beside the existing Shireikan troop redeployment); all
+thresholds trace to LOCKED s2.4 values, with reserve/delivery amounts PROVISIONAL per the
+GDD's own "dynamic … not a fixed formula" reserve-sizing (s2.4.13 D3), sized from the
+LOCKED per-warrior/roster figures and re-tuning with garrison_pu in Phase 3.
+- **D5 — Jade resupply (s2.4.11 D5 / s2.4.13 D7 / s2.4.14 D7 / s2.4.15).** Closes the
+  headline gap: a Tower permanently stopped sortieing once its jade depleted (no refill
+  pipeline). `WallSystem` centralizes the jade thresholds — `jade_critical_threshold`
+  (one Small sortie's finger allocation, s2.4.11 D5), `jade_routine_target` (Small +
+  Medium = "two sortie seasons"), `is_jade_critical`; the three former inline computations
+  in `day_orchestrator` now call these (behaviour-preserving). `_process_wall_jade_resupply`
+  (seasonal): each living Shireikan refills below-routine Towers in their half from a
+  reserve in `supply_ledger["wall_jade_reserve"]`, priority per s2.4.13 D7 (critical → SS
+  Medium/High active fronts → routine top-up), each to the LOCKED routine target, draining
+  the reserve. No mine/forced-sale/clan-jade subsystem exists (s2.4.14 map/economy
+  dependency), so the Champion's mine-purchasing output is abstracted into a fixed per-half
+  seasonal delivery — the SAME abstraction the Ashigaru auto-flow uses for garrison_pu.
+  PROVISIONAL delivery 12 / reserve cap 24. Dead/no-tower/non-Shireikan guarded.
+  Runtime-verified 26/26 (`tests/verify_wall_jade_resupply.gd`).
+- **D6 — Jade Petal Tea (s2.4.11 D6 / s2.4.13 D8 / s2.4.15).** Tea manages the Taint of the
+  named characters STATIONED at a Tower (the Taisa / Kaiu Engineer / Kuni Shugenja /
+  Shireikan roster — the garrison the sim actually tracks Taint for; abstract garrison_pu
+  has no per-soldier Taint, the s2.4.11 D7 Phase-3 note). Managed, not cured. New
+  `SettlementData.tea_stockpile` (seeded WALL_TOWER_TEA = 4.0) + `L5RCharacterData.tea_managed_until_ic_day`
+  (@export → persist). The periodic taint roll now SKIPS a character whose managed window
+  covers the current IC day (s2.4.15 "significantly slows Taint growth"). `_process_wall_tea_resupply`
+  (seasonal): Shireikan refills below-target Towers from a Tea reserve (`supply_ledger["wall_tea_reserve"]`),
+  priority by Tainted concentration (s2.4.13 D8), target = one season of coverage for the
+  Tower's Tainted count (s2.4.11 D6); Brotherhood monastery cultivation (PTL-gated) is
+  abstracted into a fixed per-half delivery (PROVISIONAL 12 / cap 24). `_process_wall_tea_consumption`
+  (seasonal): each Tainted stationed character consumes one dose; on shortage RATION highest
+  Taint Rank first (s2.4.11 D6 / s2.4.15); dosed → managed until the next season boundary
+  (`_days_until_next_season`), undosed → unassisted growth rolls + a `went_without` shortage
+  report. Runtime-verified 18/18 (`tests/verify_wall_tea.gd`).
+- **D7 — Garrison Taint watch / Rank-4 removal (s2.4.11 D7 / s2.4.15 removal threshold, LOCKED).**
+  `_process_wall_taint_removal` (seasonal, after the Tea passes): each season the stationed
+  Kuni assesses the named garrison; a character at Taint Rank 4+ is removed from the Wall
+  immediately (pre-emptive Kuni doctrine). Removal uses the GDD's first, non-lethal option
+  ("sent to a Brotherhood monastery for management"): relocate to a same-clan off-Wall
+  settlement (`_find_clan_management_settlement`: monastery/temple/shinden preferred, inland
+  fallback, wrong-clan never chosen) + detach from the Wall hierarchy (`operational_superior_id`
+  and Tea flag cleared). REQUIRES a living Kuni Shugenja OR Kuni Witch-Hunter stationed at
+  the Tower (`_is_kuni_taint_assessor`; s2.4.11 D7); a Tower with no Kuni is operationally
+  blind and removes no one. WALL_TAINT_REMOVAL_RANK = 4 (LOCKED). Runtime-verified 12/12
+  (`tests/verify_wall_taint_removal.gd`).
+- **D4 (rice) — already functional, NO new work.** Tower rice is already consumed:
+  `ResourceTick.consume_rice_province` drains `garrison_pu` at MILITARY_RICE_PER_PU_PER_SEASON
+  (0.35) for wall towers, and province-pool production (`get_province_rice`) is the implicit
+  resupply — the "baseline drain the Crab absorb indefinitely" (s2.4). The only missing piece
+  is garrison HEALTH ATTRITION when supply runs dry, which is abstract-garrison Phase-3
+  territory with a GDD-undefined attrition rate (not invented). **D3 (scout coverage) —
+  BLOCKED:** needs a Hiruma-Scout-in-Shadowlands deployment mechanic (doesn't exist) AND the
+  horde-detection chance (GDD explicitly undefined). Both remain deferred.
+
 ### Systems Added 2026-07-05 (s54.7i Kolat endgame loop — win condition, secrecy, Imperial counter-response, owner-approved, runtime-verified 44/44)
 Wires the previously-dormant `KolatSecrecy` data layer into the live loop, closing the
 conspiracy's endgame: the secrecy scalars now MOVE with real events, Tiger cultivates a
