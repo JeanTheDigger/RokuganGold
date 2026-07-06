@@ -30184,8 +30184,13 @@ static func _apply_confirmed_successions(
 			if c.lord_id == succ.deceased_id:
 				c.lord_id = succ.successor_id
 
-		# Update clan champion if applicable
-		if succ.position_tier == Enums.LordRank.CLAN_CHAMPION:
+		# Update clan champion if applicable. Keyed on the deceased's ROLE, not
+		# succ.position_tier — no death-event producer sets position_tier (it
+		# defaults to PROVINCIAL_DAIMYO), so the old position_tier == CLAN_CHAMPION
+		# guard never fired and ClanData.champion_id was stuck at its world-gen
+		# value after a champion's death. Robust + parallel to the emperor_id
+		# update below (which correctly keys on old_role).
+		if old_role == RoleRegistry.CLAN_CHAMPION or old_role == RoleRegistry.MINOR_CLAN_CHAMPION:
 			var cd: ClanData = clans.get(succ.clan)
 			if cd != null:
 				cd.champion_id = succ.successor_id

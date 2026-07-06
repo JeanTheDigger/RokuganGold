@@ -315,6 +315,15 @@ LOCKED per-warrior/roster figures and re-tuning with garrison_pu in Phase 3.
   invention. Runtime-verified 18/18 (`tests/verify_emperor_succession.gd`): evaluate ordering,
   `_process_lord_deaths` → IMPERIAL CONFIRMED succession, full round-trip installing emperor_id +
   role/status/vassal transfer, crisis/suspicious → DISPUTED.
+- **`ClanData.champion_id` never refreshed on a champion's death — same position_tier defect. FIXED.**
+  `_apply_confirmed_successions` updated `clans[clan].champion_id` only `if succ.position_tier ==
+  CLAN_CHAMPION` — never true (no producer sets position_tier), so a clan's `champion_id` was stuck
+  at its world-gen value forever after the champion died (the successor inherited the "Clan Champion"
+  role_position, so role-scanning systems found them, but every system reading `ClanData.champion_id`
+  directly used the dead id). Re-keyed on the deceased's ROLE (`old_role == RoleRegistry.CLAN_CHAMPION
+  or MINOR_CLAN_CHAMPION`), robustly parallel to the adjacent emperor_id update — no dependence on the
+  broken position_tier, no touch to the Phoenix/Dragon guards. Runtime-verified (same driver, 21/21):
+  champion_id → successor on a champion death; a non-champion succession leaves champion_id untouched.
 
 ### Systems Added 2026-07-05 (s54.7i Kolat endgame loop — win condition, secrecy, Imperial counter-response, owner-approved, runtime-verified 44/44)
 Wires the previously-dormant `KolatSecrecy` data layer into the live loop, closing the

@@ -53,6 +53,7 @@ func _init() -> void:
 	_test_process_lord_deaths()
 	_test_round_trip_installs_emperor()
 	_test_crisis_and_suspicious()
+	_test_champion_id_refresh()
 	print("--- %d passed, %d failed ---" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -164,3 +165,44 @@ func _test_crisis_and_suspicious() -> void:
 	)
 	_ok((succ_list2[0] as SuccessionData).state == SuccessionData.SuccessionState.DISPUTED, "suspicious death → DISPUTED even with an heir")
 	_ok(not successor_map2.has(1), "disputed succession is not auto-confirmed")
+
+
+func _test_champion_id_refresh() -> void:
+	print("[5] ClanData.champion_id refreshes on a champion's death (role-keyed)")
+	# Dead champion + confirmed successor; run the resolution writeback directly.
+	var champ := _person(50, 55, "Crab")
+	champ.role_position = RoleRegistry.CLAN_CHAMPION
+	champ.status = 8.0
+	champ.wounds_taken = 99999  # dead
+	var heir := _person(51, 30, "Crab")
+	var by_id: Dictionary = {50: champ, 51: heir}
+	var s := SuccessionData.new()
+	s.deceased_id = 50
+	s.successor_id = 51
+	s.clan = "Crab"
+	# Deliberately leave position_tier at its default (the whole point — the old
+	# guard keyed on this and never fired).
+	s.state = SuccessionData.SuccessionState.CONFIRMED
+	var cd := ClanData.new()
+	cd.clan_name = "Crab"
+	cd.champion_id = 50  # the now-dead champion
+	var clans: Dictionary = {"Crab": cd}
+	_DO._apply_confirmed_successions([s], [champ, heir], by_id, {}, clans)
+	_ok(cd.champion_id == 51, "champion_id updated to the successor (was 50)")
+	_ok(heir.role_position == RoleRegistry.CLAN_CHAMPION, "successor holds the Clan Champion role")
+
+	# Control: a non-champion role must NOT touch champion_id.
+	var gov := _person(60, 45, "Crab")
+	gov.role_position = "Provincial Daimyo"
+	gov.wounds_taken = 99999
+	var heir2 := _person(61, 30, "Crab")
+	var s2 := SuccessionData.new()
+	s2.deceased_id = 60
+	s2.successor_id = 61
+	s2.clan = "Crab"
+	s2.state = SuccessionData.SuccessionState.CONFIRMED
+	var cd2 := ClanData.new()
+	cd2.clan_name = "Crab"
+	cd2.champion_id = 99  # untouched marker
+	_DO._apply_confirmed_successions([s2], [gov, heir2], {60: gov, 61: heir2}, {}, {"Crab": cd2})
+	_ok(cd2.champion_id == 99, "non-champion succession leaves champion_id untouched")
