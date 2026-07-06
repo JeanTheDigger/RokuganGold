@@ -1152,6 +1152,20 @@ static func score_all(
 		option.objective_alignment = _lookup_objective_alignment(
 			need.need_type, option.action_id, scoring_tables
 		)
+		# s57.47.4 / s18-19: the seppuku accept/refuse choice is a DETERMINISTIC
+		# personality arbiter (Honor rank + Bushido/Shourido virtue via
+		# SeppukuDecision), NOT the soft 70/30 objective_alignment tilt — a Honor
+		# Rank 0 wretch must ALWAYS refuse, a Meiyo bushi must accept, regardless
+		# of the other scoring factors. Override the aligned score so the arbiter's
+		# verdict wins decisively (chosen +100, the other -1000 so no additive
+		# lean/urgency can flip it). Falls back to the JSON tilt only when the
+		# character is absent (never on the reactive path, which always passes it).
+		if character != null and need.source == "seppuku_offered" \
+				and option.action_id in ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]:
+			var seppuku_verdict: Dictionary = SeppukuDecision.will_accept_seppuku(character)
+			var arbiter_accepts: bool = bool(seppuku_verdict.get("accepts", true))
+			var option_is_accept: bool = option.action_id == "ACCEPT_SEPPUKU"
+			option.objective_alignment = 100.0 if (option_is_accept == arbiter_accepts) else -1000.0
 		option.disposition_modifier = _lookup_disposition_modifier(
 			option.target_npc_id, ctx.dispositions, scoring_tables, option.action_id
 		)
