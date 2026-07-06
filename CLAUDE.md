@@ -237,6 +237,35 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Systems Added 2026-07-06 (two more dormant-arbiter/signal wirings — s11.3.8 intercepted-letter + seppuku arbiter, owner-directed "fix these", runtime-verified 16/11)
+Same produced-vs-consumed dormant-system class as the treason/divination/succession fixes; both
+pure LOCKED-only wiring, no invented numbers.
+- **s11.3.8 INTERCEPTED_LETTER treason signal off letter interception.** The letter-interception
+  read (`_process_intercept_letter_writebacks`) existed but never turned a treasonous intercepted
+  letter into evidence. Now, AFTER a successful read (cipher gate passed, topic learned), if BOTH
+  the letter's sender and recipient pass the `_is_conscious_kolat_traitor` truth gate — i.e. the
+  interception surfaced Kolat NETWORK correspondence — it adds INTERCEPTED_LETTER hard evidence
+  (weight 50, LOCKED in TreasonSystem; ≥ the accusation threshold 40, so a single intercepted
+  network letter accuses) to each lord-bound conspirator's TREASON record via the existing gated
+  adder. Deduped per `letter_id` (a re-intercept never double-counts); a one-Kolat-party or
+  unreadable/ciphered letter adds nothing. The ONLY non-inventive treasonous-letter criterion
+  ("both correspondents are conscious lord-bound Kolat") — no content/intent detection invented.
+  `_process_intercept_letter_writebacks` gained trailing `crime_records`/`next_case_id`/`ic_day`
+  params (call site updated; all in `advance_day` scope); existing read behavior untouched.
+  Runtime-verified 16/16 (`tests/verify_treason_letter_signal.gd`).
+- **SeppukuDecision arbiter wired into the live seppuku choice (s57.47.4 / s18-19).** The
+  convicted-NPC seppuku response (RESPOND_TO_SEPPUKU, injected as a `seppuku_offered` reactive
+  event) resolved via a soft **70/30 objective_alignment tilt toward ACCEPT for everyone**, so the
+  deterministic personality arbiter `SeppukuDecision.will_accept_seppuku` — built + unit-tested but
+  with ZERO production callers — never actually decided (a Honor-Rank-0 wretch, arbiter "always
+  refuse," would still accept). `score_all` now overrides the two seppuku options'
+  objective_alignment with the arbiter's verdict (chosen +100, other −1000 so no additive
+  lean/urgency can flip it) when `need.source == "seppuku_offered"`. All values are the arbiter's
+  own LOCKED constants (Honor rank 0 → refuse; Bushido virtue → accept; Shourido Ketsui/Kanpeki/
+  Seigyo/Ishi → refuse, Dosatsu/Chishiki → accept). Falls back to the JSON tilt only when
+  `character` is absent (never on the reactive path). Runtime-verified 11/11
+  (`tests/verify_seppuku_arbiter.gd`) incl. the Honor-Rank-0-refuses-over-the-accept-tilt case.
+
 ### Systems Added 2026-07-06 (s11.3.8 treason upstream + s4.3.21 worship divination — dormant-system wiring, owner-directed "Ok, fix these", runtime-verified 28/13)
 Two more fully-built-but-dormant systems brought live (found by the same produced-vs-consumed
 sweep that surfaced the Emperor succession routing). Both are pure upstream wiring of LOCKED
