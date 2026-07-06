@@ -237,6 +237,59 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Systems Added 2026-07-06 (s11.3.8 treason upstream + s4.3.21 worship divination — dormant-system wiring, owner-directed "Ok, fix these", runtime-verified 28/13)
+Two more fully-built-but-dormant systems brought live (found by the same produced-vs-consumed
+sweep that surfaced the Emperor succession routing). Both are pure upstream wiring of LOCKED
+specs — no invented numbers (the two GDD-silent values are DEFERRED, not filled in).
+- **s11.3.8 Treason detection upstream.** The ENTIRE downstream was wired (ConvictionProcessor
+  treason hearing with Honor-weighted testimony + authority escalation + trial-by-combat demand,
+  `_apply_acquittal` false-accusation honor, CONVICTION_CONSEQUENCES TREASON row, seppuku
+  pipeline) but NOTHING ever created a TREASON CrimeRecord or accumulated evidence — treason
+  never occurred in a live world. New DayOrchestrator layer: **truth gate**
+  (`_is_conscious_kolat_traitor`: records exist only for REAL traitors per the CrimeRecord
+  world-truth convention — conscious Kolat (`kolat_sect != NONE` or master) with a living lord;
+  dormant Dream sleepers are unwitting and excluded; innocents can never carry a TREASON record,
+  and the false-accusation machinery still fires when a guilty vassal WINS the hearing).
+  **Seasonal observable signals** (`_process_treason_signals`): a lord-assigned primary with
+  `seasons_without_progress >= 1` → OBJECTIVE_STALL (+5, LOCKED); the lord's intel
+  (`disposition_toward` KnowledgeEntry) showing the vassal at Friend+ (≥ +31) toward someone the
+  lord holds at Enemy (≤ −31) → DISPOSITION_ANOMALY (+8, LOCKED, deduped per pair via
+  evidence-item meta). First signal opens the investigation (record legal_status NONE →
+  UNDER_INVESTIGATION + LegalCaseEntry). **Accusation** at the LOCKED threshold 40 → ACCUSED via
+  LegalStatusSystem; ConvictionProcessor picks the case up 3 days later, unchanged.
+  **Acquittal political shield**: after ACQUITTED a new case seeds with the HALVED carry-over
+  (LOCKED) and re-accusation requires ≥ 20 NEW evidence past it (`REACCUSATION_NEW_EVIDENCE_MIN`).
+  **Signal 5 — co-conspirator naming** (`_process_treason_coconspirator_naming`, daily after
+  `conviction_results`): a convicted traitor's `kolat_superior_id` handler is named publicly
+  when the ConvictionProcessor computed `co_conspirators_named` (GI/MEIYO lord) →
+  CO_CONSPIRATOR_TESTIMONY +45 (LOCKED) = immediate accusation; CHUGI/SEIGYO keeps it private →
+  the lord gains a `treason_suspect` KnowledgeEntry (source TESTIMONY) instead. DEFERRED (no
+  producer exists — not invented): intercepted-letter hostile-intent, confession-via-PROBE,
+  suspicious-meeting (zone_event_log is ASCII-layer), voting-against-lord, failed-order signals.
+  Runtime-verified 28/28 (`tests/verify_treason_pipeline.gd`): truth gate, weight accumulation +
+  dedup, threshold→ACCUSED→hearing (all three resolutions incl. a legitimate trial-by-combat
+  demand), public/private naming, and the full acquittal-shield sequence.
+- **s4.3.21 Worship divination (v574: embedded in PERFORM_WORSHIP).** The LOCKED divination was
+  never resolved — shugenja worshipped blind, and the existing directed-worship consumer
+  ("worst known Restless+ fortune directs worship") had no knowledge source, so worship was
+  never directed. `_process_worship_divination` (daily, right after worship accumulation): each
+  successful shugenja PERFORM_WORSHIP rolls Lore: Theology + the Fortune's Ring vs TN 15
+  (`WorshipSystem.resolve_divination`, all LOCKED) — **directed** worship reads that one Fortune,
+  **split** reads all seven; **once per season per Fortune per shugenja**
+  (`_has_seasonal_worship_reading`, absolute-season keyed); the **Fukurokujin malus** applies
+  (Restless −1k0, Displeased −2k0, **Wrathful = divination impossible** for the province); a
+  failed roll learns nothing and may retry; a fresh reading REPLACES the stale one. Readings
+  land as `worship_state` KnowledgeEntry (DIRECT_OBSERVATION) with fortune/tier/scope/flavor.
+  NPC engine consumer: PERFORM_WORSHIP metadata now sets `directed_fortune` via
+  `_pick_divined_worship_fortune` — the worst KNOWN Restless+ Fortune directs the worship, all
+  healthy (or spiritually blind) → split across all seven. NOTE: tier readings are currently all
+  NONE because `WorshipSystem.get_worship_tier` is the documented DISABLED stub ("GDD does not
+  specify WP ratio thresholds") — the divination faithfully reads what the system knows and
+  becomes fully meaningful the moment the tier model activates; the consumer logic is verified
+  against synthetic Restless/Displeased readings. DEFERRED (LOCKED mechanic, NO GDD numeric —
+  not invented): the lord Honor loss on reporting a failed divination. Runtime-verified 13/13
+  (`tests/verify_worship_divination.gd`).
+
 ### Systems Added 2026-07-06 (Kaiu Wall D5/D6/D7 — jade resupply, Jade Petal Tea, garrison Taint removal; owner-directed "keep implementing the wall elements", runtime-verified 26/18/12)
 Closes three of the Wall supply/support gaps the Phase-3 notes had left deferred. All
 world-sim-live (seasonal passes beside the existing Shireikan troop redeployment); all
