@@ -178,6 +178,10 @@ func clear_day_buff(buff_id: String) -> void:
 @export var shadowlands_powers: Array[ShadowlandsPowerData] = []
 ## Highest Taint Rank already processed for rank-up mutation/power events.
 @export var taint_rank_last_processed: int = 0
+## Jade Petal Tea management window (s2.4.15): IC day through which this
+## character is dosed and their Taint growth is suppressed (managed, not cured).
+## -1 = not managed. Set seasonally by the Wall Tea pass for dosed garrison.
+@export var tea_managed_until_ic_day: int = -1
 
 # -- Equipment & Outfit --------------------------------------------------------
 

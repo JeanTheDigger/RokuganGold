@@ -1945,9 +1945,15 @@ static func advance_day(
 	# s2.4.13 D2 — Shireikan reinforce below-minimum Towers from surplus Towers.
 	# s2.4.13 D7 — Shireikan refill jade-depleted Towers from the reserve pool,
 	# keeping the sortie loop alive (a Tower no longer permanently stalls at 0 jade).
+	# s2.4.13 D8 / s2.4.15 — Shireikan refills Tea from the Brotherhood allocation,
+	# then each Tower doses its Tainted garrison (rationing highest Rank first).
+	# Dosed characters are managed (Taint growth suppressed); the undosed make
+	# unassisted growth rolls via the periodic-taint pass.
 	if is_season_boundary:
 		_process_shireikan_troop_redeployment(characters, settlements, provinces)
 		_process_wall_jade_resupply(characters, settlements, provinces)
+		_process_wall_tea_resupply(characters, settlements)
+		_process_wall_tea_consumption(characters, settlements, ic_day)
 
 	# OOC Day Tick — fires every 4 IC days (one real-world day, per GDD s13 /
 	# s57.44.2). Runs Wind-Down selection and Void Point refresh for all
@@ -9801,6 +9807,172 @@ static func _process_wall_jade_resupply(
 
 		character.supply_ledger["wall_jade_reserve"] = reserve
 
+	return results
+
+
+# -- Wall Jade Petal Tea — s2.4.11 D6 / s2.4.13 D8 / s2.4.15 ------------------
+# Tea manages the Taint of the named characters STATIONED at a Tower (the
+# Taisa / Kaiu Engineer / Kuni Shugenja / Shireikan roster — the garrison the
+# sim actually tracks Taint for; abstract garrison_pu has no per-soldier Taint,
+# s2.4.11 D7 Phase-3 note). Two seasonal passes, mirroring jade:
+#   • _process_wall_tea_resupply — each Shireikan refills below-target Towers in
+#     their half from a Tea reserve (supply_ledger["wall_tea_reserve"]), priority
+#     by Tainted-character concentration (s2.4.13 D8). The Brotherhood monastery
+#     cultivation chain (s2.4.15, PTL-gated) isn't modelled, so its output is
+#     abstracted into a fixed per-half seasonal delivery — the same abstraction
+#     jade/garrison_pu use.
+#   • _process_wall_tea_consumption — each Tainted stationed character consumes
+#     one dose/season; if the stockpile can't cover all, RATION highest Taint
+#     Rank first (s2.4.11 D6 / s2.4.15). A dosed character is managed until the
+#     next season boundary (Taint growth suppressed by the periodic-roll skip);
+#     an undosed Tainted character makes unassisted growth rolls.
+# PROVISIONAL (s2.4.13 D3 dynamic reserve sizing): delivery + cap, sized from the
+# 4-char command roster × 6 Towers / half.
+const SHIREIKAN_TEA_DELIVERY_PER_SEASON: float = 12.0
+const SHIREIKAN_TEA_RESERVE_CAP: float = 24.0
+
+## Days from ic_day until the next season boundary (Tea management window).
+static func _days_until_next_season(ic_day: int) -> int:
+	var doy: int = ic_day % TimeSystem.IC_DAYS_PER_YEAR
+	for b: int in TimeSystem.SEASON_BOUNDARIES:
+		if b > doy:
+			return b - doy
+	return TimeSystem.IC_DAYS_PER_YEAR - doy
+
+
+## Count Tainted (Rank 1+) living named characters stationed at each Tower.
+## Returns settlement_id (String) -> Array[L5RCharacterData] sorted by Taint desc.
+static func _wall_tainted_by_tower(characters: Array, wall_towers: Dictionary) -> Dictionary:
+	var by_tower: Dictionary = {}
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.taint < 1.0:
+			continue
+		var loc: String = character.physical_location
+		if not wall_towers.has(loc):
+			continue
+		if not by_tower.has(loc):
+			by_tower[loc] = []
+		(by_tower[loc] as Array).append(character)
+	for loc: String in by_tower:
+		(by_tower[loc] as Array).sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+			return a.taint > b.taint)
+	return by_tower
+
+
+static func _process_wall_tea_resupply(
+	characters: Array,
+	settlements: Array,
+) -> Array:
+	var results: Array = []
+
+	var towers_by_number: Dictionary = {}
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER and s.wall_tower_number >= 1:
+			towers_by_number[s.wall_tower_number] = s
+			wall_towers[str(s.settlement_id)] = s
+	if towers_by_number.is_empty():
+		return results
+
+	var tainted: Dictionary = _wall_tainted_by_tower(characters, wall_towers)
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.military_rank != Enums.MilitaryRank.SHIREIKAN:
+			continue
+
+		var seat: int = -1
+		for num: int in towers_by_number:
+			if str((towers_by_number[num] as SettlementData).settlement_id) == character.physical_location:
+				seat = num
+				break
+		var half: Array = range(1, 7) if seat <= 6 else range(7, 13)
+
+		var half_towers: Array = []
+		for num: int in half:
+			if towers_by_number.has(num):
+				half_towers.append(towers_by_number[num])
+
+		var reserve: float = float(character.supply_ledger.get("wall_tea_reserve", 0.0))
+		reserve = minf(SHIREIKAN_TEA_RESERVE_CAP, reserve + SHIREIKAN_TEA_DELIVERY_PER_SEASON)
+
+		# Target Tea per Tower = one season of coverage for its Tainted count
+		# (s2.4.11 D6). Higher Tainted concentration = higher priority (s2.4.13 D8).
+		var needy: Array = []
+		for t: SettlementData in half_towers:
+			var count: int = (tainted.get(str(t.settlement_id), []) as Array).size()
+			if count == 0:
+				continue
+			var target_tea: float = float(count)
+			if t.tea_stockpile >= target_tea:
+				continue
+			needy.append({"tower": t, "count": count, "target": target_tea})
+		needy.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return int(a["count"]) > int(b["count"]))
+
+		for entry: Dictionary in needy:
+			if reserve <= 0.0:
+				break
+			var t: SettlementData = entry["tower"]
+			var need: float = float(entry["target"]) - t.tea_stockpile
+			if need <= 0.0:
+				continue
+			var give: float = minf(need, reserve)
+			t.tea_stockpile += give
+			reserve -= give
+			results.append({
+				"shireikan_id": character.character_id,
+				"tower": t.wall_tower_number,
+				"tea_delivered": give,
+			})
+
+		character.supply_ledger["wall_tea_reserve"] = reserve
+
+	return results
+
+
+static func _process_wall_tea_consumption(
+	characters: Array,
+	settlements: Array,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_towers[str(s.settlement_id)] = s
+	if wall_towers.is_empty():
+		return results
+
+	var tainted: Dictionary = _wall_tainted_by_tower(characters, wall_towers)
+	var manage_until: int = ic_day + _days_until_next_season(ic_day)
+
+	for loc: String in tainted:
+		var tower: SettlementData = wall_towers[loc] as SettlementData
+		var members: Array = tainted[loc]  # already sorted highest Taint first
+		var dosed: int = 0
+		var without: Array = []
+		for ch: L5RCharacterData in members:
+			if tower.tea_stockpile >= 1.0:
+				tower.tea_stockpile -= 1.0
+				ch.tea_managed_until_ic_day = manage_until  # managed this season
+				dosed += 1
+			else:
+				# Ration exhausted — this (lower-Taint) member goes without and
+				# makes unassisted growth rolls (clear any stale management).
+				ch.tea_managed_until_ic_day = -1
+				without.append(ch.character_id)
+		results.append({
+			"tower": (tower.wall_tower_number if tower.wall_tower_number >= 1 else -1),
+			"tainted": members.size(),
+			"dosed": dosed,
+			"went_without": without,
+			"tea_shortage": not without.is_empty(),
+		})
 	return results
 
 
@@ -33812,6 +33984,10 @@ static func _process_periodic_taint_rolls(
 			continue
 		if ch.taint < 1.0:
 			continue  # Rank 0 — not yet Tainted enough to trigger rolls (Rank 0 roll period would fire but taint gain requires rank 1+)
+		# Jade Petal Tea suppresses Taint growth while the character is managed
+		# (s2.4.15: "significantly slows Taint growth" — managed, not cured).
+		if ch.tea_managed_until_ic_day >= ic_day:
+			continue
 		if not MutationSystem.should_roll_today(ch, ic_day):
 			continue
 		var earth: int = mini(ch.stamina, ch.willpower)

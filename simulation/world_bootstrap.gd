@@ -932,6 +932,7 @@ const WALL_TOWER_START_SI: int = 10               # pristine (+12 defense)
 const WALL_TOWER_GARRISON_PU: int = 3             # above MINIMUM_GARRISON_PU (1.0)
 const WALL_TOWER_JADE: float = 5.0                # non-critical (small-sortie min ~0.6)
 const WALL_TOWER_RICE: float = 10.0               # ~6-9 seasons of 0.35/PU drain
+const WALL_TOWER_TEA: float = 4.0                 # covers the 4-char command roster's Tainted seasons (PROVISIONAL)
 const WALL_PROVINCE_SS: int = 3                   # low tier (no extra SI decay)
 
 
@@ -976,6 +977,7 @@ static func _create_wall_towers(
 		tower.wall_si = WALL_TOWER_START_SI
 		tower.jade_stockpile = WALL_TOWER_JADE
 		tower.rice_stockpile = WALL_TOWER_RICE
+		tower.tea_stockpile = WALL_TOWER_TEA
 
 		settlements.append(tower)
 		host_province.settlement_ids.append(next_id)

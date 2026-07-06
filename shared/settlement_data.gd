@@ -38,6 +38,9 @@ extends Resource
 @export var wall_si: int = 10
 # Jade stockpile at Tower level (separate from clan jade reserve, per s2.4.15).
 @export var jade_stockpile: float = 0.0
+# Jade Petal Tea stockpile at Tower level (s2.4.15). One dose per Tainted
+# garrison member per season. Depletion → unmanaged Taint growth escalation.
+@export var tea_stockpile: float = 0.0
 # Kaiu Reinforcement modifier (s2.4.16): flat decay reduction per season.
 # Active only while kaiu_reinforce_seasons_remaining > 0.
 @export var kaiu_decay_reduction: float = 0.0
