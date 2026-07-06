@@ -1361,6 +1361,7 @@ static func advance_day(
 	_process_intercept_letter_writebacks(
 		day_result.get("results", []),
 		pending_letters, characters_by_id, current_season, dice_engine,
+		crime_records, next_case_id, ic_day,
 	)
 
 	_process_whispering_wind_writebacks(
@@ -6902,6 +6903,9 @@ static func _process_intercept_letter_writebacks(
 	characters_by_id: Dictionary,
 	current_season: int,
 	dice_engine: DiceEngine,
+	crime_records: Array,
+	next_case_id: Array,
+	ic_day: int,
 ) -> void:
 	# A successful INTERCEPT_LETTER now actually READS a letter in transit involving the
 	# target — the interceptor learns its topic. s33 Elemental Cipher resists: a ciphered
@@ -6961,6 +6965,39 @@ static func _process_intercept_letter_writebacks(
 			},
 			current_season,
 		))
+
+		# s11.3.8 INTERCEPTED_LETTER treason signal: if BOTH correspondents are
+		# conscious lord-bound Kolat conspirators, the interception has surfaced
+		# Kolat NETWORK correspondence = hard treason evidence (weight 50, LOCKED —
+		# 50 >= the accusation threshold 40, so a single network letter accuses).
+		# A letter with only one Kolat party adds nothing (no invented "hostile
+		# intent" read). Deduped per letter_id so a re-intercept never double-counts.
+		var sender: L5RCharacterData = characters_by_id.get(intercepted.sender_id)
+		var recipient: L5RCharacterData = characters_by_id.get(intercepted.recipient_id)
+		if not _is_conscious_kolat_traitor(sender, characters_by_id) \
+				or not _is_conscious_kolat_traitor(recipient, characters_by_id):
+			continue
+		for conspirator: L5RCharacterData in [sender, recipient]:
+			var record: CrimeRecord = _ensure_treason_record(
+				conspirator, crime_records, next_case_id, ic_day)
+			if record.legal_status == Enums.LegalStatus.ACCUSED \
+					or record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+				continue  # already in the conviction pipeline
+			var entry: LegalCaseEntry = _treason_case_for(record, conspirator, ic_day)
+			# Dedup: one INTERCEPTED_LETTER item per letter_id, ever.
+			var seen: bool = false
+			for item: Variant in entry.evidence_items:
+				if item is Dictionary \
+						and int((item as Dictionary).get("type", -1)) == TreasonSystem.TreasonEvidenceType.INTERCEPTED_LETTER \
+						and int((item as Dictionary).get("letter_id", -1)) == intercepted.letter_id:
+					seen = true
+					break
+			if seen:
+				continue
+			_add_treason_evidence_gated(
+				record, entry, TreasonSystem.TreasonEvidenceType.INTERCEPTED_LETTER,
+				ic_day, {"letter_id": intercepted.letter_id}
+			)
 
 
 static func _process_whispering_wind_writebacks(
