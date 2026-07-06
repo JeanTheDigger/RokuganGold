@@ -1954,6 +1954,9 @@ static func advance_day(
 		_process_wall_jade_resupply(characters, settlements, provinces)
 		_process_wall_tea_resupply(characters, settlements)
 		_process_wall_tea_consumption(characters, settlements, ic_day)
+		# s2.4.11 D7 / s2.4.15 — the stationed Kuni removes Rank-4 garrison from
+		# the Wall (pre-emptive removal threshold).
+		_process_wall_taint_removal(characters, settlements, provinces)
 
 	# OOC Day Tick — fires every 4 IC days (one real-world day, per GDD s13 /
 	# s57.44.2). Runs Wind-Down selection and Void Point refresh for all
@@ -9974,6 +9977,116 @@ static func _process_wall_tea_consumption(
 			"tea_shortage": not without.is_empty(),
 		})
 	return results
+
+
+# -- Wall Garrison Taint Watch — s2.4.11 D7 / s2.4.15 (removal threshold) -----
+# Each season the stationed Kuni assesses the named garrison. Taint Rank 4
+# triggers immediate removal from the garrison (s2.4.15 removal threshold —
+# LOCKED, pre-emptive Kuni doctrine, autonomous Taisa action). A named Rank-4
+# character is removed off the Wall for management (the GDD's first, non-lethal
+# option: "sent to a Brotherhood monastery for management") — relocated to a
+# same-clan off-Wall settlement (a monastery/temple/shinden if one exists, else
+# any inland settlement) and detached from the Wall command hierarchy. The
+# assessment REQUIRES a living Kuni (Shugenja or Witch-Hunter) stationed at the
+# Tower (s2.4.11 D7: assessment "can be performed by either a Kuni Shugenja or a
+# Kuni Witch Hunter"); a Tower with no Kuni is operationally blind and performs
+# no removal that season.
+const WALL_TAINT_REMOVAL_RANK: int = 4  # s2.4.15 removal threshold — LOCKED
+static func _process_wall_taint_removal(
+	characters: Array,
+	settlements: Array,
+	provinces: Dictionary,
+) -> Array:
+	var results: Array = []
+
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_towers[str(s.settlement_id)] = s
+	if wall_towers.is_empty():
+		return results
+
+	# Living named characters stationed at each Tower, and whether a Kuni is present.
+	var stationed: Dictionary = {}   # tower loc (String) -> Array[L5RCharacterData]
+	var has_kuni: Dictionary = {}    # tower loc (String) -> bool
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var loc: String = character.physical_location
+		if not wall_towers.has(loc):
+			continue
+		if not stationed.has(loc):
+			stationed[loc] = []
+			has_kuni[loc] = false
+		(stationed[loc] as Array).append(character)
+		if _is_kuni_taint_assessor(character):
+			has_kuni[loc] = true
+
+	for loc: String in stationed:
+		if not bool(has_kuni[loc]):
+			continue  # no Kuni → no assessment this season (operationally blind)
+		var to_remove: Array = []
+		for ch: L5RCharacterData in stationed[loc]:
+			if MutationSystem.get_taint_rank(ch.taint) >= WALL_TAINT_REMOVAL_RANK:
+				to_remove.append(ch)
+		if to_remove.is_empty():
+			continue
+		var tower: SettlementData = wall_towers[loc] as SettlementData
+		var dest: int = _find_clan_management_settlement(settlements, provinces, tower.province_id)
+		for ch: L5RCharacterData in to_remove:
+			# Detach from the Wall garrison and relocate off the Wall for management.
+			ch.operational_superior_id = -1
+			ch.tea_managed_until_ic_day = -1
+			if dest >= 0:
+				ch.physical_location = str(dest)
+			results.append({
+				"tower": (tower.wall_tower_number if tower.wall_tower_number >= 1 else -1),
+				"removed_id": ch.character_id,
+				"taint_rank": MutationSystem.get_taint_rank(ch.taint),
+				"relocated_to": dest,
+			})
+	return results
+
+
+## A Kuni capable of assessing garrison Taint (s2.4.11 D7): a Kuni Shugenja or a
+## Kuni Witch-Hunter. Uses the same family/school signal as the s11.3.5 hunters.
+static func _is_kuni_taint_assessor(character: L5RCharacterData) -> bool:
+	if character.school == "Kuni Shugenja":
+		return true
+	if character.family == "Kuni" and (
+		"Witch-Hunter" in character.school or "Witch Hunter" in character.school
+	):
+		return true
+	return _is_kuni_witch_hunter(character)
+
+
+## First same-clan off-Wall settlement to receive a removed Rank-4 warrior for
+## management: prefer a religious house (monastery/temple/shinden), else any
+## non-Wall settlement in the clan's territory. Returns settlement_id or -1.
+static func _find_clan_management_settlement(
+	settlements: Array,
+	provinces: Dictionary,
+	tower_province_id: int,
+) -> int:
+	var clan: String = ""
+	var tprov: Variant = provinces.get(tower_province_id, null)
+	if tprov is ProvinceData:
+		clan = (tprov as ProvinceData).clan
+	if clan.is_empty():
+		return -1
+	var fallback: int = -1
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			continue
+		var sprov: Variant = provinces.get(s.province_id, null)
+		if not (sprov is ProvinceData) or (sprov as ProvinceData).clan != clan:
+			continue
+		match s.settlement_type:
+			Enums.SettlementType.MONASTERY, Enums.SettlementType.TEMPLE, Enums.SettlementType.SHINDEN:
+				return s.settlement_id
+		if fallback < 0:
+			fallback = s.settlement_id
+	return fallback
 
 
 # -- ARTISTIC_EXPRESSION Standing Objective Assignment (s49) -------------------
