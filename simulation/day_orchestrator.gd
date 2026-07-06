@@ -10715,6 +10715,34 @@ static func _check_alibi_for_target(
 
 # -- Lord Death / Orphaned Objectives (s55.33) --------------------------------
 
+## Build the succession TopicData from a SuccessionData (shared by the generic
+## clan path and the Emperor path). Consumes a next_topic_id counter.
+static func _build_succession_topic(
+	succession: SuccessionData,
+	is_disputed: bool,
+	current_tick: int,
+	next_topic_id: Array,
+) -> TopicData:
+	var topic_dict: Dictionary = SuccessionSystem.generate_succession_topic(
+		succession, is_disputed
+	)
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = topic_dict.get("slug", "")
+	topic.title = topic_dict.get("title", "Succession")
+	topic.momentum = topic_dict.get("momentum", 10.0)
+	topic.topic_type = "succession"
+	topic.variant = topic_dict.get("variant", "clean")
+	topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
+	topic.category = topic_dict.get("category", TopicData.Category.POLITICAL)
+	topic.ic_day_created = current_tick
+	var subject_ids: Array = topic_dict.get("subject_ids", [])
+	if not subject_ids.is_empty():
+		topic.subject_character_id = subject_ids[0]
+	return topic
+
+
 static func _process_lord_deaths(
 	death_events: Array,
 	characters: Array,
@@ -10777,6 +10805,54 @@ static func _process_lord_deaths(
 		var suspicious: bool = event.get("suspicious_death", false)
 		var cause: SuccessionData.VacancyCause = SuccessionData.VacancyCause.DEATH
 
+		# The Emperor's death routes to Imperial succession (s22.5 — designated
+		# heir → eldest child → crisis), NOT the generic clan path: no vassal
+		# confirms the Emperor. Detected by role, since no death-event producer
+		# sets position_tier (it defaults to PROVINCIAL_DAIMYO, so the dormant
+		# is_emperor_succession/evaluate_emperor_succession path never fired). The
+		# _process_successions writeback already installs the new emperor_id when a
+		# CONFIRMED succession's deceased held role EMPEROR — only this upstream
+		# routing was missing.
+		if deceased.role_position == RoleRegistry.EMPEROR:
+			var emp_succ := SuccessionSystem.trigger_succession(
+				deceased, cause, Enums.LordRank.IMPERIAL, current_tick, suspicious
+			)
+			emp_succ.succession_id = next_succession_id[0]
+			next_succession_id[0] += 1
+			var emp: Dictionary = SuccessionSystem.evaluate_emperor_succession(
+				deceased, characters_by_id
+			)
+			var emp_successor: int = int(emp.get("successor_id", -1))
+			var emp_crisis: bool = bool(emp.get("crisis", false))
+			if emp_successor >= 0:
+				emp_succ.candidate_ids.append(emp_successor)
+			# A clear heir/child is orderly; a crisis (no candidate) or a
+			# suspicious death is disputed — same clean/disputed logic the generic
+			# path uses (suspicious_death → not clean).
+			var emp_disputed: bool = emp_crisis or suspicious
+			if emp_disputed:
+				emp_succ.state = SuccessionData.SuccessionState.DISPUTED
+			var emp_topic := _build_succession_topic(
+				emp_succ, emp_disputed, current_tick, next_topic_id
+			)
+			active_topics.append(emp_topic)
+			active_successions.append(emp_succ)
+			if emp_successor >= 0 and not emp_disputed:
+				SuccessionSystem.confirm_successor(emp_succ, emp_successor)
+				successor_map[dead_lord_id] = emp_successor
+				var emp_chosen: L5RCharacterData = characters_by_id.get(emp_successor)
+				if emp_chosen != null:
+					SuccessionSystem.apply_successor_inheritance(emp_chosen, deceased)
+			all_results.append({
+				"emperor_succession": true,
+				"deceased_id": dead_lord_id,
+				"successor_id": emp_successor,
+				"crisis": emp_crisis,
+				"method": emp.get("method", ""),
+				"disputed": emp_disputed,
+			})
+			continue
+
 		if SuccessionSystem.is_phoenix_champion_succession(deceased.clan, position_tier):
 			continue
 		if SuccessionSystem.is_dragon_togashi_removal(deceased.clan, position_tier):
@@ -10809,23 +10885,7 @@ static func _process_lord_deaths(
 		if not is_clean:
 			succession.state = SuccessionData.SuccessionState.DISPUTED
 
-		var topic_dict: Dictionary = SuccessionSystem.generate_succession_topic(
-			succession, not is_clean
-		)
-		var topic := TopicData.new()
-		topic.topic_id = next_topic_id[0]
-		next_topic_id[0] += 1
-		topic.slug = topic_dict.get("slug", "")
-		topic.title = topic_dict.get("title", "Succession")
-		topic.momentum = topic_dict.get("momentum", 10.0)
-		topic.topic_type = "succession"
-		topic.variant = topic_dict.get("variant", "clean")
-		topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
-		topic.category = topic_dict.get("category", TopicData.Category.POLITICAL)
-		topic.ic_day_created = current_tick
-		var subject_ids: Array = topic_dict.get("subject_ids", [])
-		if not subject_ids.is_empty():
-			topic.subject_character_id = subject_ids[0]
+		var topic := _build_succession_topic(succession, not is_clean, current_tick, next_topic_id)
 		active_topics.append(topic)
 
 		active_successions.append(succession)
