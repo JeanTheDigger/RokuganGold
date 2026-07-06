@@ -721,6 +721,13 @@ static func advance_day(
 		day_result.get("results", []), worship_state,
 	)
 
+	# s4.3.21 Divination (v574): a shugenja's successful PERFORM_WORSHIP also
+	# reads the worship state of the Fortune(s) prayed to — no extra AP.
+	_process_worship_divination(
+		day_result.get("results", []), worship_state, characters_by_id,
+		dice_engine, ic_day,
+	)
+
 	var letter_examination_results: Array = _process_letter_examinations(
 		day_result.get("results", []),
 		pending_letters,
@@ -1403,6 +1410,12 @@ static func advance_day(
 		next_topic_id, active_topics, lord_map,
 	)
 
+	# s11.3.8e/f — treason co-conspirator naming: the convict's handler is either
+	# publicly named (+45 hard evidence) or privately tracked by the lord.
+	_process_treason_coconspirator_naming(
+		conviction_results, crime_records, characters_by_id, next_case_id, ic_day,
+	)
+
 	var trial_results: Array = _resolve_pending_trials(
 		conviction_results, crime_records, characters_by_id,
 		lord_map, dice_engine, ic_day,
@@ -1957,6 +1970,13 @@ static func advance_day(
 		# s2.4.11 D7 / s2.4.15 — the stationed Kuni removes Rank-4 garrison from
 		# the Wall (pre-emptive removal threshold).
 		_process_wall_taint_removal(characters, settlements, provinces)
+		# s11.3.8a — treason detection signals accumulate seasonal evidence
+		# against conscious Kolat traitors; at threshold 40 the record flips to
+		# ACCUSED and the (already-wired) ConvictionProcessor takes over.
+		_process_treason_signals(
+			characters, characters_by_id, crime_records, next_case_id,
+			objectives_map, ic_day,
+		)
 
 	# OOC Day Tick — fires every 4 IC days (one real-world day, per GDD s13 /
 	# s57.44.2). Runs Wind-Down selection and Void Point refresh for all
@@ -10711,6 +10731,316 @@ static func _check_alibi_for_target(
 			a, alibi_witness, magistrate, crime_record, active_case, dice_engine,
 		)
 	return {}
+
+
+# -- Treason Detection & Evidence (s11.3.8) ------------------------------------
+# The DOWNSTREAM treason pipeline (ConvictionProcessor: authority chain, defense
+# hearing with Honor-weighted testimony, acquittal + false-accusation penalty,
+# capital sentencing + Tier-2 topic + seppuku offer) has been wired since the
+# legal pass — but NOTHING produced a TREASON CrimeRecord or accumulated the
+# s11.3.8b evidence signals, so treason never entered the pipeline. This is the
+# missing upstream.
+#
+# Truth layer (s11.3.8f LOCKED: "Kolat membership constitutes treason"): every
+# living conscious Kolat member (kolat_sect != NONE or is_kolat_master) with a
+# living lord is committing treason — the system always knows (the CrimeRecord
+# world-truth convention). Dormant Dream sleepers are excluded (unwitting
+# assets, s54.7c). Detection layer: the s11.3.8a signals accumulate the LOCKED
+# evidence weights on the suspect's LegalCaseEntry; the first signal opens the
+# investigation ("the lord … notices the pattern and assigns an investigation");
+# the accusation fires at the LOCKED threshold 40, gated after an acquittal by
+# the s11.3.8c political shield (+20 new evidence, REACCUSATION_NEW_EVIDENCE_MIN;
+# the halved evidence carries over — "halved, not zeroed").
+#
+# Signals wired (observable state only — evidence NEVER reads Kolat truth):
+#   • Signal 1 — objective stall: lord-assigned primary with
+#     seasons_without_progress >= 1 (s55.29 tracking) → +5 per season.
+#   • Signal 2 — disposition anomaly: the LORD's OWN intelligence
+#     (disposition_toward knowledge entries from the PROBE/READ_CHARACTER/
+#     informant writebacks) shows the vassal at Friend+ (>= +31, s12.2) toward a
+#     character the lord holds at Enemy or worse (<= -31, s12.2) → +8, deduped
+#     per (vassal, enemy) pair.
+#   • Signal 5 — co-conspirator testimony: on a treason conviction, the
+#     convict's handler (kolat_superior_id — s11.3.8f compartmentalization:
+#     "typically their handler") is named per the convicting lord's personality
+#     (should_name_co_conspirators, already computed by ConvictionProcessor):
+#     named publicly → +45 hard evidence on the handler; kept private → the lord
+#     records a treason_suspect intelligence entry (quiet surveillance).
+# DEFERRED signals (no clean observable producer, not invented): intercepted-
+# letter hostile intent (letters carry no hostility classification), confession
+# via PROBE (no treason SecretData exists), suspicious meeting (zone_event_log
+# is the ASCII layer), voting-against-lord / failed-order (needs per-order
+# outcome attribution). LIMITATION: evidence accumulates only against real
+# traitors (an innocent has no world-truth CrimeRecord to attach a case to);
+# the false-accusation machinery still fires when a guilty vassal WINS the
+# hearing (acquittal → lord honor loss — the political shield).
+
+static func _is_conscious_kolat_traitor(
+	c: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> bool:
+	if c == null or CharacterStats.is_dead(c) or c.is_pc:
+		return false
+	if c.kolat_sect == Enums.KolatSect.NONE and not c.is_kolat_master:
+		return false
+	if c.lord_id < 0:
+		return false
+	var lord: L5RCharacterData = characters_by_id.get(c.lord_id)
+	return lord != null and not CharacterStats.is_dead(lord)
+
+
+## The live (unconvicted) TREASON record for a perpetrator, or null.
+static func _find_treason_record(crime_records: Array, perpetrator_id: int) -> CrimeRecord:
+	for r: CrimeRecord in crime_records:
+		if r.crime_type == Enums.CrimeType.TREASON \
+				and r.perpetrator_id == perpetrator_id \
+				and r.ic_day_conviction < 0:
+			return r
+	return null
+
+
+static func _ensure_treason_record(
+	traitor: L5RCharacterData,
+	crime_records: Array,
+	next_case_id: Array,
+	ic_day: int,
+) -> CrimeRecord:
+	var existing: CrimeRecord = _find_treason_record(crime_records, traitor.character_id)
+	if existing != null:
+		return existing
+	var record := CrimeRecord.new()
+	record.case_id = next_case_id[0]
+	next_case_id[0] += 1
+	record.crime_type = Enums.CrimeType.TREASON
+	record.severity = Enums.CrimeSeverity.CAPITAL  # s11.3.8: "Capital. Always."
+	record.perpetrator_id = traitor.character_id
+	record.victim_id = traitor.lord_id  # the betrayed lord
+	record.location = traitor.physical_location
+	record.ic_day_committed = ic_day  # ongoing crime; recorded when the record opens
+	record.legal_status = Enums.LegalStatus.NONE  # undiscovered until a signal fires
+	crime_records.append(record)
+	return record
+
+
+## The suspect's ACTIVE case entry for this record — creates one (opening the
+## investigation) if none. After an acquittal, a NEW case is opened seeded with
+## the halved carry-over evidence (s11.3.8c: "halved, not zeroed").
+static func _treason_case_for(
+	record: CrimeRecord,
+	traitor: L5RCharacterData,
+	ic_day: int,
+) -> LegalCaseEntry:
+	for entry: Variant in traitor.legal_cases:
+		if not entry is LegalCaseEntry:
+			continue
+		var e: LegalCaseEntry = entry as LegalCaseEntry
+		if e.crime_record_id != record.case_id:
+			continue
+		if e.state in [Enums.LegalStatus.ACQUITTED, Enums.LegalStatus.DECREED_GUILTY, Enums.LegalStatus.PARDONED]:
+			continue
+		return e
+	var was_acquitted: bool = record.legal_status == Enums.LegalStatus.ACQUITTED
+	var new_entry: LegalCaseEntry = LegalStatusSystem.open_case(traitor, record.case_id, true)
+	if was_acquitted:
+		# Carry over the halved evidence; the accusation gate then requires +20
+		# NEW evidence past this baseline (the s11.3.8c political shield).
+		new_entry.evidence_total = record.evidence_total
+		new_entry.evidence_items.append({
+			"type": "acquittal_carryover",
+			"weight": record.evidence_total,
+			"ic_day": ic_day,
+			"hard": false,
+		})
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+	return new_entry
+
+
+static func _treason_acquittal_carryover(entry: LegalCaseEntry) -> int:
+	for item: Variant in entry.evidence_items:
+		if item is Dictionary and str((item as Dictionary).get("type", "")) == "acquittal_carryover":
+			return int((item as Dictionary).get("weight", 0))
+	return 0
+
+
+## Add one signal's evidence and apply the accusation gate (threshold 40; after
+## an acquittal additionally +20 new evidence). `meta` is merged into the
+## evidence item (e.g. the anomaly pair for dedup).
+static func _add_treason_evidence_gated(
+	record: CrimeRecord,
+	entry: LegalCaseEntry,
+	evidence_type: TreasonSystem.TreasonEvidenceType,
+	ic_day: int,
+	meta: Dictionary = {},
+) -> Dictionary:
+	var res: Dictionary = TreasonSystem.add_treason_evidence(entry, evidence_type, ic_day)
+	if not meta.is_empty() and not entry.evidence_items.is_empty():
+		(entry.evidence_items[entry.evidence_items.size() - 1] as Dictionary).merge(meta)
+	record.evidence_total = entry.evidence_total
+
+	var accused: bool = false
+	if record.legal_status == Enums.LegalStatus.UNDER_INVESTIGATION \
+			and TreasonSystem.can_formally_accuse(entry):
+		var carry: int = _treason_acquittal_carryover(entry)
+		var reaccusation_ok: bool = carry <= 0 \
+			or (entry.evidence_total - carry) >= TreasonSystem.REACCUSATION_NEW_EVIDENCE_MIN
+		if reaccusation_ok:
+			record.legal_status = Enums.LegalStatus.ACCUSED
+			LegalStatusSystem.transition(entry, Enums.LegalStatus.ACCUSED, ic_day)
+			accused = true
+	res["accused"] = accused
+	return res
+
+
+## Seasonal s11.3.8a signal pass. Returns per-signal result dicts.
+static func _process_treason_signals(
+	characters: Array,
+	characters_by_id: Dictionary,
+	crime_records: Array,
+	next_case_id: Array,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for c: Variant in characters:
+		if not c is L5RCharacterData:
+			continue
+		var traitor: L5RCharacterData = c as L5RCharacterData
+		if not _is_conscious_kolat_traitor(traitor, characters_by_id):
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(traitor.lord_id)
+
+		# -- Signal 1: lord-assigned objective stall (+5/season) -----------------
+		var stall_fired: bool = false
+		var primary: Dictionary = objectives_map.get(traitor.character_id, {}).get("primary", {})
+		if int(primary.get("assigned_by", -1)) >= 0 \
+				and int(primary.get("seasons_without_progress", 0)) >= 1:
+			stall_fired = true
+
+		# -- Signal 2: disposition anomaly from the lord's intelligence (+8) -----
+		# The lord's PROBE/READ_CHARACTER/informant knowledge shows the vassal at
+		# Friend+ toward a character the lord holds at Enemy or worse (s12.2 tiers).
+		var anomalies: Array = []
+		for k: Variant in lord.knowledge_pool:
+			if not k is KnowledgeEntry:
+				continue
+			var ke: KnowledgeEntry = k as KnowledgeEntry
+			if ke.entry_type != "disposition_toward":
+				continue
+			if int(ke.data.get("target_character_id", -1)) != traitor.character_id:
+				continue
+			var toward: int = int(ke.data.get("toward_character_id", ke.data.get("toward_id", -1)))
+			if toward < 0 or toward == lord.character_id or toward == traitor.character_id:
+				continue
+			if int(ke.data.get("disposition", 0)) < 31:  # Friend tier onset (s12.2)
+				continue
+			if int(lord.disposition_values.get(toward, 0)) > -31:  # Enemy tier onset (s12.2)
+				continue
+			anomalies.append(toward)
+
+		if not stall_fired and anomalies.is_empty():
+			continue
+
+		var record: CrimeRecord = _ensure_treason_record(traitor, crime_records, next_case_id, ic_day)
+		if record.legal_status == Enums.LegalStatus.ACCUSED \
+				or record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+			continue  # already in the conviction pipeline
+		var entry: LegalCaseEntry = _treason_case_for(record, traitor, ic_day)
+
+		if stall_fired:
+			var r1: Dictionary = _add_treason_evidence_gated(
+				record, entry, TreasonSystem.TreasonEvidenceType.OBJECTIVE_STALL, ic_day
+			)
+			results.append({"signal": "objective_stall", "suspect_id": traitor.character_id,
+				"evidence_total": entry.evidence_total, "accused": r1["accused"]})
+
+		for enemy_id: int in anomalies:
+			# Dedup: one anomaly item per (vassal, enemy) pair, ever.
+			var seen: bool = false
+			for item: Variant in entry.evidence_items:
+				if item is Dictionary \
+						and int((item as Dictionary).get("type", -1)) == TreasonSystem.TreasonEvidenceType.DISPOSITION_ANOMALY \
+						and int((item as Dictionary).get("anomaly_toward", -1)) == enemy_id:
+					seen = true
+					break
+			if seen:
+				continue
+			var r2: Dictionary = _add_treason_evidence_gated(
+				record, entry, TreasonSystem.TreasonEvidenceType.DISPOSITION_ANOMALY,
+				ic_day, {"anomaly_toward": enemy_id}
+			)
+			results.append({"signal": "disposition_anomaly", "suspect_id": traitor.character_id,
+				"toward": enemy_id, "evidence_total": entry.evidence_total, "accused": r2["accused"]})
+	return results
+
+
+## Signal 5 — post-conviction co-conspirator naming (s11.3.8e/f). Consumes the
+## naming decision ConvictionProcessor already computed. The convict's known
+## contact is their handler (kolat_superior_id — compartmentalization).
+static func _process_treason_coconspirator_naming(
+	conviction_results: Array,
+	crime_records: Array,
+	characters_by_id: Dictionary,
+	next_case_id: Array,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for cv: Variant in conviction_results:
+		if not cv is Dictionary:
+			continue
+		var conv: Dictionary = cv as Dictionary
+		if conv.get("outcome", "") != "convicted":
+			continue
+		if int(conv.get("crime_type", -1)) != Enums.CrimeType.TREASON:
+			continue
+		var convicted: L5RCharacterData = characters_by_id.get(int(conv.get("accused_id", -1)))
+		if convicted == null:
+			continue
+		var superior: L5RCharacterData = characters_by_id.get(convicted.kolat_superior_id)
+		if superior == null or CharacterStats.is_dead(superior):
+			continue
+		if not _is_conscious_kolat_traitor(superior, characters_by_id):
+			continue  # handler must themselves be a lord-bound conscious member
+
+		if bool(conv.get("co_conspirators_named", false)):
+			# Named publicly → hard evidence (+45) on the handler; network blown open.
+			var record: CrimeRecord = _ensure_treason_record(
+				superior, crime_records, next_case_id, ic_day
+			)
+			if record.legal_status == Enums.LegalStatus.ACCUSED \
+					or record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+				continue
+			var entry: LegalCaseEntry = _treason_case_for(record, superior, ic_day)
+			var r: Dictionary = _add_treason_evidence_gated(
+				record, entry, TreasonSystem.TreasonEvidenceType.CO_CONSPIRATOR_TESTIMONY,
+				ic_day, {"named_by": convicted.character_id}
+			)
+			results.append({"named_publicly": true, "co_conspirator_id": superior.character_id,
+				"evidence_total": entry.evidence_total, "accused": r["accused"]})
+		else:
+			# Kept private → the convicting lord records quiet intelligence
+			# ("names stay in lord's IntelDB, quiet investigation continues").
+			var lord: L5RCharacterData = characters_by_id.get(convicted.lord_id)
+			if lord == null or CharacterStats.is_dead(lord):
+				continue
+			var already: bool = false
+			for k: Variant in lord.knowledge_pool:
+				if k is KnowledgeEntry and (k as KnowledgeEntry).entry_type == "treason_suspect" \
+						and int((k as KnowledgeEntry).data.get("target_character_id", -1)) == superior.character_id:
+					already = true
+					break
+			if not already:
+				var ke := KnowledgeEntry.new()
+				ke.source = Enums.KnowledgeSource.TESTIMONY
+				ke.entry_type = "treason_suspect"
+				ke.data = {
+					"target_character_id": superior.character_id,
+					"named_by": convicted.character_id,
+					"ic_day": ic_day,
+				}
+				InformationSystem.add_knowledge(lord, ke)
+			results.append({"named_publicly": false, "co_conspirator_id": superior.character_id,
+				"intel_holder_id": convicted.lord_id})
+	return results
 
 
 # -- Lord Death / Orphaned Objectives (s55.33) --------------------------------
@@ -24069,6 +24399,126 @@ static func _process_worship_accumulation(
 				"total_wp": effects.get("total_wp", 0.0),
 			})
 	return results
+
+
+# -- s4.3.21 Divination — embedded in PERFORM_WORSHIP (v574, LOCKED) -----------
+# "When a shugenja spends 1 AP on PERFORM_WORSHIP, they also learn the worship
+# status of the Fortune(s) they prayed to. Directed worship reveals the status
+# of that one Fortune. Split worship reveals the status of all seven Great
+# Fortunes. No additional AP cost. The once-per-season frequency limit still
+# applies." The reading rolls WorshipSystem.resolve_divination (Lore: Theology
+# + the Fortune's Ring vs TN 15, honoring the Fukurokujin divination maluses —
+# Restless −1k0 / Displeased −2k0 / Wrathful impossible). A FAILED roll yields
+# no reading and does not consume the once-per-season limit (nothing learned).
+# Results are stored as "worship_state" KnowledgeEntry on the shugenja (one
+# current reading per Fortune, older replaced), which the PERFORM_WORSHIP
+# metadata consumer reads to pick directed-vs-split worship (s4.3.21 line 1391:
+# "If a Fortune is at Restless or worse the engine directs all worship there.
+# If all Fortunes are healthy it defaults to split.").
+# DEFERRED (LOCKED mechanic, NO GDD numeric): the lord's "immediate Honor loss"
+# when their shugenja reports a failure threshold — the amount is unspecified,
+# so it is not applied (not invented).
+static func _process_worship_divination(
+	day_results: Array,
+	worship_state: Dictionary,
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	if worship_state.is_empty() or dice_engine == null:
+		return results
+	var season: int = TimeSystem.get_absolute_season(ic_day)
+	for r: Variant in day_results:
+		if not (r is Dictionary):
+			continue
+		var result: Dictionary = r as Dictionary
+		if result.get("action_id", "") != "PERFORM_WORSHIP" or not result.get("success", false):
+			continue
+		var shugenja: L5RCharacterData = characters_by_id.get(result.get("character_id", -1))
+		if shugenja == null or CharacterStats.is_dead(shugenja):
+			continue
+		if shugenja.school_type != Enums.SchoolType.SHUGENJA:
+			continue  # s4.3.21: "Only Shugenja can read the current worship state"
+		var effects: Dictionary = result.get("effects", {})
+		var province_id: int = int(effects.get("province_id", -1))
+		if province_id < 0:
+			continue
+		var province_wp: Dictionary = (worship_state.get("province_wp", {}) as Dictionary).get(province_id, {})
+		if province_wp.is_empty():
+			continue
+
+		# Directed worship → the one Fortune prayed to (the wp_distribution key);
+		# split worship → all seven Great Fortunes.
+		var fortunes: Array = []
+		if bool(effects.get("directed", false)):
+			for f: Variant in (effects.get("wp_distribution", {}) as Dictionary):
+				fortunes.append(int(f))
+		else:
+			for f: int in range(WorshipSystem.GREAT_FORTUNE_COUNT):
+				fortunes.append(f)
+
+		# Fukurokujin's own displeasure degrades Divination itself (s4.3.21 malus).
+		var fk_wp: float = float(province_wp.get(int(Enums.GreatFortune.FUKUROKUJIN), 0.0))
+		var fk_tier: Enums.WorshipTier = WorshipSystem.get_worship_tier(fk_wp, WorshipSystem.PROVINCE_THRESHOLD)
+		var malus: Dictionary = WorshipSystem.FUKUROKUJIN_MALUS.get(fk_tier, {})
+
+		var theology: int = shugenja.skills.get("Lore: Theology", 0)
+		var wound_pen: int = CharacterStats.get_wound_penalty(shugenja)
+
+		for f: int in fortunes:
+			# Once-per-season gate: a Fortune already read this season yields no
+			# second reading (v574).
+			if _has_seasonal_worship_reading(shugenja, f, season):
+				continue
+			var ring: int = WorshipSystem.FORTUNE_RING.get(f, Enums.Ring.VOID)
+			var ring_value: int = CharacterStats.get_ring_value(shugenja, ring)
+			var div: Dictionary = WorshipSystem.resolve_divination(
+				dice_engine, theology, ring_value, f, province_wp, malus, wound_pen,
+			)
+			if not div.get("success", false):
+				continue  # failed roll — nothing learned, may retry on later worship
+			# Replace any older reading for this Fortune (one current reading each).
+			var i: int = shugenja.knowledge_pool.size() - 1
+			while i >= 0:
+				var old: Variant = shugenja.knowledge_pool[i]
+				if old is KnowledgeEntry and (old as KnowledgeEntry).entry_type == "worship_state" \
+						and int((old as KnowledgeEntry).data.get("fortune", -1)) == f:
+					shugenja.knowledge_pool.remove_at(i)
+				i -= 1
+			var ke := KnowledgeEntry.new()
+			ke.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
+			ke.entry_type = "worship_state"
+			ke.season_acquired = season
+			ke.data = {
+				"fortune": f,
+				"province_id": province_id,
+				"tier": int(div.get("tier", Enums.WorshipTier.NONE)),
+				"scope": div.get("scope", "province"),
+				"flavor": div.get("flavor", ""),
+				"above_threshold": div.get("above_threshold", false),
+			}
+			InformationSystem.add_knowledge(shugenja, ke)
+			results.append({
+				"character_id": shugenja.character_id,
+				"fortune": f,
+				"tier": int(div.get("tier", Enums.WorshipTier.NONE)),
+				"province_id": province_id,
+			})
+	return results
+
+
+static func _has_seasonal_worship_reading(
+	shugenja: L5RCharacterData,
+	fortune: int,
+	season: int,
+) -> bool:
+	for k: Variant in shugenja.knowledge_pool:
+		if k is KnowledgeEntry and (k as KnowledgeEntry).entry_type == "worship_state" \
+				and int((k as KnowledgeEntry).data.get("fortune", -1)) == fortune \
+				and (k as KnowledgeEntry).season_acquired == season:
+			return true
+	return false
 
 
 static func _process_letter_examinations(

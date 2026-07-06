@@ -3592,9 +3592,14 @@ static func _populate_action_metadata(
 				worship_spell = SpellSystem.get_best_ritual_spell(character)
 			if worship_spell.is_empty() and "commune" in character.spells_known:
 				worship_spell = "commune"
+		# s4.3.21 line 1391: an explicit fortune objective always directs; else a
+		# shugenja consults their own Divination readings — a known Fortune at
+		# Restless or worse directs all worship there; all healthy → split (-1).
+		var worship_fortune: int = need.target_npc_id if need.target_npc_id >= 0 \
+			else _pick_divined_worship_fortune(ctx)
 		option.metadata = {
 			"ritual_spell_id": worship_spell,
-			"directed_fortune": need.target_npc_id if need.target_npc_id >= 0 else -1,
+			"directed_fortune": worship_fortune,
 			"location_type": _zone_to_worship_location(ctx.zone_subtype),
 			"ikebana_worship_fr": ctx.known_objectives.get("ikebana_worship_fr", 0),
 			"statuary_worship_fr": ctx.known_objectives.get("statuary_worship_fr", 0),
@@ -5846,6 +5851,32 @@ static func _zone_to_worship_location(zone: Enums.ZoneSubtype) -> String:
 		Enums.ZoneSubtype.TEMPLE_GROUNDS:
 			return "local_shrine"
 	return "roadside_shrine"
+
+
+## s4.3.21 line 1391 (LOCKED): "PERFORM_WORSHIP decomposition checks known
+## worship states from Divination results and selects directed or split
+## accordingly. If a Fortune is at Restless or worse the engine directs all
+## worship there. If all Fortunes are healthy it defaults to split."
+## Scans the character's own "worship_state" Divination readings (produced by
+## the PERFORM_WORSHIP divination writeback) and returns the WORST known
+## Fortune at Restless+, or -1 (split) when all known readings are healthy or
+## the character has no readings (spiritually blind → default split).
+static func _pick_divined_worship_fortune(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	var worst_fortune: int = -1
+	var worst_tier: int = int(Enums.WorshipTier.NONE)
+	for k: Variant in ctx.knowledge_pool:
+		if not k is KnowledgeEntry:
+			continue
+		var ke: KnowledgeEntry = k as KnowledgeEntry
+		if ke.entry_type != "worship_state":
+			continue
+		var tier: int = int(ke.data.get("tier", Enums.WorshipTier.NONE))
+		if tier > worst_tier:
+			worst_tier = tier
+			worst_fortune = int(ke.data.get("fortune", -1))
+	if worst_tier > int(Enums.WorshipTier.NONE):
+		return worst_fortune
+	return -1
 
 
 static func _pick_levy_province(ctx: NPCDataStructures.ContextSnapshot) -> int:
