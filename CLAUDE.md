@@ -292,6 +292,30 @@ LOCKED per-warrior/roster figures and re-tuning with garrison_pu in Phase 3.
   BLOCKED:** needs a Hiruma-Scout-in-Shadowlands deployment mechanic (doesn't exist) AND the
   horde-detection chance (GDD explicitly undefined). Both remain deferred.
 
+### Known Code Issues (found and fixed 2026-07-06, Emperor succession routing — dormant path, runtime-verified 18/18)
+- **`SuccessionSystem.evaluate_emperor_succession` had ZERO production callers — Emperor
+  death ran the generic clan path. FIXED.** `_process_lord_deaths` reads
+  `event["position_tier"]` defaulting to `PROVINCIAL_DAIMYO`, but NO death-event producer
+  ever sets `position_tier` — so `is_emperor_succession()` never matched and the Imperial
+  designated-heir→eldest-child→crisis logic (s22.5) never fired. The DOWNSTREAM was already
+  wired (`_apply_confirmed_successions` installs `world_states["emperor_id"]` when a CONFIRMED
+  succession's deceased held role EMPEROR — keyed on role, not position_tier); only the
+  upstream routing was missing. Fix: an Emperor death (detected by `role_position == EMPEROR`,
+  unique) now builds a proper IMPERIAL-tier SuccessionData from `evaluate_emperor_succession`
+  — orderly heir/child → CONFIRMED (successor_map + `apply_successor_inheritance`), crisis or
+  suspicious death → DISPUTED (resolves via the existing contest machinery). Extracted
+  `_build_succession_topic` (shared by the generic + Emperor paths). **Zero regression by
+  design:** only the EMPEROR role branches; every other lord tier is untouched. The broader
+  `position_tier`-always-provincial defect (champion/family confirming-authority is computed at
+  provincial tier for everyone) is LEFT AS-IS — correcting it would enable the Phoenix/Dragon
+  champion `continue` guards, which have no peacetime succession handler (`resolve_shiba_reincarnation`
+  only fires inside `_check_civil_war_resolution` during a Phoenix civil war), so it would REGRESS
+  peacetime champion succession; that's a design-gated s55.10.2/3 change for owner sign-off. All
+  values LOCKED (`RoleRegistry.lord_rank_from_status`, `CONFIRMING_TIER`, topic tiers) — no
+  invention. Runtime-verified 18/18 (`tests/verify_emperor_succession.gd`): evaluate ordering,
+  `_process_lord_deaths` → IMPERIAL CONFIRMED succession, full round-trip installing emperor_id +
+  role/status/vassal transfer, crisis/suspicious → DISPUTED.
+
 ### Systems Added 2026-07-05 (s54.7i Kolat endgame loop — win condition, secrecy, Imperial counter-response, owner-approved, runtime-verified 44/44)
 Wires the previously-dormant `KolatSecrecy` data layer into the live loop, closing the
 conspiracy's endgame: the secrecy scalars now MOVE with real events, Tiger cultivates a
