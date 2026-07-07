@@ -237,6 +237,33 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, blackmail favor tier — bypassed arbiter + live bug — runtime-verified 12/12)
+Same "built arbiter bypassed by a buggy inline copy" class as the seppuku/harvest fixes,
+but this one was an **active correctness bug**, not just a dormant no-op.
+`FavorSystem.extract_blackmail_favor` (the LOCKED tier arbiter) had ZERO production callers —
+the live INTIMIDATE/blackmail writeback (`_process_blackmail_favor_writebacks`, called in
+`advance_day`) hand-built `FavorData` inline, and that copy diverged from GDD s12.10 line 89
+(LOCKED) **two ways**: (1) it hardcoded `FavorTier.MINOR` for EVERY extracted favor, and
+(2) it minted a tracked favor even for a Tier-4 secret. The LOCKED rule: the extracted favor
+tier **IS the secret's severity tier** — Tier 1 → Major, Tier 2 → Moderate, Tier 3 → Minor,
+Tier 4 → "vague goodwill that does not constitute a formal tracked favor." So blackmail with a
+high-value (existential/treason) secret was **under-rewarding** (major secrets yielded only
+minor favors), and Tier-4 secrets **wrongly created tracked favors** the spec forbids. FIX
+(no invented numbers — every value is in the LOCKED table): the INTIMIDATE executor now emits
+the secret's severity tier (already read from `action.metadata` for the blackmail roll — it's
+in scope only on the `has_secret` path, which is the only path that extracts favors) into the
+result `effects`, and the writeback replaces the inline loop with
+`FavorSystem.extract_blackmail_favor(secret_tier, creditor, debtor, count, ic_day, next_id)`,
+which maps tier→favor-tier via `_secret_tier_to_favor_tier` and returns `[]` for Tier 4 (the
+`secret_tier >= 4 → []` guard). Field values follow the canonical function — the
+`is_blackmail_extracted` flag (the one consumers actually read) is preserved; the cosmetic
+`source_action`/`terms` change from the old `"INTIMIDATE"`/`"blackmail_extracted"` strings to
+the canonical `"BLACKMAIL"`/`""`, and NO consumer reads those old strings (verified by grep).
+Runtime-verified 12/12 (`tests/verify_blackmail_favor_tier.gd`): Tier 1→MAJOR, 2→MODERATE,
+3→MINOR; **Tier 4 → no favor**; count == raises with unique ids + `is_blackmail_extracted` +
+correct creditor/debtor; missing `secret_tier` defaults to 3 (Minor); count-0 / non-INTIMIDATE
+/ failed results extract nothing. Full project `--import` parse-clean.
+
 ### Systems Added 2026-07-06 (Emperor's Peace at Winter Court wired — s57.47 v624 / s55.10, owner-approved, runtime-verified 25/25)
 Same built-but-zero-callers dormant class as the seppuku/harvest arbiters.
 `WinterCourtSystem.is_action_blocked_by_emperors_peace` + `record_emperors_peace_violation`
