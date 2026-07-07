@@ -237,6 +237,37 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, harvest-destruction arbiter divergence — runtime-verified 21/21)
+Same "built arbiter bypassed by an inline copy" class as the SeppukuDecision fix. The NPC
+engine's `_is_harvest_blocked_by_virtue` (the RAID_HARVEST personality gate) had a hand-rolled
+virtue check that **diverged from the canonical `StarvationWarfare` arbiter (s4.3.17 Phase 4)
+twice**: (1) it never enforced the **Autumn-harvest-tick** requirement (GDD line 1041), so
+harvest destruction could be selected in ANY season; and (2) it treated **Rei as CONDITIONAL**
+(allowed on a prior formal demand) when the GDD makes Rei a **NEVER** virtue (line 1061,
+"barbaric and beneath a civilized lord"). Rewrote the gate to delegate to
+`StarvationWarfare.evaluate_ai_harvest_decision(virtue, season, has_army, …)` — the single
+GDD-faithful source (the same arbiter the world-sim harvest pass uses). Two structural helpers,
+no invented numbers: **season** is derived from `ctx.ic_day` (`_is_autumn_ic_day`: doy [180,240)
+per `TimeSystem.SEASON_BOUNDARIES` — `ctx.season` is never populated in this build), and the
+virtue string is **title-cased** (`_harvest_virtue_title_case`: `Enums.*_virtue_name` returns
+UPPERCASE keys, but the arbiter's `HARVEST_NEVER_VIRTUES`/`HARVEST_CONDITIONAL_VIRTUES` tables
+are title-case). The `has_army_in_province` hard gate is passed **satisfied and DEFERRED** to
+the sub-tile army-position system (s11.7a) — no in-province army presence is tracked yet, so the
+gate stays as it was (no behavior regression on that axis; the two fixed axes are the season +
+Rei ones). The existing `_evaluate_harvest_conditions(ctx)` (war-score/disposition/pending-event/
+action-log reads for no_other_path/hated_enemy/lord_commands/publicly_declared) is unchanged and
+feeds the arbiter's conditional check. **Selection-layer gate (not executor):** the honor cost is
+applied by EffectApplicator BEFORE `_apply_harvest_destruction`, so an executor-layer season block
+would orphan the honor charge — the gate belongs at option selection (engine), which is where it
+already lived. Runtime-verified 21/21 (`tests/verify_harvest_arbiter.gd`): NEVER virtues (Jin/Gi/
+Rei) blocked in Autumn regardless of conditions (**Rei even with a prior demand + hated enemy +
+lord command — THE key fix**); CONDITIONAL virtues gated on their specific condition
+(Meiyo→hated_enemy, Chugi→lord_commands, Makoto→publicly_declared, Yu→no_other_path); Shourido
+(Ketsui) allowed in Autumn but the SAME lord **blocked in Summer** (the season fix), and an
+allowed-in-Autumn Meiyo likewise blocked in Summer; the `_is_autumn_ic_day` window edges
+(180 inclusive / 240 exclusive / year-2 560→autumn / negative wrap) and the title-case helper.
+Full project `--import` parse-clean.
+
 ### Systems Added 2026-07-06 (s4.3.21 worship tiers ACTIVATED — Model A, province-only, owner-approved, runtime-verified 16/13)
 `WorshipSystem.get_worship_tier` was a DISABLED stub (always NONE) — the GDD LOCKS the 10 WP/
 Fortune/season threshold + the three malus tiers but never states the WP→tier transition points.
