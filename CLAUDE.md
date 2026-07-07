@@ -237,6 +237,36 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, siege War Score shifts were dead — consumer read a state nothing produces — runtime-verified 11/11)
+The sibling dormant-consumer bug surfaced by the territory-capture fix (was documented DEFERRED there;
+now fixed). `_process_siege_war_scores` (wired live in `_process_war_score_shifts`) read
+`military_daily["siege_results"]` for `resolved == "attacker_victory"` / `resolved ==
+"defender_victory"` and `attacker_clan`/`defender_clan` — but **nothing in the codebase ever produces
+those keys**: the raw siege-tick dicts carry `starvation`/`honor`/`ended`/`end_reason`, and the live
+storm-assault path emits `victor == "attacker"|"defender"` + `attacker_army_id`/`defender_army_id` (no
+`resolved`, no clans). So the loop's `if resolved.is_empty(): continue` fired every time — the function
+**never did anything**, and the LOCKED `WarSystem.SCORE_SHIFTS` keys `siege_won_attacker [12,8]` /
+`siege_won_defender [8,5]` were dead: **storming an enemy castle (or repelling an assault) moved the War
+Score by zero**, so sieges never affected the peace-negotiating position. FIX (no invented values — the
+shifts are LOCKED in SCORE_SHIFTS): rewired `_process_siege_war_scores(storm_assault_results, active_wars,
+companies, results)` to consume the REAL `storm_assault_results` (per-tick assault events — no dedup
+needed), resolving each side's clan from `companies` via the proven `_get_army_clan` helper (the same
+resolution `_process_battle_war_scores` uses), finding the war between them with the ally-aware
+`get_war_between`, and applying the shift to the winning side's PRINCIPAL clan (via `get_clan_side` →
+`clan_a`/`clan_b`, so `apply_score_shift`'s direct clan_a/clan_b match lands even for an allied victor).
+`storm_assault_results` threaded through `_process_war_score_shifts` (a defaulted trailing param) from
+the `advance_day` scope where it already lives. Guards: no war between the clans, same clan both sides,
+unknown army id (empty clan), non-victory result. Runtime-verified 11/11 (`tests/verify_siege_war_score.gd`):
+attacker win → +12/−8 on the correct sides; defender repel → +8/−5; an ALLIED attacker's win lands on
+its side's principal clan; and the four no-op guards. Full project `--import` parse-clean. DOCUMENTED
+LIMITATION (not invented): starvation-surrender attacker wins are not assaults, so they are not in
+`storm_assault_results` — their war impact flows through the now-wired territory capture + hostage War
+Score at `_capture_siege_hostages` (a faithful scoping: the storm assault is the decisive military event
+that moves War Score; starvation is attritional and its impact is the province + hostages). This also
+retires the dead `resolved == "attacker_victory"` read; the Dragon-schism check (17759) still reads the
+same never-produced key and is a separate dormant path (left scoped out — it needs the s55.10.2 Dragon
+schism context).
+
 ### Known Code Issues (found and fixed 2026-07-06, siege captures never recorded to the war — wars transferred zero territory — runtime-verified 9/9)
 Same built-but-zero-callers dormant class as the hostage-War-Score fix, and a genuine LIVE gameplay bug.
 `WarSystem.record_province_capture` (appends the captured province to `war.provinces_captured_by_a/b`)

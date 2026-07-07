@@ -920,7 +920,7 @@ static func advance_day(
 	)
 
 	var war_score_results: Array = _process_war_score_shifts(
-		military_daily, military_effects, active_wars, companies,
+		military_daily, military_effects, active_wars, companies, storm_assault_results,
 	)
 
 	var naval_war_score_results: Array = _process_naval_war_scores(
@@ -17579,13 +17579,14 @@ static func _process_war_score_shifts(
 	military_effects: Array,
 	active_wars: Array,
 	companies: Array,
+	storm_assault_results: Array = [],
 ) -> Array:
 	var results: Array = []
 	if active_wars.is_empty():
 		return results
 
 	_process_battle_war_scores(military_daily, military_effects, active_wars, companies, results)
-	_process_siege_war_scores(military_daily, active_wars, results)
+	_process_siege_war_scores(storm_assault_results, active_wars, companies, results)
 	_process_tether_war_scores(military_daily, active_wars, companies, results)
 
 	return results
@@ -17741,51 +17742,52 @@ static func _rank_to_death_event(rank: int) -> String:
 	return ""
 
 
+# s53 (LOCKED, SCORE_SHIFTS siege_won_attacker [12,8] / siege_won_defender [8,5]): a resolved
+# storm assault moves the War Score toward the victor. Previously this read
+# military_daily["siege_results"] for `resolved == "attacker_victory"` and `attacker_clan` -- keys
+# that NOTHING in the codebase ever produces (the raw siege-tick dicts carry starvation/honor/ended,
+# and the live storm-assault path emits `victor == "attacker/defender"` + army ids), so it NEVER
+# fired and both siege score shifts were dead. Now consumes the real storm_assault_results (per-tick
+# assault events -- no dedup needed), resolving each side's clan from companies (via _get_army_clan)
+# and the war between them (ally-aware get_war_between), applying the shift to the winning side's
+# principal clan. NOTE: starvation-surrender attacker wins are not an assault so aren't here -- their
+# war impact flows through the (now-wired) territory capture + hostage War Score at _capture_siege_hostages.
 static func _process_siege_war_scores(
-	military_daily: Dictionary,
+	storm_assault_results: Array,
 	active_wars: Array,
+	companies: Array,
 	results: Array,
 ) -> void:
-	var siege_results: Array = military_daily.get("siege_results", [])
-	for sr: Variant in siege_results:
+	for sr: Variant in storm_assault_results:
 		if not (sr is Dictionary):
 			continue
 		var sd: Dictionary = sr
-		var resolved: String = sd.get("resolved", "")
-		if resolved.is_empty():
+		var victor: String = sd.get("victor", "")
+		if victor != "attacker" and victor != "defender":
 			continue
 
-		var attacker_clan: String = sd.get("attacker_clan", "")
-		var defender_clan: String = sd.get("defender_clan", "")
-		if attacker_clan.is_empty() or defender_clan.is_empty():
+		var atk_clan: String = _get_army_clan(sd.get("attacker_army_id", -1), companies)
+		var def_clan: String = _get_army_clan(sd.get("defender_army_id", -1), companies)
+		if atk_clan.is_empty() or def_clan.is_empty() or atk_clan == def_clan:
 			continue
 
-		var event_type: String = ""
-		var winning_clan: String = ""
-		if resolved == "attacker_victory":
-			event_type = "siege_won_attacker"
-			winning_clan = attacker_clan
-		elif resolved == "defender_victory":
-			event_type = "siege_won_defender"
-			winning_clan = defender_clan
+		var event_type: String = "siege_won_attacker" if victor == "attacker" else "siege_won_defender"
+		var winning_clan: String = atk_clan if victor == "attacker" else def_clan
 
-		if event_type.is_empty():
+		# apply_score_shift matches war.clan_a/clan_b directly, so resolve the winner to that side's
+		# principal clan -- lands correctly even when the victor is an allied clan.
+		var war: WarData = WarSystem.get_war_between(active_wars, atk_clan, def_clan)
+		if war == null:
 			continue
-
-		for war: WarData in active_wars:
-			if not war.is_active:
-				continue
-			if WarSystem.is_clan_involved(war, winning_clan):
-				var r: Dictionary = WarSystem.apply_score_shift(
-					war, event_type, winning_clan,
-				)
-				results.append({
-					"war_id": war.war_id,
-					"event": event_type,
-					"clan": winning_clan,
-					"shift": r["shift"],
-				})
-				break
+		var side: String = WarSystem.get_clan_side(war, winning_clan)
+		var principal: String = war.clan_a if side == "a" else war.clan_b
+		var r: Dictionary = WarSystem.apply_score_shift(war, event_type, principal)
+		results.append({
+			"war_id": war.war_id,
+			"event": event_type,
+			"clan": winning_clan,
+			"shift": r["shift"],
+		})
 
 
 # -- Dragon Schism: High House of Light siege detection (s55.10.2.8) -----------
