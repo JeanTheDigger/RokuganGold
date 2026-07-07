@@ -369,6 +369,53 @@ lordless commander (no appointing lord), vacant/missing/dead commander. Runtime-
 (rank→NONE, command→−1, Glory 4.0→3.5, Company vacated); the Rikugunshokan-Daimyo feudal-position
 carve-out; and the lordless/vacant/missing-commander no-ops. Full project `--import` parse-clean.
 
+### Known Code Issues (found and fixed 2026-07-06, Kolat sleeper conditioning never decayed — dead degrade_sleeper_seasonal, runtime-verified 20/20)
+Same "built function, ZERO production callers" class as the demotion fix.
+`KolatSystem.degrade_sleeper_seasonal(sleeper, season_days)` encodes the s54.7c (LOCKED) rule
+*"conditioning_stability is a float 0–100 that degrades passively at a rate of 5 points per IC
+season without contact"* + accrues `sleeper_contact_overdue` — but **nothing called it**
+(grep-confirmed: only its own def + `tests/`). The daily tick ran only `process_sleeper_expiry`
+(day_orchestrator:1309), which touches ONLY magical (World is Truth) sleepers
+(`sleeper_expiry_ic_day >= 0`). So Dream-conditioned **psychological** sleepers never decayed —
+every one stayed permanently at 100 conditioning, permanently above the activation floor, and the
+entire maintenance loop (`MAINTAIN_SLEEPER_CONTACT` → `maintain_sleeper_contact` restores +10 /
+resets overdue, LOCKED s54.7c) was pointless (a Master would never NEED to maintain a sleeper).
+`conditioning_stability` is genuinely consumed — `can_activate_sleeper` requires it `>
+ACTIVATION_STABILITY_FLOOR` (50, LOCKED) — so the decay has real teeth: an unmaintained sleeper
+drifts below 50 in ~10 seasons and can no longer be activated. FIX (pure LOCKED-only wiring, no
+invented numbers — the −5/season and the +10/−reset restore are both s54.7c line 17 verbatim, and
+STABILITY_SEASONAL_DECAY/STABILITY_CONTACT_RESTORE match): a seasonal loop in `advance_day`'s
+`is_season_boundary` block (gated `ic_day > 1 and current_season != prev_season` so it fires once
+per REAL season change, not the day-0 startup) calls `degrade_sleeper_seasonal` on every living
+character with `season_days` = the just-ended season's length
+(`TimeSystem.SEASON_BOUNDARIES[prev_season+1] − [prev_season]`; SPRING/SUMMER 90, AUTUMN 60,
+WINTER 120). The function's own guards do all filtering — non-sleepers (default stability −1.0),
+mid-mission active-command sleepers, and magical sleepers are skipped, so only psychological Dream
+sleepers decay. The restore path is already reachable (the `MAINTAIN_SLEEPER_CONTACT` executor
+calls `maintain_sleeper_contact`), so the maintenance loop now genuinely closes. NOTE (forward-wire,
+not this fix): `sleeper_contact_overdue`'s consumer (a MAINTAIN_SLEEPER need-generation firing at
+the season-overdue threshold) is itself dormant, so that counter accumulates-but-inert for now —
+the `conditioning_stability` decay is the consumed, gameplay-affecting half. Runtime-verified 20/20
+(`tests/verify_sleeper_decay.gd`): −5/season + overdue accrual; the magical/active-command/
+non-sleeper guards + floor-at-0; the consumed consequence (fresh sleeper activatable → 10 seasons →
+50 → NOT activatable); the restore path (+10 cap 100, overdue reset); and the elapsed-season
+lengths. Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, intimidation compliance maintenance bypassed check_compliance_status — arbiter de-dup, runtime-verified 10/10)
+Self-introduced instance of the "canonical arbiter bypassed by an inline copy" anti-pattern: when
+the s12.9 Intimidation Compliance Tracker was first wired, `_process_intimidation_compliance`'s
+maintenance loop re-implemented the compliance-continuation decision inline (a chain of `continue`
+guards), leaving `IntimidationSystem.check_compliance_status` — the canonical 3-condition arbiter
+(`leverage_removed` / `pushback_succeeded` / `can_compliance_end`) — with ZERO callers. Behavior was
+identical (the inline covered the same three conditions), but the OR-logic was duplicated. FIX: the
+loop now only COMPUTES the arbiter's inputs and delegates the combination to `check_compliance_status`
+so the compliance-end rule lives in one place. The dead guard (liveness) stays inline — the arbiter
+takes primitives and can't see it — and the pushback roll keeps its short-circuit (only rolled when
+friendship/leverage haven't already ended it), so RNG consumption and behavior are byte-identical.
+No invented values. Runtime-verified 10/10 (`tests/verify_compliance_arbiter.gd`): the arbiter truth
+table + every maintenance branch (fresh/dead/friendship/leverage/persist). Full project `--import`
+parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, hostage leverage never shifted War Score — dormant SCORE_SHIFTS keys, runtime-verified 11/11)
 Same "produced-but-not-consumed" dormant-signal class as the army-dissolution / harvest-arbiter
 fixes. `WarSystem.SCORE_SHIFTS` defines the GDD-LOCKED hostage leverage keys `hostage_rank3`

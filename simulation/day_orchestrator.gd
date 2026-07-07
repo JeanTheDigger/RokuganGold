@@ -1584,6 +1584,20 @@ static func advance_day(
 	var governor_review_results: Array = []
 	var is_season_boundary: bool = current_season != prev_season or ic_day <= 1
 	if is_season_boundary:
+		# s54.7c (LOCKED): a Dream-conditioned (psychological) sleeper's conditioning_stability
+		# degrades passively at 5 points per IC season without a MAINTAIN_SLEEPER_CONTACT, and
+		# sleeper_contact_overdue accrues the elapsed IC days. KolatSystem.degrade_sleeper_seasonal
+		# encodes this exactly but had ZERO callers (the daily tick only ran process_sleeper_expiry
+		# on MAGICAL sleepers), so psychological sleepers never decayed -- every sleeper stayed
+		# permanently above the activation floor and the whole maintenance loop (MAINTAIN_SLEEPER_CONTACT
+		# restores +10 / resets overdue) was pointless. The function's own guards skip non-sleepers
+		# (default stability -1.0), active-command sleepers, and magical (World is Truth) sleepers.
+		if ic_day > 1 and current_season != prev_season:
+			var _season_len: int = TimeSystem.SEASON_BOUNDARIES[int(prev_season) + 1] \
+				- TimeSystem.SEASON_BOUNDARIES[int(prev_season)]
+			for _slp: L5RCharacterData in characters:
+				if _slp != null and not CharacterStats.is_dead(_slp):
+					KolatSystem.degrade_sleeper_seasonal(_slp, _season_len)
 		# s11.5 Jeweled Championships: when a vacancy-triggered Jeweled Champion seat
 		# (Emerald/Jade/Amethyst/Ruby/Turquoise) is empty, the Emperor calls a championship
 		# to fill it. Checked each season.
