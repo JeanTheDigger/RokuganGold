@@ -998,20 +998,16 @@ static func _execute_intimidation(
 
 
 static func _get_disposition_tier_name(disp: int) -> String:
-	if disp >= 91:
-		return "devoted"
-	if disp >= 61:
-		return "trusted_ally"
-	if disp >= 31:
-		return "friend"
-	if disp >= 11:
-		return "acquaintance"
-	if disp >= -10:
-		return "stranger"
-	if disp >= -30:
-		return "rival"
-	if disp >= -60:
-		return "enemy"
+	# Tier boundaries are the LOCKED s12.2 table — route through the canonical
+	# DispositionSystem.get_tier instead of a hand-copied threshold ladder (drift hazard).
+	match DispositionSystem.get_tier(disp):
+		DispositionSystem.Tier.DEVOTED: return "devoted"
+		DispositionSystem.Tier.TRUSTED_ALLY: return "trusted_ally"
+		DispositionSystem.Tier.FRIEND: return "friend"
+		DispositionSystem.Tier.ACQUAINTANCE: return "acquaintance"
+		DispositionSystem.Tier.STRANGER: return "stranger"
+		DispositionSystem.Tier.RIVAL: return "rival"
+		DispositionSystem.Tier.ENEMY: return "enemy"
 	return "blood_enemy"
 
 

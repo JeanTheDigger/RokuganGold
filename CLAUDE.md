@@ -237,6 +237,22 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, two disposition-tier ladders consolidated onto the canonical arbiter — behavior-preserving dedup — runtime-verified 16/16)
+A **duplicate-antipattern / drift-hazard** consolidation (the same class as the social-TN fix — agreed exactly
+today, but a hand-copied ladder that would silently drift from the LOCKED s12.2 boundaries). The canonical tier
+arbiter `DispositionSystem.get_tier` (BLOOD_ENEMY ≤ −61 / ENEMY ≤ −31 / RIVAL ≤ −11 / STRANGER ≤ 10 /
+ACQUAINTANCE ≤ 30 / FRIEND ≤ 60 / TRUSTED_ALLY ≤ 90 / DEVOTED, s12.2 LOCKED) was re-implemented INLINE as a
+hand-written 8-rung threshold ladder in two live consumers: `ActionExecutor._get_disposition_tier_name` (maps to
+a lowercase tier string) and `CourtActionSystem.get_debate_disposition_tier` (maps into the `DEBATE_DISPOSITION_TIERS`
+value dict, with "sworn" as its 61–90 TRUSTED_ALLY key). The boundaries MATCHED the canonical exactly today (no
+active bug), but each was a private hand-copy of the LOCKED table that would drift the moment either the canonical
+or a copy changed. FIX (behavior-preserving, no new numbers): both consumers now `match DispositionSystem.get_tier(disp)`
+and map the returned `Tier` enum to their own local representation (string / debate-dict value) — the threshold
+decision lives in ONE place (the canonical), while each keeps its distinct naming. Runtime-verified 16/16
+(`tests/verify_disposition_tier_dedup.gd`): both rerouted functions produce output IDENTICAL to the original inline
+ladders for EVERY disposition value −100..100 (0 mismatches across all 402 evaluations), plus all 14 tier-boundary
+spot-checks (−61/−60/−31/−30/−11/−10/10/11/30/31/60/61/90/91). Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, assassination-order honor cost applied TWICE — twin arbiters both fired — runtime-verified 14/14)
 A **twin-arbiter double-count** (the split-brain sub-class of the divergent-inline-copy bug) and a genuine
 LIVE correctness bug. The s12.8 "honor cost of ORDERING an assassination, rank-scaled by target Status"
