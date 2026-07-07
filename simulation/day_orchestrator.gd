@@ -15979,6 +15979,13 @@ static func _process_army_movements(
 ) -> Array:
 	var results: Array = []
 	for army: Dictionary in active_armies:
+		# A dissolved/disbanded army (is_active == false) is gone from the World Map
+		# (GDD s11.7 line 365) — it neither moves nor triggers battles. This guard
+		# matches the convention used by _process_disbands / _apply_retreat_orders;
+		# the movement pass previously ignored it, so a battle-dissolved or disbanded
+		# army could keep marching as a phantom.
+		if not army.get("is_active", true):
+			continue
 		_initiate_retreat_march(army)
 		if not army.get("is_moving", false):
 			continue
@@ -16020,8 +16027,17 @@ static func _resolve_army_battles(
 		if arriving_army.is_empty():
 			push_warning("[Battle] Skipped: army %d not found in active_armies" % arriving_army_id)
 			continue
+		# A dissolved/disbanded army does not fight (GDD s11.7 line 365).
+		if not arriving_army.get("is_active", true):
+			continue
 
-		var enemy_army_ids: Array = bc.get("enemy_army_ids", [])
+		# Only active enemy armies at the tile join the defense — a dissolved army
+		# lingering in the array (check_battle_trigger matches by tile, not is_active)
+		# must not be re-fought.
+		var enemy_army_ids: Array = []
+		for eid: Variant in bc.get("enemy_army_ids", []):
+			if eid is int and _find_army_by_id(eid, active_armies).get("is_active", true):
+				enemy_army_ids.append(eid)
 		if enemy_army_ids.is_empty():
 			push_warning("[Battle] Skipped: no enemy army IDs for army %d" % arriving_army_id)
 			continue
@@ -16090,6 +16106,19 @@ static func _resolve_army_battles(
 
 		_write_battle_results_to_companies(battle_result, companies)
 
+		# GDD s11.7 line 365 (LOCKED): a routing army reduced to <=20% of its
+		# starting Health (computed post-pursuit by ArmyCombatSystem.resolve_rout,
+		# already carried on battle_result.rout / .dissolution + PU-reconciled) is
+		# DISSOLVED ENTIRELY -- removed from the World Map. That dissolved decision
+		# was produced but never applied to the army entity, so the loser lingered
+		# as a phantom (kept moving, re-triggered battles). Flip the losing side's
+		# army records inactive here. (The >20% "retreats to the previous sub-tile"
+		# half is deferred to the s11.7a sub-tile movement layer -- no previous-tile
+		# tracking and _RETREAT_DEFAULT_DAYS is 0 pending that system.)
+		_apply_battle_army_dissolution(
+			battle_result, field_victor, arriving_army_id, enemy_army_ids, active_armies,
+		)
+
 		battle_result["attacker_army_id"] = arriving_army_id
 		battle_result["defender_army_ids"] = enemy_army_ids
 		battle_result["attacker_clan"] = attacker_clan
@@ -16099,6 +16128,41 @@ static func _resolve_army_battles(
 		results.append(battle_result)
 
 	return results
+
+
+## Apply the GDD s11.7 rout dissolution (line 365) to the losing side's army
+## records. resolve_rout already computed battle_result.rout.dissolved (the
+## army-wide, post-pursuit <=20%-of-starting-Health test) and reconciled the
+## Health -> PU loss; this only wires that outcome into the army lifecycle by
+## flipping the loser inactive + halting it, so the dissolved army leaves play.
+## No-op on a draw or a survivable rout (>20%, which retreats -- deferred to
+## the sub-tile layer). Never removes the array entry (matches _process_disbands:
+## is_active-guarded passes skip it).
+static func _apply_battle_army_dissolution(
+	battle_result: Dictionary,
+	victor: String,
+	attacker_army_id: int,
+	defender_army_ids: Array,
+	active_armies: Array,
+) -> void:
+	if victor != "attacker" and victor != "defender":
+		return
+	if not battle_result.get("rout", {}).get("dissolved", false):
+		return
+	var loser_ids: Array = defender_army_ids if victor == "attacker" else [attacker_army_id]
+	for lid: Variant in loser_ids:
+		if not (lid is int):
+			continue
+		var army: Dictionary = _find_army_by_id(lid, active_armies)
+		if army.is_empty():
+			continue
+		army["is_active"] = false
+		army["is_moving"] = false
+		army["destination_sub_tile"] = -1
+		army["path"] = []
+		army["days_remaining"] = 0
+		army.erase("retreat_ordered")
+		army.erase("disband_ordered")
 
 
 static func _get_army_companies(
@@ -16427,6 +16491,10 @@ static func _process_army_recovery(
 
 	var results: Array = []
 	for army: Dictionary in active_armies:
+		# A dissolved/disbanded army does not recover (GDD s11.7 line 365 -- it is
+		# gone; its Health was already reconciled to PU loss on the source province).
+		if not army.get("is_active", true):
+			continue
 		var army_id: int = army.get("army_id", -1)
 		var is_moving: bool = army.get("is_moving", false)
 		if is_moving:
