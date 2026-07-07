@@ -237,6 +237,41 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, two "canonical arbiter bypassed by a divergent inline copy" fixes — runtime-verified 12/12)
+A divergence-class sweep (the same anti-pattern as the seppuku/harvest/blackmail fixes) surfaced two
+inline copies of a canonical table/function that had drifted from the LOCKED source. Both fixes are
+pure routing — zero re-implemented logic, zero invented values.
+- **Conviction-topic momentum started one crisis-band too low (s16.1, LIVE).** `InvestigationSystem.generate_conviction_topic`
+  minted its topic momentum from a LOCAL `TOPIC_INITIAL_MOMENTUM` table whose tiers 2/3/4 were each
+  **exactly 1 point below** the canonical `TopicMomentumSystem.TIER_INITIAL_MOMENTUM` (26/51/80 → the
+  inline copy had 25/50/80) — landing at the TOP of the band below. Under the LOCKED s16.1 band floors
+  (Rumor 0–10 / Minor 11–25 / Secondary 26–50 / Major 51–75 / Unavoidable 76+), that meant **every
+  crime-conviction topic entered court discussion one full crisis-band weaker** than any other topic of
+  the same tier: a Tier-4 conviction read as RUMOR ("not yet a formal topic") instead of MINOR, Tier-3
+  as MINOR instead of SECONDARY, Tier-2 as SECONDARY instead of MAJOR (Tier-1 alone matched at 80 — the
+  off-by-one-on-3-of-4 asymmetry proves it was an inconsistent hand-copy, not a deliberate offset). This
+  drove momentum-band classification → court-agenda prominence, so convictions were systematically
+  under-weighted on the agenda. FIX: deleted the local table (it had ZERO other consumers) and routed
+  the one call site through `TopicMomentumSystem.initial_momentum_for_tier(tier)` — the same helper the
+  file's 6 `create_topic` calls already use. Conviction topics now enter at the same band as every other
+  topic of their tier.
+- **Assassination writeback classified covert killing as CAPITAL instead of SERIOUS (s57.47:33, latent).**
+  The assassination-detected-on-failure writeback (`_apply_assassination_outcome`) hand-built a
+  `CrimeRecord` and hardcoded `severity = CrimeSeverity.CAPITAL` for `UNSANCTIONED_COVERT_KILLING`,
+  conflating the execution SENTENCE (`UnsanctionedKillingSystem.get_consequences.capital = true`, the
+  punishment axis) with the `CrimeSeverity.CAPITAL` CLASSIFICATION enum. The canonical
+  `CrimeSystem.get_severity(UNSANCTIONED_COVERT_KILLING)` returns **SERIOUS** (s57.47:33 LOCKED:
+  "SERIOUS — Unsanctioned Covert Killing … Sentence: execution"), and the two SIBLING covert-killing
+  CrimeRecord sites both build via `create_crime_record` (→ SERIOUS) — this hand-built one was the lone
+  outlier. Latent (no production sentencing path currently reads `record.severity` — sentencing keys off
+  `crime_type`), but a genuine divergence from the canonical + LOCKED GDD that would silently misbehave
+  the moment any consumer reads severity. FIX: `record.severity = CrimeSystem.get_severity(Enums.CrimeType.UNSANCTIONED_COVERT_KILLING)`.
+  TREASON/MAHO/EMPEROR'S-PEACE stay CAPITAL (correct); the fix is scoped to covert killing.
+Runtime-verified 12/12 (`tests/verify_conviction_divergences.gd`): all four tiers' conviction momentum
+== the canonical table (no off-by-one) + each classifies at its correct crisis band; covert-killing
+severity == SERIOUS via both `get_severity` and `create_crime_record`, ≠ the hardcoded CAPITAL, TREASON
+still CAPITAL. Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, marriage-obligation favor never got a unique favor_id — bypassed the offer_favor factory — runtime-verified 11/11)
 Same "hand-built data object where a factory exists" sub-class as the blackmail-favor fix, but this one
 was a **latent correctness bug**, not a dormant no-op. The cross-clan marriage-obligation favor

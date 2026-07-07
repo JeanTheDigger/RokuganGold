@@ -28871,7 +28871,12 @@ static func _apply_assassination_outcome(
 		record.case_id = next_case_id[0]
 		next_case_id[0] += 1
 		record.crime_type = Enums.CrimeType.UNSANCTIONED_COVERT_KILLING
-		record.severity = Enums.CrimeSeverity.CAPITAL
+		# s57.47:33 (LOCKED) — Unsanctioned Covert Killing is severity SERIOUS (its sentence is
+		# execution, but that is the punishment axis, not the classification). Route through the
+		# canonical get_severity so this matches the sibling covert-killing sites (which build via
+		# create_crime_record); the prior hardcoded CAPITAL conflated the execution sentence with
+		# the CrimeSeverity.CAPITAL classification.
+		record.severity = CrimeSystem.get_severity(Enums.CrimeType.UNSANCTIONED_COVERT_KILLING)
 		record.perpetrator_id = assassin.character_id
 		record.victim_id = target.character_id
 		record.ic_day_committed = ic_day
