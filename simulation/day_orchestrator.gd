@@ -2030,6 +2030,12 @@ static func advance_day(
 	_remove_terminal_paintings(active_paintings)
 	_remove_terminal_sculptures(active_sculptures)
 
+	# s12.8 line 273 (LOCKED): the OTHER maintenance trigger -- "WRITE_LETTER to the same person"
+	# resets an entanglement's maintenance window (the GDD's PRIMARY channel: a love letter sustains
+	# the romance across distance). Runs at end-of-tick, after every letter-creation pass, so it sees
+	# all letters sent this tick regardless of ordering.
+	_maintain_entanglements_from_letters(pending_letters, entanglements, ic_day)
+
 	return {
 		"ic_day": ic_day,
 		"season": current_season,
@@ -28468,13 +28474,20 @@ static func _process_seduction_entanglements(
 		var target_id: int = int(r.get("target_npc_id", -1))
 		if seducer_id < 0 or target_id < 0:
 			continue
-		var duplicate: bool = false
+		# s12.8 line 273 (LOCKED): "Contact that resets the maintenance window: any Seduction
+		# ActionID (any of the five) targeting the same person." A re-seduction against an
+		# EXISTING non-broken entanglement is therefore maintenance, not a duplicate to skip --
+		# route it through SeductionSystem.maintain_entanglement (resets the window, missed_windows
+		# 0, state ACTIVE). Before this the re-seduce was a no-op, so entanglements could only ever
+		# decay (check_maintenance) and never be sustained.
+		var refreshed: bool = false
 		for existing: Dictionary in entanglements:
 			if int(existing.get("seducer_id", -1)) == seducer_id and int(existing.get("target_id", -1)) == target_id:
 				if int(existing.get("state", -1)) != SeductionSystem.EntanglementState.BROKEN:
-					duplicate = true
+					SeductionSystem.maintain_entanglement(existing, ic_day)
+					refreshed = true
 					break
-		if duplicate:
+		if refreshed:
 			continue
 		var variant: SeductionSystem.SeductionVariant = _get_seduction_variant_from_action_id(action_id)
 		entanglements.append(SeductionSystem.create_entanglement(seducer_id, target_id, ic_day, variant))
@@ -28485,6 +28498,34 @@ static func _process_seduction_entanglements(
 				HonorGlorySystem.apply_honor_change(
 					seducer, CrimeSystem.get_manipulating_honor(seducer)
 				)
+
+
+# s12.8 line 273 (LOCKED): "WRITE_LETTER to the same person" also resets an entanglement's
+# maintenance window. Any letter a seducer sends this tick to their entangled target sustains the
+# romance (the GDD's primary, across-distance maintenance channel). Guards on ic_day_sent == ic_day
+# so a lingering pending letter never re-maintains, and skips BROKEN entanglements (a letter never
+# revives an ended relationship). Routes through the canonical maintain_entanglement arbiter.
+static func _maintain_entanglements_from_letters(
+	pending_letters: Array,
+	entanglements: Array,
+	ic_day: int,
+) -> void:
+	if entanglements.is_empty() or pending_letters.is_empty():
+		return
+	for letter_v: Variant in pending_letters:
+		var letter: LetterData = letter_v as LetterData
+		if letter == null or letter.ic_day_sent != ic_day:
+			continue  # only letters SENT this tick reset the window
+		var s_id: int = letter.sender_id
+		var r_id: int = letter.recipient_id
+		if s_id < 0 or r_id < 0:
+			continue
+		for ent: Dictionary in entanglements:
+			if int(ent.get("state", -1)) == SeductionSystem.EntanglementState.BROKEN:
+				continue
+			if int(ent.get("seducer_id", -1)) == s_id and int(ent.get("target_id", -1)) == r_id:
+				SeductionSystem.maintain_entanglement(ent, ic_day)
+				break
 
 
 # ==============================================================================

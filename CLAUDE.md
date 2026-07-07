@@ -369,6 +369,35 @@ lordless commander (no appointing lord), vacant/missing/dead commander. Runtime-
 (rank→NONE, command→−1, Glory 4.0→3.5, Company vacated); the Rikugunshokan-Daimyo feudal-position
 carve-out; and the lordless/vacant/missing-commander no-ops. Full project `--import` parse-clean.
 
+### Known Code Issues (found and fixed 2026-07-06, seduction entanglement could never be maintained — dead maintain_entanglement, runtime-verified 9/9)
+Same "built arbiter, ZERO callers" class. `SeductionSystem.maintain_entanglement` (resets the
+maintenance window: `last_maintained_ic_day = now`, `missed_windows = 0`, `state = ACTIVE`) had NO
+production callers. The live entanglement pass (`_process_entanglements` → `check_maintenance`) only
+ever DECAYS an entanglement (NEGLECTED → BROKEN after 3 missed 16-day windows, s12.8), and the SEDUCE
+writeback (`_process_seduction_entanglements`) treated a re-seduction against an EXISTING non-broken
+entanglement as a **duplicate to skip** — a no-op. So once established, an entanglement could only
+decay: nothing could ever refresh it, and the whole maintenance mechanic was one-directional.
+GDD s12.8 line 273 (LOCKED) is explicit: *"Contact that resets the maintenance window: any Seduction
+ActionID (any of the five) targeting the same person, OR WRITE_LETTER to the same person."* FIX
+(pure LOCKED behavior, no invented numbers): a successful SEDUCE against an existing non-broken
+entanglement now routes through `SeductionSystem.maintain_entanglement(existing, ic_day)` (the
+re-seduction IS maintenance per line 273) instead of no-op'ing; a new target still creates a fresh
+entanglement, and a BROKEN one still doesn't block a new one (unchanged). Both LOCKED maintenance channels are now wired: (1) **re-seduction** — a successful SEDUCE against an
+existing non-broken entanglement routes through `maintain_entanglement` instead of no-op'ing; (2)
+**love-letter** — a new end-of-tick pass `_maintain_entanglements_from_letters` (placed after every
+letter-creation pass so ordering is irrelevant) scans `pending_letters` for letters SENT this tick
+(`ic_day_sent == ic_day`) whose sender→recipient matches an active entanglement and maintains it (the
+GDD's *primary*, across-distance channel; a stale/prior-tick letter never re-maintains, and a letter
+never revives a BROKEN entanglement). Runtime-verified 15/15
+(`tests/verify_entanglement_maintenance.gd`): re-seduction refreshes a NEGLECTED entanglement to
+ACTIVE / 0 missed / window-reset WITHOUT a duplicate; a new target creates a second entanglement; a
+BROKEN entanglement stays broken while a fresh one is created ACTIVE; failed / non-creating results
+don't maintain; a same-tick letter to the entangled target resets the window while a prior-tick
+letter, a letter to a different person, and a letter to a broken entanglement all correctly don't.
+Full project `--import` parse-clean. **DEFERRED (owner-gated, no trigger):** `break_entanglement`
+(the formal-breakup arbiter, −15 disposition) — there is no BREAKUP action to call it, and the
+neglect-break −10 disposition / −2-per-missed-window decay are a separate `check_maintenance` gap.
+
 ### Known Code Issues (found and fixed 2026-07-06, Kolat sleeper conditioning never decayed — dead degrade_sleeper_seasonal, runtime-verified 20/20)
 Same "built function, ZERO production callers" class as the demotion fix.
 `KolatSystem.degrade_sleeper_seasonal(sleeper, season_days)` encodes the s54.7c (LOCKED) rule
