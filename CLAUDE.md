@@ -237,6 +237,40 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, army rout-dissolution never applied to the army lifecycle — runtime-verified 14/14)
+A "produced-but-not-consumed" dormant signal in the LIVE military battle loop.
+`ArmyCombatSystem.resolve_rout` computes the GDD-LOCKED army-wide, **post-pursuit
+≤20%-of-starting-Health dissolution** (s11.7 line 365) and `process_army_dissolution`
+reconciles the losses (Health → source-province PU) — and `resolve_and_reconcile_battle`
+carries both on `battle_result.rout` / `.dissolution`. But the field-battle path
+(`_resolve_army_battles`) **never applied that dissolved decision to the losing army
+entity**: only the voluntary `disband_ordered` path (`_process_disbands`) ever set
+`is_active = false`. A battle-dissolved army lingered in `active_armies` as a **phantom** —
+it kept marching (`_process_army_movements` and `_process_army_recovery` didn't check
+`is_active` at all, and `check_battle_trigger` matches enemies by tile, not liveness), so it
+re-triggered battles and healed companies whose Health had already been converted to PU death.
+FIX (pure wiring of the already-computed LOCKED outcome — **no invented numbers**; NOT the
+movement-level `ArmyMovementSystem.should_dissolve`, which is the pre-pursuit s11.7a helper of
+the still-blocked sub-tile layer): new `_apply_battle_army_dissolution` flips the losing side's
+army records inactive + halts them (clears is_moving/path/days + retreat/disband flags) when
+`battle_result.rout.dissolved` — attacker-victor dissolves the defender armies, defender-victor
+dissolves the attacker; no-op on a draw or a survivable rout (>20%). Added the standard
+`is_active` guard (the convention already used by `_process_disbands` / `_apply_retreat_orders`)
+to `_process_army_movements` and `_process_army_recovery` so the flip actually removes the army
+from play — this ALSO fixes a latent case where a **disbanded** army (the only prior
+`is_active=false` producer) could keep moving/healing — and filtered dissolved enemies out of
+the battle-defender set in `_resolve_army_battles`. The array entry is left in place (matches
+`_process_disbands`: `is_active`-guarded passes skip it). **DEFERRED (sub-tile-blocked, s11.7a):**
+the >20% "retreats to the previous sub-tile it came from" half (GDD line 363) — there is no
+previous-tile tracking at the province-battle layer and `_RETREAT_DEFAULT_DAYS` is 0 pending the
+sub-tile movement system; and the siege storm-assault battle path (its dissolution is a separate
+siege mechanic, s11.7 siege). Runtime-verified 14/14 (`tests/verify_army_dissolution.gd`): the
+applier flips the correct losing side (attacker-victor → defenders / defender-victor → attacker
+/ survivable-rout no-op / draw no-op / halt + flags cleared); the movement pass advances an
+active mover but FREEZES an inactive phantom (its `days_remaining` untouched); the recovery pass
+yields a result for an active army but NONE for a dissolved one. Full project `--import`
+parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, harvest-destruction arbiter divergence — runtime-verified 21/21)
 Same "built arbiter bypassed by an inline copy" class as the SeppukuDecision fix. The NPC
 engine's `_is_harvest_blocked_by_virtue` (the RAID_HARVEST personality gate) had a hand-rolled
