@@ -224,11 +224,26 @@ static func resolve_active_worship(
 
 # -- Threshold Evaluation -----------------------------------------------------
 
-# DISABLED: GDD s4.3.21 does not specify WP ratio thresholds for tier transitions
+# Model A (magnitude / ratio-of-threshold), owner-approved 2026-07-06. GDD s4.3.21
+# LOCKS the threshold (10 WP/Fortune/season) and the three malus tiers but does not
+# state the WP-to-tier transition points; the owner set the two band edges below
+# (the ONLY invented values here). The tier is a pure function of how far below
+# threshold the WP sits, so it scales to any threshold and needs no per-season state
+# (worship resets each season / overflow does not carry — GDD line 1407).
+const TIER_RESTLESS_RATIO: float = 0.70   # 70-99% of threshold
+const TIER_DISPLEASED_RATIO: float = 0.40  # 40-69% of threshold
+# < 40% -> WRATHFUL; >= 100% -> NONE (met).
 static func get_worship_tier(wp: float, threshold: float) -> Enums.WorshipTier:
-	if wp >= threshold:
+	if threshold <= 0.0:
+		return Enums.WorshipTier.NONE  # no obligation defined
+	var ratio: float = wp / threshold
+	if ratio >= 1.0:
 		return Enums.WorshipTier.NONE
-	return Enums.WorshipTier.NONE
+	if ratio >= TIER_RESTLESS_RATIO:
+		return Enums.WorshipTier.RESTLESS
+	if ratio >= TIER_DISPLEASED_RATIO:
+		return Enums.WorshipTier.DISPLEASED
+	return Enums.WorshipTier.WRATHFUL
 
 
 static func evaluate_province_thresholds(province_wp: Dictionary) -> Dictionary:
@@ -430,9 +445,8 @@ static func compute_all_province_maluses(
 	provinces: Dictionary,
 ) -> Dictionary:
 	var province_tiers: Dictionary = worship_state.get("province_tiers", {})
-	var family_tiers: Dictionary = worship_state.get("family_tiers", {})
-	var clan_tiers: Dictionary = worship_state.get("clan_tiers", {})
-	var empire_tiers: Dictionary = worship_state.get("empire_tiers", {})
+	# family_tiers/clan_tiers/empire_tiers are stored in worship_state but NOT read
+	# here — the aggregate layer is deferred (see the province-only note below).
 
 	var result: Dictionary = {}
 	for pid: Variant in provinces:
@@ -440,18 +454,21 @@ static func compute_all_province_maluses(
 		if prov == null:
 			continue
 		var p_tiers: Dictionary = province_tiers.get(pid, {})
-		var fam: String = prov.family
-		var clan: String = prov.clan
-		var f_tiers: Dictionary = family_tiers.get(fam, {})
-		var c_tiers: Dictionary = clan_tiers.get(clan, {})
 
 		var combined: Dictionary = {}
 		for f: int in range(GREAT_FORTUNE_COUNT):
 			var pt: Enums.WorshipTier = p_tiers.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
-			var ft: Enums.WorshipTier = f_tiers.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
-			var ct: Enums.WorshipTier = c_tiers.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
-			var et: Enums.WorshipTier = empire_tiers.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
-			var worst: Enums.WorshipTier = get_worst_tier(pt, ft, ct, et)
+			# PROVINCE-ONLY ACTIVATION (owner-approved 2026-07-06). The family/clan/
+			# empire aggregate tiers ARE computed and stored in worship_state, but are
+			# NOT applied yet: their thresholds (60/150/800) are GDD-flagged PROVISIONAL
+			# (s4.3.21 line 1367, "recalculate once the map is built"), and this function
+			# would otherwise blanket the WORST of {province, family, clan, empire} onto
+			# every member province off provisional numbers. Only the LOCKED province
+			# threshold (10 WP) drives maluses. To activate the full four-level model once
+			# the aggregate thresholds lock, restore the three worship_state lookups
+			# (family_tiers[prov.family][f], clan_tiers[prov.clan][f], empire_tiers[f])
+			# and: var worst := get_worst_tier(pt, ft, ct, et)
+			var worst: Enums.WorshipTier = pt
 			if worst == Enums.WorshipTier.NONE:
 				continue
 			var malus: Dictionary = get_fortune_malus(f as Enums.GreatFortune, worst)

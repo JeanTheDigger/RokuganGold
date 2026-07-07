@@ -57,6 +57,12 @@ func _worship_result(char_id: int, prov: int, directed: bool, wp_dist: Dictionar
 func _state(prov: int, wp: Dictionary) -> Dictionary:
 	var ws: Dictionary = WorshipSystem.make_initial_worship_state()
 	var pw: Dictionary = WorshipSystem.make_initial_province_worship()
+	# Seed every Fortune healthy by default. Since the tier model went live
+	# (Model A), a Fortune below 40% of threshold reads WRATHFUL, and a WRATHFUL
+	# Fukurokujin blocks ALL divination for the province (GDD-LOCKED). Tests that
+	# want a specific low/Wrathful Fortune override it explicitly below.
+	for f: int in range(WorshipSystem.GREAT_FORTUNE_COUNT):
+		pw[f] = 12.0
 	for f: Variant in wp:
 		pw[int(f)] = wp[f]
 	ws["province_wp"] = {prov: pw}
