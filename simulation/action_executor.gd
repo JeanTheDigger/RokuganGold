@@ -975,6 +975,11 @@ static func _execute_intimidation(
 
 	if r.has("favors_extracted"):
 		effects["favors_extracted"] = r["favors_extracted"]
+		# Propagate the secret's severity tier so the writeback can extract the
+		# correct favor tier (s12.10 line 89 LOCKED: Tier 1->Major, 2->Moderate,
+		# 3->Minor, 4->no tracked favor). Blackmail (favors_extracted) only occurs
+		# on the has_secret path, where secret_tier was read from metadata above.
+		effects["secret_tier"] = int(action.metadata.get("secret_tier", 3))
 
 	return {
 		"success": r["success"],

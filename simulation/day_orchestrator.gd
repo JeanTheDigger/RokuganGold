@@ -7188,18 +7188,18 @@ static func _process_blackmail_favor_writebacks(
 		for f: Variant in favors:
 			if f is FavorData and (f as FavorData).favor_id >= max_id:
 				max_id = (f as FavorData).favor_id + 1
-		for i: int in range(count):
-			var favor := FavorData.new()
-			favor.favor_id = max_id + i
-			favor.favor_type = FavorData.FavorType.GENERAL
-			favor.tier = FavorData.FavorTier.MINOR
-			favor.creditor_id = creditor_id
-			favor.debtor_id = debtor_id
-			favor.created_ic_day = ic_day
-			favor.terms = "blackmail_extracted"
-			favor.source_action = "INTIMIDATE"
-			favor.is_blackmail_extracted = true
-			favors.append(favor)
+		# Route through the canonical arbiter (s12.10 line 89 LOCKED): the extracted
+		# favor tier is the secret's severity tier (Tier 1->Major, 2->Moderate,
+		# 3->Minor); a Tier-4 secret yields only vague goodwill -- NO tracked favor.
+		# The prior inline copy hardcoded MINOR for every tier and minted Tier-4
+		# favors the spec forbids.
+		var secret_tier: int = int(effects.get("secret_tier", 3))
+		var extracted: Array = FavorSystem.extract_blackmail_favor(
+			secret_tier, creditor_id, debtor_id, count, ic_day, max_id,
+		)
+		for fav_v: Variant in extracted:
+			if fav_v is FavorData:
+				favors.append(fav_v)
 
 
 static func _process_invoke_favor_writebacks(
