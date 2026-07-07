@@ -1668,6 +1668,10 @@ static func advance_day(
 			military_seasonal_result.get("promotions", []),
 			characters_by_id, companies,
 		)
+		_apply_demotion_results(
+			military_seasonal_result.get("demotions", []),
+			characters_by_id, companies,
+		)
 		military_seasonal_result["levy_suspicion"] = _process_levy_suspicion(
 			companies, active_wars, characters_by_id,
 			active_topics, next_topic_id, ic_day,
@@ -16819,9 +16823,16 @@ static func _process_military_seasonal(
 	var promotion_results: Array = _process_military_promotions(
 		companies, characters_by_id,
 	)
+	# Demotion is computed against the CURRENT commander set (disjoint from the promotion
+	# candidate pool, which draws only from non-commanders), so no character is both promoted
+	# and demoted in one tick. A demotion's freshly-vacated Company is refilled next season.
+	var demotion_results: Array = _process_military_demotions(
+		companies, characters_by_id,
+	)
 	return {
 		"upkeep": upkeep_results,
 		"promotions": promotion_results,
+		"demotions": demotion_results,
 	}
 
 
@@ -17060,6 +17071,67 @@ static func _apply_promotion_results(
 		for company: Dictionary in companies:
 			if company.get("company_id", -1) == unit_id:
 				company["commander_id"] = char_id
+				break
+
+
+# s11.7 (LOCKED, Demotion and Removal): "A commander whose disposition toward their appointing
+# lord drops below -10 may be replaced for political reasons. Removal clears the character's
+# military_rank and commanded_unit_id... they lose 0.5 Glory." The sibling promotion arbiters
+# (find_vacancies / select_best_candidate) run live every season, but MilitaryPromotionSystem's
+# should_remove_for_disposition + apply_demotion had ZERO production callers -- promotion fired
+# while demotion was dead, so a commander who came to loathe their lord kept command forever.
+# The threshold (-10) lives only in should_remove_for_disposition and the -0.5 Glory only in
+# apply_demotion, so both are routed through (no re-implemented logic / no invented numbers).
+static func _process_military_demotions(
+	companies: Array,
+	characters_by_id: Dictionary,
+) -> Array:
+	var results: Array = []
+	for company: Dictionary in companies:
+		var commander_id: int = company.get("commander_id", -1)
+		if commander_id < 0:
+			continue
+		var commander: L5RCharacterData = characters_by_id.get(commander_id)
+		if commander == null or CharacterStats.is_dead(commander):
+			continue
+		var lord_id: int = commander.lord_id
+		if lord_id < 0:
+			continue  # No appointing lord to be disaffected with.
+		var disp: int = int(commander.disposition_values.get(lord_id, 0))
+		if MilitaryPromotionSystem.should_remove_for_disposition(disp):
+			results.append({
+				"unit_id": company.get("company_id", -1),
+				"commander_id": commander_id,
+			})
+	return results
+
+
+static func _apply_demotion_results(
+	demotion_results: Array,
+	characters_by_id: Dictionary,
+	companies: Array,
+) -> void:
+	for demo: Dictionary in demotion_results:
+		var char_id: int = demo.get("commander_id", -1)
+		var unit_id: int = demo.get("unit_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		# Mutation + Glory magnitude via the canonical arbiter (a throwaway view carries the
+		# dict-shaped state apply_demotion mutates; only military_rank/commanded_unit_id are
+		# cleared, so a removed Rikugunshokan who is also a Family Daimyo keeps their feudal
+		# position per GDD s11.7).
+		var view: Dictionary = {
+			"military_rank": character.military_rank,
+			"commanded_unit_id": character.commanded_unit_id,
+		}
+		var applied: Dictionary = MilitaryPromotionSystem.apply_demotion(view)
+		character.military_rank = view.get("military_rank", Enums.MilitaryRank.NONE)
+		character.commanded_unit_id = int(view.get("commanded_unit_id", -1))
+		HonorGlorySystem.apply_glory_change(character, -float(applied.get("glory_loss", 0.0)))
+		for company: Dictionary in companies:
+			if company.get("company_id", -1) == unit_id:
+				company["commander_id"] = -1
 				break
 
 

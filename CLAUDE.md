@@ -336,6 +336,39 @@ matching no real engine action.
   design (the block prevents most). The `COVERT_ACTIONS_PERMITTED` constant is now inert
   (no overlap with the narrowed `HOSTILE_ACTIONS`) but retained as intent documentation.
 
+### Known Code Issues (found and fixed 2026-07-06, military demotion-for-disposition never fired — dormant arbiter, runtime-verified 13/13)
+Same "built arbiter with ZERO production callers" class as the seppuku/hostage fixes. The seasonal
+military pass (`_process_military_seasonal` → `_process_military_promotions`, live every season)
+PROMOTES into vacant Company commands via the LOCKED `MilitaryPromotionSystem` arbiters
+(`find_vacancies` / `select_best_candidate`, both called at `day_orchestrator:17018/17028`) — but the
+sibling **demotion** arbiters `should_remove_for_disposition` (threshold −10) and `apply_demotion`
+(clears rank/command + −0.5 Glory) had **ZERO production callers** (grep-confirmed: only their own defs
++ `tests/`). So promotion fired while demotion was dead: a commander who came to loathe their appointing
+lord kept command forever, contradicting GDD s11.7 (LOCKED, "Demotion and Removal"): *"A commander whose
+disposition toward their appointing lord drops below −10 may be replaced for political reasons. Removal
+clears the character's military_rank and commanded_unit_id... they lose 0.5 Glory. A removed
+Rikugunshokan who was also a Family Daimyo retains their feudal position but loses military authority."*
+FIX (no invented numbers — the −10 threshold lives ONLY in `should_remove_for_disposition` and the −0.5
+Glory ONLY in `apply_demotion`, so BOTH dead functions are routed through with no re-implemented logic):
+new `_process_military_demotions(companies, characters_by_id)` scans each Company with a living
+`commander_id`, reads the commander's disposition toward `lord_id` (the canonical appointing-lord field,
+the pattern used across reactive/medicine/sentaku systems), and delegates the decision to
+`should_remove_for_disposition`. `_apply_demotion_results` applies each removal via a throwaway dict
+`view` fed to `apply_demotion` (which mutates military_rank→NONE / commanded_unit_id→−1 and returns
+`glory_loss`), writes the cleared state back onto the L5RCharacterData, applies `−glory_loss` via
+`HonorGlorySystem.apply_glory_change`, and vacates the Company (`commander_id = −1`, feeding next
+season's promotion refill). Because `apply_demotion` touches ONLY the military fields, a removed
+Rikugunshokan who is also a Family Daimyo keeps `role_position`/`lord_id` — the GDD's feudal-position
+carve-out, for free. Ordering: demotion is COMPUTED after `_process_military_promotions` inside the same
+seasonal call, against the CURRENT commander set (disjoint from the promotion candidate pool, which
+draws only from non-commanders), so **no character is both promoted and demoted in one tick** and there
+is no same-tick demote→re-promote churn; a demotion's freshly-vacated Company is refilled the following
+season. Applied at the existing seasonal apply site (beside `_apply_promotion_results`). No-op guards:
+lordless commander (no appointing lord), vacant/missing/dead commander. Runtime-verified 13/13
+(`tests/verify_military_demotion.gd`): threshold edge (−11 demoted, −10 kept, loyal kept); application
+(rank→NONE, command→−1, Glory 4.0→3.5, Company vacated); the Rikugunshokan-Daimyo feudal-position
+carve-out; and the lordless/vacant/missing-commander no-ops. Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, hostage leverage never shifted War Score — dormant SCORE_SHIFTS keys, runtime-verified 11/11)
 Same "produced-but-not-consumed" dormant-signal class as the army-dissolution / harvest-arbiter
 fixes. `WarSystem.SCORE_SHIFTS` defines the GDD-LOCKED hostage leverage keys `hostage_rank3`
