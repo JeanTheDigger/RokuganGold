@@ -237,6 +237,28 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, ViolenceSystem naming-guard violation hardened — the last Pattern-B/Pattern-A footgun — runtime-verified 12/12)
+A **latent** correctness footgun (not a live bug — the same "would silently misbehave the moment a consumer
+reads it" class as the covert-killing severity fix). `ViolenceSystem.apply_consequences` (s11.3.12) pre-applies
+the attacker's honor/glory/infamy directly (Pattern B) AND then RETURNED them under the keys
+`honor_change`/`glory_change`/`infamy_change` — the EXACT Pattern-A keys `EffectApplicator` consumes
+(`effect_applicator.gd:353/372/411`). This violates the CLAUDE.md Effect Application **Design Decision #6**
+naming guard ("Never use `honor_change`… as return dict keys from a system that pre-applies mutations. Use
+`subject_honor_loss`/`subject_glory_loss`/`subject_infamy_gain`… to prevent EffectApplicator double-application").
+It was the codebase's ONLY remaining naming-guard violation (confirmed by a full double-applied-effect sweep).
+Not a live double-count ONLY because the sole caller (`day_orchestrator.gd:28828`, the non-lethal
+assassin-vs-bodyguard combat path) discards the return value — but the moment any future caller routed the dict
+through EffectApplicator, the attacker would be instantly double- (or, with the sibling glory/infamy, triple-)
+charged. FIX (behavior-preserving — the caller discards the return, grep-confirmed sole caller): the returned
+stat deltas now use the guard-compliant `subject_honor_loss`/`subject_glory_loss`/`subject_infamy_gain`
+pre-applied names (the SecretSystem/SeductionSystem convention, which EffectApplicator never consumes —
+grep-confirmed 0 reads); the Pattern-B mutations above are unchanged and still fire once; `punishment`/`topic_tier`
+(non-stat metadata) are preserved. Runtime-verified 12/12 (`tests/verify_violence_naming_guard.gd`): the attacker's
+honor/glory/infamy are each mutated exactly once (5.0→4.8 / 3.0→2.9 / 0.0→0.1); the return dict carries NONE of
+`honor_change`/`glory_change`/`infamy_change`/`infamy_gain`; and it carries the `subject_*` deltas + `punishment`
++ `topic_tier`. Full project `--import` parse-clean. With this, there are ZERO Pattern-B-pre-apply functions
+emitting a re-appliable Pattern-A stat key anywhere in the codebase.
+
 ### Known Code Issues (found and fixed 2026-07-06, two disposition-tier ladders consolidated onto the canonical arbiter — behavior-preserving dedup — runtime-verified 16/16)
 A **duplicate-antipattern / drift-hazard** consolidation (the same class as the social-TN fix — agreed exactly
 today, but a hand-copied ladder that would silently drift from the LOCKED s12.2 boundaries). The canonical tier
