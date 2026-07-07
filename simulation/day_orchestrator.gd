@@ -473,6 +473,16 @@ static func advance_day(
 		dice_engine,
 	)
 
+	# s57.47 v624 / s55.10 — Emperor's Peace violation backstop. NPCs are deterred at
+	# the option layer (npc_decision_engine._apply_emperors_peace_precondition_filter),
+	# but if an overt hostile act still EXECUTES at an active Imperial Winter Court (a
+	# crisis-override bypass, an unsanctioned duel, or a future PC), record the CAPITAL
+	# crime + Tier-1 topic + the Emperor's -15 disposition toward the offender's clan.
+	_process_emperors_peace_violations(
+		day_result.get("results", []), active_courts, characters, characters_by_id,
+		crime_records, next_case_id, active_topics, next_topic_id, ic_day, world_states,
+	)
+
 	_seed_public_records_from_crime_results(
 		crime_results, day_result.get("results", []),
 		settlements, characters_by_id, ic_day, world_states,
@@ -8493,6 +8503,105 @@ static func _create_crime_topic(
 	)
 	topic.slug = "crime_case_%d" % record.case_id
 	return topic
+
+
+## s57.47 v624 / s55.10 — Emperor's Peace violation recorder (executor-side backstop).
+## Deterrence is handled at option selection; this fires when an overt hostile act still
+## executes at an active Imperial Winter Court. Delegates the LOCKED consequence table to
+## WinterCourtSystem.record_emperors_peace_violation (CAPITAL crime ACCUSED + evidence 100,
+## Tier-1 topic, at-act honor loss on the offender, family-daimyo Glory -1.0), appends the
+## record + topic, and applies the Emperor's -15 disposition toward the offender's clan.
+static func _process_emperors_peace_violations(
+	results: Array,
+	active_courts: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	crime_records: Array,
+	next_case_id: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	world_states: Dictionary,
+) -> void:
+	# At most one active Imperial Winter Court exists at a time.
+	var wc: CourtSessionData = null
+	for c_v: Variant in active_courts:
+		if not c_v is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_v as CourtSessionData
+		if (c.court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+				and c.phase == CourtSessionData.CourtPhase.ACTIVE):
+			wc = c
+			break
+	if wc == null:
+		return
+
+	for result_v: Variant in results:
+		if not result_v is Dictionary:
+			continue
+		var r: Dictionary = result_v as Dictionary
+		var char_id: int = r.get("character_id", -1)
+		if not (char_id in wc.attendee_ids):
+			continue
+		var action_id: String = r.get("action_id", "")
+		var effects: Dictionary = r.get("effects", {})
+		# A sanctioned duel is exempt; NPC duels default sanctioned.
+		var has_duel_sanction: bool = bool(effects.get("is_sanctioned", true))
+		if not WinterCourtSystem.is_peace_violating_action(action_id, has_duel_sanction):
+			continue
+		var offender: L5RCharacterData = characters_by_id.get(char_id)
+		if offender == null or CharacterStats.is_dead(offender):
+			continue
+		if _has_open_peace_violation(offender.character_id, crime_records):
+			continue
+
+		var rec: Dictionary = WinterCourtSystem.record_emperors_peace_violation(
+			offender, action_id, wc, ic_day, next_case_id, next_topic_id, characters_by_id,
+		)
+		var crime_record: CrimeRecord = rec.get("crime_record")
+		if crime_record != null:
+			crime_records.append(crime_record)
+		var topic: TopicData = rec.get("topic")
+		if topic != null:
+			active_topics.append(topic)
+		_apply_emperors_peace_clan_disposition(
+			offender, int(rec.get("emperor_disposition_hit", -15)),
+			characters, characters_by_id, world_states,
+		)
+
+
+## True if the offender already carries a VIOLATION_EMPERORS_PEACE record (one CAPITAL
+## conviction is terminal — no need to re-record the same offender's peace-breaking).
+static func _has_open_peace_violation(offender_id: int, crime_records: Array) -> bool:
+	for rec_v: Variant in crime_records:
+		if rec_v is CrimeRecord:
+			var rec: CrimeRecord = rec_v as CrimeRecord
+			if (rec.perpetrator_id == offender_id
+					and rec.crime_type == Enums.CrimeType.VIOLATION_EMPERORS_PEACE):
+				return true
+	return false
+
+
+## GDD s57.47 line 51: "the offender's clan suffers disposition -15 from the Emperor
+## regardless of the Champion's involvement." Represented as the Emperor's standing
+## toward the clan's champion — its face to the throne — since the Emperor is not a
+## participant in the clan↔clan CollectiveDisposition graph. Falls back to the offender
+## if no living champion.
+static func _apply_emperors_peace_clan_disposition(
+	offender: L5RCharacterData,
+	hit: int,
+	characters: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id)
+	if emperor == null or CharacterStats.is_dead(emperor):
+		return
+	var champ_id: int = _extrad_find_clan_champion_id(offender.clan, characters)
+	var target_id: int = champ_id if champ_id >= 0 else offender.character_id
+	var cur: int = int(emperor.disposition_values.get(target_id, 0))
+	emperor.disposition_values[target_id] = clampi(cur + hit, -100, 100)
 
 
 static func _get_witnesses_at_location(

@@ -25,13 +25,20 @@ const REGENT_PRESTIGE: int = 2
 
 const CLAN_RECENCY_CAP_YEARS: int = 7
 
+# GDD s57.47 v624 / s55.10 — the overt hostile acts that breach the Emperor's Peace
+# at Winter Court, as REAL engine ActionIDs. Covert intrigue is PERMITTED (the point of
+# Winter Court, see COVERT_ACTIONS_PERMITTED); a SANCTIONED duel is EXEMPT (the honorable
+# form). COMMISSION_ASSASSINATION is deliberately excluded — it is covert and resolves
+# off-site over days, not "the hostile act within the settlement." Physical attack /
+# poison / sabotage have no world-sim NPC ActionID, and military acts (raid/battle) are
+# not reachable by an attending courtier — so the live violation set is intimidation +
+# an unsanctioned duel challenge.
 const HOSTILE_ACTIONS: Array[String] = [
-	"ATTACK", "INTIMIDATE", "CHALLENGE_TO_DUEL", "ASSASSINATION",
-	"POISON", "SABOTAGE", "RAID_HARVEST", "ORDER_BATTLE",
+	"INTIMIDATE", "ISSUE_DUEL_CHALLENGE",
 ]
 
 const EMPERORS_PEACE_EXEMPT: Array[String] = [
-	"CHALLENGE_TO_DUEL",
+	"ISSUE_DUEL_CHALLENGE",
 ]
 
 const COVERT_ACTIONS_PERMITTED: Array[String] = [
@@ -423,6 +430,22 @@ static func _score_school_type_for_invitation(school_type: int, _archetype: int)
 
 # -- Emperor's Peace -----------------------------------------------------------
 
+# Pure action-classification (no court object): is this action a breach of the
+# Emperor's Peace? Covert intrigue permitted; a sanctioned duel exempt. Shared by the
+# court-object predicate below and the NPC-engine precondition filter (which already
+# knows, from the injected court context, that it is at an active Winter Court) so the
+# list logic lives in exactly one place.
+static func is_peace_violating_action(
+	action_id: String,
+	has_duel_sanction: bool,
+) -> bool:
+	if action_id in COVERT_ACTIONS_PERMITTED:
+		return false
+	if action_id in EMPERORS_PEACE_EXEMPT and has_duel_sanction:
+		return false
+	return action_id in HOSTILE_ACTIONS
+
+
 static func is_action_blocked_by_emperors_peace(
 	action_id: String,
 	actor_settlement_id: int,
@@ -435,13 +458,7 @@ static func is_action_blocked_by_emperors_peace(
 		return false
 	if actor_settlement_id != court.host_settlement_id:
 		return false
-	if action_id in COVERT_ACTIONS_PERMITTED:
-		return false
-	if action_id in EMPERORS_PEACE_EXEMPT and has_duel_sanction:
-		return false
-	if action_id in HOSTILE_ACTIONS:
-		return true
-	return false
+	return is_peace_violating_action(action_id, has_duel_sanction)
 
 
 # -- Emperor's Peace Violation Crime (s57.47 v624) ----------------------------

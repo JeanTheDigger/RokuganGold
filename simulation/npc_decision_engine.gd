@@ -1023,6 +1023,34 @@ static func _apply_commerce_precondition_filter(
 	return options
 
 
+# -- Phase 4c: Emperor's Peace Precondition Filter (s57.47 v624 / s55.10) ------
+# At an active Imperial Winter Court, the Emperor's Peace forbids overt hostile acts.
+# Committing one is a CAPITAL crime (execution without seppuku, Imperial jurisdiction),
+# so NPCs are deterred at the option layer — matching every other "action unavailable
+# here" gate. The live violation set is intimidation (removed) and an UNSANCTIONED duel;
+# NPC duels default sanctioned (the honorable, permitted form), so ISSUE_DUEL_CHALLENGE
+# is NOT removed here (an unsanctioned one that still executes is caught by the
+# executor-side recorder, _process_emperors_peace_violations). Covert intrigue is
+# permitted (the point of Winter Court). Only fires for attendees of an active Imperial
+# Winter Court (the court context is injected only for active-court attendees).
+static func _apply_emperors_peace_precondition_filter(
+	options: Array,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	var court: Dictionary = ctx.active_court_at_location
+	if court.is_empty():
+		return options
+	if int(court.get("court_type", -1)) != CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
+		return options
+	var filtered: Array = []
+	for option: NPCDataStructures.ScoredAction in options:
+		# has_duel_sanction = true: NPC duels are sanctioned by default (permitted).
+		if WinterCourtSystem.is_peace_violating_action(option.action_id, true):
+			continue
+		filtered.append(option)
+	return filtered
+
+
 # -- Phase 4c: SUPPRESS_INSURGENCY Precondition Filter (s11.11 Phase 5) -------
 # Removes SUPPRESS_INSURGENCY unless the actor is co-located with a DETECTED
 # insurgency. Suppression requires being physically present in the affected
@@ -1489,6 +1517,7 @@ static func run(
 	options = _apply_passage_precondition_filter(options, character, ctx)
 	options = _apply_commune_precondition_filter(options, character)
 	options = _apply_commerce_precondition_filter(options, character, ctx)
+	options = _apply_emperors_peace_precondition_filter(options, ctx)
 	options = _apply_arrived_travel_filter(options, need, ctx)
 	options = _apply_compliance_filter(options, ctx)
 	options = _apply_action_block_filter(options, ctx)
