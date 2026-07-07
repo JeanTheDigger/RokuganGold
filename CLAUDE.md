@@ -237,6 +237,41 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, siege captures never recorded to the war — wars transferred zero territory — runtime-verified 9/9)
+Same built-but-zero-callers dormant class as the hostage-War-Score fix, and a genuine LIVE gameplay bug.
+`WarSystem.record_province_capture` (appends the captured province to `war.provinces_captured_by_a/b`)
+was fully built AND its consumer chain is entirely LIVE — `WarTermination._get_captured_provinces`
+reads those arrays at peace to set `territory_demand` / `territory_count` / `territory_transferred`, and
+`apply_territory_transfer` flips `province.clan = winner_clan` — but the function had **ZERO production
+callers**, so the two arrays were **ALWAYS empty**. Result: **every war ended transferring zero
+territory regardless of who won** (a besieging clan could storm and hold enemy provinces all war and
+keep none at peace). NOTE the sibling bug this surfaced: `_process_siege_war_scores` and the Dragon-schism
+check read `resolved == "attacker_victory"`, a state **nothing ever produces** (the live storm-assault
+path emits `victor == "attacker"` + `end_reason == "storm_assault_success"`), so those two are also
+dormant — the real live siege-capture consumer is `_capture_siege_hostages` (fires once per won siege on
+`storm_assault_success`/`starvation`, dedup-guarded, already resolving `captor_lord_id` + `settlement_id`;
+where the hostage-War-Score fix also lives). FIX (no invented values — pure LOCKED wiring): new
+`_apply_siege_province_capture(settlement_id, captor_lord_id, settlements, provinces, active_wars,
+characters_by_id)` called from `_capture_siege_hostages` — resolves the captor's clan (attacking lord),
+the settlement's `province_id`, and the province's current owner = the **defender clan** (ownership only
+formally flips at peace via `apply_territory_transfer`, verified: `province.clan` is reassigned ONLY at
+`war_termination.gd:558`), finds the active war between captor and defender (ally-aware `get_war_between`),
+and delegates the side/ally bookkeeping to `record_province_capture` (appends to the capturing side,
+erases from the other — so a province changing hands over a war is tracked correctly). `settlements`
+(Array) + `provinces` (Dictionary keyed by province_id) threaded into `_capture_siege_hostages` (both in
+`advance_day` scope at the call site). No-op guards: unknown settlement/province, missing captor,
+self-clan province, no active war between the clans. `settlements`/`provinces` typing was the one real
+mistake caught in verification — `provinces` in `advance_day` is a **Dictionary** (province_id →
+ProvinceData), not an Array; the direct `provinces.get(province_id)` lookup is cleaner than an iteration.
+Runtime-verified 9/9 (`tests/verify_siege_province_capture.gd`): attacker capture recorded on its war
+side (not the other); an ALLIED captor's capture recorded to that side's PRINCIPAL list; the four no-op
+guards (self-clan / no war / unknown settlement / invalid captor); and the end-to-end chain — two
+recorded captures are then seen by `WarTermination._get_captured_provinces` (empty pre-fix). Full project
+`--import` parse-clean. s53 LOCKED anchor: "Terms require formally ceding provinces that were held at the
+start of the war." DEFERRED (documented, separate): `_process_siege_war_scores` / Dragon-schism
+`attacker_victory` dead-state is a distinct dormant-consumer bug (they read a `resolved` string the live
+path never emits) — not fixed here to keep this scoped to the territory-transfer chain.
+
 ### Known Code Issues (found and fixed 2026-07-06, disposition→social-TN modifier consolidated onto the canonical arbiter — runtime-verified 17/17)
 The third finding of the divergence sweep — a **duplicate-antipattern** (agreed exactly today, but a
 drift hazard, and it left the canonical orphaned). `ActionExecutor._get_social_tn` re-derived the s12.2

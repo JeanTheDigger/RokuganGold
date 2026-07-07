@@ -676,7 +676,8 @@ static func advance_day(
 		ic_day,
 	)
 	_capture_siege_hostages(
-		active_sieges, characters_by_id, companies, active_wars, active_hostages, ic_day)
+		active_sieges, characters_by_id, companies, active_wars, active_hostages, ic_day,
+		settlements, provinces)
 
 	var purification_results: Array = _process_purification_effects(
 		day_result.get("results", []),
@@ -15970,6 +15971,8 @@ static func _capture_siege_hostages(
 	active_wars: Array,
 	active_hostages: Array,
 	ic_day: int,
+	settlements: Array = [],
+	provinces: Dictionary = {},
 ) -> void:
 	var end_reasons: Array = ["storm_assault_success", "starvation"]
 	for siege: Dictionary in active_sieges:
@@ -15989,6 +15992,14 @@ static func _capture_siege_hostages(
 				break
 		if captor_lord_id < 0:
 			continue
+		# s53 (LOCKED): the attacker now holds the besieged settlement's province. Record it into
+		# the war's captured-province list so the territory-transfer terms at peace can demand/keep
+		# it (war_termination reads provinces_captured_by_a/b). Fires once per won siege alongside
+		# the hostage capture (same dedup), while province.clan is still the defender (ownership only
+		# formally flips at peace via apply_territory_transfer).
+		_apply_siege_province_capture(
+			settlement_id, captor_lord_id, settlements, provinces, active_wars, characters_by_id,
+		)
 		var loc_str: String = str(settlement_id)
 		for char_val: Variant in characters_by_id.values():
 			var character: L5RCharacterData = char_val as L5RCharacterData
@@ -16056,6 +16067,47 @@ static func _apply_hostage_war_score(
 	var side: String = WarSystem.get_clan_side(war, captor_clan)
 	var winning_clan: String = war.clan_a if side == "a" else war.clan_b
 	WarSystem.apply_score_shift(war, key, winning_clan)
+
+
+# s53 (LOCKED, "Terms require formally ceding provinces held at the start of the war"): records the
+# besieged settlement's province into the war's captured-province list. WarSystem.record_province_capture
+# was fully built (and its consumer war_termination._get_captured_provinces / apply_territory_transfer
+# is LIVE) but had ZERO production callers -- so provinces_captured_by_a/b were ALWAYS empty and every
+# war ended transferring zero territory regardless of who won. Resolves the captor's clan (the attacking
+# lord's) and the defender clan (the province's current owner -- ownership only formally flips at peace),
+# finds the active war between them (ally-aware get_war_between), and delegates the side/ally bookkeeping
+# to record_province_capture (which appends to the capturing side and erases from the other).
+static func _apply_siege_province_capture(
+	settlement_id: int,
+	captor_lord_id: int,
+	settlements: Array,
+	provinces: Dictionary,
+	active_wars: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	if settlement_id < 0 or captor_lord_id < 0:
+		return
+	var captor: L5RCharacterData = characters_by_id.get(captor_lord_id) as L5RCharacterData
+	if captor == null or captor.clan.is_empty():
+		return
+	var province_id: int = -1
+	for s_val: Variant in settlements:
+		var sd: SettlementData = s_val as SettlementData
+		if sd != null and sd.settlement_id == settlement_id:
+			province_id = sd.province_id
+			break
+	if province_id < 0:
+		return
+	var pd: ProvinceData = provinces.get(province_id) as ProvinceData
+	if pd == null:
+		return
+	var defender_clan: String = pd.clan
+	if defender_clan.is_empty() or defender_clan == captor.clan:
+		return
+	var war: WarData = WarSystem.get_war_between(active_wars, captor.clan, defender_clan)
+	if war == null:
+		return
+	WarSystem.record_province_capture(war, province_id, captor.clan)
 
 
 # -- Bound Character Processing (s12.8) ---------------------------------------
