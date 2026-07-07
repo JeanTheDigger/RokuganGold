@@ -2431,21 +2431,45 @@ static func _get_primary_skill_for_action(action_id: String) -> String:
 
 
 static func _is_harvest_blocked_by_virtue(ctx: NPCDataStructures.ContextSnapshot) -> bool:
-	var virtue: String = _get_virtue_string(ctx)
-	if virtue == "JIN" or virtue == "GI":
-		return true
+	# Route the harvest-destruction gate through the canonical arbiter
+	# (StarvationWarfare.evaluate_ai_harvest_decision) — the single GDD-faithful
+	# source (s4.3.17 Phase 4). The old inline logic diverged from the GDD twice:
+	# (1) it never enforced the Autumn-harvest-tick requirement (line 1041), so it
+	# could select harvest destruction in any season; and (2) it treated Rei as a
+	# CONDITIONAL virtue (allowed on a prior formal demand) when the GDD makes Rei a
+	# NEVER virtue (line 1061, "barbaric and beneath a civilized lord"). Season is
+	# derived from ctx.ic_day (ctx.season is not populated in this build). The
+	# army-present hard gate is passed as satisfied and deferred to the sub-tile
+	# army-position system (s11.7a) — no army-in-province presence is tracked yet.
+	var virtue: String = _harvest_virtue_title_case(ctx)
+	if virtue.is_empty():
+		return false
+	var season: String = "autumn" if _is_autumn_ic_day(ctx.ic_day) else ""
 	var hc: Dictionary = _evaluate_harvest_conditions(ctx)
-	if virtue == "YU":
-		return not hc.get("no_other_path", false)
-	if virtue == "MEIYO":
-		return not hc.get("hated_enemy", false)
-	if virtue == "CHUGI":
-		return not hc.get("lord_commands", false)
-	if virtue == "MAKOTO":
-		return not hc.get("publicly_declared", false)
-	if virtue == "REI":
-		return not hc.get("prior_formal_demand", false)
-	return false
+	var decision: Dictionary = StarvationWarfare.evaluate_ai_harvest_decision(
+		virtue, season, true,
+		hc.get("no_other_path", false), hc.get("hated_enemy", false),
+		hc.get("lord_commands", false), hc.get("publicly_declared", false),
+		hc.get("prior_formal_demand", false),
+	)
+	return not bool(decision.get("allowed", false))
+
+
+static func _harvest_virtue_title_case(ctx: NPCDataStructures.ContextSnapshot) -> String:
+	# StarvationWarfare's virtue tables are title-case ("Jin"/"Rei"/"Seigyo"/...);
+	# Enums.*_virtue_name returns UPPERCASE enum keys. Convert to title case.
+	var v: String = _get_virtue_string(ctx)
+	if v.is_empty():
+		return ""
+	return v.substr(0, 1) + v.substr(1).to_lower()
+
+
+static func _is_autumn_ic_day(ic_day: int) -> bool:
+	# Autumn = the third season window [180, 240) of the 360-day IC year
+	# (TimeSystem.SEASON_BOUNDARIES). Harvest destruction is an Autumn-harvest-tick
+	# action (GDD s4.3.17 Phase 4, line 1041).
+	var doy: int = ((ic_day % 360) + 360) % 360
+	return doy >= 180 and doy < 240
 
 
 static func _evaluate_harvest_conditions(ctx: NPCDataStructures.ContextSnapshot) -> Dictionary:
