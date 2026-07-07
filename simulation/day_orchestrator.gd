@@ -24177,15 +24177,21 @@ static func _apply_marriage(
 		var proposing_lord_id: int = effects.get("proposing_lord_id", -1)
 		var target_lord_id: int = effects.get("target_lord_id", -1)
 		if proposing_lord_id >= 0 and target_lord_id >= 0:
-			var favor := FavorData.new()
-			favor.favor_type = FavorData.FavorType.GENERAL
-			favor.tier = FavorData.FavorTier.MODERATE
-			favor.creditor_id = target_lord_id
-			favor.debtor_id = proposing_lord_id
-			favor.created_ic_day = ic_day
-			favor.terms = "marriage_obligation"
-			favor.source_action = "ARRANGE_MARRIAGE"
-			favors.append(favor)
+			# Route through the canonical FavorSystem.offer_favor factory (as the other 5 favor
+			# creation sites do) so the favor gets a UNIQUE favor_id. The inline FavorData.new()
+			# here set no favor_id, so every marriage-obligation favor defaulted to -1 -- they were
+			# indistinguishable and could never be reliably invoked/honored/broken (all favor
+			# lookups match by favor_id). Field values (GENERAL / MODERATE / creditor=target lord /
+			# debtor=proposing lord / terms / source_action) are preserved exactly.
+			var max_fid: int = 0
+			for f: Variant in favors:
+				if f is FavorData and (f as FavorData).favor_id >= max_fid:
+					max_fid = (f as FavorData).favor_id + 1
+			favors.append(FavorSystem.offer_favor(
+				FavorData.FavorType.GENERAL, FavorData.FavorTier.MODERATE,
+				target_lord_id, proposing_lord_id, ic_day,
+				"marriage_obligation", "ARRANGE_MARRIAGE", max_fid,
+			))
 			favor_created = true
 
 	var topic_id: int = -1

@@ -237,6 +237,27 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, marriage-obligation favor never got a unique favor_id — bypassed the offer_favor factory — runtime-verified 11/11)
+Same "hand-built data object where a factory exists" sub-class as the blackmail-favor fix, but this one
+was a **latent correctness bug**, not a dormant no-op. The cross-clan marriage-obligation favor
+(s12.10 / s22.7) was minted by the ONLY inline `FavorData.new()` left in the codebase
+(`DayOrchestrator._apply_marriage`), which set favor_type / tier / creditor / debtor / created_ic_day /
+terms / source_action but **NOT `favor_id`** — so it defaulted to the `-1` sentinel. Every favor lookup
+(invoke / honor / break, at day_orchestrator lines 7257 / 7420) matches by `favor_id`, so ALL
+marriage-obligation favors shared id `-1` and were **indistinguishable** — a marriage favor could never
+be reliably invoked/honored/broken (the wrong one, or none, would match). FIX (no invented values —
+pure factory routing, matching the established pattern at 5 other sites: 19654 / 21774 / 21915 / 22492 /
+26848): compute `max_fid` (max existing favor_id + 1) and mint the favor via
+`FavorSystem.offer_favor(GENERAL, MODERATE, target_lord_id [creditor], proposing_lord_id [debtor],
+ic_day, "marriage_obligation", "ARRANGE_MARRIAGE", max_fid)`, which assigns the unique id. Field values
+are preserved exactly (GENERAL / MODERATE / creditor=target lord / debtor=proposing lord / terms /
+source_action) — the only change is that the favor now carries a real, unique, invokable id.
+BETWEEN_FAMILIES marriages (same clan, different family) still owe no favor. Runtime-verified 11/11
+(`tests/verify_marriage_favor_id.gd`): two cross-clan marriages mint two favors with UNIQUE ids (0, 1 —
+neither the `-1` default that was the bug); field values preserved; a between-families marriage owes no
+favor. Full project `--import` parse-clean. With this, there are ZERO inline `FavorData.new()` calls left
+— every favor in the sim routes through the `offer_favor` / `extract_blackmail_favor` factories.
+
 ### Known Code Issues (found and fixed 2026-07-06, cohabitation disposition bonus — produced-but-not-consumed — runtime-verified 9/9)
 Another "producer wired, consumer missing" dormant signal. `DayOrchestrator._apply_cohabitation`
 (live, daily) increments a **monotonic per-pair IC-day counter** (`L5RCharacterData.cohabitation_days`)
