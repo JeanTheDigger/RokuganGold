@@ -373,7 +373,17 @@ static func get_effective_disposition(
 	var family_bond: int = BiologicalFamily.compute_pairwise_modifier(
 		actor, target, chars_by_id
 	)
-	var raw: int = stored + family_bond
+	# s12.2 line 397 (LOCKED): +0.1 disposition per IC day spent in the same
+	# settlement (+12 over a 120-day Winter Court). day_orchestrator._apply_cohabitation
+	# accumulates the monotonic per-pair IC-day counter each tick; the read-time bonus
+	# reconstructs the accumulated familiarity gain losslessly (the counter exists so the
+	# sub-integer daily rate is not int-rounded away). Layered like the family bond — a
+	# persistent factor added at read time, so it never decays or goes stale. (The GDD's
+	# optional Family/Clan ripple, line 393, is a separate add-on — deferred.)
+	var cohabitation_bonus: int = int(
+		compute_cohabitation_bonus(actor.cohabitation_days.get(target_id, 0))
+	)
+	var raw: int = stored + family_bond + cohabitation_bonus
 	var floor_val: int = _get_birth_family_floor(actor, target)
 	if raw < floor_val:
 		raw = floor_val
