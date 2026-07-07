@@ -237,6 +237,21 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, disposition→social-TN modifier consolidated onto the canonical arbiter — runtime-verified 17/17)
+The third finding of the divergence sweep — a **duplicate-antipattern** (agreed exactly today, but a
+drift hazard, and it left the canonical orphaned). `ActionExecutor._get_social_tn` re-derived the s12.2
+disposition-tier raise/free-raise table INLINE (Blood Enemy +10 TN … Devoted −15 TN), a hand-copy of
+`DispositionSystem.TARGET_RAISE_MODIFIERS` (raise modifier × 5 = the TN delta; boundaries matching
+`get_tier` exactly). The canonical `DispositionSystem.get_raise_modifier` had **ZERO callers** — an
+orphaned arbiter, while the live table lived in a divergent inline copy. FIX (behavior-preserving —
+verified identical across the full range): replaced the inline `if/elif` ladder with
+`tn += DispositionSystem.get_raise_modifier(target_disp) * 5`, so the social-TN calc and every other
+disposition consumer read the SAME per-tier table (a future change to the tier table now reaches the
+TN calc automatically), and the orphaned canonical gains its first caller. Runtime-verified 17/17
+(`tests/verify_social_tn_disposition.gd`): the routed `_get_social_tn` == base + `get_raise_modifier`×5
+== the legacy inline formula for ALL 201 disposition values (−100..+100, zero mismatches), plus every
+tier boundary spot-check (−61/−31/±11/±31/±61/±91). Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, two "canonical arbiter bypassed by a divergent inline copy" fixes — runtime-verified 12/12)
 A divergence-class sweep (the same anti-pattern as the seppuku/harvest/blackmail fixes) surfaced two
 inline copies of a canonical table/function that had drifted from the LOCKED source. Both fixes are

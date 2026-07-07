@@ -1783,18 +1783,11 @@ static func _get_social_tn(
 	var tn: int = SOCIAL_BASE_TN
 	var target_disp: int = ctx.dispositions.get(action.target_npc_id, 0)
 
-	# Per GDD s12.2: Free Raises (−5 TN) or additional Raises (+5 TN) by tier
-	if target_disp <= -61:
-		tn += 10  # Blood Enemy: +2 additional Raises
-	elif target_disp <= -31:
-		tn += 5   # Enemy: +1 additional Raise
-	# Rival (-30 to -11), Stranger (-10 to +10), Acquaintance (+11 to +30): no modifier
-	elif target_disp >= 91:
-		tn -= 15  # Devoted: 3 Free Raises
-	elif target_disp >= 61:
-		tn -= 10  # Trusted Ally: 2 Free Raises
-	elif target_disp >= 31:
-		tn -= 5   # Friend: 1 Free Raise
+	# Per GDD s12.2: Free Raises (−5 TN) or additional Raises (+5 TN) by disposition tier.
+	# Route through the canonical DispositionSystem arbiter (raise modifier × 5 = TN delta) so the
+	# per-tier table never diverges from the one every other disposition consumer uses. The prior
+	# inline copy re-derived the identical table by hand (a drift hazard, though it agreed exactly).
+	tn += DispositionSystem.get_raise_modifier(target_disp) * 5
 
 	if character != null and action.action_id in ["PUBLIC_DECLARATION", "OFFER_FAVOR"]:
 		var honor_mod: int = HonorGlorySystem.get_court_honor_modifier(character)
