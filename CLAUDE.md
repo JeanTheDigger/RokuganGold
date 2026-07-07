@@ -336,6 +336,36 @@ matching no real engine action.
   design (the block prevents most). The `COVERT_ACTIONS_PERMITTED` constant is now inert
   (no overlap with the narrowed `HOSTILE_ACTIONS`) but retained as intent documentation.
 
+### Known Code Issues (found and fixed 2026-07-06, hostage leverage never shifted War Score — dormant SCORE_SHIFTS keys, runtime-verified 11/11)
+Same "produced-but-not-consumed" dormant-signal class as the army-dissolution / harvest-arbiter
+fixes. `WarSystem.SCORE_SHIFTS` defines the GDD-LOCKED hostage leverage keys `hostage_rank3`
+`[3,3]` and `hostage_rank5_champion` `[8,8]` (s22.9 line 97, cross-ref s53: "Rank 3+ hostage:
++3/−3 War Score, Rank 5+ or Champion's family: +8/−8 War Score" — the SOLE War Score consequence
+of taking a high-value prisoner, driving the peace-court negotiating position). But **neither key
+was ever passed to `apply_score_shift` anywhere** — grep-confirmed dead. Both hostage capture sites
+(`_capture_dead_commanders`, fed by the siege storm-assault path AND `_resolve_army_battles`; and
+`_capture_siege_hostages`, the siege-surrender occupant sweep) minted the `active_hostages` record
++ set `captive_status` but applied ZERO War Score shift — so capturing an enemy champion's heir in
+battle moved the war not at all.
+FIX (pure LOCKED-only wiring, no invented numbers): new `_apply_hostage_war_score(hostage,
+captor_lord_id, active_wars, characters_by_id)` called right after each `HostageSystem.capture_hostage`.
+It resolves captor + hostage clans (from `captor_lord_id` via `characters_by_id`), finds the active
+war between them (`WarSystem.get_war_between`, ally-aware), and — **delegating the rank→tier decision
+to the canonical `HostageSystem.get_leverage_value(insight_rank, is_champion_family)` arbiter** so the
+thresholds never diverge — maps leverage 8 → `hostage_rank5_champion`, 3 → `hostage_rank3`, 1 → no
+event (Rank <3). Champion-family = the hostage shares the `family` of their clan's living
+`CLAN_CHAMPION` (via `_extrad_find_clan_champion_id`). The shift is applied to the captor's SIDE's
+principal clan (`get_clan_side` → `war.clan_a`/`clan_b`) so `apply_score_shift` (which matches
+`clan_a`/`clan_b` directly) lands correctly even when the captor is an ALLIED clan. No-op guards:
+missing captor, self-clan hostage, no war between the clans, Rank <3 non-champion-family. `active_wars`
+threaded into `_capture_dead_commanders` (both callers — `_resolve_army_battles` already had it; the
+storm-assault path via a new defaulted `_process_storm_assault_results` param) and `_capture_siege_hostages`
+(all in `advance_day` scope). Runtime-verified 11/11 (`tests/verify_hostage_war_score.gd`): rank-3
+(+3/−3) / rank-5 (+8/−8) / rank-4→rank-3-tier; champion-family override (rank-2 Akodo vs a living
+Akodo champion → +8/−8) and its negative (rank-2 Matsu → no event); the four no-op guards; side
+direction (captor on side b → b gains / a loses); and the allied-captor case (Scorpion ally on side
+a → the +8 lands on principal Crab, not a silent no-op). Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, army rout-dissolution never applied to the army lifecycle — runtime-verified 14/14)
 A "produced-but-not-consumed" dormant signal in the LIVE military battle loop.
 `ArmyCombatSystem.resolve_rout` computes the GDD-LOCKED army-wide, **post-pursuit

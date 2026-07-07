@@ -671,10 +671,12 @@ static func advance_day(
 		dice_engine,
 		settlements,
 		characters_by_id,
+		active_wars,
 		active_hostages,
 		ic_day,
 	)
-	_capture_siege_hostages(active_sieges, characters_by_id, companies, active_hostages, ic_day)
+	_capture_siege_hostages(
+		active_sieges, characters_by_id, companies, active_wars, active_hostages, ic_day)
 
 	var purification_results: Array = _process_purification_effects(
 		day_result.get("results", []),
@@ -3005,6 +3007,7 @@ static func _process_storm_assault_results(
 	dice_engine: DiceEngine,
 	settlements: Array,
 	characters_by_id: Dictionary,
+	active_wars: Array = [],
 	active_hostages: Array = [],
 	ic_day: int = 0,
 ) -> Array:
@@ -3064,7 +3067,8 @@ static func _process_storm_assault_results(
 		var victor: String = battle_result.get("victor", "draw")
 		_capture_dead_commanders(
 			battle_result, victor, captor_lord_id,
-			str(siege_settlement_id), characters_by_id, active_hostages, ic_day, dice_engine,
+			str(siege_settlement_id), characters_by_id, active_wars, active_hostages, ic_day,
+			dice_engine,
 		)
 		_write_battle_results_to_companies(battle_result, companies)
 
@@ -15897,6 +15901,7 @@ static func _capture_dead_commanders(
 	captor_lord_id: int,
 	location_str: String,
 	characters_by_id: Dictionary,
+	active_wars: Array,
 	active_hostages: Array,
 	ic_day: int,
 	dice_engine: DiceEngine,
@@ -15931,12 +15936,14 @@ static func _capture_dead_commanders(
 				cmd_id, captor_lord_id, HostageSystem.CaptureSource.BATTLE_CAPTURE,
 				location_str, ic_day,
 			))
+			_apply_hostage_war_score(commander, captor_lord_id, active_wars, characters_by_id)
 
 
 static func _capture_siege_hostages(
 	active_sieges: Array,
 	characters_by_id: Dictionary,
 	companies: Array,
+	active_wars: Array,
 	active_hostages: Array,
 	ic_day: int,
 ) -> void:
@@ -15978,6 +15985,53 @@ static func _capture_siege_hostages(
 				character.character_id, captor_lord_id,
 				HostageSystem.CaptureSource.SIEGE_SURRENDER, loc_str, ic_day,
 			))
+			_apply_hostage_war_score(character, captor_lord_id, active_wars, characters_by_id)
+
+
+# s22.9 line 97 / s53 (LOCKED, cross-ref): capturing a high-value hostage shifts the War
+# Score between the captor's and hostage's clans -- Rank 3+ hostage +3/-3, Rank 5+ or a
+# Champion's-family hostage +8/-8. Both capture sites (battle + siege) minted the hostage
+# record but never applied this leverage shift, so WarSystem.SCORE_SHIFTS' "hostage_rank3"/
+# "hostage_rank5_champion" keys were dead. The rank->tier decision is delegated to the
+# canonical HostageSystem.get_leverage_value arbiter so the thresholds never diverge.
+static func _apply_hostage_war_score(
+	hostage: L5RCharacterData,
+	captor_lord_id: int,
+	active_wars: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	if hostage == null or captor_lord_id < 0:
+		return
+	var captor: L5RCharacterData = characters_by_id.get(captor_lord_id) as L5RCharacterData
+	if captor == null:
+		return
+	var captor_clan: String = captor.clan
+	var hostage_clan: String = hostage.clan
+	if hostage_clan.is_empty() or captor_clan.is_empty() or hostage_clan == captor_clan:
+		return
+	var war: WarData = WarSystem.get_war_between(active_wars, captor_clan, hostage_clan)
+	if war == null:
+		return
+	# Champion's family = the hostage shares the family of their clan's living champion.
+	var is_champ_family: bool = false
+	var champ_id: int = _extrad_find_clan_champion_id(hostage_clan, characters_by_id.values())
+	if champ_id >= 0:
+		var champ: L5RCharacterData = characters_by_id.get(champ_id) as L5RCharacterData
+		if champ != null and not champ.family.is_empty():
+			is_champ_family = (hostage.family == champ.family)
+	var leverage: int = HostageSystem.get_leverage_value(hostage.insight_rank, is_champ_family)
+	var key: String = ""
+	if leverage == HostageSystem.LEVERAGE_RANK5:
+		key = "hostage_rank5_champion"
+	elif leverage == HostageSystem.LEVERAGE_RANK3:
+		key = "hostage_rank3"
+	if key.is_empty():
+		return  # Rank < 3, not champion-family: no War Score event (GDD).
+	# apply_score_shift matches clan_a/clan_b directly, so resolve the captor's side to that
+	# side's principal clan -- lands correctly even when the captor is an allied clan.
+	var side: String = WarSystem.get_clan_side(war, captor_clan)
+	var winning_clan: String = war.clan_a if side == "a" else war.clan_b
+	WarSystem.apply_score_shift(war, key, winning_clan)
 
 
 # -- Bound Character Processing (s12.8) ---------------------------------------
@@ -16210,7 +16264,8 @@ static func _resolve_army_battles(
 			field_captor_lord_id = def_company_dicts[0].get("lord_id", -1)
 		_capture_dead_commanders(
 			battle_result, field_victor, field_captor_lord_id,
-			str(battle_province_id), characters_by_id, active_hostages, ic_day, dice_engine,
+			str(battle_province_id), characters_by_id, active_wars, active_hostages, ic_day,
+			dice_engine,
 		)
 
 		_write_battle_results_to_companies(battle_result, companies)
