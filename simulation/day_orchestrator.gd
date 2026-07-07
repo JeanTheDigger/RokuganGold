@@ -4465,13 +4465,16 @@ static func _process_kolat_writebacks(
 				active_topics.append(pp_topic)
 
 			"RUN_COURIER_ROUTE":
-				if effects.get("route_clean", true):
-					continue
-				# Failure flags route integrity (s54.7c) — a hint that elevates the
-				# Silk Master's network-maintenance priority. Stored as a flag on the
-				# Master until the segment is repaired.
+				# s54.7c: a failed segment flags route_integrity_reduced (elevating the Silk
+				# Master's MAINTAIN_KOLAT_NETWORK priority via the kolat slot in
+				# _assign_kolat_standing_objectives); a clean run REPAIRS the segment and clears
+				# the flag ("until the segment is repaired or abandoned").
 				var rc_master: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
-				if rc_master != null and not CharacterStats.is_dead(rc_master):
+				if rc_master == null or CharacterStats.is_dead(rc_master):
+					continue
+				if effects.get("route_clean", true):
+					rc_master.special_data.erase("route_integrity_reduced")
+				else:
 					rc_master.special_data["route_integrity_reduced"] = true
 
 			"SUBMIT_KOLAT_REPORT":
@@ -8936,6 +8939,28 @@ static func _assign_kolat_standing_objectives(
 			objectives_map[char_id] = {}
 
 		var objectives: Dictionary = objectives_map[char_id]
+
+		# s54.7c (LOCKED): a Silk Master whose courier route failed (route_integrity_reduced)
+		# ELEVATES MAINTAIN_KOLAT_NETWORK priority "until the segment is repaired or abandoned".
+		# The mandate is the flat standing objective (fires last), so the elevation promotes it
+		# into the kolat slot at priority 2 — which "yields to the primary but precedes the standing
+		# objective" (s54.7d cascade, resolve_goal). priority 2 is the LOCKED MAINTAIN_KOLAT_NETWORK
+		# below-80%-integrity tier (s54.7c:11). Only fills a FREE slot (never clobbers a Tiger
+		# directive); the opportunistic pass leaves this non-opportunistic source untouched. The
+		# elevation clears when the flag clears (a clean route repairs the segment).
+		if character.kolat_sect == Enums.KolatSect.SILK:
+			var kolat_slot: Dictionary = objectives.get("kolat", {})
+			var route_reduced: bool = bool(character.special_data.get("route_integrity_reduced", false))
+			if route_reduced and kolat_slot.is_empty():
+				objectives["kolat"] = {
+					"need_type": "MAINTAIN_KOLAT_NETWORK",
+					"priority": 2,
+					"source": "route_integrity",
+					"auto_assigned": true,
+				}
+			elif not route_reduced and String(kolat_slot.get("source", "")) == "route_integrity":
+				objectives.erase("kolat")
+
 		var standing: Dictionary = objectives.get("standing", {})
 		if standing.get("need_type", "") == mandate:
 			continue

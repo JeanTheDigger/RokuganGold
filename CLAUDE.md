@@ -237,6 +237,32 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, route_integrity_reduced produced-but-never-consumed — Silk courier failures did nothing — runtime-verified 9/9)
+A produced-but-not-consumed dormant signal (the cohabitation/hostage-War-Score class). The
+RUN_COURIER_ROUTE failure writeback SET `L5RCharacterData.special_data["route_integrity_reduced"] = true`
+on the Silk Master — but that key had **exactly ONE reference in the whole repo** (the write): nothing
+ever READ it, and nothing ever CLEARED it. So a failed courier segment silently did nothing — the Silk
+network never reacted to a broken route. GDD s54.7c:53 (LOCKED): "Failure … flags route_integrity_reduced
+for that segment, **elevating MAINTAIN_KOLAT_NETWORK priority until the segment is repaired or abandoned**."
+FIX (no invented values — the priority + clear condition are LOCKED): (1) **clear on repair** — a clean
+RUN_COURIER_ROUTE (`route_clean`) now ERASES the flag (the segment is verified clean = repaired), instead
+of the prior no-op `continue`; a failed run still sets it. (2) **elevate on flag** — `_assign_kolat_standing_objectives`
+promotes MAINTAIN_KOLAT_NETWORK into the **kolat objective slot at priority 2** while the flag is set. This
+is the faithful mapping of "elevate priority": the Silk mandate is otherwise the FLAT standing objective
+(fires last in `resolve_goal`), and the kolat slot at priority 2 "yields to the primary but **precedes the
+standing objective**" (s54.7d cascade) — priority 2 is the LOCKED MAINTAIN_KOLAT_NETWORK below-80%-integrity
+tier (s54.7c:11). Placed BEFORE the standing-assignment `continue`s so it runs every tick for a Silk Master;
+only fills a FREE slot (never clobbers a Tiger directive — and the opportunistic pass, which runs after,
+leaves a non-opportunistic `source` untouched, s54.7 line 9082); and the elevation is removed when the flag
+clears (`source == "route_integrity"` → erase). Runtime-verified 9/9 (`tests/verify_route_integrity.gd`):
+a failed route elevates to the kolat slot (MAINTAIN_KOLAT_NETWORK / priority 2 / source route_integrity)
+while the standing mandate stays assigned; no flag → no elevation; the flag clearing removes the elevation
+(repair); a pre-existing Tiger directive is NOT clobbered; a non-Silk (Coin) Master is unaffected. Full
+project `--import` parse-clean. DOCUMENTED LIMITATION: the full network_integrity SCORE model (s54.7c:11
+priority 2 below 80% / priority 3 below 60%) is not implemented — the boolean flag is a proxy for
+"a segment failed → network degraded", mapped to the milder locked tier (priority 2); a true integrity
+score would let it reach priority 3, but that needs the score producer (a separate, unbuilt mechanic).
+
 ### Known Code Issues (found and fixed 2026-07-06, siege War Score shifts were dead — consumer read a state nothing produces — runtime-verified 11/11)
 The sibling dormant-consumer bug surfaced by the territory-capture fix (was documented DEFERRED there;
 now fixed). `_process_siege_war_scores` (wired live in `_process_war_score_shifts`) read
