@@ -237,6 +237,30 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, cohabitation disposition bonus — produced-but-not-consumed — runtime-verified 9/9)
+Another "producer wired, consumer missing" dormant signal. `DayOrchestrator._apply_cohabitation`
+(live, daily) increments a **monotonic per-pair IC-day counter** (`L5RCharacterData.cohabitation_days`)
+for every co-located living pair — but nothing ever read it: `DispositionSystem.compute_cohabitation_bonus`
+had ZERO production callers, and `get_effective_disposition` used only stored disposition + the
+biological-family bond. So long Winter Court / hostage stays built a counter that did nothing to the
+relationship. GDD s12.2 line 397 (LOCKED): **+0.1 disposition per IC day** spent in the same
+settlement (+12 over a 120-day Winter Court — the smallest increment; meaningful over a long stay,
+negligible over a few days). FIX (no invented numbers — rate LOCKED, no cap specified, the existing
+−100..+100 clamp bounds it): fold `int(compute_cohabitation_bonus(cohabitation_days.get(target_id, 0)))`
+into the `raw` accumulation in the FULL path of `get_effective_disposition` (alongside the family bond,
+before the birth-family floor + clamp). The counter-based read-time layering reconstructs the
+accumulated familiarity losslessly (the counter exists precisely so the sub-integer daily rate is not
+int-rounded away) and, like the family bond, never decays. The **degraded plain-lookup path** (called
+with `chars_by_id == {}`) is unchanged — cohabitation applies only where full effective disposition is
+computed. DEFERRED (documented, not invented): the GDD's optional **Family/Clan ripple** (line 393 —
+cohabitation friendship slightly improving view of the other's family/clan) is a separate add-on, not
+required for the core +0.1/day self-pair gain. Runtime-verified 9/9
+(`tests/verify_cohabitation_disposition.gd`): the +0.1/day rate; 120 co-days → +12; stacks with stored
+disposition; negligible over a few days; no record → unchanged; the degraded path excludes it; a very
+long co-residence clamps to +100. Full project `--import` parse-clean. TUNING (playtest): the counter is
+monotonic, so permanent co-residents (a castle household over years) accumulate toward the +100 clamp —
+faithful to the LOCKED "meaningful over a long stay" with no GDD cap, but worth watching in a live run.
+
 ### Known Code Issues (found and fixed 2026-07-06, blackmail favor tier — bypassed arbiter + live bug — runtime-verified 12/12)
 Same "built arbiter bypassed by a buggy inline copy" class as the seppuku/harvest fixes,
 but this one was an **active correctness bug**, not just a dormant no-op.
