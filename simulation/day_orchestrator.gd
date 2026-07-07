@@ -16455,7 +16455,13 @@ static func _build_battle_states(
 		var cmd_id: int = cd.get("commander_id", -1)
 		if cmd_id >= 0 and characters_by_id.has(cmd_id):
 			commander = characters_by_id[cmd_id]
-			commander_bonus = _compute_captain_bonus(commander)
+			# Canonical land-commander bonus (s11.7): Battle rank + Tactician (+5) +
+			# Strategist (+1k0), ring-typed with clan-priority tie-break (s45). The prior
+			# _compute_captain_bonus (a naval-shaped inline copy, s11.9) silently DROPPED
+			# the Tactician/Strategist advantages and used a FIRE-biased tie-break, so the
+			# canonical arbiter had zero production callers and land commanders never got
+			# their advantage bonus.
+			commander_bonus = ArmyCombatSystem.resolve_commander_bonus(commander, commander.clan)
 		var ut: int = cd.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
 		var row: int = 1
 		if ut == Enums.CompanyUnitType.ASHIGARU_ARCHERS and col > 0:

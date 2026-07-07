@@ -237,6 +237,37 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, land-commander battle bonus bypassed the canonical arbiter — Tactician/Strategist advantages silently dropped in every land battle — runtime-verified 8/8)
+A **canonical-arbiter-bypassed-by-a-divergent-inline-copy** fix (the seppuku/harvest/social-TN class), and
+a genuine LIVE gameplay bug. `ArmyCombatSystem.resolve_commander_bonus(commander, clan_id)` — the LOCKED
+land-commander battle-bonus arbiter (s11.7 / s45: Battle skill rank **+ Tactician (+5) + Strategist (+1k0)**,
+ring-typed via `RING_TO_BONUS_TYPE` with **clan-priority tie-breaking** `CLAN_RING_PRIORITY`) — had **ZERO
+production callers** (grep-confirmed: only its own def + `tests/`). The SOLE land-army battle-company builder
+`DayOrchestrator._build_battle_states` (used by BOTH the field-battle path `_resolve_army_battles` ~16337 AND
+the storm-assault path `_process_storm_assault_results` ~3070, via `resolve_and_reconcile_battle`) instead
+computed the bonus with the **naval-shaped inline copy** `_compute_captain_bonus` (a private DO helper also
+used by the s11.9 naval path at ~22207/22223). That copy **DROPS the Tactician (+5) and Strategist (+1k0)
+advantages entirely** (it returns just `battle_rank`) and uses a naive FIRE-biased first-wins ring tie-break
+with no clan priority. Result: a land commander with the **Tactician** or **Strategist** advantage (s45)
+conferred **ZERO** battle bonus in any field battle or storm assault — the advantage was inert — and ring
+ties resolved by FIRE-bias instead of the LOCKED clan-priority order. The CONSUMER side was fully wired and
+casualty-gated (`_get_effective_attack/defense/morale_defense` apply `commander_bonus` by type unless the
+commander is injured/dead); only the producer diverged. FIX (pure routing, no invented values — every value
+is the canonical arbiter's own s11.7/s45 constant): `_build_battle_states` now calls
+`ArmyCombatSystem.resolve_commander_bonus(commander, commander.clan)` (the commander's clan drives the
+clan-priority tie-break). **Naval left untouched** — `_compute_captain_bonus` (s11.9) is a separate GDD system
+and its two naval call sites are unchanged; only the land call site was rerouted. Behavior-preserving for an
+**ordinary** commander (no advantage, no ring tie): `get_tactician_modifier`/`get_strategist_battle_modifier`
+return 0, and the RING_TO_BONUS_TYPE map is identical between the two functions (FIRE/WATER→attack,
+EARTH/AIR→defense, VOID→morale), so a plain commander's bonus is unchanged; the only deltas are (a) a
+Tactician/Strategist commander now gets their advantage bonus, and (b) exact ring ties resolve by clan
+priority. The zero-battle-rank return-shape difference (`{}` vs `{"bonus_type":"","bonus_value":0}`) is
+harmless — the consumer reads `bonus.get("bonus_type","") == "attack"`, so both mean "no bonus". Runtime-verified
+8/8 (`tests/verify_land_commander_bonus.gd`): a plain Fire-dominant commander → attack bonus == Battle rank;
+a Tactician commander → Battle+5; a Strategist commander → Battle+1; `_build_battle_states` builds a company
+carrying the Tactician-boosted bonus and its effective attack reflects it; Battle-0 → no bonus. Full project
+`--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, performance_invitation_received reactive need was dead — targeted court commissions never reached the invited performer — runtime-verified 8/8)
 A **dead-consumer** dormant signal (the class where a consumer branch reads an event type no injector
 ever produces). `NPCDecisionEngine._decompose_reactive_event` has a live arm for
