@@ -237,6 +237,35 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, assassination-order honor cost applied TWICE — twin arbiters both fired — runtime-verified 14/14)
+A **twin-arbiter double-count** (the split-brain sub-class of the divergent-inline-copy bug) and a genuine
+LIVE correctness bug. The s12.8 "honor cost of ORDERING an assassination, rank-scaled by target Status"
+(≥8→−5 / ≥6→−4 / ≥3→−3 / else −2) is encoded by TWO value-identical arbiters: `AssassinationSystem.get_ordering_honor_loss`
+(the domain-owned canonical, rank-scales internally via `CrimeSystem.scale_honor_by_rank`) and the
+duplicate `SecretSystem.get_assassination_order_honor_cost` (a hand-copied dict `ASSASSINATION_ORDER_HONOR`,
+rank-scaled externally by the caller). Both fired for the SAME commission, in the SAME tick, on the SAME
+commissioner: `ActionExecutor._execute_commission_assassination` (~6005) computed the cost via the SecretSystem
+copy, **applied it** (`apply_honor_change`, the LOCKED Pattern-B commission-time charge — CLAUDE.md "applied at
+commission time (Pattern B)"), AND stashed it as `effects.subject_honor_loss` (a pure metadata key EffectApplicator
+does NOT consume — grep-confirmed 0 reads); then `DayOrchestrator._process_assassination_commissions` (~28656,
+called once/tick from `advance_day`) **re-applied** the same rank-scaled ordering honor via the domain arbiter,
+ignoring the stash. So every NEW commission charged the commissioner the ordering honor **twice**, and — because
+that writeback has a per-(assassin,target) dedup `continue` BEFORE the re-charge — a *duplicate* commission was
+charged only once, an inconsistency that is the tell of independently-drifted wiring. FIX (pure deletion +
+behavior-preserving consolidation, no new numbers): (1) **removed the writeback re-application** — the
+`_process_assassination_commissions` pass now only registers the assassination op (the executor's Pattern-B
+charge is the single, canonical application; `state["commissioner_id"]` is still set from `effects`). (2)
+**consolidated the executor onto the domain arbiter** — `_execute_commission_assassination` now computes the
+cost via `AssassinationSystem.get_ordering_honor_loss(target.status, character)` (identical ladder + identical
+internal `scale_honor_by_rank` → the exact same value as the old SecretSystem-copy call, verified across all
+Status tiers), so the live path runs through ONE arbiter and the two no longer drift. `SecretSystem.get_assassination_order_honor_cost`
++ its `ASSASSINATION_ORDER_HONOR` dict are retained (test-covered) but now have zero production callers —
+a documented dead-but-tested residual, no longer a drift hazard for production. Runtime-verified 14/14
+(`tests/verify_assassination_order_honor.gd`): the domain arbiter == the old SecretSystem-copy value across
+9 Status tiers (rank-scaled); the writeback leaves the commissioner's honor UNCHANGED (no second charge) while
+still registering the op with the correct commissioner_id; and the dedup path still skips a duplicate op with
+no re-charge. Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, land-commander battle bonus bypassed the canonical arbiter — Tactician/Strategist advantages silently dropped in every land battle — runtime-verified 8/8)
 A **canonical-arbiter-bypassed-by-a-divergent-inline-copy** fix (the seppuku/harvest/social-TN class), and
 a genuine LIVE gameplay bug. `ArmyCombatSystem.resolve_commander_bonus(commander, clan_id)` — the LOCKED

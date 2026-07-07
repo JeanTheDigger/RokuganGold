@@ -6002,7 +6002,12 @@ static func _execute_commission_assassination(
 		}
 
 	var method: int = _select_assassination_method(assassin)
-	var honor_cost: float = CrimeSystem.scale_honor_by_rank(SecretSystem.get_assassination_order_honor_cost(target.status), character)
+	# Ordering honor cost (s12.8), rank-scaled by the commissioner's Honor Rank, via the
+	# assassination-domain arbiter (identical ladder + internal scale_honor_by_rank to the old
+	# SecretSystem.get_assassination_order_honor_cost copy — consolidated to one live arbiter so
+	# the two no longer drift). Applied here at commission time (Pattern B) and stashed as
+	# subject_honor_loss; the day-orchestrator writeback does NOT re-apply it.
+	var honor_cost: float = AssassinationSystem.get_ordering_honor_loss(target.status, character)
 	HonorGlorySystem.apply_honor_change(character, honor_cost)
 
 	return {

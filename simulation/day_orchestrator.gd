@@ -28650,10 +28650,12 @@ static func _process_assassination_commissions(
 		)
 		var commissioner_id: int = int(effects.get("commissioner_id", -1))
 		state["commissioner_id"] = commissioner_id
-		var commissioner: L5RCharacterData = characters_by_id.get(commissioner_id) as L5RCharacterData
-		var target_char: L5RCharacterData = characters_by_id.get(target_id) as L5RCharacterData
-		if commissioner != null and target_char != null:
-			HonorGlorySystem.apply_honor_change(commissioner, AssassinationSystem.get_ordering_honor_loss(target_char.status, commissioner))
+		# NOTE: the ordering honor cost (s12.8, rank-scaled by target Status) is applied ONCE, at
+		# commission time in ActionExecutor._execute_commission_assassination (Pattern B) — which also
+		# stashes it as effects.subject_honor_loss. This writeback previously RE-APPLIED the same
+		# rank-scaled ordering honor here via the domain arbiter, double-charging the commissioner
+		# every new commission (and only single-charging a deduped duplicate — an inconsistency).
+		# The re-application is removed; this pass only registers the assassination op.
 		active_assassination_ops.append(state)
 
 
