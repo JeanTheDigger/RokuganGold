@@ -237,6 +237,32 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Systems Added 2026-07-06 (s4.3.21 worship tiers ACTIVATED — Model A, province-only, owner-approved, runtime-verified 16/13)
+`WorshipSystem.get_worship_tier` was a DISABLED stub (always NONE) — the GDD LOCKS the 10 WP/
+Fortune/season threshold + the three malus tiers but never states the WP→tier transition points.
+Owner-approved **Model A (magnitude / ratio-of-threshold)**: NONE ≥100%, RESTLESS 70–99%,
+DISPLEASED 40–69%, WRATHFUL <40%. The two band edges (`TIER_RESTLESS_RATIO 0.70` /
+`TIER_DISPLEASED_RATIO 0.40`) are the ONLY owner-set values; the threshold + maluses are LOCKED.
+Pure function of WP vs threshold → no per-season state (worship resets each season, overflow
+doesn't carry), scales to any threshold. This lights up the entire dormant province malus layer
+(pop/military/koku/rice/divination/stability/longevity) AND makes the just-wired divination
+meaningful — a WRATHFUL Fukurokujin (<4 WP) now correctly blocks divination for the province
+(worship still ACCUMULATES; only the reading is blocked, GDD-LOCKED, self-healing).
+- **PROVINCE-ONLY (the safety call).** The family/clan/empire aggregate tiers are still computed +
+  stored in `worship_state`, but `compute_all_province_maluses` now applies **only the province
+  tier** (`worst = pt`). The aggregate thresholds (60/150/800) are GDD-flagged PROVISIONAL (s4.3.21
+  line 1367, "recalculate once the map is built"), and the function would otherwise blanket the
+  WORST of {province, family, clan, empire} onto **every member province** off provisional numbers —
+  a potential empire-wide malus cascade. Only the LOCKED 10-WP province threshold drives maluses.
+  The aggregate tiers have no other consumer (verified) and the aggregate crisis topics aren't
+  implemented, so this fully contains the deferral; re-enabling the four-level model once the
+  aggregate thresholds lock is a documented one-block change in `compute_all_province_maluses`.
+- Runtime-verified: `tests/verify_worship_tiers.gd` 16/16 (bands, exact boundaries, threshold
+  scaling, threshold-0 guard, and the KEY guarantee — a province meeting its own WP is NOT
+  blanketed by a WRATHFUL family/clan/empire aggregate); `tests/verify_worship_divination.gd` 13/13
+  (fixtures updated to seed Fukurokujin healthy since they predated live tiers; test [3] keeps it
+  Wrathful to exercise the divination block). Full import parse-clean.
+
 ### Systems Added 2026-07-06 (two more dormant-arbiter/signal wirings — s11.3.8 intercepted-letter + seppuku arbiter, owner-directed "fix these", runtime-verified 16/11)
 Same produced-vs-consumed dormant-system class as the treason/divination/succession fixes; both
 pure LOCKED-only wiring, no invented numbers.
