@@ -29979,20 +29979,24 @@ static func _process_intimidation_compliance(
 		var target: L5RCharacterData = characters_by_id.get(tid)
 		if intimidator == null or target == null \
 				or CharacterStats.is_dead(intimidator) or CharacterStats.is_dead(target):
-			continue  # intimidator (or target) gone — compliance ends
-		# Friendship: intimidator's disposition toward target crosses into Friend range.
-		if IntimidationSystem.can_compliance_end(intimidator.disposition_values.get(tid, 0)):
-			continue
+			continue  # intimidator (or target) gone — compliance ends (liveness the arbiter can't see)
+		# The three GDD end-conditions the canonical arbiter decides on. We only compute the inputs
+		# here and delegate the OR-combination to IntimidationSystem.check_compliance_status so the
+		# compliance-end rule lives in ONE place (was re-implemented inline before this fix).
+		var disp: int = intimidator.disposition_values.get(tid, 0)
 		# Leverage removed: the blackmail secret has been exposed (no longer leverage).
 		var secret_id: int = e.get("leverage_secret_id", -1)
-		if secret_id >= 0 and _secret_is_exposed(secret_id, active_secrets):
-			continue
-		# Pushback: the target rolls Willpower vs TN 15 + intimidator's Intimidation rank.
-		var wp_roll: int = dice_engine.roll_and_keep(maxi(target.willpower, 1), maxi(target.willpower, 1), true).total
-		var pushback: Dictionary = IntimidationSystem.resolve_pushback(
-			wp_roll, intimidator.skills.get("Intimidation", 0))
-		if pushback.get("success", false):
-			continue  # target broke free
+		var leverage_removed: bool = secret_id >= 0 and _secret_is_exposed(secret_id, active_secrets)
+		# Pushback: the target rolls Willpower vs TN 15 + intimidator's Intimidation rank. Only rolled
+		# when neither friendship nor leverage-removal has already ended it (no wasted RNG).
+		var pushback_succeeded: bool = false
+		if not IntimidationSystem.can_compliance_end(disp) and not leverage_removed:
+			var wp_roll: int = dice_engine.roll_and_keep(
+				maxi(target.willpower, 1), maxi(target.willpower, 1), true).total
+			pushback_succeeded = IntimidationSystem.resolve_pushback(
+				wp_roll, intimidator.skills.get("Intimidation", 0)).get("success", false)
+		if not IntimidationSystem.check_compliance_status(disp, leverage_removed, pushback_succeeded):
+			continue  # compliance ended
 		survivors.append(e)
 	active_intimidations.assign(survivors)
 
