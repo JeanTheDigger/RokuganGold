@@ -237,6 +237,32 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, performance_invitation_received reactive need was dead — targeted court commissions never reached the invited performer — runtime-verified 8/8)
+A **dead-consumer** dormant signal (the class where a consumer branch reads an event type no injector
+ever produces). `NPCDecisionEngine._decompose_reactive_event` has a live arm for
+`ev.type == "performance_invitation_received"` (s12.4 / s57.33.3) — it builds a
+`FULFILL_PERFORMANCE_REQUEST` need at **priority 2** for a TARGETED personal court performance
+commission (a named lord invites a specific performer) — but **nothing ever created that event**. The
+performance-request injector in `build_context` (npc_decision_engine ~:290) only emitted the
+`open_performance_request` type and `continue`d past every targeted request
+(`if req.get("target_performer_id", -1) >= 0: continue`). So a personal commission addressed to a
+specific courtier NEVER nudged that performer through the reactive path — it just sat in the court's
+`pending_performance_requests` until it expired 90 days later (the open-call path, and the
+`FULFILL_PERFORMANCE_REQUEST` fulfillment writeback in `day_orchestrator` ~:27065, were both already
+live — only the targeted injector was missing). FIX (pure routing, no invented values — the priority-2
+targeted / priority-1 open split is exactly what the existing consumer arms encode): the injector now,
+for a performer at an active court, FIRST scans for a request whose `target_performer_id` == this
+character that they `RequestPerformanceSystem.can_fulfill` (skill rank ≥ 1) and injects
+`performance_invitation_received` (the targeted arm), and only if none is addressed to them falls back
+to the prior `open_performance_request` scan — so a personal commission takes precedence over an open
+call, matching the consumer's priority-2-over-priority-1 ordering. Unskilled invited performers (fail
+`can_fulfill`) and no-court contexts inject nothing (unchanged). Runtime-verified 8/8
+(`tests/verify_performance_invitation.gd`): a targeted commission injects `performance_invitation_received`;
+an open request still injects `open_performance_request` (and NOT the targeted type); a
+targeted-to-someone-else request nudges this performer with nothing; a targeted-for-me + open pair
+injects only the targeted one (precedence); no active court injects nothing; an unskilled invited
+performer is not nudged. Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, route_integrity_reduced produced-but-never-consumed — Silk courier failures did nothing — runtime-verified 9/9)
 A produced-but-not-consumed dormant signal (the cohabitation/hostage-War-Score class). The
 RUN_COURIER_ROUTE failure writeback SET `L5RCharacterData.special_data["route_integrity_reduced"] = true`

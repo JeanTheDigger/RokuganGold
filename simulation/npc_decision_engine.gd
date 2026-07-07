@@ -286,21 +286,43 @@ static func build_context(
 				"priority": best_priority,
 			})
 
-	# Open performance request check (s57.33.3).
+	# Performance request check at court: a TARGETED personal commission (s12.4 "Perform
+	# Personally For") to THIS performer takes precedence (the reactive need at priority 2), else
+	# an OPEN request anyone present may answer (s57.33.3, priority 1). The targeted branch was
+	# missing -- the injector only ever emitted open_performance_request and `continue`d past every
+	# targeted request, so the performance_invitation_received consumer never fired and a named
+	# performer never got nudged to fulfill a personal commission (it just expired 90 days later).
 	if not ctx.active_court_at_location.is_empty():
-		var open_requests: Array = world_state.get("pending_performance_requests", [])
-		for req: Dictionary in open_requests:
-			if req.get("target_performer_id", -1) >= 0:
+		var perf_requests: Array = world_state.get("pending_performance_requests", [])
+		var perf_injected: bool = false
+		# Targeted invitation addressed to this performer.
+		for req: Dictionary in perf_requests:
+			if req.get("target_performer_id", -1) != character.character_id:
 				continue
 			if RequestPerformanceSystem.can_fulfill(character, req):
 				ctx.pending_events.append({
-					"type": "open_performance_request",
+					"type": "performance_invitation_received",
 					"request_id": req.get("request_id", -1),
 					"requesting_lord_id": req.get("requesting_lord_id", -1),
 					"performance_type": req.get("performance_type", ""),
 					"venue_mode": req.get("venue_mode", "public"),
 				})
+				perf_injected = true
 				break
+		# Otherwise an open request (target -1) any present performer may answer.
+		if not perf_injected:
+			for req: Dictionary in perf_requests:
+				if req.get("target_performer_id", -1) >= 0:
+					continue
+				if RequestPerformanceSystem.can_fulfill(character, req):
+					ctx.pending_events.append({
+						"type": "open_performance_request",
+						"request_id": req.get("request_id", -1),
+						"requesting_lord_id": req.get("requesting_lord_id", -1),
+						"performance_type": req.get("performance_type", ""),
+						"venue_mode": req.get("venue_mode", "public"),
+					})
+					break
 
 	# Personality
 	ctx.bushido_virtue = character.bushido_virtue
