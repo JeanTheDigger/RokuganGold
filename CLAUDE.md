@@ -237,6 +237,54 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Systems Added 2026-07-06 (Emperor's Peace at Winter Court wired — s57.47 v624 / s55.10, owner-approved, runtime-verified 25/25)
+Same built-but-zero-callers dormant class as the seppuku/harvest arbiters.
+`WinterCourtSystem.is_action_blocked_by_emperors_peace` + `record_emperors_peace_violation`
+were fully built (all consequence values LOCKED in s57.47) but had **ZERO production
+callers** — the CAPITAL "Violation of the Emperor's Peace" crime could never occur, and the
+Winter Court's central lore guarantee was mechanically inert. The built `HOSTILE_ACTIONS`
+list even used **phantom ActionIDs** ("ATTACK"/"POISON"/"CHALLENGE_TO_DUEL"/"ASSASSINATION")
+matching no real engine action.
+- **Classification (owner-approved 2026-07-06).** Reconciled `HOSTILE_ACTIONS` to the real,
+  world-sim-reachable overt breaches — **INTIMIDATE** and an **UNSANCTIONED
+  `ISSUE_DUEL_CHALLENGE`**. Covert intrigue stays PERMITTED (the point of Winter Court); a
+  sanctioned duel is EXEMPT (the honorable form, and NPC duels default sanctioned);
+  **COMMISSION_ASSASSINATION is excluded** (covert, resolves off-site over days — not "the
+  hostile act within the settlement"); attack/poison/sabotage have no world-sim ActionID and
+  military acts aren't reachable by an attending courtier. A thin
+  `is_peace_violating_action(action_id, has_duel_sanction)` helper holds the list logic in ONE
+  place — the court-object predicate AND the new NPC filter delegate to it (no inline copy, the
+  anti-pattern this session has been fixing). No invented numbers — every value traces to s57.47
+  line 51; the classification is a faithful reconciliation of the placeholder list's intent.
+- **Block (deterrence).** `NPCDecisionEngine._apply_emperors_peace_precondition_filter` (Phase
+  4c) removes the overt breach from an attendee's options at an active **Imperial Winter Court**
+  (identified via the already-injected `ctx.active_court_at_location.court_type`, set only for
+  active-court attendees). Live effect = INTIMIDATE removed (sanctioned duels/covert/benign
+  kept); no-op at any other court or with no court. Matches every other "action unavailable
+  here" gate.
+- **Punish (backstop).** `DayOrchestrator._process_emperors_peace_violations` (post-wave, right
+  after `_process_crime_detection`) fires when a violation nonetheless EXECUTES at the active
+  Winter Court (a crisis-override bypass, an unsanctioned duel, or a future PC — the block
+  handles the normal NPC path). Delegates the LOCKED consequence table to
+  `record_emperors_peace_violation`: CAPITAL crime `ACCUSED` + `evidence_total 100` (→ the
+  conviction pipeline → execution without seppuku, Imperial jurisdiction), Tier-1 LEGAL topic,
+  at-act honor loss on the offender + family-daimyo Glory −1.0 (both Pattern B inside the fn).
+  Appends the returned record + topic; applies the Emperor's **−15 disposition toward the
+  offender's clan champion** (the clan's face to the throne — `CollectiveDisposition` has no
+  Imperial participant, so the individual `emperor.disposition_values` is the mechanism; falls
+  back to the offender if no living champion). Deduped per offender (one CAPITAL conviction is
+  terminal). Gated on the actor being in the winter court's `attendee_ids`.
+- Runtime-verified 25/25 (`tests/verify_emperors_peace.gd`): classification (INTIMIDATE breach /
+  sanctioned-vs-unsanctioned duel / covert permitted / assassination excluded) + the court-object
+  predicate (active+host vs away/non-active); the NPC filter (removes INTIMIDATE only at an active
+  Winter Court, keeps sanctioned duel/covert/benign, no-op at a provincial court / no court); the
+  recorder (CAPITAL crime + Tier-1 topic + −15 champion disposition + at-act honor + family Glory
+  −1.0, and no-ops for a sanctioned duel / non-attendee / no-winter-court / dedup). Full project
+  `--import` parse-clean. **DEFERRED (not this pass, all documented):** the PC path that could
+  commit a violation live is on the PC-travel HOLD; the recorder's live NPC exercise is thin by
+  design (the block prevents most). The `COVERT_ACTIONS_PERMITTED` constant is now inert
+  (no overlap with the narrowed `HOSTILE_ACTIONS`) but retained as intent documentation.
+
 ### Known Code Issues (found and fixed 2026-07-06, army rout-dissolution never applied to the army lifecycle — runtime-verified 14/14)
 A "produced-but-not-consumed" dormant signal in the LIVE military battle loop.
 `ArmyCombatSystem.resolve_rout` computes the GDD-LOCKED army-wide, **post-pursuit
