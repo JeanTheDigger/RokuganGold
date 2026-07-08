@@ -237,27 +237,30 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
-### Known Code Issues (found and fixed 2026-07-06, Togashi oversight read an EMPTY top-level world_states["province_data"] — 3 province triggers dead — runtime-verified 19/19)
+### Known Code Issues (found and fixed 2026-07-06, Togashi oversight read EMPTY top-level world_states["province_data"]/["active_wars"] — 4 triggers dead — runtime-verified 24/24)
 A **wrong-source dead-read** (surfaced while verifying the realm-overlap fix directly below). `DayOrchestrator._build_togashi_world_state`
 (the sole producer of the Dragon Champion's oversight world_state) sourced its province facts from
-`world_states.get("province_data", [])` — but the top-level `world_states["province_data"]` key is **NEVER
-set**: `province_data` is stashed ONLY on the PER-CHARACTER sub-dicts (`world_states[char_id]["province_data"]
-= provinces.values()`, in `_inject_base_character_context`), never on the top-level dict this function reads.
-So the read always returned `[]`, and **THREE oversight triggers were dead** across two axes:
-`provinces_in_rebellion` (IMPERIAL_COHESION `> REBELLION_THRESHOLD`), `max_non_shadowlands_ptl` (SPIRITUAL_HEALTH
-`> 3.0`), and `wall_breach_active` (SHADOWLANDS_CONTAINMENT) — plus the realm Dragon-territory check added in
-the fix below (its province→clan map was built from the same empty array). The Dragon Champion could never
-react to rebellions, non-Shadowlands PTL spikes, or wall breaches from these signals. FIX (no invented values
-— just read the correct, already-available source): `_process_togashi_oversight` already receives the real
-`provinces: Dictionary` param (passed from `advance_day`); thread it into `_build_togashi_world_state` and
-source `provinces_data` from `provinces.values()` (fall back to the legacy empty key only if a caller passes
-no provinces — a strict improvement, since it was always empty). This resurrects all three province triggers
-AND makes the realm Dragon-territory check (below) actually work. Runtime-verified 19/19
-(`tests/verify_togashi_realm_overlap.gd`): with an EMPTY `world_states` + a real `provinces` Dictionary, the
-builder reports `provinces_in_rebellion` 1, `max_non_shadowlands_ptl` 5.0, `wall_breach_active` true (all were
-0/0/false pre-fix), the realm Dragon-territory flag flips true for a Dragon-province overlap (proving it reads
-the real provinces, not the dead key), and an empty-provinces call safely defaults to 0/false. Full project
-`--import` parse-clean.
+`world_states.get("province_data", [])` and its war count from `world_states.get("active_wars", [])` — but
+**neither top-level key is EVER set**: both are stashed ONLY on the PER-CHARACTER sub-dicts
+(`world_states[char_id]["province_data"] = provinces.values()` / `["active_wars"] = g_active_wars`, in
+`_inject_base_character_context`), never on the top-level dict this function reads. So both reads always
+returned `[]`, and **FOUR oversight triggers were dead** across three axes: `provinces_in_rebellion`
+(IMPERIAL_COHESION `> REBELLION_THRESHOLD`), `active_inter_clan_wars` (IMPERIAL_COHESION `>= 2`),
+`max_non_shadowlands_ptl` (SPIRITUAL_HEALTH `> 3.0`), and `wall_breach_active` (SHADOWLANDS_CONTAINMENT) —
+plus the realm Dragon-territory check added in the fix below (its province→clan map was built from the same
+empty array). The Dragon Champion could never react to rebellions, multiple inter-clan wars, non-Shadowlands
+PTL spikes, or wall breaches from these signals. FIX (no invented values — just read the correct,
+already-available sources): `_process_togashi_oversight` already receives the real `provinces: Dictionary`
+(and now the real `active_wars: Array` of WarData, threaded from `advance_day`); `_build_togashi_world_state`
+sources `provinces_data` from `provinces.values()` and counts `inter_clan_wars` from the real WarData (active,
+distinct non-empty clans), each falling back to the legacy empty key only if a caller passes nothing — a
+strict improvement, since both were always empty. Resurrects all four triggers AND makes the realm
+Dragon-territory check (below) actually work. Runtime-verified 24/24 (`tests/verify_togashi_realm_overlap.gd`):
+with an EMPTY `world_states` + a real `provinces` Dictionary, the builder reports `provinces_in_rebellion` 1,
+`max_non_shadowlands_ptl` 5.0, `wall_breach_active` true (all 0/0/false pre-fix), the realm Dragon-territory
+flag flips true for a Dragon-province overlap; and with real `active_wars`, `active_inter_clan_wars` counts 2
+(fires IMPERIAL_COHESION) vs 1 (silent) vs a same-clan war (0), with the empty-args paths safely defaulting.
+Full project `--import` parse-clean.
 
 ### Known Code Issues (found and fixed 2026-07-06, Togashi realm-overlap concern triggers were hardcoded dead — runtime-verified 14/14)
 A **hardcoded-dead-key** dormant signal (the producer exists but emits a constant). `TogashiOversight.spiritual_health_concern_fires`

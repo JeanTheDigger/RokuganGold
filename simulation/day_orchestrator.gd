@@ -1816,7 +1816,7 @@ static func advance_day(
 				characters_by_id, world_states, active_topics,
 				next_topic_id, ic_day, active_civil_wars,
 				objectives_map, cw_season_count,
-				settlements, provinces, spiritual_insurgency_events,
+				settlements, provinces, spiritual_insurgency_events, active_wars,
 			)
 		if not phoenix_council_state.is_empty():
 			var emperor_id_for_phoenix: int = int(world_states.get("emperor_id", -1))
@@ -23313,6 +23313,7 @@ static func _process_togashi_oversight(
 	settlements: Array = [],
 	provinces: Dictionary = {},
 	spiritual_events: Array = [],
+	active_wars: Array = [],
 ) -> Dictionary:
 	# Reappearance check runs BEFORE the dragon_autonomous_rule gate.
 	# The assaulting FC held autonomous rule; when he dies a new FC is found here.
@@ -23361,7 +23362,7 @@ static func _process_togashi_oversight(
 			fc_directives.append(d)
 
 	var oversight_world: Dictionary = _build_togashi_world_state(
-		world_states, characters, characters_by_id, spiritual_events, provinces,
+		world_states, characters, characters_by_id, spiritual_events, provinces, active_wars,
 	)
 
 	var result: Dictionary = TogashiOversight.process_seasonal_oversight(
@@ -23464,6 +23465,7 @@ static func _build_togashi_world_state(
 	characters_by_id: Dictionary,
 	spiritual_events: Array = [],
 	provinces: Dictionary = {},
+	active_wars_real: Array = [],
 ) -> Dictionary:
 	var clan_strengths: Dictionary = {}
 	for c: L5RCharacterData in characters:
@@ -23473,11 +23475,24 @@ static func _build_togashi_world_state(
 			continue
 		clan_strengths[c.clan] = float(clan_strengths.get(c.clan, 0.0)) + c.status
 
-	var active_wars: Array = world_states.get("active_wars", [])
+	# Count active inter-clan wars from the REAL active_wars param (WarData). The top-level
+	# world_states["active_wars"] this used to read is never set either (only per-character
+	# sub-dicts get it, ws[char_id]["active_wars"]), so inter_clan_wars was always 0 and the
+	# IMPERIAL_COHESION "2+ inter-clan wars" trigger was dead. Every entry in active_wars is a
+	# clan-vs-clan war (intra-clan conflicts are the separate active_civil_wars system); guard
+	# on distinct, non-empty clans. Fall back to the legacy (empty) dict-count only if a caller
+	# passes no active_wars.
 	var inter_clan_wars: int = 0
-	for w: Variant in active_wars:
-		if w is Dictionary:
-			inter_clan_wars += 1
+	if not active_wars_real.is_empty():
+		for w: Variant in active_wars_real:
+			if w is WarData:
+				var wd: WarData = w as WarData
+				if wd.is_active and wd.clan_a != "" and wd.clan_b != "" and wd.clan_a != wd.clan_b:
+					inter_clan_wars += 1
+	else:
+		for w: Variant in world_states.get("active_wars", []):
+			if w is Dictionary:
+				inter_clan_wars += 1
 
 	# Source the real provinces param. The top-level world_states["province_data"] key
 	# this function used to read is NEVER populated (province_data is stashed only on

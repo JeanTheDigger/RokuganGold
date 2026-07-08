@@ -51,13 +51,36 @@ func _build(spiritual_events: Array) -> Dictionary:
 	return _DO._build_togashi_world_state({}, [], {}, spiritual_events, provinces)
 
 
+func _war(a: String, b: String) -> WarData:
+	var w := WarData.new()
+	w.clan_a = a
+	w.clan_b = b
+	w.is_active = true
+	return w
+
+
 func _init() -> void:
 	print("--- Togashi realm-overlap facts wired from spiritual insurgency events (s55.10.2) ---")
 	_test_producer()
 	_test_consumer()
 	_test_province_source()
+	_test_inter_clan_wars()
 	print("--- %d passed, %d failed ---" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
+
+
+func _test_inter_clan_wars() -> void:
+	print("[4] active_inter_clan_wars counts the real active_wars param (was reading a dead top-level key)")
+	# emperor_id set so emperor_vacant is false -> isolates the inter-clan-wars trigger.
+	var w2: Dictionary = _DO._build_togashi_world_state({"emperor_id": 1}, [], {}, [], {}, [_war("Lion", "Crane"), _war("Crab", "Scorpion")])
+	_ok(int(w2["active_inter_clan_wars"]) == 2, "2 real wars -> count 2")
+	_ok(_TO.imperial_cohesion_concern_fires(w2) == true, "2 inter-clan wars fire IMPERIAL_COHESION")
+	var w1: Dictionary = _DO._build_togashi_world_state({"emperor_id": 1}, [], {}, [], {}, [_war("Lion", "Crane")])
+	_ok(int(w1["active_inter_clan_wars"]) == 1, "1 real war -> count 1")
+	_ok(_TO.imperial_cohesion_concern_fires(w1) == false, "1 inter-clan war below threshold -> IMPERIAL_COHESION silent")
+	# A same-clan (malformed) war entry is not counted as inter-clan.
+	var w0: Dictionary = _DO._build_togashi_world_state({"emperor_id": 1}, [], {}, [], {}, [_war("Lion", "Lion")])
+	_ok(int(w0["active_inter_clan_wars"]) == 0, "same-clan war not counted as inter-clan")
 
 
 func _test_producer() -> void:
