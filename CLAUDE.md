@@ -237,6 +237,40 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues — Deferred (2026-07-08, full-surface two-agent dormant sweep — NO clean wires remain, do NOT re-audit)
+After the PU-loss arbiter fix below, two systematic agent sweeps (military/kolat/spell AND
+economy/spiritual/info/family/naval) plus hand-probing of tattoo/advantage/kata/crime-legal/festival/edict/
+reactive/commitment/wind-down found **zero remaining clean one-commit wires** across the world-sim surface.
+Every remaining dormant item is either a SUPERSEDED dead duplicate of a live twin (harmless) or DESIGN-GATED
+behind an unbuilt trigger/subsystem or an unlocked-PROVISIONAL GDD value (needs owner approval, not a wire).
+Documented here so future sweeps skip them:
+- **SUPERSEDED (dead duplicate of a live twin — do NOT wire, would change behavior or is value-identical dead code):**
+  `ResourceTick.sum_mining_pu`/`sum_town_pu`/`sum_military_pu` (consumers sum PU inline); `ResourceTick.check_starvation`
+  (live path is `resolve_starvation_transition`); `MarriageSystem.decay_clan_boost`/`decay_family_boost` (live
+  `CollectiveDisposition.decay_marriage_boosts` uses a DIFFERENT seasons-acc model — swapping would change behavior);
+  `InformationSystem.process_observe_court`/`process_introduction`/`_get_target_actions` (live flow routes through
+  `CourtActionSystem` OBSERVE_COURT_ATTENDEES, s55.7.3); `SuccessionSystem.get_transition_effects`/`get_transition_duration`/
+  `contest_succession`/`get_designation_urgency`/`is_emperor_succession` (live emperor path calls `evaluate_emperor_succession`
+  directly); `GempukkuSystem.process_gempukku`/`count_clan_population`/`get_replenishment_needed`/`roll_natural_death`/
+  `generate_replenishment_character` (live entry is `process_seasonal_gempukku`); `SpiritualRitualSystem.diagnose`/
+  `run_summary_ritual`/`post_resolution_affliction_check` (live path `resolve_ritual_round`/`apply_resolution`).
+- **DESIGN-GATED (needs a new field/trigger/subsystem or an unlocked GDD value — owner approval required):**
+  the whole `RiceMarketSystem` posting/auction layer (`create_posting`/`adjust_price_after_season`/`should_withdraw`/
+  `resolve_purchases`/`get_active_routes_for_province` — `RicePostingData` never instantiated); `WorshipSystem`
+  four-level aggregate malus (`compute_province_effective_maluses`/`get_worst_tier` — owner-deferred, 60/150/800
+  thresholds GDD-PROVISIONAL) + `get_minor_blessing_tier` (Minor Blessing feature unbuilt); `SuccessionSystem.resolve_dragon_togashi_removal`
+  (live detector just `continue`s — needs a Phoenix-council-style removal handler); `HostageSystem.harm_hostage_consequences`
+  (the `harmed_hostage` −30 modifier IS registered but no HARM_HOSTAGE action/trigger exists); `LetterSystem.can_send_free_letter`/
+  `can_send_batch` (no letter-budget action gates on them — all live sends are narrative generators that bypass the budget);
+  `SailingSystem.self_captain_penalty`/`select_acting_captain`/`board_passengers` (no at-sea sailing-roll / captain-incapacitation
+  trigger, s57.42); the whole `SpiritualExposureSystem` Toshigoku/Chikushudo/Gaki periodic-check cluster (combat-loop unbuilt);
+  `TopicSystem.get_momentum_level` (`MomentumLevel` enum has zero consumers — sim gates on raw floats); `ReactiveDecisions.evaluate_duel_trigger`
+  (the s55.11 PROACTIVE duel-initiation path — zero callers, its grievance→challenge event producer is unbuilt; the RESPONSE
+  path DUEL_CHALLENGE_RECEIVED is the wired one); PaintingSystem `continuous_display_start_ic_day` familiarity decay
+  (s57.27:115 — `FAMILIARITY_DECAY_RATE` deliberately zeroed in the invented-content audit, rates GDD-flagged PROVISIONAL).
+  `NavalCombatSystem` zero-external funcs (`resolve_ram_in_battle`/`resolve_naval_rout`/…) are internal combat mechanics
+  reachable from the live `resolve_naval_battle` chain, not effect arbiters — out of scope, not dormant.
+
 ### Known Code Issues (found and fixed 2026-07-08, Peasant-Revolt suppression PU-loss magnitude was a divergent inline literal — canonical arbiter had ZERO callers — runtime-verified 7/7)
 A **hardcoded-literal / divergent-inline-copy** dedup (the sibling of the land-commander-bonus / social-TN
 class, surfaced by the military-systems sweep). `InsurgencySystem.get_pu_loss_on_suppression(ins)` (s11.11:147 —
