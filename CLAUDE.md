@@ -237,6 +237,60 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-07, supply-sharing amount ignored disposition — hardcoded-literal producer + dormant arbiter — runtime-verified 11/11)
+A **hardcoded-literal producer** feeding a **zero-caller arbiter** (the sibling of the situational-modifier / Togashi-hardcoded classes). `DispositionSystem.get_supply_share_ratio`
+(s12.2 line 403 LOCKED — Friend +31 sends ~half the surplus, scaling to the full amount at Devoted +61) and its
+gate `will_share_supplies` had **ZERO production callers**. The live supply-transfer path
+`DayOrchestrator._process_supply_sharing` (the SHARE_SUPPLIES writeback, which fulfils a RESOURCE_PROMISE created by
+REQUEST_ALLIED_AID) computed the shared amount as a **flat `surplus * 0.5`** — a hardcoded literal that ignored the
+giver's disposition toward the recipient entirely, so a Devoted ally shared no more than a bare Friend, and the
+GDD-locked proportional-scaling arbiter was inert. FIX (pure LOCKED wiring, **no invented values** — the 0.5→1.0
+ratio band is the arbiter's own s12.2:403 constants): the amount is now
+`surplus * maxf(0.5, DispositionSystem.get_supply_share_ratio(giver_disp))`, where `giver_disp` =
+`get_effective_disposition(giver, recipient_lord, characters_by_id)` (recipient resolved from the receiver
+settlement's `lord_character_id`, hoisted so the existing s12.2b intra-clan ripple reuses it). **Regression-free by
+construction:** the ratio is floored at the Friend baseline (0.5 = the +31 GDD ratio), so a *deliberately-chosen*
+SHARE_SUPPLIES shares MORE for a closer ally and never LESS than the prior flat 0.5 — and the giver→recipient
+disposition gate was already enforced upstream at REQUEST_ALLIED_AID (refuses < +31), so a promise-fulfilling giver
+is guaranteed Friend+ (ratio ≥ 0.5). An unresolvable/dead recipient lord falls back to the Friend-floor 0.5 (the
+prior behaviour). **DEFERRED (documented, not invented):** the below-Friend HARD REFUSE of s12.2:403 (`will_share_supplies`
+returning false) belongs to the GDD's REQUEST-response *auto-resolution* model ("resolves as a background calculation,
+no roll"), which is a **separate unbuilt path** — applying that refuse-gate to a deliberately-chosen action (which is
+not a refused request, and could suppress intra-clan feudal aid) would be a semantic mismatch, so only the
+amount-scaling arbiter is wired here. Runtime-verified 11/11 (`tests/verify_supply_share_ratio.gd`): the arbiter tiers
+(0.0 below +31, 0.5 at +31, ~1.0 at +60, 1.0 at +61+; the will_share gate at +31); and end-to-end through
+`_process_supply_sharing` on a surplus-100 giver — Devoted +70 shares the full 100 (was flat 50), Friend +31 shares 50,
++45 shares the proportional ~74, a below-Friend +5 chosen share floors at 50 (no regression), and an unresolvable
+recipient lord floors at 50 without a crash. Full project `--import` parse-clean.
+
+### Known Code Issues — Deferred (2026-07-07, dormant-arbiter sweep — consumer/trigger unbuilt, NOT quick wires)
+A truly-dead-`static func` sweep (exclude only the def line + `tests/`) across war/succession/social systems surfaced
+several GDD-locked arbiters with ZERO callers, but each is dormant because its INTENDED consumer or trigger is itself
+unbuilt (design-gated), NOT because of a missing one-line call. Documented here so future sweeps don't re-investigate:
+- **`DispositionSystem.create_death_mutual_friend_modifier` (s12.2:289, shared grief).** A fully-built, GDD-exact
+  historical-disposition-modifier producer with zero callers — BUT wiring it would be a FALSE fix: `get_effective_disposition`
+  does NOT read `historical_modifiers` at all (it sums stored + family_bond + cohabitation + birth-floor only). The entire
+  Category-2 historical-modifier layer (incl. the LIVE assassination-ordering + commitment-renege producers) is an unfolded
+  ledger — the only consumers are `_decay_all_historical_modifiers` (housekeeping) and the vengeance-target scan
+  (day_orchestrator:13116, reads `modifier == -50`). Folding historical modifiers into effective disposition is a broad,
+  behavior-changing architectural decision (would suddenly bite assassination-ordering/renege) — owner-gated, not a wire.
+- **`WarSystem.check_auto_escalation` + `get_aid_request_honor_cost`/`get_refusal_honor_cost`/`get_refusal_disposition_effects`/
+  `get_territory_fall_honor_cost` (s53).** The escalation thresholds + aid-refusal honor/disposition penalties match the GDD
+  verbatim, but they form the s53 authority-escalation / formal-aid-request cluster, which the GDD says is "NOT automatic —
+  requires the lower authority to formally request aid OR personality-driven higher-authority intervention." The request-with-
+  consequences decision surface (superior refuses an escalated REQUEST_AID) is UNBUILT; wiring the arbiters alone would either
+  over-fire (auto-escalate) or have nothing to hang on. Design-gated cluster.
+- **`HostageSystem.harm_hostage_consequences` (s22.9a, −3.0 honor + `harmed_hostage` −30 modifier).** No HARM_HOSTAGE
+  action/trigger exists, AND the −30 uses the same unfolded historical-modifier ledger above. Needs a trigger + the ledger fold.
+- **`SuccessionSystem.contest_succession`.** A superseded ALTERNATIVE — disputed successions DO resolve, via the timeout →
+  `_rebuild_candidates` → `evaluate_all_candidates`/`confirm_successor` path in `_process_successions` (:11577). Wiring the
+  active-contest model instead is a design change, not a bug fix.
+- **`HonorGlorySystem.get_recognition_rank` (glory+infamy, s46:267).** No general glory-based recognition mechanic exists —
+  the only recognition in the sim is bounty/Wanted-advantage-TN driven (`_check_bounty_recognition`). Wiring it needs the
+  recognition FEATURE built, not just a call.
+- **`FavorSystem.can_unlock_supply_sharing` (s12.10:83) / `DispositionSystem.may_deliberately_mislead` (s12.6).** Both belong
+  to the unbuilt supply-REQUEST auto-resolution model / a false-info conversation branch respectively — consumer-side unbuilt.
+
 ### Known Code Issues (found and fixed 2026-07-07, insurgency per-season economic drain never applied — the whole s11.11 economic-pressure layer was inert — runtime-verified 14/14)
 A **zero-caller effect arbiter** (the sibling of the koku-drain / route-integrity dormant class). `InsurgencySystem.get_koku_drain`
 (s11.11:161/505) and `get_rice_drain` (s11.11:249) return the GDD-LOCKED per-season economic drain each insurgency inflicts —

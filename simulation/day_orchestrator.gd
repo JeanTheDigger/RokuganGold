@@ -17678,7 +17678,24 @@ static func _process_supply_sharing(
 		if surplus <= 0.0:
 			continue
 
-		var amount: float = surplus * 0.5
+		# s12.2 line 403 (LOCKED): the supply-sharing amount scales with the giver's disposition
+		# toward the recipient lord -- Friend (+31) sends ~half the surplus, Devoted (+61+) the full
+		# amount. DispositionSystem.get_supply_share_ratio is the GDD arbiter (0.5 at +31 rising to
+		# 1.0 at +61); it was DORMANT (zero callers) and the amount was a flat surplus*0.5 (a
+		# hardcoded literal = the +31 Friend floor). Because this is a DELIBERATELY-CHOSEN
+		# SHARE_SUPPLIES (the giver is not refusing an incoming request -- the disposition gate was
+		# already enforced upstream at REQUEST_ALLIED_AID), the ratio is floored at the Friend
+		# baseline (0.5): a closer ally shares MORE while nothing shares LESS than before (zero
+		# regression). The below-Friend hard-refuse of s12.2:403 is the REQUEST-response
+		# auto-resolution model (a separate, unbuilt path), not this chosen action.
+		var recipient: L5RCharacterData = characters_by_id.get(receiver_settlement.lord_character_id)
+		var share_ratio: float = 0.5
+		if recipient != null and not CharacterStats.is_dead(recipient):
+			var giver_disp: int = DispositionSystem.get_effective_disposition(
+				character, recipient.character_id, characters_by_id,
+			)
+			share_ratio = maxf(0.5, DispositionSystem.get_supply_share_ratio(giver_disp))
+		var amount: float = surplus * share_ratio
 		var stage: int = _get_starvation_stage(receiver_settlement)
 		if stage <= 0:
 			continue
@@ -17696,7 +17713,7 @@ static func _process_supply_sharing(
 				"resolves_famine": share_result.get("resolves_famine", false),
 			})
 			# s12.2b Event Ripple: intra-clan rice sharing warms the two families' baseline.
-			var recipient: L5RCharacterData = characters_by_id.get(receiver_settlement.lord_character_id)
+			# (recipient resolved above for the disposition-scaled share amount.)
 			if recipient != null and recipient.clan == character.clan \
 					and character.family != "" and recipient.family != "":
 				CollectiveDisposition.apply_intra_clan_rice_sharing(
