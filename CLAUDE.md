@@ -237,6 +237,30 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, TAINT_MANIFESTATION could NEVER spawn — dead-key gate on the PTL-3 Shadowlands escalation — runtime-verified 6/6)
+A genuine **LIVE** bug (the dead-consumer class, surfaced by the situational-modifier fix directly above).
+`InsurgencySystem.get_spawn_chance` (s11.11) gated the Province Taint Manifestation branch on
+`var ptl: float = world_state.get("ptl", 0.0)` — but **NO producer anywhere ever writes a `ws["ptl"]`
+key** (grep-confirmed 0 writes across `/simulation` + `/shared`; the `{"ptl": …}` writes that exist are
+quest-seed / action-metadata, a different context that never feeds `process_season`). So it always read
+0.0, `if ptl < 3.0: return 0.0` ALWAYS fired, and **`TAINT_MANIFESTATION` insurgencies could never spawn
+from the seasonal pass** — the PTL-3 Shadowlands corruption→insurgency escalation (a core s11.11 mechanic)
+was completely inert, even in a province at PTL 9. The `world_state` gate was doubly dead because the SOLE
+spawner of this type is `process_season`'s spawn loop (grep-confirmed: every other `TAINT_MANIFESTATION`
+reference merely reads existing ones — quest seeds, decomposer, roster). The tell that it's a
+copy-from-the-wrong-source bug: the sibling `get_eligible_types` (line 149) already gates TAINT eligibility
+on the REAL ptl (`ptls.get(pid)` = `province.province_taint_level`) — so TAINT was made eligible at PTL≥3
+and then immediately zeroed by the dead-key chance. FIX (no invented values — the province already carries
+the real PTL as a param, and 3.0 is the same GDD-locked s11.11 threshold `get_eligible_types` uses): the
+branch now reads `province.province_taint_level` directly (`ProvinceData` is already a `get_spawn_chance`
+param, and it is the exact field `ptls` is built from — single source of truth), so `TAINT_MANIFESTATION`
+spawns automatically (chance 1.0) at PTL ≥ 3. Runtime-verified 6/6
+(`tests/verify_taint_manifestation_spawn.gd`): the consumer returns 1.0 at PTL 4.0/3.0 with an EMPTY ws
+(was 0.0 pre-fix — the whole bug), 0.0 at PTL 2.9, and now IGNORES a stale `ws["ptl"]=9.0` when the
+province PTL is 0 (proving it reads the province, not the dead key); and end-to-end through
+`process_season` a PTL-4.0 province deterministically spawns a `TAINT_MANIFESTATION` (chance 1.0) while a
+PTL-1.0 control never does across 30 seeds. Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, situational insurgency-spawn modifiers were dead — the whole escalation layer never fired — runtime-verified 17/17)
 A **produced-but-never-produced** dormant layer (the sibling of the route_integrity / hostage-War-Score
 class, but at the SOURCE end): `InsurgencySystem.get_spawn_chance` (s11.11, the sole seasonal insurgency
