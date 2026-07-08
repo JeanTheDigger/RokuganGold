@@ -321,6 +321,20 @@ Documented here so future sweeps skip them:
   (s57.27:115 — `FAMILIARITY_DECAY_RATE` deliberately zeroed in the invented-content audit, rates GDD-flagged PROVISIONAL).
   `NavalCombatSystem` zero-external funcs (`resolve_ram_in_battle`/`resolve_naval_rout`/…) are internal combat mechanics
   reachable from the live `resolve_naval_battle` chain, not effect arbiters — out of scope, not dormant.
+- **WHOLE-SIMULATION BACKSTOP SCAN (after the 3 domain agents — surfaced two systems no domain sweep hit; both DESIGN-GATED, not clean wires):**
+  (1) **`RegionalPriceModifiers` (s11.8) — the ENTIRE system is dormant, ZERO production callers.** It computes clan-territory
+  item-category price modifiers (`compute_final_price`/`get_territory_modifier`, GDD-LOCKED CLAN_MODIFIERS table) for
+  "purchasing/selling items within clan territory," but there is no item-category market-purchase point to consume it: the live
+  `PURCHASE_MARKET` is a flat abstract koku cost (no item/category/base-price) and `CONDUCT_COMMERCE` is a yield formula keyed on
+  the s4.3.8 *location* modifier, not s11.8 item-category clan modifiers. Wiring it needs a real item-category market subsystem
+  (base prices + categories per settlement) — a whole build, not a wire. The modifier values are LOCKED (no invention issue), only
+  the consumer is missing. (2) **`MiyaBlessingSystem.compute_petition_bonus`/`apply_cunning_modifier`** — `compute_need_score`
+  reads a `petition_bonus` input (winter-court petition contributions weight the annual rice-blessing need-score, s11.5b) but
+  nothing computes/feeds it (`compute_petition_bonus` has zero callers); needs a winter-court-petition→blessing tracking trigger.
+  Live `process_annual_blessing` works without it. The remaining whole-sim-scan hits are SUPERSEDED dead helpers of live systems
+  (harmless): `ArmyUpkeepSystem.compute_army_seasonal_costs`/`get_cost_tier` (live path is per-company `compute_company_seasonal_costs`);
+  `IntraClanCivilWar.get_active_precedent_bonus`/`get_dragon_treaty_penalty` (live path `apply_precedent_effect`);
+  `PUReconciliation.compute_company_pu_loss` (live path `reconcile_battle`/`process_army_dissolution`).
 
 ### Known Code Issues (found and fixed 2026-07-08, Peasant-Revolt suppression PU-loss magnitude was a divergent inline literal — canonical arbiter had ZERO callers — runtime-verified 7/7)
 A **hardcoded-literal / divergent-inline-copy** dedup (the sibling of the land-commander-bonus / social-TN
