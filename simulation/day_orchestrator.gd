@@ -12845,6 +12845,20 @@ static func _run_strategic_reviews(
 	var emperor_id: int = int(world_states.get("emperor_id", -1))
 	var emperor_archetype: int = int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON))
 
+	# Inject the war-context keys StrategicReview.run_seasonal_review's evaluators read from the
+	# TOP-LEVEL world_states. These were NEVER set at top level -- active_wars / escalating_conflicts
+	# are stashed only on PER-CHARACTER sub-dicts (ws[char_id][...]), not the top-level dict passed
+	# to run_seasonal_review. So _evaluate_seek_peace (gated on `active_wars.is_empty()`) ALWAYS
+	# returned {} -- SEEK_PEACE was fully dead, even for JIN lords -- and _evaluate_war_readiness's
+	# primary (`active_wars`) and YU-virtue (`escalating_conflicts`) triggers never fired. That
+	# starved the Phoenix Council SIGN_TREATY / DEPLOY_GO_HATAMOTO vote flow (the Shiba Champion
+	# runs through this vassal path) and the Togashi war/peace directive-alignment check. Both
+	# values are lord-agnostic and already in scope -> injected once, erased after the loop.
+	# (military_readiness -- the war-readiness `elif` branch -- stays deferred: it needs an invented
+	# readiness metric, not a plain fact.)
+	world_states["active_wars"] = active_wars
+	world_states["escalating_conflicts"] = _extract_escalating_conflicts(active_topics, active_wars)
+
 	for lord: L5RCharacterData in characters:
 		if CharacterStats.is_dead(lord):
 			continue
@@ -12878,6 +12892,8 @@ static func _run_strategic_reviews(
 	world_states.erase("trainable_vassals")
 	world_states.erase("vengeance_targets")
 	world_states.erase("bitter_rivals")
+	world_states.erase("active_wars")
+	world_states.erase("escalating_conflicts")
 
 	# Champion Strategic Evaluation (s57.54) — runs quarterly for each Clan Champion.
 	if dice_engine != null and not clans.is_empty():

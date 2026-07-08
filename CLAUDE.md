@@ -314,6 +314,36 @@ province PTL is 0 (proving it reads the province, not the dead key); and end-to-
 `process_season` a PTL-4.0 province deterministically spawns a `TAINT_MANIFESTATION` (chance 1.0) while a
 PTL-1.0 control never does across 30 seeds. Full project `--import` parse-clean.
 
+### Known Code Issues (found and fixed 2026-07-06, Strategic Review war-context read from a never-written top-level key — SEEK_PEACE fully dead, WAR_READINESS primary/YU triggers dead — runtime-verified 11/11)
+The **empty-top-level-key** dormant class (the same one the Togashi realm-overlap fix just surfaced, but on the
+Strategic Review path). `world_states` is keyed by BOTH character_id (per-character ContextSnapshot sub-dicts)
+AND string keys, and `_inject_base_character_context` sets `ws["active_wars"]`/`ws["escalating_conflicts"]`
+ONLY on the per-character sub-dicts (`ws = world_states[c.character_id]`), NEVER on the top-level dict. But
+`StrategicReview.run_seasonal_review(lord, vassals, objectives_map, world_state)` is handed the **top-level**
+`world_states` (day_orchestrator `_run_strategic_reviews:12886`), and its two war evaluators read those keys
+off it: `_evaluate_seek_peace` guards `if world_state.get("active_wars", []).is_empty(): return {}` — which
+**ALWAYS fired** (top-level `active_wars` was never set), so SEEK_PEACE was **fully dead for every lord,
+including JIN** (who should always want peace during a war); and `_evaluate_war_readiness` reads the same
+`active_wars` (primary "we are at war" trigger) and `escalating_conflicts` (the YU-virtue "war is brewing"
+trigger) — both **permanently silent**. This starved two live consumers: the **Phoenix Council** vote flow
+(the Shiba Champion runs the vassal review path; `_directive_to_decision_type` maps SEEK_PEACE→SIGN_TREATY and
+the readiness directives→DEPLOY_GO_HATAMOTO) and the **Togashi** war/peace directive-alignment check
+(`is_directive_aligned`). FIX (pure producer plumbing — **zero invented values**, both facts already in scope
+as `_run_strategic_reviews` params): inject `world_states["active_wars"] = active_wars` and
+`world_states["escalating_conflicts"] = _extract_escalating_conflicts(active_topics, active_wars)` (the same
+extractor build_context uses) ONCE before the vassal-review loop, erased after it (alongside the existing
+`trainable_vassals`/`vengeance_targets`/`bitter_rivals` scratch keys, same pattern). Both consumers read the
+keys with only `.is_empty()`/`.size()`, so no threshold is touched. DEFERRED (not invented): the
+war-readiness **`elif` military_readiness < 0.7** branch (an unbuilt readiness metric — a plain fact would
+have to be invented) and `_evaluate_seek_peace`'s **war-duration** branch (needs `longest_war_duration_seasons`,
+a producer that doesn't exist yet) — so a non-JIN lord in a war still produces no SEEK_PEACE, and a non-YU lord
+facing only escalation still produces no WAR_READINESS; the JIN-during-war and at-war/YU-during-escalation
+paths are the revived ones. Runtime-verified 11/11 (`tests/verify_strategic_war_context.gd`): the dead guard
+(empty world_state → {} even for JIN); active_wars+JIN → SEEK_PEACE; active_wars → WAR_READINESS; escalating+YU
+→ WAR_READINESS; escalating+non-YU (military_readiness 1.0) → {} (elif deferred); and end-to-end
+`run_seasonal_review` produces BOTH directives with the war-context injected and NEITHER without it. Full
+project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, situational insurgency-spawn modifiers were dead — the whole escalation layer never fired — runtime-verified 17/17)
 A **produced-but-never-produced** dormant layer (the sibling of the route_integrity / hostage-War-Score
 class, but at the SOURCE end): `InsurgencySystem.get_spawn_chance` (s11.11, the sole seasonal insurgency
