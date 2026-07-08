@@ -4665,6 +4665,15 @@ static func _execute_contested_court_action(
 	var effects: Dictionary = {}
 	if resolution.get("success", false):
 		effects["disposition_change"] = resolution.get("disposition_change", 0)
+		# s12.10 (LOCKED lines 21-31): the "Offer a Favor" disposition raise replaces the flat
+		# s15.4 value with the tiered FavorSystem.get_offer_disposition arbiter -- which had ZERO
+		# production callers, so a successful favor offer applied 0 disposition. NPC offers are
+		# always MINOR (the favor is minted at FavorTier.MINOR at both writeback sites), so the
+		# tier is MINOR: +6 base, +2 per Raise.
+		if action_id == "OFFER_FAVOR":
+			effects["disposition_change"] = FavorSystem.get_offer_disposition(
+				FavorData.FavorTier.MINOR, raises, false
+			)
 		if resolution.has("target_position_shift"):
 			effects["target_position_shift"] = resolution["target_position_shift"]
 		if resolution.has("position_durable"):
@@ -4691,6 +4700,13 @@ static func _execute_contested_court_action(
 		var fail_disp: int = resolution.get("disposition_change", 0)
 		if fail_disp != 0:
 			effects["disposition_change"] = fail_disp
+		# s12.10 (LOCKED line 31): critical failure on any tier -> -5 disposition ("the target
+		# thinks you are insincere or manipulative"). Critical failure = missing by 10+ (margin<=-10),
+		# the codebase-wide court critical-failure threshold. Routed through the same arbiter.
+		if action_id == "OFFER_FAVOR" and margin <= -10:
+			effects["disposition_change"] = FavorSystem.get_offer_disposition(
+				FavorData.FavorTier.MINOR, 0, true
+			)
 		if resolution.has("target_position_shift"):
 			effects["target_position_shift"] = resolution["target_position_shift"]
 		if resolution.has("position_hardened"):

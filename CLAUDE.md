@@ -237,6 +237,35 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-07, OFFER_FAVOR applied ZERO disposition — the s12.10 offer-disposition arbiter had zero callers — runtime-verified 12/12)
+A **zero-caller effect arbiter** (the sibling of the supply-share-ratio class). `FavorSystem.get_offer_disposition`
+(s12.10 lines 21-31 LOCKED: the disposition raise an offered favor grants — MINOR +6/+2-per-Raise, MODERATE +10/+3,
+MAJOR +15/+4, critical failure −5 — GDD: "**These replace the existing flat value in the Offer a Favor court action**,
+Section 15.4") and its constants `DISPOSITION_ON_OFFER`/`DISPOSITION_RAISE_BONUS`/`DISPOSITION_CRITICAL_FAILURE` had
+**ZERO production callers** (grep-confirmed: only their own defs + `tests/`). The live OFFER_FAVOR path
+(`ActionExecutor._execute_contested_court_action`) routes through `CourtActionSystem.resolve_offer_favor`, which returns
+`{success, requires_favor_creation}` with **NO `disposition_change`** on success (only `disposition_change: 0` on
+failure) — so the executor's `effects["disposition_change"] = resolution.get("disposition_change", 0)` was **always 0**.
+Result: a successful favor offer created the tracked favor debt (s15.4 "**Success: disposition raise** and a tracked
+favor debt") but applied **ZERO disposition** — the entire "offering a favor endears you" mechanic (the locked s12.10
+value that was meant to REPLACE the s15.4 flat value) was **dead**, and a critical failure applied 0 instead of the
+locked −5. FIX (pure LOCKED-only wiring, **no invented values** — every value is the arbiter's own s12.10 constant):
+the executor now, for `action_id == "OFFER_FAVOR"`, overrides `effects["disposition_change"]` with
+`FavorSystem.get_offer_disposition(FavorData.FavorTier.MINOR, raises, false)` on success and, on a **critical failure**
+(margin ≤ −10, the codebase-wide court crit-fail threshold), `get_offer_disposition(MINOR, 0, true)` (= −5). The tier is
+**MINOR** because the favor is minted at `FavorTier.MINOR` at **both** writeback sites (the FavorData at
+`day_orchestrator:27152` and the FAVOR_OBLIGATION commitment at `:29986`) — NPC offers are always MINOR (a documented
+pipeline limitation, not a value invented here). The value lands in `effects["disposition_change"]` — the exact slot the
+old flat value occupied (`_apply_disposition` actor→target), so this is the literal "replace the existing flat value"
+the GDD directs. Normal (non-critical) failures still emit 0 (s15.4 "Failure: … No effect"). Runtime-verified 12/12
+(`tests/verify_offer_favor_disposition.gd`): the arbiter tiers (MINOR 6/+2, MODERATE 10/+3, MAJOR 15/+4, crit −5); and
+end-to-end through the real `_execute_contested_court_action` — a strong actor succeeds 55+/60 and EVERY success emits
+`disposition_change == get_offer_disposition(MINOR, raises)` (≥ 6, was 0), while a weak actor's critical failures
+(margin ≤ −10) emit exactly −5 and ordinary failures emit 0. Full project `--import` parse-clean. **DEFERRED (documented,
+not invented):** the moderate/major offer tiers are unreachable because the OFFER_FAVOR writebacks hardcode MINOR (the
+favor-tier-selection surface is unbuilt); wiring a richer tier would need a design decision on how an NPC chooses favor
+magnitude, so only the live MINOR path is wired.
+
 ### Known Code Issues (found and fixed 2026-07-07, anti-duplicate-court proposal guard read EMPTY top-level last_court_season — dead per-season court-call suppression — runtime-verified 7/7)
 The **empty-top-level-key** dormant class (the sibling of the strategic-review war-context fix, same seam).
 `StrategicReview._evaluate_call_court` (reached via `run_seasonal_review`/`run_emperor_review` during
