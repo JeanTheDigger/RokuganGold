@@ -12877,6 +12877,18 @@ static func _run_strategic_reviews(
 			continue
 		if not _is_lord_tier(lord):
 			continue
+		# s55.10 anti-duplicate-court guard: _evaluate_call_court reads `last_court_season` off the
+		# TOP-LEVEL world_state, but _track_court_called writes it ONLY on the lord's per-character
+		# sub-dict (world_states[lord_id]["last_court_season"]). So the top-level read was always the
+		# -1 default -> `last_court_season == current_season` never held -> the "already held a court
+		# this season, don't propose another" guard was DEAD, and a lord re-proposed CALL_COURT every
+		# season (redundant directive; the creation-level settlement guard still blocked an actual
+		# duplicate court). Inject the REVIEWED lord's own tracked value at top level for this
+		# iteration (per-lord, so it must be set inside the loop; erased after). No invented values --
+		# last_court_season is the lord's real _track_court_called value, current_season the real enum.
+		world_states["last_court_season"] = int(
+			(world_states.get(lord.character_id, {}) as Dictionary).get("last_court_season", -1)
+		)
 		if lord.character_id == emperor_id and emperor_id >= 0:
 			var clan_champions: Array = _get_clan_champions(characters)
 			var directives: Array = StrategicReview.run_emperor_review(
@@ -12906,6 +12918,7 @@ static func _run_strategic_reviews(
 	world_states.erase("active_wars")
 	world_states.erase("escalating_conflicts")
 	world_states.erase("current_season")
+	world_states.erase("last_court_season")
 
 	# Champion Strategic Evaluation (s57.54) — runs quarterly for each Clan Champion.
 	if dice_engine != null and not clans.is_empty():

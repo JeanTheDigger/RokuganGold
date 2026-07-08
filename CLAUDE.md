@@ -237,6 +237,29 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-07, anti-duplicate-court proposal guard read EMPTY top-level last_court_season — dead per-season court-call suppression — runtime-verified 7/7)
+The **empty-top-level-key** dormant class (the sibling of the strategic-review war-context fix, same seam).
+`StrategicReview._evaluate_call_court` (reached via `run_seasonal_review`/`run_emperor_review` during
+`_run_strategic_reviews`) reads `last_court_season` off the **top-level** `world_state` and guards
+`if last_court_season == current_season: return {}` — "the lord already held a court this season, don't propose
+another." But the producer `DayOrchestrator._track_court_called` writes it ONLY on the lord's **per-character**
+sub-dict (`world_states[lord_id]["last_court_season"]`), never at top level, so the read was **always the -1
+default** → `-1 == current_season` never held → the guard was DEAD and a lord re-proposed **CALL_COURT every
+season** (a redundant strategic directive; the creation-level settlement guard in `_apply_court_creation` still
+blocked an actual duplicate court, so no second court was created — the cost was the wasted directive proposal).
+Distinct from the earlier `current_season` fix (already injected this session for the WINTER call-court bonus +
+Emperor Winter-Court hosting): `last_court_season` is **per-lord**, so it must be injected inside the review loop,
+not once before it. FIX (pure plumbing, **no invented values** — `last_court_season` is the lord's real
+`_track_court_called` value, `current_season` the real enum): inside the `_run_strategic_reviews` per-lord loop
+(after the dead/PC/tier guards, before the Emperor/vassal branch) inject
+`world_states["last_court_season"] = int((world_states.get(lord.character_id, {}) as Dictionary).get("last_court_season", -1))`
+— the REVIEWED lord's own tracked value hoisted to the top-level scratch key for that iteration — erased after the
+loop alongside the other war-context scratch keys. Runtime-verified 7/7 (`tests/verify_call_court_guard.gd`): the
+consumer guard fires when `last_court_season == current_season` (no redundant proposal), the -1 pre-fix state
+re-proposes CALL_COURT (the dormant behaviour), a court held a DIFFERENT season still proposes; and the injection
+expression maps a per-character `last_court_season` to the top level (present → value, absent lord → -1, empty
+world_states → -1), so the fixed flow makes the guard fire. Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-07, supply-sharing amount ignored disposition — hardcoded-literal producer + dormant arbiter — runtime-verified 11/11)
 A **hardcoded-literal producer** feeding a **zero-caller arbiter** (the sibling of the situational-modifier / Togashi-hardcoded classes). `DispositionSystem.get_supply_share_ratio`
 (s12.2 line 403 LOCKED — Friend +31 sends ~half the surplus, scaling to the full amount at Devoted +61) and its
