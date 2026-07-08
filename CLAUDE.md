@@ -335,6 +335,20 @@ Documented here so future sweeps skip them:
   (harmless): `ArmyUpkeepSystem.compute_army_seasonal_costs`/`get_cost_tier` (live path is per-company `compute_company_seasonal_costs`);
   `IntraClanCivilWar.get_active_precedent_bonus`/`get_dragon_treaty_penalty` (live path `apply_precedent_effect`);
   `PUReconciliation.compute_company_pu_loss` (live path `reconcile_battle`/`process_army_dissolution`).
+- **PHANTOM-KEY SCAN (core engine files — day_orchestrator/npc_decision_engine/strategic_review/opportunity_scanner/objective_decomposer):**
+  no clean key-mismatch hoist remains (unlike the war-context / Emperor-vacancy fixes, where the value WAS produced elsewhere and
+  just needed injecting). Every remaining phantom is a ZERO-PRODUCER scanner-phantom needing a producer BUILT (design work / an
+  invented formula), so all are DESIGN-GATED: the `StrategicReview` scoring inputs `treasury_ratio` / `active_crises` /
+  `province_threats` / `crisis_momentum_by_clan` / `tier1_crisis_active` / `tier1_military_crisis_seasons` / `peace_attempted` /
+  `shogun_exists` / `avg_province_stability` / `low_stability_provinces` / `province_statuses`(top-level) — all read-with-default,
+  no producer; and the winter-court host-frequency cooldown at `strategic_review:547` (`seasons_since_host = current_season_index −
+  last_host_seasons[clan]`) is a TWO-phantom cooldown — BOTH `current_season_index` (needs the monotonic `TimeSystem.get_absolute_season`,
+  only the cyclic `current_season` is injected) AND `last_host_seasons` (a per-clan Winter-Court-hosting tracker) have zero producers,
+  so wiring one alone doesn't revive it (last_host_seasons defaults −100 → always eligible). The `opportunity_scanner` phantoms
+  (`border_weaknesses`/`threatened_provinces`/`sieged_allies`/`tainted_provinces`/`insurgent_provinces`/`resource_deficits`/
+  `famine_provinces`/`weak_neighbor_provinces`/…) were already documented as producer-less. The `npc_decision_engine` hits
+  (`always_blocked`/`conditional`/`secondary`/`applies_to`/`blocked_when`/`need`/`topic_types`/`stacks_per_crisis`/…) are
+  JSON-scoring-table keys whose producers live in `systems/npc_engine/data/tables/*.json` (not .gd) — false positives, fully wired.
 
 ### Known Code Issues (found and fixed 2026-07-08, Peasant-Revolt suppression PU-loss magnitude was a divergent inline literal — canonical arbiter had ZERO callers — runtime-verified 7/7)
 A **hardcoded-literal / divergent-inline-copy** dedup (the sibling of the land-commander-bonus / social-TN
