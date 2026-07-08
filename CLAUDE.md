@@ -314,6 +314,24 @@ province PTL is 0 (proving it reads the province, not the dead key); and end-to-
 `process_season` a PTL-4.0 province deterministically spawns a `TAINT_MANIFESTATION` (chance 1.0) while a
 PTL-1.0 control never does across 30 seeds. Full project `--import` parse-clean.
 
+### Known Code Issues (found and fixed 2026-07-06, Emperor FILL_VACANCY read a phantom key — the Imperial archetype-gated vacancy directive was permanently dead — runtime-verified 6/6)
+A **produced-but-never-produced key-mismatch** (the ConvictionProcessor `resolved`-string class, but on the
+Strategic-Review Emperor path). `StrategicReview._evaluate_vacancy_fill` (reached via `run_emperor_review`
+during `_run_strategic_reviews`) read the Emperor's vacancy list off `world_state.get("vacancies", [])` — a
+key **NOTHING in the codebase ever writes** — so it was always empty, the `if vacancies.is_empty(): return {}`
+guard always fired, and the Emperor's archetype-gated **FILL_VACANCY** directive (the one that applies
+`ARCHETYPE_VACANCY_MIN_SEASONS` seasons-vacant floors + archetype disposition/skill/clan-balance weights) was
+**permanently dead**; only the generic per-character NPC-engine vacancy path fired. The producer,
+`DayOrchestrator._populate_vacancy_intelligence` (run early each tick at ~:159, well before the seasonal
+reviews), writes `world_states["vacancy_data"]` keyed by lord_id and **appends the Emperor's court/Governor
+seats to `vacancy_data[emperor_id]`** — with entry dicts carrying exactly the `position_type`/`seasons_vacant`/
+`priority` keys the consumer iterates. FIX (pure key correction — **zero invented values**): read
+`world_state.get("vacancy_data", {}).get(emperor.character_id, [])` (the canonical key the live producer
+already populates). Runtime-verified 6/6 (`tests/verify_emperor_vacancy_fill.gd`): empty ws → {} (dead); the
+legacy phantom `vacancies` key → {} (now ignored); `vacancy_data[emperor_id]` → a FILL_VACANCY directive
+targeting the emperor and carrying the best vacancy; and `vacancy_data` keyed to a different lord → {} (per-lord
+keying respected). Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, has_naval_threat permanently false — the COMMISSION_SHIP defensive-ship decision was dead empire-wide — runtime-verified 5/5)
 The **empty-top-level-key** class at the SOURCE end (sibling of the Strategic-Review war-context fix, but
 in the early per-tick intelligence pass). `DayOrchestrator._populate_infrastructure_intelligence` builds the

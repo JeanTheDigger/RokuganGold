@@ -592,7 +592,13 @@ static func _evaluate_vacancy_fill(
 	archetype: int,
 	world_state: Dictionary,
 ) -> Dictionary:
-	var vacancies: Array = world_state.get("vacancies", [])
+	# Read the Emperor's vacancy list off the canonical producer key. The producer
+	# (_populate_vacancy_intelligence, run early each tick) writes world_states["vacancy_data"]
+	# keyed by lord_id -- and appends the Emperor's court/Governor seats to vacancy_data[emperor_id].
+	# This evaluator previously read a phantom "vacancies" key that NOTHING writes -> always empty ->
+	# the Emperor's archetype-gated FILL_VACANCY directive (ARCHETYPE_VACANCY_MIN_SEASONS + disposition/
+	# skill weights) was permanently dead. Entry shape (position_type/seasons_vacant/priority) matches.
+	var vacancies: Array = world_state.get("vacancy_data", {}).get(emperor.character_id, [])
 	if vacancies.is_empty():
 		return {}
 
