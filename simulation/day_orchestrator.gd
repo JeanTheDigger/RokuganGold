@@ -12856,8 +12856,19 @@ static func _run_strategic_reviews(
 	# values are lord-agnostic and already in scope -> injected once, erased after the loop.
 	# (military_readiness -- the war-readiness `elif` branch -- stays deferred: it needs an invented
 	# readiness metric, not a plain fact.)
-	world_states["active_wars"] = active_wars
+	# Inject the CONTEXT-DICT form (clan_a/clan_b keys), not raw WarData: the strategic evaluators
+	# only test .is_empty()/.size() (shape-agnostic), but the same top-level dict is passed on to the
+	# self-selection path where opportunity_scanner (`war if war is Dictionary else {}`) and
+	# objective_progress (`if war is Dictionary`) read clan_a/clan_b and SILENTLY no-op on raw WarData.
+	# wars_to_context_array also filters to is_active, matching the per-character `g_active_wars` form.
+	world_states["active_wars"] = WarSystem.wars_to_context_array(active_wars)
 	world_states["escalating_conflicts"] = _extract_escalating_conflicts(active_topics, active_wars)
+	# current_season (the int-enum param) is likewise read off the TOP-LEVEL world_state by the court
+	# evaluators (_evaluate_winter_court_host guards `!= AUTUMN`; _evaluate_call_court's WINTER +20
+	# bonus), but was only ever set per-character -- and there as a STRING season name, not the int
+	# enum the consumers compare against. So the Emperor could never host Winter Court through the
+	# strategic-review path and the WINTER call-court bonus never applied. Inject the int enum here.
+	world_states["current_season"] = current_season
 
 	for lord: L5RCharacterData in characters:
 		if CharacterStats.is_dead(lord):
@@ -12894,6 +12905,7 @@ static func _run_strategic_reviews(
 	world_states.erase("bitter_rivals")
 	world_states.erase("active_wars")
 	world_states.erase("escalating_conflicts")
+	world_states.erase("current_season")
 
 	# Champion Strategic Evaluation (s57.54) — runs quarterly for each Clan Champion.
 	if dice_engine != null and not clans.is_empty():
@@ -27442,6 +27454,25 @@ static func _inject_base_character_context(
 	var g_clans_with_ships: Dictionary = world_states.get("_clans_with_ships", {})
 	var g_naval_threatened_clans: Dictionary = world_states.get("_naval_threatened_clans", {})
 	var g_active_wars: Array = WarSystem.wars_to_context_array(active_wars)
+
+	# Hoist the two type-safe GLOBAL military-opportunity facts to the TOP-LEVEL world_states so the
+	# lord Strategic-Review self-selection path sees them. OpportunityScanner._scan_military is
+	# invoked (via StrategicReview._evaluate_self_selection -> select_primary_objective) with the
+	# TOP-LEVEL world_states dict, but these keys are only ever written on PER-CHARACTER sub-dicts
+	# below -- so at the top level they read empty, and the lord self-selection BUILD_STRONGEST_FORCE /
+	# LEVY_TROOPS (from known_clan_strengths vs rivals) and ELIMINATE_SHADOWLANDS (from
+	# taint_topic_province_ids) opportunities NEVER fired for any lord. This injector runs once per
+	# tick (day_orchestrator ~373) before the seasonal strategic reviews (~1787) on the same shared
+	# dict, so the top-level copies are always the current tick's globals. Same empty-top-level-key
+	# class as the war-context fix; zero invented values -- every threshold (rival * 1.3 / * 1.1, the
+	# taint existence gate) lives in the consumer. known_clan_strengths is a Dictionary (read via
+	# .get()) and taint_topic_province_ids an Array[int] (read via a Variant loop), so both are
+	# type-safe at the consumer. `active_insurgencies` is DELIBERATELY NOT hoisted: it is an
+	# Array[InsurgencyData] but _scan_military types its loop `for ins: Dictionary`, so hoisting the
+	# raw objects would crash it -- and its ELIMINATE_SHADOWLANDS mapping (every insurgency type,
+	# incl. peasant revolts) is redundant with / less correct than the taint-topic Shadowlands gate.
+	world_states["known_clan_strengths"] = g_clan_strengths
+	world_states["taint_topic_province_ids"] = taint_province_ids
 
 	var province_values: Array = provinces.values()
 	var clan_values: Array = clans.values()

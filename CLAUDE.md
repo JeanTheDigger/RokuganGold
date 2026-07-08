@@ -314,6 +314,49 @@ province PTL is 0 (proving it reads the province, not the dead key); and end-to-
 `process_season` a PTL-4.0 province deterministically spawns a `TAINT_MANIFESTATION` (chance 1.0) while a
 PTL-1.0 control never does across 30 seeds. Full project `--import` parse-clean.
 
+### Known Code Issues (found and fixed 2026-07-06, Strategic Review self-selection top-level plumbing — 3 more empty-key/wrong-shape corrections on the same seam — runtime-verified 13/13 + 11/11 regression)
+Follow-up sweep of the **same injection seam** as the war-context fix (an Explore sub-agent flagged the
+adjacent shape hazard), fixing three more dormant reads the lord Strategic-Review self-selection path makes
+off the TOP-LEVEL `world_states`. All three trace to the same root: `StrategicReview.run_seasonal_review`
+(and, through `_evaluate_self_selection` → `OpportunityScanner.select_primary_objective` →
+`_scan_military`) is handed the **top-level** dict, but the facts it reads are only ever written on
+PER-CHARACTER `ws` sub-dicts by `_inject_base_character_context` (which runs at ~373, before the seasonal
+reviews at ~1787, on the same shared dict). **Zero invented values** — every threshold lives in the consumer.
+- **(A) `known_clan_strengths` + `taint_topic_province_ids` hoisted to top-level (2 dead lord self-selection
+  military opportunities).** `_scan_military` reads `known_clan_strengths` (rival vs own clan strength →
+  BUILD_STRONGEST_FORCE at rival > own×1.3 / LEVY_TROOPS at ×1.1–1.3) and `taint_topic_province_ids`
+  (→ ELIMINATE_SHADOWLANDS) off the top-level dict — both empty there, so no lord ever self-selected those.
+  Hoisted the two GLOBAL facts to `world_states[...]` in `_inject_base_character_context` (they're the same
+  value for every lord; refreshed each tick before the reviews). **`active_insurgencies` deliberately NOT
+  hoisted:** it is an `Array[InsurgencyData]` but `_scan_military` types its loop `for ins: Dictionary`, so
+  hoisting the raw objects would **crash** the loop — and its blanket insurgency→ELIMINATE_SHADOWLANDS
+  mapping (fires even for peasant revolts) is redundant with / less correct than the taint-topic gate. The
+  other `_scan_*` opportunity keys (`border_weaknesses`, `threatened_provinces`, `sieged_allies`,
+  `tainted_provinces`, `insurgent_provinces`, `resource_deficits`, `famine_provinces`, `weak_neighbor_provinces`,
+  …) have **zero producers anywhere** — phantom keys the scanner was written against; reviving them needs
+  invented producers, so they stay deferred.
+- **(B) `current_season` injected as the int enum (Emperor Winter-Court hosting + WINTER call-court bonus
+  dead).** The court evaluators read top-level `world_state.get("current_season", 0)` as an **int enum**, but
+  it was only set per-character and there as a **STRING** season name — so the top-level read was always 0
+  (SPRING). `_evaluate_winter_court_host` guards `!= AUTUMN` → the Emperor could **never** host Winter Court
+  through the strategic-review path, and `_evaluate_call_court`'s WINTER +20 bonus never applied. Injected
+  `world_states["current_season"] = current_season` (the int-enum param) in the war-context block, erased
+  after the loop. (Verified no top-level string-reader collides — the one string reader,
+  `npc_decision_engine:5656`, reads the per-character ws in a different pass, after the erase.)
+- **(C) war-context `active_wars` shape corrected to CONTEXT-DICTS.** The just-committed war-context fix
+  injected **raw WarData** into top-level `active_wars`, but the downstream self-selection consumers
+  (`opportunity_scanner` `war if war is Dictionary else {}`, `objective_progress` `if war is Dictionary`)
+  read `clan_a`/`clan_b` and **silently no-op on raw WarData**. Changed the injection to
+  `WarSystem.wars_to_context_array(active_wars)` (the same context-dict form `_inject_base_character_context`
+  uses per-character; also filters to `is_active`). The two strategic evaluators only test `.is_empty()`/
+  `.size()` (shape-agnostic), so they are unaffected; the scanner/progress war-checks now actually fire.
+Runtime-verified 13/13 (`tests/verify_strategic_selfselect_context.gd`): `_scan_military` produces
+BUILD_STRONGEST_FORCE / LEVY_TROOPS / ELIMINATE_SHADOWLANDS only when the keys are present (empty ws → none);
+`_evaluate_winter_court_host` fires in AUTUMN + a champion and returns {} in SPRING / when the key is absent;
+and `wars_to_context_array` yields `is Dictionary` entries with `clan_a`/`clan_b` (raw WarData is not a
+Dictionary) and filters inactive wars. The prior war-context driver still passes 11/11 (the shape change
+does not affect the shape-agnostic evaluators). Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, Strategic Review war-context read from a never-written top-level key — SEEK_PEACE fully dead, WAR_READINESS primary/YU triggers dead — runtime-verified 11/11)
 The **empty-top-level-key** dormant class (the same one the Togashi realm-overlap fix just surfaced, but on the
 Strategic Review path). `world_states` is keyed by BOTH character_id (per-character ContextSnapshot sub-dicts)
