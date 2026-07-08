@@ -4619,6 +4619,8 @@ static func _build_perform_theater_metadata(
 	var best_id: int = -1
 	var best_score: int = -1
 	var best_is_bunraku: bool = false
+	var best_style: int = TheaterSystem.Style.NOH
+	var best_lead_role: Dictionary = {}
 
 	for pid: Variant in performable:
 		var piece_id: int = int(pid)
@@ -4688,6 +4690,10 @@ static func _build_perform_theater_metadata(
 			best_score = score
 			best_id = piece_id
 			best_is_bunraku = (piece.style == TheaterSystem.Style.BUNRAKU)
+			# Carry the casting inputs so the executor can apply the s57.22.4 casting-fit TN
+			# modifier + s57.22.3 Kyogen Acting-rank gate (both dropped by the inline roll).
+			best_style = piece.style
+			best_lead_role = piece.roles[0] if not piece.roles.is_empty() else {}
 
 	# If no piece scores above 0, do not fire.
 	if best_score <= 0:
@@ -4700,6 +4706,8 @@ static func _build_perform_theater_metadata(
 		"piece_id": best_id,
 		"is_bunraku_performance": best_is_bunraku,
 		"raises": raises,
+		"piece_style": best_style,
+		"piece_lead_role": best_lead_role,
 	}
 
 

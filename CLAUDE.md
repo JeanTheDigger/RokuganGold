@@ -237,6 +237,33 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-07, theater performance roll bypassed the canonical resolver — casting-fit + Kyogen gate dropped + raises double-counted — runtime-verified 9/9)
+A **canonical-resolver-bypassed-by-a-divergent-inline-copy** fix (the land-commander-bonus class), plus a **latent
+double-count**. `TheaterSystem.resolve_performance_roll` (the s57.22.7 lead-performer arbiter) applies (a) the **s57.22.4
+casting-fit TN modifier** via `get_casting_tn_modifier` (same-clan −5 / enemy-clan +5 / gender+profession mismatch +5
+each, Noh-mask exemptions) and (b) the **s57.22.3 Kyogen minimum-Acting-rank gate** (Acting ≥ 3), folding raises into
+the TN **once**. But it had **ZERO callers** — the live `ActionExecutor._execute_perform_theater` inlined a bare
+`tn = PERFORMANCE_BASE_TN + raises*5` roll that **DROPPED BOTH** the casting-fit modifier and the Kyogen gate, AND
+**double-counted raises**: it set `tn = BASE + raises*5` and ALSO passed `raises` into `resolve_skill_check`, whose
+`roll_check` re-adds `raises*5` to the effective TN — so a raised performance needed `raises*10` of margin, not
+`raises*5`. Net: casting fit was inert (a Crab actor playing a Crane hero faced the same TN as playing an abstract
+concept), any actor could perform Kyogen regardless of Acting rank, and declared Raises were twice as costly as the
+GDD specifies (`get_casting_tn_modifier` was the dormant arbiter proving the drop). FIX (pure LOCKED wiring — the two
+missing inputs [lead role dict + style] are carried in metadata by `_build_perform_theater_metadata`, which already
+has the piece; **no invented values**): the executor now mirrors `resolve_performance_roll` exactly —
+`cast_mod = TheaterSystem.get_casting_tn_modifier(character, lead_role, style)` (the canonical arbiter),
+`tn = BASE + cast_mod + raises*5`, the Kyogen gate (`style == KYOGEN and Acting < KYOGEN_MIN_ACTING_RANK` → blocked
+`kyogen_acting_rank`), `resolve_skill_check(..., 0 raises, ...)` (raises folded into TN once — single count), and
+`margin = total − BASE − cast_mod`. `_build_perform_theater_metadata` now returns `piece_style` + `piece_lead_role`
+(primitives — `piece.roles[0]`) alongside `piece_id`. Runtime-verified 9/9 (`tests/verify_theater_casting_modifier.gd`):
+the arbiter (ABSTRACT 0, KABUKI clan mismatch +penalty, Noh-mask negates); **executor ≡ canonical** — identical
+`roll_total` + `success` across 24 config/seed pairs (abstract/mismatch/raises-2/Kyogen, same dice seed), proving zero
+divergence + single-count raises; a double-mismatch role (+10 TN) succeeds strictly less than the abstract role for a
+weak performer (cast_mod folded into TN, was dropped); and the Kyogen gate blocks Acting 2 (both paths) while Acting 4
+and KABUKI-Acting-2 pass. Full project `--import` parse-clean. Non-Kyogen/abstract-role performances by an ordinary
+actor are **behavior-preserving on the roll** (cast_mod 0, Kyogen gate n/a) EXCEPT that declared Raises now cost the
+correct `raises*5` instead of the buggy `raises*10` — a strict correctness gain.
+
 ### Known Code Issues (found and fixed 2026-07-07, wood-guardian outdoor degradation never fired — inline placement omitted the ic_day_placed_outdoor stamp — runtime-verified 11/11)
 A **hardcoded-default dead-effect** (the sibling of the situational-modifier / dead-key classes, at the PRODUCER end).
 `SculptureSystem.apply_outdoor_degradation` (s57.28 — a WOOD GUARDIAN weathers **−1 quality tier per

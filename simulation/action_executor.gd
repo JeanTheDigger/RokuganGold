@@ -6893,14 +6893,34 @@ static func _execute_perform_theater(
 			"effects": {"blocked_reason": "no_piece_to_perform"},
 		}
 
-	var tn: int = TheaterSystem.PERFORMANCE_BASE_TN + raises * 5
+	# s57.22.4/22.3 casting fit + Kyogen gate: the canonical TheaterSystem.resolve_performance_roll
+	# applies the casting-fit TN modifier (get_casting_tn_modifier -- same-clan bonus / enemy-clan +
+	# gender/profession mismatch penalties, Noh-mask exemptions) AND the Kyogen minimum-Acting-rank
+	# gate, but this executor inlined a bare `tn = BASE + raises*5` roll that dropped BOTH -- and also
+	# DOUBLE-counted raises (once in `tn` and again via the resolve_skill_check raises arg, which
+	# roll_check re-adds as raises*5). Fix: mirror resolve_performance_roll exactly, routing the
+	# casting fit through the canonical get_casting_tn_modifier arbiter and folding raises into the TN
+	# once (0 raises passed to resolve_skill_check). The lead role + style are carried in metadata.
+	var style: int = meta.get("piece_style", TheaterSystem.Style.NOH)
+	var lead_role: Dictionary = meta.get("piece_lead_role", {})
+	var cast_mod: int = TheaterSystem.get_casting_tn_modifier(character, lead_role, style)
+	var tn: int = TheaterSystem.PERFORMANCE_BASE_TN + cast_mod + raises * 5
+
+	if style == TheaterSystem.Style.KYOGEN \
+			and character.skills.get("Acting", 0) < TheaterSystem.KYOGEN_MIN_ACTING_RANK:
+		return {
+			"success": false, "action_id": "PERFORM_THEATER_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "kyogen_acting_rank", "piece_id": piece_id},
+		}
+
 	var roll: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, "Acting", tn,
-		raises, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+		0, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
 	)
 	var total: int = roll.get("total", 0)
 	var success: bool = total >= tn
-	var margin: int = total - TheaterSystem.PERFORMANCE_BASE_TN
+	var margin: int = total - TheaterSystem.PERFORMANCE_BASE_TN - cast_mod
 	var is_critical: bool = success and margin >= TheaterSystem.CRITICAL_SUCCESS_MARGIN
 	var raises_succeeded: int = raises if success else 0
 
