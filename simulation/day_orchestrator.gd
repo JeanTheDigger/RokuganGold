@@ -1725,7 +1725,7 @@ static func advance_day(
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states, worship_maluses,
-			season_meta, next_crisis_id,
+			season_meta, next_crisis_id, active_wars, characters_by_id, settlements,
 		)
 		# Resolve crisis topics tied to defeated insurgencies. Tier 1-3 topics never
 		# decay, so without this the topic of a suppressed insurgency leaks forever as
@@ -14656,18 +14656,65 @@ static func _process_insurgencies(
 	worship_maluses: Dictionary = {},
 	season_meta: Dictionary = {},
 	next_crisis_id: Array = [1],
+	active_wars: Array = [],
+	characters_by_id: Dictionary = {},
+	settlements: Array = [],
 ) -> Dictionary:
 	var ptls: Dictionary = {}
 	for pid: int in provinces:
 		var prov: ProvinceData = provinces[pid]
 		ptls[pid] = prov.province_taint_level
 
+	# Populate the mechanically-computable situational spawn modifiers that
+	# InsurgencySystem.get_spawn_chance (s11.11) reads from per-province world_state.
+	# The modifier MAGNITUDES are GDD-locked in the consumer; this only produces the
+	# facts (no invented values). The whole situational layer was dead because nobody
+	# ever populated these keys. Wired here (the one seasonal insurgency pass):
+	#   starvation_stage   -> PEASANT_REVOLT +0.10 at HUNGER+  (province.starvation_stage, ResourceTick-fed)
+	#   under_garrisoned   -> PEASANT_REVOLT +0.10             (garrison < population*0.05, the LOCKED
+	#                                                           s11.11 under-garrison threshold from
+	#                                                           compute_stability_change; aggregated
+	#                                                           across the province's settlements)
+	#   empire_at_war      -> PIRATE_FLEET base 0.05           (any active war)
+	#   clan_at_war        -> PIRATE_FLEET +0.10               (province clan involved in a war)
+	#   lord_bushido_virtue-> PEASANT_REVOLT -0.10 if JIN      (province lord's virtue)
+	# DEFERRED (no clean producer — flagged, NOT invented): recent_maho_in_province /
+	# adjacent_war_ended_recently / disbanded_units_unpaid / adjacent_to_shinomen_or_shadowlands /
+	# nezumi_suppressed_recently / adjacent_pirate_count (need history-tracking or adjacency+flags
+	# that don't exist yet).
+	var empire_at_war: bool = not active_wars.is_empty()
+	# Aggregate per-province population/garrison PU from settlements for the under-garrison check.
+	var prov_pop: Dictionary = {}
+	var prov_gar: Dictionary = {}
+	for _sv: Variant in settlements:
+		if _sv is SettlementData:
+			var _s: SettlementData = _sv as SettlementData
+			if _s.province_id < 0:
+				continue
+			prov_pop[_s.province_id] = prov_pop.get(_s.province_id, 0) + _s.population_pu
+			prov_gar[_s.province_id] = prov_gar.get(_s.province_id, 0) + _s.garrison_pu
 	var patrolled: Dictionary = season_meta.get("patrolled_provinces", {})
 	var per_province_ws: Dictionary = {}
 	for pid: int in provinces:
+		var prov2: ProvinceData = provinces[pid]
 		var ws: Dictionary = world_states.get(pid, {}).duplicate()
 		if patrolled.has(pid):
 			ws["is_patrolled"] = true
+		ws["starvation_stage"] = prov2.starvation_stage
+		var _pop: int = prov_pop.get(pid, 0)
+		if _pop > 0 and prov_gar.get(pid, 0) < _pop * 0.05:
+			ws["under_garrisoned"] = true
+		if empire_at_war:
+			ws["empire_at_war"] = true
+			if prov2.clan != "":
+				for _w: Variant in active_wars:
+					if _w is WarData and WarSystem.is_clan_involved(_w as WarData, prov2.clan):
+						ws["clan_at_war"] = true
+						break
+		if not characters_by_id.is_empty():
+			var _lord: L5RCharacterData = _find_province_lord(prov2, characters_by_id)
+			if _lord != null:
+				ws["lord_bushido_virtue"] = _lord.bushido_virtue
 		per_province_ws[pid] = ws
 
 	var next_ins_id: int = next_insurgency_id[0] if not next_insurgency_id.is_empty() else 1

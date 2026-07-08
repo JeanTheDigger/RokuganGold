@@ -237,6 +237,39 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, situational insurgency-spawn modifiers were dead — the whole escalation layer never fired — runtime-verified 17/17)
+A **produced-but-never-produced** dormant layer (the sibling of the route_integrity / hostage-War-Score
+class, but at the SOURCE end): `InsurgencySystem.get_spawn_chance` (s11.11, the sole seasonal insurgency
+spawn arbiter) reads ~11 per-province `world_state` keys whose modifier MAGNITUDES are GDD-locked *in the
+consumer* — but **NOTHING ever populated those keys**. The one caller,
+`DayOrchestrator._process_insurgencies`, built `per_province_ws` as `world_states.get(pid, {}).duplicate()`
++ only `is_patrolled`, so every read returned the default: `starvation_stage`→0, `under_garrisoned`→false,
+`empire_at_war`/`clan_at_war`→false, `lord_bushido_virtue`→NONE, etc. Result: **every insurgency spawn used
+only the flat stability-tier base** — a starving, under-garrisoned, Jin-less province was no likelier to
+revolt than a fed one, and PIRATE_FLEET (base 0.0 with no war) could **never spawn at all** on a stable
+coastal province regardless of how many wars raged. The entire situational escalation layer — the point of
+s11.11's spawn-chance table — was inert. FIX (pure producer plumbing — **zero invented values**, every
+magnitude and the one threshold are already GDD-locked in the consumer / `compute_stability_change`):
+`_process_insurgencies` now, in the same per-province ws loop that already injects `is_patrolled`, produces
+the **5 cleanly-computable facts** from existing state — `starvation_stage` = `province.starvation_stage`
+(the real ResourceTick-fed field); `under_garrisoned` = `garrison_pu < population_pu × 0.05` aggregated
+across the province's settlements (the LOCKED s11.11 under-garrison threshold from `compute_stability_change`);
+`empire_at_war` = `not active_wars.is_empty()`; `clan_at_war` = any active war involves `province.clan`
+(via `WarSystem.is_clan_involved`, ally-aware); `lord_bushido_virtue` = the province lord's virtue (via
+`_find_province_lord`). `active_wars`/`characters_by_id`/`settlements` threaded into `_process_insurgencies`
+as defaulted trailing params (backward-compatible, sole caller updated). This lights up PEASANT_REVOLT
+(starvation +0.10 / under-garrison +0.10 / Jin lord −0.10) and PIRATE_FLEET (empire 0.05 / clan +0.10).
+DEFERRED (no clean producer — flagged, NOT invented): `recent_maho_in_province`,
+`adjacent_war_ended_recently`, `disbanded_units_unpaid`, `adjacent_to_shinomen_or_shadowlands`,
+`nezumi_suppressed_recently`, `adjacent_pirate_count` — each needs history-tracking or adjacency+flags that
+don't exist yet. Runtime-verified 17/17 (`tests/verify_insurgency_spawn_modifiers.gd`): the consumer applies
+each wired key's LOCKED delta (PEASANT base 0.25, +HUNGER 0.35, +SHORTAGE-below-threshold 0.25, +under-garrison
+0.35, +Jin 0.15, all-stack 0.35; PIRATE stable-coastal no-war 0.0 / +empire 0.05 / +clan 0.15); and the
+producer is proven end-to-end through `_process_insurgencies` with same-seed paired runs (deterministic
+superset): PIRATE spawns for some seeds WITH a Crab war and **never** without (0/200), and HUNGER /
+under-garrisoned / non-Jin each produce a strict superset of PEASANT spawns vs their control. Full project
+`--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, ViolenceSystem naming-guard violation hardened — the last Pattern-B/Pattern-A footgun — runtime-verified 12/12)
 A **latent** correctness footgun (not a live bug — the same "would silently misbehave the moment a consumer
 reads it" class as the covert-killing severity fix). `ViolenceSystem.apply_consequences` (s11.3.12) pre-applies
