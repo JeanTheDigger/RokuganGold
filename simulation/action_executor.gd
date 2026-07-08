@@ -1029,10 +1029,9 @@ static func _execute_gossip(
 	# s45 CAST_OUT: listener's sect may see subject's glory as infamy (zero effective glory).
 	var subject_glory: float = float(HonorGlorySystem.get_observed_glory_rank(subject, listener)) if subject != null else 0.0
 
-	var base_tn: int = clampi(
-		10 + int(subject_glory) * 5 - int(character.glory) * 5,
-		5, 60
-	)
+	# Gossip TN formula lives in the canonical arbiter (s15.4); the inline clampi()
+	# was a divergent copy of it.
+	var base_tn: int = CourtActionSystem.compute_gossip_tn(subject_glory, character.glory)
 
 	var deception_tn: int = SkillResolver.get_deception_defense_bonus(listener) if listener != null else 0
 	var tn: int = base_tn + deception_tn

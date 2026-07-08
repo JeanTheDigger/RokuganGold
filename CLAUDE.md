@@ -237,6 +237,57 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-08, GOSSIP base-TN was a divergent inline copy of a zero-caller arbiter — runtime-verified 8/8)
+A **divergent-inline-copy** dedup (the sibling of the PU-loss / land-commander / social-TN class, surfaced by the
+crime/legal/court sweep). `CourtActionSystem.compute_gossip_tn(subject_glory, gossiper_glory)` (s15.4 — the canonical
+gossip base-TN: `clampi(10 + subject_glory×5 − gossiper_glory×5, 5, 60)` — harder to spread gossip about a glorious
+subject, easier for a glorious gossiper) had **ZERO production callers** (grep-confirmed: only its own def). The sole
+live consumer, `ActionExecutor._execute_gossip` (fired each GOSSIP action via the executor dispatch), inlined the
+**byte-identical** `clampi(10 + int(subject_glory) * 5 - int(character.glory) * 5, 5, 60)` at `action_executor.gd:1032`
+— a hand-copy of the arbiter's own s15.4 formula, so the LOCKED TN lived in two places and would drift the moment
+either changed. FIX (behavior-preserving, **no invented values** — the formula is the arbiter's own s15.4 constant):
+the executor now calls `CourtActionSystem.compute_gossip_tn(subject_glory, character.glory)` (both inputs already in
+scope — `subject_glory` from the s45 CAST_OUT observed-glory line, `character.glory` the gossiper), so the formula
+lives in ONE place. Runtime-verified 8/8 (`tests/verify_gossip_tn_arbiter.gd`): the arbiter values (equal glory → 10,
+subject+2 → 20, gossiper+2 → floor 5), the [5,60] clamp band, and — the dedup guarantee — `compute_gossip_tn(subj,
+goss)` == the retired inline `clampi(10 + subj*5 - goss*5, 5, 60)` across every subject 0..10 × gossiper 0..10
+combination (0 mismatches). Full project `--import` parse-clean. **This was the ONE clean wire the crime/legal/court
+sweep found** — the rest of that domain is documented deferred below.
+
+### Known Code Issues — Deferred (2026-07-08, crime/legal/court dormant sweep — superseded twins + design-gated, do NOT re-audit)
+The crime/investigation/legal/court sweep (after the GOSSIP fix above) found **no other clean wires**. Recorded so
+future sweeps skip them:
+- **SUPERSEDED (dead twin of a live path):** the whole `FugitiveExtraditionSystem` harboring-lord decision suite
+  (`evaluate_extradition`/`select_response`/`get_*_consequences`/`create_extradition_request` — live path is
+  `ExtraditionSystem.evaluate_extradition`/`apply_cooperation`/`apply_refusal` at day_orchestrator:5256; only
+  `generates_sighting_topic`/`can_request_imperial_warrant`/`evaluate_imperial_warrant_compliance`/
+  `get_standing_warrant_consequences` are live); `RitsuyoSystem.get_defense_strength`/`get_prosecution_strength`/
+  `get_testimonial_advantage`/`is_testimony_worthless`/`is_low_honor_accused` (live hearing uses `get_testimony_weight`
+  at conviction_processor:188); `CrimeWiring.process_treason_defense_hearing`/`process_treason_conviction`/
+  `add_treason_evidence_to_case`/`process_trial_by_combat`/`process_attempted_murder` (superseded by the live
+  `ConvictionProcessor` treason path); `WinterCourtSystem.get_home_ground_bonus` (superseded by the ctx-dict
+  `ActionExecutor._get_winter_court_skill_bonus`; the arbiter needs a CourtSessionData the live site lacks).
+- **DESIGN-GATED (needs an unbuilt trigger/field/value):** the defense-hearing option cluster (`can_appoint_champion`/
+  `can_intervene`/`can_re_accuse` + costs — champion/intervention/re-accusation triggers unbuilt); magistrate
+  allocation (`get_conviction_cascade` governor/daimyo/champion cascades — live handles only the magistrate case,
+  plus `assign_replacement_magistrate`/`get_vacancy_effects`/`get_magistrate_count`/`get_yoriki_range`/…);
+  `ExtraditionSystem.can_petition_emerald_champion` + `FugitiveExtraditionSystem.get_covert_extraction_risk`/
+  `get_visibility_tier`/`get_concealment_tn`; `UnsanctionedKillingSystem.get_punishment_range`/
+  `is_ronin_killing_prosecutable`/`evaluate_conspiracy`/`is_manslaughter`; the investigation evidence-source adders
+  (`add_false_alibi_evidence`/`add_kitsuki_eye_evidence`/`add_confession_evidence`/`add_murder_weapon_evidence`/
+  `add_co_conspirator_evidence`/`add_intercepted_letter_evidence` + `calculate_witness_evidence`/`prioritize_witnesses`
+  — each needs its evidence-source action); the investigation tampering/concealment cluster
+  (`get_tampering_success_result`/`get_criminal_recall_tn`/… — tampering action unbuilt); the LegalStatusSystem
+  transition helpers (`flee`/`capture_fugitive`/`pardon`/`close_case`/`add_evidence`/… — live code sets
+  `record.legal_status` directly); the CourtSystem proxy-mandate + query helpers (`assign_proxy_mandate`/
+  `get_proxy_mandate`/`is_within_mandate`/…); CourtCommitmentSystem `decompose_commitment`/`should_deprioritize`/
+  `get_renege_willingness`; `WinterCourtSystem.is_action_blocked_by_emperors_peace` (no live action-gate calls it) +
+  `get_agenda_day_allocation`; `CrimeSystem.begin_investigation`/`formally_accuse`/`clear_suspect`/`check_escalation`
+  (state helpers bypassed — live sets legal_status directly). Also **not a clean wire (design-gated):**
+  `IntimidationSystem.get_witness_reaction` (a virtue-gated REI/GI/MEIYO refinement of the already-live blanket
+  `PUBLIC_WITNESS_DISPOSITION_LOSS` −2 witness loss — would change behavior without GDD confirming the gate, and needs
+  a per-witness application mechanism EffectApplicator lacks).
+
 ### Known Code Issues — Deferred (2026-07-08, full-surface two-agent dormant sweep — NO clean wires remain, do NOT re-audit)
 After the PU-loss arbiter fix below, two systematic agent sweeps (military/kolat/spell AND
 economy/spiritual/info/family/naval) plus hand-probing of tattoo/advantage/kata/crime-legal/festival/edict/
