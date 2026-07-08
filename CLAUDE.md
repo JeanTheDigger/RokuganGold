@@ -314,6 +314,38 @@ province PTL is 0 (proving it reads the province, not the dead key); and end-to-
 `process_season` a PTL-4.0 province deterministically spawns a `TAINT_MANIFESTATION` (chance 1.0) while a
 PTL-1.0 control never does across 30 seeds. Full project `--import` parse-clean.
 
+### Known Code Issues — Deferred (2026-07-06, second dormant sweep — real gaps needing broad surgery or an owner design decision, NOT clean one-commit fixes)
+A second produced-vs-consumed sweep of the reactive / court / Phoenix / letter / writeback pipeline surfaced
+these; each is a genuine dormant read/effect but is **deferred** (documented so it is not re-audited) — none
+is a safe no-invention one-committer:
+- **`reactive_timestamp` sort is a no-op (s55.13 "Reactive events first (timestamp order)" unimplemented).**
+  `NPCWaveResolver._gather_reactive_npcs` (npc_wave_resolver:726-731) sorts reactive NPCs by
+  `ws.get("reactive_timestamp", 0)`, but **NOTHING writes `reactive_timestamp`** (grep-confirmed: only the two
+  reads) — so `ts_a < ts_b` is always false and reactive NPCs resolve in `characters`-array order, not the
+  GDD-locked trigger/timestamp order (`gdd/s55.13_multi_npc_resolution_order.md:5`). DEFERRED because a
+  faithful fix is **broad surgery, not a one-liner**: reactive events are injected at **~21 sites** (5
+  `<var>.pending_events.append` + 16 `<var>_ws["pending_events"] = <arr>`, across 8+ ws-var names) and NONE
+  carry a trigger timestamp; there is no single-point hook (stamping in `_inject_base_character_context`
+  reproduces array order, and `ic_day` gives no intra-tick ordering since a reactive batch shares the prior
+  day — genuine trigger order needs a monotonic per-injection sequence stamped at every site). Practical
+  impact is a resolution-order determinism refinement among largely-independent events, so the risk of a
+  21-site edit outweighs the benefit; worth a deliberate reactive-pipeline pass, not a quick fix.
+- **Phoenix Grand Ritual devastation (s55.10.3.7) + Champion Defiance Path (s55.10.3.5) — dormant effects,
+  design-gated triggers.** `PhoenixCouncil.apply_grand_ritual_devastation` and `handle_unilateral_action`
+  (the sole `defiance_count`/`defiance_stage` incrementer) have **zero production callers**: the
+  `_directive_to_decision_type` map only covers WAR_READINESS→DEPLOY_GO_HATAMOTO / SEEK_PEACE→SIGN_TREATY, and
+  no path lets a Champion "proceed on a vetoed decision," so the LOCKED consequences (province stability→0 +
+  Master honor −2.0 + Emperor disposition −20; the Stage 2/3/4 diplomatic-suspend / shugenja-withdraw / unfit
+  removal) never fire. DEFERRED: the missing piece is **which strategic directive represents the ritual** and
+  **when the Champion defies** — both design decisions (same family as the acknowledged
+  `_directive_to_decision_type` coverage limitation), not values already in the consumer.
+- **Seigyo commitment deprioritization (s16.4) — `CourtCommitmentSystem.should_deprioritize` zero callers.**
+  Returns true for SEIGYO but nothing calls it; `get_priority` applies no Seigyo reduction. DEFERRED: the GDD
+  names the behavior but gives **no numeric priority reduction** (would be invented).
+- **`CourtCommitmentData.good_faith` produced-but-read-only-in-tests.** Written once (court_commitment_system:232)
+  but no production consumer (the renege path keys off `ap_spent_toward`). Reads as an observability/record
+  flag rather than a gating input; the GDD names no distinct consumer. DEFERRED (likely intentional record-keeping).
+
 ### Known Code Issues (found and fixed 2026-07-06, Emperor FILL_VACANCY read a phantom key — the Imperial archetype-gated vacancy directive was permanently dead — runtime-verified 6/6)
 A **produced-but-never-produced key-mismatch** (the ConvictionProcessor `resolved`-string class, but on the
 Strategic-Review Emperor path). `StrategicReview._evaluate_vacancy_fill` (reached via `run_emperor_review`
