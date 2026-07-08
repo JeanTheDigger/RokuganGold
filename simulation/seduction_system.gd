@@ -38,6 +38,12 @@ const BREAKUP_DISPOSITION_LOSS: Dictionary = {
 	"high": -15,
 }
 
+# Natural (neglect) break: when three consecutive maintenance windows pass without contact the
+# entanglement breaks and the target's disposition toward the actor drops -10, "feeling used and
+# abandoned" (s12.8 line 273, LOCKED). Distinct from the FORMAL breakup arbiter break_entanglement
+# (-5/-15, s12.8 line 275), which is a deliberate action with no ActionID yet.
+const NEGLECT_BREAK_DISPOSITION_LOSS: int = -10
+
 # Flat honor cost superseded by CrimeSystem.get_low_skill_honor_cost (line 69).
 # Retained as metadata key only (Pattern B: "honor_cost" not consumed by EffectApplicator).
 const HONOR_COST: float = -0.3

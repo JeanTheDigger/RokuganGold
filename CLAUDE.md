@@ -237,6 +237,33 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-07, entanglement neglect-break disposition loss never applied — the -10 abandonment consequence was dead — runtime-verified 12/12)
+A **produced-but-not-consumed** dormant signal (the cohabitation-bonus / route-integrity class). s12.8 line 273
+(LOCKED): "If three consecutive [maintenance] windows pass without contact, the entanglement breaks — the relationship
+flag clears, **the target's disposition drops −10 (feeling used and abandoned)**." `DayOrchestrator._process_entanglements`
+(the daily maintenance pass) **detected** the BROKEN transition (`SeductionSystem.check_maintenance` → BROKEN at 3 missed
+windows) and cleared the flag + emitted a `"broken"` event — but **NEVER applied the −10 disposition loss**. So a
+seducer could abandon an entanglement (neglect it to death) with **zero relationship consequence** — the jilted target
+felt nothing. IMPORTANT — this is the **NATURAL-decay break** (−10, s12.8:273), a **DISTINCT** locked value from the
+**formal-breakup** arbiter `SeductionSystem.break_entanglement` (−5 low / −15 high attachment, s12.8:275) — which is a
+deliberate action with no ActionID yet (correctly still deferred). Wiring `break_entanglement` onto the decay path (as a
+naive sweep would suggest) would apply the WRONG value; the fix uses the GDD's own neglect-break −10. FIX (pure LOCKED
+wiring, **no invented values** — the −10 is s12.8:273 verbatim, added as the named const
+`SeductionSystem.NEGLECT_BREAK_DISPOSITION_LOSS`): `_process_entanglements` gains a defaulted `characters_by_id` param
+(threaded from `advance_day`, sole caller updated) and, on the BROKEN transition, applies the −10 to the **target's
+disposition toward the seducer** via a new `_apply_entanglement_break_disposition` helper (resolves seducer/target from
+the entanglement dict, dead-guarded, self-pair guarded, clamped −100..100), reporting the applied delta on the `"broken"`
+result. Runtime-verified 12/12 (`tests/verify_entanglement_break_disposition.gd`): the locked const; a 3-window break
+removes the entanglement AND drops the target's disposition 20→10 (−10, reported on the result); an already-broken
+entanglement is removed with NO second charge; a NEGLECTED (1-window) entanglement is NOT removed and its disposition is
+UNCHANGED (no premature −10); and the dead-target / empty-`characters_by_id` guards remove the entanglement without a
+crash or disposition change (loss reported 0). Full project `--import` parse-clean. **DEFERRED (documented, not
+invented):** the s12.8:273 **−2 per missed window** neglect decay (while NEGLECTED, pre-break) — `check_maintenance`'s
+`missed_windows` accumulates cumulatively-but-re-derived each tick (it never advances `last_maintained_ic_day`), so
+"newly-missed windows" is ill-defined and a faithful per-window −2 needs that accumulation reworked to a clean
+per-window model first (a separate, behavior-changing edit — not a no-invention one-liner). The discrete −10 break is
+the clean, unambiguous half.
+
 ### Known Code Issues (found and fixed 2026-07-07, theater DEDICATE_PIECE dropped the magnitude difficulty term + skipped can_dedicate — two dormant arbiters — runtime-verified 15/15)
 The dedication sibling of the PERFORM_THEATER fix above. `TheaterSystem.get_dedication_tn` (s57.22.10: **TN 10 +
 `disposition_magnitude`×2** — a more emotionally powerful piece is harder to convincingly re-dedicate to a new topic)

@@ -227,7 +227,7 @@ static func advance_day(
 
 	_remove_resolved_favors(favors)
 
-	var entanglement_results: Array = _process_entanglements(entanglements, ic_day)
+	var entanglement_results: Array = _process_entanglements(entanglements, ic_day, characters_by_id)
 	var bound_escape_results: Array = _process_bound_states(
 		bound_states, characters_by_id, dice_engine, ic_day
 	)
@@ -15910,6 +15910,7 @@ static func _evaluate_heir_designations(
 static func _process_entanglements(
 	entanglements: Array,
 	ic_day: int,
+	characters_by_id: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 	var broken: Array = []
@@ -15924,10 +15925,16 @@ static func _process_entanglements(
 			ent["state"] = SeductionSystem.EntanglementState.BROKEN
 			ent["missed_windows"] = check.get("missed_windows", 3)
 			broken.append(ent)
+			# s12.8 line 273 (LOCKED): a neglect-break drops the target's disposition toward the
+			# actor -10 ("feeling used and abandoned"). This consequence was never applied -- the
+			# BROKEN branch only cleared the flag. (This is the natural-decay break, NOT the formal
+			# breakup arbiter's -5/-15 -- a distinct locked value.)
+			var disp_loss: int = _apply_entanglement_break_disposition(ent, characters_by_id)
 			results.append({
 				"entanglement": ent,
 				"event": "broken",
 				"missed_windows": check.get("missed_windows", 0),
+				"disposition_loss": disp_loss,
 			})
 		elif check.get("needs_maintenance", false):
 			ent["state"] = check.get("state", SeductionSystem.EntanglementState.NEGLECTED)
@@ -15942,6 +15949,25 @@ static func _process_entanglements(
 		entanglements.erase(ent)
 
 	return results
+
+
+static func _apply_entanglement_break_disposition(
+	ent: Dictionary,
+	characters_by_id: Dictionary,
+) -> int:
+	## Apply the s12.8:273 neglect-break disposition loss: the TARGET's disposition toward the
+	## SEDUCER drops NEGLECT_BREAK_DISPOSITION_LOSS (-10). Returns the applied delta (0 if skipped).
+	var seducer_id: int = int(ent.get("seducer_id", -1))
+	var target_id: int = int(ent.get("target_id", -1))
+	if seducer_id < 0 or target_id < 0 or seducer_id == target_id:
+		return 0
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	if target == null or CharacterStats.is_dead(target):
+		return 0
+	var loss: int = SeductionSystem.NEGLECT_BREAK_DISPOSITION_LOSS
+	var cur: int = target.disposition_values.get(seducer_id, 0)
+	target.disposition_values[seducer_id] = clampi(cur + loss, -100, 100)
+	return loss
 
 
 # -- Hostage System Processing (s22.9) ----------------------------------------
