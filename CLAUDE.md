@@ -237,6 +237,34 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-06, Togashi realm-overlap concern triggers were hardcoded dead — runtime-verified 14/14)
+A **hardcoded-dead-key** dormant signal (the producer exists but emits a constant). `TogashiOversight.spiritual_health_concern_fires`
+(s55.10.2, the Dragon Champion's SPIRITUAL_HEALTH oversight axis) fires on any of four triggers —
+`failing_worship_provinces` / `realm_overlap_in_dragon_territory` / `realm_overlaps_empire_wide` /
+`max_non_shadowlands_ptl` — but the **sole producer** of that oversight world_state,
+`DayOrchestrator._build_togashi_world_state`, **hardcoded** `"realm_overlaps_empire_wide": 0` and
+`"realm_overlap_in_dragon_territory": false` (literal constants), so the two realm-overlap triggers were
+permanently dead — the Dragon Champion could never react to spiritual realm overlaps, only to failing
+worship + non-Shadowlands PTL (the two live triggers). `realm_overlap_in_dragon_territory` is the
+non-redundant one: it is the Champion caring about overlaps on his OWN Dragon lands, a signal the
+empire-wide worship count cannot express. The live `SpiritualInsurgencySystem` produces the actual
+REALM_OVERLAP events (`spiritual_insurgency_events`, already an `advance_day` param) — they were simply
+never fed to the Togashi builder. FIX (pure fact computation — **no invented values**; the two GDD-locked
+thresholds live in the consumer): `_build_togashi_world_state` gains a `spiritual_events` param (threaded
+through `_process_togashi_oversight` from the `advance_day` scope) and now computes
+`realm_overlaps_empire_wide` = count of ACTIVE (`not resolved`) `REALM_OVERLAP` events, and
+`realm_overlap_in_dragon_territory` = whether any such event's province is Dragon-clan (province→clan
+map built from the `province_data` it already iterates). Non-REALM_OVERLAP events (ELEMENTAL_IMBALANCE)
+and resolved events are excluded. `crab_military_readiness` / `shadowlands_incursion_tier` (the other two
+hardcoded literals) are DEFERRED — both need an invented readiness/tier metric, not a plain fact, so they
+stay as-is (and `shadowlands_concern_fires` still has its live `wall_breach_active` trigger). Runtime-verified
+14/14 (`tests/verify_togashi_realm_overlap.gd`): the producer computes 0/false with no events (no
+regression), count 2 for two Lion overlaps (dragon false), count 1 + dragon TRUE for a Dragon-province
+overlap, excludes a resolved overlap, excludes an ELEMENTAL_IMBALANCE; and the consumer
+`spiritual_health_concern_fires` is silent at baseline, fires on a single Dragon-territory overlap (was
+dead), fires at the 3-overlap empire-wide threshold, and stays silent at 2 non-Dragon overlaps (below the
+locked threshold). Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, TAINT_MANIFESTATION could NEVER spawn — dead-key gate on the PTL-3 Shadowlands escalation — runtime-verified 6/6)
 A genuine **LIVE** bug (the dead-consumer class, surfaced by the situational-modifier fix directly above).
 `InsurgencySystem.get_spawn_chance` (s11.11) gated the Province Taint Manifestation branch on

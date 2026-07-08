@@ -1816,7 +1816,7 @@ static func advance_day(
 				characters_by_id, world_states, active_topics,
 				next_topic_id, ic_day, active_civil_wars,
 				objectives_map, cw_season_count,
-				settlements, provinces,
+				settlements, provinces, spiritual_insurgency_events,
 			)
 		if not phoenix_council_state.is_empty():
 			var emperor_id_for_phoenix: int = int(world_states.get("emperor_id", -1))
@@ -23312,6 +23312,7 @@ static func _process_togashi_oversight(
 	current_season: int = 0,
 	settlements: Array = [],
 	provinces: Dictionary = {},
+	spiritual_events: Array = [],
 ) -> Dictionary:
 	# Reappearance check runs BEFORE the dragon_autonomous_rule gate.
 	# The assaulting FC held autonomous rule; when he dies a new FC is found here.
@@ -23360,7 +23361,7 @@ static func _process_togashi_oversight(
 			fc_directives.append(d)
 
 	var oversight_world: Dictionary = _build_togashi_world_state(
-		world_states, characters, characters_by_id,
+		world_states, characters, characters_by_id, spiritual_events,
 	)
 
 	var result: Dictionary = TogashiOversight.process_seasonal_oversight(
@@ -23461,6 +23462,7 @@ static func _build_togashi_world_state(
 	world_states: Dictionary,
 	characters: Array,
 	characters_by_id: Dictionary,
+	spiritual_events: Array = [],
 ) -> Dictionary:
 	var clan_strengths: Dictionary = {}
 	for c: L5RCharacterData in characters:
@@ -23481,14 +23483,35 @@ static func _build_togashi_world_state(
 	var max_non_sl_ptl: float = 0.0
 	var wall_breach: bool = false
 	var failing_worship: int = 0
+	var province_clan: Dictionary = {}
 	for p: Variant in provinces_data:
 		if p is ProvinceData:
+			province_clan[p.province_id] = p.clan
 			if p.active_insurgency_id >= 0:
 				rebellion_count += 1
 			if p.province_taint_level > 0.0 and p.clan != "Crab":
 				max_non_sl_ptl = maxf(max_non_sl_ptl, p.province_taint_level)
 			if p.shadowlands_strength > 0 and p.stability < 30.0:
 				wall_breach = true
+
+	# Spiritual realm overlaps (s55.10.2 SPIRITUAL_HEALTH concern). These two facts fed
+	# TogashiOversight.spiritual_health_concern_fires but were HARDCODED to 0/false in this
+	# builder -- the sole producer -- so the Dragon Champion's realm-overlap triggers were
+	# dead (only failing_worship + max_non_shadowlands_ptl could fire the concern). Computed
+	# from the live SpiritualInsurgencySystem events (no invented values -- plain facts):
+	# empire-wide count = active REALM_OVERLAP events; Dragon-territory = any active
+	# REALM_OVERLAP whose province is Dragon-clan (the Champion's home turf, non-redundant
+	# with the empire-wide worship signal).
+	var realm_overlaps_empire_wide: int = 0
+	var realm_overlap_in_dragon: bool = false
+	for ev: Variant in spiritual_events:
+		if ev is SpiritualInsurgencyData:
+			var sev: SpiritualInsurgencyData = ev as SpiritualInsurgencyData
+			if sev.resolved or sev.event_type != Enums.SpiritualEventType.REALM_OVERLAP:
+				continue
+			realm_overlaps_empire_wide += 1
+			if str(province_clan.get(sev.province_id, "")) == "Dragon":
+				realm_overlap_in_dragon = true
 
 	var worship_maluses: Dictionary = world_states.get("_worship_maluses", {})
 	for prov_id: Variant in worship_maluses:
@@ -23515,8 +23538,8 @@ static func _build_togashi_world_state(
 		"emperor_vacant": emperor_vacant,
 		"provinces_in_rebellion": rebellion_count,
 		"failing_worship_provinces": failing_worship,
-		"realm_overlaps_empire_wide": 0,
-		"realm_overlap_in_dragon_territory": false,
+		"realm_overlaps_empire_wide": realm_overlaps_empire_wide,
+		"realm_overlap_in_dragon_territory": realm_overlap_in_dragon,
 		"max_non_shadowlands_ptl": max_non_sl_ptl,
 		"wall_breach_active": wall_breach,
 		"shadowlands_incursion_tier": 0,
