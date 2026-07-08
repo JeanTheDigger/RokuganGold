@@ -237,6 +237,43 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-08, Peasant-Revolt suppression PU-loss magnitude was a divergent inline literal — canonical arbiter had ZERO callers — runtime-verified 7/7)
+A **hardcoded-literal / divergent-inline-copy** dedup (the sibling of the land-commander-bonus / social-TN
+class, surfaced by the military-systems sweep). `InsurgencySystem.get_pu_loss_on_suppression(ins)` (s11.11:147 —
+the canonical civilian-PU-loss magnitude a coordinated suppression inflicts on a Peasant Revolt: `ins.strength × 0.1`
+for `PEASANT_REVOLT`, else `0.0`) had **ZERO production callers** (grep-confirmed: only its own def + `tests/`). The
+sole live consumer, `DayOrchestrator`'s coordinated-suppression writeback (`_process_insurgencies` → the participant
+loop at ~:14586), re-checked the `PEASANT_REVOLT` type gate inline AND computed the loss as the **raw literal**
+`float(ins.strength) * 0.1 * float(effective_actions)` — a hand-copied duplicate of the arbiter's own s11.11:147
+`0.1` magnitude, so the LOCKED value lived in two places and would silently drift the moment either changed. FIX
+(behavior-preserving, **no invented values** — the `0.1` is the arbiter's own LOCKED constant): the inline site now
+calls `InsurgencySystem.get_pu_loss_on_suppression(ins) * float(effective_actions)`, so the magnitude lives in ONE
+place. Value-identical inside the existing `if ins.insurgency_type == PEASANT_REVOLT` block (the arbiter's
+PEASANT_REVOLT branch returns exactly `ins.strength * 0.1`); the outer type gate is retained (it also guards the
+`effective_actions` accumulation loop). Runtime-verified 7/7 (`tests/verify_revolt_pu_loss_arbiter.gd`): the arbiter
+tiers (strength 1→0.1, 5→0.5, 10→1.0; Ronin/Nezumi/Maho → 0.0), and — the dedup guarantee —
+`get_pu_loss_on_suppression(ins) * effective_actions` == the retired inline `strength * 0.1 * effective_actions`
+across every strength 1..12 × effective_actions 0..3 combination (0 mismatches). Full project `--import` parse-clean.
+**DEFERRED (documented from the same sweep, NOT quick wires — trigger/subsystem unbuilt, do not re-audit):**
+`WarSystem.is_annihilated` / `check_auto_escalation` / `apply_raw_shift` (dead twins of the live
+`WarTermination.check_annihilation` / inline `escalate`); `InsurgencySystem.resolve_suppression` (single-actor
+twin superseded by the live `resolve_coordinated_suppression`) + `attempt_detection`/`get_detection_tn` (a
+skill-roll detection superseded by the live patrol-concealment decrement) + `get_ronin_hire_cost`/`attempt_ronin_hire`
+(no action trigger); `NPCAdvancement.accumulate_daily_xp` (daily-granularity twin superseded by the batched
+seasonal accrual); `SiegeSystem.compute_garrison_effective_defense` (unused superset of the live
+`get_storm_defense_bonus`); the **`battle_record` phantom key** (`_gather_promotion_candidates` reads
+`c.battle_record.get("battles_as_chui"/"battles_as_taisa")` but no such field exists on L5RCharacterData and the
+sole mutator `MilitaryPromotionSystem.record_battle` has zero callers → TAISA/SHIREIKAN promotion arms are dead
+branches — needs a new character field + per-rank battle-count tracking, a design change); the entire enlisted
+promotion ladder (`create_battle_record`/`record_battle`/`can_promote_to_nikutai`/`can_promote_to_gunso` — no
+enlisted-rank store); the operational-hierarchy order-refusal/escalation/override cluster (`get_refusal_disposition_hit`/
+`will_escalate_refusal`/`get_escalation_outcome`/… — the refuse-order event trigger is unbuilt); the whole siege
+event-resolution pipeline (`create_siege_state`/`select_event`/`resolve_siege_event`/`apply_event_tick_change` —
+`active_sieges` is never appended to in live code, only loaded from saves); `AnimalHandlingSystem.can_command_to_attack`/
+`has_no_flee_override` (companion combat unbuilt); and `HuntSystem.can_request_invitation` (the status-band gate —
+a near-miss: the executor site has `ctx` but not `host_status`, the writeback site has both statuses but no `ctx`;
+neither holds all three validator inputs).
+
 ### Known Code Issues (found and fixed 2026-07-07, entanglement neglect-break disposition loss never applied — the -10 abandonment consequence was dead — runtime-verified 12/12)
 A **produced-but-not-consumed** dormant signal (the cohabitation-bonus / route-integrity class). s12.8 line 273
 (LOCKED): "If three consecutive [maintenance] windows pass without contact, the entanglement breaks — the relationship

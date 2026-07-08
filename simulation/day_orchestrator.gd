@@ -14589,8 +14589,11 @@ static func _process_insurgency_suppression(
 				if o == "success" or o == "partial":
 					effective_actions += 1
 			if effective_actions > 0:
+				# PU loss magnitude lives in the canonical arbiter (s11.11 line 147); the
+				# inline `ins.strength * 0.1` literal was a divergent copy of it.
 				_apply_revolt_pu_loss(
-					prov, settlements, float(ins.strength) * 0.1 * float(effective_actions)
+					prov, settlements,
+					InsurgencySystem.get_pu_loss_on_suppression(ins) * float(effective_actions)
 				)
 		# Per-participant critical failure: Down→survival roll, else death (line 107).
 		for p: Dictionary in participants:
