@@ -23,11 +23,14 @@ func _ok(cond: bool, label: String) -> void:
 		print("  FAIL: %s" % label)
 
 
-func _prov(pid: int, clan: String) -> ProvinceData:
+func _prov(pid: int, clan: String, ptl: float = 0.0, insurg: int = -1, sl: float = 0.0, stab: float = 80.0) -> ProvinceData:
 	var p := ProvinceData.new()
 	p.province_id = pid
 	p.clan = clan
-	p.province_taint_level = 0.0  # keep max_non_shadowlands_ptl off
+	p.province_taint_level = ptl  # keep max_non_shadowlands_ptl off by default
+	p.active_insurgency_id = insurg
+	p.shadowlands_strength = sl
+	p.stability = stab
 	return p
 
 
@@ -40,15 +43,19 @@ func _overlap(pid: int, resolved: bool = false, etype: int = Enums.SpiritualEven
 
 
 func _build(spiritual_events: Array) -> Dictionary:
-	# Provinces: 1000=Dragon, 1001/1002=Lion (non-Dragon).
-	var ws: Dictionary = {"province_data": [_prov(1000, "Dragon"), _prov(1001, "Lion"), _prov(1002, "Lion")]}
-	return _DO._build_togashi_world_state(ws, [], {}, spiritual_events)
+	# EMPTY world_states (no dead "province_data" key) + a REAL provinces Dictionary:
+	# 1000=Dragon, 1001/1002=Lion. This proves the builder reads the real provinces param
+	# (if it still read the dead top-level key, province_clan would be empty and the
+	# Dragon-territory check below would always be false).
+	var provinces: Dictionary = {1000: _prov(1000, "Dragon"), 1001: _prov(1001, "Lion"), 1002: _prov(1002, "Lion")}
+	return _DO._build_togashi_world_state({}, [], {}, spiritual_events, provinces)
 
 
 func _init() -> void:
 	print("--- Togashi realm-overlap facts wired from spiritual insurgency events (s55.10.2) ---")
 	_test_producer()
 	_test_consumer()
+	_test_province_source()
 	print("--- %d passed, %d failed ---" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -98,3 +105,20 @@ func _test_consumer() -> void:
 	# 2 empire-wide overlaps (below the >=3 threshold, none in Dragon land) do NOT fire
 	var w_below: Dictionary = _build([_overlap(1001), _overlap(1002)])
 	_ok(_TO.spiritual_health_concern_fires(w_below) == false, "2 non-Dragon overlaps below threshold -> silent")
+
+
+func _test_province_source() -> void:
+	print("[3] province-derived facts now read the real provinces param (were reading a dead top-level key)")
+	# EMPTY world_states + real provinces: a Lion province at PTL 5.0, one in rebellion, one wall breach.
+	var provinces: Dictionary = {
+		2000: _prov(2000, "Lion", 5.0, 42, 0.0, 80.0),          # PTL 5 -> max_non_shadowlands_ptl
+		2001: _prov(2001, "Crab", 0.0, -1, 3.0, 20.0),          # SL strength + low stability -> wall breach
+	}
+	var w: Dictionary = _DO._build_togashi_world_state({}, [], {}, [], provinces)
+	_ok(int(w["provinces_in_rebellion"]) == 1, "rebellion_count reads real provinces (1)")
+	_ok(is_equal_approx(float(w["max_non_shadowlands_ptl"]), 5.0), "max_non_shadowlands_ptl reads real provinces (5.0)")
+	_ok(bool(w["wall_breach_active"]) == true, "wall_breach_active reads real provinces (true)")
+	# And with an EMPTY provinces + empty world_states, they safely default (no crash, all off)
+	var w0: Dictionary = _DO._build_togashi_world_state({}, [], {}, [], {})
+	_ok(int(w0["provinces_in_rebellion"]) == 0, "empty provinces -> rebellion 0 (safe fallback)")
+	_ok(bool(w0["wall_breach_active"]) == false, "empty provinces -> wall breach false (safe fallback)")

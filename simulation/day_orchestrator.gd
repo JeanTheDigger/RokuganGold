@@ -23361,7 +23361,7 @@ static func _process_togashi_oversight(
 			fc_directives.append(d)
 
 	var oversight_world: Dictionary = _build_togashi_world_state(
-		world_states, characters, characters_by_id, spiritual_events,
+		world_states, characters, characters_by_id, spiritual_events, provinces,
 	)
 
 	var result: Dictionary = TogashiOversight.process_seasonal_oversight(
@@ -23463,6 +23463,7 @@ static func _build_togashi_world_state(
 	characters: Array,
 	characters_by_id: Dictionary,
 	spiritual_events: Array = [],
+	provinces: Dictionary = {},
 ) -> Dictionary:
 	var clan_strengths: Dictionary = {}
 	for c: L5RCharacterData in characters:
@@ -23478,7 +23479,14 @@ static func _build_togashi_world_state(
 		if w is Dictionary:
 			inter_clan_wars += 1
 
-	var provinces_data: Array = world_states.get("province_data", [])
+	# Source the real provinces param. The top-level world_states["province_data"] key
+	# this function used to read is NEVER populated (province_data is stashed only on
+	# PER-CHARACTER world_state sub-dicts, ws[char_id]["province_data"], not the top-level
+	# dict passed here) -- so rebellion_count / max_non_shadowlands_ptl / wall_breach_active
+	# (and the realm Dragon-territory check below) were ALL reading an empty array, i.e.
+	# dead. Prefer the real provinces Dictionary; fall back to the legacy (empty) key only
+	# if a caller passes no provinces.
+	var provinces_data: Array = provinces.values() if not provinces.is_empty() else world_states.get("province_data", [])
 	var rebellion_count: int = 0
 	var max_non_sl_ptl: float = 0.0
 	var wall_breach: bool = false
