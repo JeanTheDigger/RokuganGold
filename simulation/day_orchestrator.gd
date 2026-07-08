@@ -155,7 +155,7 @@ static func advance_day(
 	_process_companion_owner_deaths(characters, characters_by_id)
 	_process_companion_locations(characters, character_province_map)
 	_process_companion_deaths(characters, active_topics, next_topic_id, ic_day)
-	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state, named_vessels)
+	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state, named_vessels, active_wars)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
@@ -25744,6 +25744,7 @@ static func _populate_infrastructure_intelligence(
 	ships: Array,
 	worship_state: Dictionary,
 	named_vessels: Array = [],
+	active_wars: Array = [],
 ) -> void:
 	var worship_failing: Dictionary = {}  # province_id → clan
 	var border_no_fort: Dictionary = {}  # province_id → clan
@@ -25815,8 +25816,14 @@ static func _populate_infrastructure_intelligence(
 		if not v.is_destroyed and not v.owning_clan.is_empty():
 			clans_with_ships[v.owning_clan] = true
 
+	# Iterate the REAL active_wars param (WarData array). This function runs early in advance_day,
+	# long before top-level world_states["active_wars"] is briefly set (only during the seasonal
+	# strategic reviews, then erased), so reading that key here always saw [] -> naval_threatened_clans
+	# was permanently empty -> ws["has_naval_threat"] always false -> the objective_decomposer
+	# COMMISSION_SHIP defensive-ship branch (is_coastal AND has_naval_threat AND NOT has_naval_assets)
+	# never fired. The loop already expects raw WarData, so the param is a drop-in (s57.18).
 	var naval_threatened_clans: Dictionary = {}
-	for w: Variant in world_states.get("active_wars", []):
+	for w: Variant in active_wars:
 		if w is WarData:
 			var wd: WarData = w as WarData
 			if clans_with_ships.has(wd.clan_a):

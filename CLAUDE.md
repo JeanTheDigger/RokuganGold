@@ -314,6 +314,28 @@ province PTL is 0 (proving it reads the province, not the dead key); and end-to-
 `process_season` a PTL-4.0 province deterministically spawns a `TAINT_MANIFESTATION` (chance 1.0) while a
 PTL-1.0 control never does across 30 seeds. Full project `--import` parse-clean.
 
+### Known Code Issues (found and fixed 2026-07-06, has_naval_threat permanently false — the COMMISSION_SHIP defensive-ship decision was dead empire-wide — runtime-verified 5/5)
+The **empty-top-level-key** class at the SOURCE end (sibling of the Strategic-Review war-context fix, but
+in the early per-tick intelligence pass). `DayOrchestrator._populate_infrastructure_intelligence` builds the
+per-clan naval-threat map (`naval_threatened_clans`: a clan is threatened iff it is at war with a clan that
+owns ships, s57.18) by iterating `world_states.get("active_wars", [])` at the **top level** — but this
+function runs EARLY in `advance_day` (~:158), long before top-level `active_wars` is briefly set (only inside
+`_run_strategic_reviews` at ~:12859, and erased right after). So the read **always saw `[]`** →
+`naval_threatened_clans` was **permanently empty** → `world_states["_naval_threatened_clans"]` empty → the
+per-character `ws["has_naval_threat"] = g_naval_threatened_clans.has(c.clan)` was **always false** for every
+character → `ContextSnapshot.has_naval_threat` (npc_decision_engine:239) always false → the
+`objective_decomposer` **COMMISSION_SHIP** defensive-ship branch (`if ctx.is_coastal and ctx.has_naval_threat
+and not ctx.has_naval_assets`, priority 3) **never fired**: a coastal clan at war with a naval power never
+built a defensive ship. (`is_coastal`/`has_naval_assets` come from the real `ships` param, so only the threat
+leg was dead.) FIX (pure producer plumbing — **zero invented values**): `active_wars` (the real WarData array,
+already an `advance_day` param) is threaded into `_populate_infrastructure_intelligence` as a defaulted
+trailing param and the loop iterates it instead of the never-set top-level key. The loop already expects raw
+WarData (`if w is WarData`), so the param is a drop-in — no shape conversion (unlike the strategic-review
+`active_wars`, whose consumers wanted context-dicts; this consumer wants raw WarData). Runtime-verified 5/5
+(`tests/verify_naval_threat_intelligence.gd`): empty active_wars → empty threat map (the dead pre-fix); a
+naval Crab at war with a landlocked Lion → Lion naval-threatened, Crab not; two landlocked clans at war →
+nobody threatened; order-independent (clan_a or clan_b naval). Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, Strategic Review self-selection top-level plumbing — 3 more empty-key/wrong-shape corrections on the same seam — runtime-verified 13/13 + 11/11 regression)
 Follow-up sweep of the **same injection seam** as the war-context fix (an Explore sub-agent flagged the
 adjacent shape hazard), fixing three more dormant reads the lord Strategic-Review self-selection path makes
