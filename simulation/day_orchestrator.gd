@@ -14792,8 +14792,61 @@ static func _process_insurgencies(
 			if rpd.active_insurgency_id == ins.insurgency_id:
 				rpd.active_insurgency_id = -1
 
+	# Apply the per-season economic drain each surviving insurgency inflicts on its
+	# province (s11.11, GDD-locked ABSOLUTE amounts -- no invented values):
+	#   NEZUMI_INFESTATION -> Rice  (Strength * 0.1, cap 1.0 at Strength 10; s11.11:249/253)
+	#   RONIN_BANDIT       -> Koku  (Strength * 0.05 from the province's trade routes; s11.11:161)
+	#   PIRATE_FLEET       -> Koku  (0.05 * Strength, cap -0.4 at Strength 8; s11.11:505)
+	# The GDD frames these at "province stockpile"/"trade routes", but stockpiles live on
+	# settlements, so the province-level drain is taken from the province's settlement
+	# stockpiles (aggregate, floored at 0). Applied to SURVIVING insurgencies only (post-
+	# removal), so a same-season suppression to Strength 0 inflicts no further drain.
+	# DEFERRED (NOT applied -- semantic mismatch, no invention): URBAN_CRIMINAL_NETWORK koku
+	# (s11.11:271 is a PERCENTAGE of settlement Koku *generation*, not an absolute stockpile
+	# drain, and needs the settlement's per-season koku generation which isn't available here;
+	# get_koku_drain's criminal branch returns an absolute value that must not hit the stockpile).
+	if not settlements.is_empty():
+		var settlements_by_prov: Dictionary = {}
+		for _dv: Variant in settlements:
+			if _dv is SettlementData:
+				var _ds: SettlementData = _dv as SettlementData
+				if _ds.province_id < 0:
+					continue
+				if not settlements_by_prov.has(_ds.province_id):
+					settlements_by_prov[_ds.province_id] = []
+				(settlements_by_prov[_ds.province_id] as Array).append(_ds)
+		for ins2: InsurgencyData in insurgencies:
+			var prov_setts: Array = settlements_by_prov.get(ins2.province_id, [])
+			if prov_setts.is_empty():
+				continue
+			var rice_drain: float = InsurgencySystem.get_rice_drain(ins2)
+			if rice_drain > 0.0:
+				_drain_province_stockpile(prov_setts, rice_drain, "rice_stockpile")
+			if ins2.insurgency_type == Enums.InsurgencyType.RONIN_BANDIT \
+					or ins2.insurgency_type == Enums.InsurgencyType.PIRATE_FLEET:
+				var koku_drain: float = InsurgencySystem.get_koku_drain(ins2)
+				if koku_drain > 0.0:
+					_drain_province_stockpile(prov_setts, koku_drain, "koku_stockpile")
+
 	result["resolved_crisis_ids"] = resolved_crisis_ids
 	return result
+
+
+# Subtract `amount` from the aggregate of a province's settlement `field` stockpile,
+# taking from each settlement in turn and flooring at 0 (s11.11 economic drain).
+static func _drain_province_stockpile(setts: Array, amount: float, field: String) -> void:
+	var remaining: float = amount
+	for _sv: Variant in setts:
+		if remaining <= 0.0:
+			break
+		if not (_sv is SettlementData):
+			continue
+		var s: SettlementData = _sv as SettlementData
+		var have: float = s.get(field)
+		var take: float = minf(have, remaining)
+		if take > 0.0:
+			s.set(field, have - take)
+			remaining -= take
 
 
 # -- Spiritual Insurgency Processing (s56.16, season boundary) ----------------

@@ -237,6 +237,33 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-07, insurgency per-season economic drain never applied — the whole s11.11 economic-pressure layer was inert — runtime-verified 14/14)
+A **zero-caller effect arbiter** (the sibling of the koku-drain / route-integrity dormant class). `InsurgencySystem.get_koku_drain`
+(s11.11:161/505) and `get_rice_drain` (s11.11:249) return the GDD-LOCKED per-season economic drain each insurgency inflicts —
+but **neither had any production caller** (grep-confirmed: only their own defs + `tests/`). `InsurgencySystem.process_season` (the
+sole seasonal insurgency pass) never touched province Rice/Koku, so the ENTIRE s11.11 economic-pressure layer was dead: a Nezumi
+Infestation never stole rice from the province stockpile (s11.11:249 "Steals (Strength × 0.1) Rice … per season"), and a Ronin Bandit
+Uprising / Pirate Fleet never drained koku from the province's trade routes (s11.11:161 "−(Strength × 0.05) Koku per season" /
+s11.11:505 "0.05 Koku × Strength per season, cap −0.4 at Strength 8"). The whole point of s11.11's economic drain — making an
+insurgency *visible and costly even without an investigation action* — was inert; an ignored Strength-10 Nezumi colony could never
+"independently cause Shortage conditions through sustained Rice drain" (s11.11:253). FIX (pure LOCKED-only wiring, **no invented
+values** — every magnitude is the arbiter's own GDD constant): `DayOrchestrator._process_insurgencies` (the one seasonal pass, which
+already receives `settlements`) now, after removal, drains each **surviving** insurgency's GDD-locked ABSOLUTE amount from its
+province's settlement stockpiles via a new `_drain_province_stockpile(setts, amount, field)` helper (aggregate across the province's
+settlements, floored at 0) — Nezumi → `get_rice_drain` (rice), Ronin/Pirate → `get_koku_drain` (koku). The GDD frames these at
+"province stockpile"/"trade routes", but stockpiles live on `SettlementData.rice_stockpile`/`koku_stockpile`, so the province-level
+drain is taken from the province's settlements (the single faithful mapping). Applied to SURVIVING insurgencies only (post-removal),
+so a same-season suppression to Strength 0 inflicts no further drain. **DEFERRED (NOT applied — semantic mismatch, no invention):**
+the URBAN_CRIMINAL_NETWORK koku drain — `get_koku_drain` returns an absolute value for it, but s11.11:271 defines it as a **PERCENTAGE
+of the settlement's Koku *generation*** ("Strength × 2/3 %"), not an absolute stockpile drain, and needs the settlement's per-season
+koku generation which isn't available at this point; the koku drain is gated to RONIN_BANDIT/PIRATE_FLEET so the criminal absolute
+value never hits the stockpile. `get_pu_loss_on_suppression` is already live via the inline copy at `day_orchestrator:14580` (not a
+gap). Runtime-verified 14/14 (`tests/verify_insurgency_economic_drain.gd`): the arbiters return the locked amounts (Nezumi 4→0.4 rice,
+cap 1.0 at Strength≥10, non-Nezumi 0; Ronin 4→0.2 koku, Pirate 8→0.4 = the cap); the helper drains the aggregate across two
+settlements and floors at 0 on over-drain; and end-to-end through `_process_insurgencies` a Nezumi drains rice by Strength×0.1 (leaving
+koku untouched), a Ronin drains koku by Strength×0.05 (leaving rice untouched), and an Urban Criminal Network leaves BOTH stockpiles
+untouched (the deferred percent-of-generation branch never fires). Full project `--import` parse-clean.
+
 ### Known Code Issues (found and fixed 2026-07-06, Togashi oversight read EMPTY top-level world_states["province_data"]/["active_wars"] — 4 triggers dead — runtime-verified 24/24)
 A **wrong-source dead-read** (surfaced while verifying the realm-overlap fix directly below). `DayOrchestrator._build_togashi_world_state`
 (the sole producer of the Dragon Champion's oversight world_state) sourced its province facts from
