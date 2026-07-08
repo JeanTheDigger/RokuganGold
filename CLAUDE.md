@@ -237,6 +237,30 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-07, wood-guardian outdoor degradation never fired — inline placement omitted the ic_day_placed_outdoor stamp — runtime-verified 11/11)
+A **hardcoded-default dead-effect** (the sibling of the situational-modifier / dead-key classes, at the PRODUCER end).
+`SculptureSystem.apply_outdoor_degradation` (s57.28 — a WOOD GUARDIAN weathers **−1 quality tier per
+`WOOD_OUTDOOR_DEGRADATION_DAYS` = 1800 IC days**) is LIVE and seasonal (`DayOrchestrator._process_sculpture_...` →
+`apply_outdoor_degradation` at `day_orchestrator:35300`), but it **early-returns when `sculpture.ic_day_placed_outdoor < 0`**
+(the `@export` default). The **ONLY production producer** of that stamp is `SculptureSystem.place_sculpture:308`
+(`if material == WOOD: ic_day_placed_outdoor = ic_day`) — but the **live** placement path,
+`DayOrchestrator._auto_place_completed_sculpture` (fired when a COMPOSE_SCULPTURE completes, the sole in-game placement
+route), **inlines its own slot-assignment and BYPASSES `place_sculpture`**, so it never stamped the clock. Result: every
+wood guardian placed during play kept `ic_day_placed_outdoor` at the **−1 default**, `apply_outdoor_degradation` returned
+early **forever**, and the s57.28 outdoor-weathering mechanic was **completely dead** — a wood komainu pair never lost a
+tier no matter how many seasons it stood exposed. FIX (pure LOCKED wiring, **no invented values** — mirrors
+`place_sculpture` exactly): `_auto_place_completed_sculpture` gains an `ic_day` param (threaded from the completion site
+where it is already in scope) and, in the GUARDIAN branch, stamps `sculpture.ic_day_placed_outdoor = ic_day` when
+`material == WOOD` — the identical line `place_sculpture` uses. STONE/BRONZE guardians (indoors-durable) are untouched
+(only wood weathers outdoors, per `apply_outdoor_degradation`'s own `material != WOOD` guard). Runtime-verified 11/11
+(`tests/verify_sculpture_outdoor_degradation.gd`): an UNPLACED wood guardian never degrades even after 10× the window
+(the −1 early-return = the bug); after `_auto_place_completed_sculpture` stamps the clock, one full window elapses → the
+tier drops 3→2 (the revived effect), re-anchors, floors at tier 1; and a STONE guardian is placed but NOT stamped
+(`ic_day_placed_outdoor` stays −1) and never weathers. Full project `--import` parse-clean. **DOCUMENTED (harmless,
+not changed):** the inline path gates guardian placement on `is_statue_eligible` rather than `is_guardian_eligible`
+(a latent divergence from `place_sculpture`), but `STATUE_ELIGIBLE_TYPES == GUARDIAN_ELIGIBLE_TYPES` today
+(TEMPLE/SHINDEN/MONASTERY), so the two are equivalent — left as-is to keep this commit scoped to the degradation stamp.
+
 ### Known Code Issues (found and fixed 2026-07-07, OFFER_FAVOR applied ZERO disposition — the s12.10 offer-disposition arbiter had zero callers — runtime-verified 12/12)
 A **zero-caller effect arbiter** (the sibling of the supply-share-ratio class). `FavorSystem.get_offer_disposition`
 (s12.10 lines 21-31 LOCKED: the disposition raise an offered favor grants — MINOR +6/+2-per-Raise, MODERATE +10/+3,

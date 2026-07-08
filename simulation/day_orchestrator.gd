@@ -35120,7 +35120,7 @@ static func _process_compose_sculpture_writebacks(
 			)
 			# On completion: auto-place if a slot is available at sculptor's last location.
 			if compose_result.get("completed", false):
-				_auto_place_completed_sculpture(sculpture, settlements_by_id)
+				_auto_place_completed_sculpture(sculpture, settlements_by_id, ic_day)
 				# Generate lifecycle topic
 				var topic_dict: Dictionary = SculptureSystem.generate_lifecycle_topic(
 					sculpture, "completion", "", ic_day,
@@ -35134,6 +35134,7 @@ static func _process_compose_sculpture_writebacks(
 static func _auto_place_completed_sculpture(
 	sculpture: SculptureData,
 	settlements_by_id: Dictionary,
+	ic_day: int = 0,
 ) -> void:
 	## Auto-place completed statuary/guardian into available slot at their settlement.
 	## Figurines skip (they go into inventory for DELIVER_GIFT).
@@ -35163,6 +35164,13 @@ static func _auto_place_completed_sculpture(
 				sculpture.creator_id, settlement):
 			settlement.guardian_slot = sculpture.sculpture_id
 			sculpture.display_slot = SculptureSystem.DisplaySlot.GUARDIAN_SLOT
+			# Wood guardians stand outdoors — stamp the degradation clock (s57.28: -1 tier per
+			# WOOD_OUTDOOR_DEGRADATION_DAYS). This inline placement bypassed the canonical
+			# SculptureSystem.place_sculpture, which alone set ic_day_placed_outdoor, so every
+			# in-game wood guardian left it at the -1 default and SculptureSystem.apply_outdoor_degradation
+			# (live, seasonal) early-returned forever — outdoor wood weathering was dead.
+			if sculpture.material == SculptureSystem.MaterialType.WOOD:
+				sculpture.ic_day_placed_outdoor = ic_day
 			# Mark guardian pair intact if this sculpture is the completing piece.
 			if sculpture.paired:
 				sculpture.pair_intact = true
