@@ -6968,11 +6968,15 @@ static func _execute_dedicate_piece(
 			"effects": {"blocked_reason": "no_known_topic"},
 		}
 
-	# Courtier / Awareness roll vs TN 10 + magnitude * 2 (resolved in writeback since we lack piece here)
-	var tn: int = TheaterSystem.DEDICATION_BASE_TN + raises * 5
+	# Courtier / Awareness roll vs the s57.22.10 dedication TN (10 + magnitude*2). The magnitude
+	# difficulty term was DROPPED by the old flat `DEDICATION_BASE_TN + raises*5` inline roll (and
+	# raises were double-counted, once in tn + again via the resolve_skill_check raises arg). The
+	# metadata builder now carries the canonical get_dedication_tn value; raises fold into the TN once.
+	var base_tn: int = meta.get("dedication_tn", TheaterSystem.DEDICATION_BASE_TN)
+	var tn: int = base_tn + raises * 5
 	var roll: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, "Courtier", tn,
-		raises, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+		0, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
 	)
 	var total: int = roll.get("total", 0)
 

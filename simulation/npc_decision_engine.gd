@@ -4082,7 +4082,7 @@ static func _populate_action_metadata(
 	elif option.action_id == "PERFORM_THEATER_PIECE":
 		option.metadata = _build_perform_theater_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "DEDICATE_PIECE":
-		option.metadata = _build_dedicate_piece_metadata(ctx, need)
+		option.metadata = _build_dedicate_piece_metadata(ctx, need, character)
 	elif option.action_id == "PETITION_RONIN":
 		option.metadata = {"target_lord_id": _pick_lord_for_petition(ctx, chars_by_id)}
 		option.target_npc_id = option.metadata.get("target_lord_id", -1)
@@ -5057,14 +5057,39 @@ static func _kyogen_has_provocation_pretext(
 static func _build_dedicate_piece_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
+	character: L5RCharacterData = null,
 ) -> Dictionary:
-	## Dedicate: pick known completed piece + most relevant topic to link.
+	## Dedicate: pick a piece + topic the character can ACTUALLY dedicate, and carry the
+	## magnitude-scaled TN. Routes through the canonical TheaterSystem.can_dedicate (s57.22.10
+	## preconditions: known_by, <2 topic slots, topic not already linked, topic known) and
+	## get_dedication_tn (TN 10 + magnitude*2), both of which had ZERO callers -- the executor
+	## checked only "topic known" and used a flat TN that dropped the magnitude difficulty term.
 	var performable: Array = ctx.known_objectives.get("theater_pieces_to_perform", [])
+	var pieces_by_id: Dictionary = ctx.known_objectives.get("_theater_pieces_by_id", {})
+
+	# Scan for the first (piece, topic) pair that passes the full canonical precondition gate.
+	if character != null:
+		for pid: Variant in performable:
+			var piece: TheaterPieceData = pieces_by_id.get(int(pid)) as TheaterPieceData
+			if piece == null:
+				continue
+			for tid: Variant in ctx.known_topics:
+				var topic_id_c: int = int(tid)
+				if TheaterSystem.can_dedicate(ctx.character_id, piece, topic_id_c, character):
+					return {
+						"piece_id": piece.piece_id,
+						"topic_id": topic_id_c,
+						"raises": 0,
+						"dedication_tn": TheaterSystem.get_dedication_tn(piece),
+					}
+		# No dedicatable (piece, topic) pair -> signal a no-op (executor blocks on piece_id < 0).
+		return {"piece_id": -1, "topic_id": -1, "raises": 0}
+
+	# Defensive fallback (no character supplied): the old first-piece/first-topic behaviour.
 	var piece_id: int = -1
 	for pid: Variant in performable:
 		piece_id = int(pid)
 		break
-	# Best topic: pick first known topic related to the need's target
 	var topic_id: int = -1
 	if not ctx.known_topics.is_empty():
 		topic_id = int(ctx.known_topics[0])

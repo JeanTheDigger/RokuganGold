@@ -237,6 +237,29 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-07, theater DEDICATE_PIECE dropped the magnitude difficulty term + skipped can_dedicate — two dormant arbiters — runtime-verified 15/15)
+The dedication sibling of the PERFORM_THEATER fix above. `TheaterSystem.get_dedication_tn` (s57.22.10: **TN 10 +
+`disposition_magnitude`×2** — a more emotionally powerful piece is harder to convincingly re-dedicate to a new topic)
+and `can_dedicate` (the s57.22.10 preconditions: performer ∈ `known_by`, `< 2` topic slots filled, topic not already
+linked, topic known) both had **ZERO callers**. `ActionExecutor._execute_dedicate_piece` used a flat
+`tn = DEDICATION_BASE_TN + raises*5` — **dropping the `magnitude*2` difficulty term** (every dedication used the base
+TN 10 regardless of the piece's power) and **double-counting raises** (once in `tn`, again via the resolve_skill_check
+raises arg) — and gated only on "topic known", **missing** the known_by / ≤2-slot / not-already-linked preconditions (a
+non-author who never learned the piece could dedicate it; a piece could be over-linked past 2 topics). The executor's
+own comment admitted "resolved in writeback since we lack piece here" — but **no writeback re-applied** either arbiter.
+FIX (pure LOCKED wiring — the metadata builder already has the piece + the deciding `character`; **no invented values**):
+`_build_dedicate_piece_metadata` now scans the performable pieces × known topics for the first `(piece, topic)` pair
+that passes the canonical `TheaterSystem.can_dedicate(...)` gate, and carries `get_dedication_tn(piece)` (the
+magnitude-scaled TN) in metadata — retiring BOTH dormant arbiters at selection time; if no dedicatable pair exists it
+returns `piece_id -1` (the executor's existing block). The executor uses `meta.dedication_tn` and folds raises into the
+TN once (`0` raises to resolve_skill_check). Runtime-verified 15/15 (`tests/verify_theater_dedication_tn.gd`): the
+arbiter (magnitude 1/3/5 → TN 12/16/20); `can_dedicate`'s five branches (valid / not-in-known_by / 2-slots-full /
+topic-already-linked / topic-not-known); the builder picks the dedicatable piece (skips an un-known one), carries the
+magnitude-18 TN, and returns −1 when nothing is dedicatable; and the executor's TN is magnitude-scaled (a magnitude-5
+piece [TN 20] succeeds strictly less than a magnitude-1 piece [TN 12] for the same performer/seeds), with a base-TN
+fallback + the −1 block. Full project `--import` parse-clean. DEFERRED as before: the moderate/major favor-tier-style
+richer paths are unaffected; this is scoped to the dedication difficulty + precondition gate.
+
 ### Known Code Issues (found and fixed 2026-07-07, theater performance roll bypassed the canonical resolver — casting-fit + Kyogen gate dropped + raises double-counted — runtime-verified 9/9)
 A **canonical-resolver-bypassed-by-a-divergent-inline-copy** fix (the land-commander-bonus class), plus a **latent
 double-count**. `TheaterSystem.resolve_performance_roll` (the s57.22.7 lead-performer arbiter) applies (a) the **s57.22.4
