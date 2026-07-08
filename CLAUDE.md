@@ -286,6 +286,28 @@ amount-scaling arbiter is wired here. Runtime-verified 11/11 (`tests/verify_supp
 +45 shares the proportional ~74, a below-Friend +5 chosen share floors at 50 (no regression), and an unresolvable
 recipient lord floors at 50 without a crash. Full project `--import` parse-clean.
 
+### Known Code Issues — Deferred (2026-07-07, consumer-side phantom-key sweep — trigger subsystem unbuilt)
+A consumer-side sweep (a LIVE consumer reads a field/key no producer writes) surfaced these; each is a genuine dead
+consumer but blocked because the intended PRODUCER subsystem is itself unbuilt — documented so they're not re-audited:
+- **`ProvinceStatus.has_alliance_protection` (s53:387) — the war/raid-target alliance guard.** `WarJustification.evaluate_province_weakness`
+  reads `not ps.has_alliance_protection` (a live raid/war-eligibility gate at objective_decomposer:1432/1447 +
+  npc_decision_engine:5544), but `build_province_statuses_from_data` never sets the field → permanently false → an
+  alliance never shields a province. BLOCKED: the only alliance data is `WarData.allied_clans_a/b`, populated ONLY by
+  `WarSystem.add_ally` — which has ZERO production callers (the SECURE_ALLIANCE/REQUEST_ALLIED_AID → add_ally hookup is
+  unbuilt), so allied_clans is always empty. Computing has_alliance_protection from it would still be always-false. This
+  is the same unbuilt s53 alliance/aid cluster as the war-aid-refusal arbiters above.
+- **`WallStatus.tea_stockpile_seasons` / `scout_deployed` / `scout_report_age` / `scout_report_elevated_activity` /
+  `max_taint_rank` (s55.23a wall-tower ladder).** `ObjectiveDecomposer._decompose_strengthen_wall` reads these in a
+  5-loop ladder (DEPLOY_SCOUTS → MAINTAIN_FORTIFICATION → MANAGE_TAINT/tea → jade → sortie), but the two `WallStatus`
+  builders set none of them. `tea_stockpile_seasons` (default 2.0) HAS a clean live source (`SettlementData.tea_stockpile`),
+  but wiring it is INERT: the first loop's `not scout_deployed` (a phantom, no producer) is permanently true, so
+  DEPLOY_SCOUTS returns FIRST and masks every branch beneath it — AND DEPLOY_SCOUTS has no executor/context-list/skill-map
+  (the scout-intel subsystem is unbuilt, the GDD-locked "DEPLOY_SCOUTS fires first" prerequisite). The ladder is also
+  reached only by a STRENGTHEN_WALL holder with NO garrison shortage AND no crisis (else the earlier shortage/crisis
+  branches fire), and the real wall maintenance (FORTIFY / Kuni purify / Taisa sortie / jade resupply) runs via the
+  dedicated standing passes, not this ladder. So the whole ladder below DEPLOY_SCOUTS is masked + superseded — blocked on
+  the unbuilt scout subsystem, not a one-line wire.
+
 ### Known Code Issues — Deferred (2026-07-07, dormant-arbiter sweep — consumer/trigger unbuilt, NOT quick wires)
 A truly-dead-`static func` sweep (exclude only the def line + `tests/`) across war/succession/social systems surfaced
 several GDD-locked arbiters with ZERO callers, but each is dormant because its INTENDED consumer or trigger is itself
