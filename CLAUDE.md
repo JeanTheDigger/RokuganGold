@@ -274,8 +274,14 @@ do inject. Guards mirror the insult producer (living non-PC non-self subject, pe
 writeback are unchanged (they consume the same `GRIEVANCE`), so this is a pure producer extension. Runtime-verified 16/16
 (`tests/verify_proactive_duel.gd` gains `_test_gossip_and_expose_grievance`): open gossip → subject grieves the gossiper; concealed
 gossip → nothing; public secret exposure → subject grieves the exposer; a failed exposure and a self-gossip (actor==subject) → nothing.
-Full project `--import` parse-clean. **With this, all three GDD-named Trigger-1 sources are live**; only Triggers 2-4 (topic /
-debate / eliminate-objective producers) remain deferred.
+Full project `--import` parse-clean. **With this, all three GDD-named Trigger-1 sources are live.** Triggers 2-3 remain deferred
+(need their own producers + genuine ambiguity — Trigger 2 must resolve WHICH person a family/clan-dishonor topic names as the
+duel target from the topic's perpetrator, and Trigger 3 needs session-scoped "no remaining court actions" state). **Trigger 4 is
+NOT a clean wire and is DEFERRED PERMANENTLY (do NOT re-attempt):** the GDD frames it as a reactive path, but ISSUE_DUEL_CHALLENGE
+is ALREADY a scored action under the `ELIMINATE_CHARACTER` NeedType in `objective_alignment.json` (the normal AP loop selects it,
+and the executor already sets `to_death = true` for ELIMINATE_CHARACTER) — so a reactive Trigger-4 producer would create a
+**duplicate execution path**, which the CLAUDE.md hard constraint explicitly forbids ("Do not create duplicate execution paths.
+Check existing channels before wiring any ActionID"). The eliminate-via-duel behavior is already live through the scored channel.
 
 ### Systems Added 2026-07-08 (s11.5b §4.3 Miya's Blessing Winter-Court PETITIONS ACTIVATED — dead petition_bonus producer, owner-approved, runtime-verified 15/15)
 Owner-approved activation ("Continue, all of those, go") of the fourth of six design-gated systems. The s11.5b §4.3
