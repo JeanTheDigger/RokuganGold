@@ -451,9 +451,17 @@ Documented here so future sweeps skip them:
   item-category price modifiers (`compute_final_price`/`get_territory_modifier`, GDD-LOCKED CLAN_MODIFIERS table) for
   "purchasing/selling items within clan territory," but there is no item-category market-purchase point to consume it: the live
   `PURCHASE_MARKET` is a flat abstract koku cost (no item/category/base-price) and `CONDUCT_COMMERCE` is a yield formula keyed on
-  the s4.3.8 *location* modifier, not s11.8 item-category clan modifiers. Wiring it needs a real item-category market subsystem
-  (base prices + categories per settlement) — a whole build, not a wire. The modifier values are LOCKED (no invention issue), only
-  the consumer is missing. (2) **`MiyaBlessingSystem.compute_petition_bonus`** — the winter-court-petition→blessing trigger is
+  the s4.3.8 *location* modifier, not s11.8 item-category clan modifiers. **RE-CONFIRMED BLOCKED-ON-INVENTION during the 2026-07-08
+  owner-approved activation pass (the sixth of six items): it CANNOT be activated without inventing.** The GDD s11.8 provides the
+  clan % modifiers (LOCKED, already in `CLAN_MODIFIERS`) but **NO base prices** — it says the modifier "adjusts the base market
+  price of the listed item category ... through the Commerce system (Section 51)", and neither s11.8, s51, s49, nor any code carries
+  a per-item-category base-price table. The one live price-bearing point (the `CRAFT` executor's `cost_in_koku` material cost) is a
+  crafting-material cost keyed on `Enums.CraftingCategory` (EQUIPMENT/…), which does NOT map to the s11.8 item categories ("Weapons",
+  "Food", "Silk", "Iron", …) without an invented mapping. So a faithful wire needs TWO GDD-undefined inputs — (a) a base-price table
+  for the s11.8 categories and (b) an item→category mapping — both of which are game-design values requiring owner authorization, not
+  code. Per the "Do not invent mechanics" HARD CONSTRAINT this stays deferred (documented so it is not re-attempted); `compute_final_price`
+  already takes `base_price` as a param, so the day the owner supplies the base-price table + category mapping it is a clean wire.
+  (2) **`MiyaBlessingSystem.compute_petition_bonus`** — the winter-court-petition→blessing trigger is
   **NO LONGER DEFERRED — activated 2026-07-08** (owner-approved; see the changelog entry below): `_process_miya_blessing_petitions`
   now resolves the s11.5b §4.3 petitions and feeds `petition_bonus` into the Spring blessing. (`apply_cunning_modifier` was
   already live via `_process_miya_blessing_followup`.) The remaining whole-sim-scan hits are SUPERSEDED dead helpers of live systems
