@@ -316,6 +316,37 @@ and the executor already sets `to_death = true` for ELIMINATE_CHARACTER) — so 
 **duplicate execution path**, which the CLAUDE.md hard constraint explicitly forbids ("Do not create duplicate execution paths.
 Check existing channels before wiring any ActionID"). The eliminate-via-duel behavior is already live through the scored channel.
 
+### Systems Added 2026-07-09 (s11.5b §5 Cunning-emperor blessing POLITICS ACTIVATED — dead ±10 arbiter + un-stamped clan field, owner-approved, runtime-verified 14/14)
+Owner-approved activation (AskUserQuestion "Cunning-emperor blessing politics", 2026-07-09) of a dormant + design-gated arbiter —
+the fifth design-gated Miya system brought live. `MiyaBlessingSystem.apply_cunning_modifier` (s11.5b §5, LOCKED: a Cunning emperor
+**+10** Need Score to a favored clan's provinces / **−10** to a disfavored clan's, before the annual rice-blessing province pick)
+was **doubly dead**: (1) it had **ZERO production callers** (`process_annual_blessing` built the scored array and called
+`select_provinces` directly, skipping the cunning pass — and an EARLIER CLAUDE.md note wrongly called it "already live via
+`_process_miya_blessing_followup`", corrected 2026-07-09), AND (2) the scored-province entry `_build_scored_provinces` produced never
+carried a `clan` field, so even a hand-inserted call would have matched `entry.get("clan","")` == "" and been a silent no-op. The GDD
+§5 LOCKS the ±10 effect but leaves it **discretionary** ("**May** add +10 to favored / −10 to disfavored") and locks NO rule for
+WHICH clan a Cunning emperor favors — the one design value. **OWNER-APPROVED RULE (2026-07-09):** favored = the clan whose champion
+holds the **HIGHEST** disposition toward the Emperor, disfavored = the **LOWEST** — the established Emperor↔clan convention
+(`CollectiveDisposition` has no Imperial participant, so a clan's standing with the throne routes through its champion, per the
+Emperor's-Peace fix), computed via the **same** "highest-status, `lord_id==-1` per clan" champion proxy + `champ.disposition_values[emperor_id]`
+read the sibling suspension-penalty pass (`_process_miya_blessing_followup`) already uses — **zero invented mechanic beyond the owner's
+favorite-selection rule; the ±10 magnitude is the arbiter's own LOCKED constant.** FIX (three parts, all structural): (1)
+`ResourceTick._build_scored_provinces` now stamps `"clan": prov.clan` on each scored entry (a real `ProvinceData` field the arbiter
+already expects); (2) new `DayOrchestrator._compute_cunning_blessing_clans(characters_by_id, emperor_id)` computes favored/disfavored
+by the owner rule — **no-op (both blank)** when there are < 2 clans OR the top and bottom champions tie (no real standing difference →
+no favoritism to express), deterministic clan-name tiebreak among equal extremes — called on the SPRING boundary only when
+`emperor_archetype == CUNNING` and fed to `spring_inputs["cunning_favored_clan"]`/`["cunning_disfavored_clan"]`; (3)
+`ResourceTick._apply_miya_blessing` forwards the two keys into the hand-built `inputs` dict (they were being dropped there), and
+`MiyaBlessingSystem.process_annual_blessing` applies `apply_cunning_modifier(scored_array, favored, disfavored)` before
+`select_provinces` when the archetype is CUNNING and at least one clan name is non-blank. Every OTHER archetype ignores the keys
+(no-op); a Cunning emperor with no standing difference among clans applies nothing. Runtime-verified 14/14
+(`tests/verify_miya_cunning.gd`): the arbiter (+10 favored / −10 disfavored / neutral unchanged / blank-names no-op); the
+favored/disfavored helper (highest-champ→favored, lowest→disfavored, ignores a higher-disp non-champion vassal, no-op on <2 clans /
+all-equal / no-emperor); and end-to-end through `process_annual_blessing` — with 2 low-score Crab + 3 high-score Lion provinces, an
+IRON emperor selects all 3 Lion (cunning keys ignored) while a CUNNING favored=Crab/disfavored=Lion flips the ±10 to select 2 Crab +
+1 Lion, and a CUNNING emperor with blank clans reverts to the raw all-Lion pick (the no-standing-difference no-op). Full project
+`--import` parse-clean.
+
 ### Known Code Issues — Deferred (2026-07-09, TWO fresh whole-domain dormant sweeps — social-consequence + resource/economy/worship — NO clean wire remains, do NOT re-audit)
 Two systematic agent sweeps of the last two un-reconfirmed domains, each grepping every `static func` in-scope for production
 callers and tracing each zero-caller's intended consumer + GDD lock, cross-checked against the deferred lists above, plus a hand
@@ -335,10 +366,10 @@ violate the "Do not invent mechanics" HARD CONSTRAINT). Documented so future swe
   symmetric for friendly acts toward enemies).** Its sibling `get_raise_modifier` is already live in the social-TN calc, but this
   one needs a per-action `action_is_hostile` classification (none exists) + a central social-roll choke point to inject a
   keep-dice modifier (none exists) — a per-action hostility map + keep threading through every social roll.
-- **`MiyaBlessingSystem.apply_cunning_modifier` (s11.5b §5 — Cunning-emperor ±10 Need Score).** Truly zero-caller (an earlier
-  CLAUDE.md parenthetical wrongly called it "already live" — corrected 2026-07-09, see the whole-sim backstop scan above).
-  DESIGN-GATED: GDD §5 makes it discretionary ("**May** add +10 to favored / −10 to disfavored") and locks NO rule for WHICH clan
-  a Cunning emperor favors/disfavors (zero `favored_clan`/`disfavored_clan` producer) → needs an invented favorite-selection mechanic.
+- **`MiyaBlessingSystem.apply_cunning_modifier` (s11.5b §5 — Cunning-emperor ±10 Need Score) — RESOLVED / ACTIVATED 2026-07-09
+  (owner-approved), no longer a dormant item.** Was truly zero-caller (+ the scored entry never carried a `clan` field); the owner
+  supplied the discretionary §5 favorite-selection rule (favored/disfavored = highest/lowest clan-champion disposition toward the
+  Emperor) and it is now wired end-to-end. See the "s11.5b §5 Cunning-emperor blessing POLITICS ACTIVATED" changelog entry above.
 - **The rest are design-gated clusters (trigger/field/consumer unbuilt), already the same class the deferred lists document:** the
   s12.10a favor-DISPUTE suite (`can_dispute`/`resolve_dispute`/`get_dispute_witness_disposition` — no DISPUTE_FAVOR action);
   `FavorSystem.is_blackmail_exposure_risk`/`forgive_favor` (no public-invocation-exposure / heir-forgiveness trigger);
@@ -560,13 +591,12 @@ Documented here so future sweeps skip them:
   already takes `base_price` as a param, so the day the owner supplies the base-price table + category mapping it is a clean wire.
   (2) **`MiyaBlessingSystem.compute_petition_bonus`** — the winter-court-petition→blessing trigger is
   **NO LONGER DEFERRED — activated 2026-07-08** (owner-approved; see the changelog entry below): `_process_miya_blessing_petitions`
-  now resolves the s11.5b §4.3 petitions and feeds `petition_bonus` into the Spring blessing. (**CORRECTION 2026-07-09 —
-  `MiyaBlessingSystem.apply_cunning_modifier` [§5 Cunning-emperor ±10 Need Score] is DORMANT + DESIGN-GATED, do NOT wire.**
-  An earlier note here wrongly claimed it "was already live via `_process_miya_blessing_followup`" — grep-confirmed FALSE: it has
-  ZERO production callers [def-only], and `_process_miya_blessing_followup` never calls it. It stays deferred because GDD §5 makes
-  it discretionary — "**May** add +10 to favored clan / −10 to disfavored" — and locks NO rule for WHICH clan a Cunning emperor
-  favors/disfavors [zero `favored_clan`/`disfavored_clan` producer anywhere], so wiring it needs an invented favorite-selection
-  mechanic → owner-gated, not a clean wire.) The remaining whole-sim-scan hits are SUPERSEDED dead helpers of live systems
+  now resolves the s11.5b §4.3 petitions and feeds `petition_bonus` into the Spring blessing. (**`MiyaBlessingSystem.apply_cunning_modifier`
+  [§5 Cunning-emperor ±10 Need Score] — NO LONGER DEFERRED, ACTIVATED 2026-07-09** owner-approved; see the "s11.5b §5 Cunning-emperor
+  blessing POLITICS ACTIVATED" changelog entry above. It WAS doubly dead [zero callers + the scored entry never carried a `clan`
+  field] and an even-earlier note here wrongly called it "already live via `_process_miya_blessing_followup`" — both now resolved:
+  the owner's rule [favored/disfavored = highest/lowest clan-champion disposition toward the Emperor] supplied the discretionary
+  §5 favorite-selection value, and it is wired end-to-end.) The remaining whole-sim-scan hits are SUPERSEDED dead helpers of live systems
   (harmless): `ArmyUpkeepSystem.compute_army_seasonal_costs`/`get_cost_tier` (live path is per-company `compute_company_seasonal_costs`);
   `IntraClanCivilWar.get_active_precedent_bonus`/`get_dragon_treaty_penalty` (live path `apply_precedent_effect`);
   `PUReconciliation.compute_company_pu_loss` (live path `reconcile_battle`/`process_army_dissolution`).

@@ -1631,6 +1631,16 @@ static func advance_day(
 			spring_inputs["petition_bonuses"] = _process_miya_blessing_petitions(
 				active_courts, characters_by_id, provinces, dice_engine,
 			)
+			# s11.5b §5 (owner-approved): a Cunning emperor politically weights the Blessing.
+			# Precompute favored/disfavored clans (highest/lowest clan-champion disposition
+			# toward the Emperor); the blessing applies apply_cunning_modifier before selection.
+			if int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)) \
+					== StrategicReview.EmperorArchetype.CUNNING:
+				var cunning_clans: Dictionary = _compute_cunning_blessing_clans(
+					characters_by_id, int(world_states.get("emperor_id", -1)),
+				)
+				spring_inputs["cunning_favored_clan"] = cunning_clans["favored"]
+				spring_inputs["cunning_disfavored_clan"] = cunning_clans["disfavored"]
 		worship_seasonal_results = _process_seasonal_worship(
 			worship_state, settlements, provinces,
 		)
@@ -3735,6 +3745,60 @@ static func _miya_neediest_province_for_clan(clan: String, provinces: Dictionary
 			best_stability = prov.stability
 			best_pid = prov.province_id
 	return best_pid
+
+
+# s11.5b §5 (owner-approved 2026-07-09): a Cunning emperor weights the annual Blessing as a
+# political tool -- MiyaBlessingSystem.apply_cunning_modifier adds +10 Need Score to a favored
+# clan's provinces and -10 to a disfavored clan's before selection. The GDD LOCKS the ±10 effect
+# but NOT which clan is favored/disfavored (it is discretionary -- "MAY add"), so the OWNER-APPROVED
+# rule is: favored = the clan whose champion holds the HIGHEST disposition toward the Emperor,
+# disfavored = the LOWEST. This uses the established Emperor<->clan convention (CollectiveDisposition
+# has no Imperial participant, so a clan's standing with the throne routes through its champion) via
+# the SAME "highest-status, lord_id==-1 per clan" proxy + champ.disposition_values[emperor_id] read
+# that the suspension-penalty pass (_process_miya_blessing_followup) already uses. No-op when the top
+# and bottom tie (all-equal standing -> no real favoritism to express); deterministic clan-name
+# tiebreak among equal extremes. The favored/disfavored blank -> the arbiter is a no-op.
+static func _compute_cunning_blessing_clans(
+	characters_by_id: Dictionary,
+	emperor_id: int,
+) -> Dictionary:
+	var result: Dictionary = {"favored": "", "disfavored": ""}
+	if emperor_id < 0:
+		return result
+	# Champion proxy: highest-status living character per clan with lord_id == -1 (the clan's
+	# face to the throne -- identical to the suspension-penalty pass below).
+	var champions: Dictionary = {}
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c) or c.clan == "" or c.character_id == emperor_id:
+			continue
+		if c.lord_id != -1:
+			continue
+		var existing: L5RCharacterData = champions.get(c.clan)
+		if existing == null or c.status > existing.status:
+			champions[c.clan] = c
+	if champions.size() < 2:
+		return result  # need at least two clans to express favoritism
+	var best_clan: String = ""
+	var best_disp: int = -101
+	var worst_clan: String = ""
+	var worst_disp: int = 101
+	var clan_names: Array = champions.keys()
+	clan_names.sort()  # deterministic tiebreak among equal extremes
+	for clan_name: String in clan_names:
+		var champ: L5RCharacterData = champions[clan_name]
+		var disp: int = int(champ.disposition_values.get(emperor_id, 0))
+		if disp > best_disp:
+			best_disp = disp
+			best_clan = clan_name
+		if disp < worst_disp:
+			worst_disp = disp
+			worst_clan = clan_name
+	if best_disp == worst_disp:
+		return result  # all clans equal toward the Emperor -> no favoritism without a real difference
+	result["favored"] = best_clan
+	result["disfavored"] = worst_clan
+	return result
 
 
 static func _process_miya_blessing_followup(

@@ -333,6 +333,16 @@ static func process_annual_blessing(inputs: Dictionary) -> Dictionary:
 	var scored_array: Array = []
 	for entry: Dictionary in inputs.get("scored_provinces", []):
 		scored_array.append(entry)
+	# s11.5b §5: a Cunning emperor weights the Blessing politically -- +10 Need Score to a
+	# favored clan's provinces, -10 to a disfavored clan's -- before selection. The two clan
+	# names are supplied by the caller (the clan whose champion holds the highest / lowest
+	# disposition toward the Emperor). No-op for any other archetype, and no-op when no clan
+	# stands out (both names blank -> no favoritism without a real standing difference).
+	if archetype == StrategicReview.EmperorArchetype.CUNNING:
+		var favored_clan: String = String(inputs.get("cunning_favored_clan", ""))
+		var disfavored_clan: String = String(inputs.get("cunning_disfavored_clan", ""))
+		if favored_clan != "" or disfavored_clan != "":
+			apply_cunning_modifier(scored_array, favored_clan, disfavored_clan)
 	var selected_ids: Array = select_provinces(scored_array)
 	if selected_ids.is_empty():
 		# No eligible recipient — the allocation stays in the Emperor's stockpile.

@@ -452,6 +452,9 @@ static func _apply_miya_blessing(
 		"otosan_uchi_pu": float(miya_inputs.get("otosan_uchi_pu", 0.0)),
 		"scored_provinces": scored,
 		"province_settlements": _group_settlements_by_province(provinces, settlements),
+		# s11.5b §5: Cunning-emperor favored/disfavored clans (empty for other archetypes).
+		"cunning_favored_clan": miya_inputs.get("cunning_favored_clan", ""),
+		"cunning_disfavored_clan": miya_inputs.get("cunning_disfavored_clan", ""),
 	}
 
 	var result: Dictionary = MiyaBlessingSystem.process_annual_blessing(inputs)
@@ -522,6 +525,7 @@ static func _build_scored_provinces(
 		var ex_data: Dictionary = exclusions.get(pid, {})
 		var entry: Dictionary = {
 			"province_id": pid,
+			"clan": prov.clan,  # s11.5b §5: read by MiyaBlessingSystem.apply_cunning_modifier (Cunning-emperor ±10)
 			"score": MiyaBlessingSystem.compute_need_score(conditions),
 			"stability": prov.stability,
 			"population_pu": float(sum_population_pu(prov, settlements)),
