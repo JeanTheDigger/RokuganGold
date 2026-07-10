@@ -259,9 +259,23 @@ chain: insult (tick N) → GRIEVANCE → deliberate evaluation (tick N+1) → DU
 a failed one; and the issuance writeback injects exactly one first-blood/sanctioned DUEL_CHALLENGE_RECEIVED naming the correct
 challenger, with same-challenger dedup. Full project `--import` parse-clean. **DEFERRED (follow-ons, need their own event producers):**
 Trigger 2 (a Tier-3+ Dishonor/Betrayal topic about the NPC's family/clan → grievance), Trigger 3 (lost a PUBLIC_DEBATE with no
-recovering court actions), Trigger 4 (an ELIMINATE_CHARACTER primary targeting a co-located character); GOSSIP / EXPOSE_SECRET_PUBLIC
-as additional Trigger-1 sources. The core proactive path (`evaluate_duel_trigger`) is now live and any new trigger just injects a
-`GRIEVANCE` with its `trigger_type`.
+recovering court actions), Trigger 4 (an ELIMINATE_CHARACTER primary targeting a co-located character). The core proactive path
+(`evaluate_duel_trigger`) is now live and any new trigger just injects a `GRIEVANCE` with its `trigger_type`.
+**FOLLOW-ON (2026-07-08, GOSSIP + EXPOSE_SECRET_PUBLICLY — the other two GDD-named Trigger-1 sources — runtime-verified 16/16):**
+the GDD Trigger 1 list is verbatim "A PUBLIC_INSULT, **GOSSIP, or EXPOSE_SECRET_PUBLIC** action has publicly damaged this NPC's
+reputation" — only PUBLIC_INSULT was wired above. New producer `_process_reputation_grievance_triggers` (wired beside
+`_process_brash_reactions` in the same post-wave pass) scans day results for a successful **GOSSIP** or **EXPOSE_SECRET_PUBLICLY**
+and injects a `GRIEVANCE` naming the ACTOR into the reputation-damaged **SUBJECT**'s `pending_events` (the subject is the gossip
+`effects.gossip_subject_id` / exposure `effects.subject_id`, NOT the listener). These two have **no Brash coupling** (the subject is
+talked-*about*, not slighted to their face), so they go straight to the deliberate GRIEVANCE — no involuntary path. **Faithful
+concealment gate (no invention):** a GOSSIP whose `effects.source_concealed` is true injects **nothing** — the subject cannot
+challenge a gossiper they cannot identify (s15.4 source concealment); an open gossip and any public exposure name a known actor and
+do inject. Guards mirror the insult producer (living non-PC non-self subject, per-(subject,actor) dedup). The reactive arm + issuance
+writeback are unchanged (they consume the same `GRIEVANCE`), so this is a pure producer extension. Runtime-verified 16/16
+(`tests/verify_proactive_duel.gd` gains `_test_gossip_and_expose_grievance`): open gossip → subject grieves the gossiper; concealed
+gossip → nothing; public secret exposure → subject grieves the exposer; a failed exposure and a self-gossip (actor==subject) → nothing.
+Full project `--import` parse-clean. **With this, all three GDD-named Trigger-1 sources are live**; only Triggers 2-4 (topic /
+debate / eliminate-objective producers) remain deferred.
 
 ### Systems Added 2026-07-08 (s11.5b §4.3 Miya's Blessing Winter-Court PETITIONS ACTIVATED — dead petition_bonus producer, owner-approved, runtime-verified 15/15)
 Owner-approved activation ("Continue, all of those, go") of the fourth of six design-gated systems. The s11.5b §4.3

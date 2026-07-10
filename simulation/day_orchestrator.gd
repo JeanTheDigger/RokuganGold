@@ -825,6 +825,14 @@ static func advance_day(
 		dice_engine,
 	)
 
+	# s55.11 Trigger 1: GOSSIP / EXPOSE_SECRET_PUBLICLY reputation grievances (the other two
+	# GDD-named sources; PUBLIC_INSULT is handled by _process_brash_reactions above).
+	_process_reputation_grievance_triggers(
+		day_result.get("results", []),
+		characters_by_id,
+		world_states,
+	)
+
 	_process_contrary_reactions(
 		day_result.get("results", []),
 		characters_by_id,
@@ -7807,6 +7815,62 @@ static func _process_brash_reactions(
 				})
 				target_ws["pending_events"] = t_pending
 				world_states[target_id] = target_ws
+
+
+# -- s55.11 Trigger 1 (public insult received) — the OTHER two GDD-named sources.
+# The GDD Trigger 1 list is "A PUBLIC_INSULT, GOSSIP, or EXPOSE_SECRET_PUBLIC action has publicly
+# damaged this NPC's reputation this session." PUBLIC_INSULT is handled by _process_brash_reactions
+# (it also carries the involuntary Brash path); GOSSIP and EXPOSE_SECRET_PUBLICLY have no Brash
+# coupling (the subject is talked-about, not slighted to their face), so they inject the deliberate
+# GRIEVANCE directly. The reputation-damaged NPC is the gossip/secret SUBJECT; the named target of
+# the grievance is the ACTOR (gossiper / exposer). A CONCEALED-source gossip injects nothing — the
+# subject cannot challenge a gossiper they cannot identify (s15.4 source concealment).
+static func _process_reputation_grievance_triggers(
+	results: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if not d.get("success", false):
+			continue
+		var action_id: String = d.get("action_id", "")
+		var effects: Dictionary = d.get("effects", {})
+		var subject_id: int = -1
+		if action_id == "GOSSIP":
+			if bool(effects.get("source_concealed", false)):
+				continue  # subject can't identify the gossiper -> no grievance
+			subject_id = int(effects.get("gossip_subject_id", -1))
+		elif action_id == "EXPOSE_SECRET_PUBLICLY":
+			subject_id = int(effects.get("subject_id", -1))
+		else:
+			continue
+		var actor_id: int = int(d.get("character_id", -1))
+		if subject_id < 0 or actor_id < 0 or subject_id == actor_id:
+			continue
+		var subject: L5RCharacterData = characters_by_id.get(subject_id)
+		if subject == null or CharacterStats.is_dead(subject) or subject.is_pc:
+			continue
+		var subj_ws: Dictionary = world_states.get(subject_id, {})
+		var pending: Array = subj_ws.get("pending_events", [])
+		var already: bool = false
+		for ev_v: Variant in pending:
+			if ev_v is Dictionary and (ev_v as Dictionary).get("reactive_type", "") == "GRIEVANCE" \
+					and int((ev_v as Dictionary).get("target_npc_id", -1)) == actor_id:
+				already = true
+				break
+		if already:
+			continue
+		pending.append({
+			"reactive_type": "GRIEVANCE",
+			"trigger_type": "public_insult",
+			"target_npc_id": actor_id,
+			"is_public": true,
+		})
+		subj_ws["pending_events"] = pending
+		world_states[subject_id] = subj_ws
 
 
 # -- s45 CONTRARY: log informational event when CONTRARY character fails Willpower

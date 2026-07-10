@@ -55,6 +55,7 @@ func _init() -> void:
 	_test_reactive_arm_blocked()
 	_test_producer_injects_grievance()
 	_test_issuance_writeback()
+	_test_gossip_and_expose_grievance()
 	print("--- %d passed, %d failed ---" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -136,3 +137,60 @@ func _test_issuance_writeback() -> void:
 	DayOrchestrator._process_proactive_duel_writebacks(reactive_results, chars, world_states)
 	_ok((world_states.get(10, {}).get("pending_events", []) as Array).size() == 1,
 		"a repeat GRIEVANCE from the same challenger does not stack a second challenge")
+
+
+func _test_gossip_and_expose_grievance() -> void:
+	print("[5] GOSSIP + EXPOSE_SECRET_PUBLICLY inject a GRIEVANCE into the reputation-damaged subject")
+	var gossiper := _char(30, _EN.BushidoVirtue.NONE)
+	var subject := _char(40, _EN.BushidoVirtue.YU)  # non-PC, alive
+	var exposer := _char(31, _EN.BushidoVirtue.NONE)
+	var chars := {30: gossiper, 40: subject, 31: exposer}
+
+	# Open (non-concealed) GOSSIP -> subject can identify the gossiper -> GRIEVANCE naming gossiper 30.
+	var ws1 := {}
+	DayOrchestrator._process_reputation_grievance_triggers([{
+		"action_id": "GOSSIP", "success": true, "character_id": 30,
+		"effects": {"gossip_subject_id": 40, "source_concealed": false},
+	}], chars, ws1)
+	var g_ok := false
+	for ev_v in ws1.get(40, {}).get("pending_events", []):
+		if ev_v is Dictionary and ev_v.get("reactive_type", "") == "GRIEVANCE" \
+				and int(ev_v.get("target_npc_id", -1)) == 30:
+			g_ok = true
+	_ok(g_ok, "open gossip -> subject 40 gets a GRIEVANCE naming gossiper 30")
+
+	# CONCEALED-source gossip -> subject can't identify the gossiper -> NOTHING.
+	var ws2 := {}
+	DayOrchestrator._process_reputation_grievance_triggers([{
+		"action_id": "GOSSIP", "success": true, "character_id": 30,
+		"effects": {"gossip_subject_id": 40, "source_concealed": true},
+	}], chars, ws2)
+	_ok(ws2.get(40, {}).get("pending_events", []).is_empty(),
+		"concealed gossip -> no grievance (unknown gossiper)")
+
+	# EXPOSE_SECRET_PUBLICLY -> subject gets a GRIEVANCE naming the exposer 31.
+	var ws3 := {}
+	DayOrchestrator._process_reputation_grievance_triggers([{
+		"action_id": "EXPOSE_SECRET_PUBLICLY", "success": true, "character_id": 31,
+		"effects": {"subject_id": 40},
+	}], chars, ws3)
+	var e_ok := false
+	for ev_v in ws3.get(40, {}).get("pending_events", []):
+		if ev_v is Dictionary and ev_v.get("reactive_type", "") == "GRIEVANCE" \
+				and int(ev_v.get("target_npc_id", -1)) == 31:
+			e_ok = true
+	_ok(e_ok, "public secret exposure -> subject 40 gets a GRIEVANCE naming exposer 31")
+
+	# A FAILED exposure produces nothing; self-subject (actor == subject) produces nothing.
+	var ws4 := {}
+	DayOrchestrator._process_reputation_grievance_triggers([{
+		"action_id": "EXPOSE_SECRET_PUBLICLY", "success": false, "character_id": 31,
+		"effects": {"subject_id": 40},
+	}], chars, ws4)
+	_ok(ws4.get(40, {}).get("pending_events", []).is_empty(), "a FAILED exposure injects nothing")
+	var ws5 := {}
+	DayOrchestrator._process_reputation_grievance_triggers([{
+		"action_id": "GOSSIP", "success": true, "character_id": 40,
+		"effects": {"gossip_subject_id": 40, "source_concealed": false},
+	}], chars, ws5)
+	_ok(ws5.get(40, {}).get("pending_events", []).is_empty(), "self-gossip (actor==subject) injects nothing")
