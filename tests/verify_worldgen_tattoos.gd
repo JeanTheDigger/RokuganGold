@@ -40,23 +40,20 @@ func _dice(seed_val: int) -> DiceEngine:
 
 
 func _init() -> void:
-	print("--- s57.25.8 world-gen decorative tattoo seeding ---")
+	print("--- s57.25.8 world-gen tattoo seeding (decorative + Togashi ability) ---")
 	_test_gating()
 	_test_constraints()
 	_test_probability_bands()
 	_test_id_uniqueness()
+	_test_ability_tattoos()
 	print("--- %d passed, %d failed ---" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
 
 func _test_gating() -> void:
-	print("[1] eligibility gating: ineligible clans/schools/dead get NOTHING")
+	print("[1] eligibility gating: ineligible clans/dead get NOTHING")
 	var d := _dice(99)
 	var nid: Array = [1]
-	# Togashi tattooed-monk -> ability tattoos (deferred), NOT decorative here.
-	var togashi := _char(1, "Dragon", "Togashi", "Togashi Tattooed Order", Enums.SchoolType.MONK)
-	var t_out: Array = _TS.seed_world_start_tattoos(togashi, d, nid)
-	_ok(t_out.is_empty(), "Togashi Tattooed Order monk seeds no decorative tattoo (excluded)")
 	# A non-tattoo clan (Lion Akodo bushi) -> nothing, over many rolls.
 	var any_lion := false
 	for i in 200:
@@ -183,3 +180,47 @@ func _test_id_uniqueness() -> void:
 	_ok(not dup, "all seeded tattoo_ids unique")
 	_ok(total > 0, "some tattoos were seeded")
 	_ok(nid[0] == total + 1, "next_tattoo_id advanced by the seeded count (%d, total %d)" % [nid[0], total])
+
+
+func _togashi(cid: int, school: String, rank: int) -> L5RCharacterData:
+	var c := _char(cid, "Dragon", "Togashi", school, Enums.SchoolType.MONK)
+	c.insight_rank = rank
+	return c
+
+
+func _test_ability_tattoos() -> void:
+	print("[5] Togashi ability tattoos: LOCKED per-rank allotment, distinct abilities/locations")
+	var d := _dice(444)
+	var nid: Array = [1]
+	var head := Enums.TattooBodyLocation.HEAD
+
+	# LOCKED per-rank allotments (get_allotment_for_rank).
+	var r1: Array = _TS.seed_world_start_tattoos(_togashi(1, "Togashi Tattooed Order", 1), d, nid)
+	_ok(r1.size() == 2, "Togashi Rank 1 -> 2 ability tattoos (got %d)" % r1.size())
+	var r3: Array = _TS.seed_world_start_tattoos(_togashi(2, "Togashi Tattooed Order", 3), d, nid)
+	_ok(r3.size() == 4, "Togashi Rank 3 -> 4 ability tattoos, the GDD worked example (got %d)" % r3.size())
+	var r5: Array = _TS.seed_world_start_tattoos(_togashi(3, "Togashi Tattooed Order", 5), d, nid)
+	_ok(r5.size() == 6, "Togashi Rank 5 -> 6 ability tattoos (got %d)" % r5.size())
+	var kik: Array = _TS.seed_world_start_tattoos(_togashi(4, "Kikage Zumi", 3), d, nid)
+	_ok(kik.size() == 2, "Kikage Zumi Rank 3 -> 2 (got %d)" % kik.size())
+	var ho4: Array = _TS.seed_world_start_tattoos(_togashi(5, "Hoshi Tsurui Zumi", 4), d, nid)
+	_ok(ho4.size() == 2, "Hoshi Tsurui Zumi Rank 4 -> 2 (got %d)" % ho4.size())
+	var ho1: Array = _TS.seed_world_start_tattoos(_togashi(6, "Hoshi Tsurui Zumi", 1), d, nid)
+	_ok(ho1.size() == 1, "Hoshi Tsurui Zumi Rank 1 -> 1 (got %d)" % ho1.size())
+
+	# Every ability tattoo: is_ability true, ability != NONE, artist -1, no HEAD, distinct within monk.
+	var bad := false
+	var abils_seen: Array = []
+	var locs_seen: Array = []
+	for t: TattooData in r5:
+		if not t.is_ability_tattoo or t.ability_granted == Enums.TattooAbility.NONE:
+			bad = true
+		if t.artist_id != -1:
+			bad = true
+		if t.body_location == head:
+			bad = true
+		if t.ability_granted in abils_seen or t.body_location in locs_seen:
+			bad = true  # duplicate ability or location on the same monk
+		abils_seen.append(t.ability_granted)
+		locs_seen.append(t.body_location)
+	_ok(not bad, "Rank-5 monk: 6 ability tattoos, all ability/non-NONE/artist -1/no-HEAD/distinct")

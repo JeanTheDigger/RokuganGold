@@ -553,6 +553,25 @@ const DAIDOJI_WRIST_LOCATIONS: Array[int] = [
 	Enums.TattooBodyLocation.RIGHT_WRIST_FOREARM,
 ]
 
+# s57.25.6 canonical ability list (Enums.TattooAbility minus NONE). Togashi ability-tattoo
+# ASSIGNMENT is drawn from this set at world-gen. The per-rank COUNT is LOCKED (SCHOOL_ALLOTMENTS);
+# s57.25 says only "the elder decides within school logic" -- no deterministic per-rank selection
+# rule -- so the specific abilities are a seeded deterministic draw (no duplicates per monk),
+# modeling the elder's opaque choice. PROVISIONAL / owner-overridable: swap this draw for a fixed
+# per-school ability sequence if a rule is pinned. The abilities are combat effects (ASCII/s40
+# layer, PC-travel HOLD), so a blind draw is inert until that layer is live and can be refined then.
+const ALL_TATTOO_ABILITIES: Array[int] = [
+	Enums.TattooAbility.BALANCE, Enums.TattooAbility.BAMBOO, Enums.TattooAbility.BEAR,
+	Enums.TattooAbility.BLAZE, Enums.TattooAbility.CENTIPEDE, Enums.TattooAbility.CLOUD,
+	Enums.TattooAbility.CRAB, Enums.TattooAbility.CRANE, Enums.TattooAbility.DRAGON,
+	Enums.TattooAbility.HAWK, Enums.TattooAbility.KI_RIN, Enums.TattooAbility.LION,
+	Enums.TattooAbility.MANTIS, Enums.TattooAbility.MOUNTAIN, Enums.TattooAbility.OCEAN,
+	Enums.TattooAbility.PHOENIX, Enums.TattooAbility.SCORPION, Enums.TattooAbility.SPIDER,
+	Enums.TattooAbility.STORM, Enums.TattooAbility.VOID, Enums.TattooAbility.VOLCANO,
+	Enums.TattooAbility.WAVE, Enums.TattooAbility.WHISPER, Enums.TattooAbility.WIND,
+	Enums.TattooAbility.WOLF,
+]
+
 
 static func seed_world_start_tattoos(
 	character: L5RCharacterData,
@@ -563,9 +582,10 @@ static func seed_world_start_tattoos(
 	var out: Array = []
 	if character == null or CharacterStats.is_dead(character):
 		return out
-	# Tattooed-monk schools are excluded here -- they receive ability tattoos (deferred build).
+	# Tattooed-monk schools spawn with their LOCKED per-rank ability-tattoo allotment (s57.25.8);
+	# decorative rules do not apply to them.
 	if is_togashi_school(character.school):
-		return out
+		return _seed_ability_tattoos(character, dice, next_tattoo_id, ic_day)
 
 	var clan: String = character.clan
 	var family: String = character.family
@@ -634,6 +654,40 @@ static func _seed_one_decorative(
 	if t != null:
 		next_tattoo_id[0] += 1
 	return t
+
+
+# Togashi/Kikage/Hoshi: seed the LOCKED per-rank ability-tattoo count (get_allotment_for_rank);
+# abilities drawn deterministically (seeded dice, no duplicates) from ALL_TATTOO_ABILITIES onto
+# distinct non-HEAD locations. quality NORMAL (ability tattoos are not aesthetically graded; the
+# quality-tiered s57.25.4 bond is absent anyway with artist_id = -1). Artist NPCs deferred.
+static func _seed_ability_tattoos(
+	character: L5RCharacterData, dice: DiceEngine, next_tattoo_id: Array, ic_day: int,
+) -> Array:
+	var out: Array = []
+	var count: int = get_allotment_for_rank(character.school, maxi(1, character.insight_rank))
+	if count <= 0:
+		return out
+	var abil_pool: Array = ALL_TATTOO_ABILITIES.duplicate()
+	var loc_pool: Array = DECORATIVE_BODY_LOCATIONS.duplicate()
+	for _i in count:
+		if abil_pool.is_empty() or loc_pool.is_empty():
+			break
+		var ai: int = dice.rand_int_range(0, abil_pool.size() - 1)
+		var ability: int = abil_pool[ai]
+		abil_pool.remove_at(ai)
+		var li: int = dice.rand_int_range(0, loc_pool.size() - 1)
+		var loc: int = loc_pool[li]
+		loc_pool.remove_at(li)
+		var t: TattooData = create_tattoo(
+			next_tattoo_id[0], character.character_id, -1,
+			Enums.TattooQualityTier.NORMAL, loc,
+			Enums.TattooSubjectType.IMAGE, "ability tattoo", -1,
+			true, ability, ic_day,
+		)
+		if t != null:
+			next_tattoo_id[0] += 1
+			out.append(t)
+	return out
 
 
 # =============================================================================
