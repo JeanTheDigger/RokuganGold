@@ -1216,7 +1216,7 @@ static func advance_day(
 		active_bonsai, characters_by_id, settlements, ic_day,
 	)
 	_process_garden_visitor_effects(
-		active_gardens, characters, characters_by_id, settlements, ic_day,
+		active_gardens, characters, characters_by_id, settlements, ic_day, active_bonsai,
 	)
 
 	_process_bonsai_visitor_effects(
@@ -34477,11 +34477,22 @@ static func _process_garden_visitor_effects(
 	characters_by_id: Dictionary,
 	settlements: Array,
 	ic_day: int,
+	active_bonsai: Array = [],
 ) -> void:
 	## Apply visitor disposition bonuses and glory ticks for co-located living characters.
 
 	if active_gardens.is_empty():
 		return
+
+	# s57.23a B6 (s57.24.9): a bonsai displayed in a zone containing an active garden raises the
+	# garden's effective visitor tier by 1 (capped at Legendary), presence-based. Zones proxy to
+	# settlement level, so collect the settlement_ids that host an active displayed bonsai.
+	var bonsai_settlements: Dictionary = {}
+	for b_v: Variant in active_bonsai:
+		var b: BonsaiData = b_v as BonsaiData
+		if b == null or b.is_dead or b.display_settlement_id < 0:
+			continue
+		bonsai_settlements[b.display_settlement_id] = true
 
 	# Build location → character list
 	var chars_at: Dictionary = {}
@@ -34520,8 +34531,11 @@ static func _process_garden_visitor_effects(
 			if GardenSystem.has_active_bonus(visitor, garden.garden_id, ic_day):
 				continue
 
+			# B6 boost: +1 effective tier when an active bonsai shares this garden's settlement.
+			var b6_marker: int = 1 if bonsai_settlements.has(garden.settlement_id) else -1
+			var eff_tier: int = GardenSystem.get_garden_effective_tier(garden, b6_marker)
 			var visit_result: Dictionary = GardenSystem.apply_visitor(
-				garden, visitor.character_id, garden.creator_id, ic_day,
+				garden, visitor.character_id, garden.creator_id, ic_day, eff_tier,
 			)
 			if visit_result.get("bonus", 0) <= 0:
 				continue

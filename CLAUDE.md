@@ -237,6 +237,33 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Known Code Issues (found and fixed 2026-07-08, s57.23a B6 bonsai→garden integration boost never applied — zero-caller arbiter — runtime-verified 10/10)
+A **zero-caller effect arbiter** (the sibling of the OFFER_FAVOR / supply-share-ratio class). `GardenSystem.get_garden_effective_tier(garden, bonsai_display_id)`
+(s57.23a **B6** / s57.24.9 LOCKED: "When bonsai displayed in a zone containing an active garden, garden's effective visitor tier
+increases by 1 (capped at Legendary). The boost is presence-based — bonsai quality_tier does not affect the magnitude") had **ZERO
+production callers** (grep-confirmed: only its own def + `tests/`). The live garden-visit pass `DayOrchestrator._process_garden_visitor_effects`
+computed the visitor disposition bonus via `GardenSystem.apply_visitor`, which reads the **raw `garden.current_tier`** and never
+factored in a co-displayed bonsai — so a bonsai displayed at a garden's settlement gave the garden **zero** visitor-tier boost, and
+the entire s57.24.9 integration mechanic was inert. FIX (pure LOCKED wiring, **no invented values** — the +1/cap-5/presence-based
+rule is the arbiter's own s57.23a B6 constant): `apply_visitor` gains an optional `effective_tier: int = -1` override (when ≥ 0 it
+replaces `garden.current_tier` in the `VISITOR_DISPOSITION_BY_TIER` lookup — backward-compatible, the single existing caller is the
+garden pass; every other path is untouched). `_process_garden_visitor_effects` gains a defaulted `active_bonsai` param (threaded from
+`advance_day`, where it is already passed to the sibling bonsai pass), builds the set of settlement_ids hosting an active
+(non-dead, displayed) bonsai, and per garden computes `eff_tier = get_garden_effective_tier(garden, present ? 1 : -1)` fed into
+`apply_visitor`. Zones proxy to settlement level throughout the art system, so "bonsai in the garden's zone" = a bonsai whose
+`display_settlement_id == garden.settlement_id` (the one faithful mapping). The s57.27:115 familiarity decay still scales the
+(now-boosted) bonus afterward — the two LOCKED effects compose. Runtime-verified 10/10 (`tests/verify_garden_bonsai_b6.gd`): the
+arbiter (raw tier / +1 with bonsai / Legendary cap at 5); `apply_visitor`'s override (bonus == effective tier, creator still
+excluded, backward-compatible default); and end-to-end through `_process_garden_visitor_effects` — a tier-2 garden gives a visitor
++2 alone but **+3 with a co-displayed active bonsai**, while a bonsai at a DIFFERENT settlement or a DEAD bonsai gives no boost (+2).
+Full project `--import` parse-clean. (Found by a targeted art/lifecycle dormant sweep; the same sweep confirmed the rest of that
+domain is dead-duplicates [`get_maintain_tn`, `check_witness_immunity`, `resolve_performance_roll` — effect already applied inline]
+or design-gated [garden voluntary/daimyo-removal cluster, sacking-survival, emakimono-copy, `guardian_ward_value` — all need an
+unbuilt trigger/consumer], and a parallel newer-systems sweep [kolat/wall/spiritual/maho/insurgency] found NO clean wire — every
+remaining zero-caller there is a superseded aggregate twin [`compute_ptl_change`/`compute_stability_change` would double-count live
+piecemeal producers] or design-gated [`compute_susceptibility`/`get_crisis_tier`/`compute_garrison_honor_gain`(PROVISIONAL)] — do
+NOT re-audit those.)
+
 ### Systems Added 2026-07-08 (s55.11 PROACTIVE duel path ACTIVATED — Trigger 1 public insult, owner-approved, runtime-verified 11/11)
 Owner-approved activation ("Continue, all of those, go") of the fifth of six design-gated systems. `ReactiveDecisions.evaluate_duel_trigger`
 — the s55.11 DELIBERATE proactive-duel evaluation (capability check → target-assessment → personality gate → ISSUE_DUEL_CHALLENGE)

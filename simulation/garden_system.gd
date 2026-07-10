@@ -312,15 +312,19 @@ static func apply_visitor(
 	visitor_id: int,
 	creator_id: int,
 	ic_day: int,
+	effective_tier: int = -1,
 ) -> Dictionary:
 	## Records a visit and returns the visitor effects.
 	## Creator visits are excluded from visitor counting and bonuses.
+	## effective_tier (>= 0) overrides garden.current_tier for the disposition lookup —
+	## used to apply the s57.23a B6 bonsai-in-zone integration boost (get_garden_effective_tier).
 	## Returns: {"bonus": int, "glory_tick": bool, "creator_glory": float, "daimyo_glory": float}
 
 	if visitor_id == creator_id:
 		return {"bonus": 0, "glory_tick": false, "creator_glory": 0.0, "daimyo_glory": 0.0}
 
-	var bonus: int = VISITOR_DISPOSITION_BY_TIER.get(garden.current_tier, 1)
+	var tier_for_bonus: int = effective_tier if effective_tier >= 0 else garden.current_tier
+	var bonus: int = VISITOR_DISPOSITION_BY_TIER.get(tier_for_bonus, 1)
 
 	# Update visitor memory (purge old entries, enforce cap)
 	_add_visitor_memory(garden, visitor_id, ic_day)
