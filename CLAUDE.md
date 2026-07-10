@@ -522,8 +522,13 @@ Documented here so future sweeps skip them:
   already takes `base_price` as a param, so the day the owner supplies the base-price table + category mapping it is a clean wire.
   (2) **`MiyaBlessingSystem.compute_petition_bonus`** — the winter-court-petition→blessing trigger is
   **NO LONGER DEFERRED — activated 2026-07-08** (owner-approved; see the changelog entry below): `_process_miya_blessing_petitions`
-  now resolves the s11.5b §4.3 petitions and feeds `petition_bonus` into the Spring blessing. (`apply_cunning_modifier` was
-  already live via `_process_miya_blessing_followup`.) The remaining whole-sim-scan hits are SUPERSEDED dead helpers of live systems
+  now resolves the s11.5b §4.3 petitions and feeds `petition_bonus` into the Spring blessing. (**CORRECTION 2026-07-09 —
+  `MiyaBlessingSystem.apply_cunning_modifier` [§5 Cunning-emperor ±10 Need Score] is DORMANT + DESIGN-GATED, do NOT wire.**
+  An earlier note here wrongly claimed it "was already live via `_process_miya_blessing_followup`" — grep-confirmed FALSE: it has
+  ZERO production callers [def-only], and `_process_miya_blessing_followup` never calls it. It stays deferred because GDD §5 makes
+  it discretionary — "**May** add +10 to favored clan / −10 to disfavored" — and locks NO rule for WHICH clan a Cunning emperor
+  favors/disfavors [zero `favored_clan`/`disfavored_clan` producer anywhere], so wiring it needs an invented favorite-selection
+  mechanic → owner-gated, not a clean wire.) The remaining whole-sim-scan hits are SUPERSEDED dead helpers of live systems
   (harmless): `ArmyUpkeepSystem.compute_army_seasonal_costs`/`get_cost_tier` (live path is per-company `compute_company_seasonal_costs`);
   `IntraClanCivilWar.get_active_precedent_bonus`/`get_dragon_treaty_penalty` (live path `apply_precedent_effect`);
   `PUReconciliation.compute_company_pu_loss` (live path `reconcile_battle`/`process_army_dissolution`).
