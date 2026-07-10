@@ -1788,6 +1788,7 @@ static func advance_day(
 			characters, objectives_map, world_states,
 			characters_by_id, marriages, active_wars,
 			active_topics, active_edicts, clans, current_season, dice_engine,
+			ic_day,
 		)
 		_assign_phoenix_champion_restore_objective(
 			characters, objectives_map, phoenix_council_state,
@@ -12840,6 +12841,7 @@ static func _run_strategic_reviews(
 	clans: Dictionary = {},
 	current_season: int = 0,
 	dice_engine: DiceEngine = null,
+	ic_day: int = -1,
 ) -> Array:
 	var results: Array = []
 	var emperor_id: int = int(world_states.get("emperor_id", -1))
@@ -12869,6 +12871,17 @@ static func _run_strategic_reviews(
 	# enum the consumers compare against. So the Emperor could never host Winter Court through the
 	# strategic-review path and the WINTER call-court bonus never applied. Inject the int enum here.
 	world_states["current_season"] = current_season
+	# s55.10 Winter-Court HOST ROTATION: _evaluate_winter_court_host scores each clan by
+	# seasons-since-last-hosted = current_season_index - last_host_seasons[clan]. Both were phantom
+	# keys (zero producers), so the rotation term was a constant (0 - (-100) = 100, capped at 20) for
+	# EVERY clan and never differentiated — a clan that hosted last year scored the same as one that
+	# never has. current_season_index needs the MONOTONIC absolute season (only the cyclic
+	# current_season was injected) -> inject it here (erased after the loop). last_host_seasons is the
+	# persistent per-clan Winter-Court tracker written by _create_winter_court_from_directive on
+	# court creation; it lives at the top level (survives across ticks, not in the stale-key pass) and
+	# is read directly by the evaluator. No invented values -- the score weights are the evaluator's own.
+	if ic_day >= 0:
+		world_states["current_season_index"] = TimeSystem.get_absolute_season(ic_day)
 
 	for lord: L5RCharacterData in characters:
 		if CharacterStats.is_dead(lord):
@@ -12918,6 +12931,9 @@ static func _run_strategic_reviews(
 	world_states.erase("active_wars")
 	world_states.erase("escalating_conflicts")
 	world_states.erase("current_season")
+	world_states.erase("current_season_index")
+	# NOTE: last_host_seasons is deliberately NOT erased -- it is the persistent per-clan
+	# Winter-Court-hosting tracker (written on court creation), not a per-tick scratch key.
 	world_states.erase("last_court_season")
 
 	# Champion Strategic Evaluation (s57.54) — runs quarterly for each Clan Champion.
@@ -21358,6 +21374,13 @@ static func _create_winter_court_from_directive(
 		commitments.append(cm)
 		next_commitment_id[0] += 1
 		commitments_created += 1
+
+	# s55.10 host-rotation tracker: record the absolute season this clan hosted so
+	# _evaluate_winter_court_host scores it lower next Autumn (recently-hosted clans yield
+	# to those that have waited longer). Persistent top-level key (not a per-tick scratch).
+	var lhs: Dictionary = world_state.get("last_host_seasons", {})
+	lhs[host_clan] = TimeSystem.get_absolute_season(ic_day)
+	world_state["last_host_seasons"] = lhs
 
 	return {
 		"court_id": court.court_id,

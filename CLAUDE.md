@@ -237,6 +237,30 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Systems Added 2026-07-08 (s55.10 Winter-Court HOST ROTATION ACTIVATED — two phantom producers built, owner-approved, runtime-verified 6/6)
+Owner-approved activation ("Continue, all of those, go") of the third of six design-gated systems. `StrategicReview._evaluate_winter_court_host`
+(the Emperor's Autumn choice of which clan hosts the Imperial Winter Court, s55.10) scores each clan by
+`seasons_since_host = current_season_index − last_host_seasons[clan]` (capped 20, ×0.75), so a clan that hosted recently
+should yield to one that has waited longer — but BOTH keys were **phantoms with zero producers**: `current_season_index`
+was never set (only the CYCLIC `current_season` 0–3 was injected — useless for a monotonic "seasons since" difference), and
+`last_host_seasons` (a per-clan Winter-Court-hosting tracker) was never written. So the term was a CONSTANT for every clan
+(`0 − (−100) = 100` → capped 20 → +15 each) and never differentiated — a clan that hosted last year scored identically to
+one that never had, and host selection fell entirely to disposition/crisis/archetype (no rotation). **No values invented**
+— the score weights and the −100 default are the evaluator's own; the two producers are pure plumbing. FIX: (1)
+`_run_strategic_reviews` gains an `ic_day` param (threaded from `advance_day`) and injects
+`world_states["current_season_index"] = TimeSystem.get_absolute_season(ic_day)` (the monotonic `year*4 + season` index) in
+the war-context block, erased after the loop like the other scratch keys. (2) `_create_winter_court_from_directive` records
+`world_state["last_host_seasons"][host_clan] = TimeSystem.get_absolute_season(ic_day)` on successful court creation — a
+PERSISTENT top-level key (survives across ticks in-memory, deliberately NOT in the stale-key pass and NOT erased after the
+review loop), so a clan that just hosted scores its rotation term near 0 next Autumn while long-waiting clans get the full
++15. (`world_states` top-level scratch isn't saved across restart, so the rotation preference resets on reload — acceptable
+graceful degradation for an annual, self-healing preference; Winter Court is once/year so it re-establishes within a year
+or two.) Runtime-verified 6/6 (`tests/verify_winter_court_rotation.gd`, isolating the rotation term via IRON archetype [0
+preference] + empty disposition/crisis): a just-hosted clan yields to a never-hosted one; swapping recency flips the choice
+(proving the term is live, not constant); a longer-ago-hosted clan (20 seasons) beats a more-recent one (4 seasons); the
+pre-fix phantom state (no keys) collapses to iteration-order (the dead behavior); and the non-Autumn guard returns {}. Full
+project `--import` parse-clean.
+
 ### Systems Added 2026-07-08 (s4.3.21 four-level worship maluses ACTIVATED — family/clan/empire blanketing, owner-approved, runtime-verified 10/10)
 Owner-approved activation ("Continue, all of those, go") of the second of six design-gated systems. The s4.3.21 kami-worship
 malus layer was **province-only**: `process_seasonal_worship` fully COMPUTES + STORES the family/clan/empire aggregate
@@ -393,10 +417,10 @@ Documented here so future sweeps skip them:
   invented formula), so all are DESIGN-GATED: the `StrategicReview` scoring inputs `treasury_ratio` / `active_crises` /
   `province_threats` / `crisis_momentum_by_clan` / `tier1_crisis_active` / `tier1_military_crisis_seasons` / `peace_attempted` /
   `shogun_exists` / `avg_province_stability` / `low_stability_provinces` / `province_statuses`(top-level) — all read-with-default,
-  no producer; and the winter-court host-frequency cooldown at `strategic_review:547` (`seasons_since_host = current_season_index −
-  last_host_seasons[clan]`) is a TWO-phantom cooldown — BOTH `current_season_index` (needs the monotonic `TimeSystem.get_absolute_season`,
-  only the cyclic `current_season` is injected) AND `last_host_seasons` (a per-clan Winter-Court-hosting tracker) have zero producers,
-  so wiring one alone doesn't revive it (last_host_seasons defaults −100 → always eligible). The `opportunity_scanner` phantoms
+  no producer. **RESOLVED (2026-07-08, owner-approved — see the changelog entry below):** the winter-court host-frequency
+  cooldown at `strategic_review:547` (`seasons_since_host = current_season_index − last_host_seasons[clan]`) — BOTH phantom
+  producers were built: `current_season_index` is now injected via `TimeSystem.get_absolute_season(ic_day)` and
+  `last_host_seasons` is written per-clan on Winter Court creation. The `opportunity_scanner` phantoms
   (`border_weaknesses`/`threatened_provinces`/`sieged_allies`/`tainted_provinces`/`insurgent_provinces`/`resource_deficits`/
   `famine_provinces`/`weak_neighbor_provinces`/…) were already documented as producer-less. The `npc_decision_engine` hits
   (`always_blocked`/`conditional`/`secondary`/`applies_to`/`blocked_when`/`need`/`topic_types`/`stacks_per_crisis`/…) are
