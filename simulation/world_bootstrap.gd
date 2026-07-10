@@ -528,6 +528,17 @@ static func bootstrap_world(
 	for _ac: L5RCharacterData in characters:
 		ArmorSystem.assign_by_profile(_ac)
 
+	# -- World-start decorative tattoos (s57.25.8, DECORATIVE slice) ----------
+	# Seed the culturally-appropriate decorative tattoos s57.25.8 mandates (Crab Hida /
+	# Mantis 40-60% 1-2, Daidoji 50% wrist, Dragon non-monk 0-2). Togashi ability tattoos
+	# and the artist-NPC seeding are DEFERRED (see TattooSystem.seed_world_start_tattoos).
+	var seeded_tattoos: Array = []
+	var next_tattoo_id: Array = [1]
+	for _tc: L5RCharacterData in characters:
+		var char_tattoos: Array = TattooSystem.seed_world_start_tattoos(_tc, dice, next_tattoo_id)
+		for _tt: TattooData in char_tattoos:
+			seeded_tattoos.append(_tt)
+
 	# -- Starting navies (Naval Tranche 2, owner-approved 2026-07-02) ---------
 	var next_ship_id: Array = [1]
 	var navy_result: Dictionary = _seed_starting_navies(
@@ -569,6 +580,8 @@ static func bootstrap_world(
 		"named_vessels": navy_result["named_vessels"],
 		"next_ship_id": next_ship_id[0],
 		"water_subtiles": water_subtiles,
+		"tattoos": seeded_tattoos,
+		"next_tattoo_id": next_tattoo_id[0],
 	}
 
 

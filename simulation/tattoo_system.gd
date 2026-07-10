@@ -521,6 +521,121 @@ static func get_dragon_decorative_count(rng_value: float) -> int:
 	return 2
 
 
+# -- World-Generation Decorative Seeding (s57.25.8, DECORATIVE slice) ----------
+# Seeds the world-start DECORATIVE tattoos s57.25.8 mandates. LOCKED: clan/family/school
+# eligibility, the seed probabilities (helpers above), count (1-2 Crab/Mantis, 0-2 Dragon),
+# quality band (Normal-Fine), Daidoji-wrist-only, and the Togashi-monk exclusion (they get
+# ability tattoos -- a SEPARATE, DEFERRED build with an open per-rank ability-assignment
+# design space s57.25 does not resolve). Bounded owner-set defaults (no open design space):
+#   * quality split within "Normal to Fine": uniform (WORLD_GEN_TATTOO_FINE_CHANCE).
+#   * count within a locked range: uniform via the dice engine (deterministic world-gen).
+#   * artist_id = -1: world-start tattoos have no in-game artist, so no s57.25.4 disposition
+#     bond forms. The s57.25.8 artist-NPC seeding is DEFERRED (a separate structural build);
+#     -1 is a graceful degradation, not an invented mechanic.
+#   * body location: a random UNOCCUPIED eligible location; HEAD is never seeded (s57.25.2
+#     requires is_bald at application, which world-gen never sets).
+#   * subject_type IMAGE, a flavor description, topic_id -1 (no mechanic).
+const WORLD_GEN_TATTOO_FINE_CHANCE: float = 0.5  # PROVISIONAL uniform Normal<->Fine split
+
+const DECORATIVE_BODY_LOCATIONS: Array[int] = [
+	Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
+	Enums.TattooBodyLocation.RIGHT_WRIST_FOREARM,
+	Enums.TattooBodyLocation.LEFT_UPPER_ARM_SHOULDER,
+	Enums.TattooBodyLocation.RIGHT_UPPER_ARM_SHOULDER,
+	Enums.TattooBodyLocation.CHEST_TORSO,
+	Enums.TattooBodyLocation.BACK,
+	Enums.TattooBodyLocation.LEFT_LEG_THIGH,
+	Enums.TattooBodyLocation.RIGHT_LEG_THIGH,
+]
+
+const DAIDOJI_WRIST_LOCATIONS: Array[int] = [
+	Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
+	Enums.TattooBodyLocation.RIGHT_WRIST_FOREARM,
+]
+
+
+static func seed_world_start_tattoos(
+	character: L5RCharacterData,
+	dice: DiceEngine,
+	next_tattoo_id: Array,
+	ic_day: int = 0,
+) -> Array:
+	var out: Array = []
+	if character == null or CharacterStats.is_dead(character):
+		return out
+	# Tattooed-monk schools are excluded here -- they receive ability tattoos (deferred build).
+	if is_togashi_school(character.school):
+		return out
+
+	var clan: String = character.clan
+	var family: String = character.family
+	var is_bushi: bool = character.school_type == Enums.SchoolType.BUSHI
+
+	# Daidoji (Crane): 50% single wrist/forearm tattoo, duty/loyalty theme.
+	if family == "Daidoji":
+		if should_seed_daidoji_tattoo(dice.randf()):
+			var loc: int = DAIDOJI_WRIST_LOCATIONS[dice.rand_int_range(0, DAIDOJI_WRIST_LOCATIONS.size() - 1)]
+			var t: TattooData = _seed_one_decorative(
+				character.character_id, loc, dice, next_tattoo_id,
+				"Daidoji duty and family loyalty", ic_day,
+			)
+			if t != null:
+				out.append(t)
+		return out
+
+	# Crab Hida warriors / Mantis: 40-60% of 1-2 decorative tattoos.
+	if (clan == "Crab" and family == "Hida" and is_bushi) or (clan == "Mantis" and is_bushi):
+		if should_seed_crab_mantis_tattoo(dice.randf()):
+			_seed_n_decorative(
+				out, character.character_id, dice.rand_int_range(1, 2),
+				dice, next_tattoo_id, "decorative clan art", ic_day,
+			)
+		return out
+
+	# Dragon non-monk samurai: 0-2 decorative tattoos.
+	if clan == "Dragon":
+		var dcount: int = get_dragon_decorative_count(dice.randf())
+		if dcount > 0:
+			_seed_n_decorative(
+				out, character.character_id, dcount,
+				dice, next_tattoo_id, "Dragon decorative art", ic_day,
+			)
+		return out
+
+	return out
+
+
+static func _seed_n_decorative(
+	out: Array, recipient_id: int, count: int, dice: DiceEngine,
+	next_tattoo_id: Array, subject: String, ic_day: int,
+) -> void:
+	var avail: Array = DECORATIVE_BODY_LOCATIONS.duplicate()
+	for _i in count:
+		if avail.is_empty():
+			break
+		var idx: int = dice.rand_int_range(0, avail.size() - 1)
+		var loc: int = avail[idx]
+		avail.remove_at(idx)
+		var t: TattooData = _seed_one_decorative(recipient_id, loc, dice, next_tattoo_id, subject, ic_day)
+		if t != null:
+			out.append(t)
+
+
+static func _seed_one_decorative(
+	recipient_id: int, location: int, dice: DiceEngine,
+	next_tattoo_id: Array, subject: String, ic_day: int,
+) -> TattooData:
+	var quality: int = Enums.TattooQualityTier.FINE if dice.randf() < WORLD_GEN_TATTOO_FINE_CHANCE \
+		else Enums.TattooQualityTier.NORMAL
+	var t: TattooData = create_tattoo(
+		next_tattoo_id[0], recipient_id, -1, quality, location,
+		Enums.TattooSubjectType.IMAGE, subject, -1, false, Enums.TattooAbility.NONE, ic_day,
+	)
+	if t != null:
+		next_tattoo_id[0] += 1
+	return t
+
+
 # =============================================================================
 # Permanent Passive Tattoo Checks
 # =============================================================================

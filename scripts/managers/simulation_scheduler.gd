@@ -199,6 +199,13 @@ func _bootstrap_fresh_world() -> void:
 	for st: WaterSubtileData in boot_subtiles:
 		WorldState.water_subtiles.append(st)
 
+	# World-start decorative tattoos (s57.25.8, decorative slice).
+	var boot_tattoos: Array = result.get("tattoos", [])
+	WorldState.tattoos.clear()
+	for tt: TattooData in boot_tattoos:
+		WorldState.tattoos.append(tt)
+	WorldState.next_tattoo_id[0] = result.get("next_tattoo_id", 1)
+
 	var clan_champions: Dictionary = result.get("clan_champions", {})
 	for clan_name: String in clan_champions:
 		var cd: ClanData = WorldState.clans.get(clan_name)
