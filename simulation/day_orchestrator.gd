@@ -16647,7 +16647,7 @@ static func _process_military_daily(
 		active_tethers, tether_results,
 	)
 	var deprivation_results: Array = _process_field_deprivation(
-		active_tethers, tether_results,
+		active_tethers, tether_results, companies,
 	)
 	var recovery_results: Array = _process_army_recovery(
 		active_armies, tether_by_army, companies, worship_maluses,
@@ -17277,7 +17277,20 @@ static func _process_army_recovery(
 static func _process_field_deprivation(
 	active_tethers: Array,
 	tether_results: Array,
+	companies: Array = [],
 ) -> Array:
+	# s11.7 field deprivation: a rice-starved field army loses morale/health per day at its
+	# escalating deprivation tick (RICE_DEPRIVATION 2→-3 morale / 3→-3/-5 / 4→-5/-10, all LOCKED).
+	# Previously this pass only REPORTED the effect (deprivation_results had zero readers), so a
+	# starving army wasted away by nothing — the symmetric twin of the fixed "army recovery computed
+	# but never applied" bug. Apply the rice delta to the same cd["current_morale"]/["current_health"]
+	# the recovery pass writes. (The arms attack/defense half stays report-only — no daily company
+	# dict carries mutable attack/defense; a battle-time consumer is unbuilt, DESIGN-GATED.)
+	var companies_by_id: Dictionary = {}
+	for c_v: Variant in companies:
+		if c_v is Dictionary:
+			companies_by_id[int((c_v as Dictionary).get("company_id", -1))] = c_v
+
 	var non_detached: Array = []
 	for t: Dictionary in active_tethers:
 		if not t.get("detached", false):
@@ -17296,15 +17309,33 @@ static func _process_field_deprivation(
 		var company_ids: Array = tether.get("company_ids", [])
 		var rice_effect: Dictionary = ArmyUpkeepSystem.get_rice_deprivation_effect(rice_tick) if rice_tick > 0 else {}
 		var arms_effect: Dictionary = ArmyUpkeepSystem.get_arms_deprivation_effect(arms_tick) if arms_tick > 0 else {}
+		var d_morale: int = int(rice_effect.get("morale", 0))
+		var d_health: int = int(rice_effect.get("health", 0))
 		var per_company: Array = []
 
 		for cid: Variant in company_ids:
+			var applied_morale: int = 0
+			var applied_health: int = 0
+			if (d_morale < 0 or d_health < 0) and companies_by_id.has(int(cid)):
+				var cd: Dictionary = companies_by_id[int(cid)]
+				var base: Dictionary = ArmyCombatSystem.UNIT_STATS.get(
+					cd.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY), {})
+				if d_morale < 0:
+					var cur_m: int = int(cd.get("current_morale", base.get("morale", 0)))
+					cd["current_morale"] = maxi(0, cur_m + d_morale)
+					applied_morale = cd["current_morale"] - cur_m
+				if d_health < 0:
+					var cur_h: int = int(cd.get("current_health", base.get("health", 0)))
+					cd["current_health"] = maxi(0, cur_h + d_health)
+					applied_health = cd["current_health"] - cur_h
 			per_company.append({
 				"company_id": int(cid),
 				"rice_tick": rice_tick,
 				"arms_tick": arms_tick,
 				"rice_effect": rice_effect,
 				"arms_effect": arms_effect,
+				"morale_applied": applied_morale,
+				"health_applied": applied_health,
 			})
 
 		results.append({
