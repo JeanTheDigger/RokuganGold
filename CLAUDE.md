@@ -316,6 +316,45 @@ and the executor already sets `to_death = true` for ELIMINATE_CHARACTER) — so 
 **duplicate execution path**, which the CLAUDE.md hard constraint explicitly forbids ("Do not create duplicate execution paths.
 Check existing channels before wiring any ActionID"). The eliminate-via-duel behavior is already live through the scored channel.
 
+### Known Code Issues — Deferred (2026-07-09, post-succession-fix sweep — a whole inert LOCKED section + a dead-twin batch, do NOT re-audit)
+After the s22.5 succession wire (below), a fresh zero-caller sweep of the lifecycle / war / siege / naval / ronin / pc / artisan /
+bribery / tattoo layers found **NO further clean no-invention wire** — every survivor is a superseded twin, design-gated (missing
+producer/trigger/value), or ASCII/combat-blocked. Documented so future sweeps skip these exact items:
+- **s57.25.8 World-Generation tattoo seeding — the ENTIRE LOCKED section is inert (a genuine gap, but a FEATURE BUILD, owner-authorization-gated, NOT a dormant one-line wire).**
+  `WorldState.tattoos`/`next_tattoo_id` storage exists (+ persists), and the s57.25.8 helpers `should_seed_crab_mantis_tattoo`
+  (≤0.6), `should_seed_daidoji_tattoo` (≤0.5), `get_dragon_decorative_count` (0/1/2) are built with LOCKED chances — but **NOTHING at
+  world-gen calls them** (grep-confirmed: `world_population_generator`/`world_generator`/`world_bootstrap` have ZERO tattoo refs
+  beyond the Togashi school-name string), so **no NPC starts with any tattoo** — contradicting the whole LOCKED s57.25.8 (Dragon
+  non-monk 0–2 decorative; Hida/Mantis 40–60% 1–2 Normal/Fine; Daidoji 50% wrist Normal/Fine; **Togashi monks spawn with their full
+  ability-tattoo rank allotment** — a Rank-3 Togashi should have 4 ability tattoos and has zero). BLOCKED (not a clean wire): it is a
+  substantial multi-part world-gen build (seed decorative tattoos across 4 clans + seed the required tattoo-artist NPCs the GDD ties to
+  them for artist_id references), AND it has genuinely underspecified sub-parts that would require invention — the Togashi
+  ability-tattoo assignment ("determined by the elder within the school's narrative logic — not freely chosen," but s57.25.8/57.25.6
+  give NO deterministic per-rank ability-selection rule), the Normal↔Fine quality split point, body-location selection, and
+  artist-NPC placement counts. Per the "Do not invent mechanics" HARD CONSTRAINT + Section D (per-feature authorization), this needs
+  **explicit owner authorization + a decision on the Togashi ability-assignment rule** before any build — it is not covered by the
+  prior "Continue, all of those, go" authorization (which scoped Cunning blessing / affair secrets / secret context-severity /
+  regional market). The decorative-only slice (Crab/Mantis/Daidoji/Dragon-non-monk) is the closest-to-clean part (its ranges are
+  locked, its helpers built) but still a build, not a wire.
+- **SEEK_TATTOO NeedType (s57.25.7) — unbuilt NPC objective.** `TattooSystem.is_seek_tattoo_blocked` / `get_seek_tattoo_urgency` have
+  ZERO callers; only APPLY_TATTOO is wired (executor + precondition filter). The whole s57.25.7 monk-seeks-elder self-selection
+  pathway (OFFER_ART_COMMISSION 95 / BEGIN_TRAVEL 90 / ASK_FOR_INTRODUCTION 80 / GATHER_INTELLIGENCE 75, urgency scaling, BLOCKED
+  state, the reciprocal GRANT_TATTOO) is a design-gated objective build (needs the NeedType, the `tattoos_granted_this_rank` tracker
+  producer, and the elder-in-`met_characters` scan), not a wire.
+- **Ability-tattoo activation (`get_active_ability_tattoo`/`can_activate_tattoo`/`compute_visibility`/`has_mantis_tattoo`/…) —
+  ASCII/s40-blocked** (the tattoo powers fire on the combat/effect layer under the PC-travel HOLD).
+- **Confirmed dead twins (superseded by a live path; do NOT wire):** `MarriageSystem.is_gempuku_eligible` (a 72-**season** duplicate
+  of the live 18-year day-based `L5RCharacterData.is_gempukku_ready` / `GEMPUKKU_AGE_DAYS 6480`); `MarriageSystem.get_birth_family_floors`
+  (a dead accessor — the live `DispositionSystem._get_birth_family_floor` reads the floors directly); `DispositionSystem.get_tier_name`
+  (cosmetic String helper, no gameplay consumer); `BriberySystem.apply_bribe_accepted`/`apply_bribe_refused`/`generates_public_topic`/
+  `get_report_behavior`/`destroy_physical_evidence` (the live bribery path routes `attempt_bribe` → `_apply_failed_bribe_evidence` +
+  `SecretSystem.apply_bribe_costs` in the executor/orchestrator, so the crime-record-mutating dedicated funcs are superseded);
+  `WarTermination.create_peace_court`/`conclude_peace_court`/`is_valid_peace_proxy`/`apply_willingness_modifier` (a higher-fidelity
+  peace-court negotiation superseding — live wars terminate via `resolve_negotiated_settlement`/`resolve_formal_surrender`/
+  `resolve_annihilation` with inline terms; the peace-court needs an unbuilt convene-trigger + terms-negotiation subsystem).
+  The war-aid-refusal cluster, siege event-pipeline (`active_sieges` never appended in live code), army-upkeep dead twins, and
+  information-system dead twins remain as already documented above.
+
 ### Known Code Issues (found and fixed 2026-07-09, s22.5 succession transition-duration was a divergent inline copy — the 7-tick fast path was UNREACHABLE — runtime-verified 12/12)
 A **divergent-inline-copy / dormant-fast-path** wire (the sibling of the land-commander / social-TN class, applied to the succession
 lifecycle). `SuccessionSystem.get_transition_duration(is_clean, confirming_disp)` — the canonical s22.5 transition-duration arbiter
