@@ -237,6 +237,28 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Systems Added 2026-07-08 (s4.3.21 four-level worship maluses ACTIVATED — family/clan/empire blanketing, owner-approved, runtime-verified 10/10)
+Owner-approved activation ("Continue, all of those, go") of the second of six design-gated systems. The s4.3.21 kami-worship
+malus layer was **province-only**: `process_seasonal_worship` fully COMPUTES + STORES the family/clan/empire aggregate
+tiers (`family_tiers`/`clan_tiers`/`empire_tiers` in `worship_state`, via `evaluate_aggregate_thresholds`), and the
+canonical `get_worst_tier(province, family, clan, empire)` arbiter exists — but the live consumer
+`compute_all_province_maluses` read ONLY the province tier and never touched the three aggregate maps, so a Fortune the
+whole clan neglected inflicted nothing (contradicting the GDD's four-level design, where a failing clan-wide worship
+blankets the malus onto every member province). **No values invented** — the aggregate thresholds (family 60 / clan 150 /
+empire 800) are the GDD's own stated numbers (s4.3.21 line 1367), flagged PROVISIONAL only for map-dependent
+recalibration; the province threshold (10 WP) and the malus tables are LOCKED and unchanged. FIX: `compute_all_province_maluses`
+now, per province × Fortune, reads the province tier PLUS `family_tiers[prov.family][f]`, `clan_tiers[prov.clan][f]`,
+`empire_tiers[f]` and applies `get_worst_tier(...)` (WorshipTier enum NONE<RESTLESS<DISPLEASED<WRATHFUL, so `max` = worst
+severity) — so the harshest of the four scopes drives each province's malus. The result flows unchanged into the live
+seasonal consumer (`day_orchestrator:1617` → `_apply_worship_stability_maluses` + the resource/insurgency ticks), so a
+displeased clan now actually depresses pop growth / stability / koku / rice across all its provinces. Runtime-verified
+10/10 (`tests/verify_worship_four_level.gd`): `get_worst_tier` max-severity ordering; a failing FAMILY blankets its
+provinces (Benten WRATHFUL → −1.0 pop growth + `marriage_auto_fail` on the province, whose own tier is NONE); a failing
+CLAN blankets (DISPLEASED → −0.50); a failing EMPIRE blankets (RESTLESS → −0.25); the worst tier wins over a milder
+province tier (province RESTLESS + family WRATHFUL → −1.0); and all-NONE → empty combined (no malus). Full project
+`--import` parse-clean. The 60/150/800 thresholds remain PROVISIONAL pending a live playtest per the GDD flag, but they
+are the GDD's stated values — nothing invented.
+
 ### Systems Added 2026-07-08 (s57.27:115 familiarity decay ACTIVATED — painting + garden, owner-approved, runtime-verified 24/24)
 Owner-approved activation ("Continue, all of those, go") of the first of six previously design-gated systems. The
 s57.27:115 familiarity-decay mechanic (LOCKED section; the *rates* are GDD-flagged PROVISIONAL/pending-playtest) was
@@ -337,8 +359,8 @@ Documented here so future sweeps skip them:
 - **DESIGN-GATED (needs a new field/trigger/subsystem or an unlocked GDD value — owner approval required):**
   the whole `RiceMarketSystem` posting/auction layer (`create_posting`/`adjust_price_after_season`/`should_withdraw`/
   `resolve_purchases`/`get_active_routes_for_province` — `RicePostingData` never instantiated); `WorshipSystem`
-  four-level aggregate malus (`compute_province_effective_maluses`/`get_worst_tier` — owner-deferred, 60/150/800
-  thresholds GDD-PROVISIONAL) + `get_minor_blessing_tier` (Minor Blessing feature unbuilt); `SuccessionSystem.resolve_dragon_togashi_removal`
+  four-level aggregate malus is **NO LONGER DEFERRED — activated 2026-07-08** (owner-approved; see the changelog
+  entry below) + `get_minor_blessing_tier` (Minor Blessing feature unbuilt); `SuccessionSystem.resolve_dragon_togashi_removal`
   (live detector just `continue`s — needs a Phoenix-council-style removal handler); `HostageSystem.harm_hostage_consequences`
   (the `harmed_hostage` −30 modifier IS registered but no HARM_HOSTAGE action/trigger exists); `LetterSystem.can_send_free_letter`/
   `can_send_batch` (no letter-budget action gates on them — all live sends are narrative generators that bypass the budget);

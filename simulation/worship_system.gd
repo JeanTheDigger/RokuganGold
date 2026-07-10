@@ -445,8 +445,17 @@ static func compute_all_province_maluses(
 	provinces: Dictionary,
 ) -> Dictionary:
 	var province_tiers: Dictionary = worship_state.get("province_tiers", {})
-	# family_tiers/clan_tiers/empire_tiers are stored in worship_state but NOT read
-	# here — the aggregate layer is deferred (see the province-only note below).
+	# FULL FOUR-LEVEL MODEL ACTIVATED (owner-approved 2026-07-08). The family/clan/
+	# empire aggregate tiers are computed + stored by process_seasonal_worship; this
+	# function now takes the WORST of {province, family, clan, empire} per Fortune, so
+	# a failing clan-wide worship blankets the malus onto every member province
+	# (s4.3.21 four-level design). The aggregate thresholds (family 60 / clan 150 /
+	# empire 800) are GDD-STATED but flagged PROVISIONAL ("recalculate once the map is
+	# built", s4.3.21 line 1367) — no values invented, only the map-dependent calibration
+	# is pending a live playtest. The LOCKED province threshold (10 WP) is unchanged.
+	var family_tiers: Dictionary = worship_state.get("family_tiers", {})
+	var clan_tiers: Dictionary = worship_state.get("clan_tiers", {})
+	var empire_tiers: Dictionary = worship_state.get("empire_tiers", {})
 
 	var result: Dictionary = {}
 	for pid: Variant in provinces:
@@ -454,21 +463,16 @@ static func compute_all_province_maluses(
 		if prov == null:
 			continue
 		var p_tiers: Dictionary = province_tiers.get(pid, {})
+		var fam_tiers: Dictionary = family_tiers.get(prov.family, {})
+		var clan_t: Dictionary = clan_tiers.get(prov.clan, {})
 
 		var combined: Dictionary = {}
 		for f: int in range(GREAT_FORTUNE_COUNT):
 			var pt: Enums.WorshipTier = p_tiers.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
-			# PROVINCE-ONLY ACTIVATION (owner-approved 2026-07-06). The family/clan/
-			# empire aggregate tiers ARE computed and stored in worship_state, but are
-			# NOT applied yet: their thresholds (60/150/800) are GDD-flagged PROVISIONAL
-			# (s4.3.21 line 1367, "recalculate once the map is built"), and this function
-			# would otherwise blanket the WORST of {province, family, clan, empire} onto
-			# every member province off provisional numbers. Only the LOCKED province
-			# threshold (10 WP) drives maluses. To activate the full four-level model once
-			# the aggregate thresholds lock, restore the three worship_state lookups
-			# (family_tiers[prov.family][f], clan_tiers[prov.clan][f], empire_tiers[f])
-			# and: var worst := get_worst_tier(pt, ft, ct, et)
-			var worst: Enums.WorshipTier = pt
+			var ft: Enums.WorshipTier = fam_tiers.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
+			var ct: Enums.WorshipTier = clan_t.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
+			var et: Enums.WorshipTier = empire_tiers.get(f, Enums.WorshipTier.NONE) as Enums.WorshipTier
+			var worst: Enums.WorshipTier = get_worst_tier(pt, ft, ct, et)
 			if worst == Enums.WorshipTier.NONE:
 				continue
 			var malus: Dictionary = get_fortune_malus(f as Enums.GreatFortune, worst)
