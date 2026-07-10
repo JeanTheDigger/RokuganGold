@@ -237,6 +237,29 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Systems Added 2026-07-08 (s11.5b §4.3 Miya's Blessing Winter-Court PETITIONS ACTIVATED — dead petition_bonus producer, owner-approved, runtime-verified 15/15)
+Owner-approved activation ("Continue, all of those, go") of the fourth of six design-gated systems. The s11.5b §4.3
+Winter-Court-influence layer was **dormant at the producer end**: `MiyaBlessingSystem.compute_need_score` already CONSUMED a
+`petition_bonus` input per province (weighting which provinces receive the annual rice-blessing) and `compute_petition_bonus(success,
+raises)` computed the GDD value (+8 base, +2/raise, 0 on failure) — but **NOTHING ran the petitions**, so the input was always `{}`
+and Winter Court lobbying never affected the blessing. The GDD §4.3 is fully specified (LOCKED): during Winter Court, a Status-3.0+
+character may raise a petition (a Courtier(Manipulation)/Awareness roll vs TN 25) that adds +8 Need Score to the petitioned province
+(+2/raise); a Miya representative must be present; one petition per province. FIX: new
+`DayOrchestrator._process_miya_blessing_petitions` — resolved at the SPRING boundary (day 360, where the Imperial Winter Court is
+STILL active: it runs day 241→361, so the same annual event that hosts the petitions is live when the blessing consumes them, no
+cross-season tracker needed). It scans `active_courts` for an ACTIVE `IMPERIAL_WINTER_COURT` with a Miya-family attendee present,
+then each attending clan's best Status-3.0+ courtier rolls Courtier(Manipulation)/Awareness (via SkillResolver) vs TN 25 for that
+clan's neediest home province; the resulting `compute_petition_bonus` lands in `{province_id: bonus}` fed straight into
+`spring_inputs["petition_bonuses"]` → the blessing's `_build_scored_provinces`. Added GDD-LOCKED constants `MiyaBlessingSystem.PETITION_TN
+= 25` and `PETITION_MIN_STATUS = 3.0`. **PROVISIONAL / structural NPC selection (flagged — the GDD locks the roll/effect/gate but NOT
+which province a clan lobbies for or who petitions):** the petitioned province is the clan's lowest-stability home province (a direct
+GDD distress signal, already the blessing's own tiebreak), the petitioner is the clan's highest-Courtier Status-3.0+ attendee, and
+free raises are earned from margin (margin/5, the codebase's NPC bonus-scaling convention). Runtime-verified 15/15
+(`tests/verify_miya_petition.gd`): the constants + arbiter (+8/+12/0); `compute_need_score` adds the petition (+12 → +12); neediest-province
+selection (lowest stability; −1 for a clan with no province); the full flow (Miya present → a strong petitioner secures ≥ +8 on the
+neediest Crab province, the healthy one untouched); and the three gates (Miya-absent / only-Status-2.0 / inactive court → no
+petitions). Full project `--import` parse-clean.
+
 ### Systems Added 2026-07-08 (s55.10 Winter-Court HOST ROTATION ACTIVATED — two phantom producers built, owner-approved, runtime-verified 6/6)
 Owner-approved activation ("Continue, all of those, go") of the third of six design-gated systems. `StrategicReview._evaluate_winter_court_host`
 (the Emperor's Autumn choice of which clan hosts the Imperial Winter Court, s55.10) scores each clan by
@@ -404,10 +427,10 @@ Documented here so future sweeps skip them:
   `PURCHASE_MARKET` is a flat abstract koku cost (no item/category/base-price) and `CONDUCT_COMMERCE` is a yield formula keyed on
   the s4.3.8 *location* modifier, not s11.8 item-category clan modifiers. Wiring it needs a real item-category market subsystem
   (base prices + categories per settlement) — a whole build, not a wire. The modifier values are LOCKED (no invention issue), only
-  the consumer is missing. (2) **`MiyaBlessingSystem.compute_petition_bonus`/`apply_cunning_modifier`** — `compute_need_score`
-  reads a `petition_bonus` input (winter-court petition contributions weight the annual rice-blessing need-score, s11.5b) but
-  nothing computes/feeds it (`compute_petition_bonus` has zero callers); needs a winter-court-petition→blessing tracking trigger.
-  Live `process_annual_blessing` works without it. The remaining whole-sim-scan hits are SUPERSEDED dead helpers of live systems
+  the consumer is missing. (2) **`MiyaBlessingSystem.compute_petition_bonus`** — the winter-court-petition→blessing trigger is
+  **NO LONGER DEFERRED — activated 2026-07-08** (owner-approved; see the changelog entry below): `_process_miya_blessing_petitions`
+  now resolves the s11.5b §4.3 petitions and feeds `petition_bonus` into the Spring blessing. (`apply_cunning_modifier` was
+  already live via `_process_miya_blessing_followup`.) The remaining whole-sim-scan hits are SUPERSEDED dead helpers of live systems
   (harmless): `ArmyUpkeepSystem.compute_army_seasonal_costs`/`get_cost_tier` (live path is per-company `compute_company_seasonal_costs`);
   `IntraClanCivilWar.get_active_precedent_bonus`/`get_dragon_treaty_penalty` (live path `apply_precedent_effect`);
   `PUReconciliation.compute_company_pu_loss` (live path `reconcile_battle`/`process_army_dissolution`).

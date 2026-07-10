@@ -1611,6 +1611,12 @@ static func advance_day(
 		var spring_inputs: Dictionary = miya_inputs.duplicate()
 		if current_season == TimeSystem.Season.SPRING and not miya_inputs.is_empty():
 			spring_inputs["current_ic_year"] = time_system.get_ic_year()
+			# s11.5b §4.3: resolve Winter Court petitions (the WC is still active at the Spring
+			# boundary, day 360 < its day-361 close) and feed the per-province Need-Score bonuses
+			# into the blessing. Previously always {} -- compute_petition_bonus had zero callers.
+			spring_inputs["petition_bonuses"] = _process_miya_blessing_petitions(
+				active_courts, characters_by_id, provinces, dice_engine,
+			)
 		worship_seasonal_results = _process_seasonal_worship(
 			worship_state, settlements, provinces,
 		)
@@ -3624,6 +3630,90 @@ static func _decay_all_knowledge(
 #     escalation thresholds.
 #   - Applies -1 stability to every Need Score > 0 province on suspension
 #     (penalty doubles after 2 consecutive years).
+
+# s11.5b §4.3 Winter Court Influence: during the Imperial Winter Court (still active at the Spring
+# boundary — it runs day 241..361), clan representatives lobby for specific provinces to receive
+# Miya's Blessing. A Miya representative must be present; any Status 3.0+ character may raise a
+# petition via a Courtier(Manipulation)/Awareness roll vs TN 25; success adds +8 Need Score to the
+# petitioned province, +2 per Raise; one petition per province. Returns {province_id: bonus} fed
+# straight into the Spring blessing's petition_bonuses input. Was fully dormant: compute_need_score
+# already CONSUMED petition_bonus and compute_petition_bonus computed the value, but nothing ran the
+# petitions -- the input was always {}. PROVISIONAL (structural NPC selection -- the GDD locks the
+# roll/effect/gate but not WHICH province a clan lobbies for or WHO petitions): the petitioned
+# province is the clan's lowest-stability home province (greatest need), and the petitioner is the
+# clan's highest-Courtier Status-3.0+ attendee. Free raises are earned from margin (margin/5), the
+# codebase convention for NPC bonus-scaling rolls.
+static func _process_miya_blessing_petitions(
+	active_courts: Array,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var petition_bonuses: Dictionary = {}
+	if dice_engine == null:
+		return petition_bonuses
+	for court_v: Variant in active_courts:
+		if not court_v is CourtSessionData:
+			continue
+		var court: CourtSessionData = court_v as CourtSessionData
+		if court.court_type != CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
+			continue
+		if not CourtSystem.is_active(court):
+			continue
+		# The Miya daimyo (or representative) must be present (s11.5b §4.3).
+		var miya_present: bool = false
+		for aid_v: Variant in court.attendee_ids:
+			var a: L5RCharacterData = characters_by_id.get(int(aid_v)) as L5RCharacterData
+			if a != null and not CharacterStats.is_dead(a) and a.family == "Miya":
+				miya_present = true
+				break
+		if not miya_present:
+			continue
+		# Each attending clan's best Status-3.0+ courtier lobbies for that clan's neediest province.
+		var best_by_clan: Dictionary = {}  # clan -> L5RCharacterData
+		for aid_v2: Variant in court.attendee_ids:
+			var a2: L5RCharacterData = characters_by_id.get(int(aid_v2)) as L5RCharacterData
+			if a2 == null or CharacterStats.is_dead(a2):
+				continue
+			if a2.status < MiyaBlessingSystem.PETITION_MIN_STATUS:
+				continue
+			if a2.clan.is_empty():
+				continue
+			var cur: L5RCharacterData = best_by_clan.get(a2.clan) as L5RCharacterData
+			if cur == null or int(a2.skills.get("Courtier", 0)) > int(cur.skills.get("Courtier", 0)):
+				best_by_clan[a2.clan] = a2
+		for clan_v: Variant in best_by_clan:
+			var clan: String = clan_v as String
+			var petitioner: L5RCharacterData = best_by_clan[clan] as L5RCharacterData
+			var target_pid: int = _miya_neediest_province_for_clan(clan, provinces)
+			if target_pid < 0:
+				continue
+			# One petition per province per Winter Court (record even a failure so it isn't retried).
+			if petition_bonuses.has(target_pid):
+				continue
+			var roll: Dictionary = SkillResolver.resolve_skill_check(
+				petitioner, dice_engine, "Courtier", MiyaBlessingSystem.PETITION_TN,
+				0, "Manipulation",
+			)
+			var success: bool = roll.get("success", false)
+			var free_raises: int = maxi(0, int(roll.get("margin", 0)) / 5)
+			petition_bonuses[target_pid] = MiyaBlessingSystem.compute_petition_bonus(success, free_raises)
+		return petition_bonuses  # one Imperial Winter Court at a time
+	return petition_bonuses
+
+
+static func _miya_neediest_province_for_clan(clan: String, provinces: Dictionary) -> int:
+	var best_pid: int = -1
+	var best_stability: float = 1.0e9
+	for pid_v: Variant in provinces:
+		var prov: ProvinceData = provinces[pid_v] as ProvinceData
+		if prov == null or prov.clan != clan:
+			continue
+		if prov.stability < best_stability:
+			best_stability = prov.stability
+			best_pid = prov.province_id
+	return best_pid
+
 
 static func _process_miya_blessing_followup(
 	seasonal_result: Dictionary,

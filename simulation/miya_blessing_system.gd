@@ -49,6 +49,8 @@ const NEED_BLESSED_LAST_YEAR_MALUS: int = -5
 
 const PETITION_BONUS_BASE: int = 8
 const PETITION_BONUS_PER_RAISE: int = 2
+const PETITION_TN: int = 25          # s11.5b §4.3 — Courtier (Manipulation)/Awareness vs TN 25
+const PETITION_MIN_STATUS: float = 3.0  # s11.5b §4.3 — only Status 3.0+ may raise a petition
 
 
 # -- Application bonuses (s11.5b §6) -----------------------------------------
