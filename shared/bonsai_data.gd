@@ -33,6 +33,11 @@ extends Resource
 ## Settlement ID where the bonsai is currently displayed. -1 = not displayed.
 @export var display_settlement_id: int = -1
 
+## IC day continuous display began at the current slot (-1 = not displayed). Drives the
+## s57.27:115 familiarity decay of the visitor disposition bonus (standard 15%/yr, floor 50%);
+## reset when the bonsai is displayed at a different settlement.
+@export var display_start_ic_day: int = -1
+
 ## True when the bonsai has died from neglect (s57.24.7 B4).
 @export var is_dead: bool = false
 

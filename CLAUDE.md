@@ -354,12 +354,18 @@ separate lifespan path, never calls this). Runtime-verified 24/24 (`tests/verify
 constants (0.15/0.50/0.075/0.75); the GDD's own worked examples (Fine kakemono +2 → 1yr 1.0 / 2yr 0.85 / 3yr 0.70 / 4yr
 0.55 / 5yr+ 0.50 floor); the half-rate tier (2yr 0.925 / 3yr 0.85 / 4yr 0.775 / 5yr 0.75 floor); the guards (unset −1 →
 1.0, sub-year → 1.0, extreme age holds the floor); and the orchestrator scaling round-math (+2@3yr→1, +4@3yr→3,
-+4@floor→2, +4@fresh→4). Full project `--import` parse-clean. **DEFERRED (documented, not this pass — no continuous-display
-clock):** `SculptureData` (statuary/guardian) and `BonsaiData` carry no display-start field (only `date_completed` /
-`collection_date`), so their familiarity decay needs a small clock addition (a `continuous_display_start_ic_day` set when
-the piece is placed/displayed) before the same `familiarity_factor` can be consumed — the helper is ready and the
-religious-statuary half-rate path (`half_rate=true`) awaits it. The rate values remain PROVISIONAL pending a live
-playtest, per the GDD flag.
++4@floor→2, +4@fresh→4). Full project `--import` parse-clean. **TIER 2 (bonsai + sculpture) now DONE (2026-07-08,
+runtime-verified 16/16 `tests/verify_familiarity_decay_tier2.gd`):** the two art forms that lacked a display-start clock
+each gained one — `BonsaiData.display_start_ic_day` (stamped in `_process_bonsai_display_writebacks` on DISPLAY_BONSAI,
+reset when moved to a different settlement, kept on re-display at the same slot; read STANDARD-rate at the bonsai visitor
+site — a bonsai is a living plant) and `SculptureData.display_start_ic_day` (stamped in `_auto_place_completed_sculpture`
+when a statuary/guardian enters its display slot; read HALF-rate at the sculpture visitor site — religious statuary per
+s57.27:115; distinct from the s57.28 `ic_day_placed_outdoor` wood-weathering clock). Both scale their visitor
+`disposition_change` by the same canonical `PaintingSystem.familiarity_factor` — so all FOUR permanently-displayed art
+forms (painting, garden, bonsai, sculpture) now decay consistently. Verified: fields default −1 (unplaced → factor 1.0);
+the bonsai clock stamps/preserves/resets correctly across DISPLAY_BONSAI; statuary + guardian stamp on placement; and the
+rate distinction (bonsai 3yr→0.70, sculpture 3yr→0.85). Ikebana stays exempt (separate lifespan path). The rate values
+remain PROVISIONAL pending a live playtest, per the GDD flag.
 
 ### Known Code Issues (found and fixed 2026-07-08, GOSSIP base-TN was a divergent inline copy of a zero-caller arbiter — runtime-verified 8/8)
 A **divergent-inline-copy** dedup (the sibling of the PU-loss / land-commander / social-TN class, surfaced by the

@@ -40,6 +40,11 @@ extends Resource
 ## For figurines: -1 means in inventory (not placed). Set on DELIVER_GIFT writeback.
 @export var display_settlement_id: int = -1
 
+## IC day the statuary/guardian was placed into its display slot (-1 = unplaced). Drives the
+## s57.27:115 familiarity decay of the visitor disposition bonus at the HALF rate (religious
+## statuary: 7.5%/yr, floor 75%). Distinct from ic_day_placed_outdoor (the s57.28 wood-weathering clock).
+@export var display_start_ic_day: int = -1
+
 ## Which slot: -1=none, 0=statue_slot, 1=guardian_slot
 @export var display_slot: int = -1
 

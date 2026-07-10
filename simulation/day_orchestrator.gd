@@ -1205,7 +1205,7 @@ static func advance_day(
 	)
 	_process_bonsai_display_writebacks(
 		day_result.get("results", []),
-		active_bonsai, characters_by_id, settlements,
+		active_bonsai, characters_by_id, settlements, ic_day,
 	)
 	_process_garden_visitor_effects(
 		active_gardens, characters, characters_by_id, settlements, ic_day,
@@ -34358,6 +34358,7 @@ static func _process_bonsai_display_writebacks(
 	active_bonsai: Array,
 	characters_by_id: Dictionary,
 	settlements: Array,
+	ic_day: int = -1,
 ) -> void:
 	## Set display_settlement_id on the bonsai when DISPLAY_BONSAI succeeds.
 	var settlements_by_id: Dictionary = {}
@@ -34398,6 +34399,10 @@ static func _process_bonsai_display_writebacks(
 					(b_v as BonsaiData).display_settlement_id = -1
 					break
 
+		# s57.27:115 familiarity clock: (re)start it when the bonsai begins displaying at a NEW
+		# settlement slot; keep it if re-displayed at the same slot (continuous display preserved).
+		if bonsai.display_settlement_id != settlement_id:
+			bonsai.display_start_ic_day = ic_day
 		bonsai.display_settlement_id = settlement_id
 		settlement.bonsai_display_slot = bonsai_id
 
@@ -34566,10 +34571,17 @@ static func _process_bonsai_visitor_effects(
 			)
 			if visit.get("bonus", 0) <= 0:
 				continue
+			# s57.27:115 familiarity decay — a bonsai displayed in the same slot > 1 IC year loses
+			# visitor impact (standard 15%/yr, floor 50%; a bonsai is a living plant, not statuary).
+			var bonsai_fam: float = PaintingSystem.familiarity_factor(
+				ic_day, bonsai.display_start_ic_day, false)
+			var bonsai_bonus: int = int(round(float(visit["bonus"]) * bonsai_fam))
+			if bonsai_bonus <= 0:
+				continue
 			var bucket: Array = visitor.temporary_modifiers.get(bonsai.owner_id, [])
 			bucket.append({
 				"event_type": "bonsai_visitor",
-				"value": visit["bonus"],
+				"value": bonsai_bonus,
 				"created_ic_day": ic_day,
 				"duration": GardenSystem.VISITOR_BONUS_DURATION_DAYS,
 			})
@@ -35393,11 +35405,15 @@ static func _auto_place_completed_sculpture(
 				sculpture.creator_id, settlement):
 			settlement.statue_slot = sculpture.sculpture_id
 			sculpture.display_slot = SculptureSystem.DisplaySlot.STATUE_SLOT
+			# s57.27:115 familiarity clock (half-rate religious statuary).
+			sculpture.display_start_ic_day = ic_day
 	elif sculpture.format == SculptureSystem.Format.GUARDIAN:
 		if settlement.guardian_slot < 0 and SculptureSystem.has_guardian_permission(
 				sculpture.creator_id, settlement):
 			settlement.guardian_slot = sculpture.sculpture_id
 			sculpture.display_slot = SculptureSystem.DisplaySlot.GUARDIAN_SLOT
+			# s57.27:115 familiarity clock (half-rate religious statuary).
+			sculpture.display_start_ic_day = ic_day
 			# Wood guardians stand outdoors — stamp the degradation clock (s57.28: -1 tier per
 			# WOOD_OUTDOOR_DEGRADATION_DAYS). This inline placement bypassed the canonical
 			# SculptureSystem.place_sculpture, which alone set ic_day_placed_outdoor, so every
@@ -35472,7 +35488,11 @@ static func _process_sculpture_visitor_effects(
 
 			# Disposition toward creator
 			if creator != null and not CharacterStats.is_dead(creator):
-				var disp: int = visit_result.get("disposition_change", 0)
+				# s57.27:115 familiarity decay — religious statuary decays at the HALF rate
+				# (7.5%/yr, floor 75%): a temple statue/komainu is part of the sacred space.
+				var sculpt_fam: float = PaintingSystem.familiarity_factor(
+					ic_day, sculpture.display_start_ic_day, true)
+				var disp: int = int(round(float(visit_result.get("disposition_change", 0)) * sculpt_fam))
 				if disp != 0:
 					var bucket: Array = visitor.temporary_modifiers.get(sculpture.creator_id, [])
 					bucket.append({
