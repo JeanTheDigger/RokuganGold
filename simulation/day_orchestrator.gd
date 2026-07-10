@@ -2162,6 +2162,14 @@ static func advance_day(
 static func _reset_all_ap(characters: Array) -> void:
 	for c: L5RCharacterData in characters:
 		ActionPointSystem.reset_daily_ap(c)
+		# s57.34.2: refresh the Civilian Order budget from the character's CURRENT lord rank
+		# before the daily reset. Without this, civilian_order_budget_max stays at its default 0
+		# for every character (update_budget_for_character had zero production callers), so the
+		# wave-resolver gate `is_lord and civilian_orders_remaining > 0` was never entered and the
+		# entire Civilian Order governance channel (SET_TAX_RATE, ASSIGN_VASSAL_OBJECTIVE,
+		# SEND_INVITATION, REQUEST_ART, lord WRITE_LETTER, …) was inert. Recomputing each day also
+		# tracks status changes from promotion / succession / clan induction.
+		CivilianOrderBudget.update_budget_for_character(c)
 		c.civilian_orders_remaining = c.civilian_order_budget_max
 		c.passage_request_count_today = 0
 		c.pieces_seen.erase("_performance_count_today")
