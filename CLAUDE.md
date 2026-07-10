@@ -316,6 +316,37 @@ and the executor already sets `to_death = true` for ELIMINATE_CHARACTER) — so 
 **duplicate execution path**, which the CLAUDE.md hard constraint explicitly forbids ("Do not create duplicate execution paths.
 Check existing channels before wiring any ActionID"). The eliminate-via-duel behavior is already live through the scored channel.
 
+### Systems Added 2026-07-09 (s57.25.8 tattoo ARTIST-NPC seeding + s57.25.4 world-start disposition bond ACTIVATED — completes the tattoo world-gen layer; owner-directed "do all three", runtime-verified 45/45)
+The last deferred piece of s57.25.8. World-start tattoos were seeded (decorative + Togashi ability) but every one carried
+`artist_id = -1` (no in-game artist), so the **s57.25.4 disposition bond — the SOLE live `artist_id` consumer** (fired by the
+APPLY_TATTOO writeback, `day_orchestrator:30751` via `TattooSystem.get_disposition_bond`) — could never form for the world-start
+population, and s57.25.9 provenance always resolved "unknown." Two structural halves: **(1) artist NPCs.**
+`WorldBootstrap._seed_tattoo_artists` (new) seeds one tattoo-artist NPC per relevant clan/family via `WorldGenerator.generate_character`
+on a **reused existing clan school** (Dragon → Kitsuki Investigator, Crab → Kaiu Engineer [the artisan family], Mantis → Yoritomo
+Bushi, Daidoji → Daidoji Iron Warrior, Togashi elder → Togashi Tattooed Order) + injects the **LOCKED Artisan: Tattooing floor rank**
+(s57.25.8: Dragon/Crab/Mantis **2+**, Daidoji **1+**, Togashi elder **3+** as a Rank-3 monk) — **no invented archetype** (owner:
+"reuse a generic artisan school"). Created BEFORE `_assign_physical_locations` so they flow through every downstream pass (placement,
+contacts, advantages, insight resync, armor) as ordinary citizens; `next_character_id` threaded through `next_char_arr` so the id
+counter stays correct. `seed_world_start_tattoos` gains a defaulted `artist_by_category` param ({category → artist_id}, empty {} →
+the prior `-1` no-bond degradation, so the verify driver's 3-arg calls are unchanged); each recipient branch (dragon/crab/mantis/
+daidoji/togashi) stamps its category's artist onto the tattoo. **(2) s57.25.4 bond.** `_apply_world_start_tattoo_bonds` applies the
+LOCKED bidirectional bond per tattoo (Normal +1 / Fine +2 / Exceptional +3 / Masterwork +4 / Legendary +5), **mirroring the live
+APPLY_TATTOO effect** (`disposition_change` actor→recipient + `recipient_disposition_change` recipient→actor) applied directly to
+`disposition_values` (clampi −100..100), additive, never degrades ("no stacking cap"); a self-applied Togashi tattoo (artist ==
+recipient) is skipped (mechanically inert per GDD). **No values invented** — the bond magnitudes are the arbiter's own s57.25.4
+constants, the Tattooing floors are s57.25.8's own, the bond application is the live path's own pattern. **PROVISIONAL / owner-
+overridable (flagged in-code):** one artist per clan/family — the GDD "at minimum one" floor read at CLAN granularity (a reduction
+from the per-major-Dragon-province / per-Crab-Mantis-holding / per-major-Daidoji-holding literal); the reused school per clan; the
+artist character insight_rank (structural, a seasoned artisan — the Tattooing *rank* is LOCKED). The per-locale artist distribution
+(which would bound the bond to local clienteles rather than one artist per whole clan) is the remaining PROVISIONAL refinement — swap
+the `_TATTOO_ARTIST_SPECS` rows to expand. Runtime-verified 45/45 (`tests/verify_worldgen_tattoos.gd`, +21): `_seed_tattoo_artists`
+(5 artists, distinct ids, `next_char` advances by 5, each with its LOCKED Tattooing floor rank + real clan/family); artist_id routing
+(Crab-Hida tattoos carry the 'crab' id, Togashi ability tattoos carry the elder id, empty map → −1 backward-compatible); and the bond
+(Normal+Fine stack to +3 bidirectionally, artist_id<0 applies nothing, self-tattoo adds no self-disposition entry). Full project
+`--import` parse-clean. **With this, the s57.25.8 tattoo world-gen layer is complete** (decorative + Togashi ability + artist NPCs +
+bond); only the per-locale artist multiplication is a PROVISIONAL refinement, and the ability-tattoo *combat effects* stay on the
+ASCII/s40 PC-travel HOLD.
+
 ### Systems Added 2026-07-09 (s57.25.8 Togashi ABILITY tattoo world-gen ACTIVATED — completes tattoo seeding; owner-directed "what do you want here", runtime-verified 24/24)
 Follow-on to the decorative slice below. Togashi/Kikage/Hoshi tattooed-monk NPCs now spawn with their **LOCKED per-rank ability-tattoo
 allotment** (Togashi 2/2/2, Kikage 1/1/1, Hoshi 1@R1 + 1@R4 — cumulative via the existing `get_allotment_for_rank`, keyed on the monk's
@@ -330,10 +361,8 @@ is drawn). Faithful: the abilities are combat effects on the ASCII/s40 layer (PC
 live and can be refined then; quality NORMAL (ability tattoos aren't aesthetically graded; the quality-tiered s57.25.4 bond is absent with
 `artist_id = -1` anyway). Runtime-verified 24/24 (`tests/verify_worldgen_tattoos.gd`, +6): the exact locked allotments (Rank-1 Togashi → 2,
 **Rank-3 → 4 [the GDD worked example]**, Rank-5 → 6, Kikage R3 → 2, Hoshi R4 → 2, Hoshi R1 → 1) and per-monk constraints (all ability /
-non-NONE / artist −1 / no HEAD / distinct abilities+locations). Full project `--import` parse-clean. **With this, only the s57.25.8
-artist-NPC seeding remains deferred** (≥1 tattoo-artist per Dragon province / Crab-Mantis-Daidoji holding for valid `artist_id` references
-+ the disposition bond — a structural NPC-creation build with an unspecified artisan school/stat template; world-start tattoos carry
-`artist_id = -1`, no bond, until then). To pin the Togashi abilities to a fixed per-school sequence instead of the draw, swap
+non-NONE / artist −1 / no HEAD / distinct abilities+locations). Full project `--import` parse-clean. **The s57.25.8 artist-NPC seeding
++ s57.25.4 world-start bond are now DONE too (see the changelog entry above), so the tattoo world-gen layer is complete.** To pin the Togashi abilities to a fixed per-school sequence instead of the draw, swap
 `ALL_TATTOO_ABILITIES` / `_seed_ability_tattoos` — a one-function change.
 
 ### Systems Added 2026-07-09 (s57.25.8 DECORATIVE tattoo world-gen ACTIVATED — the whole LOCKED section was inert; owner-directed "continue", runtime-verified 18/18)
@@ -360,20 +389,21 @@ Daidoji ≤1 wrist-only); the seed-probability bands land in the LOCKED ranges (
 and id uniqueness + `next_tattoo_id` advancing by the seeded count. Full project `--import` parse-clean. **DEFERRED (open design space →
 owner decision, NOT built):** (1) **Togashi ability-tattoo allotment seeding** — a Rank-3 Togashi should spawn with 4 ability tattoos, but
 s57.25/57.25.6 give **no deterministic per-rank ability-selection rule** ("the elder decides within school logic"), so which of the 26+
-abilities each monk receives cannot be resolved without an owner rule; (2) the **s57.25.8 artist-NPC seeding** (≥1 tattoo-artist per Dragon
-province / Crab-Mantis-Daidoji holding for valid `artist_id` references + the disposition bond) — a separate structural NPC-creation build.
+abilities each monk receives cannot be resolved without an owner rule [RESOLVED 2026-07-09 — PROVISIONAL seeded draw]; (2) the **s57.25.8
+artist-NPC seeding** (≥1 tattoo-artist per clan/family for valid `artist_id` references + the s57.25.4 disposition bond) [RESOLVED
+2026-07-09 — `WorldBootstrap._seed_tattoo_artists` + `_apply_world_start_tattoo_bonds`, runtime-verified 45/45].
 
 ### Known Code Issues — Deferred (2026-07-09, post-succession-fix sweep — a whole inert LOCKED section + a dead-twin batch, do NOT re-audit)
 After the s22.5 succession wire (below), a fresh zero-caller sweep of the lifecycle / war / siege / naval / ronin / pc / artisan /
 bribery / tattoo layers found **NO further clean no-invention wire** — every survivor is a superseded twin, design-gated (missing
 producer/trigger/value), or ASCII/combat-blocked. Documented so future sweeps skip these exact items:
-- **s57.25.8 World-Generation tattoo seeding — the DECORATIVE slice AND the Togashi ABILITY allotment are now DONE (see the two
-  changelog entries above); only the artist-NPC seeding remains DEFERRED.** Decorative (Crab-Hida/Mantis 40–60% 1–2, Daidoji 50% wrist,
-  Dragon non-monk 0–2) + Togashi/Kikage/Hoshi ability tattoos (locked per-rank count, abilities a PROVISIONAL owner-overridable seeded
-  draw) are wired end-to-end via `TattooSystem.seed_world_start_tattoos`, runtime-verified 24/24. STILL DEFERRED: the **artist-NPC
-  seeding** (≥1 tattoo-artist per Dragon province / Crab-Mantis-Daidoji holding for valid `artist_id` references + the s57.25.4
-  disposition bond) — a structural NPC-creation build with an unspecified artisan school/stat template; world-start tattoos carry
-  `artist_id = -1` (no bond) until then.
+- **s57.25.8 World-Generation tattoo seeding — DECORATIVE + Togashi ABILITY + ARTIST-NPC + s57.25.4 BOND are ALL DONE (see the three
+  changelog entries above); the tattoo world-gen layer is complete.** Decorative (Crab-Hida/Mantis 40–60% 1–2, Daidoji 50% wrist,
+  Dragon non-monk 0–2) + Togashi/Kikage/Hoshi ability tattoos + one artist NPC per clan/family (reused clan school + LOCKED
+  Artisan: Tattooing floor rank) + the bidirectional s57.25.4 disposition bond are wired end-to-end via
+  `TattooSystem.seed_world_start_tattoos` / `WorldBootstrap._seed_tattoo_artists` / `_apply_world_start_tattoo_bonds`,
+  runtime-verified 45/45. Only PROVISIONAL refinements remain (owner-overridable, NOT deferred work): per-locale artist
+  multiplication (one-per-clan floor vs the per-province/per-holding literal) and pinning the reused schools/insight ranks.
 - **SEEK_TATTOO NeedType (s57.25.7) — unbuilt NPC objective.** `TattooSystem.is_seek_tattoo_blocked` / `get_seek_tattoo_urgency` have
   ZERO callers; only APPLY_TATTOO is wired (executor + precondition filter). The whole s57.25.7 monk-seeks-elder self-selection
   pathway (OFFER_ART_COMMISSION 95 / BEGIN_TRAVEL 90 / ASK_FOR_INTRODUCTION 80 / GATHER_INTELLIGENCE 75, urgency scaling, BLOCKED

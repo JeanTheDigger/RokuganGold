@@ -529,9 +529,10 @@ static func get_dragon_decorative_count(rng_value: float) -> int:
 # design space s57.25 does not resolve). Bounded owner-set defaults (no open design space):
 #   * quality split within "Normal to Fine": uniform (WORLD_GEN_TATTOO_FINE_CHANCE).
 #   * count within a locked range: uniform via the dice engine (deterministic world-gen).
-#   * artist_id = -1: world-start tattoos have no in-game artist, so no s57.25.4 disposition
-#     bond forms. The s57.25.8 artist-NPC seeding is DEFERRED (a separate structural build);
-#     -1 is a graceful degradation, not an invented mechanic.
+#   * artist_id: resolved from the artist_by_category map (s57.25.8 seeds one tattoo-artist NPC
+#     per clan/family; WorldBootstrap._seed_tattoo_artists), enabling the s57.25.4 disposition
+#     bond. Falls back to -1 (no artist -> no bond, a graceful degradation) when the map is
+#     empty, e.g. the verify driver's 3-arg calls.
 #   * body location: a random UNOCCUPIED eligible location; HEAD is never seeded (s57.25.2
 #     requires is_bald at application, which world-gen never sets).
 #   * subject_type IMAGE, a flavor description, topic_id -1 (no mechanic).
@@ -578,14 +579,21 @@ static func seed_world_start_tattoos(
 	dice: DiceEngine,
 	next_tattoo_id: Array,
 	ic_day: int = 0,
+	artist_by_category: Dictionary = {},
 ) -> Array:
+	# artist_by_category maps a recipient category ("dragon"/"crab"/"mantis"/"daidoji"/
+	# "togashi") -> the seeded tattoo-artist NPC's id, so world-start tattoos carry a valid
+	# artist_id (s57.25.8) and the s57.25.4 disposition bond can form. Empty {} -> artist_id -1
+	# (the prior no-bond graceful degradation), so the verify driver's 3-arg calls are unchanged.
 	var out: Array = []
 	if character == null or CharacterStats.is_dead(character):
 		return out
 	# Tattooed-monk schools spawn with their LOCKED per-rank ability-tattoo allotment (s57.25.8);
 	# decorative rules do not apply to them.
 	if is_togashi_school(character.school):
-		return _seed_ability_tattoos(character, dice, next_tattoo_id, ic_day)
+		return _seed_ability_tattoos(
+			character, dice, next_tattoo_id, ic_day, int(artist_by_category.get("togashi", -1)),
+		)
 
 	var clan: String = character.clan
 	var family: String = character.family
@@ -598,6 +606,7 @@ static func seed_world_start_tattoos(
 			var t: TattooData = _seed_one_decorative(
 				character.character_id, loc, dice, next_tattoo_id,
 				"Daidoji duty and family loyalty", ic_day,
+				int(artist_by_category.get("daidoji", -1)),
 			)
 			if t != null:
 				out.append(t)
@@ -606,9 +615,11 @@ static func seed_world_start_tattoos(
 	# Crab Hida warriors / Mantis: 40-60% of 1-2 decorative tattoos.
 	if (clan == "Crab" and family == "Hida" and is_bushi) or (clan == "Mantis" and is_bushi):
 		if should_seed_crab_mantis_tattoo(dice.randf()):
+			var cat: String = "crab" if clan == "Crab" else "mantis"
 			_seed_n_decorative(
 				out, character.character_id, dice.rand_int_range(1, 2),
 				dice, next_tattoo_id, "decorative clan art", ic_day,
+				int(artist_by_category.get(cat, -1)),
 			)
 		return out
 
@@ -619,6 +630,7 @@ static func seed_world_start_tattoos(
 			_seed_n_decorative(
 				out, character.character_id, dcount,
 				dice, next_tattoo_id, "Dragon decorative art", ic_day,
+				int(artist_by_category.get("dragon", -1)),
 			)
 		return out
 
@@ -627,7 +639,7 @@ static func seed_world_start_tattoos(
 
 static func _seed_n_decorative(
 	out: Array, recipient_id: int, count: int, dice: DiceEngine,
-	next_tattoo_id: Array, subject: String, ic_day: int,
+	next_tattoo_id: Array, subject: String, ic_day: int, artist_id: int = -1,
 ) -> void:
 	var avail: Array = DECORATIVE_BODY_LOCATIONS.duplicate()
 	for _i in count:
@@ -636,19 +648,21 @@ static func _seed_n_decorative(
 		var idx: int = dice.rand_int_range(0, avail.size() - 1)
 		var loc: int = avail[idx]
 		avail.remove_at(idx)
-		var t: TattooData = _seed_one_decorative(recipient_id, loc, dice, next_tattoo_id, subject, ic_day)
+		var t: TattooData = _seed_one_decorative(
+			recipient_id, loc, dice, next_tattoo_id, subject, ic_day, artist_id,
+		)
 		if t != null:
 			out.append(t)
 
 
 static func _seed_one_decorative(
 	recipient_id: int, location: int, dice: DiceEngine,
-	next_tattoo_id: Array, subject: String, ic_day: int,
+	next_tattoo_id: Array, subject: String, ic_day: int, artist_id: int = -1,
 ) -> TattooData:
 	var quality: int = Enums.TattooQualityTier.FINE if dice.randf() < WORLD_GEN_TATTOO_FINE_CHANCE \
 		else Enums.TattooQualityTier.NORMAL
 	var t: TattooData = create_tattoo(
-		next_tattoo_id[0], recipient_id, -1, quality, location,
+		next_tattoo_id[0], recipient_id, artist_id, quality, location,
 		Enums.TattooSubjectType.IMAGE, subject, -1, false, Enums.TattooAbility.NONE, ic_day,
 	)
 	if t != null:
@@ -658,10 +672,11 @@ static func _seed_one_decorative(
 
 # Togashi/Kikage/Hoshi: seed the LOCKED per-rank ability-tattoo count (get_allotment_for_rank);
 # abilities drawn deterministically (seeded dice, no duplicates) from ALL_TATTOO_ABILITIES onto
-# distinct non-HEAD locations. quality NORMAL (ability tattoos are not aesthetically graded; the
-# quality-tiered s57.25.4 bond is absent anyway with artist_id = -1). Artist NPCs deferred.
+# distinct non-HEAD locations. quality NORMAL (ability tattoos are not aesthetically graded).
+# artist_id = the seeded Togashi elder (s57.25.8) when supplied, else -1.
 static func _seed_ability_tattoos(
 	character: L5RCharacterData, dice: DiceEngine, next_tattoo_id: Array, ic_day: int,
+	artist_id: int = -1,
 ) -> Array:
 	var out: Array = []
 	var count: int = get_allotment_for_rank(character.school, maxi(1, character.insight_rank))
@@ -679,7 +694,7 @@ static func _seed_ability_tattoos(
 		var loc: int = loc_pool[li]
 		loc_pool.remove_at(li)
 		var t: TattooData = create_tattoo(
-			next_tattoo_id[0], character.character_id, -1,
+			next_tattoo_id[0], character.character_id, artist_id,
 			Enums.TattooQualityTier.NORMAL, loc,
 			Enums.TattooSubjectType.IMAGE, "ability tattoo", -1,
 			true, ability, ic_day,

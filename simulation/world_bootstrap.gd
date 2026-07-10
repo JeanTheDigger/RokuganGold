@@ -463,6 +463,15 @@ static func bootstrap_world(
 
 	var characters: Array = pop_result.get("characters", [])
 
+	# -- World-start tattoo artists (s57.25.8) -------------------------------------
+	# Seed one tattoo-artist NPC per relevant clan/family so world-start tattoos carry a valid
+	# artist_id (not the -1 no-bond sentinel), enabling the s57.25.4 disposition bond. Created
+	# BEFORE placement so the artists flow through every downstream pass (location, contacts,
+	# advantages, insight resync, armor) like any other citizen. Returns {category: artist_id}.
+	var next_char_arr: Array = [int(pop_result.get(
+		"next_character_id", pop_result.get("total_count", 0) + 1))]
+	var artist_by_category: Dictionary = _seed_tattoo_artists(characters, dice, next_char_arr)
+
 	_assign_physical_locations(characters, provinces, settlements, dice)
 	WorldPopulationGenerator._seed_co_located_contacts(
 		characters, baselines.get("clan", {}), baselines.get("family", {}),
@@ -528,16 +537,21 @@ static func bootstrap_world(
 	for _ac: L5RCharacterData in characters:
 		ArmorSystem.assign_by_profile(_ac)
 
-	# -- World-start decorative tattoos (s57.25.8, DECORATIVE slice) ----------
-	# Seed the culturally-appropriate decorative tattoos s57.25.8 mandates (Crab Hida /
-	# Mantis 40-60% 1-2, Daidoji 50% wrist, Dragon non-monk 0-2). Togashi ability tattoos
-	# and the artist-NPC seeding are DEFERRED (see TattooSystem.seed_world_start_tattoos).
+	# -- World-start tattoos (s57.25.8) --------------------------------------
+	# Seed the culturally-appropriate tattoos s57.25.8 mandates: decorative (Crab Hida /
+	# Mantis 40-60% 1-2, Daidoji 50% wrist, Dragon non-monk 0-2) + Togashi ability tattoos.
+	# artist_by_category routes each recipient to its seeded artist so tattoos carry a valid
+	# artist_id; the s57.25.4 bond (Normal +1 .. Legendary +5, bidirectional) is then applied
+	# between each tattoo's artist and recipient -- mirroring the live APPLY_TATTOO
+	# disposition_change/recipient_disposition_change effect, applied directly to disposition_values.
 	var seeded_tattoos: Array = []
 	var next_tattoo_id: Array = [1]
 	for _tc: L5RCharacterData in characters:
-		var char_tattoos: Array = TattooSystem.seed_world_start_tattoos(_tc, dice, next_tattoo_id)
+		var char_tattoos: Array = TattooSystem.seed_world_start_tattoos(
+			_tc, dice, next_tattoo_id, 0, artist_by_category)
 		for _tt: TattooData in char_tattoos:
 			seeded_tattoos.append(_tt)
+	_apply_world_start_tattoo_bonds(seeded_tattoos, chars_by_id)
 
 	# -- Starting navies (Naval Tranche 2, owner-approved 2026-07-02) ---------
 	var next_ship_id: Array = [1]
@@ -564,7 +578,7 @@ static func bootstrap_world(
 		"herald_id": pop_result.get("herald_id", -1),
 		"clan_champions": pop_result.get("clan_champions", {}),
 		"military_data": military_data,
-		"next_character_id": pop_result.get("next_character_id", pop_result.get("total_count", 0) + 1),
+		"next_character_id": next_char_arr[0],
 		"next_settlement_id": next_settlement_id,
 		"bloodspeaker_cells": bloodspeaker_result.get("cells", []),
 		"bloodspeaker_insurgencies": bloodspeaker_result.get("insurgencies", []),
@@ -1026,6 +1040,79 @@ static func _create_clan_data(provinces: Dictionary) -> Dictionary:
 		clans[minor] = cd
 
 	return clans
+
+
+# -- World-Start Tattoo Artists (s57.25.8) ------------------------------------
+# Seeds one tattoo-artist NPC per relevant clan/family so world-start tattoos have a valid
+# artist_id -- enabling the s57.25.4 disposition bond (the sole LIVE artist_id consumer today,
+# via the APPLY_TATTOO writeback) and s57.25.9 provenance. Reuses an existing clan school as the
+# template (no invented archetype -- owner: "reuse a generic artisan school") + injects the
+# LOCKED Artisan: Tattooing floor rank. Returns {category: artist_id}.
+#   LOCKED (s57.25.8): the Tattooing floor ranks -- Dragon/Crab/Mantis 2+, Daidoji 1+, Togashi
+#     elder 3+ (a Togashi Rank 3+ monk) -- and the artist REQUIREMENT itself.
+#   PROVISIONAL (owner-overridable): one artist per clan/family, the GDD "at minimum one" floor
+#     read at CLAN granularity (a reduction from the per-major-province / per-holding-settlement
+#     literal); the reused school per clan; the artist character insight_rank (structural: a
+#     seasoned artisan). Flagged -- swap the spec rows to pin a fixed per-clan template.
+const _TATTOO_ARTIST_SPECS: Array = [
+	# [category, clan, family, school, insight_rank, tattooing_rank]
+	["dragon",  "Dragon", "Kitsuki",  "Kitsuki Investigator",   2, 2],
+	["crab",    "Crab",   "Kaiu",     "Kaiu Engineer",          2, 2],
+	["mantis",  "Mantis", "Yoritomo", "Yoritomo Bushi",         2, 2],
+	["daidoji", "Crane",  "Daidoji",  "Daidoji Iron Warrior",   2, 1],
+	["togashi", "Dragon", "Togashi",  "Togashi Tattooed Order", 3, 3],
+]
+
+
+static func _seed_tattoo_artists(
+	characters: Array, dice: DiceEngine, next_char_arr: Array,
+) -> Dictionary:
+	var out: Dictionary = {}
+	for spec_v: Variant in _TATTOO_ARTIST_SPECS:
+		var spec: Array = spec_v as Array
+		var cid: int = next_char_arr[0]
+		next_char_arr[0] += 1
+		# horishi = tattoo master; a synthetic name (no public name generator exists), unique by id.
+		var artist: L5RCharacterData = WorldGenerator.generate_character(
+			cid, "%s Horishi" % str(spec[2]),
+			str(spec[1]), str(spec[2]), str(spec[3]), int(spec[4]), dice,
+		)
+		if artist == null:
+			continue
+		# Inject the LOCKED Artisan: Tattooing floor rank (s57.25.8); keep a higher rank if the
+		# reused school already grants more. Resync the denormalized insight cache afterward.
+		var cur: int = int(artist.skills.get("Artisan: Tattooing", 0))
+		artist.skills["Artisan: Tattooing"] = maxi(cur, int(spec[5]))
+		artist.insight_rank = CharacterStats.get_insight_rank(artist)
+		characters.append(artist)
+		out[str(spec[0])] = cid
+	return out
+
+
+# Applies the s57.25.4 bidirectional disposition bond for each world-start tattoo that carries a
+# real artist_id (Normal +1 / Fine +2 / Exceptional +3 / Masterwork +4 / Legendary +5). Mirrors
+# the live APPLY_TATTOO effect (disposition_change actor->recipient + recipient_disposition_change
+# recipient->actor) applied directly to disposition_values (clamped -100..100). Per tattoo, additive,
+# never degrades (s57.25.4 "no stacking cap"). Self-applied Togashi tattoos (artist == recipient) are
+# mechanically inert per the GDD but harmless -- skipped to avoid a self-disposition entry.
+static func _apply_world_start_tattoo_bonds(
+	tattoos: Array, chars_by_id: Dictionary,
+) -> void:
+	for t_v: Variant in tattoos:
+		var t: TattooData = t_v as TattooData
+		if t == null or t.artist_id < 0 or t.artist_id == t.recipient_id:
+			continue
+		var bond: int = TattooSystem.get_disposition_bond(t.quality_tier)
+		if bond == 0:
+			continue
+		var artist: L5RCharacterData = chars_by_id.get(t.artist_id)
+		var recipient: L5RCharacterData = chars_by_id.get(t.recipient_id)
+		if artist == null or recipient == null:
+			continue
+		artist.disposition_values[t.recipient_id] = clampi(
+			int(artist.disposition_values.get(t.recipient_id, 0)) + bond, -100, 100)
+		recipient.disposition_values[t.artist_id] = clampi(
+			int(recipient.disposition_values.get(t.artist_id, 0)) + bond, -100, 100)
 
 
 static func _assign_physical_locations(

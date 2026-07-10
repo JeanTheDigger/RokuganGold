@@ -10,6 +10,7 @@ extends SceneTree
 const _TS := preload("res://simulation/tattoo_system.gd")
 const _CH := preload("res://shared/character_data.gd")
 const _DICE := preload("res://simulation/dice_engine.gd")
+const _WB := preload("res://simulation/world_bootstrap.gd")
 
 var _pass: int = 0
 var _fail: int = 0
@@ -46,6 +47,9 @@ func _init() -> void:
 	_test_probability_bands()
 	_test_id_uniqueness()
 	_test_ability_tattoos()
+	_test_artist_seeding()
+	_test_artist_id_routing()
+	_test_disposition_bonds()
 	print("--- %d passed, %d failed ---" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -224,3 +228,101 @@ func _test_ability_tattoos() -> void:
 		abils_seen.append(t.ability_granted)
 		locs_seen.append(t.body_location)
 	_ok(not bad, "Rank-5 monk: 6 ability tattoos, all ability/non-NONE/artist -1/no-HEAD/distinct")
+
+
+func _test_artist_seeding() -> void:
+	print("[6] artist-NPC seeding: 5 artists, correct clan/family/Tattooing rank, ids advance")
+	var d := _dice(1234)
+	var chars: Array = []
+	var next_char: Array = [500]
+	var m: Dictionary = _WB._seed_tattoo_artists(chars, d, next_char)
+	_ok(chars.size() == 5, "5 tattoo artists created (got %d)" % chars.size())
+	_ok(next_char[0] == 505, "next_character_id advanced by 5 (got %d)" % next_char[0])
+	# The category map covers every recipient branch.
+	for cat: String in ["dragon", "crab", "mantis", "daidoji", "togashi"]:
+		_ok(m.has(cat) and int(m[cat]) >= 500, "artist_by_category has '%s'" % cat)
+	# LOCKED Tattooing floor ranks per clan/family + real clan membership.
+	var want_rank := {"Dragon_Kitsuki": 2, "Crab_Kaiu": 2, "Mantis_Yoritomo": 2, "Crane_Daidoji": 1, "Dragon_Togashi": 3}
+	var seen_keys: Array = []
+	var ids: Dictionary = {}
+	var all_ranked := true
+	for c: L5RCharacterData in chars:
+		var key: String = "%s_%s" % [c.clan, c.family]
+		seen_keys.append(key)
+		ids[c.character_id] = true
+		var tr: int = int(c.skills.get("Artisan: Tattooing", 0))
+		if tr < int(want_rank.get(key, 99)):
+			all_ranked = false
+	_ok(all_ranked, "every artist has Artisan: Tattooing >= its LOCKED floor rank")
+	_ok(ids.size() == 5, "all 5 artist ids distinct")
+	for key: String in want_rank:
+		_ok(key in seen_keys, "artist for %s exists" % key)
+
+
+func _test_artist_id_routing() -> void:
+	print("[7] artist_by_category routes recipient -> its artist_id on seeded tattoos")
+	var d := _dice(88)
+	var nid: Array = [1]
+	var amap := {"dragon": 900, "crab": 901, "mantis": 902, "daidoji": 903, "togashi": 904}
+	# Force a Crab-Hida hit until we get one, then check artist_id == 901.
+	var crab_ok := false
+	for i in 200:
+		var hi := _char(1000 + i, "Crab", "Hida", "Hida Bushi", Enums.SchoolType.BUSHI)
+		var ts: Array = _TS.seed_world_start_tattoos(hi, d, nid, 0, amap)
+		if ts.size() > 0:
+			crab_ok = true
+			for t: TattooData in ts:
+				if t.artist_id != 901:
+					crab_ok = false
+			break
+	_ok(crab_ok, "Crab-Hida tattoos carry the 'crab' artist_id (901)")
+	# Togashi monk -> togashi elder artist_id.
+	var mo := _togashi(2000, "Togashi Tattooed Order", 3)
+	var mts: Array = _TS.seed_world_start_tattoos(mo, d, nid, 0, amap)
+	var tog_ok := mts.size() == 4
+	for t: TattooData in mts:
+		if t.artist_id != 904:
+			tog_ok = false
+	_ok(tog_ok, "Togashi ability tattoos carry the 'togashi' elder artist_id (904)")
+	# Empty map -> artist_id stays -1 (backward-compatible no-bond degradation).
+	var neg := false
+	for i in 200:
+		var hi2 := _char(3000 + i, "Crab", "Hida", "Hida Bushi", Enums.SchoolType.BUSHI)
+		var ts2: Array = _TS.seed_world_start_tattoos(hi2, d, nid)
+		if ts2.size() > 0:
+			for t: TattooData in ts2:
+				if t.artist_id != -1:
+					neg = true
+			break
+	_ok(not neg, "empty artist map -> artist_id -1 (backward compatible)")
+
+
+func _mk_tattoo(tid: int, recipient: int, artist: int, quality: int) -> TattooData:
+	var t: TattooData = TattooData.new()
+	t.tattoo_id = tid
+	t.recipient_id = recipient
+	t.artist_id = artist
+	t.quality_tier = quality
+	return t
+
+
+func _test_disposition_bonds() -> void:
+	print("[8] s57.25.4 bond: bidirectional +tier, skips artist<0 and self-tattoo")
+	var artist := _char(10, "Dragon", "Kitsuki", "S", Enums.SchoolType.ARTISAN)
+	var recip := _char(11, "Dragon", "Mirumoto", "S", Enums.SchoolType.BUSHI)
+	var lone := _char(12, "Crab", "Hida", "S", Enums.SchoolType.BUSHI)
+	var chars_by_id := {10: artist, 11: recip, 12: lone}
+	var tattoos: Array = [
+		_mk_tattoo(1, 11, 10, Enums.TattooQualityTier.NORMAL),  # +1 both ways
+		_mk_tattoo(2, 11, 10, Enums.TattooQualityTier.FINE),    # +2 both ways (stacks)
+		_mk_tattoo(3, 12, -1, Enums.TattooQualityTier.FINE),    # no artist -> no bond
+		_mk_tattoo(4, 10, 10, Enums.TattooQualityTier.MASTERWORK),  # self -> skipped
+	]
+	_WB._apply_world_start_tattoo_bonds(tattoos, chars_by_id)
+	# recip -> artist and artist -> recip both accumulate +1 (Normal) + +2 (Fine) = +3.
+	_ok(int(recip.disposition_values.get(10, 0)) == 3, "recipient -> artist == +3 (Normal+Fine, got %d)" % int(recip.disposition_values.get(10, 0)))
+	_ok(int(artist.disposition_values.get(11, 0)) == 3, "artist -> recipient == +3 (got %d)" % int(artist.disposition_values.get(11, 0)))
+	# The artist-less tattoo left the lone bushi untouched.
+	_ok(lone.disposition_values.is_empty(), "artist_id<0 tattoo applies no bond")
+	# The self-tattoo added no self-disposition entry.
+	_ok(not artist.disposition_values.has(10), "self-tattoo skipped (no self-disposition)")
