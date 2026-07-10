@@ -34264,11 +34264,19 @@ static func _process_garden_visitor_effects(
 			if visit_result.get("bonus", 0) <= 0:
 				continue
 
+			# s57.27:115 familiarity decay — a garden held in the same zone > 1 IC year
+			# loses visitor impact (standard 15%/yr, floor 50%).
+			var garden_fam: float = PaintingSystem.familiarity_factor(
+				ic_day, garden.installation_date, false)
+			var garden_bonus: int = int(round(float(visit_result["bonus"]) * garden_fam))
+			if garden_bonus <= 0:
+				continue
+
 			# Add temporary disposition modifier toward creator
 			var bucket: Array = visitor.temporary_modifiers.get(garden.creator_id, [])
 			bucket.append({
 				"event_type": "garden_visitor",
-				"value": visit_result["bonus"],
+				"value": garden_bonus,
 				"created_ic_day": ic_day,
 				"duration": GardenSystem.VISITOR_BONUS_DURATION_DAYS,
 			})
@@ -34824,7 +34832,11 @@ static func _process_painting_visitor_effects(
 
 			# Disposition toward creator
 			if creator != null and not CharacterStats.is_dead(creator):
-				var disp: int = visit_result.get("disposition_change", 0)
+				# s57.27:115 familiarity decay — fusuma decays at half rate.
+				var fam_factor: float = PaintingSystem.familiarity_factor(
+					ic_day, painting.continuous_display_start_ic_day,
+					painting.format == PaintingSystem.Format.FUSUMA)
+				var disp: int = int(round(float(visit_result.get("disposition_change", 0)) * fam_factor))
 				if disp != 0:
 					var bucket: Array = visitor.temporary_modifiers.get(painting.creator_id, [])
 					bucket.append({

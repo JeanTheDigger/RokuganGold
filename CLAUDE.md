@@ -237,6 +237,35 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Systems Added 2026-07-08 (s57.27:115 familiarity decay ACTIVATED — painting + garden, owner-approved, runtime-verified 24/24)
+Owner-approved activation ("Continue, all of those, go") of the first of six previously design-gated systems. The
+s57.27:115 familiarity-decay mechanic (LOCKED section; the *rates* are GDD-flagged PROVISIONAL/pending-playtest) was
+**dormant**: `PaintingSystem.FAMILIARITY_DECAY_RATE` had been deliberately zeroed in the invented-content audit, and the
+two display-start clocks (`PaintingData.continuous_display_start_ic_day`, `GardenData.installation_date`) were tracked at
+creation but **never read** — so a work displayed for decades gave the same visitor bonus as a fresh one, contradicting
+"a permanently-displayed work occupying the same slot > 1 IC year loses visitor impact." **No invented values** — every
+number is the GDD's own: standard tier 15%/IC year beyond the first, floor 50%; the fusuma + religious-statuary tier at
+HALF rate (7.5%/yr, floor 75%). FIX: (1) **canonical helper** — restored the four rate constants and added
+`PaintingSystem.familiarity_factor(ic_day, display_start_ic_day, half_rate)` as the SINGLE home for the decay math
+(`beyond_first = max(0, years−1)`; `max(floor, 1 − rate×beyond_first)`; returns 1.0 within the first year or when the
+clock is unset −1) — so paintings/gardens (and the deferred sculpture/bonsai) all read ONE formula, no divergent copies.
+(2) **painting visitor site** (`day_orchestrator` ~34836): the visitor `disposition_change` is now scaled by
+`familiarity_factor(ic_day, painting.continuous_display_start_ic_day, painting.format == FUSUMA)` and int-rounded — so a
+Fine kakemono (+2) held 3 IC years applies +1 (round(2×0.70)), a Masterwork (+4) at floor applies +2 (round(4×0.50)),
+and a fresh work is unchanged. Fusuma decays at the half rate (architectural, part of the space). (3) **garden visitor
+site** (~34269): the garden `bonus` is scaled by `familiarity_factor(ic_day, garden.installation_date, false)` (standard
+rate) with a `garden_bonus <= 0: continue` guard. The GDD's ikebana-exempt rule is honored for free (ikebana runs a
+separate lifespan path, never calls this). Runtime-verified 24/24 (`tests/verify_familiarity_decay.gd`): the rate
+constants (0.15/0.50/0.075/0.75); the GDD's own worked examples (Fine kakemono +2 → 1yr 1.0 / 2yr 0.85 / 3yr 0.70 / 4yr
+0.55 / 5yr+ 0.50 floor); the half-rate tier (2yr 0.925 / 3yr 0.85 / 4yr 0.775 / 5yr 0.75 floor); the guards (unset −1 →
+1.0, sub-year → 1.0, extreme age holds the floor); and the orchestrator scaling round-math (+2@3yr→1, +4@3yr→3,
++4@floor→2, +4@fresh→4). Full project `--import` parse-clean. **DEFERRED (documented, not this pass — no continuous-display
+clock):** `SculptureData` (statuary/guardian) and `BonsaiData` carry no display-start field (only `date_completed` /
+`collection_date`), so their familiarity decay needs a small clock addition (a `continuous_display_start_ic_day` set when
+the piece is placed/displayed) before the same `familiarity_factor` can be consumed — the helper is ready and the
+religious-statuary half-rate path (`half_rate=true`) awaits it. The rate values remain PROVISIONAL pending a live
+playtest, per the GDD flag.
+
 ### Known Code Issues (found and fixed 2026-07-08, GOSSIP base-TN was a divergent inline copy of a zero-caller arbiter — runtime-verified 8/8)
 A **divergent-inline-copy** dedup (the sibling of the PU-loss / land-commander / social-TN class, surfaced by the
 crime/legal/court sweep). `CourtActionSystem.compute_gossip_tn(subject_glory, gossiper_glory)` (s15.4 — the canonical
@@ -317,8 +346,9 @@ Documented here so future sweeps skip them:
   trigger, s57.42); the whole `SpiritualExposureSystem` Toshigoku/Chikushudo/Gaki periodic-check cluster (combat-loop unbuilt);
   `TopicSystem.get_momentum_level` (`MomentumLevel` enum has zero consumers — sim gates on raw floats); `ReactiveDecisions.evaluate_duel_trigger`
   (the s55.11 PROACTIVE duel-initiation path — zero callers, its grievance→challenge event producer is unbuilt; the RESPONSE
-  path DUEL_CHALLENGE_RECEIVED is the wired one); PaintingSystem `continuous_display_start_ic_day` familiarity decay
-  (s57.27:115 — `FAMILIARITY_DECAY_RATE` deliberately zeroed in the invented-content audit, rates GDD-flagged PROVISIONAL).
+  path DUEL_CHALLENGE_RECEIVED is the wired one). PaintingSystem `continuous_display_start_ic_day` familiarity decay
+  (s57.27:115) is **NO LONGER DEFERRED — activated 2026-07-08** with the GDD-stated rates (owner-approved); see the
+  "familiarity decay activated" changelog entry below.
   `NavalCombatSystem` zero-external funcs (`resolve_ram_in_battle`/`resolve_naval_rout`/…) are internal combat mechanics
   reachable from the live `resolve_naval_battle` chain, not effect arbiters — out of scope, not dormant.
 - **WHOLE-SIMULATION BACKSTOP SCAN (after the 3 domain agents — surfaced two systems no domain sweep hit; both DESIGN-GATED, not clean wires):**

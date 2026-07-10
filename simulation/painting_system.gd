@@ -181,11 +181,36 @@ const CLAN_PAINTING_DURATION_DAYS: int = 30
 const PASSIVE_WP_BY_TIER: Dictionary = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0}  # PROVISIONAL
 
 # ---------------------------------------------------------------------------
-# Familiarity decay (s57.27.10) — PROVISIONAL, zeroed
+# Familiarity decay (s57.27:115, LOCKED — rates GDD-flagged PROVISIONAL/pending-playtest;
+# owner-approved activation). A displayed work occupying the same slot continuously for more
+# than 1 IC year loses visitor impact: the visitor disposition bonus reduces by 15% per IC year
+# beyond the first, flooring at 50% of the original. Fusuma and religious statuary decay at HALF
+# rate (7.5%/yr, floor 75%) — architectural/sacred works are part of the space's identity.
+# Ikebana is exempt (arrangements die before decay applies). Canonical for ALL permanently
+# displayed art (paintings, sculptures, gardens, bonsai) — the cross-art callers use
+# familiarity_factor() below so the rates live in ONE place.
 # ---------------------------------------------------------------------------
 
-const FAMILIARITY_DECAY_RATE: float = 0.0    # PROVISIONAL
-const FAMILIARITY_DECAY_FLOOR: float = 0.0   # PROVISIONAL
+const FAMILIARITY_DECAY_RATE: float = 0.15         # s57.27:115 — 15%/IC year beyond the first
+const FAMILIARITY_DECAY_FLOOR: float = 0.50        # floor at 50% of the original bonus
+const FAMILIARITY_DECAY_RATE_HALF: float = 0.075   # fusuma + religious statuary: half rate
+const FAMILIARITY_DECAY_FLOOR_HALF: float = 0.75   # fusuma + religious statuary: floor 75%
+
+
+## The s57.27:115 familiarity-decay multiplier for a work displayed since `display_start_ic_day`.
+## Returns 1.0 (no decay) within the first IC year or when the clock is unset (-1). `half_rate`
+## selects the fusuma/religious-statuary tier (7.5%/yr, floor 75%) vs the standard tier
+## (15%/yr, floor 50%). Callers scale the visitor disposition bonus by this factor.
+static func familiarity_factor(ic_day: int, display_start_ic_day: int, half_rate: bool = false) -> float:
+	if display_start_ic_day < 0:
+		return 1.0
+	var years: float = float(ic_day - display_start_ic_day) / float(TimeSystem.IC_DAYS_PER_YEAR)
+	var beyond_first: float = maxf(0.0, years - 1.0)
+	if beyond_first <= 0.0:
+		return 1.0
+	var rate: float = FAMILIARITY_DECAY_RATE_HALF if half_rate else FAMILIARITY_DECAY_RATE
+	var floor_v: float = FAMILIARITY_DECAY_FLOOR_HALF if half_rate else FAMILIARITY_DECAY_FLOOR
+	return maxf(floor_v, 1.0 - rate * beyond_first)
 
 # ---------------------------------------------------------------------------
 # Visitor memory cap (s57.27.10)
