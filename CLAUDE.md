@@ -316,6 +316,44 @@ and the executor already sets `to_death = true` for ELIMINATE_CHARACTER) — so 
 **duplicate execution path**, which the CLAUDE.md hard constraint explicitly forbids ("Do not create duplicate execution paths.
 Check existing channels before wiring any ActionID"). The eliminate-via-duel behavior is already live through the scored channel.
 
+### Known Code Issues — Deferred (2026-07-09, TWO fresh whole-domain dormant sweeps — social-consequence + resource/economy/worship — NO clean wire remains, do NOT re-audit)
+Two systematic agent sweeps of the last two un-reconfirmed domains, each grepping every `static func` in-scope for production
+callers and tracing each zero-caller's intended consumer + GDD lock, cross-checked against the deferred lists above, plus a hand
+spot-check of the closest near-misses. **Result: ZERO clean structural wires remain** — every surviving dormant arbiter is
+design-gated behind an unbuilt trigger, a missing data field, or a missing central choke point (inventing past any of them would
+violate the "Do not invent mechanics" HARD CONSTRAINT). Documented so future sweeps skip these exact near-misses:
+- **`SecretSystem.get_effective_severity` (s12.8:39 LOCKED — +1 severity tier when a higher-Status character is involved OR the act
+  is < RECENCY_SEASONS old).** The live exposure funcs `reveal_privately`/`expose_publicly` use raw `secret.severity` and ignore
+  it. DESIGN-GATED: `SecretData` (grep-confirmed) has `subject_id` but **no `involved_id` field and no creation-day/season field**,
+  so two of its three inputs (`involved_status`, `seasons_since_act`) have no producer — wiring needs a data-model change + a design
+  decision on who counts as "involved," not a wire.
+- **`SeductionSystem.get_affair_severity` (s12.8:271 LOCKED — unmarried→T4 / married→T3 / cross-clan+political→T2).** The discovery
+  → `expose_publicly` chain is live, but `_process_seduction_entanglements` creates the entanglement and **never mints the mandated
+  affair-secret object** — and that pass receives neither `active_secrets` nor a secret-id allocator, and there is no
+  `is_political_tension` signal in scope. Threading the secret registry + a tension source is a build, not a one-liner.
+- **`DispositionSystem.get_authenticity_modifier` (s12.2:515 LOCKED — Devoted/Ally/Friend doing a hostile act → −1/−2 KEPT dice;
+  symmetric for friendly acts toward enemies).** Its sibling `get_raise_modifier` is already live in the social-TN calc, but this
+  one needs a per-action `action_is_hostile` classification (none exists) + a central social-roll choke point to inject a
+  keep-dice modifier (none exists) — a per-action hostility map + keep threading through every social roll.
+- **`MiyaBlessingSystem.apply_cunning_modifier` (s11.5b §5 — Cunning-emperor ±10 Need Score).** Truly zero-caller (an earlier
+  CLAUDE.md parenthetical wrongly called it "already live" — corrected 2026-07-09, see the whole-sim backstop scan above).
+  DESIGN-GATED: GDD §5 makes it discretionary ("**May** add +10 to favored / −10 to disfavored") and locks NO rule for WHICH clan
+  a Cunning emperor favors/disfavors (zero `favored_clan`/`disfavored_clan` producer) → needs an invented favorite-selection mechanic.
+- **The rest are design-gated clusters (trigger/field/consumer unbuilt), already the same class the deferred lists document:** the
+  s12.10a favor-DISPUTE suite (`can_dispute`/`resolve_dispute`/`get_dispute_witness_disposition` — no DISPUTE_FAVOR action);
+  `FavorSystem.is_blackmail_exposure_risk`/`forgive_favor` (no public-invocation-exposure / heir-forgiveness trigger);
+  `IntimidationSystem.generate_betrayal_topic` (no failed-blackmail→expose sequence tracking); `ViolenceSystem.should_escalate_to_killing`
+  (only the non-lethal bodyguard scuffle feeds `evaluate_violence`); the `SecretSystem` NPC-covert-selection/fabrication-detection
+  gates (`get_bribe_tn`/`detect_fabrication`/`should_generate_reputation_topic`/`passes_covert_filters`/`can_fabricate` — unbuilt
+  fields/actions); the `DispositionSystem` composite permanent+historical+temporary ledger (`compute_permanent_modifier`/
+  `compute_total_disposition`/`is_temporary_expired` — the same unfolded-ledger owner-gated architecture); and on the
+  resource/economy/worship side `WorshipSystem.get_minor_blessing_tier`/`compute_province_effective_maluses` (deferred four-level
+  minor-blessing layer / superseded by the live batch `compute_all_province_maluses`), `RegionalPriceModifiers.compute_final_price`
+  (needs the owner base-price table + item→category mapping), and the SUPERSEDED per-unit refactor seams
+  `ResourceTick.produce_iron_settlement`/`process_forge_conversion_single_clan` (effect fires via the inline batch passes —
+  harmless). **With this, all world-sim domains have been swept to exhaustion for clean no-invention wires; every remaining
+  dormant item is owner-gated design work, not a structural wire.**
+
 ### Systems Added 2026-07-08 (s11.5b §4.3 Miya's Blessing Winter-Court PETITIONS ACTIVATED — dead petition_bonus producer, owner-approved, runtime-verified 15/15)
 Owner-approved activation ("Continue, all of those, go") of the fourth of six design-gated systems. The s11.5b §4.3
 Winter-Court-influence layer was **dormant at the producer end**: `MiyaBlessingSystem.compute_need_score` already CONSUMED a
