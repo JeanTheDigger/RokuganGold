@@ -316,6 +316,31 @@ and the executor already sets `to_death = true` for ELIMINATE_CHARACTER) — so 
 **duplicate execution path**, which the CLAUDE.md hard constraint explicitly forbids ("Do not create duplicate execution paths.
 Check existing channels before wiring any ActionID"). The eliminate-via-duel behavior is already live through the scored channel.
 
+### Known Code Issues (found and fixed 2026-07-09, s22.5 succession transition-duration was a divergent inline copy — the 7-tick fast path was UNREACHABLE — runtime-verified 12/12)
+A **divergent-inline-copy / dormant-fast-path** wire (the sibling of the land-commander / social-TN class, applied to the succession
+lifecycle). `SuccessionSystem.get_transition_duration(is_clean, confirming_disp)` — the canonical s22.5 transition-duration arbiter
+(**clean succession + confirming-authority disposition ≥ 31 → CLEAN_SUCCESSION_MIN_TICKS 7 / clean low-disp → CLEAN_SUCCESSION_MAX_TICKS 14
+/ disputed → DISPUTED_MAX_TICKS 60**) had **ZERO production callers** (grep-confirmed: only its own def + `tests/`). The sole live consumer,
+`DayOrchestrator._process_successions`'s per-tick loop (:11890), **inlined its own `max_dur`** as `DISPUTED_MAX_TICKS (60)` unless the
+succession was `PENDING` → `CLEAN_SUCCESSION_MAX_TICKS (14)` — so it only ever yielded **14 or 60, and NEVER 7**. Result: the s22.5
+**7-tick fast path** ("a clean succession whose confirming authority holds the heir at Friend+ disposition resolves fastest") was
+**permanently unreachable** — every clean succession dragged out the full 14 ticks regardless of the confirming authority's standing,
+and the disposition-≥31 threshold in `get_transition_duration` was dead. The tell that this is a divergent copy: the inline path split
+on `SuccessionState` (PENDING vs else) while the arbiter splits on `is_clean` + `confirming_disp` — two different, drifting encodings of
+the same LOCKED rule. FIX (pure structural wire of the LOCKED arbiter — **no invented values**; the 7/14/60 are the arbiter's own s22.5
+constants): (1) `SuccessionData` gains a defaulted `transition_max_ticks: int = -1` (a data-carrier field, the sanctioned way to route a
+LOCKED value from producer to consumer); (2) the creation site (`_process_lord_deaths`, :11726 — where `is_clean` and `confirming_disp`
+are already computed for the DISPUTED-state branch) **stamps** `succession.transition_max_ticks = SuccessionSystem.get_transition_duration(is_clean, confirming_disp)`;
+(3) the tick loop **reads** `succ.transition_max_ticks`, falling back to the prior inline behavior only when it is the `-1` sentinel (a
+succession loaded from a pre-fix save). So a clean high-disposition succession now resolves in 7 ticks, a clean low-disposition one in
+14, and a disputed one in 60 — the fast path is live. **Emperor-succession path unaffected** (grep-confirmed): the orderly Imperial path
+sets `CONFIRMED` and is skipped by the tick loop (`if succ.state == CONFIRMED: continue`), and the DISPUTED Imperial path stamps 60 (its
+`is_clean` is false) — identical to the old fallback. Runtime-verified 12/12 (`tests/verify_succession_duration.gd`): the arbiter (clean+31/60
+→ 7, clean+30/0 → 14 at the boundary, disputed → 60 regardless of disp; the 7/14/60 constants distinct); and end-to-end through
+`_process_successions` — a stamped `transition_max_ticks=7` succession expires+confirms at **exactly tick 7** (its sole living candidate),
+the `-1`-fallback control expires at tick **14** (the pre-fix behavior), the fast path resolves strictly sooner than the fallback (proving
+the fix makes a difference), and a CONFIRMED succession is not ticked. Full project `--import` parse-clean.
+
 ### Systems Added 2026-07-09 (s12.8:39 context-severity upgrade ACTIVATED — dead get_effective_severity + missing SecretData fields, owner-approved, runtime-verified 13/13)
 Owner-approved activation ("Continue, all of those, go", 2026-07-09) of a dormant LOCKED arbiter blocked on two missing data fields.
 GDD s12.8:39 (LOCKED): "a secret moves up one tier if it involves a character of higher Status than the subject, or if it occurred

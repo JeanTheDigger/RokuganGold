@@ -11720,6 +11720,12 @@ static func _process_lord_deaths(
 		var is_clean: bool = SuccessionSystem.is_clean_succession(
 			succession, candidates, confirming_disp
 		)
+		# s22.5 (LOCKED): route the canonical transition-duration arbiter (clean+high-disp -> 7 /
+		# clean -> 14 / disputed -> 60) and carry its value to the tick loop, which otherwise
+		# inlined a divergent copy that never reached the 7-tick fast path.
+		succession.transition_max_ticks = SuccessionSystem.get_transition_duration(
+			is_clean, confirming_disp
+		)
 
 		if not is_clean:
 			succession.state = SuccessionData.SuccessionState.DISPUTED
@@ -11879,9 +11885,13 @@ static func _process_successions(
 		if succ.state == SuccessionData.SuccessionState.RESOLVED:
 			continue
 
-		var max_dur: int = SuccessionSystem.DISPUTED_MAX_TICKS
-		if succ.state == SuccessionData.SuccessionState.PENDING:
-			max_dur = SuccessionSystem.CLEAN_SUCCESSION_MAX_TICKS
+		# Use the canonical duration stamped at creation (s22.5 arbiter). Fallback for a succession
+		# created before this field existed / loaded from an old save: the prior inline behavior.
+		var max_dur: int = succ.transition_max_ticks
+		if max_dur < 0:
+			max_dur = SuccessionSystem.DISPUTED_MAX_TICKS
+			if succ.state == SuccessionData.SuccessionState.PENDING:
+				max_dur = SuccessionSystem.CLEAN_SUCCESSION_MAX_TICKS
 
 		var tick_result := SuccessionSystem.process_tick(succ, max_dur)
 		if tick_result["expired"]:
