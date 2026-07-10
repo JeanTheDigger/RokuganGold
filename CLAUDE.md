@@ -442,6 +442,19 @@ violate the "Do not invent mechanics" HARD CONSTRAINT). Documented so future swe
   `ResourceTick.produce_iron_settlement`/`process_forge_conversion_single_clan` (effect fires via the inline batch passes —
   harmless). **With this, all world-sim domains have been swept to exhaustion for clean no-invention wires; every remaining
   dormant item is owner-gated design work, not a structural wire.**
+- **`InventorySystem` physical-item MANIPULATION layer (s12.11) — whole-layer dormant, DESIGN-GATED (documented 2026-07-09 so it is
+  not re-hunted).** The LIVE surface of InventorySystem is only THREE functions (`create_gift_item` [DELIVER_GIFT], `get_contraband_on_person`
+  + `get_item_size_string` [assassination CONCEAL_ITEM / contraband]). The entire physical-item *manipulation* suite — `give_directly`,
+  `send_by_messenger`, `receive_from_transit`, `move_to_storage`, `destroy_item`, `pickpocket`, `search_quarters` (the ITEM-theft one),
+  `has_evidence`/`get_evidence_items`/`get_items_in_tier`/`can_add_item`/`needs_concealment` — is **zero-caller** (grep-confirmed:
+  def + `tests/` only). NOT a clean wire: there are NO physical-item-transfer ActionIDs anywhere (GIVE_ITEM / PICKPOCKET / SEND_ITEM /
+  STORE_ITEM / DESTROY_ITEM don't exist — grep-confirmed empty), so wiring the layer means BUILDING a whole physical-inventory action
+  suite (ActionIDs + AP costs + context lists + objective_alignment scores + action_skill_map + personality filters + theft/detection
+  mechanics + an item-economy producer) — all game-design values requiring owner authorization, the same class as the deferred s11.8
+  Regional item-price market and the removed artisan-NPC pipeline. NOTE the name collision that is NOT a bug: the LIVE `SEARCH_QUARTERS`
+  ActionID searches for **secrets** (`SecretSystem.resolve_search_quarters`, a Stealth roll), a DIFFERENT capability from
+  `InventorySystem.search_quarters` (physically taking an item from quarters) — the two are unrelated, not a divergent copy. Gift-giving
+  (s12.3) and performative arts (s12.4) were swept in the same pass and are fully wired (zero dormant funcs).
 
 ### Systems Added 2026-07-08 (s11.5b §4.3 Miya's Blessing Winter-Court PETITIONS ACTIVATED — dead petition_bonus producer, owner-approved, runtime-verified 15/15)
 Owner-approved activation ("Continue, all of those, go") of the fourth of six design-gated systems. The s11.5b §4.3
