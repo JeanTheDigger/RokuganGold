@@ -316,6 +316,34 @@ and the executor already sets `to_death = true` for ELIMINATE_CHARACTER) — so 
 **duplicate execution path**, which the CLAUDE.md hard constraint explicitly forbids ("Do not create duplicate execution paths.
 Check existing channels before wiring any ActionID"). The eliminate-via-duel behavior is already live through the scored channel.
 
+### Systems Added 2026-07-09 (s12.8:271 affair-secret minting ACTIVATED — dead get_affair_severity + never-minted secret, owner-approved, runtime-verified 20/20)
+Owner-approved activation ("Continue, all of those, go", 2026-07-09) of a dormant LOCKED arbiter. GDD s12.8:271 (LOCKED) states
+"**the entanglement generates a secret object**" on a successful seduction, at a severity tier by the participants' circumstances —
+but the tier arbiter `SeductionSystem.get_affair_severity` (cross-clan+political → **T2** / married → **T3** / unmarried similar →
+**T4**) had **ZERO production callers**, and `DayOrchestrator._process_seduction_entanglements` created the entanglement while
+**never minting the mandated secret** — so the entire "discovery (EAVESDROP/SHADOW_TARGET) → blackmail (INTIMIDATE) → expose
+(EXPOSE_SECRET)" affair-scandal chain had no affair secret to consume. FIX (structural plumbing of a LOCKED arbiter + LOCKED
+secret-mint pattern; **no invented values** — the tiers are the arbiter's own s12.8:271 constants): the entanglement pass gains
+`active_secrets`/`next_secret_id` params (threaded from `advance_day`, both already in scope) and, on a NEW entanglement, mints the
+affair secret via new `_mint_affair_secret`. Every design choice is grounded: **subject = the seduced target** (line 289 "the seduced
+person suffers the affair scandal consequences" in every variant, and SEDUCE_FOR_LEVERAGE explicitly treats it as "leverage against
+the seduced target"); **known_by_ids = [seducer, target]** (LOCKED "initially known only to the two participants"); **severity** from
+`get_affair_severity(seducer.spouse_id>=0, target.spouse_id>=0, is_political_tension, is_cross_clan)`. The one §271 design signal —
+"political tension" — is the **OWNER-APPROVED default: cross-clan** (a cross-clan affair is inherently politically charged, and this
+matches the arbiter's own T2-first precedence; a same-clan affair is never T2). Minted via the established `SecretSystem.create_secret`
++ `next_secret_id[0]++` + `active_secrets.append` pattern; **deduped on the per-(seducer,target) `affair_<s>_<t>` slug** so re-seducing
+after a break (the affair secret "remains in existence", line 273) never mints a duplicate; **null-guarded** (unresolvable participants →
+no mint, no crash). The minted secret is immediately consumable by the LIVE chain: `DayOrchestrator` injects every secret whose
+`known_by_ids` contains a character into that character's `ws["known_secrets"]` (day_orchestrator:18897→18906), so the seducer can now
+EXPOSE/blackmail the affair and EAVESDROP/SHADOW writebacks extend `known_by_ids` to observers. Applies to all five Seduction ActionIDs
+(the seduced person suffers the scandal regardless of the seducer's motive). Runtime-verified 20/20 (`tests/verify_affair_secret.gd`):
+the arbiter (T4/T3/T2 + the T2-first precedence over married); `_mint_affair_secret` (subject=target, known_by=[both], correct severity,
+slug, not-fabricated, id advance, cross-clan→T2, per-pair dedup, null-guard); and end-to-end through `_process_seduction_entanglements`
+(a successful SEDUCE mints the affair secret known by both participants; a failed seduction mints nothing). Full project `--import`
+parse-clean. **DEFERRED (documented, not invented):** SEDUCE_TO_COMPROMISE's **additional** third-party political secret (line 289 —
+subject = the rival whose household was penetrated) needs the executor's intended-third-party target id, which the compromise path does
+not set; the affair-scandal secret on the seduced person (minted here for all five variants) is the base output.
+
 ### Systems Added 2026-07-09 (s11.5b §5 Cunning-emperor blessing POLITICS ACTIVATED — dead ±10 arbiter + un-stamped clan field, owner-approved, runtime-verified 14/14)
 Owner-approved activation (AskUserQuestion "Cunning-emperor blessing politics", 2026-07-09) of a dormant + design-gated arbiter —
 the fifth design-gated Miya system brought live. `MiyaBlessingSystem.apply_cunning_modifier` (s11.5b §5, LOCKED: a Cunning emperor
@@ -358,10 +386,11 @@ violate the "Do not invent mechanics" HARD CONSTRAINT). Documented so future swe
   it. DESIGN-GATED: `SecretData` (grep-confirmed) has `subject_id` but **no `involved_id` field and no creation-day/season field**,
   so two of its three inputs (`involved_status`, `seasons_since_act`) have no producer — wiring needs a data-model change + a design
   decision on who counts as "involved," not a wire.
-- **`SeductionSystem.get_affair_severity` (s12.8:271 LOCKED — unmarried→T4 / married→T3 / cross-clan+political→T2).** The discovery
-  → `expose_publicly` chain is live, but `_process_seduction_entanglements` creates the entanglement and **never mints the mandated
-  affair-secret object** — and that pass receives neither `active_secrets` nor a secret-id allocator, and there is no
-  `is_political_tension` signal in scope. Threading the secret registry + a tension source is a build, not a one-liner.
+- **`SeductionSystem.get_affair_severity` (s12.8:271 LOCKED — unmarried→T4 / married→T3 / cross-clan+political→T2) — RESOLVED /
+  ACTIVATED 2026-07-09 (owner-approved), no longer a dormant item.** `_process_seduction_entanglements` now threads
+  `active_secrets`/`next_secret_id` and mints the affair secret via `_mint_affair_secret` (subject = the seduced target, known_by =
+  the two participants, severity from the arbiter, "political tension" = cross-clan per the owner default, per-pair dedup). See the
+  "s12.8:271 affair-secret minting ACTIVATED" changelog entry above.
 - **`DispositionSystem.get_authenticity_modifier` (s12.2:515 LOCKED — Devoted/Ally/Friend doing a hostile act → −1/−2 KEPT dice;
   symmetric for friendly acts toward enemies).** Its sibling `get_raise_modifier` is already live in the social-TN calc, but this
   one needs a per-action `action_is_hostile` classification (none exists) + a central social-roll choke point to inject a

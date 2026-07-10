@@ -886,6 +886,8 @@ static func advance_day(
 		entanglements,
 		ic_day,
 		characters_by_id,
+		active_secrets,
+		next_secret_id,
 	)
 
 	_process_assassination_commissions(
@@ -29170,6 +29172,8 @@ static func _process_seduction_entanglements(
 	entanglements: Array,
 	ic_day: int,
 	characters_by_id: Dictionary = {},
+	active_secrets: Array = [],
+	next_secret_id: Array = [1],
 ) -> void:
 	for r: Dictionary in day_results:
 		var action_id: String = r.get("action_id", "")
@@ -29201,6 +29205,11 @@ static func _process_seduction_entanglements(
 			continue
 		var variant: SeductionSystem.SeductionVariant = _get_seduction_variant_from_action_id(action_id)
 		entanglements.append(SeductionSystem.create_entanglement(seducer_id, target_id, ic_day, variant))
+		# s12.8:271 (LOCKED): "the entanglement generates a secret object" at a severity tier by the
+		# participants' circumstances -- the affair-scandal secret the discovery->blackmail->expose
+		# chain (EAVESDROP/SHADOW_TARGET/EXPOSE_SECRET) consumes. Was dormant: SeductionSystem.
+		# get_affair_severity (the LOCKED tier arbiter) had zero callers and no secret was ever minted.
+		_mint_affair_secret(seducer_id, target_id, characters_by_id, active_secrets, next_secret_id)
 
 		if action_id == "SEDUCE_TO_COMPROMISE":
 			var seducer: L5RCharacterData = characters_by_id.get(seducer_id)
@@ -29208,6 +29217,58 @@ static func _process_seduction_entanglements(
 				HonorGlorySystem.apply_honor_change(
 					seducer, CrimeSystem.get_manipulating_honor(seducer)
 				)
+
+
+# s12.8:271 (LOCKED) affair-secret minting (owner-approved 2026-07-09). On a NEW entanglement the
+# seduction generates the affair-scandal secret at the LOCKED severity tier (SeductionSystem.
+# get_affair_severity: cross-clan+political -> T2 / married -> T3 / unmarried similar -> T4). Grounded,
+# no invented values: the tiers are the arbiter's own LOCKED constants; the secret is "initially known
+# only to the two participants" (known_by_ids = [seducer, target]); the subject is the SEDUCED TARGET
+# -- line 289 "the seduced person suffers the affair scandal consequences" in every variant, and
+# SEDUCE_FOR_LEVERAGE treats the secret as "leverage against the seduced target". The OWNER-APPROVED
+# default for the §271 "political tension" signal is cross-clan (a cross-clan affair is inherently
+# politically charged -- also consistent with the arbiter's own T2-first precedence). Deduped on the
+# per-(seducer,target) affair slug so re-seducing after a break (the affair secret "remains in
+# existence", line 273) never mints a duplicate. DEFERRED (documented): SEDUCE_TO_COMPROMISE's
+# ADDITIONAL third-party political secret (line 289 -- subject = the rival) needs the executor's
+# intended-third-party target id, which the compromise path does not set; the affair-scandal secret
+# on the seduced person (minted here for all five variants) is the base output.
+static func _mint_affair_secret(
+	seducer_id: int,
+	target_id: int,
+	characters_by_id: Dictionary,
+	active_secrets: Array,
+	next_secret_id: Array,
+) -> void:
+	var seducer: L5RCharacterData = characters_by_id.get(seducer_id)
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	if seducer == null or target == null:
+		return  # cannot resolve circumstances -> skip (no crash; the entanglement still stands)
+	var slug: String = "affair_%d_%d" % [seducer_id, target_id]
+	for s_v: Variant in active_secrets:
+		var s_existing: SecretData = s_v as SecretData
+		if s_existing != null and s_existing.slug == slug:
+			return  # the affair secret already exists for this pair (persists past a break)
+	var seducer_married: bool = seducer.spouse_id >= 0
+	var target_married: bool = target.spouse_id >= 0
+	var is_cross_clan: bool = (
+		seducer.clan != "" and target.clan != "" and seducer.clan != target.clan
+	)
+	# Owner-approved default: "political tension" = cross-clan (matches the LOCKED arbiter's
+	# T2-first precedence). A same-clan affair is never Tier 2.
+	var is_political_tension: bool = is_cross_clan
+	var severity: SecretData.Severity = SeductionSystem.get_affair_severity(
+		seducer_married, target_married, is_political_tension, is_cross_clan
+	)
+	var desc: String = "%s is having an affair with %s" % [
+		seducer.character_name, target.character_name,
+	]
+	var secret: SecretData = SecretSystem.create_secret(
+		next_secret_id[0], target_id, severity, slug, desc
+	)
+	secret.known_by_ids = [seducer_id, target_id]  # LOCKED: initially known only to the two participants
+	next_secret_id[0] += 1
+	active_secrets.append(secret)
 
 
 # s12.8 line 273 (LOCKED): "WRITE_LETTER to the same person" also resets an entanglement's
