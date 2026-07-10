@@ -32,6 +32,14 @@ static func evaluate_reactive_event(
 			return _evaluate_training_response(event, character, ctx)
 		"CONTRACT_OFFERED":
 			return _evaluate_contract_offer(event, character)
+		"GRIEVANCE":
+			# s55.11 PROACTIVE duel trigger: a grievance (e.g. a public insult, Trigger 1) fired
+			# against this NPC. Run the deliberate capability/target-assessment/personality
+			# evaluation; on a pass it returns an ISSUE_DUEL_CHALLENGE decision, else a no-op.
+			var duel: Dictionary = evaluate_duel_trigger(character, event, ctx)
+			if duel.is_empty():
+				return {"action": "PASS", "need_type": ""}
+			return duel
 	return {"action": "PASS", "need_type": event.get("need_type", "")}
 
 

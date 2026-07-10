@@ -425,6 +425,12 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id, dice_engine,
 	)
 
+	# s55.11 proactive duel (Trigger 1, public insult): issue the challenge for any GRIEVANCE
+	# reactive result whose deliberate evaluation returned ISSUE_DUEL_CHALLENGE.
+	_process_proactive_duel_writebacks(
+		day_result.get("results", []), characters_by_id, world_states,
+	)
+
 	# s57.18: a lord's ORDER_DEPLOY toward a coastal target sails their clan fleet there.
 	_process_fleet_deployment_writebacks(
 		day_result.get("results", []), ships, characters_by_id, water_subtiles,
@@ -7630,6 +7636,54 @@ static func _process_duel_challenge_writebacks(
 
 const DUEL_DECLINE_GLORY_LOSS: float = 0.0
 
+# s55.11 proactive duel: a GRIEVANCE reactive result whose deliberate evaluation
+# (evaluate_duel_trigger) passed the capability/target-assessment/personality gates and returned
+# ISSUE_DUEL_CHALLENGE. Issue the challenge -- inject DUEL_CHALLENGE_RECEIVED into the target (the
+# insulter) so their own reactive path decides accept/decline (the downstream is the existing wired
+# response path). Mirrors _process_brash_reactions' involuntary injection; here it is deliberate.
+static func _process_proactive_duel_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("reactive_type", "") != "GRIEVANCE":
+			continue
+		if d.get("action", "") != "ISSUE_DUEL_CHALLENGE":
+			continue
+		var challenger_id: int = int(d.get("character_id", -1))
+		var defender_id: int = int(d.get("target_npc_id", -1))
+		if challenger_id < 0 or defender_id < 0 or challenger_id == defender_id:
+			continue
+		var defender: L5RCharacterData = characters_by_id.get(defender_id)
+		if defender == null or CharacterStats.is_dead(defender):
+			continue
+		var def_ws: Dictionary = world_states.get(defender_id, {})
+		var pending: Array = def_ws.get("pending_events", [])
+		# Dedup: don't stack a second challenge from the same challenger.
+		var already: bool = false
+		for ev_v: Variant in pending:
+			if ev_v is Dictionary \
+					and (ev_v as Dictionary).get("reactive_type", "") == "DUEL_CHALLENGE_RECEIVED" \
+					and int((ev_v as Dictionary).get("challenger_id", -1)) == challenger_id:
+				already = true
+				break
+		if already:
+			continue
+		pending.append({
+			"reactive_type": "DUEL_CHALLENGE_RECEIVED",
+			"challenger_id": challenger_id,
+			"to_death": false,       # a proactive honor duel over an insult is first-blood (s4.8)
+			"is_sanctioned": true,   # the honorable, sanctioned form
+			"is_public": bool(d.get("event_data", {}).get("is_public", true)),
+		})
+		def_ws["pending_events"] = pending
+		world_states[defender_id] = def_ws
+
+
 static func _process_duel_response_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
@@ -7679,9 +7733,14 @@ static func _process_duel_response_writebacks(
 		results.append(wrapped)
 
 
-# -- s45 BRASH: inject duel challenge when BRASH character fails Willpower check
-# after being successfully publicly insulted. The BRASH character challenges the
-# insulter; DUEL_CHALLENGE_RECEIVED goes into the insulter's pending_events.
+# -- PUBLIC_INSULT reactions: s45 BRASH (involuntary) + s55.11 proactive duel (deliberate).
+# When a character is successfully publicly insulted:
+#   * s45 BRASH: if the target has the Brash disadvantage and FAILS the Willpower composure roll,
+#     they are COMPELLED to challenge the insulter (DUEL_CHALLENGE_RECEIVED into the insulter).
+#   * s55.11 Trigger 1 (public insult received): otherwise (not brash, or brash-but-composed) a
+#     GRIEVANCE event is injected into the TARGET's own pending_events, so their reactive path runs
+#     evaluate_duel_trigger (capability/target-assessment/personality gates) and may DELIBERATELY
+#     issue the challenge. This is the deliberate counterpart to the involuntary Brash compulsion.
 static func _process_brash_reactions(
 	results: Array,
 	characters_by_id: Dictionary,
@@ -7698,35 +7757,56 @@ static func _process_brash_reactions(
 			continue
 		var insulter_id: int = d.get("character_id", -1)
 		var target_id: int = d.get("target_npc_id", -1)
-		if insulter_id < 0 or target_id < 0:
+		if insulter_id < 0 or target_id < 0 or insulter_id == target_id:
 			continue
 		var target: L5RCharacterData = characters_by_id.get(target_id)
-		if target == null or CharacterStats.is_dead(target):
+		if target == null or CharacterStats.is_dead(target) or target.is_pc:
 			continue
+
+		var brash_forced: bool = false
 		var brash_check: Dictionary = AdvantageSystem.check_brash_trigger(target, true)
-		if not brash_check.get("triggered", false):
-			continue
-		var tn: int = brash_check.get("tn", 25)
-		var brash_wound: int = CharacterStats.get_wound_penalty(target)
-		var roll: DiceResult = dice_engine.roll_and_keep(
-			target.willpower, target.willpower, false, false
-		)
-		var total: int = roll.total + int(target.honor) + brash_wound
-		if total >= tn:
-			continue  # Passed — stays composed
-		# Failed: BRASH character challenges the insulter to a duel.
-		var insulter_ws: Dictionary = world_states.get(insulter_id, {})
-		var pending: Array = insulter_ws.get("pending_events", [])
-		pending.append({
-			"reactive_type": "DUEL_CHALLENGE_RECEIVED",
-			"challenger_id": target_id,
-			"to_death": false,
-			"is_sanctioned": true,
-			"is_public": true,
-			"brash_triggered": true,
-		})
-		insulter_ws["pending_events"] = pending
-		world_states[insulter_id] = insulter_ws
+		if brash_check.get("triggered", false):
+			var tn: int = brash_check.get("tn", 25)
+			var brash_wound: int = CharacterStats.get_wound_penalty(target)
+			var roll: DiceResult = dice_engine.roll_and_keep(
+				target.willpower, target.willpower, false, false
+			)
+			var total: int = roll.total + int(target.honor) + brash_wound
+			if total < tn:
+				# Failed composure: BRASH compels an involuntary challenge into the insulter.
+				var insulter_ws: Dictionary = world_states.get(insulter_id, {})
+				var pending: Array = insulter_ws.get("pending_events", [])
+				pending.append({
+					"reactive_type": "DUEL_CHALLENGE_RECEIVED",
+					"challenger_id": target_id,
+					"to_death": false,
+					"is_sanctioned": true,
+					"is_public": true,
+					"brash_triggered": true,
+				})
+				insulter_ws["pending_events"] = pending
+				world_states[insulter_id] = insulter_ws
+				brash_forced = true
+
+		if not brash_forced:
+			# s55.11 Trigger 1: inject a GRIEVANCE into the target for the deliberate duel evaluation.
+			var target_ws: Dictionary = world_states.get(target_id, {})
+			var t_pending: Array = target_ws.get("pending_events", [])
+			var already: bool = false
+			for ev_v: Variant in t_pending:
+				if ev_v is Dictionary and (ev_v as Dictionary).get("reactive_type", "") == "GRIEVANCE" \
+						and int((ev_v as Dictionary).get("target_npc_id", -1)) == insulter_id:
+					already = true
+					break
+			if not already:
+				t_pending.append({
+					"reactive_type": "GRIEVANCE",
+					"trigger_type": "public_insult",
+					"target_npc_id": insulter_id,
+					"is_public": true,
+				})
+				target_ws["pending_events"] = t_pending
+				world_states[target_id] = target_ws
 
 
 # -- s45 CONTRARY: log informational event when CONTRARY character fails Willpower

@@ -237,6 +237,32 @@ file, search `/simulation/` and `/shared/` to confirm the system doesn't already
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
 
+### Systems Added 2026-07-08 (s55.11 PROACTIVE duel path ACTIVATED — Trigger 1 public insult, owner-approved, runtime-verified 11/11)
+Owner-approved activation ("Continue, all of those, go") of the fifth of six design-gated systems. `ReactiveDecisions.evaluate_duel_trigger`
+— the s55.11 DELIBERATE proactive-duel evaluation (capability check → target-assessment → personality gate → ISSUE_DUEL_CHALLENGE)
+— was **fully built but had ZERO callers**, and no grievance→challenge event producer existed, so an NPC could never proactively
+challenge someone to a duel (only the RESPONSE path DUEL_CHALLENGE_RECEIVED was wired). The GDD s55.11 lists four trigger
+conditions (public insult / family-clan dishonored / cornered-in-court / eliminate-objective) — all GDD-specified, so this is a
+wiring gap, not a design gap. Wired **Trigger 1 (public insult received)** end-to-end (the cleanest, highest-value trigger;
+PUBLIC_INSULT is a live action): (1) **producer** — `_process_brash_reactions` (the PUBLIC_INSULT reaction pass) now, when the
+s45 Brash disadvantage does NOT compel an involuntary challenge (not brash, or brash-but-composed), injects a `GRIEVANCE` event
+into the insulted target's `pending_events` (deduped per insulter, living non-PC non-self target) — the deliberate counterpart to
+the involuntary Brash compulsion; (2) **reactive arm** — `evaluate_reactive_event` routes `"GRIEVANCE"` → `evaluate_duel_trigger`
+(giving the dormant function its first caller; a failed gate returns a clean PASS no-op); (3) **issuance writeback** — new
+`_process_proactive_duel_writebacks` scans the reactive results for a `GRIEVANCE` → `ISSUE_DUEL_CHALLENGE` and injects a
+`DUEL_CHALLENGE_RECEIVED` into the insulter (first-blood, sanctioned — the honorable insult-duel form, s4.8), reusing the fully-wired
+response path (accept/decline → `resolve_accepted_duel` → duel death → succession). **No values invented** — the gates/thresholds
+are `evaluate_duel_trigger`'s own (the one PROVISIONAL is its pre-existing Iaijutsu≥3 capability threshold, unchanged). Multi-tick
+chain: insult (tick N) → GRIEVANCE → deliberate evaluation (tick N+1) → DUEL_CHALLENGE_RECEIVED → response (tick N+2). Runtime-verified
+11/11 (`tests/verify_proactive_duel.gd`): the reactive arm returns ISSUE_DUEL_CHALLENGE for a YU bushi and PASS when the personality
+(JIN) or capability (no-YU/Iaijutsu-0/no-allies) gates block; the producer injects a GRIEVANCE on a successful insult and nothing on
+a failed one; and the issuance writeback injects exactly one first-blood/sanctioned DUEL_CHALLENGE_RECEIVED naming the correct
+challenger, with same-challenger dedup. Full project `--import` parse-clean. **DEFERRED (follow-ons, need their own event producers):**
+Trigger 2 (a Tier-3+ Dishonor/Betrayal topic about the NPC's family/clan → grievance), Trigger 3 (lost a PUBLIC_DEBATE with no
+recovering court actions), Trigger 4 (an ELIMINATE_CHARACTER primary targeting a co-located character); GOSSIP / EXPOSE_SECRET_PUBLIC
+as additional Trigger-1 sources. The core proactive path (`evaluate_duel_trigger`) is now live and any new trigger just injects a
+`GRIEVANCE` with its `trigger_type`.
+
 ### Systems Added 2026-07-08 (s11.5b §4.3 Miya's Blessing Winter-Court PETITIONS ACTIVATED — dead petition_bonus producer, owner-approved, runtime-verified 15/15)
 Owner-approved activation ("Continue, all of those, go") of the fourth of six design-gated systems. The s11.5b §4.3
 Winter-Court-influence layer was **dormant at the producer end**: `MiyaBlessingSystem.compute_need_score` already CONSUMED a
@@ -414,8 +440,8 @@ Documented here so future sweeps skip them:
   `SailingSystem.self_captain_penalty`/`select_acting_captain`/`board_passengers` (no at-sea sailing-roll / captain-incapacitation
   trigger, s57.42); the whole `SpiritualExposureSystem` Toshigoku/Chikushudo/Gaki periodic-check cluster (combat-loop unbuilt);
   `TopicSystem.get_momentum_level` (`MomentumLevel` enum has zero consumers — sim gates on raw floats); `ReactiveDecisions.evaluate_duel_trigger`
-  (the s55.11 PROACTIVE duel-initiation path — zero callers, its grievance→challenge event producer is unbuilt; the RESPONSE
-  path DUEL_CHALLENGE_RECEIVED is the wired one). PaintingSystem `continuous_display_start_ic_day` familiarity decay
+  (the s55.11 PROACTIVE duel-initiation path) is **NO LONGER DEFERRED — activated 2026-07-08** for Trigger 1 (public insult),
+  owner-approved; see the changelog entry below (Triggers 2–4 still need their own event producers). PaintingSystem `continuous_display_start_ic_day` familiarity decay
   (s57.27:115) is **NO LONGER DEFERRED — activated 2026-07-08** with the GDD-stated rates (owner-approved); see the
   "familiarity decay activated" changelog entry below.
   `NavalCombatSystem` zero-external funcs (`resolve_ram_in_battle`/`resolve_naval_rout`/…) are internal combat mechanics
