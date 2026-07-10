@@ -29209,7 +29209,7 @@ static func _process_seduction_entanglements(
 		# participants' circumstances -- the affair-scandal secret the discovery->blackmail->expose
 		# chain (EAVESDROP/SHADOW_TARGET/EXPOSE_SECRET) consumes. Was dormant: SeductionSystem.
 		# get_affair_severity (the LOCKED tier arbiter) had zero callers and no secret was ever minted.
-		_mint_affair_secret(seducer_id, target_id, characters_by_id, active_secrets, next_secret_id)
+		_mint_affair_secret(seducer_id, target_id, characters_by_id, active_secrets, next_secret_id, ic_day)
 
 		if action_id == "SEDUCE_TO_COMPROMISE":
 			var seducer: L5RCharacterData = characters_by_id.get(seducer_id)
@@ -29239,6 +29239,7 @@ static func _mint_affair_secret(
 	characters_by_id: Dictionary,
 	active_secrets: Array,
 	next_secret_id: Array,
+	ic_day: int = -1,
 ) -> void:
 	var seducer: L5RCharacterData = characters_by_id.get(seducer_id)
 	var target: L5RCharacterData = characters_by_id.get(target_id)
@@ -29267,6 +29268,10 @@ static func _mint_affair_secret(
 		next_secret_id[0], target_id, severity, slug, desc
 	)
 	secret.known_by_ids = [seducer_id, target_id]  # LOCKED: initially known only to the two participants
+	# s12.8:39 context inputs: the seducer is the "involved" party (higher Status than the target
+	# bumps exposure severity +1 tier); ic_day_created stamps recency (< RECENCY_SEASONS -> +1 tier).
+	secret.involved_id = seducer_id
+	secret.ic_day_created = ic_day
 	next_secret_id[0] += 1
 	active_secrets.append(secret)
 

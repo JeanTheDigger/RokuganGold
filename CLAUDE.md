@@ -316,6 +316,35 @@ and the executor already sets `to_death = true` for ELIMINATE_CHARACTER) — so 
 **duplicate execution path**, which the CLAUDE.md hard constraint explicitly forbids ("Do not create duplicate execution paths.
 Check existing channels before wiring any ActionID"). The eliminate-via-duel behavior is already live through the scored channel.
 
+### Systems Added 2026-07-09 (s12.8:39 context-severity upgrade ACTIVATED — dead get_effective_severity + missing SecretData fields, owner-approved, runtime-verified 13/13)
+Owner-approved activation ("Continue, all of those, go", 2026-07-09) of a dormant LOCKED arbiter blocked on two missing data fields.
+GDD s12.8:39 (LOCKED): "a secret moves up one tier if it involves a character of higher Status than the subject, or if it occurred
+within the last 4 IC seasons." `SecretSystem.get_effective_severity(secret, subject_status, involved_status, seasons_since_act)`
+encodes this exactly — but had **ZERO production callers** (the live exposure funcs `reveal_privately`/`expose_publicly` used the raw
+`secret.severity`), because two of its three inputs had **no producer**: `SecretData` carried **no `involved_id`** (who else is in the
+secret) and **no creation-day** field. FIX (owner-approved defaults; **no invented values** — the tier logic + RECENCY_SEASONS=4 are
+the arbiter's own LOCKED constants): (1) `SecretData` gains `involved_id: int = -1` + `ic_day_created: int = -1` (both default -1 =
+unset → graceful raw severity); (2) the affair mint (`_mint_affair_secret`) stamps them (`involved_id = seducer`, `ic_day_created =
+ic_day`) — owner default "involved = the secret's other party (seducer/fabricator/briber) where one exists"; (3) new
+`SecretSystem.get_exposure_severity(secret, subject, characters_by_id, ic_day)` resolves the effective tier — `subject.status`,
+`involved.status` (from `involved_id`, sentinel -1.0 when unset/unresolvable → no involved bump), `seasons_since_act` via
+`TimeSystem.get_absolute_season(ic_day) − get_absolute_season(ic_day_created)` (−1 when either day is unset → the arbiter's own
+`>= 0` guard suppresses the recency bump) — and is wired into BOTH exposure funcs (`reveal_privately` gains trailing
+`characters_by_id`/`ic_day`; `expose_publicly` gains trailing `ic_day`), fed `characters_by_id` + `ctx.ic_day` from the executor. So
+exposure DAMAGE (disposition/honor/glory/infamy) now uses the effective severity, not the raw tier. **Graceful + backward-compatible:**
+a secret without context data (every non-affair mint today) exposes at raw severity; the default-arg exposure calls are unchanged.
+**FAITHFULLY PRESERVED (documented, NOT altered):** `get_effective_severity`'s own LOCKED guard `sev > TIER_1 and sev < TIER_4` only
+upgrades TIER_2/TIER_3 — a TIER_4 secret is NOT upgraded (its `sev < TIER_4` excludes it) and TIER_1 is already the ceiling; this is
+the arbiter's built behavior and is preserved as-is (changing it would alter a LOCKED-value arbiter — a separate owner decision).
+Runtime-verified 13/13 (`tests/verify_secret_context_severity.gd`): the helper (raw when unset; higher-status-involved bump T3→T2;
+recency bump T3→T2; lower-status/old/unresolvable → no bump; the T4-no-upgrade + T2→T1-ceiling guards); and the exposure integration
+(a T3 married-affair secret with a higher-status seducer exposes as effective T2 with a harsher per-witness disposition hit than a
+raw-T3 control; `reveal_privately` likewise; and the no-context-args call stays raw T3, backward-compatible). Full project `--import`
+parse-clean. **DEFERRED (documented):** only the affair secret currently stamps `involved_id`/`ic_day_created` (the bribe secrets are
+already TIER_1 so the arbiter's guard makes stamping them a no-op); the infrastructure now applies to ANY secret the moment its mint
+site sets the two fields — stamping the remaining mint sites (fabrication/witness) is a follow-on once each site's "involved party"
+semantics are pinned.
+
 ### Systems Added 2026-07-09 (s12.8:271 affair-secret minting ACTIVATED — dead get_affair_severity + never-minted secret, owner-approved, runtime-verified 20/20)
 Owner-approved activation ("Continue, all of those, go", 2026-07-09) of a dormant LOCKED arbiter. GDD s12.8:271 (LOCKED) states
 "**the entanglement generates a secret object**" on a successful seduction, at a severity tier by the participants' circumstances —
@@ -382,10 +411,10 @@ spot-check of the closest near-misses. **Result: ZERO clean structural wires rem
 design-gated behind an unbuilt trigger, a missing data field, or a missing central choke point (inventing past any of them would
 violate the "Do not invent mechanics" HARD CONSTRAINT). Documented so future sweeps skip these exact near-misses:
 - **`SecretSystem.get_effective_severity` (s12.8:39 LOCKED — +1 severity tier when a higher-Status character is involved OR the act
-  is < RECENCY_SEASONS old).** The live exposure funcs `reveal_privately`/`expose_publicly` use raw `secret.severity` and ignore
-  it. DESIGN-GATED: `SecretData` (grep-confirmed) has `subject_id` but **no `involved_id` field and no creation-day/season field**,
-  so two of its three inputs (`involved_status`, `seasons_since_act`) have no producer — wiring needs a data-model change + a design
-  decision on who counts as "involved," not a wire.
+  is < RECENCY_SEASONS old) — RESOLVED / ACTIVATED 2026-07-09 (owner-approved), no longer a dormant item.** `SecretData` gained
+  `involved_id` + `ic_day_created` (stamped at the affair mint; owner default "involved = the other party"), new
+  `SecretSystem.get_exposure_severity` resolves the effective tier, and both exposure funcs now apply it (fed `ctx.ic_day`). See the
+  "s12.8:39 context-severity upgrade ACTIVATED" changelog entry above.
 - **`SeductionSystem.get_affair_severity` (s12.8:271 LOCKED — unmarried→T4 / married→T3 / cross-clan+political→T2) — RESOLVED /
   ACTIVATED 2026-07-09 (owner-approved), no longer a dormant item.** `_process_seduction_entanglements` now threads
   `active_secrets`/`next_secret_id` and mints the affair secret via `_mint_affair_secret` (subject = the seduced target, known_by =

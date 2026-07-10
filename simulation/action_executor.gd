@@ -1670,7 +1670,7 @@ static func _execute_expose_privately(
 		return {}
 
 	var has_proof: bool = action.metadata.get("has_proof", false)
-	var r: Dictionary = SecretSystem.reveal_privately(secret, character, recipient, subject, has_proof)
+	var r: Dictionary = SecretSystem.reveal_privately(secret, character, recipient, subject, has_proof, characters_by_id, ctx.ic_day)
 	r["subject_id"] = subject_id
 	r["secret_id"] = secret.secret_id
 
@@ -1708,7 +1708,7 @@ static func _execute_expose_publicly(
 
 	var has_proof: bool = action.metadata.get("has_proof", false)
 	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
-	var r: Dictionary = SecretSystem.expose_publicly(secret, character, subject, witness_ids, characters_by_id, has_proof)
+	var r: Dictionary = SecretSystem.expose_publicly(secret, character, subject, witness_ids, characters_by_id, has_proof, ctx.ic_day)
 	r["subject_id"] = subject_id
 	r["secret_id"] = secret.secret_id
 

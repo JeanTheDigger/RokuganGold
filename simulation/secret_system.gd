@@ -140,6 +140,33 @@ static func get_effective_severity(
 	return sev as SecretData.Severity
 
 
+# s12.8:39 (owner-approved 2026-07-09): resolve a secret's EFFECTIVE severity for exposure, applying
+# the LOCKED context modifier (+1 tier if the involved party out-ranks the subject, OR the act is
+# within RECENCY_SEASONS). Graceful: an unset involved_id (-1) yields involved_status -1.0 (< any real
+# status -> no involved bump); an unset ic_day_created (-1) or unknown current day yields
+# seasons_since_act -1 (get_effective_severity guards `>= 0` -> no recency bump). So a secret without
+# context data simply exposes at its raw severity. NOTE: get_effective_severity's own LOCKED guard
+# only upgrades TIER_2/TIER_3 (its `sev < TIER_4` excludes TIER_4, `sev > TIER_1` excludes TIER_1) --
+# faithfully preserved here, not altered.
+static func get_exposure_severity(
+	secret: SecretData,
+	subject: L5RCharacterData,
+	characters_by_id: Dictionary,
+	ic_day: int,
+) -> SecretData.Severity:
+	var subject_status: float = subject.status if subject != null else 0.0
+	var involved_status: float = -1.0
+	if secret.involved_id >= 0:
+		var inv: L5RCharacterData = characters_by_id.get(secret.involved_id)
+		if inv != null:
+			involved_status = inv.status
+	var seasons_since_act: int = -1
+	if secret.ic_day_created >= 0 and ic_day >= 0:
+		seasons_since_act = TimeSystem.get_absolute_season(ic_day) \
+			- TimeSystem.get_absolute_season(secret.ic_day_created)
+	return get_effective_severity(secret, subject_status, involved_status, seasons_since_act)
+
+
 # ==============================================================================
 # Private Exposure (Reveal a Secret Privately)
 # ==============================================================================
@@ -150,8 +177,11 @@ static func reveal_privately(
 	recipient: L5RCharacterData,
 	subject: L5RCharacterData,
 	has_proof: bool = false,
+	characters_by_id: Dictionary = {},
+	ic_day: int = -1,
 ) -> Dictionary:
-	var sev: SecretData.Severity = secret.severity
+	# s12.8:39 context modifier (LOCKED): exposure damage uses the EFFECTIVE severity, not the raw tier.
+	var sev: SecretData.Severity = get_exposure_severity(secret, subject, characters_by_id, ic_day)
 	var disp_change: int = PRIVATE_EXPOSURE_DISP.get(sev, -8)
 	var honor_loss: float = CrimeSystem.scale_honor_by_rank(SUBJECT_HONOR_LOSS.get(sev, 0.0), subject)
 	var glory_loss: float = SUBJECT_GLORY_LOSS.get(sev, 0.0)
@@ -194,8 +224,10 @@ static func expose_publicly(
 	witness_ids: Array,
 	characters_by_id: Dictionary,
 	has_proof: bool = false,
+	ic_day: int = -1,
 ) -> Dictionary:
-	var sev: SecretData.Severity = secret.severity
+	# s12.8:39 context modifier (LOCKED): exposure damage uses the EFFECTIVE severity, not the raw tier.
+	var sev: SecretData.Severity = get_exposure_severity(secret, subject, characters_by_id, ic_day)
 	var disp_per_witness: int = PUBLIC_EXPOSURE_DISP_PER_WITNESS.get(sev, -5)
 	var honor_loss: float = CrimeSystem.scale_honor_by_rank(SUBJECT_HONOR_LOSS.get(sev, 0.0), subject)
 	var glory_loss: float = SUBJECT_GLORY_LOSS.get(sev, 0.0)
