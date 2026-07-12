@@ -433,11 +433,22 @@ producer/trigger/value), or ASCII/combat-blocked. Documented so future sweeps sk
   `TattooSystem.seed_world_start_tattoos` / `WorldBootstrap._seed_tattoo_artists` / `_apply_world_start_tattoo_bonds`,
   runtime-verified 45/45. Only PROVISIONAL refinements remain (owner-overridable, NOT deferred work): per-locale artist
   multiplication (one-per-clan floor vs the per-province/per-holding literal) and pinning the reused schools/insight ranks.
-- **SEEK_TATTOO NeedType (s57.25.7) — unbuilt NPC objective.** `TattooSystem.is_seek_tattoo_blocked` / `get_seek_tattoo_urgency` have
-  ZERO callers; only APPLY_TATTOO is wired (executor + precondition filter). The whole s57.25.7 monk-seeks-elder self-selection
-  pathway (OFFER_ART_COMMISSION 95 / BEGIN_TRAVEL 90 / ASK_FOR_INTRODUCTION 80 / GATHER_INTELLIGENCE 75, urgency scaling, BLOCKED
-  state, the reciprocal GRANT_TATTOO) is a design-gated objective build (needs the NeedType, the `tattoos_granted_this_rank` tracker
-  producer, and the elder-in-`met_characters` scan), not a wire.
+- **SEEK_TATTOO / GRANT_TATTOO NeedTypes (s57.25.7) — a SUBSYSTEM build, not a wire (re-confirmed 2026-07-09).** The ARBITER layer is
+  fully built (`has_unfilled_ability_slots` / `count_ability_tattoos` / `is_seek_tattoo_blocked` / `get_seek_tattoo_urgency`) and the
+  SCORING tables are present (`objective_alignment.SEEK_TATTOO` → OFFER_ART_COMMISSION 95 / BEGIN_TRAVEL 90 / ASK_FOR_INTRODUCTION 80 /
+  PROBE 75 / WRITE_LETTER 70; `objective_alignment.GRANT_TATTOO` → APPLY_TATTOO 95). The 2026-07-09 `school_rank` fix (below) un-broke
+  the APPLY_TATTOO **ability gate** (`can_apply_ability_tattoo` was `school_name=""`→false + `school_rank` stale-1 → no elder could EVER
+  grant), which was a real prerequisite. But it is STILL not a clean wire, for a deeper reason surfaced this pass: **APPLY_TATTOO has NO
+  target-selection anywhere in the live decision path** — `_populate_action_metadata` (npc_decision_engine:3962) sets `target_tier` /
+  `body_location` but never `target_npc_id`, and hardcodes `is_ability_tattoo:false` / `ability:NONE`, and `GRANT_TATTOO` has ZERO
+  production usage (only its score const + JSON row). So the whole tattoo-**application** decision path (decorative AND the elder's
+  ability grant) lacks recipient selection + the ability-grant metadata (which ability, drawn from the un-owned set; `in_togashi_territory`
+  resolution; the seeking-monk target). Wiring s57.25.7 = building that recipient/metadata subsystem + the SEEK_TATTOO standing (monks
+  with unfilled slots) + the GRANT_TATTOO standing (elders co-located with a seeker in Togashi territory) + the monk travel/seek pathways
+  (elder-in-`met_characters` scan) + urgency scaling (needs a seasons-at-rank tracker with **no producer**) + the BLOCKED state. That is a
+  multi-part objective-engine build with genuine design surface (which co-located character an autonomous artisan chooses to tattoo — the
+  GDD specifies the *scores* and *consent* but not the NPC recipient-selection heuristic), NOT a dormant arbiter to wire. Owner-authorized
+  subsystem work.
 - **Ability-tattoo activation (`get_active_ability_tattoo`/`can_activate_tattoo`/`compute_visibility`/`has_mantis_tattoo`/…) —
   ASCII/s40-blocked** (the tattoo powers fire on the combat/effect layer under the PC-travel HOLD).
 - **Confirmed dead twins (superseded by a live path; do NOT wire):** `MarriageSystem.is_gempuku_eligible` (a 72-**season** duplicate
