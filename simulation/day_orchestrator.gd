@@ -2053,6 +2053,15 @@ static func advance_day(
 			world_states, active_topics, active_okiyas,
 		)
 
+	# s57.31.7a / s57.32.2 rest tracking — maintains the `rested_last_night` gate that BOTH natural
+	# healing and Void refresh read (via _counts_as_rested, inside the OOC tick block above). LOCKED
+	# lifecycle: reset true at the start of each OOC day, flipped false by disqualifiers occurring
+	# during the OOC day's 4 IC days. Runs AFTER the OOC read so this tick's read reflects the just-
+	# completed window; the reset then opens the next window. Only the CONTINUOUS-TRAVEL disqualifier
+	# is wired (the one clean, live, unambiguous condition — a character marching does not rest);
+	# active-combat/watch-duty/starvation disqualifiers are deferred (no per-character presence tracking).
+	_process_rest_tracking(characters, travel_arrivals, ic_day)
+
 	# Lifecycle cleanup: drop terminal (gone-from-world) art objects from their active
 	# registries — a destroyed garden, dead bonsai, or lost/abandoned-incomplete piece is no
 	# longer a live object (every consumer already skips them; nothing queries them post-terminal).
@@ -6483,6 +6492,34 @@ static func _process_power_of_the_ocean(characters: Array, ic_day: int) -> void:
 ## rest-gated systems should call this rather than reading rested_last_night directly.
 static func _counts_as_rested(c: L5RCharacterData, ic_day: int) -> bool:
 	return c.rested_last_night or c.power_of_ocean_until_ic_day >= ic_day
+
+
+## s57.31.7a / s57.32.2 rest tracking (the SOLE producer of the `rested_last_night` gate).
+## Called each IC day AFTER the OOC tick read. On an OOC-day boundary (ic_day % TICKS_PER_REAL_DAY
+## == 0) it resets every living character's flag to true — the LOCKED "reset to true at the start of
+## each OOC day". Then, for the current IC day, any character who is traveling (or arrived this day,
+## having spent the day on the road) has the flag flipped to false — the LOCKED "continuous travel"
+## disqualifier ("a character who ... marches through the night does not benefit from the refresh").
+## The false state persists across the 4-IC-day window (only the next boundary resets it), so a
+## character who travels on ANY day of the window is denied natural healing + Void refresh at the
+## next OOC tick. DEFERRED disqualifiers (no per-character producer exists): active-combat presence,
+## watch-duty majority, and per-character starvation (province starvation_stage is not per-person).
+static func _process_rest_tracking(
+	characters: Array,
+	travel_arrivals: Array,
+	ic_day: int,
+) -> void:
+	var is_boundary: bool = ic_day % TimeSystem.TICKS_PER_REAL_DAY == 0
+	var arrived_today: Dictionary = {}
+	for a: Dictionary in travel_arrivals:
+		arrived_today[int(a.get("character_id", -1))] = true
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if is_boundary:
+			c.rested_last_night = true
+		if TravelSystem.is_traveling(c) or arrived_today.has(c.character_id):
+			c.rested_last_night = false
 
 
 static func _clear_daily_spell_buffs(characters: Array) -> void:
