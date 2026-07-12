@@ -232,6 +232,43 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Known Code Issues — Deferred (2026-07-09, dead-FIELD sweep — zero-writer @export fields, all survivors design-gated, do NOT re-audit)
+A NEW lens the prior function-focused sweeps missed: a mechanical scan of every scalar/bool `@export` field on
+`L5RCharacterData` + `ProvinceData`/`SettlementData`/`ClanData` + the system Resources (SecretData/FavorData/WarData/…) for
+fields **READ in production but NEVER WRITTEN** (the exact class as the civilian-order-budget / bodyguard / rested_last_night
+LIVE bugs this session fixed). Three were fixed (civilian_order_budget_max, assigned_protection_target_id, rested_last_night
+— see their changelog entries). **Every remaining zero-writer field is design-gated — documented so future sweeps skip them:**
+- **`SettlementData.lord_character_id` (10 readers) + `shrine_custodian_id` (2 readers) — the "settlement → governing NPC
+  linkage" architecture gap.** `_find_province_lord`'s own placeholder comment flags it ("province → daimyo linkage is not
+  explicit on ProvinceData"). Both are stored NPC ids read by art-ownership/display gates (sculpture/painting/garden),
+  supply-share recipient resolution, art-visitor daimyo-glory maps, and the s57.26b shide auto-grant — all misfiring on the
+  `-1` default. NOT a clean wire: populating them as stored world-gen fields duplicates a LIVE heuristic (`_find_province_lord`)
+  into a staleable cache (the lord/custodian dies → the field points at a corpse), and rerouting the 10+ cross-system
+  consumers to a live resolver is a broad refactor of the unbuilt governance-linkage architecture.
+- **`L5RCharacterData.adopted_children_ids` — feeds succession's whole ADOPTED_HEIR path (succession_system:160-170/875) +
+  heir designation, but never written, so no character ever has an adopted heir.** GDD s22.5:33 (LOCKED) makes adoption a
+  **deliberate 1-AP ActionID** that appends the adoptee + generates an Adoption topic (the topic-weight table already exists,
+  topic_system:533/546). But there is NO ADOPT executor / context-list / objective_alignment scoring, and building it needs
+  an NPC adoption trigger + target-selection heuristic the GDD does not specify (owner-gated game design — same class as the
+  deferred SEEK_TATTOO / physical-inventory pipelines).
+- **`L5RCharacterData.enhanced_void` — the +2k2 Void-spend variant.** The LOCKED techniques that grant it (Kaiu Method /
+  Yoritomo Joy of Plunder) are **skill-scoped** ("Void Points on **School Skills**"/"on any **Merchant Skill** grant +2k2"),
+  so the blanket boolean is a MISMATCH — wiring `enhanced_void = true` would grant +2k2 on ALL rolls (invention). Faithful
+  wiring needs a skill-context refactor of `VoidSystem.roll_bonus` + per-school skill-set maps; and its only consumer
+  (`spend_for_roll`) is the s40 tile-combat layer on the PC-travel HOLD anyway.
+- **`SecretData.physical_proof_item_id` — read once (has_proof signal).** Blocked on the unbuilt physical-inventory layer
+  (no physical-item-transfer ActionIDs exist; already documented DESIGN-GATED). A secret gets physical proof only when an
+  item-transfer mechanic can set it.
+- **`great_grandparent_records` — intentional 3-generation world-gen depth cap** (world-gen builds parent/grandparent
+  AncestorRecords, not great-grandparent; a minor family-bond disposition factor). Not a bug.
+- **`immune_to_fear` / `speaks_foreign` — already documented forward-wired** (no granting advantage/roster data set yet; the
+  read-side mechanism is complete and activates the moment a producer populates them).
+- (False positives cleared: `life_extension_years`, `access_petition_denied_season`, `okiya_visit_counts`,
+  `commerce_conducted_seasons`, `cohabitation_days`, `violence_offense_days`, the xp_* fields, and all Array/Dict fields —
+  each IS written via `+=` / element-mutation / `.append` / a helper method [`set_day_buff` etc.], missed by the whole-object-
+  assignment regex.) **With this, the dead-field vein is swept to exhaustion — every clean no-invention wire is taken; the
+  rest are settlement-governance-linkage / ADOPT-pipeline / physical-inventory / skill-scoped-technique design work.**
+
 ### Known Code Issues (found and fixed 2026-07-09, s57.31.7a/s57.32.2 `rested_last_night` had ZERO producers — natural healing + Void refresh ignored every rest disqualifier — runtime-verified 12/12)
 A **zero-producer dead-field** (the sibling of the bodyguard / civilian-order-budget class, on the rest/recovery layer). `L5RCharacterData.rested_last_night` (@export, default **`true`**) is the SHARED gate BOTH the OOC-Day-Tick natural-healing pass (s57.31.7a) and the Void-Point-refresh pass (s57.32.2) read — via `DayOrchestrator._counts_as_rested(c, ic_day)` = `c.rested_last_night or power_of_ocean_until_ic_day >= ic_day` (day_orchestrator:6493, consumed at the OOC tick block :2293/:2299). The LOCKED lifecycle (s57.31.7a:195 + s57.32.2:15, both explicit): the flag **resets to true at the start of each OOC day** and is **flipped to false by any disqualifier occurring during the OOC day's 4 IC days — "active combat, continuous travel, watch-duty majority, starvation (2+ days without food/water), or specific blocking effects"** — so "a character who marches through the night does not benefit from the refresh." But **NOTHING in production ever WROTE the field** (grep-confirmed: the only refs were the @export decl + the two reader sites + `_counts_as_rested`), so it sat at its default `true` for every character forever → `_counts_as_rested` was ALWAYS true → **every character healed AND refreshed their full Void pool at every OOC tick regardless of whether they marched all night, fought, or starved.** The entire rest-disqualifier layer was inert; a courier who spends the whole session on the road recovered Void + Wounds identically to one resting safely in a castle. FIX (pure structural wire of the LOCKED lifecycle — **no invented values**; the reset/flip rule and the "continuous travel" disqualifier are the spec's own): new `DayOrchestrator._process_rest_tracking(characters, travel_arrivals, ic_day)` — the SOLE producer — is called each IC day **AFTER** the OOC-tick read (so this tick's read still reflects the just-completed window, then the reset opens the next one): on an OOC boundary (`ic_day % TICKS_PER_REAL_DAY == 0`) it resets every living character's flag to `true` (LOCKED "reset at the start of each OOC day"), and then for the current day it flips the flag to `false` for any character who **`TravelSystem.is_traveling(c)`** OR **arrived this day** (in `travel_arrivals`, having spent the day on the road — travel is processed at :186, before the OOC read, so a same-day arrival's `is_traveling` is already false and must be caught via the arrivals list). The `false` state persists across the 4-IC-day window (only the next boundary resets it), so travel on ANY day of the window denies healing + Void refresh at the next tick — exactly the LOCKED "any one disqualifier ... prevents natural healing." **Only continuous travel is wired** — the one clean, live, unambiguous disqualifier; **DEFERRED (documented, no per-character producer exists):** active-combat presence (no per-character "was in combat this OOC day" flag; most combat is on the s40 PC-travel HOLD), watch-duty majority (no watch-duty tracking), and per-character starvation (the sim tracks province `starvation_stage`, not per-person 24h-without-food — mapping province→person would be an interpretation, not built). **Power of the Ocean (s36) composes cleanly** — a traveling character flagged `false` still `_counts_as_rested` via the spell override (`power_of_ocean_until_ic_day >= ic_day`), unchanged. The `_counts_as_rested` doc comment already anticipated this producer ("overrides the rest system's flip-to-false for combat/travel"). Runtime-verified 12/12 (`tests/verify_rest_tracking.gd`): boundary reset (stationary → true; non-boundary does NOT reset a false flag — window persistence); travel flip (traveling → false; boundary+traveling → reset-then-flip = false, the new window disqualified); arrival flip (arrived-this-day → false despite `is_traveling==false`; an unrelated stationary char stays rested); full-window persistence (day-1 travel → false; days 2/3 stationary keep it false; `_counts_as_rested` false throughout; day-4 boundary resets true); dead-guard (a dead traveler untouched); and the Power-of-the-Ocean override. Full project `--import` parse-clean. **With this, `rested_last_night` is no longer a dead field** — traveling characters now forgo their OOC natural healing + Void refresh, the LOCKED s57.31.7a/s57.32.2 behavior.
 
