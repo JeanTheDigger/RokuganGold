@@ -717,6 +717,12 @@ static func generate_character(
 	# (spell ML casting gate, kolat, combat) require this — generation set the param-driven
 	# stats but never wrote the field, leaving it stuck at the default 1.
 	c.insight_rank = CharacterStats.get_insight_rank(c)
+	# school_rank is the twin denormalized cache of the school/insight rank (the advancement
+	# passes keep it == get_insight_rank). Generation set insight_rank but never school_rank,
+	# so it sat at the default 1 for every world-gen NPC until the first advancement tick lazily
+	# self-healed it (spamming a rank-up topic per senior character) — leaving the tattoo
+	# ability gate (>=3), kiho eligibility, and Kolat T1 criteria (>=5/4) wrong from world-start.
+	c.school_rank = c.insight_rank
 
 	SkillResolver.apply_technique_flags(c)
 	if c.school_type == Enums.SchoolType.SHUGENJA:

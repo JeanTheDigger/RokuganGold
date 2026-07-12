@@ -731,7 +731,7 @@ static func _apply_tattoo_precondition_filter(
 	if not is_ability:
 		if not TattooSystem.can_receive_decorative(
 			world_tattoos, recipient_id,
-			recipient.school_name, recipient.school_rank,
+			recipient.school, recipient.school_rank,
 		):
 			return _remove_action(options, "APPLY_TATTOO")
 

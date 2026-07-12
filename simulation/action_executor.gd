@@ -6368,7 +6368,7 @@ static func _execute_apply_tattoo(
 	if is_ability:
 		var in_togashi_territory: bool = action.metadata.get("in_togashi_territory", false)
 		if not TattooSystem.can_apply_ability_tattoo(
-			character.school_name, character.school_rank, in_togashi_territory
+			character.school, character.school_rank, in_togashi_territory
 		):
 			return {
 				"success": false, "action_id": "APPLY_TATTOO",

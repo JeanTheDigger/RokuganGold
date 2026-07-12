@@ -316,6 +316,35 @@ and the executor already sets `to_death = true` for ELIMINATE_CHARACTER) — so 
 **duplicate execution path**, which the CLAUDE.md hard constraint explicitly forbids ("Do not create duplicate execution paths.
 Check existing channels before wiring any ActionID"). The eliminate-via-duel behavior is already live through the scored channel.
 
+### Known Code Issues (found and fixed 2026-07-09, `school_name`/`school_rank` dead-field cluster — 2nd batch of the 2026-06-12 migration; broke the APPLY_TATTOO ability gate + more from world-start — runtime-verified 20/20)
+A **dead-field / stale-cache** cluster (the sibling of the 2026-06-12 `school_name` fix, which migrated 8 readers but MISSED a second
+batch of 6, plus a never-initialized twin cache). **(A) `school_name` never written → always `""`.** `L5RCharacterData.school_name` (the
+redundant duplicate of the canonical `.school`, which `generate_character` always sets) has **ZERO production writers** (grep-confirmed) yet
+**6 live readers still used it**, each silently misbehaving because `""` matches no school name: `action_executor:6371`
+(`can_apply_ability_tattoo(character.school_name, …)` — the **APPLY_TATTOO ability-grant gate**, so `is_togashi_school("")`→false → **no
+elder could EVER grant an ability tattoo**), `npc_decision_engine:734` (`can_receive_decorative(…, recipient.school_name, …)` — the
+**decorative-slot gate**, so `""`→ a tattooed monk could wrongly receive decorative work while ability slots were unfilled, violating
+s57.25.3), `kata_system:368` (**Mirumoto/Kakita ring reduction** — never fired) + `:442` (**named-kata school gate** — never fired), and
+`kolat_master_selector:292`/`:325` (**Kolat T1 school criteria** — never matched at world-gen). **(B) `school_rank` never initialized →
+stale 1.** `school_rank` (the twin denormalized cache of the school/insight rank — the advancement passes at `day_orchestrator:7514` /
+`npc_advancement:590` keep it `== get_insight_rank`) was set by neither `generate_character` nor world-gen, so it sat at its **@export
+default 1 for every world-gen NPC** until the first seasonal advancement tick lazily self-healed it (`new_rank > old_rank` → bump +
+**a spurious Tier-4 "rank-up" topic per senior character**). So from world-start the ability gate (`>=3`), kiho eligibility
+(`kiho_system:150`), and Kolat T1 criteria (`>=5/4`, and Kolat selection runs ONLY at world-gen) all read rank 1 regardless of the
+character's real rank. FIX (pure dead-field migration + cache init, **no invented values** — every target is the existing canonical field):
+(1) the 6 `.school_name` reads → `.school`; (2) `generate_character` now sets `c.school_rank = c.insight_rank` right after it syncs
+`insight_rank` (both are caches of `CharacterStats.get_insight_rank` — the same formula the advancement sync uses), and the WorldBootstrap
+post-mutation resync loop sets `school_rank` alongside `insight_rank` (so advantage/kolat/kuroiban/tattoo-artist skill boosts that change
+the computed rank keep both caches correct). NOTE: `get_insight_rank` recomputes rank from rings/skills, so the generation `insight_rank`
+PARAM is NOT the resulting rank (a param-3 Togashi computes to Rank 2); `school_rank` correctly holds the COMPUTED rank (consistent with
+advancement). Follow-on: the shipped tattoo-artist **Togashi elder** (`_TATTOO_ARTIST_SPECS`) was created at param `insight_rank=3` → computed
+Rank 2, but the GDD requires the ability-tattoo elder be **Rank 3+**, so its param was bumped to 4 (computes to 4) — a genuine granting elder
+(future-proofs GRANT_TATTOO); the shipped seeding/bond were unaffected (neither gates on the elder's live rank). Runtime-verified 20/20
+(`tests/verify_school_field_fix.gd`): `generate_character` sets `school_rank == insight_rank` (rank 1/3/5, no stale-1); the ability gate now
+passes for a computed-Rank-3+ Togashi elder in Togashi territory (fails outside, fails for a junior/non-Togashi, and the dead `school_name`
+path would still fail — proving the field was the bug); and the kata Mirumoto/Kakita reduction now fires for Mirumoto/Kakita and not Akodo.
+Full project `--import` parse-clean. `school_name` now has ZERO production readers (left declared for save compat).
+
 ### Systems Added 2026-07-09 (s57.25.8 tattoo ARTIST-NPC seeding + s57.25.4 world-start disposition bond ACTIVATED — completes the tattoo world-gen layer; owner-directed "do all three", runtime-verified 45/45)
 The last deferred piece of s57.25.8. World-start tattoos were seeded (decorative + Togashi ability) but every one carried
 `artist_id = -1` (no in-game artist), so the **s57.25.4 disposition bond — the SOLE live `artist_id` consumer** (fired by the

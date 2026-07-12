@@ -525,10 +525,13 @@ static func bootstrap_world(
 
 	# Resync the denormalized insight_rank cache after ALL world-gen character mutations
 	# (generate_character set it, but assign_derived_advantages / Kolat master skill boosts /
-	# Kuroiban can change skills afterward). Single idempotent pass — the canonical computed
-	# rank, so the spell ML gate / kolat / combat consumers are correct from world start.
+	# Kuroiban / the tattoo-artist skill injection can change skills afterward). Single idempotent
+	# pass — the canonical computed rank, so the spell ML gate / kolat / combat consumers are
+	# correct from world start. school_rank is the twin cache (advancement keeps it == insight_rank),
+	# so resync it too or the tattoo-ability / kiho / Kolat-T1 gates read a stale rank.
 	for _ic: L5RCharacterData in characters:
 		_ic.insight_rank = CharacterStats.get_insight_rank(_ic)
+		_ic.school_rank = _ic.insight_rank
 
 	# Refine the PROVISIONAL armor loadout now that position/role status is finalized.
 	# generate_character ran assign_by_profile at status 1.0 (most bushi -> ashigaru); re-run it
@@ -1060,7 +1063,10 @@ const _TATTOO_ARTIST_SPECS: Array = [
 	["crab",    "Crab",   "Kaiu",     "Kaiu Engineer",          2, 2],
 	["mantis",  "Mantis", "Yoritomo", "Yoritomo Bushi",         2, 2],
 	["daidoji", "Crane",  "Daidoji",  "Daidoji Iron Warrior",   2, 1],
-	["togashi", "Dragon", "Togashi",  "Togashi Tattooed Order", 3, 3],
+	# insight_rank param 4 (NOT 3) because get_insight_rank recomputes rank from rings/skills and a
+	# param-3 Togashi only computes to Rank 2 -- the GDD requires the ability-tattoo elder be Rank 3+,
+	# so param 4 (computes to 4) makes it a genuine granting elder (and future-proofs GRANT_TATTOO).
+	["togashi", "Dragon", "Togashi",  "Togashi Tattooed Order", 4, 3],
 ]
 
 
