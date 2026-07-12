@@ -29459,6 +29459,17 @@ static func _process_assassination_daily_tick(
 						tick_result["daily_detection"] = daily_detect
 
 					if AssassinationSystem.should_assign_bodyguard(op):
+						# s12.8 household response: at suspicion >= 20 the household assigns a bodyguard
+						# to the threatened member (the producer of assigned_protection_target_id, which
+						# the execution-phase bodyguard-encounter path reads). Assign once — only if the
+						# target has no guard yet — the best loyal co-located warrior.
+						if _find_bodyguard(target, characters_by_id) == null:
+							var protector: L5RCharacterData = AssassinationSystem.find_best_protector(
+								target, assassin.character_id, characters_by_id,
+							)
+							if protector != null:
+								protector.assigned_protection_target_id = target.character_id
+								tick_result["bodyguard_assigned"] = protector.character_id
 						var searcher: L5RCharacterData = AssassinationSystem.find_best_searcher(
 							target, assassin.character_id, characters_by_id,
 						)

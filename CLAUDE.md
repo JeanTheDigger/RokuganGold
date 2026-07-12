@@ -232,6 +232,43 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Known Code Issues (found and fixed 2026-07-09, s12.8 bodyguard-assignment producer was NEVER wired — the entire household bodyguard defense was inert — runtime-verified 9/9)
+A **zero-producer dead-field** disabling a whole downstream combat path (the sibling of the civilian-order-budget class,
+applied to the assassination defense layer). `L5RCharacterData.assigned_protection_target_id` (the field that marks a
+character as another's assigned yojimbo) is the **SOLE input** to the execution-phase bodyguard-encounter path:
+`DayOrchestrator._find_bodyguard` / `_target_has_bodyguard` (day_orchestrator:29586/29593) resolve the target's guard
+ONLY by scanning for a character whose `assigned_protection_target_id == target.character_id`, and that guard drives the
+LIVE `AssassinationSystem.resolve_bodyguard_encounter` combat retry + `evaluate_bodyguard_response`. But **NOTHING in
+production ever WROTE that field** (grep-confirmed: world-gen never sets it, no assignment path stamped it) — it sat at
+its `@export` default `-1` for every character forever. So `_find_bodyguard` always returned null, `_target_has_bodyguard`
+was always false, and **the entire s12.8 "household assigns a bodyguard at suspicion ≥ 20" defense (`SUSPICION_BODYGUARD_THRESHOLD`
+= 20, s12.8 line 42) was dead** — a target under active assassination surveillance never got a yojimbo, the FIGHT_FIRST
+bodyguard-combat branch never fired, and `_npc_bodyguard_decision` / `evaluate_bodyguard_response` were unreachable. The
+household response tiers (0-9 none / 10-19 watchful / **20-29 bodyguard assigned** / 30+ lockdown) had their watchful and
+lockdown rungs live (investigation bonus / access-TN penalty) but the middle **bodyguard** rung produced nothing. FIX
+(pure structural wire of the LOCKED household-response tier — **no invented values**; the threshold + the loyalty gate are
+the arbiter's own s12.8 constants, and the selection metric mirrors the sibling `find_best_searcher` / `_find_bodyguard`):
+(1) new `AssassinationSystem.find_best_protector(target, assassin_id, characters_by_id)` — the best combat-capable LOYAL
+co-located household member (`_is_household_member` + `disposition ≥ LOYALTY_DISPOSITION_MINIMUM` 0, scored by
+`maxi(Kenjutsu, Iaijutsu)` — the exact combat measure `_find_bodyguard` uses), excluding the assassin, the target itself,
+dead candidates, anyone already guarding someone (`assigned_protection_target_id >= 0`), and non-co-located candidates.
+(2) `DayOrchestrator`'s ACCESS phase now, inside the existing `if AssassinationSystem.should_assign_bodyguard(op):` gate
+(suspicion ≥ 20), when the target has **no** guard yet (`_find_bodyguard(target) == null`), stamps
+`protector.assigned_protection_target_id = target.character_id` and reports `tick_result["bodyguard_assigned"]` — so the
+previously-dead execution-phase path now reaches. **Persistence design (documented, no invention):** an assigned bodyguard
+REMAINS the yojimbo — the GDD gives no de-assignment rule, so none is invented (a minor "protector pool depletion" over a
+very long game is acceptable; a guard who leaves the settlement stops resolving via the co-location gate, so a wandered-off
+guard is naturally inert). Runtime-verified 9/9 (`tests/verify_bodyguard_assignment.gd`): `find_best_protector` picks the
+highest-combat (Kenjutsu 5) loyal household member and, with it gone, the best-of-`max(Ken,Iai)` (Iaijutsu 3) direct
+vassal; it excludes the assassin / target / dead / disloyal (disposition < 0) / already-guarding / off-site candidates
+(→ null when all are excluded, then selects the lone eligible warrior past every gate); and end-to-end a stamped protector
+flips `_target_has_bodyguard` false → true and is resolved by `_find_bodyguard`, while a guard who then leaves the
+settlement no longer resolves. Full project `--import` parse-clean. **With this, `assigned_protection_target_id` is no
+longer a dead field** — the s12.8 bodyguard rung of the household-response ladder is live. DEFERRED (documented, not this
+fix): the s12.8 **PC crisis-event** bodyguard path (a PC target) is on the PC-travel HOLD; the daimyo/lord-ordered
+standing-yojimbo assignment (a bodyguard assigned by a lord's civilian order rather than reactively by the household under
+threat) is a separate governance channel with no current ActionID.
+
 All systems are implemented, tested, and passing. Before writing any new simulation
 file, search `/simulation/` and `/shared/` to confirm the system doesn't already exist.
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
