@@ -232,6 +232,44 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-09 (s22.5:33 adoption ACTIVATED — the dead ADOPTED_HEIR succession path, owner-approved, runtime-verified 20/20)
+Owner-approved ("Go", 2026-07-09) build of the s22.5:33 adoption mechanic. `L5RCharacterData.adopted_children_ids` was a
+**zero-writer dead field** that fed succession's ENTIRE Priority-4 ADOPTED_HEIR candidate path (`SuccessionSystem.get_candidates`
+:160-170, `_candidate_priority` :875, birth-order weight 4) plus the divination heir check (day_orchestrator:33582) — but
+NOTHING ever appended to it, so **no character ever had an adopted heir** and a lord with no bloodline heir simply had their
+line break (the s22.5 P6 "confirming lord selects — the family line is broken" outcome) with no adoption fallback. GDD s22.5:33
+(LOCKED): "Priest 4 — Adopted Heir: A character formally adopted into the family for the purpose of succession. Adoption is a
+deliberate action (1 AP) that generates an Adoption topic (Section 16.5) with the adoption_variant flag (clear_succession or
+questionable_legitimacy per Section 15.7)." **Placement (per the "check existing channels before wiring any ActionID" HARD
+CONSTRAINT):** heir designation is already a dedicated SEASONAL orchestrator pass (`DayOrchestrator._evaluate_heir_designations`
+→ `SuccessionSystem.designate_heir`), NOT a daily-AP action — so adoption (a sibling succession decision) was wired INTO that
+pass, not as a duplicate daily-AP ActionID (which would create a parallel succession-decision execution path — forbidden). The
+GDD's "1 AP" is the PC-facing framing; the NPC seasonal pass models the same decision without AP bookkeeping, exactly as the
+existing heir designation does. **The one design call the GDD leaves open — the NPC trigger + target — is the owner-approved
+heuristic (2026-07-09), every number LOCKED:** `_should_adopt_heir` fires when the lord is **Family Daimyo+** (`RoleRegistry.
+lord_rank_from_status ≥ FAMILY_DAIMYO`, i.e. status ≥ 6.0), has **no settled heir** (`designated_heir_id < 0`), has **not already
+adopted** (`adopted_children_ids` empty), and has **NO living biological child of the same clan** (a bloodline child of ANY age
+is the natural heir and blocks adoption; a dead child does not block). `_pick_adoption_candidate` selects the **highest-status
+UNMARRIED (`spouse_id < 0`) same-clan-AND-family adult (`age ≥ 18` — the world-gen adult-samurai gate, since `is_gempukku_ready`
+is a ChildRecord method not on the sheet) junior (`status < lord.status`)** who is **not already claimed** as any lord's designated
+heir or adopted child (a `claimed_ids` set built once per pass so an adoptee is never double-claimed). On adoption: append the
+adoptee to `adopted_children_ids`, `designate_heir` them (they are now the sole/strongest candidate), and generate the Adoption
+topic via `_create_adoption_topic` — `topic_type "adoption"` (the type the personality-lean tables already react to: chugi +5,
+gi's questionable −6), **variant `clear_succession`** (the `questionable_legitimacy` variant applies only to adopting an
+unacknowledged affair/secret-line child, and NO illegitimacy/affair-line signal is tracked on the character sheet, so it has no
+detectable trigger — documented, NOT invented), TIER_4 POLITICAL, subject = the adoptee (NEUTRAL role), known by both lord and
+adoptee. Runs BEFORE the ordinary candidate evaluation, so the adopted heir immediately becomes the designated heir; a lord who
+adopts this season is skipped by `_should_adopt_heir` next season (heir now settled / already adopted). Runtime-verified 20/20
+(`tests/verify_adoption.gd`): the four `_should_adopt_heir` gates (Family-Daimyo-rank / no-heir / not-already-adopted /
+living-same-clan-bio-child-blocks, dead-child-does-not-block); `_pick_adoption_candidate`'s full exclusion set (married / child-age
+/ different-family / different-clan / status≥lord / claimed → picks the highest-status unclaimed junior, null when none eligible);
+the topic (type/variant/tier/category/subject/clan+family/both-pools/id-advance); and end-to-end through `_evaluate_heir_designations`
+(a heirless SEIGYO Family Daimyo adopts + designates + topics, while a Family Daimyo WITH a living bio child does not). Full project
+`--import` parse-clean. **With this, `adopted_children_ids` is no longer a dead field** — the s22.5 ADOPTED_HEIR succession path is
+live. DEFERRED (documented, not invented): the `questionable_legitimacy` variant (needs an affair/secret-line-child signal on the
+character sheet); a PC-facing 1-AP ADOPT ActionID (the PC layer is on the PC-travel HOLD, and the seasonal NPC pass is the live
+channel).
+
 ### Known Code Issues — Deferred (2026-07-09, dead-FIELD sweep — zero-writer @export fields, all survivors design-gated, do NOT re-audit)
 A NEW lens the prior function-focused sweeps missed: a mechanical scan of every scalar/bool `@export` field on
 `L5RCharacterData` + `ProvinceData`/`SettlementData`/`ClanData` + the system Resources (SecretData/FavorData/WarData/…) for
@@ -245,12 +283,9 @@ LIVE bugs this session fixed). Three were fixed (civilian_order_budget_max, assi
   `-1` default. NOT a clean wire: populating them as stored world-gen fields duplicates a LIVE heuristic (`_find_province_lord`)
   into a staleable cache (the lord/custodian dies → the field points at a corpse), and rerouting the 10+ cross-system
   consumers to a live resolver is a broad refactor of the unbuilt governance-linkage architecture.
-- **`L5RCharacterData.adopted_children_ids` — feeds succession's whole ADOPTED_HEIR path (succession_system:160-170/875) +
-  heir designation, but never written, so no character ever has an adopted heir.** GDD s22.5:33 (LOCKED) makes adoption a
-  **deliberate 1-AP ActionID** that appends the adoptee + generates an Adoption topic (the topic-weight table already exists,
-  topic_system:533/546). But there is NO ADOPT executor / context-list / objective_alignment scoring, and building it needs
-  an NPC adoption trigger + target-selection heuristic the GDD does not specify (owner-gated game design — same class as the
-  deferred SEEK_TATTOO / physical-inventory pipelines).
+- **`L5RCharacterData.adopted_children_ids` — RESOLVED / WIRED 2026-07-09 (owner-approved), no longer dormant.** See the
+  "s22.5:33 adoption WIRED" changelog entry above: the seasonal `_evaluate_heir_designations` pass (the dedicated succession
+  channel, not a duplicate daily-AP ActionID) now adopts an heir for a heirless Family Daimyo+, feeding the ADOPTED_HEIR path.
 - **`L5RCharacterData.enhanced_void` — the +2k2 Void-spend variant.** The LOCKED techniques that grant it (Kaiu Method /
   Yoritomo Joy of Plunder) are **skill-scoped** ("Void Points on **School Skills**"/"on any **Merchant Skill** grant +2k2"),
   so the blanket boolean is a MISMATCH — wiring `enhanced_void = true` would grant +2k2 on ALL rolls (invention). Faithful

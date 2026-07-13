@@ -1862,7 +1862,7 @@ static func advance_day(
 				active_successions, next_succession_id,
 			)
 		_evaluate_heir_designations(
-			characters, characters_by_id, active_topics
+			characters, characters_by_id, active_topics, next_topic_id, ic_day
 		)
 		var provinces_array: Array = _dict_values_to_province_array(provinces)
 		var emperor_archetype: int = world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)
@@ -16239,7 +16239,20 @@ static func _evaluate_heir_designations(
 	characters: Array,
 	characters_by_id: Dictionary,
 	active_topics: Array,
+	next_topic_id: Array = [1000],
+	ic_day: int = 0,
 ) -> void:
+	# s22.5:33 adoption — a Family Daimyo+ with no living biological same-clan child and no settled
+	# heir formally adopts the best same-clan junior into the family for the purpose of succession.
+	# The set of characters already spoken for (any lord's designated heir or adopted child) so an
+	# adoptee is never double-claimed. Built once per pass.
+	var claimed_ids: Dictionary = {}
+	for l: L5RCharacterData in characters:
+		if l.designated_heir_id >= 0:
+			claimed_ids[l.designated_heir_id] = true
+		for aid: int in l.adopted_children_ids:
+			claimed_ids[aid] = true
+
 	for lord: L5RCharacterData in characters:
 		if CharacterStats.is_dead(lord):
 			continue
@@ -16248,6 +16261,23 @@ static func _evaluate_heir_designations(
 
 		if not SuccessionSystem.should_reevaluate_heir(lord):
 			continue
+
+		# Adoption fallback (s22.5:33) — runs before ordinary candidate evaluation. When the lord is
+		# genuinely without a bloodline heir, adopt an heir rather than leaving the line to break
+		# (the P6 "confirming lord selects" outcome). Adopting into the family makes the adoptee a P4
+		# ADOPTED_HEIR candidate (birth-order weight 4), which the succession system already consumes.
+		if _should_adopt_heir(lord, characters_by_id):
+			var adoptee: L5RCharacterData = _pick_adoption_candidate(
+				lord, characters, claimed_ids,
+			)
+			if adoptee != null:
+				lord.adopted_children_ids.append(adoptee.character_id)
+				SuccessionSystem.designate_heir(lord, adoptee.character_id)
+				claimed_ids[adoptee.character_id] = true
+				_create_adoption_topic(
+					lord, adoptee, active_topics, next_topic_id, ic_day, characters_by_id,
+				)
+				continue
 
 		var proxy := L5RCharacterData.new()
 		proxy.character_id = lord.character_id
@@ -16277,6 +16307,89 @@ static func _evaluate_heir_designations(
 		)
 		if evals.size() > 0:
 			SuccessionSystem.designate_heir(lord, evals[0]["candidate_id"])
+
+
+## s22.5:33 — a lord adopts an heir when: Family Daimyo+ (heads a family line), no heir settled yet,
+## has not already adopted, and has NO living biological child of the same clan (a bloodline heir of
+## any age blocks adoption — they are the natural heir). Owner-approved trigger (2026-07-09).
+static func _should_adopt_heir(lord: L5RCharacterData, characters_by_id: Dictionary) -> bool:
+	if RoleRegistry.lord_rank_from_status(lord.status) < Enums.LordRank.FAMILY_DAIMYO:
+		return false
+	if lord.designated_heir_id >= 0:
+		return false
+	if not lord.adopted_children_ids.is_empty():
+		return false
+	for cid: int in lord.children_ids:
+		var child: L5RCharacterData = characters_by_id.get(cid)
+		if child != null and not CharacterStats.is_dead(child) and child.clan == lord.clan:
+			return false  # a living same-clan bloodline child is the natural heir
+	return true
+
+
+## s22.5:33 adoptee selection (owner-approved 2026-07-09): the highest-status UNMARRIED same-clan,
+## same-family, adult junior (status below the lord's) who is not already claimed as another lord's
+## heir/adopted child. "In their family" = same clan AND family; "junior" = lower status; adult =
+## age >= 18 (the same unmarried-adult-samurai gate world-gen uses at world_population_generator:754,
+## matching GEMPUKKU_AGE_DAYS = 18 IC years — is_gempukku_ready is a ChildRecord method, not on the
+## character sheet).
+static func _pick_adoption_candidate(
+	lord: L5RCharacterData,
+	characters: Array,
+	claimed_ids: Dictionary,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.character_id == lord.character_id:
+			continue
+		if c.clan != lord.clan or c.family != lord.family:
+			continue
+		if c.spouse_id >= 0:
+			continue  # unmarried
+		if c.age < 18:
+			continue  # an adult samurai, not a child
+		if c.status >= lord.status:
+			continue  # a junior of the family
+		if claimed_ids.has(c.character_id):
+			continue  # not already someone's heir/adopted
+		if best == null or c.status > best.status:
+			best = c
+	return best
+
+
+## s22.5:33 / s16.5 — the Adoption topic. Variant is always clear_succession: the questionable_
+## legitimacy variant (s15.7) applies only to adopting an unacknowledged affair/secret-line child,
+## and no illegitimacy/affair-line signal is tracked on the character sheet, so it has no detectable
+## trigger (documented, NOT invented). The topic_type "adoption" is the one the personality-lean
+## tables already react to (chugi +5, gi's questionable -6).
+static func _create_adoption_topic(
+	lord: L5RCharacterData,
+	adoptee: L5RCharacterData,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	characters_by_id: Dictionary,
+) -> void:
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = "adoption_lord%d_heir%d_d%d" % [lord.character_id, adoptee.character_id, ic_day]
+	topic.title = "Adoption of an Heir by Lord %d" % lord.character_id
+	topic.topic_type = "adoption"
+	topic.variant = "clear_succession"
+	topic.tier = TopicData.Tier.TIER_4
+	topic.category = TopicData.Category.POLITICAL
+	topic.subject_character_id = adoptee.character_id
+	topic.subject_role = "NEUTRAL"
+	topic.clan_involved = lord.clan
+	topic.family_involved = lord.family
+	topic.ic_day_created = ic_day
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+	active_topics.append(topic)
+	for h: L5RCharacterData in [lord, adoptee]:
+		if not CharacterStats.is_dead(h) and topic.topic_id not in h.topic_pool:
+			h.topic_pool.append(topic.topic_id)
 
 
 # -- Entanglement Maintenance (s12.8) -----------------------------------------
