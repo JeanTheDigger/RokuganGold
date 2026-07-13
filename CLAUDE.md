@@ -232,7 +232,66 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
-### Systems Added 2026-07-09 (settlement → governing-NPC linkage WIRED — the dead lord_character_id + shrine_custodian_id fields, owner-approved "B and C", runtime-verified 10/10)
+### Systems Added 2026-07-09 (s57.25.7 SEEK_TATTOO / GRANT_TATTOO ability-tattoo loop WIRED — the dead ability-grant NeedTypes, owner-approved "B and C", runtime-verified 21/21)
+Owner-approved ("B and C", 2026-07-09) build of the s57.25.7 ability-tattoo subsystem — the last documented "owner-gated
+subsystem" tattoo item. `SEEK_TATTOO` and `GRANT_TATTOO` were **fully SCORED** in `objective_alignment.json` (SEEK →
+OFFER_ART_COMMISSION 95 / BEGIN_TRAVEL 90 / ASK_FOR_INTRODUCTION 80 / PROBE 75 / WRITE_LETTER 70; GRANT → APPLY_TATTOO 95) and
+the arbiter layer was complete (`has_unfilled_ability_slots` / `count_ability_tattoos` / `is_seek_tattoo_blocked` /
+`get_seek_tattoo_urgency`), but **NEITHER NeedType was ever ASSIGNED to any character** — so no Togashi monk ever sought an
+ability tattoo and no elder ever prioritised granting one; the entire s57.25.7 ise-zumi/elder loop was dead, and APPLY_TATTOO's
+metadata hardcoded `is_ability_tattoo:false` / never set `target_npc_id`. On reading the LOCKED s57.25.7 in full, the earlier
+"genuine design surface" concern dissolved — the GDD locks **every** value (the 95/90/85/80/75 scores, the 1/2/3-season urgency
+tiers, activation/deactivation, the BLOCKED state, recipient selection = "the elder prioritises the one with the highest urgency
+score"), so this is structural wiring, not invention. **The one genuine gap the deferred note named — "a seasons-at-rank tracker
+with no producer" — is the only new value routed, and it is a LOCKED-derived structural stamp** (the current absolute season,
+via `TimeSystem.get_absolute_season`). **Build (three tranches):**
+- **T1 — urgency tracker + helpers.** New `L5RCharacterData.tattoo_rank_reached_season` (absolute season the current insight
+  rank was reached; -1 = untracked → urgency 0) + `seek_tattoo_blocked` (permanent s57.25.7 BLOCKED flag). PRODUCER: both
+  rank-advancement sites (seasonal `_process_npc_advancement` loop + solo-TRAIN `_process_rank_advancement_writebacks`) now stamp
+  `tattoo_rank_reached_season = get_absolute_season(ic_day)` when a Togashi monk ranks up, so urgency resets each rank (the GDD's
+  "seasons at the current rank without receiving their allotment"). New `TattooSystem.seasons_at_rank_unfilled(char, ic_day)`,
+  `is_seeking_tattoo(tattoos, char)` (Togashi + unfilled slots + not BLOCKED), and `draw_ability_for_grant(tattoos, recipient,
+  dice)` (an ability the recipient doesn't already carry, from the s57.25.6 canonical `ALL_TATTOO_ABILITIES` via the seeded dice —
+  the same PROVISIONAL rng-within-a-LOCKED-set draw world-gen already uses; the GDD locks the count/consent but leaves the elder's
+  specific ability choice as "the elder decides within school logic").
+- **T2 — the two standing passes** (`DayOrchestrator._assign_seek_tattoo_standing_objectives` /
+  `_assign_grant_tattoo_standing_objectives`, run after `_clear_stale_context_flags`, both self-correcting). SEEK: for each living
+  non-PC Togashi monk — set the permanent BLOCKED flag when all 9 body locations are occupied; assign `SEEK_TATTOO` standing when
+  seeking (overriding only the peacetime `PERFORM_RITUAL` default / empty slot — a magistrate/lord-assigned standing is respected);
+  revert a stale `SEEK_TATTOO` → `PERFORM_RITUAL` once filled/blocked. GRANT: group active seekers (in Togashi territory) by
+  `physical_location`, and for each qualified elder (Togashi school, school Rank 3+, Artisan: Tattooing 3+, in Togashi territory,
+  co-located with ≥1 seeker) pick the **highest-urgency** co-located seeker (deterministic lowest-id tie-break, elder excluded),
+  resolve the grant params (`get_available_locations`[0] + `draw_ability_for_grant`), assign `GRANT_TATTOO` standing, and inject
+  `world_states[elder]["grant_tattoo_target"] = {recipient_id, body_location, ability}` (added to the daily stale-key clear so it
+  never goes stale); revert a stale `GRANT_TATTOO` → `PERFORM_RITUAL` when no seeker is co-located. **Togashi territory = the
+  character's province is Dragon-clan** (`_in_togashi_territory` via the daily `character_province_map` — the faithful mapping of
+  the GDD's "in Togashi territory / Dragon Clan territory"; no explicit territory field exists).
+- **T3 — APPLY_TATTOO ability metadata.** New `ContextSnapshot.grant_tattoo_target` (read in `build_context` from the injected
+  world_state). `_populate_action_metadata`'s APPLY_TATTOO branch, when `ctx.grant_tattoo_target` is non-empty, sets
+  `option.target_npc_id = recipient`, `is_ability_tattoo=true`, `ability`, `in_togashi_territory=true`, quality NORMAL (ability
+  tattoos aren't aesthetically graded, s57.25.8) — the fields the **Phase-4c precondition filter** requires (it reads
+  `target_npc_id`, SKIPS the decorative `can_receive_decorative` gate for ability tattoos, and authoritatively stamps
+  `body_location`/`world_tattoos` + runs consent — Dragon is NO_RELUCTANCE so a seeking monk always consents). Decorative APPLY_TATTOO
+  is **untouched** (the else-branch is byte-identical to the prior metadata → zero regression). **The executor
+  (`_execute_apply_tattoo`) + creation writeback were ALREADY complete for ability tattoos** — they read `is_ability`/`ability`/
+  `in_togashi_territory`, call `can_apply_ability_tattoo`, and `create_tattoo(..., is_ability, ability, ...)` sets
+  `is_ability_tattoo` + `ability_granted` — so no executor change was needed; only the metadata + standing were missing.
+**End-to-end loop (all through the daily-AP APPLY_TATTOO channel the GDD specifies — NOT a duplicate channel):** rank-up stamps the
+urgency clock → SEEK pass assigns `SEEK_TATTOO` → the monk's scored travel/ask/offer actions carry them to a qualified elder →
+co-location in Dragon lands → GRANT pass assigns the elder `GRANT_TATTOO` + resolves the target → APPLY_TATTOO@95 fires with the
+ability metadata → executor gates+rolls → writeback creates the ability TattooData → the monk's slot count rises → SEEK reverts once
+filled. Runtime-verified 21/21 (`tests/verify_seek_grant_tattoo.gd`): the pure helpers (urgency by elapsed absolute season; seeking
+gated on Togashi/unfilled/not-blocked; the ability draw excludes owned + returns NONE when all owned; the Dragon-territory check);
+the SEEK pass (assign when seeking, don't-assign when filled, respect a magistrate's UPHOLD_LAW, revert a stale SEEK→PERFORM_RITUAL,
+the all-9-occupied → BLOCKED transition); and the GRANT pass (qualified elder assigned GRANT_TATTOO + the injected target points at
+the **highest-urgency** co-located seeker with a body_location + drawn ability; under-skilled elder / out-of-Dragon-territory → no
+grant; a stale GRANT with no seeker reverts to PERFORM_RITUAL). Full project `--import` parse-clean; adoption/rest/bodyguard/settlement
+drivers re-pass (no regression from the shared-file edits). **With this, `SEEK_TATTOO` + `GRANT_TATTOO` are no longer dead
+NeedTypes** — the s57.25.7 ability-tattoo loop is live. DEFERRED (documented, not invented): the ise-zumi's "unknown elder pathway"
+GATHER_INTELLIGENCE "locate Togashi elder" score (75) is scored but has no query-target producer; the ability-tattoo COMBAT effects
+stay on the ASCII/s40 PC-travel HOLD (the grant creates the tattoo; its power fires on the combat layer).
+
+### Systems Added 2026-07-09 (settlement → governing-NPC linkage WIRED — the dead lord_character_id + shrine_custodian_id fields, owner-approved "B and C", runtime-verified 13/13)
 Owner-approved ("B and C", 2026-07-09) resolution of the last documented "clean-but-objected" dead-field cluster.
 `SettlementData.lord_character_id` (10 readers) and `shrine_custodian_id` (2 readers) were **zero-writer dead @export fields** —
 world-gen never set them and no production pass wrote them, so every reader misfired on the `-1` default: supply-share recipient
@@ -253,7 +312,7 @@ char where `(prov.clan=="" OR c.clan==prov.clan) AND (prov.family=="" OR c.famil
 lord → `-1`. `shrine_custodian_id` (religious settlements only — TEMPLE/SHINDEN/MONASTERY) = the highest-`get_insight_rank`
 shugenja (`school_type == SHUGENJA`) stationed at that settlement (`physical_location == str(settlement_id)`), else `-1` — the
 exact s57.26b/origami custodian read. Called in `advance_day` right after the `character_province_map` build (before the companion
-passes), so the linkage is fresh before any consumer runs that tick. Runtime-verified 10/10 (`tests/verify_settlement_governance.gd`):
+passes), so the linkage is fresh before any consumer runs that tick. Runtime-verified 13/13 (`tests/verify_settlement_governance.gd`):
 lord resolution across all four wildcard cases + the no-match `-1` + a parity spot-check against `_find_province_lord` itself;
 custodian = highest-Insight shugenja at a temple (a co-located bushi is NOT picked), `-1` for a non-religious settlement, `-1`
 for a religious settlement with no shugenja present; and the self-correction (living daimyo governs → daimyo dies → settlement
@@ -595,22 +654,14 @@ producer/trigger/value), or ASCII/combat-blocked. Documented so future sweeps sk
   `TattooSystem.seed_world_start_tattoos` / `WorldBootstrap._seed_tattoo_artists` / `_apply_world_start_tattoo_bonds`,
   runtime-verified 45/45. Only PROVISIONAL refinements remain (owner-overridable, NOT deferred work): per-locale artist
   multiplication (one-per-clan floor vs the per-province/per-holding literal) and pinning the reused schools/insight ranks.
-- **SEEK_TATTOO / GRANT_TATTOO NeedTypes (s57.25.7) — a SUBSYSTEM build, not a wire (re-confirmed 2026-07-09).** The ARBITER layer is
-  fully built (`has_unfilled_ability_slots` / `count_ability_tattoos` / `is_seek_tattoo_blocked` / `get_seek_tattoo_urgency`) and the
-  SCORING tables are present (`objective_alignment.SEEK_TATTOO` → OFFER_ART_COMMISSION 95 / BEGIN_TRAVEL 90 / ASK_FOR_INTRODUCTION 80 /
-  PROBE 75 / WRITE_LETTER 70; `objective_alignment.GRANT_TATTOO` → APPLY_TATTOO 95). The 2026-07-09 `school_rank` fix (below) un-broke
-  the APPLY_TATTOO **ability gate** (`can_apply_ability_tattoo` was `school_name=""`→false + `school_rank` stale-1 → no elder could EVER
-  grant), which was a real prerequisite. But it is STILL not a clean wire, for a deeper reason surfaced this pass: **APPLY_TATTOO has NO
-  target-selection anywhere in the live decision path** — `_populate_action_metadata` (npc_decision_engine:3962) sets `target_tier` /
-  `body_location` but never `target_npc_id`, and hardcodes `is_ability_tattoo:false` / `ability:NONE`, and `GRANT_TATTOO` has ZERO
-  production usage (only its score const + JSON row). So the whole tattoo-**application** decision path (decorative AND the elder's
-  ability grant) lacks recipient selection + the ability-grant metadata (which ability, drawn from the un-owned set; `in_togashi_territory`
-  resolution; the seeking-monk target). Wiring s57.25.7 = building that recipient/metadata subsystem + the SEEK_TATTOO standing (monks
-  with unfilled slots) + the GRANT_TATTOO standing (elders co-located with a seeker in Togashi territory) + the monk travel/seek pathways
-  (elder-in-`met_characters` scan) + urgency scaling (needs a seasons-at-rank tracker with **no producer**) + the BLOCKED state. That is a
-  multi-part objective-engine build with genuine design surface (which co-located character an autonomous artisan chooses to tattoo — the
-  GDD specifies the *scores* and *consent* but not the NPC recipient-selection heuristic), NOT a dormant arbiter to wire. Owner-authorized
-  subsystem work.
+- **SEEK_TATTOO / GRANT_TATTOO NeedTypes (s57.25.7) — RESOLVED / WIRED 2026-07-09 (owner-approved "B and C"), no longer deferred.** See
+  the "s57.25.7 SEEK_TATTOO / GRANT_TATTOO ability-tattoo loop WIRED" changelog entry above. On reading the LOCKED s57.25.7 in full, the
+  "genuine design surface" objection dissolved — the GDD locks every value (scores, 1/2/3-season urgency tiers, activation/BLOCKED,
+  recipient = "highest urgency"), so it was structural wiring after all. Built: the seasons-at-rank urgency tracker (the one "no producer"
+  gap — a LOCKED-derived stamp at rank-up) + `is_seeking_tattoo`/`draw_ability_for_grant` helpers (T1); the two self-correcting standing
+  passes `_assign_seek_tattoo`/`_assign_grant_tattoo` (T2, highest-urgency co-located seeker, Dragon-territory gate, BLOCKED transition);
+  and the APPLY_TATTOO ability metadata via `ctx.grant_tattoo_target` (T3). The executor + creation writeback were ALREADY complete for
+  ability tattoos, so no executor change was needed. Runtime-verified 21/21.
 - **Ability-tattoo activation (`get_active_ability_tattoo`/`can_activate_tattoo`/`compute_visibility`/`has_mantis_tattoo`/…) —
   ASCII/s40-blocked** (the tattoo powers fire on the combat/effect layer under the PC-travel HOLD).
 - **Confirmed dead twins (superseded by a live path; do NOT wire):** `MarriageSystem.is_gempuku_eligible` (a 72-**season** duplicate

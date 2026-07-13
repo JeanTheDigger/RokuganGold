@@ -107,11 +107,11 @@ func _test_custodian() -> void:
 	var shug_high: L5RCharacterData = _mkc(3, "Phoenix", "Isawa", 4.0)
 	shug_high.school_type = Enums.SchoolType.SHUGENJA
 	shug_high.physical_location = "500"
-	# Boost shug_high's insight above shug_low via a higher insight_rank stat and more skills.
-	shug_high.fire_ring = 4; shug_high.air_ring = 4; shug_high.water_ring = 4
-	shug_high.earth_ring = 4; shug_high.void_ring = 4
-	shug_low.fire_ring = 2; shug_low.air_ring = 2; shug_low.water_ring = 2
-	shug_low.earth_ring = 2; shug_low.void_ring = 2
+	# Boost shug_high's insight clearly above shug_low. Elemental rings are DERIVED from trait pairs
+	# (Fire=min(agi,int), etc.), so set the traits + void_ring; get_insight_rank reads the computed rings.
+	shug_high.agility = 5; shug_high.intelligence = 5; shug_high.stamina = 5; shug_high.willpower = 5
+	shug_high.strength = 5; shug_high.perception = 5; shug_high.reflexes = 5; shug_high.awareness = 5
+	shug_high.void_ring = 5
 	# A bushi at the same temple must NOT be picked as custodian.
 	var bushi: L5RCharacterData = _mkc(4, "Phoenix", "Shiba", 5.0)
 	bushi.school_type = Enums.SchoolType.BUSHI

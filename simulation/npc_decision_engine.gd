@@ -90,6 +90,8 @@ static func build_context(
 	ctx.court_session_state = world_state.get("court_session_state", {})
 	ctx.court_settlement_id = world_state.get("court_settlement_id", -1)
 	ctx.compliance_intimidators = world_state.get("compliance_intimidators", [])
+	# s57.25.7: GRANT_TATTOO elder's resolved ability-grant target (co-located seeking monk).
+	ctx.grant_tattoo_target = world_state.get("grant_tattoo_target", {})
 	# s29.15.24 action-block validation (populated only when non-empty). The daily
 	# break-condition pass prunes expired/broken entries, so this holds active blocks.
 	if not character.action_blocks.is_empty():
@@ -3970,15 +3972,36 @@ static func _populate_action_metadata(
 			best_tier = Enums.TattooQualityTier.EXCEPTIONAL
 		elif tattooing_rank >= 2:
 			best_tier = Enums.TattooQualityTier.FINE
-		option.metadata = {
-			"target_tier": best_tier,
-			"body_location": Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
-			"is_ability_tattoo": false,
-			"ability": Enums.TattooAbility.NONE,
-			"subject_type": Enums.TattooSubjectType.IMAGE,
-			"subject_description": "",
-			"subject_topic_id": -1,
-		}
+		# s57.25.7 GRANT_TATTOO: a qualified Togashi elder co-located with a seeking monk applies
+		# their rank ABILITY tattoo. The grant target (recipient / body_location / ability) was
+		# resolved by _assign_grant_tattoo_standing_objectives and injected as ctx.grant_tattoo_target.
+		# Setting target_npc_id + is_ability_tattoo=true here is REQUIRED before the Phase-4c filter,
+		# which reads target_npc_id, skips the decorative gate for ability tattoos, and (authoritatively)
+		# stamps body_location/world_tattoos + runs consent. Ability tattoos are always NORMAL quality
+		# (not aesthetically graded, s57.25.8).
+		var gt: Dictionary = ctx.grant_tattoo_target
+		if not gt.is_empty() and int(gt.get("recipient_id", -1)) >= 0:
+			option.target_npc_id = int(gt.get("recipient_id", -1))
+			option.metadata = {
+				"target_tier": Enums.TattooQualityTier.NORMAL,
+				"body_location": gt.get("body_location", Enums.TattooBodyLocation.LEFT_WRIST_FOREARM),
+				"is_ability_tattoo": true,
+				"ability": gt.get("ability", Enums.TattooAbility.NONE),
+				"in_togashi_territory": true,
+				"subject_type": Enums.TattooSubjectType.IMAGE,
+				"subject_description": "ability tattoo",
+				"subject_topic_id": -1,
+			}
+		else:
+			option.metadata = {
+				"target_tier": best_tier,
+				"body_location": Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
+				"is_ability_tattoo": false,
+				"ability": Enums.TattooAbility.NONE,
+				"subject_type": Enums.TattooSubjectType.IMAGE,
+				"subject_description": "",
+				"subject_topic_id": -1,
+			}
 	elif option.action_id == "PURIFY_TAINTED_GROUND":
 		var ptl: float = 0.0
 		var target_prov_id: int = option.target_province_id

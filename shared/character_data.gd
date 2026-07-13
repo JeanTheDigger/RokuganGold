@@ -159,6 +159,15 @@ func clear_day_buff(buff_id: String) -> void:
 @export var infamy: float = 0.0
 @export var insight_rank: int = 1
 
+# -- s57.25.7 Tattoo SEEK_TATTOO tracking --------------------------------------
+## Absolute season (year*4 + season) when this Togashi monk reached their current insight rank.
+## Drives SEEK_TATTOO urgency scaling (seasons-at-rank-unfilled); -1 = untracked (urgency 0). Stamped
+## by the rank-advancement producers when a Togashi monk ranks up, so urgency resets each rank.
+@export var tattoo_rank_reached_season: int = -1
+## Permanent BLOCKED state (s57.25.7): all 9 body locations occupied, no room for a new ability tattoo.
+## Once set, SEEK_TATTOO urgency/travel stop — the monk accepts their spiritual ceiling.
+@export var seek_tattoo_blocked: bool = false
+
 # -- Wounds --------------------------------------------------------------------
 # Total wounds taken. Wound levels derived from Earth ring at query time.
 

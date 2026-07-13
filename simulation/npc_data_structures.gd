@@ -149,6 +149,9 @@ class ContextSnapshot:
 	var known_secrets: Array = []
 	# s12.9: intimidator ids this character is currently "complying under duress" toward.
 	var compliance_intimidators: Array = []
+	# s57.25.7: for a Togashi elder holding GRANT_TATTOO, the resolved ability-grant target the
+	# co-located seeking monk (empty {} = not granting). {recipient_id, body_location, ability}.
+	var grant_tattoo_target: Dictionary = {}
 	# s29.15.24: active action-block entries on this character (Ide R5 peace_locked,
 	# INTERVENE_CAPTAIN, etc.). Each: {blocker_id, source_technique, blocked_action_ids
 	# ("hostile_tagged" or Array[String]), expires, break_conditions, ...}. The action

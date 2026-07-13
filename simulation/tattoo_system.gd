@@ -446,6 +446,53 @@ static func get_seek_tattoo_urgency(seasons_at_rank_unfilled: int) -> int:
 	return SEEK_TATTOO_STANDARD_SCORE
 
 
+## Seasons the monk has been at their current rank without filling their ability-tattoo allotment
+## (s57.25.7 urgency scaling: "the longer the monk has been at the current rank without receiving
+## their allotment, the higher SEEK_TATTOO scores"). The clock is stamped at rank advancement
+## (tattoo_rank_reached_season) and reads the current absolute season; -1 (untracked) -> 0.
+static func seasons_at_rank_unfilled(character: L5RCharacterData, current_ic_day: int) -> int:
+	if character == null or character.tattoo_rank_reached_season < 0:
+		return 0
+	var now_season: int = TimeSystem.get_absolute_season(current_ic_day)
+	return maxi(0, now_season - character.tattoo_rank_reached_season)
+
+
+## Is this Togashi monk actively driven by SEEK_TATTOO right now? (s57.25.7 activation gate.) Requires
+## a Togashi school, unfilled ability slots for the current rank, and NOT the permanent BLOCKED state.
+static func is_seeking_tattoo(
+	tattoos: Array,
+	character: L5RCharacterData,
+) -> bool:
+	if character == null or character.seek_tattoo_blocked:
+		return false
+	return has_unfilled_ability_slots(
+		tattoos, character.character_id, character.school, character.school_rank
+	)
+
+
+## Draw an ability tattoo for a GRANT: an ability the recipient does not already carry, from the
+## s57.25.6 canonical ALL_TATTOO_ABILITIES set, via the seeded dice (same PROVISIONAL rng-within-a-
+## LOCKED-set draw world-gen uses — the GDD locks the count/consent but leaves the elder's specific
+## ability choice as "the elder decides within school logic"). Returns NONE when the recipient already
+## has every ability (nothing left to grant).
+static func draw_ability_for_grant(
+	tattoos: Array,
+	recipient_id: int,
+	dice: DiceEngine,
+) -> int:
+	var owned: Dictionary = {}
+	for t: TattooData in tattoos:
+		if t.recipient_id == recipient_id and t.is_ability_tattoo:
+			owned[t.ability_granted] = true
+	var pool: Array = []
+	for a: int in ALL_TATTOO_ABILITIES:
+		if not owned.has(a):
+			pool.append(a)
+	if pool.is_empty():
+		return Enums.TattooAbility.NONE
+	return pool[dice.rand_int_range(0, pool.size() - 1)]
+
+
 # =============================================================================
 # 57.25.9 — Provenance Investigation
 # =============================================================================

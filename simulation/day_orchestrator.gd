@@ -184,6 +184,12 @@ static func advance_day(
 	_populate_military_data(military_data, companies)
 
 	_clear_stale_context_flags(world_states)
+	# s57.25.7 ability-tattoo loop (after clear_stale so grant_tattoo_target is freshly re-injected).
+	_assign_seek_tattoo_standing_objectives(characters, objectives_map, tattoos)
+	_assign_grant_tattoo_standing_objectives(
+		characters, objectives_map, world_states, tattoos,
+		character_province_map, provinces, dice_engine, ic_day,
+	)
 	_clear_daily_spell_buffs(characters)
 	_inject_kolat_objective_flags(world_states, objectives_map)
 	_expire_province_weather(provinces, ic_day)
@@ -7618,6 +7624,9 @@ static func _process_solo_training_writebacks(
 		# Rank-up occurred from solo training — sync stored field and flags (s48a A48a-3)
 		character.school_rank = new_rank
 		SkillResolver.apply_technique_flags(character)
+		# s57.25.7 SEEK_TATTOO urgency clock resets on a Togashi monk's rank-up.
+		if TattooSystem.is_togashi_school(character.school):
+			character.tattoo_rank_reached_season = TimeSystem.get_absolute_season(ic_day)
 		# Generate Tier 4 Personal topic (s48a A48a-2) and seed into character's own pool
 		var topic := TopicData.new()
 		topic.topic_id = next_topic_id[0]
@@ -9608,6 +9617,146 @@ static func _assign_monk_standing_objectives(
 			"priority": 3,
 			"auto_assigned": true,
 		}
+
+
+# -- s57.25.7 SEEK_TATTOO / GRANT_TATTOO Standing Needs -------------------------
+# The ability-tattoo loop between Togashi monks (seekers) and elders (granters). These NeedTypes
+# were fully SCORED in objective_alignment.json but NEVER ASSIGNED -- so no monk ever sought a
+# tattoo and no elder ever prioritised granting one (the whole s57.25.7 path was dead). Both passes
+# run AFTER the monk pass + clear_stale, are self-correcting (revert a stale standing when the
+# condition lapses), and only override the peacetime monk default (PERFORM_RITUAL) -- a
+# magistrate/lord-assigned standing is respected. All values are the GDD's own s57.25.7 constants.
+
+## Togashi territory = the character's current province is Dragon-clan (s57.25.7 "in Togashi
+## territory" / "Dragon Clan territory"). No explicit territory field exists, so this is the
+## faithful mapping via the daily character_province_map.
+static func _in_togashi_territory(
+	char_id: int, character_province_map: Dictionary, provinces: Dictionary,
+) -> bool:
+	var pid: int = int(character_province_map.get(char_id, -1))
+	if pid < 0:
+		return false
+	var prov: ProvinceData = provinces.get(pid)
+	return prov != null and prov.clan == "Dragon"
+
+
+static func _assign_seek_tattoo_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+	tattoos: Array,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.is_pc or CharacterStats.is_dead(character):
+			continue
+		if not TattooSystem.is_togashi_school(character.school):
+			continue
+		# BLOCKED transition (s57.25.7): all 9 body locations occupied -> permanent BLOCKED.
+		if not character.seek_tattoo_blocked \
+				and TattooSystem.is_seek_tattoo_blocked(tattoos, character.character_id):
+			character.seek_tattoo_blocked = true
+		var char_id: int = character.character_id
+		var objectives: Dictionary = objectives_map.get(char_id, {})
+		var standing: Dictionary = objectives.get("standing", {})
+		var st_need: String = standing.get("need_type", "")
+		if TattooSystem.is_seeking_tattoo(tattoos, character):
+			# Override the peacetime monk default / empty slot with SEEK_TATTOO. Respect a
+			# magistrate/lord-assigned standing (a non-ritual, non-seek standing).
+			if standing.is_empty() or st_need == "PERFORM_RITUAL":
+				if not objectives_map.has(char_id):
+					objectives_map[char_id] = {}
+				objectives_map[char_id]["standing"] = {
+					"need_type": "SEEK_TATTOO", "priority": 3, "auto_assigned": true,
+				}
+		elif st_need == "SEEK_TATTOO":
+			# No longer seeking (filled or BLOCKED) -> revert to the monk default.
+			objectives_map[char_id]["standing"] = {
+				"need_type": "PERFORM_RITUAL", "priority": 3, "auto_assigned": true,
+			}
+
+
+static func _assign_grant_tattoo_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+	world_states: Dictionary,
+	tattoos: Array,
+	character_province_map: Dictionary,
+	provinces: Dictionary,
+	dice: DiceEngine,
+	current_ic_day: int,
+) -> void:
+	# Group active seekers (in Togashi territory) by physical_location, with urgency.
+	var seekers_by_loc: Dictionary = {}
+	for character: L5RCharacterData in characters:
+		if character.is_pc or CharacterStats.is_dead(character):
+			continue
+		if not TattooSystem.is_togashi_school(character.school):
+			continue
+		if character.physical_location.is_empty():
+			continue
+		if not TattooSystem.is_seeking_tattoo(tattoos, character):
+			continue
+		if not _in_togashi_territory(character.character_id, character_province_map, provinces):
+			continue
+		var urg: int = TattooSystem.seasons_at_rank_unfilled(character, current_ic_day)
+		seekers_by_loc.get_or_add(character.physical_location, []).append(
+			{"char": character, "urg": urg}
+		)
+	for elder: L5RCharacterData in characters:
+		if elder.is_pc or CharacterStats.is_dead(elder):
+			continue
+		# Qualified elder: Togashi school, Rank 3+, Artisan: Tattooing 3+ (s57.25.7).
+		if not TattooSystem.is_togashi_school(elder.school):
+			continue
+		var eid: int = elder.character_id
+		var qualified: bool = elder.school_rank >= 3 \
+				and elder.skills.get("Artisan: Tattooing", 0) >= 3
+		var loc: String = elder.physical_location
+		var best: L5RCharacterData = null
+		if qualified and not loc.is_empty() and seekers_by_loc.has(loc) \
+				and _in_togashi_territory(eid, character_province_map, provinces):
+			# Highest-urgency co-located seeker (GDD: elder prioritises most-seasons-unfilled);
+			# deterministic tie-break by lowest character_id. Exclude the elder themselves.
+			var best_urg: int = -1
+			for entry: Dictionary in seekers_by_loc[loc]:
+				var s: L5RCharacterData = entry["char"]
+				if s.character_id == eid:
+					continue
+				var u: int = entry["urg"]
+				if u > best_urg or (u == best_urg and (best == null or s.character_id < best.character_id)):
+					best = s
+					best_urg = u
+		var granting: bool = false
+		if best != null:
+			var avail: Array = TattooSystem.get_available_locations(tattoos, best.character_id, false)
+			var ability: int = TattooSystem.draw_ability_for_grant(tattoos, best.character_id, dice)
+			if not avail.is_empty() and ability != Enums.TattooAbility.NONE:
+				granting = true
+				# Assign GRANT_TATTOO (overriding the elder's monk default / their own SEEK) + inject
+				# the resolved grant target for _populate_action_metadata to build APPLY_TATTOO.
+				var objs: Dictionary = objectives_map.get(eid, {})
+				var st_need: String = (objs.get("standing", {}) as Dictionary).get("need_type", "")
+				if objs.get("standing", {}).is_empty() or st_need in ["PERFORM_RITUAL", "SEEK_TATTOO"]:
+					if not objectives_map.has(eid):
+						objectives_map[eid] = {}
+					objectives_map[eid]["standing"] = {
+						"need_type": "GRANT_TATTOO", "priority": 3, "auto_assigned": true,
+					}
+				var ws: Dictionary = world_states.get(eid, {})
+				if not (ws is Dictionary):
+					ws = {}
+				ws["grant_tattoo_target"] = {
+					"recipient_id": best.character_id,
+					"body_location": avail[0],
+					"ability": ability,
+				}
+				world_states[eid] = ws
+		if not granting:
+			# No co-located seeker -> revert a stale GRANT_TATTOO standing to the monk default.
+			var objs2: Dictionary = objectives_map.get(eid, {})
+			if (objs2.get("standing", {}) as Dictionary).get("need_type", "") == "GRANT_TATTOO":
+				objectives_map[eid]["standing"] = {
+					"need_type": "PERFORM_RITUAL", "priority": 3, "auto_assigned": true,
+				}
 
 
 # -- Witch-Hunter Standing Need (s11.3.5) --------------------------------------
@@ -20918,6 +21067,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"champion_conclusion_candidates", "local_tier3_candidates",
 		"has_active_contracts", "has_kolat_objective",
 		"has_taint_corroboration_target", "compliance_intimidators",
+		"grant_tattoo_target",
 		# Lord-specific keys (cleared so ex-lords don't retain stale data after succession)
 		"province_data", "settlements", "clans", "current_season",
 		"characters_by_id", "active_armies", "active_insurgencies",
@@ -24869,6 +25019,10 @@ static func _process_npc_advancement(
 		var ranked_char: L5RCharacterData = chars_by_id_local.get(rut["character_id"]) as L5RCharacterData
 		if ranked_char != null and not ranked_char.topic_pool.has(topic.topic_id):
 			ranked_char.topic_pool.append(topic.topic_id)
+		# s57.25.7 SEEK_TATTOO urgency clock: a Togashi monk who ranks up resets their
+		# seasons-at-rank tracker (the new rank's ability allotment is now unfilled).
+		if ranked_char != null and TattooSystem.is_togashi_school(ranked_char.school):
+			ranked_char.tattoo_rank_reached_season = TimeSystem.get_absolute_season(ic_day)
 
 	return adv_result
 
