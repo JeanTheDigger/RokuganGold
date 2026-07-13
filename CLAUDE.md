@@ -308,6 +308,12 @@ LIVE bugs this session fixed). Three were fixed (civilian_order_budget_max, assi
   already flagged PROVISIONAL/diverging-from-GDD) is an owner-gated subsystem, not a field wire.
 - **`LetterData.passage_destination_province` / `passage_koku_offered` — the s57.42/43 REQUEST_PASSAGE Sailing fields.**
   Blocked on the deferred Sailing layer (no live REQUEST_PASSAGE ActionID / ship Lesser Zone; already documented DEFERRED).
+- **`TattooData.is_visible` — its sole reader `can_activate_tattoo` is itself a zero-caller ASCII/s40-blocked function**
+  (ability-tattoo activation fires on the combat/effect layer, PC-travel HOLD). Design-gated with the rest of the tattoo
+  combat layer.
+- **`ArtisanItemData.is_exceptional_weapon` / `is_sacred_weapon` / `history_points` — the s49 crafting attribute layer**;
+  the NPC crafting pipeline was removed as invented content (2026-05-26), and the live CRAFT executor does not set these, so
+  they stay unwritten until an owner-authorized crafting-attribute pipeline exists.
 - (False positives cleared: `life_extension_years`, `access_petition_denied_season`, `okiya_visit_counts`,
   `commerce_conducted_seasons`, `cohabitation_days`, `violence_offense_days`, the xp_* fields, and all Array/Dict fields —
   each IS written via `+=` / element-mutation / `.append` / a helper method [`set_day_buff` etc.], missed by the whole-object-
