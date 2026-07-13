@@ -5754,7 +5754,7 @@ static func _build_feasibility_data(
 		character.clan, provinces, settlements, active_wars,
 	)
 	var trade_routes: Array = world_state.get("trade_routes", [])
-	var has_routes: bool = _has_active_trade_routes(trade_routes, character.clan)
+	var has_routes: bool = _has_active_trade_routes(trade_routes, clan_province_ids)
 	var allied: Array = _collect_allied_surplus(
 		character, world_state, settlements, provinces,
 	)
@@ -5869,15 +5869,24 @@ static func _collect_raidable_provinces(
 	return result
 
 
-# TODO: Filter trade routes by clan — requires province-to-clan mapping.
-static func _has_active_trade_routes(trade_routes: Array, _clan: String) -> bool:
+# s4.3.17 Rung 3 (Market Purchase) requires the clan to reach a market via one of ITS OWN
+# trade routes — a route is the clan's iff it connects a province the clan controls (s4.3.18:
+# a trade route connects two provinces). Filter by the clan's province ids so a clan with no
+# routes cannot market-purchase, and disrupting a clan's routes correctly blocks the rung.
+static func _has_active_trade_routes(trade_routes: Array, clan_province_ids: Array) -> bool:
 	for r: Variant in trade_routes:
 		if r is TradeRouteData:
 			var route: TradeRouteData = r
-			if not route.is_disrupted:
+			if route.is_disrupted:
+				continue
+			if route.province_a_id in clan_province_ids or route.province_b_id in clan_province_ids:
 				return true
 		elif r is Dictionary:
-			if not r.get("is_disrupted", true):
+			if r.get("is_disrupted", true):
+				continue
+			var pa: int = int(r.get("province_a_id", -1))
+			var pb: int = int(r.get("province_b_id", -1))
+			if pa in clan_province_ids or pb in clan_province_ids:
 				return true
 	return false
 
