@@ -185,7 +185,7 @@ static func advance_day(
 
 	_clear_stale_context_flags(world_states)
 	# s57.25.7 ability-tattoo loop (after clear_stale so grant_tattoo_target is freshly re-injected).
-	_assign_seek_tattoo_standing_objectives(characters, objectives_map, tattoos)
+	_assign_seek_tattoo_standing_objectives(characters, objectives_map, tattoos, ic_day)
 	_assign_grant_tattoo_standing_objectives(
 		characters, objectives_map, world_states, tattoos,
 		character_province_map, provinces, dice_engine, ic_day,
@@ -9644,6 +9644,7 @@ static func _assign_seek_tattoo_standing_objectives(
 	characters: Array,
 	objectives_map: Dictionary,
 	tattoos: Array,
+	ic_day: int = -1,
 ) -> void:
 	for character: L5RCharacterData in characters:
 		if character.is_pc or CharacterStats.is_dead(character):
@@ -9661,11 +9662,17 @@ static func _assign_seek_tattoo_standing_objectives(
 		if TattooSystem.is_seeking_tattoo(tattoos, character):
 			# Override the peacetime monk default / empty slot with SEEK_TATTOO. Respect a
 			# magistrate/lord-assigned standing (a non-ritual, non-seek standing).
-			if standing.is_empty() or st_need == "PERFORM_RITUAL":
+			if standing.is_empty() or st_need == "PERFORM_RITUAL" or st_need == "SEEK_TATTOO":
 				if not objectives_map.has(char_id):
 					objectives_map[char_id] = {}
+				# Stamp the seasons-at-rank urgency each pass so resolve_goal can escalate
+				# SEEK_TATTOO above a self-selected primary at maximum urgency (s57.25.7).
+				var urg: int = 0
+				if ic_day >= 0:
+					urg = TattooSystem.seasons_at_rank_unfilled(character, ic_day)
 				objectives_map[char_id]["standing"] = {
 					"need_type": "SEEK_TATTOO", "priority": 3, "auto_assigned": true,
+					"urgency_seasons": urg,
 				}
 		elif st_need == "SEEK_TATTOO":
 			# No longer seeking (filled or BLOCKED) -> revert to the monk default.

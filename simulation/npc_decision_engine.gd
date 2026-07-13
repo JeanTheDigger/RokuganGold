@@ -401,7 +401,11 @@ static func resolve_goal(
 	else:
 		# Standard primary objective step (non-lord-tier, Champion, and Imperial).
 		var primary: Dictionary = objectives.get("primary", {})
-		if primary.size() > 0:
+		# s57.25.7 SEEK_TATTOO maximum-urgency escalation: after 3 IC seasons at rank
+		# without receiving the ability allotment, SEEK_TATTOO overrides all objectives
+		# except a direct lord command and active military deployment. Skip a
+		# self-selected primary here so the standing (SEEK_TATTOO) step below wins.
+		if primary.size() > 0 and not _seek_tattoo_max_urgency_override(character, ctx, objectives):
 			var primary_need := _decompose_objective(primary, ctx)
 			if primary_need != null:
 				return primary_need
@@ -431,6 +435,35 @@ static func resolve_goal(
 	fallback.need_type = "REST"
 	fallback.priority = 3
 	return fallback
+
+
+## s57.25.7 SEEK_TATTOO maximum-urgency precedence override. When a Togashi monk has
+## held their current insight rank for 3+ IC seasons without receiving their ability-tattoo
+## allotment, get_seek_tattoo_urgency returns SEEK_TATTOO_MAXIMUM_SCORE and the LOCKED rule
+## elevates SEEK_TATTOO above every objective EXCEPT (a) a direct lord command
+## (an externally-assigned primary) and (b) active military deployment (ON_CAMPAIGN).
+## Returns true when the current self-selected primary should be skipped so the standing
+## SEEK_TATTOO step wins. Requires the standing to actually be SEEK_TATTOO at maximum urgency.
+static func _seek_tattoo_max_urgency_override(
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	objectives: Dictionary,
+) -> bool:
+	var standing: Dictionary = objectives.get("standing", {})
+	if standing.get("need_type", "") != "SEEK_TATTOO":
+		return false
+	var urg: int = int(standing.get("urgency_seasons", 0))
+	if TattooSystem.get_seek_tattoo_urgency(urg) != TattooSystem.SEEK_TATTOO_MAXIMUM_SCORE:
+		return false
+	# A direct lord command (externally-assigned primary) is never overridden.
+	var primary: Dictionary = objectives.get("primary", {})
+	var assigned_by: int = int(primary.get("assigned_by", -1))
+	if assigned_by >= 0 and assigned_by != character.character_id:
+		return false
+	# Active military deployment is never overridden.
+	if ctx.context_flag == Enums.ContextFlag.ON_CAMPAIGN:
+		return false
+	return true
 
 
 ## Kolat objective slot (s54.7d). The third objective slot, active only when a

@@ -232,6 +232,35 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-09 (s57.25.7 SEEK_TATTOO max-urgency escalation WIRED — the last dead half of get_seek_tattoo_urgency, owner-approved "1 2 and 3", runtime-verified 14/14)
+Owner-approved ("1 2 and 3", 2026-07-09) resolution of the one deferred piece the SEEK/GRANT tattoo build left open.
+`TattooSystem.get_seek_tattoo_urgency` (85/90/95 by `seasons_at_rank_unfilled`) had ONE live consumer — the GRANT pass's
+highest-urgency recipient selection — but its **other** LOCKED effect was dead: s57.25.7 "after **3 IC seasons** unfilled,
+SEEK_TATTOO overrides all objectives **except a direct lord command + active military deployment**." The engine ranks objectives
+by precedence TIERS (primary > kolat > standing), not a numeric objective score, so the 95 had **no numeric slot to feed** — the
+LOCKED escalation is a `resolve_goal` **precedence override**, not a scoring bump. Wired that override (pure LOCKED-derived
+structural change, **no invented values** — the 3-season / MAXIMUM_SCORE / lord-command / on-campaign gates are all the arbiter's
+own s57.25.7 constants): **(1)** the SEEK pass (`_assign_seek_tattoo_standing_objectives`) now takes `ic_day` and stamps
+`urgency_seasons = seasons_at_rank_unfilled(char, ic_day)` onto the assigned SEEK_TATTOO standing dict every tick (re-stamped even
+when the standing already IS SEEK_TATTOO, so the clock stays fresh; -1/untracked → 0); the daily call site passes `ic_day`.
+**(2)** new `NPCDecisionEngine._seek_tattoo_max_urgency_override(character, ctx, objectives)` — true iff the standing is
+SEEK_TATTOO AND `get_seek_tattoo_urgency(urgency_seasons) == SEEK_TATTOO_MAXIMUM_SCORE` (≥3 seasons) AND the primary is **not**
+a direct lord command (`assigned_by < 0` or `== self`) AND `ctx.context_flag != ON_CAMPAIGN`. **(3)** `resolve_goal`'s standard
+(non-lord-tier) primary branch skips a self-selected primary when the override holds, falling through to the standing step so
+SEEK_TATTOO wins. The FAMILY_DAIMYO combined-pool branch is untouched (a Family Daimyo is never a rank-seeking Togashi monk — that
+branch requires `is_lord` at FAMILY_DAIMYO tier; monks hit the standard `else` branch), and a **direct lord command** (externally-
+assigned primary) or **active deployment** (ON_CAMPAIGN) always wins, faithful to the two LOCKED exceptions. Below maximum urgency
+(≤2 seasons, score ≤90) the primary keeps standard precedence — zero behavior change for the common case; the escalation is the
+edge case the GDD names (a monk kept at rank without their allotment long enough that seeking becomes overriding). Runtime-verified
+14/14 (`tests/verify_seek_urgency_escalation.gd`): the override predicate (max-urgency+self-primary → true; 2-season/non-SEEK-standing/
+lord-command/on-campaign → false; self-assigned primary → true); end-to-end `resolve_goal` (max urgency returns SEEK_TATTOO over a
+self PERFORM_RITUAL primary; low urgency + lord command + on-campaign all keep the primary); and the SEEK-pass urgency stamp
+(4-season stamp, re-stamp to 0 after a rank reset, ic_day-1 → 0). Full project `--import` parse-clean; the SEEK/GRANT driver
+re-passes 21/21 (the new defaulted `ic_day` param is backward-compatible). **With this, `get_seek_tattoo_urgency` is fully live** —
+both the recipient-selection AND the precedence-escalation halves. The s57.25.7 ability-tattoo loop has no remaining deferred logic
+except the combat-layer tattoo *powers* (ASCII/s40 PC-travel HOLD) and the ise-zumi "unknown elder pathway" GATHER_INTELLIGENCE
+query-target producer (documented).
+
 ### Systems Added 2026-07-09 (s57.25.7 SEEK_TATTOO / GRANT_TATTOO ability-tattoo loop WIRED — the dead ability-grant NeedTypes, owner-approved "B and C", runtime-verified 21/21)
 Owner-approved ("B and C", 2026-07-09) build of the s57.25.7 ability-tattoo subsystem — the last documented "owner-gated
 subsystem" tattoo item. `SEEK_TATTOO` and `GRANT_TATTOO` were **fully SCORED** in `objective_alignment.json` (SEEK →
@@ -290,14 +319,8 @@ drivers re-pass (no regression from the shared-file edits). **With this, `SEEK_T
 NeedTypes** — the s57.25.7 ability-tattoo loop is live. DEFERRED (documented, not invented): the ise-zumi's "unknown elder pathway"
 GATHER_INTELLIGENCE "locate Togashi elder" score (75) is scored but has no query-target producer; the ability-tattoo COMBAT effects
 stay on the ASCII/s40 PC-travel HOLD (the grant creates the tattoo; its power fires on the combat layer). **`get_seek_tattoo_urgency`
-(the 85/90/95 objective-level urgency) stays DEFERRED by design:** `seasons_at_rank_unfilled` IS live (it drives the GRANT pass's
-highest-urgency recipient selection — the GDD's "elder prioritises the most-seasons-unfilled"), but the urgency's OTHER effect — the
-LOCKED "after 3 IC seasons unfilled, SEEK_TATTOO overrides all objectives except direct lord commands + active military" — maps to a
-resolve_goal PRECEDENCE change (elevate the SEEK_TATTOO standing above a self-selected, non-lord primary at maximum urgency). This
-engine ranks objectives by precedence TIERS (primary > kolat > standing), not a numeric objective score, so there is no numeric slot
-for the 85/90/95 to feed; forcing the escalation is a delicate change to the core primary-vs-standing precedence (regression risk on
-the whole decision loop) and is an edge case (a seeking monk rarely also holds a competing self-selected primary). Documented as the
-one faithful-but-deeper refinement; the common-case loop (seek → travel → grant, and a lord-assigned primary always winning) is live.
+(the 85/90/95 objective-level urgency) — RESOLVED / WIRED 2026-07-09 (see the "s57.25.7 SEEK_TATTOO max-urgency escalation WIRED"
+changelog entry directly below); no longer deferred.**
 
 ### Systems Added 2026-07-09 (settlement → governing-NPC linkage WIRED — the dead lord_character_id + shrine_custodian_id fields, owner-approved "B and C", runtime-verified 13/13)
 Owner-approved ("B and C", 2026-07-09) resolution of the last documented "clean-but-objected" dead-field cluster.
