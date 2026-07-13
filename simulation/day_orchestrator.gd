@@ -152,6 +152,13 @@ static func advance_day(
 			if _pid >= 0:
 				character_province_map[_cpm_c.character_id] = _pid
 
+	# Settlement -> governing-NPC linkage (populates SettlementData.lord_character_id +
+	# shrine_custodian_id, previously zero-writer dead fields). Daily + self-correcting so the
+	# linkage tracks succession/death (a dead lord's settlements re-point to the new highest-status
+	# governor next tick). Revives the art-ownership / supply-share / daimyo-glory / shide-grant
+	# consumers that misfired on the -1 default.
+	_populate_settlement_governance(settlements, provinces, characters_by_id)
+
 	_process_companion_owner_deaths(characters, characters_by_id)
 	_process_companion_locations(characters, character_province_map)
 	_process_companion_deaths(characters, active_topics, next_topic_id, ic_day)
@@ -3995,6 +4002,63 @@ static func _find_province_lord(
 		if best == null or c.status > best.status:
 			best = c
 	return best
+
+
+## Settlement -> governing-NPC linkage (the PRODUCER for SettlementData.lord_character_id +
+## shrine_custodian_id -- previously zero-writer dead @export fields read by 10+ art-ownership /
+## supply-share / shide consumers, all misfiring on the -1 default). Replicates _find_province_lord's
+## clan/family wildcard heuristic EXACTLY, but resolves every province in one O(chars) pass (per-clan /
+## per-family / per-clan+family / global best-status maps) instead of an O(chars) scan per province.
+## Daily + self-correcting, so the linkage tracks succession/death without a stored-cache staleness bug
+## (a dead lord's settlements re-point to the new highest-status heir next tick). shrine_custodian_id is
+## the highest-Insight shugenja stationed at a religious settlement (the s57.26b shide-custodian read).
+static func _populate_settlement_governance(
+	settlements: Array,
+	provinces: Dictionary,
+	characters_by_id: Dictionary,
+) -> void:
+	var best_cf: Dictionary = {}   # "clan\tfamily" -> best-status L5RCharacterData
+	var best_c: Dictionary = {}    # clan -> best-status
+	var best_f: Dictionary = {}    # family -> best-status
+	var best_any: L5RCharacterData = null
+	var shug_by_loc: Dictionary = {}  # physical_location -> best-Insight shugenja there
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var cf: String = c.clan + "\t" + c.family
+		if not best_cf.has(cf) or c.status > (best_cf[cf] as L5RCharacterData).status:
+			best_cf[cf] = c
+		if not best_c.has(c.clan) or c.status > (best_c[c.clan] as L5RCharacterData).status:
+			best_c[c.clan] = c
+		if c.family != "" and (not best_f.has(c.family) or c.status > (best_f[c.family] as L5RCharacterData).status):
+			best_f[c.family] = c
+		if best_any == null or c.status > best_any.status:
+			best_any = c
+		if c.school_type == Enums.SchoolType.SHUGENJA and c.physical_location != "":
+			var loc: String = c.physical_location
+			if not shug_by_loc.has(loc) \
+					or CharacterStats.get_insight_rank(c) > CharacterStats.get_insight_rank(shug_by_loc[loc]):
+				shug_by_loc[loc] = c
+	# Resolve each province's lord once, then stamp every settlement in it.
+	var prov_lord: Dictionary = {}
+	for pid: int in provinces:
+		var prov: ProvinceData = provinces[pid]
+		var lord: L5RCharacterData = null
+		if prov.family != "":
+			# clan+family both set -> exact match; family only -> family best (any clan, matching
+			# _find_province_lord's "clan == '' skips the clan filter" semantics).
+			lord = best_cf.get(prov.clan + "\t" + prov.family) if prov.clan != "" else best_f.get(prov.family)
+		elif prov.clan != "":
+			lord = best_c.get(prov.clan)
+		else:
+			lord = best_any
+		prov_lord[pid] = lord.character_id if lord != null else -1
+	for s: SettlementData in settlements:
+		s.lord_character_id = int(prov_lord.get(s.province_id, -1))
+		if s.settlement_type in Enums.RELIGIOUS_SETTLEMENT_TYPES:
+			var cust: L5RCharacterData = shug_by_loc.get(str(s.settlement_id))
+			s.shrine_custodian_id = cust.character_id if cust != null else -1
 
 
 # -- Famine Crisis Processing (s16.2) ------------------------------------------

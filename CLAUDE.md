@@ -232,6 +232,37 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-09 (settlement → governing-NPC linkage WIRED — the dead lord_character_id + shrine_custodian_id fields, owner-approved "B and C", runtime-verified 10/10)
+Owner-approved ("B and C", 2026-07-09) resolution of the last documented "clean-but-objected" dead-field cluster.
+`SettlementData.lord_character_id` (10 readers) and `shrine_custodian_id` (2 readers) were **zero-writer dead @export fields** —
+world-gen never set them and no production pass wrote them, so every reader misfired on the `-1` default: supply-share recipient
+resolution (`day_orchestrator:18312`), the art-ownership / daimyo-glory settlement→lord maps (5 sites: :34066/:34919/:35490/
+:35599/:35650/:35941, feeding sculpture/painting/garden display-ownership + art-visitor daimyo Glory), and the s57.26b shide
+custodian read (`origami_system:259`). The prior deferred note called this "NOT a clean wire" on two grounds — (a) populating
+them as stored world-gen fields duplicates the LIVE `_find_province_lord` heuristic into a **staleable cache** (the lord/custodian
+dies → the field points at a corpse), and (b) rerouting the 10+ consumers to a live resolver is a broad refactor. **Both objections
+dissolved by the design:** the new `DayOrchestrator._populate_settlement_governance` runs **DAILY and is fully self-correcting**
+(recomputed every tick from the current living population, so a dead lord's settlements re-point to the new highest-status governor
+the very next tick — there is no persisted stale-corpse cache; it is a per-tick projection, not a stored fact), and it resolves
+**every province in ONE O(chars) pass** (building per-clan / per-family / per-clan+family / global best-status maps + a
+highest-Insight-shugenja-by-location index, then stamping each settlement) instead of an O(chars) scan per province — so the 10+
+consumers were revived by simply **populating the fields they already read**, WITHOUT rerouting a single one. **No values/heuristics
+invented — the lord resolution replicates `_find_province_lord`'s EXACT clan/family wildcard semantics** (highest-status living
+char where `(prov.clan=="" OR c.clan==prov.clan) AND (prov.family=="" OR c.family==prov.family)`): clan+family both set → exact
+`best_cf` match, family only → `best_f` (any clan), clan only → `best_c`, both blank → `best_any`; a province with no matching
+lord → `-1`. `shrine_custodian_id` (religious settlements only — TEMPLE/SHINDEN/MONASTERY) = the highest-`get_insight_rank`
+shugenja (`school_type == SHUGENJA`) stationed at that settlement (`physical_location == str(settlement_id)`), else `-1` — the
+exact s57.26b/origami custodian read. Called in `advance_day` right after the `character_province_map` build (before the companion
+passes), so the linkage is fresh before any consumer runs that tick. Runtime-verified 10/10 (`tests/verify_settlement_governance.gd`):
+lord resolution across all four wildcard cases + the no-match `-1` + a parity spot-check against `_find_province_lord` itself;
+custodian = highest-Insight shugenja at a temple (a co-located bushi is NOT picked), `-1` for a non-religious settlement, `-1`
+for a religious settlement with no shugenja present; and the self-correction (living daimyo governs → daimyo dies → settlement
+re-points to the heir next pass → both dead → `-1`). Full project `--import` parse-clean. **With this, `lord_character_id` and
+`shrine_custodian_id` are no longer dead fields** — the whole art-ownership / supply-share / daimyo-glory / shide-custodian
+consumer set is live. (The `_find_province_lord` placeholder comment's "province → daimyo linkage is not explicit on ProvinceData"
+gap is now bridged by this daily projection; the two remain independent — `_find_province_lord` is still the ad-hoc single-province
+resolver, `_populate_settlement_governance` is the batch settlement-field producer.)
+
 ### Systems Added 2026-07-09 (s22.5:33 adoption ACTIVATED — the dead ADOPTED_HEIR succession path, owner-approved, runtime-verified 20/20)
 Owner-approved ("Go", 2026-07-09) build of the s22.5:33 adoption mechanic. `L5RCharacterData.adopted_children_ids` was a
 **zero-writer dead field** that fed succession's ENTIRE Priority-4 ADOPTED_HEIR candidate path (`SuccessionSystem.get_candidates`
@@ -276,13 +307,14 @@ A NEW lens the prior function-focused sweeps missed: a mechanical scan of every 
 fields **READ in production but NEVER WRITTEN** (the exact class as the civilian-order-budget / bodyguard / rested_last_night
 LIVE bugs this session fixed). Three were fixed (civilian_order_budget_max, assigned_protection_target_id, rested_last_night
 — see their changelog entries). **Every remaining zero-writer field is design-gated — documented so future sweeps skip them:**
-- **`SettlementData.lord_character_id` (10 readers) + `shrine_custodian_id` (2 readers) — the "settlement → governing NPC
-  linkage" architecture gap.** `_find_province_lord`'s own placeholder comment flags it ("province → daimyo linkage is not
-  explicit on ProvinceData"). Both are stored NPC ids read by art-ownership/display gates (sculpture/painting/garden),
-  supply-share recipient resolution, art-visitor daimyo-glory maps, and the s57.26b shide auto-grant — all misfiring on the
-  `-1` default. NOT a clean wire: populating them as stored world-gen fields duplicates a LIVE heuristic (`_find_province_lord`)
-  into a staleable cache (the lord/custodian dies → the field points at a corpse), and rerouting the 10+ cross-system
-  consumers to a live resolver is a broad refactor of the unbuilt governance-linkage architecture.
+- **`SettlementData.lord_character_id` (10 readers) + `shrine_custodian_id` (2 readers) — RESOLVED / WIRED 2026-07-09
+  (owner-approved "B and C"), no longer dead fields.** See the "settlement → governing-NPC linkage WIRED" changelog entry
+  above: `DayOrchestrator._populate_settlement_governance` (daily, right after the `character_province_map` build) now
+  populates both fields. The prior "not a clean wire / staleable cache" objection was solved by making the pass **daily +
+  self-correcting** (recomputed every tick, so a dead lord's settlements re-point to the new highest-status governor next
+  tick — no stale-corpse cache) and resolving every province in ONE O(chars) pass (per-clan / per-family / per-clan+family /
+  global best-status maps) that replicates `_find_province_lord`'s exact clan/family wildcard semantics, so the 10+ consumers
+  were revived WITHOUT rerouting any of them to a live resolver.
 - **`L5RCharacterData.adopted_children_ids` — RESOLVED / WIRED 2026-07-09 (owner-approved), no longer dormant.** See the
   "s22.5:33 adoption WIRED" changelog entry above: the seasonal `_evaluate_heir_designations` pass (the dedicated succession
   channel, not a duplicate daily-AP ActionID) now adopts an heir for a heirless Family Daimyo+, feeding the ADOPTED_HEIR path.
