@@ -289,7 +289,15 @@ grant; a stale GRANT with no seeker reverts to PERFORM_RITUAL). Full project `--
 drivers re-pass (no regression from the shared-file edits). **With this, `SEEK_TATTOO` + `GRANT_TATTOO` are no longer dead
 NeedTypes** — the s57.25.7 ability-tattoo loop is live. DEFERRED (documented, not invented): the ise-zumi's "unknown elder pathway"
 GATHER_INTELLIGENCE "locate Togashi elder" score (75) is scored but has no query-target producer; the ability-tattoo COMBAT effects
-stay on the ASCII/s40 PC-travel HOLD (the grant creates the tattoo; its power fires on the combat layer).
+stay on the ASCII/s40 PC-travel HOLD (the grant creates the tattoo; its power fires on the combat layer). **`get_seek_tattoo_urgency`
+(the 85/90/95 objective-level urgency) stays DEFERRED by design:** `seasons_at_rank_unfilled` IS live (it drives the GRANT pass's
+highest-urgency recipient selection — the GDD's "elder prioritises the most-seasons-unfilled"), but the urgency's OTHER effect — the
+LOCKED "after 3 IC seasons unfilled, SEEK_TATTOO overrides all objectives except direct lord commands + active military" — maps to a
+resolve_goal PRECEDENCE change (elevate the SEEK_TATTOO standing above a self-selected, non-lord primary at maximum urgency). This
+engine ranks objectives by precedence TIERS (primary > kolat > standing), not a numeric objective score, so there is no numeric slot
+for the 85/90/95 to feed; forcing the escalation is a delicate change to the core primary-vs-standing precedence (regression risk on
+the whole decision loop) and is an edge case (a seeking monk rarely also holds a competing self-selected primary). Documented as the
+one faithful-but-deeper refinement; the common-case loop (seek → travel → grant, and a lord-assigned primary always winning) is live.
 
 ### Systems Added 2026-07-09 (settlement → governing-NPC linkage WIRED — the dead lord_character_id + shrine_custodian_id fields, owner-approved "B and C", runtime-verified 13/13)
 Owner-approved ("B and C", 2026-07-09) resolution of the last documented "clean-but-objected" dead-field cluster.
