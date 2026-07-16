@@ -2990,20 +2990,24 @@ static func _validate_military_order(
 			if action_id in ["ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST", "CONDUCT_SORTIE"]:
 				return {"valid": false, "reason": "unit_garrisoned"}
 
-	if ctx.military_rank >= Enums.MilitaryRank.TAISA:
+	var sections: Dictionary = military_data.get("sections", {})
+
+	# s57.21.3 vacant-superior gate: a Taisa's coordinated manoeuvre needs a living Shireikan above the
+	# Legion (checked via the Legion's parent Section). A Shireikan is ALSO a Taisa+ rank, but only a
+	# Taisa commands a Legion (commanded_unit_id == legion_id), so this fires only for the Legion tier.
+	if ctx.military_rank == Enums.MilitaryRank.TAISA:
 		if not legions.is_empty():
 			var legion: MilitaryUnitData.LegionData = legions.get(ctx.commanded_unit_id)
-			if legion != null and not MilitaryHierarchy.can_legion_coordinate(legion):
+			if legion != null and not MilitaryHierarchy.can_legion_coordinate(legion, sections):
 				if action_id in ["ORDER_BATTLE", "CONDUCT_RAID"]:
-					return {"valid": false, "reason": "legion_no_coordinator"}
+					return {"valid": false, "reason": "legion_superior_vacant"}
 
 	if ctx.military_rank >= Enums.MilitaryRank.SHIREIKAN:
-		var sections: Dictionary = military_data.get("sections", {})
 		if not sections.is_empty():
 			var section: MilitaryUnitData.SectionData = sections.get(ctx.commanded_unit_id)
-			if section != null and not MilitaryHierarchy.can_section_initiate_campaign(section):
+			if section != null and not MilitaryHierarchy.can_section_initiate_campaign(section, legions):
 				if action_id in ["ORDER_BATTLE", "CONDUCT_RAID"]:
-					return {"valid": false, "reason": "section_no_commander"}
+					return {"valid": false, "reason": "section_legion_vacant"}
 
 	return {"valid": true}
 

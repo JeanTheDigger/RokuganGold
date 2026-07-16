@@ -232,6 +232,44 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (s57.21 military unit hierarchy — T2: vacant-superior military-order gate now LIVE, owner-approved rule, runtime-verified 19/19)
+Follow-on to T1 (below), delivering the behavioral payoff. Before this, the executor's Taisa/Shireikan military-order
+gates in `ActionExecutor._validate_military_order` were dead **two ways**: (1) `military_data.legions`/`sections` were
+never populated (no unit Resources existed), so the gate short-circuited on the empty dicts, and (2) the two arbiters
+`MilitaryHierarchy.can_legion_coordinate`/`can_section_initiate_campaign` were **semantic no-ops** (`commander_id >= 0`
+— the acting commander IS the unit's commander, so always true; the prior session flagged this exact tautology). T2
+redesigns both arbiters to the **owner-approved vacant-superior rule** (AskUserQuestion 2026-07-16) — both halves trace
+to LOCKED s57.21.3 and are non-tautological: **(a)** a Taisa's ORDER_BATTLE/CONDUCT_RAID is blocked when their Legion's
+**parent Section has no living Shireikan** (`can_legion_coordinate(legion, sections)` → the parent Section's
+`commander_id`; s57.21.3 "A Go-hatamoto section without a Shireikan cannot initiate new campaigns"), and **(b)** a
+Shireikan's is blocked when **any constituent Legion has no living Taisa** (`can_section_initiate_campaign(section,
+legions)` → every legion in `section.constituent_legions` has a live `commander_id`; s57.21.3 "A Legion without a Taisa
+cannot execute coordinated manoeuvres"). **Liveness (owner-approved read-time vacate):** `_populate_military_data`
+(rewritten to also build `military_data.legions`/`sections` from the T1 WorldState raw arrays) sets each unit's
+`commander_id = -1` (vacant) when its commanding character is DEAD or missing (via `_live_commander_id` + the
+`characters_by_id` already in scope), so the arbiters read liveness directly off `commander_id` with **no invented
+values** — the whole rule is LOCKED s57.21.3 vacancy semantics. Threaded the T1 raw arrays into the daily pass:
+`WorldState.military_legions/sections` → `advance_one_day` → `advance_day` (2 new defaulted params) →
+`_populate_military_data` → the executor gate via `military_data`. Gate call sites updated (Taisa branch now `== TAISA`
+since a Shireikan's `commanded_unit_id` is a section_id that never indexes the legions map; block reasons
+`legion_superior_vacant` / `section_legion_vacant`). **Non-battle actions are unaffected** (only ORDER_BATTLE /
+CONDUCT_RAID gate); **graceful** (an unresolvable parent Section or empty `military_data` never blocks — the gate only
+fires when a vacancy is proven); **zero regression** (the population-A Company/Chui-garrison gate is untouched — those
+bushi carry `military_rank NONE`, so they never reach the Taisa/Shireikan branches; a generated Taisa's ORDER_BATTLE was
+*already* invalid pre-T1 via `no_commanded_unit`, so T1+T2 strictly ENABLES it when the superior is alive). The live
+path is wired: `ctx.commanded_unit_id = character.commanded_unit_id` (npc_decision_engine:199) carries the T1-stamped
+legion_id/section_id into the gate. Runtime-verified 19/19 (`tests/verify_military_gate.gd`): `_populate_military_data`
+bakes liveness (living→kept, dead/missing→-1, empty chars-map→ids intact); both arbiters (living superior→allow,
+dead Shireikan→legion blocked, dead subordinate Taisa→section blocked, unresolvable parent→graceful allow); and
+end-to-end `_validate_military_order` (Taisa ORDER_BATTLE valid with living Shireikan / blocked `legion_superior_vacant`
+with a dead one / CONDUCT_RAID likewise / ASSIGN_GARRISON NOT blocked; Shireikan ORDER_BATTLE valid with all Taisa alive
+/ blocked `section_legion_vacant` with a dead subordinate / empty military_data graceful). Full project `--import`
+parse-clean. **With T1+T2, the s57.21 unit hierarchy is instantiated, persisted, and its vacant-superior gate is LIVE.**
+DEFERRED — **T3:** commander death → FILL_VACANCY (s57.20.3) so a vacant Taisa/Shireikan slot is refilled by the lord
+with appointment authority. The read-time liveness vacate already makes the GATE correct on death; T3 is the refill
+objective trigger (the existing `_process_military_promotions` fills population-A *company* commands, not these
+generated Legion/Section commanders — a separate vacancy pass).
+
 ### Systems Added 2026-07-16 (s57.21 military unit hierarchy — T1: instantiate Army/Section/Legion + person-chain from generated commanders, owner-approved GDD-scale, runtime-verified 22/22)
 Owner-approved ("Redesign gates + build" + "GDD-scale (grow legions)" + "From generated commanders", via AskUserQuestion)
 build of the s57.21 organizational hierarchy. Prior state (both diagnosed via a live-consumer grep): the LOCKED unit

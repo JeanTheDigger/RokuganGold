@@ -113,6 +113,8 @@ static func advance_day(
 	next_ship_id: Array = [1],
 	water_subtiles: Array = [],
 	kolat_secrecy: Dictionary = {},
+	military_legions: Array = [],
+	military_sections: Array = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 	# s54.7i Kolat endgame bundle — heal a partial/empty bundle so every pass can
@@ -181,7 +183,7 @@ static func advance_day(
 	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id, kolat_secrecy)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 
-	_populate_military_data(military_data, companies)
+	_populate_military_data(military_data, companies, military_legions, military_sections, characters_by_id)
 
 	_clear_stale_context_flags(world_states)
 	# s57.25.7 ability-tattoo loop (after clear_stale so grant_tattoo_target is freshly re-injected).
@@ -28677,7 +28679,13 @@ static func _populate_crime_suppression_data(
 	world_states["_crime_suppression_data"] = per_settlement
 
 
-static func _populate_military_data(military_data: Dictionary, companies: Array) -> void:
+static func _populate_military_data(
+	military_data: Dictionary,
+	companies: Array,
+	legions_raw: Array = [],
+	sections_raw: Array = [],
+	characters_by_id: Dictionary = {},
+) -> void:
 	var companies_dict: Dictionary = {}
 	for mc: Dictionary in companies:
 		var cid: int = mc.get("company_id", -1)
@@ -28692,10 +28700,47 @@ static func _populate_military_data(military_data: Dictionary, companies: Array)
 		# deployment_status not stored in raw dict; default WITH_LEGION is correct
 		companies_dict[cid] = cd
 	military_data["companies"] = companies_dict
-	if not military_data.has("legions"):
-		military_data["legions"] = {}
-	if not military_data.has("sections"):
-		military_data["sections"] = {}
+
+	# s57.21 unit hierarchy (raw dicts -> Resources). A unit's commander_id is set to -1 (vacant) when
+	# its commanding character is DEAD or missing, so the vacant-superior gate arbiters read liveness
+	# directly off commander_id without threading characters_by_id into MilitaryHierarchy.
+	var legions_dict: Dictionary = {}
+	for lr: Dictionary in legions_raw:
+		var lid: int = lr.get("legion_id", -1)
+		if lid < 0:
+			continue
+		var ld: MilitaryUnitData.LegionData = MilitaryUnitData.LegionData.new()
+		ld.legion_id = lid
+		ld.parent_section_id = lr.get("parent_section_id", -1)
+		ld.commander_id = _live_commander_id(lr.get("commander_id", -1), characters_by_id)
+		ld.home_province_id = lr.get("home_province_id", -1)
+		ld.constituent_companies = lr.get("constituent_companies", [])
+		legions_dict[lid] = ld
+	military_data["legions"] = legions_dict
+
+	var sections_dict: Dictionary = {}
+	for sr: Dictionary in sections_raw:
+		var sid: int = sr.get("section_id", -1)
+		if sid < 0:
+			continue
+		var sd: MilitaryUnitData.SectionData = MilitaryUnitData.SectionData.new()
+		sd.section_id = sid
+		sd.parent_army_id = sr.get("parent_army_id", -1)
+		sd.commander_id = _live_commander_id(sr.get("commander_id", -1), characters_by_id)
+		sd.constituent_legions = sr.get("constituent_legions", [])
+		sections_dict[sid] = sd
+	military_data["sections"] = sections_dict
+
+
+static func _live_commander_id(commander_id: int, characters_by_id: Dictionary) -> int:
+	## Returns the commander_id if that character is alive (present + not dead), else -1 (vacant).
+	## An empty characters_by_id (a caller not threading liveness) leaves the id intact — graceful.
+	if commander_id < 0 or characters_by_id.is_empty():
+		return commander_id
+	var c: L5RCharacterData = characters_by_id.get(commander_id) as L5RCharacterData
+	if c == null or CharacterStats.is_dead(c):
+		return -1
+	return commander_id
 
 
 static func _process_doshin_seasonal_recovery(world_states: Dictionary) -> void:

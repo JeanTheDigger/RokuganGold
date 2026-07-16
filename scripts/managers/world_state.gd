@@ -416,6 +416,8 @@ func advance_one_day() -> Dictionary:
 		next_ship_id,
 		water_subtiles,
 		kolat_secrecy,
+		military_legions,
+		military_sections,
 	)
 	# Keep the legacy s54.7i scalars in step with the authoritative bundle (no
 	# external reader, but the save should not carry a stale value).

@@ -395,9 +395,33 @@ static func get_vacancy_penalties(
 	}
 
 
-static func can_legion_coordinate(legion: MilitaryUnitData.LegionData) -> bool:
-	return legion.commander_id >= 0
+static func can_legion_coordinate(
+	legion: MilitaryUnitData.LegionData,
+	sections: Dictionary = {},
+) -> bool:
+	## s57.21.3 vacant-superior rule: a Legion executes coordinated manoeuvres (ORDER_BATTLE / CONDUCT_RAID)
+	## only when its parent Section has a living Shireikan to coordinate the operation. A Taisa whose Section
+	## has no living Shireikan holds position (s57.21.3: "A Go-hatamoto section without a Shireikan cannot
+	## initiate new campaigns"). Liveness is baked into section.commander_id (-1 = dead/missing/vacant, set
+	## by _populate_military_data). If the parent Section is not resolvable, do NOT block (graceful) -- the
+	## gate only fires when a vacant superior is proven.
+	var sec: MilitaryUnitData.SectionData = sections.get(legion.parent_section_id)
+	if sec == null:
+		return true
+	return sec.commander_id >= 0
 
 
-static func can_section_initiate_campaign(section: MilitaryUnitData.SectionData) -> bool:
-	return section.commander_id >= 0
+static func can_section_initiate_campaign(
+	section: MilitaryUnitData.SectionData,
+	legions: Dictionary = {},
+) -> bool:
+	## s57.21.3 vacant-superior rule: a Shireikan initiates a campaign (ORDER_BATTLE / CONDUCT_RAID) only
+	## when every subordinate Legion in the Section has a living Taisa -- a Legion without a Taisa "cannot
+	## execute coordinated manoeuvres," so a campaign relying on it is blocked until the vacancy is filled.
+	## Liveness is baked into legion.commander_id (-1 = vacant). An empty legion map is not proof of a
+	## vacancy, so do NOT block (graceful).
+	for lid: int in section.constituent_legions:
+		var lg: MilitaryUnitData.LegionData = legions.get(lid)
+		if lg != null and lg.commander_id < 0:
+			return false
+	return true
