@@ -301,6 +301,45 @@ negative-framing** (s12.7) channels are separate bulk-resolution paths that do n
 "all contexts" for those two channels is a broader wiring — not a one-line lean). This lands the clean deliberate-action
 half (the two GDD-named +15/+10 leans on the live GOSSIP/DISCLOSE actions).
 
+### Systems Added 2026-07-16 (s52 battle XP multiplier season-wide WIRED — the `in_battle_ids` hardcoded `[]`; the entire 2.5×/3.0× combat-season activity bonus was DEAD, owner-approved "Wire it season-wide", runtime-verified 16/16)
+Owner-approved (AskUserQuestion "Wire it season-wide", 2026-07-16) resolution of a **hardcoded-dead builder key**
+disabling a whole downstream XP tier. `NPCAdvancement.get_activity_multiplier` (npc_advancement.gd:91, s52 Part 3
+LOCKED) grants the **battle** activity multiplier — **2.5× participating / 3.0× commanding** (`MULTIPLIER_BATTLE` /
+`MULTIPLIER_COMMANDING_BATTLE`, the two GDD-locked constants) — to every combatant listed in
+`world_state["in_battle_ids"]`, checked FIRST (highest priority, above siege/court/crisis). But the SOLE builder of
+that world_state, `DayOrchestrator._build_advancement_world_state`, **hardcoded `"in_battle_ids": []`** (its
+`active_armies` param was entirely unread), so the set was **always empty** — **no NPC ever received the battle
+multiplier.** Officers who fought and commanded a full season of Mass Battles earned peacetime-rate XP (the
+worst-affected being the very Taisa/Shireikan the s57.21 promotion ladder needs to advance). The producer
+`battle_record` was live (the per-rank promotion counters landed alongside this session), but it carried **no season
+stamp**, so the seasonal pass had no way to tell WHO fought THIS season. FIX (pure structural wire of the LOCKED
+value — **no invented values**; the multipliers are the consumer's own s52 constants, the stamp is
+`TimeSystem.get_absolute_season`): **(1) producer stamp** — `_record_side_participation` gains a defaulted
+`ic_day: int = -1` and, when a commander records a battle, stamps `battle_record["last_battle_season"] =
+TimeSystem.get_absolute_season(ic_day)` (threaded from `_record_battle_participation` → both live call sites — the
+field-battle `_resolve_army_battles` and the storm-assault path — which already have `ic_day` in scope). **(2)
+consumer reconstruction** — `_build_advancement_world_state` gains `ic_day: int = -1` and rebuilds `in_battle_ids`
+from every character whose `battle_record["last_battle_season"]` equals the **JUST-ENDED** absolute season. **Critical
+timing (the one subtlety):** seasonal advancement fires at the START of the new season (day_orchestrator:1839, inside
+the `is_season_boundary` block), BEFORE any of the new season's battles, so the credited season is
+`get_absolute_season(ic_day) - 1` — the season that just closed. Threaded `ic_day` through `_process_npc_advancement`
+(which already receives it) → `_build_advancement_world_state`. **Self-cleaning (no accumulator, no manual clear):**
+`last_battle_season` is a single per-character int that is only "current" for one season, so a commander who fought
+two seasons ago is automatically NOT re-credited (the stamp no longer matches `just-ended`), and a fresh battle simply
+overwrites it — no WorldState membership-set to build, reset, or leak. **Graceful degradation** (no invention): every
+new param defaults to -1, so the pre-fix 4-arg `_record_battle_participation` call shape (used by
+`tests/verify_battle_record.gd`) still records the battle and leaves NO stamp, and `_build_advancement_world_state`
+with `ic_day < 0` yields an empty `in_battle_ids` (no crash). Runtime-verified 16/16
+(`tests/verify_battle_xp_multiplier.gd`): the producer stamps `last_battle_season` on both attacker + defender
+commanders (dead/`-1` commanders unstamped); the builder credits ONLY the just-ended season (never-fought / fought-two-
+seasons-ago / fought-this-current-season all excluded — the self-cleaning guarantee) and defaults empty on `ic_day <
+0`; end-to-end producer→builder→`get_activity_multiplier` yields **3.0× for a commanding Taisa**, **2.5× for a
+participating no-command soldier**, **1.0× for a bystander who never fought**; and the 4-arg backward-compat path
+records the battle with no stamp. Full project `--import` parse-clean; `verify_battle_record.gd` re-passes 22/22 (the
+defaulted param is backward-compatible). **With this, `in_battle_ids` is no longer dead** — a season of combat now
+earns the LOCKED 2.5×/3.0× advancement bonus, so battle-tested officers actually accrue the XP their promotion ladder
+requires.
+
 ### Systems Added 2026-07-16 (s57.22.5 COMPOSE_THEATER_PIECE priority arbiter WIRED — zero-caller arbiter + broken priority-1 + injection gap, owner-approved "Theater compose-priority arbiter", runtime-verified 14/14)
 Owner-approved (AskUserQuestion "Theater compose-priority arbiter", 2026-07-16) resolution of a **zero-caller arbiter
 with a latent priority bug** on the s57.22 theater layer. GDD s57.22.5 (LOCKED, line 61): when COMPOSE_THEATER_PIECE

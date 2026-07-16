@@ -3168,7 +3168,7 @@ static func _process_storm_assault_results(
 
 		# s11.7a battle_record producer (storm-assault path — same as the field battle).
 		_record_battle_participation(
-			battle_result, atk_dicts, def_dicts, characters_by_id,
+			battle_result, atk_dicts, def_dicts, characters_by_id, ic_day,
 		)
 
 		var captor_lord_id: int = atk_dicts[0].get("lord_id", -1) if not atk_dicts.is_empty() else -1
@@ -17277,7 +17277,7 @@ static func _resolve_army_battles(
 		# s11.7a battle_record producer: every participating living commander records this engagement
 		# at their current rank (drives promotion scoring + TAISA/SHIREIKAN eligibility accrual).
 		_record_battle_participation(
-			battle_result, atk_company_dicts, def_company_dicts, characters_by_id,
+			battle_result, atk_company_dicts, def_company_dicts, characters_by_id, ic_day,
 		)
 
 		var field_victor: String = battle_result.get("victor", "draw")
@@ -17409,11 +17409,12 @@ static func _record_battle_participation(
 	atk_company_dicts: Array,
 	def_company_dicts: Array,
 	characters_by_id: Dictionary,
+	ic_day: int = -1,
 ) -> void:
 	var victor: String = battle_result.get("victor", "draw")
 	var seen: Dictionary = {}
-	_record_side_participation(atk_company_dicts, victor == "attacker", characters_by_id, seen)
-	_record_side_participation(def_company_dicts, victor == "defender", characters_by_id, seen)
+	_record_side_participation(atk_company_dicts, victor == "attacker", characters_by_id, seen, ic_day)
+	_record_side_participation(def_company_dicts, victor == "defender", characters_by_id, seen, ic_day)
 
 
 static func _record_side_participation(
@@ -17421,6 +17422,7 @@ static func _record_side_participation(
 	won: bool,
 	characters_by_id: Dictionary,
 	seen: Dictionary,
+	ic_day: int = -1,
 ) -> void:
 	for cd: Dictionary in company_dicts:
 		var cmd_id: int = int(cd.get("commander_id", -1))
@@ -17435,6 +17437,11 @@ static func _record_side_participation(
 		MilitaryPromotionSystem.record_battle(
 			commander.battle_record, won, 0, commander.military_rank,
 		)
+		# Stamp the absolute season this participation occurred in, so the seasonal advancement
+		# pass can grant the s52 battle activity multiplier (2.5x participating / 3.0x commanding)
+		# to everyone who fought this season. Self-cleaning: only "current" for one season.
+		if ic_day >= 0:
+			(commander.battle_record as Dictionary)["last_battle_season"] = TimeSystem.get_absolute_season(ic_day)
 
 
 const _TERRAIN_TO_BATTLE_TERRAIN: Dictionary = {
@@ -25192,7 +25199,7 @@ static func _process_npc_advancement(
 	var days_in_season: int = _get_season_days(current_season)
 
 	var adv_world_state: Dictionary = _build_advancement_world_state(
-		characters, active_courts, active_sieges, active_armies, insurgencies
+		characters, active_courts, active_sieges, active_armies, insurgencies, ic_day
 	)
 
 	var adv_result: Dictionary = NPCAdvancement.process_seasonal_advancement(
@@ -25245,6 +25252,7 @@ static func _build_advancement_world_state(
 	active_sieges: Array,
 	active_armies: Array,
 	insurgencies: Array,
+	ic_day: int = -1,
 ) -> Dictionary:
 	var in_court_ids: Array = []
 	for court_entry_v: Variant in active_courts:
@@ -25273,8 +25281,21 @@ static func _build_advancement_world_state(
 			elif c.military_rank >= Enums.MilitaryRank.CHUI:
 				in_crisis_ids.append(c.character_id)
 
+	# Season-wide battle membership (s52 Part 3): a character earns the 2.5x/3.0x battle
+	# activity multiplier for the OOC season if their battle_record shows they fought in a
+	# battle during the JUST-ENDED season. Seasonal advancement fires at the START of the new
+	# season (before any of this season's battles), so the credited season is the previous
+	# absolute season. The last_battle_season stamp is per-character and self-cleaning (it is
+	# only "current" for one season), so no accumulator set or manual clear is needed.
+	var in_battle_ids: Array = []
+	if ic_day >= 0:
+		var prev_abs_season: int = TimeSystem.get_absolute_season(ic_day) - 1
+		for c: L5RCharacterData in characters:
+			if c.battle_record is Dictionary and int((c.battle_record as Dictionary).get("last_battle_season", -1)) == prev_abs_season:
+				in_battle_ids.append(c.character_id)
+
 	return {
-		"in_battle_ids": [],
+		"in_battle_ids": in_battle_ids,
 		"in_siege_ids": in_siege_ids,
 		"in_court_ids": in_court_ids,
 		"in_crisis_ids": in_crisis_ids,
