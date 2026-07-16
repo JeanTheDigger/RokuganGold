@@ -232,6 +232,44 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (s57.21 military unit hierarchy — T3: dead-commander → FILL_VACANCY Legion/Section refill now LIVE, owner-approved, runtime-verified 22/22 + latent scoring-crash fix)
+Completes the s57.21 hierarchy trilogy (T1 instantiate, T2 gate, T3 refill), unblocked by the s11.7a battle_record
+producer landed alongside (entry directly below). Before T3, a dead generated Legion/Section commander (a
+Taisa/Shireikan from `_generate_military_commanders`) left the persistent `military_legions`/`military_sections`
+raw unit's `commander_id` naming the corpse — T2's read-time liveness bake correctly fired the vacant-superior GATE
+(the section/legion could not campaign), but **nothing ever REFILLED the slot**, so it stayed leaderless forever.
+T3 adds the seasonal `DayOrchestrator._process_military_command_refill(legions_raw, sections_raw, characters_by_id)`
+(+ `_refill_unit_tier` + `_apply_command_refill_results`), wired into the seasonal military block right after
+promotion/demotion. It reuses the SAME LOCKED promotion machinery as company commands — `_gather_promotion_candidates`
++ `MilitaryPromotionSystem.select_best_candidate` with `rank_needed` **TAISA for a vacant Legion, SHIREIKAN for a
+vacant Section** (LOCKED s57.21) — so the eligibility (`is_eligible_for_taisa` needs `battles_as_chui >= 1`;
+`is_eligible_for_shireikan` needs `battles_as_taisa >= 2`) reads the now-live battle_record. **Vacancy detection:**
+a unit is vacant iff its stored `commander_id` is dead/missing (a live commander is skipped). **Slot inheritance
+(no invention):** the new commander inherits the dead predecessor's slot wholesale — same `commanded_unit_id`
+(the unit id), same `operational_superior_id`, same `role_position` (the slot's superior never changes, only the
+person; the dead predecessor's record is still in `characters_by_id`, so those are readable). **Persistence:** the
+new commander is written into the persistent raw unit's `commander_id`, so the next tick's liveness bake keeps it.
+**Graceful + no double-claim:** if no eligible officer exists the slot stays vacant (the gate keeps blocking that
+unit's campaigns until a qualified officer emerges); a `claimed` set shared across both tiers prevents one candidate
+filling two vacancies in a single pass. **LATENT CRASH FIXED (found by T3, pre-existing):** `_gather_promotion_candidates`
+passed `personality_virtue` as the raw `Enums.BushidoVirtue` **enum**, but `select_best_candidate`'s
+`score_taisa_candidate`/`score_shireikan_candidate` take a **String** (keyed into `*_PERSONALITY` via `.to_upper()`)
+→ "Cannot convert argument from int to String" crash. Latent because the CHUI promotion path rarely reaches a
+vacancy+candidate; T3 exercises the TAISA/SHIREIKAN scoring arms for the first time. Fixed by converting via
+`Enums.bushido_virtue_name(c.bushido_virtue)` (the uppercase key the tables already expect) — repairs BOTH the
+existing CHUI promotion scoring AND the T3 refill. Runtime-verified 22/22 (`tests/verify_military_refill.gd`): a dead
+Taisa's Legion is refilled by the best-Battle eligible uncommanded officer (inheriting Shireikan-100 superior +
+"Taisa" role, raw unit rewritten, new commander now a Taisa commanding legion 20); a LIVING Taisa is untouched; a
+candidate with NO battle record leaves the slot vacant (raw unit still names the corpse, liveness bake vacates at
+read time); two vacant legions + one candidate claim it exactly once (no double-assign); and a Shireikan seat
+requires `battles_as_taisa >= 2` (a 1-battle officer is rejected, a 2-battle officer fills it, inheriting the
+Rikugunshokan-5 superior). Full project `--import` parse-clean; T2 gate driver re-passes 19/19 (no regression).
+**With T1+T2+T3, the s57.21 unit hierarchy is instantiated, persisted, gated, AND self-healing on commander death.**
+DEFERRED (documented, owner-acknowledged as the separate larger option "Unify military populations"): the two
+disjoint military populations mean a PURE-GENERATED officer (population B) never commands a battling company
+(population A), so the refill is starved of pop-B candidates until A/B reconciliation — but it is fully correct and
+LIVE for ANY battle-tested uncommanded officer, and the machinery fires the moment such a candidate exists.
+
 ### Systems Added 2026-07-16 (s11.7a battle_record PRODUCER — the phantom field goes LIVE; owner-approved "Resolve battle_record", runtime-verified 22/22)
 Owner-approved (AskUserQuestion "Resolve battle_record", 2026-07-16) resolution of a documented **phantom field**
 (`Known Code Issues — Deferred 2026-07-08`: "the `battle_record` phantom key ... TAISA/SHIREIKAN promotion arms are

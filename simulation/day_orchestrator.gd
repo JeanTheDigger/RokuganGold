@@ -1734,6 +1734,19 @@ static func advance_day(
 			military_seasonal_result.get("demotions", []),
 			characters_by_id, companies,
 		)
+		# s57.21.3 command-vacancy refill: a dead generated Legion/Section commander (Taisa/Shireikan)
+		# leaves the persistent raw unit's commander_id naming the corpse -- the read-time liveness bake
+		# fires the vacant-superior gate, but the slot must be REFILLED or it stays leaderless forever.
+		# Reuses the promotion machinery (no invention); eligibility now accrues via the live s11.7a
+		# battle_record producer. Runs after promotion/demotion so a same-season promoted/demoted
+		# character's command state is settled before the refill scan.
+		var command_refill_results: Array = _process_military_command_refill(
+			military_legions, military_sections, characters_by_id,
+		)
+		_apply_command_refill_results(
+			command_refill_results, military_legions, military_sections, characters_by_id,
+		)
+		military_seasonal_result["command_refill"] = command_refill_results
 		military_seasonal_result["levy_suspicion"] = _process_levy_suspicion(
 			companies, active_wars, characters_by_id,
 			active_topics, next_topic_id, ic_day,
@@ -18244,7 +18257,11 @@ static func _gather_promotion_candidates(
 			"school_rank": c.school_rank,
 			"glory": c.glory,
 			"disposition": 10,
-			"personality_virtue": c.bushido_virtue,
+			# select_best_candidate's score_*_candidate expect the virtue as an uppercase String
+			# (keyed into *_PERSONALITY), not the raw BushidoVirtue enum -- passing the int crashed
+			# score_taisa_candidate/score_shireikan_candidate (latent: the CHUI path rarely reaches a
+			# vacancy+candidate; the s57.21 refill exercises the TAISA/SHIREIKAN arms for the first time).
+			"personality_virtue": Enums.bushido_virtue_name(c.bushido_virtue),
 			"battles_commanded": c.battle_record.get("battles_fought", 0) if c.battle_record is Dictionary else 0,
 			"battles_as_chui": c.battle_record.get("battles_as_chui", 0) if c.battle_record is Dictionary else 0,
 			"battles_as_taisa": c.battle_record.get("battles_as_taisa", 0) if c.battle_record is Dictionary else 0,
@@ -18252,6 +18269,117 @@ static func _gather_promotion_candidates(
 		})
 
 	return candidates
+
+
+# s57.20.3 / s57.21.3 (LOCKED, command vacancy): when a generated Legion/Section commander (a Taisa/
+# Shireikan from world-population -- "population B") dies, their unit's stored commander_id in the
+# persistent military_legions / military_sections raw arrays still names the corpse. The read-time
+# liveness bake (_populate_military_data -> commander_id -1) correctly makes the vacant-superior GATE
+# fire, but nothing ever REFILLS the slot, so the Legion/Section stays permanently leaderless. This
+# seasonal pass fills the vacancy via the SAME promotion machinery as company commands
+# (_gather_promotion_candidates / select_best_candidate; rank_needed TAISA for a Legion, SHIREIKAN for
+# a Section -- both LOCKED s57.21). The new commander inherits the dead predecessor's slot wholesale:
+# same commanded_unit_id, same operational_superior_id, same role_position (the slot's superior never
+# changes -- only the person). If no eligible officer exists (e.g. no battle-tested Taisa for a
+# Shireikan seat, LOCKED battles_as_taisa >= 2, now accrued via the live s11.7a battle_record
+# producer), the slot stays vacant (graceful -- the gate keeps blocking that unit's campaigns until a
+# qualified officer emerges). Company-tier refill is the separate _process_military_promotions pass
+# (per-bushi "population A"); this handles the generated Legion/Section tier only. No invented values:
+# every threshold/score is MilitaryPromotionSystem's own.
+static func _process_military_command_refill(
+	legions_raw: Array,
+	sections_raw: Array,
+	characters_by_id: Dictionary,
+) -> Array:
+	var results: Array = []
+	# A candidate claimed by one vacancy this pass must not be selected for another (the compute phase
+	# reads live commanded_unit_id, which is only mutated at apply time). Shared across both tiers so a
+	# Chui promoted into a Legion is not also drafted into a Section this same season.
+	var claimed: Dictionary = {}
+	_refill_unit_tier(legions_raw, "legion_id", Enums.MilitaryRank.TAISA, characters_by_id, claimed, results)
+	_refill_unit_tier(sections_raw, "section_id", Enums.MilitaryRank.SHIREIKAN, characters_by_id, claimed, results)
+	return results
+
+
+static func _refill_unit_tier(
+	units_raw: Array,
+	id_key: String,
+	rank_needed: int,
+	characters_by_id: Dictionary,
+	claimed: Dictionary,
+	results: Array,
+) -> void:
+	for unit: Dictionary in units_raw:
+		var commander_id: int = unit.get("commander_id", -1)
+		# Vacant iff the stored commander is dead/missing (a live commander needs no refill).
+		if commander_id >= 0:
+			var commander: L5RCharacterData = characters_by_id.get(commander_id)
+			if commander != null and not CharacterStats.is_dead(commander):
+				continue
+		var unit_id: int = unit.get(id_key, -1)
+		if unit_id < 0:
+			continue
+		var vacancy: Dictionary = {"unit_id": unit_id, "rank_needed": rank_needed}
+		var candidates: Array = _gather_promotion_candidates(vacancy, characters_by_id)
+		var filtered: Array = []
+		for cand: Dictionary in candidates:
+			if not claimed.has(int(cand.get("character_id", -1))):
+				filtered.append(cand)
+		if filtered.is_empty():
+			continue
+		var best: Dictionary = MilitaryPromotionSystem.select_best_candidate(filtered, rank_needed)
+		if best.is_empty():
+			continue
+		var new_id: int = int(best.get("character_id", -1))
+		if new_id < 0:
+			continue
+		claimed[new_id] = true
+		# Inherit the dead predecessor's slot (superior + role); only the person changes. A dead
+		# character is not removed from characters_by_id, so the predecessor record is still readable.
+		var op_superior: int = -1
+		var role: String = ""
+		var predecessor: L5RCharacterData = characters_by_id.get(commander_id)
+		if predecessor != null:
+			op_superior = predecessor.operational_superior_id
+			role = predecessor.role_position
+		results.append({
+			"unit_id": unit_id,
+			"id_key": id_key,
+			"rank_needed": rank_needed,
+			"new_commander_id": new_id,
+			"operational_superior_id": op_superior,
+			"role_position": role,
+		})
+
+
+static func _apply_command_refill_results(
+	refill_results: Array,
+	legions_raw: Array,
+	sections_raw: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for r: Dictionary in refill_results:
+		var new_id: int = int(r.get("new_commander_id", -1))
+		var character: L5RCharacterData = characters_by_id.get(new_id)
+		if character == null:
+			continue
+		var unit_id: int = int(r.get("unit_id", -1))
+		var rank: int = int(r.get("rank_needed", Enums.MilitaryRank.NONE))
+		character.military_rank = rank
+		character.commanded_unit_id = unit_id
+		var op_superior: int = int(r.get("operational_superior_id", -1))
+		if op_superior >= 0:
+			character.operational_superior_id = op_superior
+		var role: String = r.get("role_position", "")
+		if not role.is_empty():
+			character.role_position = role
+		# Write the new commander into the persistent raw unit so the next tick's liveness bake keeps it.
+		var id_key: String = r.get("id_key", "")
+		var target: Array = legions_raw if id_key == "legion_id" else sections_raw
+		for unit: Dictionary in target:
+			if int(unit.get(id_key, -1)) == unit_id:
+				unit["commander_id"] = new_id
+				break
 
 
 # -- Military Effect Post-Processing -------------------------------------------
