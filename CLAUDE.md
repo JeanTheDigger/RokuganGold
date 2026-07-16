@@ -301,6 +301,40 @@ negative-framing** (s12.7) channels are separate bulk-resolution paths that do n
 "all contexts" for those two channels is a broader wiring — not a one-line lean). This lands the clean deliberate-action
 half (the two GDD-named +15/+10 leans on the live GOSSIP/DISCLOSE actions).
 
+### Known Code Issues (found and fixed 2026-07-16, Winter Court delegate scoring dropped the Perform skill — a bare-category vs sub-skill mismatch, owner-approved "Case-mismatch sweep", runtime-verified 6/6)
+A **bare-category-vs-sub-skill mismatch** (the sibling of the `Games`→`Games: Go` / `Theology`→`Lore: Theology`
+class, surfaced by the owner-approved case-mismatch sweep). `WinterCourtSystem._score_delegate_candidate` scores a
+Winter Court delegation candidate by their court skills — `Etiquette + Sincerity + Courtier + Perform`, summed then
+`/ 4.0` — but **`Perform` is a skill CATEGORY**: characters store the sub-skills (`Perform: Song`, `Perform: Dance`,
+`Perform: Oratory`, …), never a bare `"Perform"` key, so `candidate.skills.get("Perform", 0)` **was always 0.**
+Every candidate's performance ability was silently dropped from the delegate court-skill score (and the sum was still
+divided by 4, diluting the other three real skills). So a gifted performer courtier was scored no higher than a
+tone-deaf one when a Champion picked Winter Court delegates. FIX (behavior-correcting, **no invented value** — it
+reads the candidate's REAL Perform skill via the canonical resolver): `candidate.skills.get("Perform", 0)` →
+`NPCDecisionEngine._best_skill_rank("Perform", candidate.skills)`, the shared helper that resolves the five skill
+CATEGORIES (`Lore`/`Games`/`Perform`/`Craft`/`Artisan`) to the highest-ranked matching sub-skill (`Perform:` prefix)
+— the exact resolution the `Games: Go` fix + the NPC competence scorer already use, so no divergent copy. The other
+three terms (Etiquette/Sincerity/Courtier) are standalone skills, unaffected. Runtime-verified 6/6
+(`tests/verify_winter_court_perform_skill.gd`): the helper resolves `Perform: Song 5 → 5`, takes the max across
+sub-skills, returns 0 for no-perform and for a (non-canonical) bare `"Perform"` key; and end-to-end through the real
+`_score_delegate_candidate`, a candidate with `Perform: Song 5` now scores strictly higher than an identical
+candidate without it, and a pure-Perform candidate outscores a no-court-skill one (proving the term now contributes
+rather than being dropped). Full project `--import` parse-clean. **With this, a courtier's performance skill counts
+toward Winter Court delegate selection**, as the scoring intends. The same sweep also **checked all clan/family/
+school/role/skill literal comparisons** across `/simulation` + `/shared`: clan/family comparisons are all canonical
+(the Festival-of-Akodo `"lion"` was the only mistyped clan literal — fixed in the entry below), role_position
+comparisons resolve (`"Master of " + element` correctly produces `"Master of Void"` etc.), `.school_name` has zero
+comparisons (dead field), and skill lookups are otherwise all canonical sub-skills. DEFERRED (documented, NOT a
+case-mismatch — a **world-gen instantiation gap** needing an owner decision, do NOT re-audit as a typo): the Void-spell
+Ishiken gate (`SpellSystem.can_cast`: `character.school != "Isawa Ishiken"`) and the ISHIKEN_DO advantage grant
+(`AdvantageSystem` line ~1982: `character.school == "Isawa Ishiken"`) both key on the school string **`"Isawa Ishiken"`,
+which is spelled consistently everywhere** (it is a live `STARTING_SPELLS` key) BUT is **NOT a `WorldGenerator.SCHOOL_DATA`
+key** (only `"Isawa Shugenja"` exists) — so no character is ever created as an Isawa Ishiken, meaning **all s37 Void
+spells are un-castable and ISHIKEN_DO is never granted at world-start.** This is NOT a typo (the string matches itself);
+it is a world-gen question — whether/which characters (the Phoenix Master of Void? a fraction of Isawa?) should be
+generated with the `"Isawa Ishiken"` school or the ISHIKEN_DO advantage — which the GDD does not pin down, so it needs
+owner design input (cannot invent a world-gen rule). Flagged for a future owner decision.
+
 ### Known Code Issues (found and fixed 2026-07-16, s11.5 Festival of Akodo Lion-honor bonus — a lowercase-clan case mismatch left the bonus DEAD for every Lion samurai, runtime-verified 6/6)
 A **case-mismatch dead-branch** (the sibling of the `school_name`/`Theology`/`Games` string-mismatch class, on the
 festival layer). `ActionExecutor._execute_perform_worship` applies `honor_change = ctx.festival_honor_gain`, plus **+0.1

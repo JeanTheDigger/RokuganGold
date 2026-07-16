@@ -292,7 +292,11 @@ static func _score_delegate_candidate(
 	court_skills += float(candidate.skills.get("Etiquette", 0))
 	court_skills += float(candidate.skills.get("Sincerity", 0))
 	court_skills += float(candidate.skills.get("Courtier", 0))
-	court_skills += float(candidate.skills.get("Perform", 0))
+	# "Perform" is a skill CATEGORY -- characters store sub-skills ("Perform: Song", etc.), never a
+	# bare "Perform" key, so skills.get("Perform", 0) was always 0 and every candidate's performance
+	# ability was silently dropped from the delegate court-skill score. Resolve to the best Perform
+	# sub-skill via the canonical helper (same as the Games/Lore category resolution elsewhere).
+	court_skills += float(NPCDecisionEngine._best_skill_rank("Perform", candidate.skills))
 	var court_skill_score: float = clampf(court_skills / 4.0, 0.0, 10.0) * 15.0 / 10.0
 
 	var prestige_val: float = (candidate.status + float(HonorGlorySystem.get_observed_glory_rank(candidate, champion))) / 2.0
