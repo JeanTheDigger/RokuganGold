@@ -232,6 +232,37 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (s15.8 Otomo institutional Gossip/Disclose leans WIRED — the dead `get_otomo_lean` arbiter, owner-approved "Fresh dormant sweep", runtime-verified 8/8)
+Owner-approved (AskUserQuestion "Fresh dormant sweep", 2026-07-16 → the sweep's top finding) resolution of a
+**zero-caller institutional-lean arbiter**. `CourtPrioritySystem.get_otomo_lean(action_id)` (GOSSIP → **+15**,
+DISCLOSE → **+10**; its LOCKED constants `OTOMO_GOSSIP_LEAN 15` / `OTOMO_DISCLOSE_LEAN 10`) had **ZERO production
+callers** (grep-confirmed: only its own def + `tests/`). The NPC decision engine applies per-action school/family
+institutional leans in a well-established `score_all` loop series (DISCERN_NEED Yasuki/Doji +20, ANNOUNCE_HUNT school
+±15, TRAIN_ANIMAL ±10, CONDUCT_TEA_CEREMONY guest/clan, PURCHASE_MARKET/CONDUCT_COMMERCE school+honor, COMMISSION_SHIP
+gated on `ctx.family`) — but **no loop ever added the Otomo lean**, so a generated Otomo NPC never received their
+institutional preference and the entire s15.8 "Otomo Institutional Behavior — LOCKED" ("the Otomo are always the
+serpents in the garden") was inert for the deliberate-action path. GOSSIP and DISCLOSE are **live generated options**
+across every social context (AT_COURT / AT_OWN_HOLDINGS / VISITING option lists, AP costs 1 each). FIX (pure structural
+wire mirroring the sibling lean loops, **no invented values** — the +15/+10 are the arbiter's own s15.8 constants,
+matching the LOCKED GDD "Gossip +15 to any Gossip action in any setting… Disclose +10 in any setting"): a new
+`score_all` loop, gated on `ctx.family == "Otomo"` (the identity gate already used by the COMMISSION_SHIP lean at
+`npc_decision_engine:3741`; `ctx.family` populated at `build_context:44`), adds
+`CourtPrioritySystem.get_otomo_lean(option.action_id)` to each option's `disposition_modifier` — so an Otomo NPC's
+GOSSIP is weighted +15 and DISCLOSE +10 over every non-Otomo family, wherever those actions are generated (court +
+personal-visit contexts), matching the GDD's "apply in ALL contexts" for the deliberate AP-action channel. Runtime-verified
+8/8 (`tests/verify_otomo_lean.gd`): the arbiter constants (GOSSIP 15 / DISCLOSE 10 / CHARM 0); the **Otomo-vs-control
+delta** through the real `score_all` (an Otomo NPC's GOSSIP disposition_modifier is exactly +15 over a non-Otomo Scorpion
+family, DISCLOSE +10, CHARM unchanged — the delta isolates the lean from every other scoring component); and two
+different non-Otomo families score identically (no family lean leaks). Full project `--import` parse-clean. **With this,
+`get_otomo_lean` is live** — Otomo courtiers now lean into gossip and reputation-damaging disclosure as s15.8 mandates.
+DEFERRED (documented, blocked — NOT this wire): the s15.8 **+10 inter-clan-damage lean** (`OTOMO_INTER_CLAN_DAMAGE_LEAN`)
+and the **absolute goodwill prohibition** (`is_otomo_blocked_action`) both need a per-option "builds/worsens inter-clan
+goodwill" classification that no option carries yet; the **Rival-escalation** path (`should_otomo_escalate` → fabricate
+accusations) needs an escalation trigger; and the **daily-conversation topic-weighting** (s12.6) + **letter
+negative-framing** (s12.7) channels are separate bulk-resolution paths that do not route through `score_all` (the GDD's
+"all contexts" for those two channels is a broader wiring — not a one-line lean). This lands the clean deliberate-action
+half (the two GDD-named +15/+10 leans on the live GOSSIP/DISCLOSE actions).
+
 ### Systems Added 2026-07-16 (s57.22.5 COMPOSE_THEATER_PIECE priority arbiter WIRED — zero-caller arbiter + broken priority-1 + injection gap, owner-approved "Theater compose-priority arbiter", runtime-verified 14/14)
 Owner-approved (AskUserQuestion "Theater compose-priority arbiter", 2026-07-16) resolution of a **zero-caller arbiter
 with a latent priority bug** on the s57.22 theater layer. GDD s57.22.5 (LOCKED, line 61): when COMPOSE_THEATER_PIECE

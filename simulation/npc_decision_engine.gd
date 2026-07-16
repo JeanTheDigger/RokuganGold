@@ -1354,6 +1354,16 @@ static func score_all(
 		elif ctx.school.begins_with("Kitsuki"):
 			option.disposition_modifier += 10.0
 
+	# Otomo institutional leans (s15.8, LOCKED "Otomo Institutional Behavior"):
+	# the seiyaku "serpents in the garden" preference applies in ALL contexts, not just
+	# court — Gossip +15, Disclose +10 to any such action generated for an Otomo NPC.
+	# Values are CourtPrioritySystem's own LOCKED constants (OTOMO_GOSSIP_LEAN / OTOMO_DISCLOSE_LEAN).
+	if ctx.family == "Otomo":
+		for option: NPCDataStructures.ScoredAction in options:
+			var otomo_lean: int = CourtPrioritySystem.get_otomo_lean(option.action_id)
+			if otomo_lean != 0:
+				option.disposition_modifier += float(otomo_lean)
+
 	# Public Commerce school lean + honor self-regulation (Annex C, s57.40.7):
 	# Mercantile schools +5 or +10 (Ide Trader); high-caste ritual schools -10; Miya -5.
 	# Honor 5–6 → -3 avoid lean; Honor 7+ → -5 avoid lean. Applies only to public rolls.
