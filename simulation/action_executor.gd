@@ -702,6 +702,18 @@ static func _try_execute_deliver_gift(
 	var roll: Dictionary = gift_result.get("roll", {})
 	var tn: int = GiftGivingSystem.TN_DELIVER_GIFT
 
+	# Doji Courtier R3 "The Perfect Gift" (s29.15.4, LOCKED): on an accepted gift, a Doji
+	# Courtier of school Rank 3+ finds the right gesture (Courtier/Awareness roll, TN 20)
+	# and writes a one-shot Devotion-equivalent disposition modifier onto the recipient —
+	# +20 base, +35 at +1 Raise, +50 at +2 Raises — once per relationship (the arbiter's
+	# own non-stacking guard). The arbiter self-gates on school/rank/already-applied BEFORE
+	# rolling (no wasted RNG for a non-Doji giver) and Pattern-B pre-applies the disposition
+	# to recipient.disposition_values, so it is surfaced here as observability metadata only
+	# (never a Pattern-A key → EffectApplicator does not re-apply it).
+	var perfect_gift: Dictionary = {}
+	if success:
+		perfect_gift = SkillResolver.execute_perfect_gift(character, recipient, dice_engine)
+
 	var effects: Dictionary = {
 		"recipient_disposition_change": gift_result.get("disposition_change", 0),
 		"recipient_modifiers": gift_result.get("modifiers_to_apply", []),
@@ -710,6 +722,8 @@ static func _try_execute_deliver_gift(
 		"gift_tier": tier,
 		"gift_subtype": subtype,
 		"gift_free_raises": gift_result.get("free_raises_applied", 0),
+		"perfect_gift_applied": bool(perfect_gift.get("success", false)),
+		"perfect_gift_disposition": int(perfect_gift.get("disposition_applied", 0)),
 		"noshi_item_id": noshi_item_id,
 		"noshi_is_mundane": noshi_is_mundane,
 		# Preserve generic-social effect keys so downstream consumers that read

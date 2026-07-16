@@ -232,6 +232,44 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (s29.15.4 Doji R3 "The Perfect Gift" WIRED — zero-caller technique arbiter + dead field + stale "+15/already-wired" docs, owner-approved "Fresh dormant sweep", runtime-verified 16/16)
+Second finding from the owner-approved "Fresh dormant sweep" (2026-07-16). `SkillResolver.execute_perfect_gift`
+(the Doji Courtier Rank-3 technique — a Courtier/Awareness roll at **TN 20** that writes a one-shot
+Devotion-equivalent disposition modifier onto the recipient: **+20 base / +35 at +1 Raise / +50 at +2 Raises**,
+one-shot per relationship via a non-stacking guard) had **ZERO production callers** (grep-confirmed: only its own def +
+`tests/`), and its data field `L5RCharacterData.perfect_gift_targets` was a **dead field** touched only inside that
+dormant func. So a Doji Courtier R3+ delivering a gift **never received the technique** — the entire s29.15.4 mechanic
+was inert. **DOCS were doubly stale (corrected here):** both `00_INDEX.md` (line 665) and an old "Systems Added
+2026-05-18" changelog entry claimed "R3 Perfect Gift (one-shot **+15** disposition on gift, once per target)" — but the
+wire never existed (zero callers) AND the value was wrong: the LOCKED GDD (`gdd/s29.15_...:47`) and the arbiter's own
+constants (`PERFECT_GIFT_TN 20`, `PERFECT_GIFT_BASE_DISP 20`, `PERFECT_GIFT_RAISE_VALUES [20,35,50]`) both specify
+**+20/+35/+50**. The "+15/already-wired" was simply inaccurate documentation contradicted by the LOCKED GDD and the
+code — NOT a binding alternative value. FIX (pure structural wire of the existing LOCKED arbiter through its
+GDD-intended trigger, **no invented values** — every number is the arbiter's own s29.15.4 constant): the intended
+trigger is an **accepted gift**, and DELIVER_GIFT is a fully live channel (`ActionExecutor._try_execute_deliver_gift`
+→ `GiftGivingSystem.resolve_deliver_gift`), so `_try_execute_deliver_gift`, **on a successful gift** (`outcome ==
+"success"`), now calls `SkillResolver.execute_perfect_gift(character, recipient, dice_engine)` — an **auto-rider**
+matching every other courtier technique (Doji R1a free raise, Yasuki/Kitsuki R1, etc. are all auto-applied inside the
+resolver/executor, not separate ActionIDs → NOT a duplicate execution path). The arbiter **self-gates** (returns
+`wrong_school`/`rank_too_low`/`already_applied` BEFORE rolling, so a non-Doji giver wastes no RNG and gets no effect)
+and is **Pattern B** (pre-applies the disposition to `recipient.disposition_values[doji]` directly), so the wire
+surfaces it **only as observability metadata** (`perfect_gift_applied` / `perfect_gift_disposition`) — never a Pattern-A
+key, so `EffectApplicator` never re-applies it (the LOCKED Effect-Application naming guard). The technique's own
+non-stacking guard (`target in perfect_gift_targets`) enforces "one shot per relationship." Also corrected `00_INDEX.md`
+line 665 to the true value + wiring (a Code Implementation Status correction — the one gdd file editable without approval
+for status). Runtime-verified 16/16 (`tests/verify_perfect_gift.gd`): the three arbiter gates (non-Doji → `wrong_school`
+with no disposition; a rank-1 Doji → `rank_too_low`; a repeat target → `already_applied`, unchanged); the success path
+(a strong Doji clears TN 20 → `disposition_applied` is a LOCKED tier value in {20,35,50}, the recipient's disposition
+toward the Doji is raised by exactly that via Pattern B, and the target is recorded in `perfect_gift_targets`); the
+non-stacking one-shot (a second attempt → `already_applied`, no further disposition); and **end-to-end through the real
+`_try_execute_deliver_gift`** (a Doji's accepted gift surfaces `perfect_gift_applied: true` + a LOCKED disposition tier +
+raises the recipient's disposition ≥ 20, while a non-Doji [Bayushi] giver fires no Perfect Gift). Full project `--import`
+parse-clean. **With this, `execute_perfect_gift` is live and `perfect_gift_targets` is no longer a dead field** — a Doji
+Courtier's gift now cements a Devotion-equivalent bond, as s29.15.4 mandates. DEFERRED (documented, faithful scope): the
+GDD's "Connects to R1b — a Doji who used DISCERN_NEED first has better information" bonus is not modeled (DISCERN_NEED
+already gives its own separate intel; no combined-bonus mechanic exists), and the technique fires on any accepted gift
+(the NPC engine has no separate "invoke technique" action — auto-rider is the established courtier-technique convention).
+
 ### Systems Added 2026-07-16 (s15.8 Otomo institutional Gossip/Disclose leans WIRED — the dead `get_otomo_lean` arbiter, owner-approved "Fresh dormant sweep", runtime-verified 8/8)
 Owner-approved (AskUserQuestion "Fresh dormant sweep", 2026-07-16 → the sweep's top finding) resolution of a
 **zero-caller institutional-lean arbiter**. `CourtPrioritySystem.get_otomo_lean(action_id)` (GOSSIP → **+15**,
