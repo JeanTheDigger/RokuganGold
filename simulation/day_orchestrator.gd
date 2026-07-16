@@ -3153,6 +3153,11 @@ static func _process_storm_assault_results(
 			dice_engine, settlements, false, fort_bonus, {}, ef_atk, ef_def,
 		)
 
+		# s11.7a battle_record producer (storm-assault path — same as the field battle).
+		_record_battle_participation(
+			battle_result, atk_dicts, def_dicts, characters_by_id,
+		)
+
 		var captor_lord_id: int = atk_dicts[0].get("lord_id", -1) if not atk_dicts.is_empty() else -1
 		var victor: String = battle_result.get("victor", "draw")
 		_capture_dead_commanders(
@@ -17256,6 +17261,12 @@ static func _resolve_army_battles(
 			dice_engine, settlements, false, fort_bonus, worship_maluses, ef_atk, ef_def,
 		)
 
+		# s11.7a battle_record producer: every participating living commander records this engagement
+		# at their current rank (drives promotion scoring + TAISA/SHIREIKAN eligibility accrual).
+		_record_battle_participation(
+			battle_result, atk_company_dicts, def_company_dicts, characters_by_id,
+		)
+
 		var field_victor: String = battle_result.get("victor", "draw")
 		var field_captor_lord_id: int = -1
 		if field_victor == "attacker" and not atk_company_dicts.is_empty():
@@ -17370,6 +17381,47 @@ static func _build_battle_states(
 		))
 		col += 1
 	return states
+
+
+# Producer for the s11.7a battle_record (previously a phantom: the field/factory/mutator existed but
+# NOTHING wrote a record, so battles_fought/battles_as_chui/battles_as_taisa were always 0 and every
+# promotion criterion that reads them was dead). After a resolved battle, each LIVING company commander
+# who participated records one battle at their CURRENT military_rank (won iff their side is the victor;
+# a draw counts as fought). Deduped per commander -- one engagement is one battle even across multiple
+# commanded companies. This drives the CHUI-promotion scoring (battles_commanded) and, over time,
+# accrues the battles_as_chui/battles_as_taisa the LOCKED TAISA/SHIREIKAN eligibility arms require.
+# No invented values: record_battle keys the per-rank counter off the field's own definitional meaning.
+static func _record_battle_participation(
+	battle_result: Dictionary,
+	atk_company_dicts: Array,
+	def_company_dicts: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	var victor: String = battle_result.get("victor", "draw")
+	var seen: Dictionary = {}
+	_record_side_participation(atk_company_dicts, victor == "attacker", characters_by_id, seen)
+	_record_side_participation(def_company_dicts, victor == "defender", characters_by_id, seen)
+
+
+static func _record_side_participation(
+	company_dicts: Array,
+	won: bool,
+	characters_by_id: Dictionary,
+	seen: Dictionary,
+) -> void:
+	for cd: Dictionary in company_dicts:
+		var cmd_id: int = int(cd.get("commander_id", -1))
+		if cmd_id < 0 or seen.has(cmd_id):
+			continue
+		seen[cmd_id] = true
+		var commander: L5RCharacterData = characters_by_id.get(cmd_id)
+		if commander == null or CharacterStats.is_dead(commander):
+			continue
+		if not (commander.battle_record is Dictionary) or (commander.battle_record as Dictionary).is_empty():
+			commander.battle_record = MilitaryPromotionSystem.create_battle_record()
+		MilitaryPromotionSystem.record_battle(
+			commander.battle_record, won, 0, commander.military_rank,
+		)
 
 
 const _TERRAIN_TO_BATTLE_TERRAIN: Dictionary = {

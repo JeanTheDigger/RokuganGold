@@ -94,6 +94,12 @@ static func create_battle_record() -> Dictionary:
 		"battles_won": 0,
 		"battles_lost": 0,
 		"companies_destroyed_under_command": 0,
+		# Per-rank battle counts the LOCKED s11.7a promotion criteria read
+		# (is_eligible_for_taisa needs battles_as_chui >= 1; is_eligible_for_shireikan needs
+		# battles_as_taisa >= 2). Counted by the commander's rank AT battle time -- the definitional
+		# meaning of the field names, no invented value.
+		"battles_as_chui": 0,
+		"battles_as_taisa": 0,
 	}
 
 
@@ -101,13 +107,20 @@ static func record_battle(
 	battle_record: Dictionary,
 	won: bool,
 	companies_destroyed: int = 0,
+	military_rank: int = Enums.MilitaryRank.NONE,
 ) -> void:
-	battle_record["battles_fought"] += 1
+	battle_record["battles_fought"] = int(battle_record.get("battles_fought", 0)) + 1
 	if won:
-		battle_record["battles_won"] += 1
+		battle_record["battles_won"] = int(battle_record.get("battles_won", 0)) + 1
 	else:
-		battle_record["battles_lost"] += 1
-	battle_record["companies_destroyed_under_command"] += companies_destroyed
+		battle_record["battles_lost"] = int(battle_record.get("battles_lost", 0)) + 1
+	battle_record["companies_destroyed_under_command"] = int(
+		battle_record.get("companies_destroyed_under_command", 0)) + companies_destroyed
+	# A battle fought while holding a rank counts toward the next rank's LOCKED prerequisite.
+	if military_rank == Enums.MilitaryRank.CHUI:
+		battle_record["battles_as_chui"] = int(battle_record.get("battles_as_chui", 0)) + 1
+	elif military_rank == Enums.MilitaryRank.TAISA:
+		battle_record["battles_as_taisa"] = int(battle_record.get("battles_as_taisa", 0)) + 1
 
 
 # -- Enlisted Promotion (Below Chui) ---------------------------------------------

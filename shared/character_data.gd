@@ -236,6 +236,11 @@ var combat_ring_deltas: Dictionary = {}
 @export var military_rank: Enums.MilitaryRank = Enums.MilitaryRank.NONE
 @export var commanded_unit_id: int = -1
 @export var assigned_company_id: int = -1
+## s11.7a battle record: per-commander combat history the LOCKED promotion criteria read
+## (battles_fought/won/lost, companies_destroyed_under_command, battles_as_chui/as_taisa). Empty {}
+## until the character first commands a company in a resolved battle; the mutator is
+## MilitaryPromotionSystem.record_battle, driven by _record_battle_participation at the battle sites.
+@export var battle_record: Dictionary = {}
 @export var current_objective: String = ""
 @export var physical_location: String = ""
 @export var travel_destination: String = ""

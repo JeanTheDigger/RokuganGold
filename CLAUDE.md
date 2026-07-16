@@ -232,6 +232,43 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (s11.7a battle_record PRODUCER — the phantom field goes LIVE; owner-approved "Resolve battle_record", runtime-verified 22/22)
+Owner-approved (AskUserQuestion "Resolve battle_record", 2026-07-16) resolution of a documented **phantom field**
+(`Known Code Issues — Deferred 2026-07-08`: "the `battle_record` phantom key ... TAISA/SHIREIKAN promotion arms are
+dead branches"). `L5RCharacterData.battle_record` was read at THREE live sites in `_gather_promotion_candidates`
+(day_orchestrator:18208-18210 — `battles_commanded` = `battle_record.get("battles_fought")`, plus `battles_as_chui`
+/ `battles_as_taisa`), the factory `MilitaryPromotionSystem.create_battle_record` and mutator `record_battle` both
+existed — but **the field was NOT DECLARED on the character sheet, the factory OMITTED the per-rank keys, and
+`record_battle` had ZERO production callers**, so every read returned 0 (the guard `if c.battle_record is Dictionary
+else 0` masked the absent field). Net: the CHUI-promotion **scoring** input `battles_commanded` was permanently 0,
+and the LOCKED TAISA/SHIREIKAN **eligibility** arms (`is_eligible_for_taisa` needs `battles_as_chui >= 1`;
+`is_eligible_for_shireikan` needs `battles_as_taisa >= 2`) could never pass. FIX (three parts, no invented values —
+the per-rank counter is the definitional meaning of the field's own name): **(1) field** — declared
+`@export var battle_record: Dictionary = {}` (empty = no record; readers already guard `is Dictionary`); **(2)
+factory + mutator** — `create_battle_record()` now seeds the two missing keys (`battles_as_chui`/`battles_as_taisa`,
+both 0), and `record_battle` gained a defaulted `military_rank` param that increments the per-rank counter off the
+commander's rank AT battle time (CHUI → `battles_as_chui`, TAISA → `battles_as_taisa`, else neither); the base
+counters are now `.get`-defensive so a partial legacy record can't crash; **(3) producer** — new
+`DayOrchestrator._record_battle_participation(battle_result, atk_company_dicts, def_company_dicts, characters_by_id)`
+(+ `_record_side_participation`) wired right after BOTH `resolve_and_reconcile_battle` sites (the field-battle
+`_resolve_army_battles` and the storm-assault path): every LIVING company commander who participated records one
+battle at their current `military_rank` (won iff their side is the victor; a draw counts as fought), **deduped per
+commander** (one engagement = one battle even across multiple commanded companies), dead/`-1` commanders skipped,
+pre-existing records ACCUMULATE (never reset). With this, `battle_record` is no longer a phantom — the CHUI-promotion
+scoring reads real `battles_commanded`, the enlisted eligibility reads real `battles_fought`, and the per-rank
+counters accrue for battle-tested officers. Runtime-verified 22/22 (`tests/verify_battle_record.gd`): the factory
+seeds all six keys; `record_battle` increments per-rank correctly (NONE → no per-rank, CHUI → `battles_as_chui`,
+TAISA → `battles_as_taisa`, accumulating); and end-to-end `_record_battle_participation` records one battle for the
+attacker Taisa (deduped across two companies, WON as a Taisa) and the defender Chui (LOST as a Chui), skips the dead
+commander + the `-1` commander, and accumulates a second engagement (fought 2 / battles_as_taisa 2). Full project
+`--import` parse-clean. **DEFERRED (documented, owner-acknowledged as the separate larger option "Unify military
+populations"):** the two disjoint military populations mean the GENERATED Taisa/Shireikan (population B, from
+`_generate_military_commanders`) never command the per-bushi battling companies (population A), so a pure-generated
+officer still accrues no record — the battle_record producer is fully correct and LIVE for any officer who commands
+a battling company, but reconciling populations A/B (so generated commanders lead real companies) is a separate
+design change. This LANDS the field + producer (independently valuable: CHUI scoring + enlisted eligibility now
+read real data); the s57.21 T3 Legion/Section refill is re-enabled on top (next).
+
 ### Systems Added 2026-07-16 (s57.21 military unit hierarchy — T2: vacant-superior military-order gate now LIVE, owner-approved rule, runtime-verified 19/19)
 Follow-on to T1 (below), delivering the behavioral payoff. Before this, the executor's Taisa/Shireikan military-order
 gates in `ActionExecutor._validate_military_order` were dead **two ways**: (1) `military_data.legions`/`sections` were
