@@ -232,6 +232,49 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (s57.22.5 COMPOSE_THEATER_PIECE priority arbiter WIRED — zero-caller arbiter + broken priority-1 + injection gap, owner-approved "Theater compose-priority arbiter", runtime-verified 14/14)
+Owner-approved (AskUserQuestion "Theater compose-priority arbiter", 2026-07-16) resolution of a **zero-caller arbiter
+with a latent priority bug** on the s57.22 theater layer. GDD s57.22.5 (LOCKED, line 61): when COMPOSE_THEATER_PIECE
+fires, the engine advances **exactly one** WIP piece per AP by the priority "(1) pieces serving an active political
+NeedType (DAMAGE_RELATIONSHIP or MOVE_TOPIC_POSITION) rank above ARTISTIC_EXPRESSION pieces; (2) among same-priority
+pieces, the most-progressed toward its threshold (highest `craft_progress`/threshold ratio); (3) ties broken by
+most-recently-declared piece." `TheaterSystem.select_composition_piece_to_advance` **encoded this ordering but had
+ZERO production callers** — the live compose path (`NPCDecisionEngine._build_compose_theater_metadata`) just grabbed
+`int(wip_ids[0])` (the first WIP piece in **injection order**), ignoring the LOCKED priority entirely. Worse, the
+arbiter's own **priority-1 was a dead branch**: it computed `is_political = active_need_type in political_types` but
+**never used `is_political` in the `sort_custom` comparator** — so even if it had been called, a political piece would
+NOT have ranked above an artistic one (only ratio + recency were sorted). A composer with an in-progress
+scandal-play (DAMAGE_RELATIONSHIP) and an in-progress art-play would advance whichever happened to be injected first,
+not the political one the GDD mandates. **Third bug — the injection gap:** `DayOrchestrator._inject_theater_context`
+appended a character's own WIP piece **id** to `wip_ids` but `continue`d **before** adding the piece **object** to
+`pieces_by_id`, so the per-character `_theater_pieces_by_id` map (the only place the engine can read a WIP piece's
+progress/threshold/political flag) **lacked every WIP piece** — the arbiter had nothing to read even once called.
+FIX (three coordinated structural wires, **no invented values** — every input is a live per-piece field):
+**(1) arbiter priority-1 made real** — the comparator now ranks by `a.political_need_type != ""` vs
+`b.political_need_type != ""` (political-first) BEFORE the ratio + `piece_id` tiebreak; the dead `is_political` /
+`political_types` locals are removed and the now-unused need param renamed `_active_need_type`. The political
+determination reads **`TheaterPieceData.political_need_type`** (declared field, default `""`, **stamped at composition
+start** in `_build_compose_theater_metadata` only when the need is DAMAGE_RELATIONSHIP/MOVE_TOPIC_POSITION) — so
+"serves a political NeedType" is the piece's own recorded purpose, the faithful reading (a piece is political by what it
+was composed FOR, not by the current tick's need — the prior `active_need_type` gate was the wrong axis). **(2)
+injection gap closed** — `_inject_theater_context` now adds the WIP piece object to `pieces_by_id` alongside the id, so
+`_theater_pieces_by_id` carries every WIP piece the arbiter needs. **(3) consumer wired to the arbiter** —
+`_build_compose_theater_metadata`, when WIP pieces exist, resolves the WIP piece objects from
+`ctx.known_objectives["_theater_pieces_by_id"]` (filtered to `wip_ids`) and calls
+`TheaterSystem.select_composition_piece_to_advance(ctx.character_id, wip_pieces, need.need_type)`, using
+`chosen.piece_id`; it **falls back to `wip_ids[0]`** only when the piece objects are unresolvable (backward-compatible
+with a pre-fix injected state). The arbiter's own author/complete/`lost`/`abandoned_incomplete` filters are unchanged.
+Runtime-verified 14/14 (`tests/verify_theater_compose_priority.gd`): priority-1 (a political piece is selected over a
+**far-more-progressed** artistic piece; MOVE_TOPIC_POSITION also counts as political); priority-2 (highest progress
+ratio wins among same-priority pieces, both artistic-vs-artistic and political-vs-political); priority-3 (equal
+political-status + equal ratio → highest `piece_id`); the filters (completed/lost/abandoned/other-author excluded →
+only the live own-WIP piece survives; nothing eligible → null); the injection (a WIP piece object is exposed in
+`_theater_pieces_by_id` — the closed gap); and end-to-end through `_build_compose_theater_metadata` (with the artistic
+piece FIRST in `wip_ids`, the builder still returns the political piece's id via the arbiter — proving it is no longer
+`wip_ids[0]`; and the unresolvable-pieces path falls back to `wip_ids[0]`). Full project `--import` parse-clean.
+**With this, `select_composition_piece_to_advance` is live and its LOCKED priority-1 actually fires** — a composer
+progresses their political play ahead of their art play, as s57.22.5 mandates.
+
 ### Systems Added 2026-07-16 (s57.21 military unit hierarchy — T3: dead-commander → FILL_VACANCY Legion/Section refill now LIVE, owner-approved, runtime-verified 22/22 + latent scoring-crash fix)
 Completes the s57.21 hierarchy trilogy (T1 instantiate, T2 gate, T3 refill), unblocked by the s11.7a battle_record
 producer landed alongside (entry directly below). Before T3, a dead generated Legion/Section commander (a

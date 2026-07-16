@@ -33117,6 +33117,9 @@ static func _inject_theater_context(
 			if piece.craft_progress >= 0:
 				if piece.author_id == char_id:
 					wip_ids.append(piece.piece_id)
+					# Expose the WIP piece object so the compose arbiter (§57.22.5) can read
+					# its progress/threshold/political_need_type when picking which to advance.
+					pieces_by_id[piece.piece_id] = piece
 				continue
 
 			# Completed piece.

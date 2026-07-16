@@ -4451,11 +4451,27 @@ static func _build_compose_theater_metadata(
 	need: NPCDataStructures.ImmediateNeed,
 ) -> Dictionary:
 	## Compose: select WIP piece to advance or declare a new composition.
-	## wip_piece_ids injected by _inject_theater_context.
+	## wip_piece_ids + _theater_pieces_by_id injected by _inject_theater_context.
 	var wip_ids: Array = ctx.known_objectives.get("wip_piece_ids", [])
 	if not wip_ids.is_empty():
+		# §57.22.5 (LOCKED): advance exactly one WIP piece by the priority arbiter
+		# (political pieces first, then highest progress ratio, then most recent),
+		# not the naive first-in-list.
+		var pieces_by_id: Dictionary = ctx.known_objectives.get("_theater_pieces_by_id", {})
+		var wip_pieces: Array = []
+		for wid: int in wip_ids:
+			var p: Variant = pieces_by_id.get(int(wid), null)
+			if p != null:
+				wip_pieces.append(p)
+		var chosen_id: int = int(wip_ids[0])  # fallback if pieces not resolvable
+		if not wip_pieces.is_empty():
+			var chosen: TheaterPieceData = TheaterSystem.select_composition_piece_to_advance(
+				ctx.character_id, wip_pieces, need.need_type
+			)
+			if chosen != null:
+				chosen_id = chosen.piece_id
 		return {
-			"piece_id": int(wip_ids[0]),
+			"piece_id": chosen_id,
 			"is_new": false,
 			"raises": 0,
 		}
