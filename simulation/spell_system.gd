@@ -1612,14 +1612,17 @@ static func can_cast(character: L5RCharacterData, spell_id: String) -> bool:
 	var spell: Dictionary = SPELL_LIBRARY[spell_id]
 	var ml: int = spell.get("m", 1)
 	var ring: int = spell.get("e", -1)
-	# Void spells: Isawa Ishiken restriction
+	# Void spells: castable only by ishiken — the Ishiken-do Advantage (s37:3 LOCKED).
+	# The Isawa Ishiken school string is kept as a backward-compat fallback for legacy
+	# hand-built characters whose advantage array was never derived.
 	if spell.get("i", false):
-		if character.school != "Isawa Ishiken":
-			var has_school: bool = false
-			for sp: String in character.school_paths:
-				if sp == "Isawa Ishiken":
-					has_school = true
-					break
+		if not AdvantageSystem.has_advantage(character, Enums.Advantage.ISHIKEN_DO):
+			var has_school: bool = character.school == "Isawa Ishiken"
+			if not has_school:
+				for sp: String in character.school_paths:
+					if sp == "Isawa Ishiken":
+						has_school = true
+						break
 			if not has_school:
 				return false
 	# Must know the spell

@@ -1978,8 +1978,10 @@ static func assign_derived_advantages(
 	active_hostages: Array,
 	chars_by_id: Dictionary,
 ) -> void:
-	# ISHIKEN_DO — assigned to Isawa Ishiken school characters
-	if character.school == "Isawa Ishiken":
+	# ISHIKEN_DO — assigned to Isawa Ishiken school characters AND the Phoenix Master of Void
+	# (s37:3 LOCKED: Void spells are castable only by ishiken with the Ishiken-do Advantage;
+	# s45:385 ISHIKEN_DO is shugenja-only; the Master of Void is canonically always an Ishiken).
+	if character.school == "Isawa Ishiken" or character.role_position == "Master of Void":
 		if not has_advantage(character, Enums.Advantage.ISHIKEN_DO):
 			var adv: AdvantageData = AdvantageData.new()
 			adv.advantage_type = Enums.Advantage.ISHIKEN_DO

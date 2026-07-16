@@ -319,6 +319,12 @@ static func _generate_clan_leadership(
 			master.role_position = "Master of " + element
 			master.school_type = Enums.SchoolType.SHUGENJA
 			master.status = 7.0
+			# The Master of Void is canonically an ishiken (s37:3): give them the Isawa Ishiken
+			# starting Void spells so those spells are actually in spells_known (the ISHIKEN_DO
+			# advantage that gates casting is granted by AdvantageSystem.assign_derived_advantages
+			# via the "Master of Void" role_position). Appends the void set to the base Isawa spells.
+			if element == "Void":
+				SpellSystem.assign_starting_spells(master, "Isawa Ishiken")
 			chars.append(master)
 
 	return chars

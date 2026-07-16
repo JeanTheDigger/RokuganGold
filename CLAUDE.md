@@ -232,6 +232,42 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (s37:3 Void-spell / Isawa Ishiken gate WIRED — the whole Void-spell layer was DEAD; owner-approved "Master of Void only", runtime-verified 14/14)
+Owner-approved (AskUserQuestion "Master of Void only", 2026-07-16) resolution of a **triple-coupled dead layer**:
+**NO NPC could ever cast a Void spell.** GDD s37:3 (LOCKED): "Void spells are only castable by ishiken — shugenja
+with the **Ishiken-do Advantage**" (s45:385 ISHIKEN_DO is shugenja-only; s29.5:251 the Isawa Ishiken-dō school
+"Requires: Ishiken-do"). Three coupled defects made the entire Void half of the spell library inert: (1)
+`SpellSystem.can_cast` gated Void spells (`spell.get("i", true)`) on the **school STRING** `"Isawa Ishiken"`, not the
+LOCKED ISHIKEN_DO advantage; (2) `AdvantageSystem.assign_derived_advantages` **granted** ISHIKEN_DO only for
+`school == "Isawa Ishiken"` — a school string **world-gen never produces** (the Phoenix Elemental Masters are generated
+via `_generate_positioned_character` with a generic Isawa school, then only `role_position` is stamped `"Master of Void"`);
+and (3) the Master of Void — canonically an ishiken, one per game — was therefore never granted the advantage AND never
+given the Isawa Ishiken **starting Void spells** (`assign_starting_spells` keys on school, and the Void set lives only
+under `STARTING_SPELLS["Isawa Ishiken"]`, never assigned). Net: the ISHIKEN_DO advantage existed, the Void spells
+existed (all `"i": true`, e:4), the gate existed — but the three never connected, so `can_cast` returned false for every
+Void spell for every character in a real world. FIX (three structural wires, **no invented values** — the ISHIKEN_DO
+gate is the LOCKED s37:3 rule, the starting Void set is the shipped `STARTING_SPELLS["Isawa Ishiken"]` table, the grant
+keys on the canonical `"Master of Void"` role string [confirmed by `succession_system:675`]): **(1)** `can_cast`'s Void
+branch now passes when `AdvantageSystem.has_advantage(character, ISHIKEN_DO)` — the LOCKED gate — keeping the
+`"Isawa Ishiken"` school-string / `school_paths` check as a **backward-compat OR-fallback** (so legacy hand-built
+characters + the two GUT tests `test_can_cast_ishiken_*` still pass unchanged); **(2)** `assign_derived_advantages`
+grants ISHIKEN_DO to `school == "Isawa Ishiken" OR role_position == "Master of Void"` (the pass runs at
+`world_bootstrap:491`, AFTER `generate_world_population` at :460, so the Master's role is already stamped); **(3)** the
+Master of Void generation block (`world_population_generator:313`) now calls
+`SpellSystem.assign_starting_spells(master, "Isawa Ishiken")` when `element == "Void"`, appending the three Void ML1
+starting spells (`sense_void`/`boundless_sight`/`see_through_lies`) to the base Isawa set — so the Master actually
+**knows** Void spells. Runtime-verified 14/14 (`tests/verify_ishiken_void.gd`): the gate (plain shugenja without the
+advantage CANNOT cast a Void spell; the same shugenja WITH ISHIKEN_DO CAN; a non-Void elemental spell is unaffected);
+the school-string + school_paths OR-fallbacks (a legacy `"Isawa Ishiken"` character casts Void with no advantage); the
+grant (Master of Void → ISHIKEN_DO; Master of Fire → NOT); and **end-to-end** — a generated-style Master of Void KNOWS
++ has the advantage + `can_cast("sense_void")` is true, while a plain Isawa Shugenja of the same rank/ring cannot. Full
+project `--import` parse-clean (0 errors); the two legacy `test_spell_system` Void-gate tests preserved by the
+OR-fallback. **With this, the Void-spell layer is live** — the Phoenix Master of Void can finally cast the Void magic
+s37 grants only to ishiken. DEFERRED (documented, owner-scoped): only the Master of Void is an ishiken (the owner's
+"Master of Void only" scope — a per-clan or per-shugenja fraction would require an invented %); a PC Ishiken path is on
+the s60.2 no-PC-shugenja HOLD; the wider Void spell *progression* beyond the starting set rides the general spell-
+advancement system (not this wire).
+
 ### Systems Added 2026-07-16 (s29.15.4 Doji R3 "The Perfect Gift" WIRED — zero-caller technique arbiter + dead field + stale "+15/already-wired" docs, owner-approved "Fresh dormant sweep", runtime-verified 16/16)
 Second finding from the owner-approved "Fresh dormant sweep" (2026-07-16). `SkillResolver.execute_perfect_gift`
 (the Doji Courtier Rank-3 technique — a Courtier/Awareness roll at **TN 20** that writes a one-shot
