@@ -260,6 +260,30 @@ only court↔war linkage (`CourtSessionData.peace_court_war_id`) lives entirely 
 subsystem** (`WarTermination.create_peace_court`/`conclude_peace_court`, already documented as needing an unbuilt
 convene-trigger). Wiring war-resolution recording needs that peace-court mechanism (owner design), not a structural wire.
 
+### Known Code Issues — Deferred (2026-07-16, trade-route BLOCKADE cluster — sub-tile-blocked (s11.7a HOLD), do NOT re-audit)
+A military/battle dormant sweep surfaced the s55.21.11 **BLOCKADE_TRADE_ROUTE** cluster as an undocumented dormant system:
+the action is a live, NPC-selectable ActionID (`action_executor:2004` → `_compute_blockade_effects` →
+`StarvationWarfare.execute_blockade`; scored 95 under BLOCKADE_TRADE_ROUTE in `objective_alignment.json`) but is a **silent
+no-op** — `NPCDecisionEngine._build_blockade_metadata` (npc_decision_engine:5727) hardcodes `route_id: -1`, so the writeback
+`DayOrchestrator._apply_blockade` (day_orchestrator:18596) early-returns before disrupting any route or declaring the
+blockade-war, leaving `StarvationWarfare.can_blockade` / `lift_blockade` / `get_blockaded_routes` as downstream-dead
+zero-callers. **VERDICT: BLOCKED on sub-tile army position (s11.7a HOLD), NOT a clean structural wire — do NOT wire.** The
+LOCKED spec (s55.21.11 §2.1, "BLOCKADE_TRADE_ROUTE (1 AP, Lord-tier, ON_CAMPAIGN)") defines the mechanic as: "**Station a
+military unit on a sub-tile through which an enemy trade route passes** ... Requires an active military unit of minimum 0.5
+PU in the target sub-tile. **If the unit is defeated or retreats, the blockade ends automatically.**" So (a) the route that
+gets blockaded is *the one passing through the army's sub-tile* — resolving a `route_id` requires knowing where the army is
+stationed, which is precisely the sub-tile army-position data on the s11.7a HOLD (`can_blockade(army_pu, is_at_route_node)`
+is a zero-caller for the same reason — the `is_at_route_node` precondition is uncheckable); picking an arbitrary inter-clan
+route would **invent** the targeting mechanic (forbidden). And (b) the auto-lift ("unit defeated or retreats") + the
+Finding-2 zero-caller `lift_blockade` are equally sub-tile-gated — since Finding 1 means no `"blockade_%s"` route is ever
+placed, a peace-restore lift wire (`WarTermination.restore_trade_routes_for_peace` clears only `"war_*"` routes) would be a
+no-op that can never fire, so wiring it now adds unverifiable plumbing for an unreachable state. Confirmed the sole
+trade-blockade path: `IMPOSE_EMBARGO` is only a scoring-list literal (npc_decision_engine:3307, no executor), so there is no
+alternate clan-level embargo action to wire in its place. The `route_id: -1` hardcode is the correct/expected state until
+sub-tile army movement (s11.7a) exists — this is Section C "Areas Requiring Sub-Tile Map Data", not a dormant wire.
+(TradeRouteData carries only `province_a_id`/`province_b_id` — no clan field — so even the province→clan resolution would
+need injecting; but the fundamental blocker is the army-sub-tile-position targeting, not the plumbing.)
+
 ### Systems Added 2026-07-16 (s56.16 SPIRIT_BIND ritual-selection WIRED — the 4th dead effect-writeback arm; the NPC engine never selected a binding spell, runtime-verified 16/16)
 Completes the owner's "activate all four dead writeback arms" intent (the curriculum patch below stocked
 `bonds_of_ningen_do` on the Kuni but nothing ever SELECTED it). The **SPIRIT_BIND** effect-cast writeback
