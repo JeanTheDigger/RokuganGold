@@ -389,7 +389,7 @@ static func advance_day(
 		world_states, characters, active_topics, tattoos, trade_routes,
 		phoenix_council_state, companies, ic_day, current_season,
 		provinces, settlements, clans, active_wars, characters_by_id,
-		active_armies, insurgencies,
+		active_armies, insurgencies, spiritual_insurgency_events,
 	)
 	world_states["_crime_records"] = crime_records
 
@@ -28503,6 +28503,7 @@ static func _inject_base_character_context(
 	characters_by_id: Dictionary = {},
 	active_armies: Array = [],
 	insurgencies: Array = [],
+	spiritual_insurgency_events: Array = [],
 ) -> void:
 	var taint_province_ids: Array = []
 	for t: Variant in active_topics:
@@ -28513,6 +28514,22 @@ static func _inject_base_character_context(
 			for pid: Variant in topic.provinces_affected:
 				if pid is int and pid >= 0 and pid not in taint_province_ids:
 					taint_province_ids.append(pid)
+
+	# Provinces with an active, unresolved spiritual REALM_OVERLAP event a binding spell can
+	# suppress (s56.16). The SPIRIT_BIND ritual-selection branch gates on this being non-empty;
+	# the writeback (find_bindable_spirit_event) then resolves only a matching-realm event at the
+	# caster's own province, so a non-co-located cast is a graceful no-op.
+	var spiritual_overlap_province_ids: Array = []
+	for se: Variant in spiritual_insurgency_events:
+		if se is not SpiritualInsurgencyData:
+			continue
+		var sev: SpiritualInsurgencyData = se as SpiritualInsurgencyData
+		if sev.resolved:
+			continue
+		if sev.event_type != Enums.SpiritualEventType.REALM_OVERLAP:
+			continue
+		if sev.province_id >= 0 and sev.province_id not in spiritual_overlap_province_ids:
+			spiritual_overlap_province_ids.append(sev.province_id)
 
 	var has_champion_authority: bool = PhoenixCouncil.has_champion_authority(phoenix_council_state) if not phoenix_council_state.is_empty() else false
 	var phoenix_champion_id: int = -1
@@ -28631,6 +28648,7 @@ static func _inject_base_character_context(
 		ws["trade_routes"] = trade_routes
 		ws["settlement_koku_modifiers"] = g_settlement_koku_mods
 		ws["taint_topic_province_ids"] = taint_province_ids
+		ws["spiritual_overlap_province_ids"] = spiritual_overlap_province_ids
 		ws["unit_training_counts"] = unit_counts.get(c.clan, {})
 		ws["worship_failing_province_ids"] = g_worship
 		ws["border_province_ids_without_fort"] = g_border

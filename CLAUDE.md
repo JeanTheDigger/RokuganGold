@@ -232,6 +232,45 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (s56.16 SPIRIT_BIND ritual-selection WIRED — the 4th dead effect-writeback arm; the NPC engine never selected a binding spell, runtime-verified 16/16)
+Completes the owner's "activate all four dead writeback arms" intent (the curriculum patch below stocked
+`bonds_of_ningen_do` on the Kuni but nothing ever SELECTED it). The **SPIRIT_BIND** effect-cast writeback
+(`DayOrchestrator._process_ritual_spell_writebacks`, day_orchestrator:34047) is fully wired end-to-end — on a
+successful binding-spell cast it calls `SpellSystem.find_bindable_spirit_event(ritual_spell_id, province_id,
+spiritual_insurgency_events)` to **suppress one active, unresolved REALM_OVERLAP spiritual-insurgency event at the
+caster's province** (`target_event.resolved = true`, `resolution_type = "spirit_bind"`), the s56.16 magical
+counterpart to the shugenja-ritual resolution — but it was **PERMANENTLY DORMANT** because the NPC PERFORM_RITUAL
+metadata selection (`_populate_action_metadata`) had **no SPIRIT_BIND branch**: its ritual-spell preference chain was
+Taint (PURIFY/REMOVE_TAINT) → ritual-honor → detection, so `ritual_spell_id` was **never** a binding spell and
+`find_bindable_spirit_event` was **never called from a live path** (grep-confirmed: only its own def + `tests/`).
+So a Kuni standing in a province overlapped by Gaki-Do/Toshigoku/Chikushudo/Sakkaku/Yume-Do never bound the intrusion,
+and the whole s56.16 magical-suppression path was inert. FIX (pure structural wire, **no invented values** — the
+selection reuses the shipped `get_best_castable_spell_by_effect`, the realm-matching is the writeback's own s34
+`BINDABLE_REALMS` constant): **(1) producer** — `_inject_base_character_context` gains a defaulted
+`spiritual_insurgency_events` param (threaded from `advance_day`, already in scope at the call site) and builds
+`spiritual_overlap_province_ids` = the provinces of every **active, unresolved `REALM_OVERLAP`** event (dedup, mirrors
+the sibling `taint_topic_province_ids` build), injected per-character on each `ws`. **(2) carrier** — new
+`ContextSnapshot.spiritual_overlap_province_ids` + `build_context` read (mirrors `taint_topic_province_ids`).
+**(3) consumer** — the PERFORM_RITUAL selection adds a SPIRIT_BIND branch **below Taint, above ritual-honor**: when the
+Taint branch selected nothing AND `not ctx.spiritual_overlap_province_ids.is_empty()`, it picks
+`get_best_castable_spell_by_effect(character, SPIRIT_BIND)` (→ `bonds_of_ningen_do` for a Rank-3+ Kuni; the junior
+falls through). **Priority is faithful** — Shadowlands Taint is graver than a spirit-realm overlap, AND
+`bonds_of_ningen_do` explicitly **excludes Jigoku/Shadowlands** (s34), so it could never address taint anyway. The
+gate mirrors the shipped PURIFY convention (non-empty-set, not caster-province-specific); the writeback's
+`find_bindable_spirit_event` does the province+realm match and **gracefully no-ops** if the caster isn't co-located
+with a bindable-realm event (so a non-co-located cast wastes nothing beyond the ritual). Runtime-verified 16/16
+(`tests/verify_spirit_bind_selection.gd`): the selection helper (senior Kuni → `bonds_of_ningen_do`, junior → `""`);
+the **real** `_inject_base_character_context` end-to-end (builds the set from a mix — two active overlaps present, a
+RESOLVED overlap + an ELEMENTAL_IMBALANCE excluded, a duplicate deduped); `build_context` carries it (+ empty default);
+the **real** `_populate_action_metadata` selection (senior Kuni + overlap + no-taint → `bonds_of_ningen_do`; taint +
+overlap → `purge_the_taint` wins; no-overlap → not bonds; junior + overlap → falls through); and the writeback matcher
+(`find_bindable_spirit_event` binds a GAKI_DO overlap at the caster's province, no-ops at a different province, and does
+NOT bind a JIGOKU overlap). Full project `--import` parse-clean. **With this, all four effect-writeback arms
+(PURIFY_AREA / REMOVE_TAINT / HEAL_WOUNDS / SPIRIT_BIND) are live** — a Kuni now purifies Taint, removes it, and binds a
+spirit-realm overlap; an Iuchi heals. DEFERRED (documented, not this wire): `freedom_of_the_air` (Air ML2, the other
+SPIRIT_BIND spell, realm-agnostic incl. Meido) is not in any school's starting set, so only a shugenja who learns it in
+play selects it — the branch already handles it via the effect query the moment it's known.
+
 ### Systems Added 2026-07-16 (shugenja starting-spell CURRICULUM patch — PURIFY/REMOVE_TAINT/HEAL effect-writebacks were DEAD for lack of a known spell; owner-approved "minimal curriculum patch", runtime-verified 19/19)
 Owner-approved (AskUserQuestion "Authorize a minimal curriculum patch" → "Approve — heal → Iuchi", 2026-07-16)
 resolution of a **systemic dormant layer** found by the spell-layer follow-up sweep. The per-effect spell-cast

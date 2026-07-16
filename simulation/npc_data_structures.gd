@@ -203,6 +203,10 @@ class ContextSnapshot:
 	# Shadowlands intelligence (s55.23)
 	var taint_topic_province_ids: Array = []
 
+	# Spiritual REALM_OVERLAP intelligence (s56.16): provinces with an active, unresolved
+	# spiritual-insurgency overlap a binding spell (SPIRIT_BIND) can suppress.
+	var spiritual_overlap_province_ids: Array = []
+
 	# Famine crisis intelligence
 	var famine_crisis_province_ids: Array = []
 

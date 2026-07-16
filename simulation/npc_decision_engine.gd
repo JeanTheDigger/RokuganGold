@@ -218,6 +218,7 @@ static func build_context(
 	ctx.active_wars = world_state.get("active_wars", [])
 	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
 	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [])
+	ctx.spiritual_overlap_province_ids = world_state.get("spiritual_overlap_province_ids", [])
 	ctx.active_insurgency_id = world_state.get("active_insurgency_id", -1)
 	ctx.active_insurgency_detected = bool(world_state.get("active_insurgency_detected", false))
 	ctx.active_insurgency_type = world_state.get("active_insurgency_type", "")
@@ -3700,6 +3701,13 @@ static func _populate_action_metadata(
 					ritual_spell = SpellSystem.get_best_purify_spell(character)
 					if ritual_spell.is_empty():
 						ritual_spell = SpellSystem.get_best_taint_removal_spell(character)
+				# Next prefer a binding spell when a spiritual REALM_OVERLAP is active (s56.16):
+				# the SPIRIT_BIND writeback suppresses one matching overlap at the caster's
+				# province (a graceful no-op if none co-located). Below Taint (Shadowlands is
+				# graver, and bonds_of_ningen_do explicitly excludes Jigoku/Shadowlands).
+				if ritual_spell.is_empty() and not ctx.spiritual_overlap_province_ids.is_empty():
+					ritual_spell = SpellSystem.get_best_castable_spell_by_effect(
+						character, SpellSystem.SpellSimEffect.SPIRIT_BIND)
 				if ritual_spell.is_empty():
 					ritual_spell = SpellSystem.get_best_ritual_spell(character)
 				if ritual_spell.is_empty():
