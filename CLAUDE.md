@@ -232,6 +232,47 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (shugenja starting-spell CURRICULUM patch — PURIFY/REMOVE_TAINT/HEAL effect-writebacks were DEAD for lack of a known spell; owner-approved "minimal curriculum patch", runtime-verified 19/19)
+Owner-approved (AskUserQuestion "Authorize a minimal curriculum patch" → "Approve — heal → Iuchi", 2026-07-16)
+resolution of a **systemic dormant layer** found by the spell-layer follow-up sweep. The per-effect spell-cast
+writebacks in `DayOrchestrator._process_ritual_spell_writebacks` for **PURIFY_AREA / REMOVE_TAINT / HEAL_WOUNDS /
+SPIRIT_BIND** are wired end-to-end (NPC ritual/heal metadata selects a spell → `resolve_cast` → the writeback applies
+the effect), but were **permanently inert**: no shugenja's `_SCHOOL_STARTING_SPELLS` set contained a spell of any of
+those effects, so `get_best_spell_by_effect` always returned `""` and the four writeback arms never fired. The sets
+only cover DETECT (`sense`), COMMUNE (`commune`), and RITUAL_HONOR (`purification_of_the_kami`/`gift_of_amaterasu`/
+`bentens_touch`) — `purge_the_taint`, `tomb_of_jade`, `regrow_the_wound`, `bonds_of_ningen_do` etc. were in NOBODY's
+`spells_known`, and there is no NPC spell-progression to grant them (the sets are flagged PROVISIONAL, "actual school
+curricula require s28/s29 review"). FIX (owner-approved curriculum patch — the school assignments are the authorized
+design call; every spell/effect is the shipped library's own, no invented values): **(1)** the **Kuni Shugenja** (the
+Crab anti-Shadowlands specialists — Taint purification, jade magic, spirit-warding is their canonical role) start
+knowing `purge_the_taint` (PURIFY_AREA, Earth ML3), `tomb_of_jade` (REMOVE_TAINT, Earth ML4), and `bonds_of_ningen_do`
+(SPIRIT_BIND, Earth ML3) — all Earth, their primary ring; **(2)** the **Iuchi Shugenja** (Unicorn practical support
+magic) start knowing `regrow_the_wound` (HEAL_WOUNDS, Water ML3). ML3/ML4 as starting spells is already precedented
+(Isawa starts with `command` ML3): a Rank-1 caster **knows** them and casts once their rank permits. **Coupled
+correctness fix (necessary so the patch does not regress junior casters):** the NPC ritual/heal/worship SELECTION must
+never pick a spell the caster cannot yet cast (a Rank-1 Kuni who knows `purge_the_taint` ML3 must not be selected to
+attempt an uncastable ritual instead of falling through to a castable fallback). Rather than change the widely-tested
+pure `get_best_spell_by_effect` (highest-ML **known** — its GUT tests assert exactly that), a new
+`SpellSystem.get_best_castable_spell_by_effect` (highest-ML **castable** — gated on `can_cast`: rank ≥ ML, a free slot,
+and any Ishiken/Void gate) was added, and the **five production wrappers** (`get_best_healing_spell` /
+`get_best_taint_removal_spell` / `get_best_purify_spell` / `get_best_detection_spell` / `get_best_ritual_spell`) + the
+inline PURIFY selection now route through it. Behavior-preserving for every pre-existing ML1 effect spell (they were
+always castable at Rank 1); the pure query is untouched so its tests pass. This ACTIVATES the **PURIFY_AREA,
+REMOVE_TAINT, and HEAL_WOUNDS** writeback arms immediately (their selection wires already exist) and **stocks
+`bonds_of_ningen_do` on the Kuni** for the SPIRIT_BIND arm (whose selection wire is the immediate follow-on — the
+ritual selection does not yet prefer a spirit-bind spell at a REALM_OVERLAP province). Runtime-verified 19/19
+(`tests/verify_shugenja_curriculum.gd`): the Kuni + Iuchi curriculum additions (originals preserved; the heal is
+Iuchi-scoped, Kitsu does NOT get it); the castable selectors (a senior Kuni's PURIFY→`purge_the_taint` / REMOVE_TAINT→
+`tomb_of_jade` / SPIRIT_BIND→`bonds_of_ningen_do`; a Rank-1 Kuni falls through [`""`]; a Rank-3 Kuni casts purge ML3 but
+not tomb ML4; senior/junior Iuchi likewise); the pure `get_best_spell_by_effect` stays castability-agnostic; and the
+ML1 detection/ritual-honor paths are unchanged. Full project `--import` parse-clean (0 errors); the pure-query GUT tests
+(`get_best_spell_by_effect_picks_highest_ml`, the INFORMATION_GATHER highest-ML test) are preserved because that query
+was not changed, and `get_best_purify_spell`'s rank-3 GUT fixture stays castable → `purge_the_taint`. **With this, three
+of the four dead effect-writebacks are live** — a rank-capable Kuni now reduces province PTL / cleanses Taint by
+casting, and a rank-capable Iuchi magically heals. DEFERRED (the SPIRIT_BIND selection wire, next commit; and: the
+per-locale/other-school curriculum breadth stays PROVISIONAL pending s28/s29 school curricula — this is the minimal
+patch the owner authorized, not a full curriculum pass).
+
 ### Systems Added 2026-07-16 (s37:3 Void-spell / Isawa Ishiken gate WIRED — the whole Void-spell layer was DEAD; owner-approved "Master of Void only", runtime-verified 14/14)
 Owner-approved (AskUserQuestion "Master of Void only", 2026-07-16) resolution of a **triple-coupled dead layer**:
 **NO NPC could ever cast a Void spell.** GDD s37:3 (LOCKED): "Void spells are only castable by ishiken — shugenja

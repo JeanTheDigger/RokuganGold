@@ -1508,7 +1508,11 @@ const _SCHOOL_STARTING_SPELLS: Dictionary = {
 	"Asako Shugenja":   ["sense", "commune", "to_seek_the_truth", "token_of_memory"],
 	"Moshi Shugenja":   ["sense", "commune", "gift_of_amaterasu", "fire_kamis_blessing"],
 	## Earth-primary schools
-	"Kuni Shugenja":    ["sense", "commune", "jade_strike", "jurojins_balm"],
+	# Kuni are the Crab anti-Shadowlands specialists: Taint purification, jade magic, and
+	# spirit-warding are their canonical role. purge_the_taint (PURIFY_AREA), tomb_of_jade
+	# (REMOVE_TAINT), and bonds_of_ningen_do (SPIRIT_BIND) are all Earth (their primary ring) and
+	# activate the corresponding effect-cast writebacks (owner-approved curriculum patch 2026-07-16).
+	"Kuni Shugenja":    ["sense", "commune", "jade_strike", "jurojins_balm", "purge_the_taint", "tomb_of_jade", "bonds_of_ningen_do"],
 	"Isawa Shugenja":   ["sense", "commune", "summon", "command"],
 	"Agasha Shugenja":  ["sense", "commune", "earths_touch", "jurojins_balm"],
 	## Fire-primary schools
@@ -1516,7 +1520,9 @@ const _SCHOOL_STARTING_SPELLS: Dictionary = {
 	"Tamori Shugenja":  ["sense", "commune", "elemental_crucible", "the_raging_forge"],
 	## Water-primary schools
 	"Yogo Shugenja":    ["sense", "commune", "path_to_inner_peace", "purification_of_the_kami"],
-	"Iuchi Shugenja":   ["sense", "commune", "speed_of_the_waterfall", "cloak_of_the_miya"],
+	# regrow_the_wound (HEAL_WOUNDS, Water) added so the Iuchi carry the sim healing spell
+	# (owner-approved curriculum patch 2026-07-16 — the Unicorn's practical support magic).
+	"Iuchi Shugenja":   ["sense", "commune", "speed_of_the_waterfall", "cloak_of_the_miya", "regrow_the_wound"],
 	"Kitsu Shugenja":   ["sense", "commune", "sympathetic_energies", "judgment_of_yomi"],
 	## Void school
 	"Isawa Ishiken":    ["sense", "commune", "sense_void", "boundless_sight", "see_through_lies"],
@@ -2016,6 +2022,30 @@ static func get_best_spell_by_effect(character: L5RCharacterData,
 	return best
 
 
+## Like get_best_spell_by_effect but returns only a spell the caster can CAST right now (insight
+## rank meets the mastery level, a slot is free, and any Ishiken/Void gate passes). The NPC
+## ritual/heal selection uses this so a junior caster who KNOWS a higher-ML effect spell (e.g. a
+## Rank-1 Kuni with purge_the_taint ML3) falls through to a castable fallback instead of being
+## selected to attempt an uncastable ritual. get_best_spell_by_effect stays a pure library query.
+static func get_best_castable_spell_by_effect(character: L5RCharacterData,
+		effect: SpellSimEffect) -> String:
+	var best: String = ""
+	var best_ml: int = -1
+	for spell_id: String in character.spells_known:
+		if not SPELL_LIBRARY.has(spell_id):
+			continue
+		var spell: Dictionary = SPELL_LIBRARY[spell_id]
+		if spell.get("s", SpellSimEffect.COMBAT_ONLY) != effect:
+			continue
+		if not can_cast(character, spell_id):
+			continue
+		var ml: int = spell.get("m", 0)
+		if ml > best_ml:
+			best_ml = ml
+			best = spell_id
+	return best
+
+
 ## Group A: person-intelligence divination — caster must be co-located with target.
 ## Produces personality_insight KnowledgeEntries. (s33, s37)
 const INFORMATION_GATHER_GROUP_A: Array[String] = [
@@ -2073,24 +2103,28 @@ static func get_best_npc_information_spell(character: L5RCharacterData) -> Strin
 	return best
 
 
+# The NPC ritual/heal/worship selection uses these, so they return only a CASTABLE spell of the
+# effect (behavior-preserving for the pre-existing ML1 effect spells; a junior caster who knows a
+# higher-ML effect spell falls through to a castable fallback rather than attempting an uncastable
+# ritual). get_best_spell_by_effect remains the pure "highest-ML known" library query.
 static func get_best_healing_spell(character: L5RCharacterData) -> String:
-	return get_best_spell_by_effect(character, SpellSimEffect.HEAL_WOUNDS)
+	return get_best_castable_spell_by_effect(character, SpellSimEffect.HEAL_WOUNDS)
 
 
 static func get_best_taint_removal_spell(character: L5RCharacterData) -> String:
-	return get_best_spell_by_effect(character, SpellSimEffect.REMOVE_TAINT)
+	return get_best_castable_spell_by_effect(character, SpellSimEffect.REMOVE_TAINT)
 
 
 static func get_best_purify_spell(character: L5RCharacterData) -> String:
-	return get_best_spell_by_effect(character, SpellSimEffect.PURIFY_AREA)
+	return get_best_castable_spell_by_effect(character, SpellSimEffect.PURIFY_AREA)
 
 
 static func get_best_detection_spell(character: L5RCharacterData) -> String:
-	return get_best_spell_by_effect(character, SpellSimEffect.DETECT_PRESENCE)
+	return get_best_castable_spell_by_effect(character, SpellSimEffect.DETECT_PRESENCE)
 
 
 static func get_best_ritual_spell(character: L5RCharacterData) -> String:
-	return get_best_spell_by_effect(character, SpellSimEffect.RITUAL_HONOR)
+	return get_best_castable_spell_by_effect(character, SpellSimEffect.RITUAL_HONOR)
 
 
 ## Returns the AsciiMapEnvironment.WeatherState int written to the province by a

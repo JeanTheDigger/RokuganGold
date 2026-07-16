@@ -3697,7 +3697,7 @@ static func _populate_action_metadata(
 			if character != null and SpellSystem.is_shugenja(character):
 				# Prefer taint-cleansing spells in provinces with known taint.
 				if not ctx.taint_topic_province_ids.is_empty():
-					ritual_spell = SpellSystem.get_best_spell_by_effect(character, SpellSystem.SpellSimEffect.PURIFY_AREA)
+					ritual_spell = SpellSystem.get_best_purify_spell(character)
 					if ritual_spell.is_empty():
 						ritual_spell = SpellSystem.get_best_taint_removal_spell(character)
 				if ritual_spell.is_empty():
