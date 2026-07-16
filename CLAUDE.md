@@ -232,6 +232,45 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (s12.11 FABRICATE_SECRET mints physical proof — the dead `physical_proof_item_id` producer, owner-approved narrow, runtime-verified 25/25)
+Owner-approved ("Narrow: FABRICATE_SECRET mints proof", via AskUserQuestion) resolution of the last documented
+**dead-field with a fully-wired consumer** in the secret/inventory layer. `SecretData.physical_proof_item_id` had
+**ZERO producers** — world-gen never set it and no production pass wrote it — so its complete downstream chain was
+permanently dead: `DayOrchestrator._inject_...known_secrets` stamps `"has_proof": s.physical_proof_item_id >= 0`
+(day_orchestrator:19283) → `NPCDecisionEngine._pick_best_secret` carries `has_proof` into action metadata → the
+EXPOSE_SECRET_PUBLICLY / EXPOSE_SECRET_PRIVATELY executors read `action.metadata.has_proof`
+(action_executor:1672/1709) → `SecretSystem.reveal_privately`/`expose_publicly` grant
+`PHYSICAL_PROOF_FREE_RAISES` (=1) free raises when `has_proof` (secret_system:190/236). Because
+`physical_proof_item_id` stayed at its `-1` default for **every** secret, `has_proof` was **always false** — no
+fabricator ever got the s12.8 +1 Free Raise on a later exposure, and the s12.11 Evidence-item→proof link the GDD
+mandates ("Evidence: acquired through covert actions serving as physical proof ... Grants 1 Free Raise when used in
+Expose a Secret Publicly or Reveal a Secret Privately") never formed. The prior deferred note called this
+"blocked on the unbuilt physical-inventory layer (no physical-item-transfer ActionIDs exist)"; the owner authorized
+the **NARROW** producer that needs no item-economy: a **successful FABRICATE_SECRET mints the forged document that IS
+the secret's proof** (a forged secret's physical evidence is, by definition, produced by the act of fabricating it —
+the one clean, GDD-adjacent producer, no item market / no NPC-theft scoring). FIX (pure structural wire + the LOCKED
+s12.11 Evidence category, **no invented values**): `DayOrchestrator._process_fabricate_secret_writebacks` gains
+defaulted `next_item_id`/`characters_by_id` params (threaded from `advance_day`, both already in scope at the call
+site) and, on a successful fabrication whose fabricator is living & resolvable & the secret has no proof yet, mints a
+covert-produced item via `InventorySystem.create_item(id, name, ItemCategory.EVIDENCE, ItemSize.SMALL, 1,
+is_evidence=true)` (Evidence, Small = a document, Normal quality — all the LOCKED s12.11 Evidence-category values),
+appends it to the fabricator's **on-person** `items` (a real, steal-able/destroyable inventory item per s12.11), and
+stamps `sd.physical_proof_item_id = item_id`. The `has_proof` predicate then reads true and the already-wired +1 Free
+Raise fires on any later Expose/Reveal of that fabricated secret. **Graceful degradation** (no invention): an
+unresolvable or dead fabricator mints no proof and the secret is still appended (backward-compatible with the prior
+3-arg call shape); a secret that already carries proof is never re-minted (idempotent). Runtime-verified 25/25
+(`tests/verify_fabricate_proof.gd`): a successful fabrication mints exactly one EVIDENCE/is_evidence/Small/Normal/
+on-person item, links it, and advances `next_item_id`; a FAILED fabrication mints nothing (counter + inventory + secret
+list untouched); an unresolvable AND a dead fabricator mint no proof yet still append the secret; a secret with existing
+proof is not re-minted; and **end-to-end** — after minting, the orchestrator's `has_proof` predicate is true and
+`SecretSystem.expose_publicly(..., has_proof=true)` returns `free_raises == PHYSICAL_PROOF_FREE_RAISES` (1) while a
+proofless control returns 0. Full project `--import` parse-clean. **With this, `physical_proof_item_id` is no longer a
+dead field** — a fabricated secret now carries the forged document that grants its exposer the LOCKED s12.8 +1 Free
+Raise. DEFERRED (documented, still design-gated — NOT this narrow producer): the broader physical-inventory MANIPULATION
+suite (GIVE_ITEM/PICKPOCKET/SEND_ITEM/STORE_ITEM/DESTROY_ITEM ActionIDs + an item-economy), and proof for **non-forged**
+secrets (a real secret's physical proof needs an evidence-discovery/covert-acquisition action to set the field, which
+those ActionIDs would provide).
+
 ### Known Code Issues (found and fixed 2026-07-09, s4.3.17 trade-route Rung-3 gate ignored the clan — market-purchase feasibility mis-fired empire-wide — runtime-verified 9/9)
 A **produced-imprecisely / dead-param** bug (the author left a `# TODO: Filter trade routes by clan` marker at `npc_decision_engine:5872`). `_has_active_trade_routes(trade_routes, _clan)` **ignored its `_clan` param entirely** — it returned true if ANY undisrupted `TradeRouteData` existed **anywhere in the world**. Its sole consumer is the s4.3.17 war-readiness **feasibility ladder Rung 3 (Market Purchase)**: `FeasibilityLedger.try_market_purchase` returns `applied:false, reason:"no_trade_routes"` when `has_trade_routes` is false (a clan can't reach a market without a route). Because the flag was global, **a clan with NO trade routes of its own still passed the gate** (as long as some other clan's route was undisrupted), AND — the more damaging half — **disrupting a clan's OWN trade routes did NOT block their market purchase** (the flag stayed true off unrelated foreign routes), defeating trade-route disruption as a war-pressure lever. The value flowed `_build_feasibility_context` → `ladder_context.has_trade_routes` → `war_justification` → `feasibility_ledger.try_market_purchase`, so every lord's war-readiness market-purchase rung read the wrong signal. FIX (pure structural filter, **no invented values** — the "route connects a province" relation is `TradeRouteData.connects`/`province_a_id`/`province_b_id` per s4.3.18, and the clan's province ids are ALREADY computed at the call site as `clan_province_ids`): `_has_active_trade_routes(trade_routes, clan_province_ids)` now returns true iff an **undisrupted** route connects one of the **clan's own** provinces; the call site passes `clan_province_ids` instead of `character.clan`. Handles both the `TradeRouteData` and the defensive `Dictionary` route forms (filtering the dict form by its `province_a_id`/`province_b_id` keys). Runtime-verified 9/9 (`tests/verify_trade_route_clan_filter.gd`): an undisrupted route between OTHER clans' provinces no longer counts (the bug); an undisrupted route touching a clan province counts (either a- or b-side, `connects` symmetric); a disrupted own-route does NOT count (disruption blocks the rung); own-cut + foreign-active still blocked; empty routes / no-provinces-clan → false; and the Dictionary-form fallback filters by province ids too. Full project `--import` parse-clean. **With this, `_has_active_trade_routes` is clan-scoped** — the Rung-3 market-purchase gate now correctly reflects whether the clan itself can reach a market, and trade-route disruption meaningfully constrains an enemy's war readiness.
 

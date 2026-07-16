@@ -602,7 +602,7 @@ static func advance_day(
 
 	_process_fabricate_secret_writebacks(
 		day_result.get("results", []),
-		active_secrets, next_secret_id,
+		active_secrets, next_secret_id, next_item_id, characters_by_id,
 	)
 
 	_process_lying_honor_writebacks(
@@ -8211,6 +8211,8 @@ static func _process_fabricate_secret_writebacks(
 	results: Array,
 	active_secrets: Array,
 	next_secret_id: Array,
+	next_item_id: Array = [1],
+	characters_by_id: Dictionary = {},
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -8231,6 +8233,27 @@ static func _process_fabricate_secret_writebacks(
 		var fabricator_id: int = d.get("character_id", -1)
 		if fabricator_id >= 0 and fabricator_id not in sd.known_by_ids:
 			sd.known_by_ids.append(fabricator_id)
+		# s12.11 (owner-approved narrow producer, 2026-07-16): a successful fabrication mints the forged
+		# document that serves as the secret's physical proof -- a covert-produced Evidence item
+		# (ItemCategory.EVIDENCE, is_evidence=true, Small size, Normal quality, s12.11). Setting the
+		# secret's physical_proof_item_id activates the ALREADY-wired +1 Free Raise on a later Expose a
+		# Secret Publicly / Reveal a Secret Privately (s12.8 has_proof consumer chain: day_orchestrator
+		# known_secrets injection -> _pick_best_secret -> executor -> SecretSystem.PHYSICAL_PROOF_FREE_RAISES).
+		# The forged proof lives in the fabricator's on-person inventory as a real, steal-able/destroyable
+		# item; it degrades gracefully (no proof minted) only if the fabricator is unresolvable/dead.
+		var fabricator: L5RCharacterData = characters_by_id.get(fabricator_id) as L5RCharacterData
+		if fabricator != null and not CharacterStats.is_dead(fabricator) and sd.physical_proof_item_id < 0:
+			var item_id: int = next_item_id[0]
+			next_item_id[0] += 1
+			var item_name: String = "Forged document"
+			if not sd.description.is_empty():
+				item_name = "Forged proof: %s" % sd.description
+			var item: Dictionary = InventorySystem.create_item(
+				item_id, item_name, InventorySystem.ItemCategory.EVIDENCE,
+				InventorySystem.ItemSize.SMALL, 1, true,
+			)
+			fabricator.items.append(item)
+			sd.physical_proof_item_id = item_id
 		active_secrets.append(sd)
 
 
