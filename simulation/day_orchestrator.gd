@@ -25290,9 +25290,13 @@ static func _build_advancement_world_state(
 	var in_battle_ids: Array = []
 	if ic_day >= 0:
 		var prev_abs_season: int = TimeSystem.get_absolute_season(ic_day) - 1
-		for c: L5RCharacterData in characters:
-			if c.battle_record is Dictionary and int((c.battle_record as Dictionary).get("last_battle_season", -1)) == prev_abs_season:
-				in_battle_ids.append(c.character_id)
+		# prev_abs_season >= 0 guard: a real stamp is always get_absolute_season(...) >= 0, while an
+		# unstamped/empty battle_record reads the -1 default. Before the first season has ended
+		# (ic_day in year-0 spring -> prev = -1) that -1 default would falsely match, so skip.
+		if prev_abs_season >= 0:
+			for c: L5RCharacterData in characters:
+				if c.battle_record is Dictionary and int((c.battle_record as Dictionary).get("last_battle_season", -1)) == prev_abs_season:
+					in_battle_ids.append(c.character_id)
 
 	return {
 		"in_battle_ids": in_battle_ids,

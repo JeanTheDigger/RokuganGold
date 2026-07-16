@@ -301,7 +301,7 @@ negative-framing** (s12.7) channels are separate bulk-resolution paths that do n
 "all contexts" for those two channels is a broader wiring — not a one-line lean). This lands the clean deliberate-action
 half (the two GDD-named +15/+10 leans on the live GOSSIP/DISCLOSE actions).
 
-### Systems Added 2026-07-16 (s52 battle XP multiplier season-wide WIRED — the `in_battle_ids` hardcoded `[]`; the entire 2.5×/3.0× combat-season activity bonus was DEAD, owner-approved "Wire it season-wide", runtime-verified 16/16)
+### Systems Added 2026-07-16 (s52 battle XP multiplier season-wide WIRED — the `in_battle_ids` hardcoded `[]`; the entire 2.5×/3.0× combat-season activity bonus was DEAD, owner-approved "Wire it season-wide", runtime-verified 18/18)
 Owner-approved (AskUserQuestion "Wire it season-wide", 2026-07-16) resolution of a **hardcoded-dead builder key**
 disabling a whole downstream XP tier. `NPCAdvancement.get_activity_multiplier` (npc_advancement.gd:91, s52 Part 3
 LOCKED) grants the **battle** activity multiplier — **2.5× participating / 3.0× commanding** (`MULTIPLIER_BATTLE` /
@@ -326,7 +326,12 @@ the `is_season_boundary` block), BEFORE any of the new season's battles, so the 
 (which already receives it) → `_build_advancement_world_state`. **Self-cleaning (no accumulator, no manual clear):**
 `last_battle_season` is a single per-character int that is only "current" for one season, so a commander who fought
 two seasons ago is automatically NOT re-credited (the stamp no longer matches `just-ended`), and a fresh battle simply
-overwrites it — no WorldState membership-set to build, reset, or leak. **Graceful degradation** (no invention): every
+overwrites it — no WorldState membership-set to build, reset, or leak. **First-boundary guard** (edge case caught in
+validation): the seasonal block also fires on day 0/1 (`is_season_boundary` via `ic_day <= 1`), where
+`get_absolute_season(ic_day) - 1 == -1` — the same value an unstamped/empty `battle_record` returns from its `.get`
+default. A `prev_abs_season >= 0` guard skips the loop before the first season has ended, so an unstamped character is
+never falsely credited on world-start (a real stamp is always `get_absolute_season(...) >= 0`, so it can never collide
+with the -1 default at any later boundary). **Graceful degradation** (no invention): every
 new param defaults to -1, so the pre-fix 4-arg `_record_battle_participation` call shape (used by
 `tests/verify_battle_record.gd`) still records the battle and leaves NO stamp, and `_build_advancement_world_state`
 with `ic_day < 0` yields an empty `in_battle_ids` (no crash). Runtime-verified 16/16
@@ -335,7 +340,8 @@ commanders (dead/`-1` commanders unstamped); the builder credits ONLY the just-e
 seasons-ago / fought-this-current-season all excluded — the self-cleaning guarantee) and defaults empty on `ic_day <
 0`; end-to-end producer→builder→`get_activity_multiplier` yields **3.0× for a commanding Taisa**, **2.5× for a
 participating no-command soldier**, **1.0× for a bystander who never fought**; and the 4-arg backward-compat path
-records the battle with no stamp. Full project `--import` parse-clean; `verify_battle_record.gd` re-passes 22/22 (the
+records the battle with no stamp; and the first-boundary edge (ic_day 0/1, `prev_abs_season == -1`) credits no
+unstamped character. Full project `--import` parse-clean; `verify_battle_record.gd` re-passes 22/22 (the
 defaulted param is backward-compatible). **With this, `in_battle_ids` is no longer dead** — a season of combat now
 earns the LOCKED 2.5×/3.0× advancement bonus, so battle-tested officers actually accrue the XP their promotion ladder
 requires.

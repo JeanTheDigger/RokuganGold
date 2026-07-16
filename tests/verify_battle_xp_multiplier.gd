@@ -124,6 +124,19 @@ func _test_builder_membership() -> void:
 	_ok((ws_default.get("in_battle_ids", []) as Array).is_empty(),
 		"ic_day < 0 yields empty in_battle_ids (graceful default)")
 
+	# EDGE CASE: the very first season boundary (ic_day 0/1, year-0 spring). prev_abs_season == -1,
+	# which equals the empty-record .get default -- an unstamped character must NOT be falsely
+	# credited. Guarded by prev_abs_season >= 0.
+	var never_fought: L5RCharacterData = _mk_commander(14)
+	never_fought.battle_record = _MPS.create_battle_record()  # no last_battle_season key -> .get == -1
+	var empty_record: L5RCharacterData = _mk_commander(15)  # default {} battle_record
+	for boundary_day: int in [0, 1]:
+		var ws_first: Dictionary = _DO._build_advancement_world_state(
+			[never_fought, empty_record], [], [], [], [], boundary_day
+		)
+		_ok((ws_first.get("in_battle_ids", []) as Array).is_empty(),
+			"first season boundary (ic_day %d): no false credit for unstamped records" % boundary_day)
+
 
 func _test_end_to_end_multiplier() -> void:
 	print("[3] end-to-end: producer -> builder -> get_activity_multiplier (2.5x / 3.0x)")
