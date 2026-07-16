@@ -232,6 +232,50 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (s57.21 military unit hierarchy — T1: instantiate Army/Section/Legion + person-chain from generated commanders, owner-approved GDD-scale, runtime-verified 22/22)
+Owner-approved ("Redesign gates + build" + "GDD-scale (grow legions)" + "From generated commanders", via AskUserQuestion)
+build of the s57.21 organizational hierarchy. Prior state (both diagnosed via a live-consumer grep): the LOCKED unit
+chain **did not exist** — `WorldPopulationGenerator._generate_military_commanders` created only Taisa+Chui **characters**
+(with `lord_id` set, but **no `operational_superior_id`, no `commanded_unit_id`, no Shireikan tier, and NO
+LegionData/SectionData/ArmyData Resources**), so the executor's Taisa/Shireikan military-order gates
+(`_validate_military_order`) could never resolve a unit — they short-circuit on the empty `military_data.legions`/
+`sections` dicts, AND the two gate arbiters (`MilitaryHierarchy.can_legion_coordinate`/`can_section_initiate_campaign`)
+were semantic no-ops (`commander_id >= 0` — the acting commander IS the commander, always true). The prior deferred note
+flagged this as "the multi-tier military command hierarchy is UNBUILT" + "owner-gated subsystem." **T1 (this commit, the
+zero-regression foundation) instantiates the LOCKED hierarchy from the generated commanders and persists it**; no gate
+consumes it yet (behaviorally inert until T2). `_generate_military_commanders` now builds, per clan, the LOCKED
+Army→Section→Legion→Company chain: **LOCKED per-clan army count** (`CLAN_ARMY_COUNT`: Crab/Lion 4, Crane/Dragon 2,
+Mantis/Unicorn 3, Phoenix/Scorpion/Imperial 1), one **Shireikan** per Section, one **Taisa** per Legion, one **Chui**
+per Company. **No invented scale** — `LEGIONS_PER_SECTION = 4` is the **LOCKED range FLOOR** (s57.21.1 "4-12 legions per
+Shireikan"), `COMPANIES_PER_LEGION = 7` is LOCKED (6 regular + 1 reserve); the one genuinely-unspecified value,
+`SECTIONS_PER_ARMY = 1` (a single-wing go-hatamoto), is flagged **PROVISIONAL** in-code (s57.21.1 gives "up to 48
+legions" per army but no exact section count). This grows each army from the prior invented `LEGIONS_PER_ARMY = 3`
+(which had no Shireikan tier at all) to the GDD-floor-faithful 4-legion section under a Shireikan. The **person chain
+mirrors the unit chain per s57.21.3**: Chui.operational_superior_id → Taisa → Shireikan → Rikugunshokan (the
+Rikugunshokan's stays -1 — they receive objectives from `lord_id`); `commanded_unit_id` points each commander at their
+own unit (Taisa = legion_id, Shireikan = section_id) so the executor gate can resolve up the organizational chain.
+Units are emitted as **raw dicts** (JSON-serializable, mirroring the existing `military_companies` precedent) with a
+single monotonic global id counter (no cross-clan id collision); `constituent_companies` is left empty (the Company
+tier is the separate per-bushi `military_companies` population, and s57.21 permits the top-down arrays unpopulated —
+see the existing "Military hierarchy constituent arrays — intentionally unpopulated" note). Threaded end-to-end:
+`generate_world_population` returns `military_armies/sections/legions` → `WorldBootstrap.bootstrap_world` return →
+`SimulationScheduler` assigns them to new `WorldState.military_armies/sections/legions: Array[Dictionary]` →
+`WorldStateSaver` save/load (JSON state, mirroring `military_companies`). **Zero regression:** the Company/Chui-garrison
+gate (population-A per-bushi companies) is untouched; T1 adds only new data + additive character fields nothing consumes
+yet (the daily `_populate_military_data` still inits `legions`/`sections` to `{}` — T2 populates them). Runtime-verified
+22/22 (`tests/verify_military_hierarchy_gen.gd`): Lion's full chain (4 armies × 1 section × 4 legions × 7 companies →
+4 Shireikan / 16 Taisa / 112 Chui, every legion→real section→real army with no orphan/skipped level, Taisa.commanded_unit_id
+== legion_id, Taisa.operational_superior_id == parent section's Shireikan, Shireikan.commanded_unit_id == section_id &
+op_superior == Rikugunshokan & constituent_legions populated, every Chui.op_superior a real Taisa, every army commanded
+by the Rikugunshokan); LOCKED per-clan army counts (Crab/Crane/Dragon/Phoenix/Scorpion/Unicorn/Mantis); and globally-
+unique unit ids across clans. Full project `--import` parse-clean. Rank-distribution self-corrects (the ~189 added
+commanders stay within per-clan RANK_DISTRIBUTION targets; the backfill subtracts them). **DEFERRED — T2 (next):**
+populate `military_data.legions/sections` in `_populate_military_data` from the WorldState arrays + redesign
+`can_legion_coordinate`/`can_section_initiate_campaign` to the owner-approved **vacant-superior** rule (Taisa
+ORDER_BATTLE/CONDUCT_RAID blocked when the Legion's parent Section has no living Shireikan; Shireikan campaign blocked
+when a constituent Legion has no living Taisa — both trace to LOCKED s57.21.3, both non-tautological, evaluated with
+`characters_by_id` liveness). **T3:** commander death → vacate unit (`commander_id = -1`) → FILL_VACANCY (s57.20.3).
+
 ### Systems Added 2026-07-16 (s12.11 FABRICATE_SECRET mints physical proof — the dead `physical_proof_item_id` producer, owner-approved narrow, runtime-verified 25/25)
 Owner-approved ("Narrow: FABRICATE_SECRET mints proof", via AskUserQuestion) resolution of the last documented
 **dead-field with a fully-wired consumer** in the secret/inventory layer. `SecretData.physical_proof_item_id` had

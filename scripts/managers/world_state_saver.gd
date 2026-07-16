@@ -492,6 +492,9 @@ func _save_json_state(ws: Node, base: String) -> bool:
 		"active_tethers": ws.active_tethers,
 		"order_states": ws.order_states,
 		"military_companies": ws.military_companies,
+		"military_armies": ws.military_armies,
+		"military_sections": ws.military_sections,
+		"military_legions": ws.military_legions,
 		"marriages": ws.marriages,
 		"active_assassination_ops": ws.active_assassination_ops,
 		"active_civil_wars": ws.active_civil_wars,
@@ -644,6 +647,9 @@ func _load_json_state(ws: Node, base: String) -> void:
 	ws.active_tethers.assign(state.get("active_tethers", []))
 	ws.order_states.assign(state.get("order_states", []))
 	ws.military_companies.assign(state.get("military_companies", []))
+	ws.military_armies.assign(state.get("military_armies", []))
+	ws.military_sections.assign(state.get("military_sections", []))
+	ws.military_legions.assign(state.get("military_legions", []))
 	ws.marriages.assign(state.get("marriages", []))
 	ws.active_assassination_ops.assign(state.get("active_assassination_ops", []))
 	ws.active_civil_wars.assign(state.get("active_civil_wars", []))

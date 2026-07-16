@@ -170,6 +170,10 @@ func _bootstrap_fresh_world() -> void:
 	var mil: Dictionary = result.get("military_data", {})
 	WorldState.military_companies.assign(mil.get("companies", []))
 	WorldState.next_company_id[0] = mil.get("next_company_id", 1)
+	# s57.21 unit hierarchy (Army/Section/Legion raw dicts from the generated commanders).
+	WorldState.military_armies.assign(result.get("military_armies", []))
+	WorldState.military_sections.assign(result.get("military_sections", []))
+	WorldState.military_legions.assign(result.get("military_legions", []))
 
 	WorldState.emperor_id = result.get("emperor_id", -1)
 	var emperor: L5RCharacterData = WorldState.characters_by_id.get(WorldState.emperor_id)

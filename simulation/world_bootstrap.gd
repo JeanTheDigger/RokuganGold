@@ -581,6 +581,10 @@ static func bootstrap_world(
 		"herald_id": pop_result.get("herald_id", -1),
 		"clan_champions": pop_result.get("clan_champions", {}),
 		"military_data": military_data,
+		# s57.21 unit hierarchy (Army/Section/Legion raw dicts from the generated commanders).
+		"military_armies": pop_result.get("military_armies", []),
+		"military_sections": pop_result.get("military_sections", []),
+		"military_legions": pop_result.get("military_legions", []),
 		"next_character_id": next_char_arr[0],
 		"next_settlement_id": next_settlement_id,
 		"bloodspeaker_cells": bloodspeaker_result.get("cells", []),
