@@ -232,6 +232,34 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-16 (s15.2/s16.4 court-close commitment recording WIRED — every court closed as "no_resolution"; zero-caller arbiter + dead field, runtime-verified 16/16)
+Owner-approved dormant-sweep finding (social/court layer). `CourtSystem.record_commitment` (the **SOLE writer** of
+`CourtSessionData.commitments_made`, court_system.gd:255) had **ZERO production callers** (grep-confirmed: only its own
+def + `tests/`), so `commitments_made` sat at its `@export` default `[]` **forever** — and the live consumer
+`CourtSystem.generate_court_close_topic` (called on EVERY court close, day_orchestrator:21083 → `_topic_from_dict` →
+`active_topics`) reads `court.commitments_made.is_empty() and court.wars_resolved_during.is_empty()` (court_system.gd:333)
+and so **ALWAYS returned the generic `"no_resolution"` TIER_4 rumor**. The higher-tier `"concluded"` outcome topic
+(**Imperial Winter Court → TIER_2, Clan Champion Court → TIER_3**, court_system.gd:344-363) could **never spawn** — so the
+world's political rumor mill never reflected actual court decisions, even at the Empire's grandest courts where lords bound
+themselves publicly. FIX (pure structural wire, **no invented values** — every field is real data already in scope): the
+live PUBLIC_DECLARATION writeback `DayOrchestrator._process_voluntary_declarations` (called at day_orchestrator:819) already
+creates a `CourtCommitmentData` for a successful declaration with the active `court` **unambiguously in scope** (found via
+`_find_active_court_for_character`, ACTIVE-gated) and even duplicates `court.attendee_ids` as witnesses — it now ALSO calls
+`CourtSystem.record_commitment(court, lord_id, commitment_type, topic.title, court.attendee_ids)` right after appending the
+commitment. `record_commitment` self-gates on `court.phase == ACTIVE` (always true here) and stores the real
+character_id/commitment_type/description/witnesses/ic_day. So a court where a lord made a binding public declaration now
+closes with the escalated `"concluded"` topic. Runtime-verified 16/16 (`tests/verify_court_commitment_record.gd`): the
+arbiter (appends on an ACTIVE court, rejects a non-active one, witnesses default to attendees); `generate_court_close_topic`
+(empty → `no_resolution` TIER_4; with a commitment → `concluded`, Imperial Winter → TIER_2 / Champion → TIER_3, count
+reported); and **end-to-end through the real `_process_voluntary_declarations`** (a lord's PUBLIC_DECLARATION at a Champion
+Court records the commitment onto the court → the court now closes `concluded`/TIER_3 instead of `no_resolution`/TIER_4,
+while a quiet control court still closes `no_resolution`). Full project `--import` parse-clean. **DEFERRED (documented,
+design-gated — NOT this wire):** the sibling `record_war_resolution` / `wars_resolved_during` (the other dead arm) — the
+LIVE war-termination path (`_process_war_terminations`, from NEGOTIATE_SURRENDER actions) has **no court in scope**, and the
+only court↔war linkage (`CourtSessionData.peace_court_war_id`) lives entirely inside the **zero-caller dead-twin peace-court
+subsystem** (`WarTermination.create_peace_court`/`conclude_peace_court`, already documented as needing an unbuilt
+convene-trigger). Wiring war-resolution recording needs that peace-court mechanism (owner design), not a structural wire.
+
 ### Systems Added 2026-07-16 (s56.16 SPIRIT_BIND ritual-selection WIRED — the 4th dead effect-writeback arm; the NPC engine never selected a binding spell, runtime-verified 16/16)
 Completes the owner's "activate all four dead writeback arms" intent (the curriculum patch below stocked
 `bonds_of_ningen_do` on the Kuni but nothing ever SELECTED it). The **SPIRIT_BIND** effect-cast writeback

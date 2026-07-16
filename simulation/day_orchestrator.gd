@@ -27993,6 +27993,12 @@ static func _process_voluntary_declarations(
 		cc.witness_ids = court.attendee_ids.duplicate()
 		court_commitments.append(cc)
 		created.append(cc)
+		# Record the declaration onto the court session too, so generate_court_close_topic
+		# reflects it (s15.2/s16.4): a court where a lord bound themselves publicly closes with
+		# the higher-tier "concluded" outcome topic instead of the generic "no_resolution" rumor.
+		CourtSystem.record_commitment(
+			court, lord_id, commitment_type, topic.title, court.attendee_ids,
+		)
 	return created
 
 
