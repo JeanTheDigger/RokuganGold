@@ -2469,7 +2469,7 @@ static func _execute_perform_worship(
 	var province_id: int = action.target_province_id
 
 	var honor_bonus: float = ctx.festival_honor_gain
-	if ctx.festival_has_lion_honor and character.clan == "lion":
+	if ctx.festival_has_lion_honor and character.clan == "Lion":
 		honor_bonus += 0.1
 
 	return {

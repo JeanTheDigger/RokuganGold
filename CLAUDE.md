@@ -301,6 +301,31 @@ negative-framing** (s12.7) channels are separate bulk-resolution paths that do n
 "all contexts" for those two channels is a broader wiring — not a one-line lean). This lands the clean deliberate-action
 half (the two GDD-named +15/+10 leans on the live GOSSIP/DISCLOSE actions).
 
+### Known Code Issues (found and fixed 2026-07-16, s11.5 Festival of Akodo Lion-honor bonus — a lowercase-clan case mismatch left the bonus DEAD for every Lion samurai, runtime-verified 6/6)
+A **case-mismatch dead-branch** (the sibling of the `school_name`/`Theology`/`Games` string-mismatch class, on the
+festival layer). `ActionExecutor._execute_perform_worship` applies `honor_change = ctx.festival_honor_gain`, plus **+0.1
+more** when `ctx.festival_has_lion_honor` (the LOCKED s11.5 **Festival of Akodo** `lion_honor` effect — the Lion Clan's
+founding-Kami celebration) AND `character.clan == "lion"`. But clans are stored **capitalized** (`"Lion"`) EVERYWHERE
+else in the codebase — every other Lion comparison uses `"Lion"` (e.g. `action_executor:4841`), and world-gen never
+writes a lowercase clan — so the lowercase literal `"lion"` **NEVER matched**, and the entire Lion honor bonus was
+**dead for every Lion character during their own festival.** The base festival honor (Bon Festival `honor_gain`) worked
+(it has no clan gate); only the clan-scoped Lion bonus mis-fired. FIX (one-character structural correction, **no invented
+value**: the `+0.1` is the LOCKED s11.5:109 magnitude — "Lion characters who participate gain **+0.1 Honor**" — already
+in the code, gated on a mistyped clan check; the effect is the LOCKED Festival-of-Akodo `lion_honor` flag): `character.clan
+== "lion"` → `character.clan == "Lion"`. Confirmed the case-mismatch was the codebase's **only** lowercase-clan comparison
+(a full scan of `clan == "<clan>"` across all nine clans + Imperial found zero other lowercase literals). Runtime-verified
+6/6 (`tests/verify_festival_lion_honor.gd`): a Lion char during the `lion_honor` festival now gains `honor_change == 0.1`
+(was 0.0 — the dead branch); a non-Lion (Crane) gets nothing; a Lion with no festival active gets nothing; a
+(non-canonical) lowercase `"lion"` clan correctly does NOT match (the fix keys on the canonical `"Lion"`); and the bonus
+stacks on top of a co-occurring base festival honor (base 0.2 + lion 0.1 → 0.3, non-Lion keeps only 0.2). Full project
+`--import` parse-clean. **With this, a Lion samurai who performs worship during the Festival of Akodo receives the LOCKED
++0.1 Honor**, as s11.5 mandates. (Discovered during an economy/imperial/festival dormant sweep; the same sweep confirmed
+the Imperial Edict apply-effect chain is LIVE — `process_daily_compliance` → `_apply_compliant_edict` dispatches all 7
+`apply_*` handlers — and that `FestivalSystem.get_glory_gain_festivals` is a harmless dead twin, NOT a clean wire: the
+live festival-glory path deliberately splits poetry/martial into separate `festival_glory_poetry`/`festival_glory_martial`
+world-state keys, both consumed in the executor, whereas the arbiter returns a combined float — rerouting would change
+behavior. The `RiceMarketSystem` posting/auction layer and `RegionalPriceModifiers` remain DEFERRED as already documented.)
+
 ### Systems Added 2026-07-16 (s52 battle XP multiplier season-wide WIRED — the `in_battle_ids` hardcoded `[]`; the entire 2.5×/3.0× combat-season activity bonus was DEAD, owner-approved "Wire it season-wide", runtime-verified 18/18)
 Owner-approved (AskUserQuestion "Wire it season-wide", 2026-07-16) resolution of a **hardcoded-dead builder key**
 disabling a whole downstream XP tier. `NPCAdvancement.get_activity_multiplier` (npc_advancement.gd:91, s52 Part 3
