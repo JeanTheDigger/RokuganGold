@@ -24368,7 +24368,49 @@ static func _process_seiyaku_review(
 		active_topics.append(topic)
 		result["exhaustion_topic_id"] = topic.topic_id
 
+	# s55.22b §3.1/§7: apply the per-season disposition suppression. Each active directive lowers
+	# BOTH targeted Champions' disposition toward each other (the pair the system scans), via the
+	# LOCKED estimate_seasonal_effect arbiter fed the committed-directive channel set (an assigned
+	# operative uses all channels per §3: court + one visit + letters). Escalated directives run at
+	# max intensity; detected directives are halved inside the arbiter. Clamped to the +31 formal-
+	# alliance floor when applicable. Operates entirely through the existing disposition system (§7).
+	_apply_seiyaku_suppression(seiyaku_state, characters)
+
 	return result
+
+
+static func _apply_seiyaku_suppression(
+	seiyaku_state: Dictionary,
+	characters: Array,
+) -> void:
+	var directives: Dictionary = seiyaku_state.get("active_directives", {})
+	if directives.is_empty():
+		return
+	# Resolve the current Great Clan Champion per clan (status >= 7.0, no lord, alive) — the same
+	# selection _build_champion_dispositions uses to build the scanned pair values.
+	var champions: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.clan.is_empty() or c.lord_id != -1 or c.status < 7.0 or CharacterStats.is_dead(c):
+			continue
+		if not champions.has(c.clan) or c.status > champions[c.clan].status:
+			champions[c.clan] = c
+	for pair_key: Variant in directives.keys():
+		var directive: Dictionary = directives[pair_key]
+		var champ_a: L5RCharacterData = champions.get(directive.get("clan_a", ""))
+		var champ_b: L5RCharacterData = champions.get(directive.get("clan_b", ""))
+		if champ_a == null or champ_b == null:
+			continue
+		var escalated: bool = directive.get("escalated", false)
+		# A committed operative uses all channels (s55.22b §3): court access + one visit + letters.
+		var effect: int = OtomoSeiyakuSystem.estimate_seasonal_effect(directive, true, 1, true, escalated)
+		if effect >= 0:
+			continue
+		var floor: int = OtomoSeiyakuSystem.get_alliance_disposition_floor(seiyaku_state, pair_key as String)
+		# Poison each side's view of the other (s55.22b §3.1).
+		champ_a.disposition_values[champ_b.character_id] = clampi(
+			int(champ_a.disposition_values.get(champ_b.character_id, 0)) + effect, floor, 100)
+		champ_b.disposition_values[champ_a.character_id] = clampi(
+			int(champ_b.disposition_values.get(champ_a.character_id, 0)) + effect, floor, 100)
 
 
 static func _build_champion_dispositions(

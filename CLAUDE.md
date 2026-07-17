@@ -232,6 +232,46 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-17 (s55.22b Otomo Seiyaku alliance-suppression EFFECT MADE LIVE — the whole mechanic was decorative; owner-approved "Committed-flat", runtime-verified 12/12)
+Owner-approved (2026-07-17, "Go" on the recommended **Committed-flat** model) resolution of the highest-impact genuinely-inert
+system found by two independent dormant sweeps this session. The s55.22b Otomo Seiyaku directive lifecycle
+(`OtomoSeiyakuSystem.process_seasonal_review` → `DayOrchestrator._process_seiyaku_review`) ran fully — scanning
+Champion-pair disposition, assigning operatives, escalating, cancelling, detection (topic-seeding), exhaustion topics —
+but **applied ZERO disposition suppression anywhere**, so the entire "the Otomo suppress two clans' warming alliance"
+mechanic was decorative. The per-directive suppression arbiter `OtomoSeiyakuSystem.estimate_seasonal_effect`
+(otomo_seiyaku_system.gd:327) — the SOLE reader of the `effectiveness_halved` flag set by `apply_detection` — had **ZERO
+production callers** (grep-confirmed), and its four MAX per-channel constants (`COURT_EFFECT_MAX -8` / `VISIT_EFFECT_MAX -5`
+/ `LETTER_EFFECT_MAX -2` / and `COMBINED_EFFECT_MAX -12`) were **defined-never-read**. So the detection wire's
+effectiveness-halving half was inert (it halved an effect never computed), and a targeted alliance decayed only through
+its own neglect, never through Otomo pressure. **The application target was LOCKED, not unpinned** (the sweep's initial
+"undefined" read was over-conservative): s55.22b §2.1 + §7 state the Otomo watch — and thus suppress — the **Champion-to-
+Champion disposition of the targeted pair**, "operating entirely through the existing disposition system, no new axis."
+`_build_champion_dispositions` already resolves those two Champion characters (status ≥ 7.0, no lord, alive). FIX (owner-
+approved **Committed-flat**, **no invented values** — every number is a shipped s55.22b constant): **(1)**
+`estimate_seasonal_effect` gains a defaulted `escalated: bool = false` param that switches the per-channel constants MIN→MAX
+(consuming the four dead MAX constants) — so a baseline directive scores the LOCKED per-channel minimums and a fabrication-
+authorized (`escalated`) one runs at max intensity. **(2)** new `DayOrchestrator._apply_seiyaku_suppression`, called at the
+end of `_process_seiyaku_review` (once per season, after the detection reset + directive lifecycle), resolves each active
+directive's two Champions and applies `estimate_seasonal_effect(directive, has_court_access=true, visits_conducted=1,
+letters_sent=true, escalated)` — the **committed-directive channel set** (an assigned operative uses all channels per §3, so
+the directive commitment IS the activity; no per-operative action tracking needed), which yields −6/season baseline, −12
+escalated (−15 raw clamped), and internally halves for a detected directive (−3 baseline). The delta is applied
+**symmetrically to BOTH Champions' disposition toward each other** (§3.1 "poisons each side's view of the other"), clamped
+**never below the +31 formal-alliance floor** (`get_alliance_disposition_floor`, LOCKED §6.2) and to 100. Missing/dead
+Champion → skip; no directive → no-op. So a Crab–Crane Champion alliance at +50 now erodes −6/season under an Otomo
+directive (−12 escalated), halved to −3 the season it is detected, and cannot be pushed below +31 once the two Champions
+formally ally — exactly the s55.22b design ("costly and fragile, but resistible by two clans actively maintaining the
+relationship"). Runtime-verified 12/12 (`tests/verify_seiyaku_suppression.gd`): the arbiter (committed base −6, escalated
+−12 clamped, detected halves base→−3 and raw escalated −15→−7); end-to-end through the **real** `_apply_seiyaku_suppression`
+(a base directive drops BOTH Champions by 6, escalated by 12, detected by 3; the +31 formal-alliance floor holds against a
+−12 escalated hit at disposition 35; no-directive and missing-Champion guards leave disposition untouched). Full project
+`--import` parse-clean. **With this, the s55.22b suppression effect is live** — the topic-seeding AND the effectiveness-
+halving halves of the detection wire now both matter. DEFERRED (documented, not this wire): the **real-activity** model
+(threading each operative's actual court/visit/letter actions against the pair) is the larger alternative the owner did not
+pick; the diffuse "+5 sympathy toward the targeted clans from all who learn" stays deferred (no per-clan sympathy field);
+the §3.2 Fabrication/ACQUIRE_LEVERAGE escalation ACTIONS are separate from this disposition effect (the `escalated` flag
+here only raises the suppression intensity, which is the LOCKED §3.2 consequence the effect models).
+
 ### Systems Added 2026-07-17 (s57.23a A9 garden-commission abandonment PARTIAL MITIGATION WIRED — dead @export field + defined-never-read const + a LIVE fairness bug, runtime-verified 17/17)
 Owner-authorized dormant-sweep finding (art/craft layer). The LOCKED s57.23a **A9 partial-mitigation** rule
 ("Partial mitigation — `progress_at_abandonment >= 50% of threshold`: Honor -0.25, disposition -4", gdd
@@ -9797,13 +9837,14 @@ call the seasonal pass uses" is FALSE — `OtomoSeiyakuSystem.estimate_seasonal_
 (otomo_seiyaku_system.gd:327, the sole reader of the flag at :334) has **ZERO production callers**,
 and `process_seasonal_review` applies NO disposition suppression anywhere. So the **topic-seeding**
 half of this detection wire IS live (the observable, driver-verified effect), but the
-**effectiveness-halving** half is inert: the suppression delta it would halve is never computed or
-applied. This is **DESIGN-GATED, NOT a clean wire** (do NOT re-audit): calling
-`estimate_seasonal_effect` needs three per-directive operative-activity inputs
-(`has_court_access`/`visits_conducted`/`letters_sent`) that are **produced nowhere**, and its
-−5…−12 output has **no existing application target** (which disposition/baseline it suppresses is
-undefined in code and unpinned in any LOCKED value) — wiring it would require inventing both, so it
-awaits an owner design decision on the whole s55.22b suppression-application mechanic.
+**effectiveness-halving** half was inert. **RESOLVED 2026-07-17** (owner-approved "Committed-flat" —
+see the "s55.22b Otomo Seiyaku alliance-suppression EFFECT MADE LIVE" changelog entry at the top):
+the application target was in fact LOCKED (§2.1/§7 — the Champion-to-Champion pair disposition), and
+`estimate_seasonal_effect` is now called by `DayOrchestrator._apply_seiyaku_suppression` each season
+with the committed-directive channel set (an assigned operative uses all channels per §3, so no
+per-operative activity tracking is needed), applying −6/season baseline (−12 escalated via the now-
+consumed MAX constants, halved on detection) symmetrically to both Champions' disposition, clamped to
+the +31 formal-alliance floor. Runtime-verified 12/12.
 LIMITATION: the diffuse "+5 sympathy toward the targeted clans from all who learn" is deferred
 (no per-clan sympathy field).
 
