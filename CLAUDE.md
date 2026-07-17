@@ -232,6 +232,48 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-17 (s57.21 pop-A/pop-B military unification — STAGE 1: de-clobber + Company→Legion linkage; latent clobber bug fixed, T2 gate ACTIVATED; owner-approved "Tiered-command, staged", runtime-verified 17/17)
+Owner-approved (2026-07-17, "Yes" on the presented **Tiered-command, staged** unification model) first stage of unifying the two
+disjoint world-gen military populations that the s57.21 T1/T2/T3 notes flagged as the outstanding "Unify military populations"
+work. **Pop-A** (`WorldBootstrap._create_initial_military`) builds one battling Company per real BUSHI officer (rank ≥ CHUI) — these
+accrue `battle_record` and are the promotion/demotion candidate pool; **Pop-B** (`WorldPopulationGenerator._generate_military_commanders`)
+builds the LOCKED Army→Section→Legion officer chain (Taisa/Shireikan/Rikugunshokan with `commanded_unit_id` pointing at their own
+unit) but with ZERO battling companies under them. Two seams kept them apart, one a **latent LIVE bug**: (1) the pop-A loop set
+`c.commanded_unit_id = next_company_id` **UNCONDITIONALLY** over every rank-≥CHUI officer (world_bootstrap.gd:1240) — **including the
+pop-B Taisa/Shireikan/Rikugunshokan** (they ARE clan BUSHI with `military_rank` ≥ TAISA, so the loop picked them up) — **clobbering
+the legion/section/army pointer** the s57.21 generator had stamped on them, silently defeating the s57.21 **T2 vacant-superior gate**
+(a Taisa's `commanded_unit_id` no longer indexed a legion → the gate fell to its graceful "unresolvable → allow" path, so it never
+actually gated); and (2) **no linkage** — every Chui-company had `parent_legion_id = -1`, so `legion.constituent_companies` was always
+empty and the Company→Legion→Section→Army chain never closed. Plus an **id-space collision hazard**: `next_company_id` (from 1) and the
+pop-B `next_unit_id` (from 1) OVERLAP, so a Chui's `company_id` could equal a Taisa's `legion_id` — an ambiguity in the shared
+`commanded_unit_id` namespace. FIX (pure structural wire, **no invented values** — the unit counts stay the LOCKED s57.21 constants,
+the linkage reuses the shipped `constituent_companies`/`parent_legion_id` fields, and the chain resolution is s57.21.3's own
+`operational_superior_id`→`commanded_unit_id` mirror): `_create_initial_military` gains a defaulted `legions: Array = []` param (the
+pop-B `military_legions` raw dicts, threaded from the call site where they're already in scope in `pop_result`) and — **(1) de-clobber**
+— the company-creation gate is narrowed from `military_rank >= 2` to `military_rank >= 2 and military_rank < Enums.MilitaryRank.TAISA`,
+so only Nikutai/Gunso/Chui get a company and **Taisa/Shireikan/Rikugunshokan keep their legion/section/army pointer intact**; **(2)
+link** — each Chui-company resolves its Taisa via `chars_by_id[c.operational_superior_id]` (when that superior is a TAISA), reads the
+Taisa's `commanded_unit_id` as the legion id, and — when that legion exists in the passed `legions` — stamps the company's
+`parent_legion_id`/`parent_section_id` and appends the `company_id` to the legion's `constituent_companies` (mutating the raw dict
+in place, so it persists into `WorldState.military_legions`); **(3) de-conflict ids** — `next_company_id` now starts at
+`max_unit_id + 1` (the highest allocated unit id, always a legion id given the army→section→legions allocation order), so a
+`company_id` can never equal any army/section/legion id. **Graceful everywhere:** empty `legions` → counter starts at 1 (unchanged
+pre-fix behavior for a no-pop-B world); a company-tier officer whose superior is not a Taisa (garrison/wall) → **unlinked**
+`parent_legion_id = -1` (no crash, no regression — those independent garrison companies stay as before); an unresolvable legion →
+unlinked. **This ACTIVATES the s57.21 T2 vacant-superior gate** — a Taisa's `commanded_unit_id` is once again a real legion id that
+resolves up to its Section's Shireikan liveness check (the whole point of T2, previously inert because the clobber pointed it at a
+company_id the legions map never held). Runtime-verified 17/17 (`tests/verify_military_unification_stage1.gd`): Taisa/Shireikan/
+Rikugunshokan keep their unit pointer (5/3/1, NOT clobbered) and get NO company; exactly the 3 company-tier officers (2 Chui + 1
+garrison Gunso) get companies, none commanded by a Taisa/Shireikan/Rikugunshokan; both Chui-companies link to legion 5 (`parent_legion_id`
+5, `parent_section_id` 3) and are appended to `legion.constituent_companies`; every company id is above the max legion id (no collision);
+and the garrison Gunso (superior = a Shireikan, not a Taisa) gets an UNLINKED company (`parent_legion_id` -1) without a crash. Full
+project `--import` parse-clean. **DEFERRED (documented — the later stages of the approved plan, NOT this commit):** Stage 2 feeds the
+now-connected chain into the starved pools (promotion/refill/demotion candidate gathering + `battle_record` accrual walking the real
+Company→Legion→Section chain, so a Taisa's battles/eligibility flow from the companies actually under them — today `battle_record` only
+reaches fought-company commanders and demotion iterates `companies` only); Stage 3 wires `army_id` membership + the army-mobilization
+chain-walk (Army→Sections→Legions→Companies) and T3-tier demotion (Taisa/Shireikan, which no pass touches yet). Stage 1 alone is a
+clean structural fix — it removes the latent clobber bug and closes the org chain, with each later stage independently verifiable.
+
 ### Systems Added 2026-07-17 (s55.22b Otomo Seiyaku alliance-suppression EFFECT MADE LIVE — the whole mechanic was decorative; owner-approved "Committed-flat", runtime-verified 12/12)
 Owner-approved (2026-07-17, "Go" on the recommended **Committed-flat** model) resolution of the highest-impact genuinely-inert
 system found by two independent dormant sweeps this session. The s55.22b Otomo Seiyaku directive lifecycle

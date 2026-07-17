@@ -479,6 +479,7 @@ static func bootstrap_world(
 
 	var military_data: Dictionary = _create_initial_military(
 		characters, clans, provinces, dice, settlements,
+		pop_result.get("military_legions", []),
 	)
 
 	var chars_by_id: Dictionary = {}
@@ -1197,13 +1198,38 @@ static func _create_initial_military(
 	_provinces: Dictionary,
 	_dice: DiceEngine,
 	settlements: Array = [],
+	legions: Array = [],
 ) -> Dictionary:
+	## s57.21 pop-A/pop-B unification -- Stage 1 (de-conflict + chain linkage).
+	## Historically this gave EVERY rank->=CHUI officer their own one-company command and set
+	## commanded_unit_id = company_id UNCONDITIONALLY -- which CLOBBERED the legion/section pointer
+	## the s57.21 generator had already stamped on every Taisa/Shireikan/Rikugunshokan, silently
+	## defeating the T2 vacant-superior gate. Two fixes:
+	##   (1) Only CHUI and below (Nikutai/Gunso/Chui) command companies -- Taisa/Shireikan/
+	##       Rikugunshokan command legions/sections/armies, so their commanded_unit_id is left intact.
+	##   (2) Each Chui-company is LINKED into its Taisa's legion (parent_legion_id/parent_section_id +
+	##       legion.constituent_companies), closing the Company->Legion chain the T2 gate walks.
+	## Also separates the company id space from the unit id space (armies/sections/legions) so a
+	## Chui's company_id can never collide with a Taisa's legion_id in the commanded_unit_id namespace.
 	var settlement_to_province: Dictionary = {}
 	for s: SettlementData in settlements:
 		settlement_to_province[str(s.settlement_id)] = s.province_id
 
+	var chars_by_id: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		chars_by_id[c.character_id] = c
+
+	var legions_by_id: Dictionary = {}
+	var max_unit_id: int = 0
+	for lg: Dictionary in legions:
+		var lg_id: int = int(lg["legion_id"])
+		legions_by_id[lg_id] = lg
+		if lg_id > max_unit_id:
+			max_unit_id = lg_id
+
 	var companies: Array[Dictionary] = []
-	var next_company_id: int = 1
+	# Company ids live ABOVE every allocated unit id so a company_id and a legion_id are never equal.
+	var next_company_id: int = max_unit_id + 1
 
 	for clan_name: String in clans:
 		var clan_chars: Array = []
@@ -1217,8 +1243,20 @@ static func _create_initial_military(
 				mil_ranked.append(c)
 
 		for c: L5RCharacterData in mil_ranked:
-			if c.military_rank >= 2:
+			# Only company-tier officers (Nikutai/Gunso/Chui) get a company here. Taisa/Shireikan/
+			# Rikugunshokan already command their legion/section/army (commanded_unit_id set at gen).
+			if c.military_rank >= 2 and c.military_rank < Enums.MilitaryRank.TAISA:
 				var src_province: int = settlement_to_province.get(c.physical_location, -1)
+				var parent_legion_id: int = -1
+				var parent_section_id: int = -1
+				# Link this Chui-company into its Taisa's legion (Company->Legion chain closure).
+				var superior: L5RCharacterData = chars_by_id.get(c.operational_superior_id, null)
+				if superior != null and superior.military_rank == Enums.MilitaryRank.TAISA:
+					var legion: Dictionary = legions_by_id.get(superior.commanded_unit_id, {})
+					if not legion.is_empty():
+						parent_legion_id = int(legion["legion_id"])
+						parent_section_id = int(legion.get("parent_section_id", -1))
+						legion["constituent_companies"].append(next_company_id)
 				var company: Dictionary = {
 					"company_id": next_company_id,
 					"clan_name": clan_name,
@@ -1233,8 +1271,8 @@ static func _create_initial_military(
 					"destroyed": false,
 					"levy_raised_season": 0,
 					"source_province_id": src_province,
-					"parent_legion_id": -1,
-					"parent_section_id": -1,
+					"parent_legion_id": parent_legion_id,
+					"parent_section_id": parent_section_id,
 					"army_id": -1,
 				}
 				c.commanded_unit_id = next_company_id
