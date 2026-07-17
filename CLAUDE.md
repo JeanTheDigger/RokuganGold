@@ -232,6 +232,47 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-17 (s57.21 military unification — STAGE 3a: T3-tier (Taisa/Shireikan) demotion; the top-tier disposition-removal gap was UNREACHABLE; owner-approved "Tiered-command, staged", runtime-verified 30/30)
+Owner-approved (2026-07-17, "Tiered-command, staged") third-stage payoff on the demotion side. The company-tier disposition removal
+(`DayOrchestrator._process_military_demotions`, LOCKED s11.7 "Demotion and Removal": a commander whose disposition toward their
+appointing lord drops below −10 is replaced for political reasons, −0.5 Glory) iterates **`companies` only** — but a Taisa commands a
+**LEGION** and a Shireikan a **SECTION**, both in the raw `military_legions`/`military_sections` arrays that pass never touches. So a
+generated pop-B Taisa/Shireikan who came to loathe their appointing lord kept command **forever** — the exact gap the company pass
+already closes for a Chui/Gunso, but at the top tier it was simply unreachable (the Stage 2b note flagged "no pass touches the
+top-tier demotion yet"). FIX (pure structural parallel of the existing company pass — **no invented values**; the −10 threshold and
+−0.5 Glory are `MilitaryPromotionSystem`'s own `should_remove_for_disposition` / `apply_demotion`, shared with the company pass):
+**(1)** new `_process_military_command_demotions(legions_raw, sections_raw, characters_by_id)` (+ `_gather_command_demotions` over each
+raw array) marks a living T3 commander whose `disposition_values[lord_id]` (the SAME appointing-lord axis the company pass reads) is
+below the removal threshold — skipping a loyal one, a lordless one (no appointing lord), a dead one, and an already-vacant unit.
+**(2)** `_apply_command_demotion_results` reuses the canonical `apply_demotion` arbiter via the same throwaway-view pattern as the
+company path (clears `military_rank`+`commanded_unit_id`, −0.5 Glory; a removed Rikugunshokan-who-is-also-a-Family-Daimyo keeps their
+feudal position — only the military fields are touched) and vacates the raw unit (`commander_id -> -1`). **(3)** wired into the
+seasonal military block **after** the company demotion apply and **before** the command-vacancy refill, so a demotion-vacated
+legion/section feeds the SAME `_process_military_command_refill` cascade that already fills dead-commander vacancies (Stage 2b) — a
+disloyal Taisa is removed and a battle-tested loyal serving Chui takes their seat the same season. **Two coordinated refill hooks
+(the subtle part):** the just-demoted officers are seeded into the refill's `claimed` set (new defaulted `pre_claimed` param) so a
+removed commander is **not re-appointed into a vacated seat the same tick** — their disposition toward the lord is still < −10, so a
+same-season re-appointment would only re-demote them next season (pure churn; they are free again next season by which point the seat
+is filled by someone else). AND — because a demotion vacates the raw `commander_id` to −1, the corpse-inheritance shortcut the
+dead-commander refill uses (the raw unit still names the corpse → read its `operational_superior_id`/`role_position`) **cannot see the
+predecessor** — so a new defaulted `slot_predecessors` param (unit_id → demoted commander id) lets the refill inherit each
+demotion-vacated seat's superior + role from the just-removed officer (alive, rank-cleared, but with `op_superior`/`role_position`
+left intact by `apply_demotion`). Reuses their OWN slot values — no invention, exactly as the dead path reuses the corpse's.
+Runtime-verified 30/30 (`tests/verify_military_command_demotion.gd`): detection (disloyal Taisa disp −11 + Shireikan disp −30 marked;
+loyal +20, boundary −10-not-below, lordless, dead, and already-vacant all skipped; `id_key`/`unit_id` tier-tagged); application
+(rank→NONE, command→−1, Glory 4.0→3.5, raw unit vacated, `role_position` kept for the Daimyo carve-out); refill `pre_claimed`
+exclusion (a demoted Chui that WOULD be the best candidate is excluded → seat stays vacant this season); end-to-end (a disloyal Taisa
+is demoted → legion vacated → the refill, with the demoted officer excluded + supplying the slot, appoints a **different** loyal
+serving Chui who inherits the dead-slot Shireikan superior, and the demoted ex-Taisa remains uncommanded). Full project `--import`
+parse-clean; the T3 refill (`verify_military_refill.gd` 22/22), Stage 2b (`verify_military_unification_stage2b.gd` 28/28), and the
+company demotion (`verify_military_demotion.gd` 13/13) all re-pass — the new params are defaulted/backward-compatible. **With Stage 1
+(chain), 2a (up-chain battle credit), 2b (promotion-from-within), 3a (T3 demotion), the s57.21 unified hierarchy self-heals on
+disloyalty at every tier** — a disloyal Chui/Gunso loses their company (company pass), a disloyal Taisa their legion / Shireikan their
+section (this pass), and every vacancy refills from the serving officers below. **DEFERRED (Stage 3b, owner-approved, NEXT):**
+`army_id` membership onto linked companies + the Army→Sections→Legions→Companies mobilization chain-walk (the last piece of the
+approved plan; no pass walks Army→Section→Legion→Company for mobilization yet). Stage 3a is a clean structural parallel of the
+existing company demotion, independently verifiable, with zero regression.
+
 ### Systems Added 2026-07-17 (s57.21 military unification — STAGE 2b: promotion-from-within; serving Chui/Taisa were EXCLUDED from higher-tier candidacy contra LOCKED s11.7 line 311; owner-approved "Tiered-command, staged", runtime-verified 28/28)
 Owner-approved (2026-07-17, "2a and then 2b") third stage — the promotion-from-within payoff that closes the loop opened by
 Stage 2a. With Stage 2a now accruing `battles_as_chui`/`battles_as_taisa` up the command chain, a serving officer could finally
@@ -277,10 +318,12 @@ the Legion seat vacant and their company command intact (the LOCKED gate rejects
 ADDS candidates — the eligibility gates never let an under-qualified one through). **With Stage 1 + 2a + 2b, the s57.21 unified
 military hierarchy is self-feeding:** companies link into legions (S1), battle experience flows up the chain (S2a), and vacancies at
 every tier refill from the serving officers directly below (S2b) — a Chui rises to Taisa, a Taisa to Shireikan, each promotion
-cascading a fresh vacancy the next tier fills. **DEFERRED (Stage 3, owner-approved, NEXT):** `army_id` membership onto linked
-companies + the Army→Sections→Legions→Companies mobilization chain-walk + T3-tier (Taisa/Shireikan) demotion (no pass touches the
-top-tier demotion yet — `_process_military_demotions` iterates `companies` only). Stage 2b is a clean structural fix (a LOCKED-mandated
-filter relaxation + a Stage-1-enabled cascade-vacate), independently verifiable, with zero regression to the company-promotion path.
+cascading a fresh vacancy the next tier fills. **Stage 3a (T3-tier Taisa/Shireikan demotion) — DONE 2026-07-17** (see the "STAGE 3a"
+changelog entry above; the top-tier demotion gap is closed — `_process_military_command_demotions` now removes a disloyal
+Taisa/Shireikan over the raw legion/section arrays, feeding the same refill cascade). **DEFERRED (Stage 3b, owner-approved, NEXT):**
+`army_id` membership onto linked companies + the Army→Sections→Legions→Companies mobilization chain-walk (no pass walks the full
+mobilization chain yet). Stage 2b is a clean structural fix (a LOCKED-mandated filter relaxation + a Stage-1-enabled cascade-vacate),
+independently verifiable, with zero regression to the company-promotion path.
 
 ### Systems Added 2026-07-17 (s57.21 military unification — STAGE 2a: up-chain battle_record credit; the Shireikan-eligibility rung was UNREACHABLE; owner-approved "credit up the command chain", runtime-verified 18/18)
 Owner-approved (2026-07-17, "2a and then 2b") second stage — the payoff of the Stage 1 chain closure. Before this, the battle_record
