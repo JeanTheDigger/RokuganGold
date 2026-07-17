@@ -266,8 +266,14 @@ company_id the legions map never held). Runtime-verified 17/17 (`tests/verify_mi
 Rikugunshokan keep their unit pointer (5/3/1, NOT clobbered) and get NO company; exactly the 3 company-tier officers (2 Chui + 1
 garrison Gunso) get companies, none commanded by a Taisa/Shireikan/Rikugunshokan; both Chui-companies link to legion 5 (`parent_legion_id`
 5, `parent_section_id` 3) and are appended to `legion.constituent_companies`; every company id is above the max legion id (no collision);
-and the garrison Gunso (superior = a Shireikan, not a Taisa) gets an UNLINKED company (`parent_legion_id` -1) without a crash. Full
-project `--import` parse-clean. **DEFERRED (documented — the later stages of the approved plan, NOT this commit):** Stage 2 feeds the
+and the garrison Gunso (superior = a Shireikan, not a Taisa) gets an UNLINKED company (`parent_legion_id` -1) without a crash. **Also
+LIVE-world-confirmed 12/12** on the REAL bootstrapped roster (`tests/verify_military_unification_live.gd`, seed 424242 — 3821 chars /
+701 companies / 80 legions / 20 sections / 20 armies): company ids DISJOINT from all unit ids (0 collisions); **0 rank-≥TAISA officers
+command a company** (the clobber is gone); **all 80 legions commanded by their Taisa + all 20 sections by their Shireikan**, with the
+surplus 12 Taisa + 2 Shireikan correctly UNSET (`commanded_unit_id` -1 — the s2.4 Wall command roster, a separate Tower-command
+structure, NOT a pop-B legion) and **0 "other"** (no corruption); **all 560 pop-B Chui-companies (80 legions × 7) linked to their
+legion** with every linked company's Chui→Taisa→legion `commanded_unit_id` mirror holding (0 bad back-refs), the 141 unlinked companies
+being garrison/Wall officers whose superior is not a Taisa (graceful). Full project `--import` parse-clean. **DEFERRED (documented — the later stages of the approved plan, NOT this commit):** Stage 2 feeds the
 now-connected chain into the starved pools (promotion/refill/demotion candidate gathering + `battle_record` accrual walking the real
 Company→Legion→Section chain, so a Taisa's battles/eligibility flow from the companies actually under them — today `battle_record` only
 reaches fought-company commanders and demotion iterates `companies` only); Stage 3 wires `army_id` membership + the army-mobilization
