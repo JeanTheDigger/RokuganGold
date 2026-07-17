@@ -9787,11 +9787,23 @@ war/peace; family: duel-death, rice-sharing, lord-raid, betrayal). Runtime-verif
 `OtomoSeiyakuSystem.apply_detection` was dead — the §6.1 detection/counterplay against Otomo
 alliance-suppression never fired. `DayOrchestrator._process_seiyaku_detection` (seasonal, before
 the seiyaku review) lets a co-located non-Otomo character detect each active suppression directive
-via a contested Courtier/Awareness roll; on success `apply_detection` halves the operative's
-effectiveness for the season (consumed by estimate_seasonal_effect) and a Tier-4 "Otomo
-Manipulation Detected — A/B Targeted" topic seeds to the detector. effectiveness_halved is reset
-each season (the per-court-session window). Values GDD-exact (halved effectiveness). Runtime-verified
-5/5 (strong detector halves + topic + learns; Otomo courtier excluded; runs vs strong operative).
+via a contested Courtier/Awareness roll; on success `apply_detection` sets `effectiveness_halved`
+and a Tier-4 "Otomo Manipulation Detected — A/B Targeted" topic seeds to the detector.
+effectiveness_halved is reset each season (the per-court-session window). Values GDD-exact.
+Runtime-verified 5/5 (strong detector halves + topic + learns; Otomo courtier excluded; runs vs
+strong operative). **CORRECTION (2026-07-17, confirmed by two independent dormant sweeps):** the
+original claim that `effectiveness_halved` is "consumed by `estimate_seasonal_effect`, the exact
+call the seasonal pass uses" is FALSE — `OtomoSeiyakuSystem.estimate_seasonal_effect`
+(otomo_seiyaku_system.gd:327, the sole reader of the flag at :334) has **ZERO production callers**,
+and `process_seasonal_review` applies NO disposition suppression anywhere. So the **topic-seeding**
+half of this detection wire IS live (the observable, driver-verified effect), but the
+**effectiveness-halving** half is inert: the suppression delta it would halve is never computed or
+applied. This is **DESIGN-GATED, NOT a clean wire** (do NOT re-audit): calling
+`estimate_seasonal_effect` needs three per-directive operative-activity inputs
+(`has_court_access`/`visits_conducted`/`letters_sent`) that are **produced nowhere**, and its
+−5…−12 output has **no existing application target** (which disposition/baseline it suppresses is
+undefined in code and unpinned in any LOCKED value) — wiring it would require inventing both, so it
+awaits an owner design decision on the whole s55.22b suppression-application mechanic.
 LIMITATION: the diffuse "+5 sympathy toward the targeted clans from all who learn" is deferred
 (no per-clan sympathy field).
 
