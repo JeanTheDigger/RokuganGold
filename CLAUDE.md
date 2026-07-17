@@ -232,6 +232,44 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-17 (s57.21 military unification — STAGE 2a: up-chain battle_record credit; the Shireikan-eligibility rung was UNREACHABLE; owner-approved "credit up the command chain", runtime-verified 18/18)
+Owner-approved (2026-07-17, "2a and then 2b") second stage — the payoff of the Stage 1 chain closure. Before this, the battle_record
+producer `DayOrchestrator._record_side_participation` credited **only the direct company commander** (Chui/Gunso) — no walk up the
+command chain. Since a Taisa commands a *legion* (never a battling company) and a Shireikan a *section*, **`battles_as_taisa` could
+never accrue for anyone**, leaving the LOCKED s11.7 Shireikan-eligibility rung (`is_eligible_for_shireikan` needs `battles_as_taisa
+>= 2`) **permanently unreachable** — a dead promotion branch. **The GDD LOCKS the ladder + counters (s11.7 lines 309–319:
+Chui→Taisa needs `battles_as_chui >= 1`, Taisa→Shireikan needs `battles_as_taisa >= 2`, plus Battle-skill minimums) but does NOT
+pin the ACCRUAL TRIGGER** (it never states "credit the Taisa when a unit under them fights" vs "only when personally commanding a
+fighting company"; the s52 2.5×/3.0× participate-vs-command split governs the XP multiplier, not `battle_record`). So the accrual
+rule was a genuine design decision — **owner-approved: credit up the command chain, one battle per engagement per commander, at
+their own rank.** FIX (now possible ONLY because Stage 1 linked companies into legions): `_record_side_participation`, after
+crediting the company commander, walks the **UNIT chain** — `company.parent_legion_id` → the legion's `commander_id` (the Taisa) →
+`legion.parent_section_id` → the section's `commander_id` (the Shireikan) — and records **one** battle for each via a new shared
+`_credit_commander_battle` helper (deduped per engagement via the same `seen` set, so a Taisa whose legion sent 3 companies to one
+battle earns ONE battle, not 3; win/loss = that side's outcome; at each officer's own `military_rank`, stamping `last_battle_season`
+so the s52 battle-XP multiplier also credits them). **Unit chain, not person chain (the one subtle call):** `legion.commander_id` is
+kept current by the T3 refill on a Taisa's death, whereas a subordinate Chui's `operational_superior_id` still points at the
+refilled-out *corpse* — so walking `operational_superior_id` would credit a dead Taisa (skipped by the `is_dead` guard → the NEW
+Taisa silently starves). `record_battle`'s per-rank branch gives the Taisa `battles_as_taisa++` (the exact LOCKED counter the
+Shireikan rung reads); the Shireikan gets `battles_fought++` only (no per-rank counter — its Rikugunshokan rung has **no** battle-count
+minimum per s11.7 line 315, so none is needed). **No invented values** — the credit magnitudes/counters are `record_battle`'s own,
+the chain is the LOCKED s57.21.3 unit hierarchy, the eligibility thresholds are untouched. Threaded `military_legions`/`military_sections`
+(which `advance_day` already holds) through both battle paths as defaulted params: the field-battle path (`_process_military_daily`
+→ `_resolve_army_battles` → the producer) and the storm-assault path (`_process_storm_assault_results` → the producer). **Graceful/
+backward-compatible:** with empty legion/section arrays the producer is company-commander-only (the exact pre-Stage-2 behavior — the
+pre-existing `verify_battle_record.gd` re-passes 22/22); a dead up-chain commander is skipped without blocking the Shireikan credit;
+an unresolvable legion/section is skipped. Runtime-verified 18/18 (`tests/verify_battle_record_upchain.gd`): a Chui + its legion's
+Taisa (`battles_as_taisa` 1) + that legion's Shireikan (`battles_fought` 1, no `battles_as_taisa`) all credited, the Taisa **deduped
+to ONE battle** across two of its companies in the same engagement; two engagements accrue `battles_as_taisa == 2` and a Battle-5
+Taisa then clears `is_eligible_for_shireikan`; a defender-side loss records `battles_lost` up the chain; empty arrays leave the Taisa
+UNTOUCHED (backward-compat); a dead up-chain Taisa is skipped while the Shireikan is still credited (no crash). Full project `--import`
+parse-clean. **With this, the s11.7 Taisa→Shireikan promotion rung can finally be fed** — a serving Taisa accrues battle experience
+from the companies actually under their legion. **DEFERRED (Stage 2b, owner-approved, NEXT):** the `_gather_promotion_candidates`
+`commanded_unit_id >= 0` filter still EXCLUDES every serving Chui/Taisa, contra the LOCKED s11.7 line 311 ("Candidates: Chui currently
+serving in the Go-hatamoto") — so even with `battles_as_taisa` now accruing, a serving Taisa can't yet be a Shireikan candidate; 2b
+relaxes that filter so promotion-from-within works (a promoted officer vacates their old slot, which the refill cascades to fill).
+Stage 3 (army_id membership + army-mobilization chain-walk + T3-tier demotion) remains after 2b.
+
 ### Systems Added 2026-07-17 (s57.21 pop-A/pop-B military unification — STAGE 1: de-clobber + Company→Legion linkage; latent clobber bug fixed, T2 gate ACTIVATED; owner-approved "Tiered-command, staged", runtime-verified 17/17)
 Owner-approved (2026-07-17, "Yes" on the presented **Tiered-command, staged** unification model) first stage of unifying the two
 disjoint world-gen military populations that the s57.21 T1/T2/T3 notes flagged as the outstanding "Unify military populations"

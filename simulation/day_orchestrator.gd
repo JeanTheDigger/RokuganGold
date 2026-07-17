@@ -338,6 +338,7 @@ static func advance_day(
 		active_armies, active_sieges, active_tethers, order_states,
 		dice_engine, settlements, companies, wm_for_military,
 		active_wars, characters_by_id, provinces, active_hostages, ic_day,
+		military_legions, military_sections,
 	)
 
 	var dragon_schism_siege_event: Dictionary = {}
@@ -700,6 +701,8 @@ static func advance_day(
 		active_wars,
 		active_hostages,
 		ic_day,
+		military_legions,
+		military_sections,
 	)
 	_capture_siege_hostages(
 		active_sieges, characters_by_id, companies, active_wars, active_hostages, ic_day,
@@ -3138,6 +3141,8 @@ static func _process_storm_assault_results(
 	active_wars: Array = [],
 	active_hostages: Array = [],
 	ic_day: int = 0,
+	military_legions: Array = [],
+	military_sections: Array = [],
 ) -> Array:
 	var results: Array = []
 
@@ -3191,9 +3196,11 @@ static func _process_storm_assault_results(
 			dice_engine, settlements, false, fort_bonus, {}, ef_atk, ef_def,
 		)
 
-		# s11.7a battle_record producer (storm-assault path — same as the field battle).
+		# s11.7a battle_record producer (storm-assault path — same as the field battle, incl. Stage 2
+		# up-chain credit to the companies' legion Taisa + that legion's section Shireikan).
 		_record_battle_participation(
 			battle_result, atk_dicts, def_dicts, characters_by_id, ic_day,
+			military_legions, military_sections,
 		)
 
 		var captor_lord_id: int = atk_dicts[0].get("lord_id", -1) if not atk_dicts.is_empty() else -1
@@ -17137,6 +17144,8 @@ static func _process_military_daily(
 	provinces: Dictionary = {},
 	active_hostages: Array = [],
 	ic_day: int = 0,
+	military_legions: Array = [],
+	military_sections: Array = [],
 ) -> Dictionary:
 	var disband_results: Array = _process_disbands(
 		active_armies, companies, settlements,
@@ -17145,7 +17154,7 @@ static func _process_military_daily(
 	var battle_results: Array = _resolve_army_battles(
 		movement_results, active_armies, companies, active_wars,
 		dice_engine, settlements, characters_by_id, worship_maluses,
-		provinces, active_hostages, ic_day,
+		provinces, active_hostages, ic_day, military_legions, military_sections,
 	)
 	var retreat_arrival_results: Array = _process_retreat_arrivals(
 		movement_results, active_armies, active_tethers,
@@ -17220,6 +17229,8 @@ static func _resolve_army_battles(
 	provinces: Dictionary = {},
 	active_hostages: Array = [],
 	ic_day: int = 0,
+	military_legions: Array = [],
+	military_sections: Array = [],
 ) -> Array:
 	var results: Array = []
 
@@ -17300,9 +17311,11 @@ static func _resolve_army_battles(
 		)
 
 		# s11.7a battle_record producer: every participating living commander records this engagement
-		# at their current rank (drives promotion scoring + TAISA/SHIREIKAN eligibility accrual).
+		# at their current rank (drives promotion scoring + TAISA/SHIREIKAN eligibility accrual). Stage 2
+		# also credits up the linked chain (the companies' legion Taisa + that legion's section Shireikan).
 		_record_battle_participation(
 			battle_result, atk_company_dicts, def_company_dicts, characters_by_id, ic_day,
+			military_legions, military_sections,
 		)
 
 		var field_victor: String = battle_result.get("victor", "draw")
@@ -17435,11 +17448,25 @@ static func _record_battle_participation(
 	def_company_dicts: Array,
 	characters_by_id: Dictionary,
 	ic_day: int = -1,
+	legions_raw: Array = [],
+	sections_raw: Array = [],
 ) -> void:
 	var victor: String = battle_result.get("victor", "draw")
 	var seen: Dictionary = {}
-	_record_side_participation(atk_company_dicts, victor == "attacker", characters_by_id, seen, ic_day)
-	_record_side_participation(def_company_dicts, victor == "defender", characters_by_id, seen, ic_day)
+	# s57.21.3 up-chain credit maps (empty when the caller passes no unit arrays -> company-commander-only,
+	# the pre-Stage-2 behavior). Built once per engagement; consumed by _record_side_participation.
+	var legions_by_id: Dictionary = {}
+	for lg: Dictionary in legions_raw:
+		legions_by_id[int(lg.get("legion_id", -1))] = lg
+	var sections_by_id: Dictionary = {}
+	for sc: Dictionary in sections_raw:
+		sections_by_id[int(sc.get("section_id", -1))] = sc
+	_record_side_participation(
+		atk_company_dicts, victor == "attacker", characters_by_id, seen, ic_day, legions_by_id, sections_by_id,
+	)
+	_record_side_participation(
+		def_company_dicts, victor == "defender", characters_by_id, seen, ic_day, legions_by_id, sections_by_id,
+	)
 
 
 static func _record_side_participation(
@@ -17448,25 +17475,62 @@ static func _record_side_participation(
 	characters_by_id: Dictionary,
 	seen: Dictionary,
 	ic_day: int = -1,
+	legions_by_id: Dictionary = {},
+	sections_by_id: Dictionary = {},
 ) -> void:
 	for cd: Dictionary in company_dicts:
-		var cmd_id: int = int(cd.get("commander_id", -1))
-		if cmd_id < 0 or seen.has(cmd_id):
+		# The company commander (Chui/Gunso) records the engagement at their own rank.
+		_credit_commander_battle(int(cd.get("commander_id", -1)), won, characters_by_id, seen, ic_day)
+		# s57.21.3 up-chain credit (Stage 2): the Taisa commanding this company's legion earns a battle
+		# at TAISA rank -> battles_as_taisa, the s11.7 Shireikan-eligibility rung that no producer could
+		# feed before Stage 1 linked the chain; and that legion's section Shireikan earns a battle too.
+		# Deduped per engagement via the shared `seen` set. Uses the UNIT chain (parent_legion_id ->
+		# legion.commander_id) -- always current after a refill, unlike the person chain, where a
+		# subordinate's operational_superior_id can still point at a refilled-out corpse.
+		var legion_id: int = int(cd.get("parent_legion_id", -1))
+		if legion_id < 0:
 			continue
-		seen[cmd_id] = true
-		var commander: L5RCharacterData = characters_by_id.get(cmd_id)
-		if commander == null or CharacterStats.is_dead(commander):
+		var legion: Dictionary = legions_by_id.get(legion_id, {})
+		if legion.is_empty():
 			continue
-		if not (commander.battle_record is Dictionary) or (commander.battle_record as Dictionary).is_empty():
-			commander.battle_record = MilitaryPromotionSystem.create_battle_record()
-		MilitaryPromotionSystem.record_battle(
-			commander.battle_record, won, 0, commander.military_rank,
-		)
-		# Stamp the absolute season this participation occurred in, so the seasonal advancement
-		# pass can grant the s52 battle activity multiplier (2.5x participating / 3.0x commanding)
-		# to everyone who fought this season. Self-cleaning: only "current" for one season.
-		if ic_day >= 0:
-			(commander.battle_record as Dictionary)["last_battle_season"] = TimeSystem.get_absolute_season(ic_day)
+		_credit_commander_battle(int(legion.get("commander_id", -1)), won, characters_by_id, seen, ic_day)
+		var section_id: int = int(legion.get("parent_section_id", -1))
+		if section_id < 0:
+			continue
+		var section: Dictionary = sections_by_id.get(section_id, {})
+		if section.is_empty():
+			continue
+		_credit_commander_battle(int(section.get("commander_id", -1)), won, characters_by_id, seen, ic_day)
+
+
+static func _credit_commander_battle(
+	cmd_id: int,
+	won: bool,
+	characters_by_id: Dictionary,
+	seen: Dictionary,
+	ic_day: int = -1,
+) -> void:
+	## Record one battle for a commander at their own rank, deduped per engagement via `seen`.
+	## Marks `seen` BEFORE the liveness check (a dead commander is skipped, not retried), matching the
+	## pre-Stage-2 behavior. record_battle increments battles_fought/won/lost + the per-rank counter
+	## (CHUI->battles_as_chui, TAISA->battles_as_taisa); a Shireikan gets no per-rank counter (its
+	## Rikugunshokan rung has no battle-count minimum) but still accrues battles_fought for scoring.
+	if cmd_id < 0 or seen.has(cmd_id):
+		return
+	seen[cmd_id] = true
+	var commander: L5RCharacterData = characters_by_id.get(cmd_id)
+	if commander == null or CharacterStats.is_dead(commander):
+		return
+	if not (commander.battle_record is Dictionary) or (commander.battle_record as Dictionary).is_empty():
+		commander.battle_record = MilitaryPromotionSystem.create_battle_record()
+	MilitaryPromotionSystem.record_battle(
+		commander.battle_record, won, 0, commander.military_rank,
+	)
+	# Stamp the absolute season this participation occurred in, so the seasonal advancement
+	# pass can grant the s52 battle activity multiplier (2.5x participating / 3.0x commanding)
+	# to everyone who fought this season. Self-cleaning: only "current" for one season.
+	if ic_day >= 0:
+		(commander.battle_record as Dictionary)["last_battle_season"] = TimeSystem.get_absolute_season(ic_day)
 
 
 const _TERRAIN_TO_BATTLE_TERRAIN: Dictionary = {
