@@ -232,6 +232,56 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-17 (s57.21 military unification — STAGE 2b: promotion-from-within; serving Chui/Taisa were EXCLUDED from higher-tier candidacy contra LOCKED s11.7 line 311; owner-approved "Tiered-command, staged", runtime-verified 28/28)
+Owner-approved (2026-07-17, "2a and then 2b") third stage — the promotion-from-within payoff that closes the loop opened by
+Stage 2a. With Stage 2a now accruing `battles_as_chui`/`battles_as_taisa` up the command chain, a serving officer could finally
+MEET the LOCKED promotion prerequisites — but the candidate-gathering filter still EXCLUDED every serving officer, so the eligibility
+they'd earned was unusable. `_gather_promotion_candidates` (day_orchestrator.gd:18332) had the filter `if c.commanded_unit_id >= 0:
+continue`, which drops any officer already holding a command (a Chui commands a company_id, a Taisa a legion_id — both `>= 0`). But
+the LOCKED s11.7 line 311 is explicit: **"Candidates: Chui currently serving in the Go-hatamoto"** — a *serving* Chui IS the intended
+Taisa-vacancy candidate (and, symmetrically, a serving Taisa the intended Shireikan-vacancy candidate). So the filter made the
+LOCKED promotion-from-within path impossible: `_refill_unit_tier` (the T3 Legion/Section refill) could only ever draw from *un*commanded
+officers, of which the pure-generated pop-B world has almost none — leaving Taisa/Shireikan vacancies starved even after Stage 2a made
+the counters accrue. **The relaxation is a LOCKED requirement, not a design decision** (line 311 names serving Chui as candidates
+verbatim); the safety of admitting them is guaranteed by `MilitaryPromotionSystem.select_best_candidate`'s own LOCKED eligibility
+gates (`is_eligible_for_taisa` needs `battles_as_chui >= 1` + Battle ≥ 4; `is_eligible_for_shireikan` needs `battles_as_taisa >= 2` +
+Battle ≥ 5), which do the real filtering — so relaxing the *pool* filter cannot admit an under-qualified officer. FIX (pure structural
+relaxation + a cascade-vacate, **no invented values** — every threshold is `MilitaryPromotionSystem`'s own, the vacate reuses the
+Stage 1 disjoint-id guarantee): **(1)** `_gather_promotion_candidates` gains a defaulted `admit_serving: bool = false`; the
+`commanded_unit_id >= 0` filter is now `if c.commanded_unit_id >= 0 and not admit_serving: continue`. The refill path
+(`_refill_unit_tier`, both Legion=TAISA and Section=SHIREIKAN tiers) passes `admit_serving=true`; **the CHUI company-promotion path
+(`_process_military_promotions`) keeps the default `false`** — its original "unassigned only" pool, so pop-A garrison-company
+promotion is **byte-for-byte unchanged (zero regression)**. The rank filter (`military_rank >= rank_needed → continue`) still applies,
+so a same-rank officer is never a candidate for their own tier. **(2)** the deeper half — **promotion-from-within must VACATE the old
+slot** so the vacancy cascade refills it (owner: "a promoted officer vacates their old slot, which the refill cascades to fill").
+`_apply_command_refill_results` gains a defaulted `companies: Array = []`; before overwriting `character.commanded_unit_id = unit_id`
+it captures `old_unit = character.commanded_unit_id` and, when `old_unit >= 0 and old_unit != unit_id`, calls the new
+`_vacate_unit_command(old_unit, companies, legions_raw, sections_raw)` — which scans all three unit arrays and sets the matching
+unit's `commander_id = -1`. **The scan is unambiguous BECAUSE of Stage 1** (company ids start above every unit id → disjoint id
+spaces → at most one array holds any id). So a serving Chui promoted to Taisa leaves their **company** vacant (→ a CHUI vacancy the
+next-season company-promotion pass fills), and a serving Taisa promoted to Shireikan leaves their **legion** vacant (→ a TAISA vacancy
+the next-season refill fills) — the cascade the owner described. The promoted officer still inherits the dead predecessor's slot
+(op_superior + role, unchanged from T3), and the raw unit is rewritten so the next tick's liveness bake keeps the new commander.
+`companies` threaded through the seasonal call site (already in scope at day_orchestrator:1754). **Timing is safe:** all refill
+COMPUTE (`_refill_unit_tier` × 2, sharing the `claimed` dedup set) runs before any APPLY, so a serving officer is still "commanding
+their old unit" during compute (their old legion isn't seen as vacant this pass — only becomes vacant at apply, refilled next
+season); a candidate claimed for one vacancy is never selected for another. Runtime-verified 28/28
+(`tests/verify_military_unification_stage2b.gd`): the admit_serving gate (a serving Chui EXCLUDED with `false`, ADMITTED with `true`,
+same-rank Taisa still rank-filtered out); `_vacate_unit_command` clears the correct tier only (company/legion/section) and no-ops on
+an unknown id; **end-to-end** — a battle-tested serving Chui fills a vacant Legion (→ Taisa, inheriting the dead Taisa's Shireikan
+superior + "Legion Commander" role, its raw legion rewritten) AND its old company is vacated, while a battle-tested serving Taisa
+fills a vacant Section (→ Shireikan, inheriting the Rikugunshokan superior + "Section Commander" role) AND its old legion is vacated,
+with the shared `claimed` dedup holding across both tiers; an **ineligible** serving Chui (Battle 4 but `battles_as_chui == 0`) leaves
+the Legion seat vacant and their company command intact (the LOCKED gate rejects them). Full project `--import` parse-clean; the T3
+`verify_military_refill.gd` re-passes 22/22 (the two defaulted params are backward-compatible, and admitting serving officers only
+ADDS candidates — the eligibility gates never let an under-qualified one through). **With Stage 1 + 2a + 2b, the s57.21 unified
+military hierarchy is self-feeding:** companies link into legions (S1), battle experience flows up the chain (S2a), and vacancies at
+every tier refill from the serving officers directly below (S2b) — a Chui rises to Taisa, a Taisa to Shireikan, each promotion
+cascading a fresh vacancy the next tier fills. **DEFERRED (Stage 3, owner-approved, NEXT):** `army_id` membership onto linked
+companies + the Army→Sections→Legions→Companies mobilization chain-walk + T3-tier (Taisa/Shireikan) demotion (no pass touches the
+top-tier demotion yet — `_process_military_demotions` iterates `companies` only). Stage 2b is a clean structural fix (a LOCKED-mandated
+filter relaxation + a Stage-1-enabled cascade-vacate), independently verifiable, with zero regression to the company-promotion path.
+
 ### Systems Added 2026-07-17 (s57.21 military unification — STAGE 2a: up-chain battle_record credit; the Shireikan-eligibility rung was UNREACHABLE; owner-approved "credit up the command chain", runtime-verified 18/18)
 Owner-approved (2026-07-17, "2a and then 2b") second stage — the payoff of the Stage 1 chain closure. Before this, the battle_record
 producer `DayOrchestrator._record_side_participation` credited **only the direct company commander** (Chui/Gunso) — no walk up the

@@ -1752,7 +1752,7 @@ static func advance_day(
 			military_legions, military_sections, characters_by_id,
 		)
 		_apply_command_refill_results(
-			command_refill_results, military_legions, military_sections, characters_by_id,
+			command_refill_results, military_legions, military_sections, characters_by_id, companies,
 		)
 		military_seasonal_result["command_refill"] = command_refill_results
 		military_seasonal_result["levy_suspicion"] = _process_levy_suspicion(
@@ -18332,6 +18332,7 @@ static func _apply_demotion_results(
 static func _gather_promotion_candidates(
 	vacancy: Dictionary,
 	characters_by_id: Dictionary,
+	admit_serving: bool = false,
 ) -> Array:
 	var candidates: Array = []
 	var rank_needed: int = vacancy.get("rank_needed", Enums.MilitaryRank.CHUI)
@@ -18342,7 +18343,15 @@ static func _gather_promotion_candidates(
 			continue
 		if c.military_rank >= rank_needed:
 			continue
-		if c.commanded_unit_id >= 0:
+		# s11.7 line 311 (LOCKED): "Candidates: Chui currently serving in the Go-hatamoto" -- a serving
+		# officer (commanded_unit_id >= 0) IS a valid higher-tier candidate (Stage 2b). The refill path
+		# (Legion/Section) passes admit_serving=true so serving Chui become Taisa candidates and serving
+		# Taisa become Shireikan candidates; the company-tier CHUI promotion keeps admit_serving=false
+		# (its original "unassigned only" pool -- zero regression to pop-A garrison companies). The
+		# LOCKED eligibility gates in select_best_candidate (battles_as_chui >= 1 for Taisa,
+		# battles_as_taisa >= 2 for Shireikan) ensure only genuinely battle-tested serving officers
+		# qualify; a promoted serving officer's old slot is vacated at apply time so the cascade refills it.
+		if c.commanded_unit_id >= 0 and not admit_serving:
 			continue
 
 		var battle_skill: int = c.skills.get("Battle", 0)
@@ -18416,7 +18425,9 @@ static func _refill_unit_tier(
 		if unit_id < 0:
 			continue
 		var vacancy: Dictionary = {"unit_id": unit_id, "rank_needed": rank_needed}
-		var candidates: Array = _gather_promotion_candidates(vacancy, characters_by_id)
+		# admit_serving=true: a Legion/Section vacancy accepts serving lower-tier officers (a serving
+		# Chui for a Taisa seat, a serving Taisa for a Shireikan seat) per LOCKED s11.7 line 311.
+		var candidates: Array = _gather_promotion_candidates(vacancy, characters_by_id, true)
 		var filtered: Array = []
 		for cand: Dictionary in candidates:
 			if not claimed.has(int(cand.get("character_id", -1))):
@@ -18453,6 +18464,7 @@ static func _apply_command_refill_results(
 	legions_raw: Array,
 	sections_raw: Array,
 	characters_by_id: Dictionary,
+	companies: Array = [],
 ) -> void:
 	for r: Dictionary in refill_results:
 		var new_id: int = int(r.get("new_commander_id", -1))
@@ -18460,6 +18472,13 @@ static func _apply_command_refill_results(
 		if character == null:
 			continue
 		var unit_id: int = int(r.get("unit_id", -1))
+		# Stage 2b promotion-from-within: a serving officer promoted into this Legion/Section vacates
+		# their OLD command so the cascade refills it (a serving Chui -> Taisa leaves their company
+		# vacant; a serving Taisa -> Shireikan leaves their legion vacant). ids are disjoint (Stage 1),
+		# so the vacate scans all three unit arrays and clears whichever holds the old command.
+		var old_unit: int = character.commanded_unit_id
+		if old_unit >= 0 and old_unit != unit_id:
+			_vacate_unit_command(old_unit, companies, legions_raw, sections_raw)
 		var rank: int = int(r.get("rank_needed", Enums.MilitaryRank.NONE))
 		character.military_rank = rank
 		character.commanded_unit_id = unit_id
@@ -18476,6 +18495,29 @@ static func _apply_command_refill_results(
 			if int(unit.get(id_key, -1)) == unit_id:
 				unit["commander_id"] = new_id
 				break
+
+
+# Stage 2b: clear the commander_id of a promoted officer's OLD unit (company / legion / section) so the
+# vacancy cascade refills it next season. ids are disjoint across the three tiers (Stage 1 de-conflict:
+# company ids start above every unit id), so the scan is unambiguous -- at most one array holds the id.
+static func _vacate_unit_command(
+	old_unit_id: int,
+	companies: Array,
+	legions_raw: Array,
+	sections_raw: Array,
+) -> void:
+	for company: Dictionary in companies:
+		if int(company.get("company_id", -1)) == old_unit_id:
+			company["commander_id"] = -1
+			return
+	for legion: Dictionary in legions_raw:
+		if int(legion.get("legion_id", -1)) == old_unit_id:
+			legion["commander_id"] = -1
+			return
+	for section: Dictionary in sections_raw:
+		if int(section.get("section_id", -1)) == old_unit_id:
+			section["commander_id"] = -1
+			return
 
 
 # -- Military Effect Post-Processing -------------------------------------------
