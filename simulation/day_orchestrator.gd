@@ -35737,10 +35737,17 @@ static func _process_garden_seasonal_maintenance(
 			record.progress_at_abandonment = record.cultivation_progress
 			var daimyo: L5RCharacterData = characters_by_id.get(record.daimyo_id)
 			if artisan != null and not CharacterStats.is_dead(artisan):
-				HonorGlorySystem.apply_honor_change(artisan, -GardenSystem.ABANDONMENT_HONOR_LOSS)
+				# A9 partial mitigation: an artisan who reached >= 50% of the target
+				# threshold before abandoning is punished at half the honor/disposition
+				# cost (a near-complete garden is not the same offense as an untouched one).
+				var threshold: int = int(GardenSystem.QUALITY_THRESHOLD.get(record.target_quality_tier, 20))
+				var mitigated: bool = record.progress_at_abandonment >= int(GardenSystem.PARTIAL_MITIGATION_THRESHOLD * threshold)
+				var honor_loss: float = GardenSystem.ABANDONMENT_HONOR_LOSS * 0.5 if mitigated else GardenSystem.ABANDONMENT_HONOR_LOSS
+				var disp_loss: int = int(GardenSystem.ABANDONMENT_DISPOSITION_LOSS / 2) if mitigated else GardenSystem.ABANDONMENT_DISPOSITION_LOSS
+				HonorGlorySystem.apply_honor_change(artisan, -honor_loss)
 				if daimyo != null and not CharacterStats.is_dead(daimyo):
 					var disp: int = clampi(
-						artisan.disposition_values.get(daimyo.character_id, 0) - GardenSystem.ABANDONMENT_DISPOSITION_LOSS,
+						artisan.disposition_values.get(daimyo.character_id, 0) - disp_loss,
 						-100, 100,
 					)
 					artisan.disposition_values[daimyo.character_id] = disp

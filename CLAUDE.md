@@ -232,6 +232,37 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-17 (s57.23a A9 garden-commission abandonment PARTIAL MITIGATION WIRED — dead @export field + defined-never-read const + a LIVE fairness bug, runtime-verified 17/17)
+Owner-authorized dormant-sweep finding (art/craft layer). The LOCKED s57.23a **A9 partial-mitigation** rule
+("Partial mitigation — `progress_at_abandonment >= 50% of threshold`: Honor -0.25, disposition -4", gdd
+lines 124-125) was **never applied**: `CommissionRecordData.progress_at_abandonment` (commission_record_data.gd:50)
+was WRITTEN at the abandonment writeback (`= record.cultivation_progress`, day_orchestrator:35737) but READ at
+**ZERO** production sites, and `GardenSystem.PARTIAL_MITIGATION_THRESHOLD` (=0.5, garden_system.gd:46) was
+**defined-never-read** — so the live abandonment writeback in `DayOrchestrator._process_garden_seasonal_maintenance`
+(day_orchestrator:35739) applied the **FULL** `-ABANDONMENT_HONOR_LOSS` (0.5) and **FULL** `-ABANDONMENT_DISPOSITION_LOSS`
+(8) UNCONDITIONALLY. A near-complete vassal garden (an artisan who cultivated most of the way to the target quality
+before abandoning) was punished **exactly as harshly as an untouched one** — a genuine LIVE fairness bug, and the
+whole point of the A9 mitigation tier was inert. FIX (pure LOCKED wire, **no invented values** — every number is a
+shipped constant): the writeback now computes `threshold = QUALITY_THRESHOLD.get(record.target_quality_tier, 20)`
+(the per-tier cumulative-progress ceiling, 20/40/70/110/160) and `mitigated = record.progress_at_abandonment >=
+int(PARTIAL_MITIGATION_THRESHOLD * threshold)` (the A9 "50% of threshold" cutoff, keyed on the record's OWN target
+tier — so the dead field is now READ against `target_quality_tier`), and when mitigated applies **half** the shipped
+consts (`ABANDONMENT_HONOR_LOSS * 0.5` = -0.25 Honor, `ABANDONMENT_DISPOSITION_LOSS / 2` = -4 disposition) instead of
+the full values — the exact A9 mitigated pair. Non-mitigated abandonment (< 50% progress) is unchanged (full -0.5 /
+-8), so this is strictly a fairness improvement for the near-complete case, no regression on the untouched case.
+`progress_at_abandonment` is still stamped `= record.cultivation_progress` right before (the field is now both written
+AND read), retiring both the dead field and the defined-never-read const. Runtime-verified 17/17
+(`tests/verify_garden_abandonment_mitigation.gd`): the mitigation constants (full 0.5/8, threshold 0.5, tier1 20);
+end-to-end through the **real** `_process_garden_seasonal_maintenance` — a tier-1 commission abandoned at progress 5
+(< 10 = 50% of 20) takes the FULL -0.5/-8 while `progress_at_abandonment` is recorded, one abandoned at exactly 10
+(the boundary) or 18 takes HALF -0.25/-4; and the per-tier threshold (tier 3 → threshold 70, cutoff 35: progress 34 →
+full, 35 → half), proving the cutoff scales with `target_quality_tier`, not a fixed 10. Full project `--import`
+parse-clean. **With this, A9 partial mitigation is live** — an artisan who nearly finished a commissioned garden
+before abandoning is punished at half cost, as s57.23a mandates. DEFERRED (documented, design-gated — NOT this wire):
+the A10 forgiveness-appeal ActionID (`forgiveness_appeal_season` field, `DECEIT_*` consts) needs an unbuilt
+APPEAL_FORGIVENESS action + the Sincerity(Honesty/Deceit) roll pipeline; the A11 Daimyo-forced-removal topic path is
+separate governance work.
+
 ### Systems Added 2026-07-17 (s57.54.10d operational-superior CO budget MADE SPENDABLE — the LOCKED budget was unspendable; owner-approved "Shape A (CO-spending)" + "Propagate superior's objective", runtime-verified 33/33)
 Owner-approved (AskUserQuestion 2026-07-17, two-part: **Shape A (CO-spending)** then **Propagate superior's objective**)
 resolution of the deferred s57.54.10d operational-superior Civilian Order budget — the item the CLAUDE.md deferred note
