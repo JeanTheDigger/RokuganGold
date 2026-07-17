@@ -326,6 +326,42 @@ static func find_best_searcher(
 	return best
 
 
+# s12.8 "bodyguard assigned" household response (suspicion >= SUSPICION_BODYGUARD_THRESHOLD, line 42):
+# selects the best combat-capable LOYAL co-located household member to guard the target. Mirrors
+# find_best_searcher's household+disposition loyalty gate; scores by max(Kenjutsu, Iaijutsu) — the
+# same combat measure _find_bodyguard uses to pick among assigned guards. Excludes the assassin, the
+# target, the dead, anyone already guarding someone (assigned_protection_target_id >= 0), and — the
+# whole point — requires loyalty so a household turns its OWN warriors to the threatened member's
+# defense. Returns null when no loyal co-located warrior exists.
+static func find_best_protector(
+	target: L5RCharacterData,
+	assassin_id: int,
+	characters_by_id: Dictionary,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	var best_combat: int = -1
+	for char_id: int in characters_by_id:
+		if char_id == assassin_id or char_id == target.character_id:
+			continue
+		var c: L5RCharacterData = characters_by_id[char_id]
+		if CharacterStats.is_dead(c):
+			continue
+		if c.physical_location != target.physical_location or c.physical_location == "":
+			continue
+		if c.assigned_protection_target_id >= 0:
+			continue  # already guarding someone
+		if not _is_household_member(c, target):
+			continue
+		var disp: int = int(c.disposition_values.get(target.character_id, 0))
+		if disp < LOYALTY_DISPOSITION_MINIMUM:
+			continue
+		var combat: int = maxi(c.skills.get("Kenjutsu", 0), c.skills.get("Iaijutsu", 0))
+		if combat > best_combat:
+			best_combat = combat
+			best = c
+	return best
+
+
 static func has_seduce_for_access(
 	assassin_id: int,
 	target_location: String,

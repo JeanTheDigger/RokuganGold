@@ -13,6 +13,7 @@ const SEED_TAINT_MANIFESTATION:    int = 3   # Enums.InsurgencyType.TAINT_MANIFE
 const SEED_NEZUMI_INFESTATION:     int = 4   # Enums.InsurgencyType.NEZUMI_INFESTATION
 const SEED_URBAN_CRIMINAL_NETWORK: int = 5   # Enums.InsurgencyType.URBAN_CRIMINAL_NETWORK
 const SEED_WALL_SORTIE:            int = 100
+const SEED_ONI_MANIFESTATION:      int = 101  # s56.1.2: named-oni boss encounter
 
 # -- Unit type ID strings -------------------------------------------------------
 # Ronin / Bandit (s54.8)
@@ -219,6 +220,8 @@ static func compose_roster(seed_type: int, strength: int, options: Dictionary, s
 			return _compose_urban_criminal(strength, rng)
 		SEED_WALL_SORTIE:
 			return _compose_wall_sortie(options.get("sortie_size", SORTIE_SMALL), rng)
+		SEED_ONI_MANIFESTATION:
+			return _compose_oni_manifestation(rng)
 		_:
 			return _compose_ronin_bandit(strength, 75, rng)
 
@@ -563,6 +566,28 @@ static func _compose_wall_sortie(size: String, rng: RandomNumberGenerator) -> Di
 		"enemy_groups":    _sortie_enemy(size, e_total, rng),
 		"individual_variance_chance": _variance_chance(rng),
 		"has_named_npc_slot": false,
+	}
+
+# -- Oni Manifestation (s56.1.2 / s56.10.10 "Oni") ----------------------------
+# A named Oni has manifested in Ningen-do: a boss-tier encounter (s56.1.2). The
+# GDD specifies no escort composition, so the roster is the single named boss —
+# no invented headcounts. Selection is structural: a deterministic BOSS-tier oni
+# from OniBestiary (the tier tag comes from the s54.5 transcription). The chosen
+# oni id is the unit_type; the live spawn layer resolves it via
+# SpiritCombatant.spawn_by_id (that spawn path is on the PC-travel HOLD). A named
+# unique boss carries no individual variance.
+
+static func _compose_oni_manifestation(rng: RandomNumberGenerator) -> Dictionary:
+	var boss_ids: Array = OniBestiary.boss_ids()
+	var oni_id: String = "arugai_no_oni"  # BOSS-tier fallback (always present)
+	if not boss_ids.is_empty():
+		oni_id = String(boss_ids[rng.randi() % boss_ids.size()])
+	return {
+		"seed_type": SEED_ONI_MANIFESTATION,
+		"total_count": 1,
+		"groups": [_group(oni_id, 1, ROLE_LEADER)],
+		"individual_variance_chance": 0.0,
+		"has_named_npc_slot": true,
 	}
 
 static func _sortie_friendly(size: String, total: int, rng: RandomNumberGenerator) -> Array:

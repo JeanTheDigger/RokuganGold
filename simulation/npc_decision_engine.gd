@@ -90,6 +90,8 @@ static func build_context(
 	ctx.court_session_state = world_state.get("court_session_state", {})
 	ctx.court_settlement_id = world_state.get("court_settlement_id", -1)
 	ctx.compliance_intimidators = world_state.get("compliance_intimidators", [])
+	# s57.25.7: GRANT_TATTOO elder's resolved ability-grant target (co-located seeking monk).
+	ctx.grant_tattoo_target = world_state.get("grant_tattoo_target", {})
 	# s29.15.24 action-block validation (populated only when non-empty). The daily
 	# break-condition pass prunes expired/broken entries, so this holds active blocks.
 	if not character.action_blocks.is_empty():
@@ -216,6 +218,7 @@ static func build_context(
 	ctx.active_wars = world_state.get("active_wars", [])
 	ctx.escalating_conflicts = world_state.get("escalating_conflicts", [])
 	ctx.taint_topic_province_ids = world_state.get("taint_topic_province_ids", [])
+	ctx.spiritual_overlap_province_ids = world_state.get("spiritual_overlap_province_ids", [])
 	ctx.active_insurgency_id = world_state.get("active_insurgency_id", -1)
 	ctx.active_insurgency_detected = bool(world_state.get("active_insurgency_detected", false))
 	ctx.active_insurgency_type = world_state.get("active_insurgency_type", "")
@@ -286,21 +289,43 @@ static func build_context(
 				"priority": best_priority,
 			})
 
-	# Open performance request check (s57.33.3).
+	# Performance request check at court: a TARGETED personal commission (s12.4 "Perform
+	# Personally For") to THIS performer takes precedence (the reactive need at priority 2), else
+	# an OPEN request anyone present may answer (s57.33.3, priority 1). The targeted branch was
+	# missing -- the injector only ever emitted open_performance_request and `continue`d past every
+	# targeted request, so the performance_invitation_received consumer never fired and a named
+	# performer never got nudged to fulfill a personal commission (it just expired 90 days later).
 	if not ctx.active_court_at_location.is_empty():
-		var open_requests: Array = world_state.get("pending_performance_requests", [])
-		for req: Dictionary in open_requests:
-			if req.get("target_performer_id", -1) >= 0:
+		var perf_requests: Array = world_state.get("pending_performance_requests", [])
+		var perf_injected: bool = false
+		# Targeted invitation addressed to this performer.
+		for req: Dictionary in perf_requests:
+			if req.get("target_performer_id", -1) != character.character_id:
 				continue
 			if RequestPerformanceSystem.can_fulfill(character, req):
 				ctx.pending_events.append({
-					"type": "open_performance_request",
+					"type": "performance_invitation_received",
 					"request_id": req.get("request_id", -1),
 					"requesting_lord_id": req.get("requesting_lord_id", -1),
 					"performance_type": req.get("performance_type", ""),
 					"venue_mode": req.get("venue_mode", "public"),
 				})
+				perf_injected = true
 				break
+		# Otherwise an open request (target -1) any present performer may answer.
+		if not perf_injected:
+			for req: Dictionary in perf_requests:
+				if req.get("target_performer_id", -1) >= 0:
+					continue
+				if RequestPerformanceSystem.can_fulfill(character, req):
+					ctx.pending_events.append({
+						"type": "open_performance_request",
+						"request_id": req.get("request_id", -1),
+						"requesting_lord_id": req.get("requesting_lord_id", -1),
+						"performance_type": req.get("performance_type", ""),
+						"venue_mode": req.get("venue_mode", "public"),
+					})
+					break
 
 	# Personality
 	ctx.bushido_virtue = character.bushido_virtue
@@ -377,7 +402,11 @@ static func resolve_goal(
 	else:
 		# Standard primary objective step (non-lord-tier, Champion, and Imperial).
 		var primary: Dictionary = objectives.get("primary", {})
-		if primary.size() > 0:
+		# s57.25.7 SEEK_TATTOO maximum-urgency escalation: after 3 IC seasons at rank
+		# without receiving the ability allotment, SEEK_TATTOO overrides all objectives
+		# except a direct lord command and active military deployment. Skip a
+		# self-selected primary here so the standing (SEEK_TATTOO) step below wins.
+		if primary.size() > 0 and not _seek_tattoo_max_urgency_override(character, ctx, objectives):
 			var primary_need := _decompose_objective(primary, ctx)
 			if primary_need != null:
 				return primary_need
@@ -407,6 +436,35 @@ static func resolve_goal(
 	fallback.need_type = "REST"
 	fallback.priority = 3
 	return fallback
+
+
+## s57.25.7 SEEK_TATTOO maximum-urgency precedence override. When a Togashi monk has
+## held their current insight rank for 3+ IC seasons without receiving their ability-tattoo
+## allotment, get_seek_tattoo_urgency returns SEEK_TATTOO_MAXIMUM_SCORE and the LOCKED rule
+## elevates SEEK_TATTOO above every objective EXCEPT (a) a direct lord command
+## (an externally-assigned primary) and (b) active military deployment (ON_CAMPAIGN).
+## Returns true when the current self-selected primary should be skipped so the standing
+## SEEK_TATTOO step wins. Requires the standing to actually be SEEK_TATTOO at maximum urgency.
+static func _seek_tattoo_max_urgency_override(
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	objectives: Dictionary,
+) -> bool:
+	var standing: Dictionary = objectives.get("standing", {})
+	if standing.get("need_type", "") != "SEEK_TATTOO":
+		return false
+	var urg: int = int(standing.get("urgency_seasons", 0))
+	if TattooSystem.get_seek_tattoo_urgency(urg) != TattooSystem.SEEK_TATTOO_MAXIMUM_SCORE:
+		return false
+	# A direct lord command (externally-assigned primary) is never overridden.
+	var primary: Dictionary = objectives.get("primary", {})
+	var assigned_by: int = int(primary.get("assigned_by", -1))
+	if assigned_by >= 0 and assigned_by != character.character_id:
+		return false
+	# Active military deployment is never overridden.
+	if ctx.context_flag == Enums.ContextFlag.ON_CAMPAIGN:
+		return false
+	return true
 
 
 ## Kolat objective slot (s54.7d). The third objective slot, active only when a
@@ -709,7 +767,7 @@ static func _apply_tattoo_precondition_filter(
 	if not is_ability:
 		if not TattooSystem.can_receive_decorative(
 			world_tattoos, recipient_id,
-			recipient.school_name, recipient.school_rank,
+			recipient.school, recipient.school_rank,
 		):
 			return _remove_action(options, "APPLY_TATTOO")
 
@@ -1023,6 +1081,34 @@ static func _apply_commerce_precondition_filter(
 	return options
 
 
+# -- Phase 4c: Emperor's Peace Precondition Filter (s57.47 v624 / s55.10) ------
+# At an active Imperial Winter Court, the Emperor's Peace forbids overt hostile acts.
+# Committing one is a CAPITAL crime (execution without seppuku, Imperial jurisdiction),
+# so NPCs are deterred at the option layer — matching every other "action unavailable
+# here" gate. The live violation set is intimidation (removed) and an UNSANCTIONED duel;
+# NPC duels default sanctioned (the honorable, permitted form), so ISSUE_DUEL_CHALLENGE
+# is NOT removed here (an unsanctioned one that still executes is caught by the
+# executor-side recorder, _process_emperors_peace_violations). Covert intrigue is
+# permitted (the point of Winter Court). Only fires for attendees of an active Imperial
+# Winter Court (the court context is injected only for active-court attendees).
+static func _apply_emperors_peace_precondition_filter(
+	options: Array,
+	ctx: NPCDataStructures.ContextSnapshot,
+) -> Array:
+	var court: Dictionary = ctx.active_court_at_location
+	if court.is_empty():
+		return options
+	if int(court.get("court_type", -1)) != CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
+		return options
+	var filtered: Array = []
+	for option: NPCDataStructures.ScoredAction in options:
+		# has_duel_sanction = true: NPC duels are sanctioned by default (permitted).
+		if WinterCourtSystem.is_peace_violating_action(option.action_id, true):
+			continue
+		filtered.append(option)
+	return filtered
+
+
 # -- Phase 4c: SUPPRESS_INSURGENCY Precondition Filter (s11.11 Phase 5) -------
 # Removes SUPPRESS_INSURGENCY unless the actor is co-located with a DETECTED
 # insurgency. Suppression requires being physically present in the affected
@@ -1152,6 +1238,20 @@ static func score_all(
 		option.objective_alignment = _lookup_objective_alignment(
 			need.need_type, option.action_id, scoring_tables
 		)
+		# s57.47.4 / s18-19: the seppuku accept/refuse choice is a DETERMINISTIC
+		# personality arbiter (Honor rank + Bushido/Shourido virtue via
+		# SeppukuDecision), NOT the soft 70/30 objective_alignment tilt — a Honor
+		# Rank 0 wretch must ALWAYS refuse, a Meiyo bushi must accept, regardless
+		# of the other scoring factors. Override the aligned score so the arbiter's
+		# verdict wins decisively (chosen +100, the other -1000 so no additive
+		# lean/urgency can flip it). Falls back to the JSON tilt only when the
+		# character is absent (never on the reactive path, which always passes it).
+		if character != null and need.source == "seppuku_offered" \
+				and option.action_id in ["ACCEPT_SEPPUKU", "REFUSE_SEPPUKU"]:
+			var seppuku_verdict: Dictionary = SeppukuDecision.will_accept_seppuku(character)
+			var arbiter_accepts: bool = bool(seppuku_verdict.get("accepts", true))
+			var option_is_accept: bool = option.action_id == "ACCEPT_SEPPUKU"
+			option.objective_alignment = 100.0 if (option_is_accept == arbiter_accepts) else -1000.0
 		option.disposition_modifier = _lookup_disposition_modifier(
 			option.target_npc_id, ctx.dispositions, scoring_tables, option.action_id
 		)
@@ -1254,6 +1354,16 @@ static func score_all(
 			option.disposition_modifier += 20.0
 		elif ctx.school.begins_with("Kitsuki"):
 			option.disposition_modifier += 10.0
+
+	# Otomo institutional leans (s15.8, LOCKED "Otomo Institutional Behavior"):
+	# the seiyaku "serpents in the garden" preference applies in ALL contexts, not just
+	# court — Gossip +15, Disclose +10 to any such action generated for an Otomo NPC.
+	# Values are CourtPrioritySystem's own LOCKED constants (OTOMO_GOSSIP_LEAN / OTOMO_DISCLOSE_LEAN).
+	if ctx.family == "Otomo":
+		for option: NPCDataStructures.ScoredAction in options:
+			var otomo_lean: int = CourtPrioritySystem.get_otomo_lean(option.action_id)
+			if otomo_lean != 0:
+				option.disposition_modifier += float(otomo_lean)
 
 	# Public Commerce school lean + honor self-regulation (Annex C, s57.40.7):
 	# Mercantile schools +5 or +10 (Ide Trader); high-caste ritual schools -10; Miya -5.
@@ -1475,6 +1585,7 @@ static func run(
 	options = _apply_passage_precondition_filter(options, character, ctx)
 	options = _apply_commune_precondition_filter(options, character)
 	options = _apply_commerce_precondition_filter(options, character, ctx)
+	options = _apply_emperors_peace_precondition_filter(options, ctx)
 	options = _apply_arrived_travel_filter(options, need, ctx)
 	options = _apply_compliance_filter(options, ctx)
 	options = _apply_action_block_filter(options, ctx)
@@ -2417,21 +2528,45 @@ static func _get_primary_skill_for_action(action_id: String) -> String:
 
 
 static func _is_harvest_blocked_by_virtue(ctx: NPCDataStructures.ContextSnapshot) -> bool:
-	var virtue: String = _get_virtue_string(ctx)
-	if virtue == "JIN" or virtue == "GI":
-		return true
+	# Route the harvest-destruction gate through the canonical arbiter
+	# (StarvationWarfare.evaluate_ai_harvest_decision) — the single GDD-faithful
+	# source (s4.3.17 Phase 4). The old inline logic diverged from the GDD twice:
+	# (1) it never enforced the Autumn-harvest-tick requirement (line 1041), so it
+	# could select harvest destruction in any season; and (2) it treated Rei as a
+	# CONDITIONAL virtue (allowed on a prior formal demand) when the GDD makes Rei a
+	# NEVER virtue (line 1061, "barbaric and beneath a civilized lord"). Season is
+	# derived from ctx.ic_day (ctx.season is not populated in this build). The
+	# army-present hard gate is passed as satisfied and deferred to the sub-tile
+	# army-position system (s11.7a) — no army-in-province presence is tracked yet.
+	var virtue: String = _harvest_virtue_title_case(ctx)
+	if virtue.is_empty():
+		return false
+	var season: String = "autumn" if _is_autumn_ic_day(ctx.ic_day) else ""
 	var hc: Dictionary = _evaluate_harvest_conditions(ctx)
-	if virtue == "YU":
-		return not hc.get("no_other_path", false)
-	if virtue == "MEIYO":
-		return not hc.get("hated_enemy", false)
-	if virtue == "CHUGI":
-		return not hc.get("lord_commands", false)
-	if virtue == "MAKOTO":
-		return not hc.get("publicly_declared", false)
-	if virtue == "REI":
-		return not hc.get("prior_formal_demand", false)
-	return false
+	var decision: Dictionary = StarvationWarfare.evaluate_ai_harvest_decision(
+		virtue, season, true,
+		hc.get("no_other_path", false), hc.get("hated_enemy", false),
+		hc.get("lord_commands", false), hc.get("publicly_declared", false),
+		hc.get("prior_formal_demand", false),
+	)
+	return not bool(decision.get("allowed", false))
+
+
+static func _harvest_virtue_title_case(ctx: NPCDataStructures.ContextSnapshot) -> String:
+	# StarvationWarfare's virtue tables are title-case ("Jin"/"Rei"/"Seigyo"/...);
+	# Enums.*_virtue_name returns UPPERCASE enum keys. Convert to title case.
+	var v: String = _get_virtue_string(ctx)
+	if v.is_empty():
+		return ""
+	return v.substr(0, 1) + v.substr(1).to_lower()
+
+
+static func _is_autumn_ic_day(ic_day: int) -> bool:
+	# Autumn = the third season window [180, 240) of the 360-day IC year
+	# (TimeSystem.SEASON_BOUNDARIES). Harvest destruction is an Autumn-harvest-tick
+	# action (GDD s4.3.17 Phase 4, line 1041).
+	var doy: int = ((ic_day % 360) + 360) % 360
+	return doy >= 180 and doy < 240
 
 
 static func _evaluate_harvest_conditions(ctx: NPCDataStructures.ContextSnapshot) -> Dictionary:
@@ -3563,9 +3698,16 @@ static func _populate_action_metadata(
 			if character != null and SpellSystem.is_shugenja(character):
 				# Prefer taint-cleansing spells in provinces with known taint.
 				if not ctx.taint_topic_province_ids.is_empty():
-					ritual_spell = SpellSystem.get_best_spell_by_effect(character, SpellSystem.SpellSimEffect.PURIFY_AREA)
+					ritual_spell = SpellSystem.get_best_purify_spell(character)
 					if ritual_spell.is_empty():
 						ritual_spell = SpellSystem.get_best_taint_removal_spell(character)
+				# Next prefer a binding spell when a spiritual REALM_OVERLAP is active (s56.16):
+				# the SPIRIT_BIND writeback suppresses one matching overlap at the caster's
+				# province (a graceful no-op if none co-located). Below Taint (Shadowlands is
+				# graver, and bonds_of_ningen_do explicitly excludes Jigoku/Shadowlands).
+				if ritual_spell.is_empty() and not ctx.spiritual_overlap_province_ids.is_empty():
+					ritual_spell = SpellSystem.get_best_castable_spell_by_effect(
+						character, SpellSystem.SpellSimEffect.SPIRIT_BIND)
 				if ritual_spell.is_empty():
 					ritual_spell = SpellSystem.get_best_ritual_spell(character)
 				if ritual_spell.is_empty():
@@ -3592,9 +3734,14 @@ static func _populate_action_metadata(
 				worship_spell = SpellSystem.get_best_ritual_spell(character)
 			if worship_spell.is_empty() and "commune" in character.spells_known:
 				worship_spell = "commune"
+		# s4.3.21 line 1391: an explicit fortune objective always directs; else a
+		# shugenja consults their own Divination readings — a known Fortune at
+		# Restless or worse directs all worship there; all healthy → split (-1).
+		var worship_fortune: int = need.target_npc_id if need.target_npc_id >= 0 \
+			else _pick_divined_worship_fortune(ctx)
 		option.metadata = {
 			"ritual_spell_id": worship_spell,
-			"directed_fortune": need.target_npc_id if need.target_npc_id >= 0 else -1,
+			"directed_fortune": worship_fortune,
 			"location_type": _zone_to_worship_location(ctx.zone_subtype),
 			"ikebana_worship_fr": ctx.known_objectives.get("ikebana_worship_fr", 0),
 			"statuary_worship_fr": ctx.known_objectives.get("statuary_worship_fr", 0),
@@ -3876,15 +4023,36 @@ static func _populate_action_metadata(
 			best_tier = Enums.TattooQualityTier.EXCEPTIONAL
 		elif tattooing_rank >= 2:
 			best_tier = Enums.TattooQualityTier.FINE
-		option.metadata = {
-			"target_tier": best_tier,
-			"body_location": Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
-			"is_ability_tattoo": false,
-			"ability": Enums.TattooAbility.NONE,
-			"subject_type": Enums.TattooSubjectType.IMAGE,
-			"subject_description": "",
-			"subject_topic_id": -1,
-		}
+		# s57.25.7 GRANT_TATTOO: a qualified Togashi elder co-located with a seeking monk applies
+		# their rank ABILITY tattoo. The grant target (recipient / body_location / ability) was
+		# resolved by _assign_grant_tattoo_standing_objectives and injected as ctx.grant_tattoo_target.
+		# Setting target_npc_id + is_ability_tattoo=true here is REQUIRED before the Phase-4c filter,
+		# which reads target_npc_id, skips the decorative gate for ability tattoos, and (authoritatively)
+		# stamps body_location/world_tattoos + runs consent. Ability tattoos are always NORMAL quality
+		# (not aesthetically graded, s57.25.8).
+		var gt: Dictionary = ctx.grant_tattoo_target
+		if not gt.is_empty() and int(gt.get("recipient_id", -1)) >= 0:
+			option.target_npc_id = int(gt.get("recipient_id", -1))
+			option.metadata = {
+				"target_tier": Enums.TattooQualityTier.NORMAL,
+				"body_location": gt.get("body_location", Enums.TattooBodyLocation.LEFT_WRIST_FOREARM),
+				"is_ability_tattoo": true,
+				"ability": gt.get("ability", Enums.TattooAbility.NONE),
+				"in_togashi_territory": true,
+				"subject_type": Enums.TattooSubjectType.IMAGE,
+				"subject_description": "ability tattoo",
+				"subject_topic_id": -1,
+			}
+		else:
+			option.metadata = {
+				"target_tier": best_tier,
+				"body_location": Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
+				"is_ability_tattoo": false,
+				"ability": Enums.TattooAbility.NONE,
+				"subject_type": Enums.TattooSubjectType.IMAGE,
+				"subject_description": "",
+				"subject_topic_id": -1,
+			}
 	elif option.action_id == "PURIFY_TAINTED_GROUND":
 		var ptl: float = 0.0
 		var target_prov_id: int = option.target_province_id
@@ -3988,7 +4156,7 @@ static func _populate_action_metadata(
 	elif option.action_id == "PERFORM_THEATER_PIECE":
 		option.metadata = _build_perform_theater_metadata(ctx, need, chars_by_id)
 	elif option.action_id == "DEDICATE_PIECE":
-		option.metadata = _build_dedicate_piece_metadata(ctx, need)
+		option.metadata = _build_dedicate_piece_metadata(ctx, need, character)
 	elif option.action_id == "PETITION_RONIN":
 		option.metadata = {"target_lord_id": _pick_lord_for_petition(ctx, chars_by_id)}
 		option.target_npc_id = option.metadata.get("target_lord_id", -1)
@@ -4301,11 +4469,27 @@ static func _build_compose_theater_metadata(
 	need: NPCDataStructures.ImmediateNeed,
 ) -> Dictionary:
 	## Compose: select WIP piece to advance or declare a new composition.
-	## wip_piece_ids injected by _inject_theater_context.
+	## wip_piece_ids + _theater_pieces_by_id injected by _inject_theater_context.
 	var wip_ids: Array = ctx.known_objectives.get("wip_piece_ids", [])
 	if not wip_ids.is_empty():
+		# §57.22.5 (LOCKED): advance exactly one WIP piece by the priority arbiter
+		# (political pieces first, then highest progress ratio, then most recent),
+		# not the naive first-in-list.
+		var pieces_by_id: Dictionary = ctx.known_objectives.get("_theater_pieces_by_id", {})
+		var wip_pieces: Array = []
+		for wid: int in wip_ids:
+			var p: Variant = pieces_by_id.get(int(wid), null)
+			if p != null:
+				wip_pieces.append(p)
+		var chosen_id: int = int(wip_ids[0])  # fallback if pieces not resolvable
+		if not wip_pieces.is_empty():
+			var chosen: TheaterPieceData = TheaterSystem.select_composition_piece_to_advance(
+				ctx.character_id, wip_pieces, need.need_type
+			)
+			if chosen != null:
+				chosen_id = chosen.piece_id
 		return {
-			"piece_id": int(wip_ids[0]),
+			"piece_id": chosen_id,
 			"is_new": false,
 			"raises": 0,
 		}
@@ -4525,6 +4709,8 @@ static func _build_perform_theater_metadata(
 	var best_id: int = -1
 	var best_score: int = -1
 	var best_is_bunraku: bool = false
+	var best_style: int = TheaterSystem.Style.NOH
+	var best_lead_role: Dictionary = {}
 
 	for pid: Variant in performable:
 		var piece_id: int = int(pid)
@@ -4594,6 +4780,10 @@ static func _build_perform_theater_metadata(
 			best_score = score
 			best_id = piece_id
 			best_is_bunraku = (piece.style == TheaterSystem.Style.BUNRAKU)
+			# Carry the casting inputs so the executor can apply the s57.22.4 casting-fit TN
+			# modifier + s57.22.3 Kyogen Acting-rank gate (both dropped by the inline roll).
+			best_style = piece.style
+			best_lead_role = piece.roles[0] if not piece.roles.is_empty() else {}
 
 	# If no piece scores above 0, do not fire.
 	if best_score <= 0:
@@ -4606,6 +4796,8 @@ static func _build_perform_theater_metadata(
 		"piece_id": best_id,
 		"is_bunraku_performance": best_is_bunraku,
 		"raises": raises,
+		"piece_style": best_style,
+		"piece_lead_role": best_lead_role,
 	}
 
 
@@ -4955,14 +5147,39 @@ static func _kyogen_has_provocation_pretext(
 static func _build_dedicate_piece_metadata(
 	ctx: NPCDataStructures.ContextSnapshot,
 	need: NPCDataStructures.ImmediateNeed,
+	character: L5RCharacterData = null,
 ) -> Dictionary:
-	## Dedicate: pick known completed piece + most relevant topic to link.
+	## Dedicate: pick a piece + topic the character can ACTUALLY dedicate, and carry the
+	## magnitude-scaled TN. Routes through the canonical TheaterSystem.can_dedicate (s57.22.10
+	## preconditions: known_by, <2 topic slots, topic not already linked, topic known) and
+	## get_dedication_tn (TN 10 + magnitude*2), both of which had ZERO callers -- the executor
+	## checked only "topic known" and used a flat TN that dropped the magnitude difficulty term.
 	var performable: Array = ctx.known_objectives.get("theater_pieces_to_perform", [])
+	var pieces_by_id: Dictionary = ctx.known_objectives.get("_theater_pieces_by_id", {})
+
+	# Scan for the first (piece, topic) pair that passes the full canonical precondition gate.
+	if character != null:
+		for pid: Variant in performable:
+			var piece: TheaterPieceData = pieces_by_id.get(int(pid)) as TheaterPieceData
+			if piece == null:
+				continue
+			for tid: Variant in ctx.known_topics:
+				var topic_id_c: int = int(tid)
+				if TheaterSystem.can_dedicate(ctx.character_id, piece, topic_id_c, character):
+					return {
+						"piece_id": piece.piece_id,
+						"topic_id": topic_id_c,
+						"raises": 0,
+						"dedication_tn": TheaterSystem.get_dedication_tn(piece),
+					}
+		# No dedicatable (piece, topic) pair -> signal a no-op (executor blocks on piece_id < 0).
+		return {"piece_id": -1, "topic_id": -1, "raises": 0}
+
+	# Defensive fallback (no character supplied): the old first-piece/first-topic behaviour.
 	var piece_id: int = -1
 	for pid: Variant in performable:
 		piece_id = int(pid)
 		break
-	# Best topic: pick first known topic related to the need's target
 	var topic_id: int = -1
 	if not ctx.known_topics.is_empty():
 		topic_id = int(ctx.known_topics[0])
@@ -5571,7 +5788,7 @@ static func _build_feasibility_data(
 		character.clan, provinces, settlements, active_wars,
 	)
 	var trade_routes: Array = world_state.get("trade_routes", [])
-	var has_routes: bool = _has_active_trade_routes(trade_routes, character.clan)
+	var has_routes: bool = _has_active_trade_routes(trade_routes, clan_province_ids)
 	var allied: Array = _collect_allied_surplus(
 		character, world_state, settlements, provinces,
 	)
@@ -5686,15 +5903,24 @@ static func _collect_raidable_provinces(
 	return result
 
 
-# TODO: Filter trade routes by clan — requires province-to-clan mapping.
-static func _has_active_trade_routes(trade_routes: Array, _clan: String) -> bool:
+# s4.3.17 Rung 3 (Market Purchase) requires the clan to reach a market via one of ITS OWN
+# trade routes — a route is the clan's iff it connects a province the clan controls (s4.3.18:
+# a trade route connects two provinces). Filter by the clan's province ids so a clan with no
+# routes cannot market-purchase, and disrupting a clan's routes correctly blocks the rung.
+static func _has_active_trade_routes(trade_routes: Array, clan_province_ids: Array) -> bool:
 	for r: Variant in trade_routes:
 		if r is TradeRouteData:
 			var route: TradeRouteData = r
-			if not route.is_disrupted:
+			if route.is_disrupted:
+				continue
+			if route.province_a_id in clan_province_ids or route.province_b_id in clan_province_ids:
 				return true
 		elif r is Dictionary:
-			if not r.get("is_disrupted", true):
+			if r.get("is_disrupted", true):
+				continue
+			var pa: int = int(r.get("province_a_id", -1))
+			var pb: int = int(r.get("province_b_id", -1))
+			if pa in clan_province_ids or pb in clan_province_ids:
 				return true
 	return false
 
@@ -5846,6 +6072,32 @@ static func _zone_to_worship_location(zone: Enums.ZoneSubtype) -> String:
 		Enums.ZoneSubtype.TEMPLE_GROUNDS:
 			return "local_shrine"
 	return "roadside_shrine"
+
+
+## s4.3.21 line 1391 (LOCKED): "PERFORM_WORSHIP decomposition checks known
+## worship states from Divination results and selects directed or split
+## accordingly. If a Fortune is at Restless or worse the engine directs all
+## worship there. If all Fortunes are healthy it defaults to split."
+## Scans the character's own "worship_state" Divination readings (produced by
+## the PERFORM_WORSHIP divination writeback) and returns the WORST known
+## Fortune at Restless+, or -1 (split) when all known readings are healthy or
+## the character has no readings (spiritually blind → default split).
+static func _pick_divined_worship_fortune(ctx: NPCDataStructures.ContextSnapshot) -> int:
+	var worst_fortune: int = -1
+	var worst_tier: int = int(Enums.WorshipTier.NONE)
+	for k: Variant in ctx.knowledge_pool:
+		if not k is KnowledgeEntry:
+			continue
+		var ke: KnowledgeEntry = k as KnowledgeEntry
+		if ke.entry_type != "worship_state":
+			continue
+		var tier: int = int(ke.data.get("tier", Enums.WorshipTier.NONE))
+		if tier > worst_tier:
+			worst_tier = tier
+			worst_fortune = int(ke.data.get("fortune", -1))
+	if worst_tier > int(Enums.WorshipTier.NONE):
+		return worst_fortune
+	return -1
 
 
 static func _pick_levy_province(ctx: NPCDataStructures.ContextSnapshot) -> int:

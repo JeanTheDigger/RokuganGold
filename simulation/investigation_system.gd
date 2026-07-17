@@ -654,14 +654,6 @@ const CRIME_TYPE_NAMES: Dictionary = {
 	Enums.CrimeType.OTHER: "Crime",
 }
 
-const TOPIC_INITIAL_MOMENTUM: Dictionary = {
-	TopicData.Tier.TIER_1: 80.0,
-	TopicData.Tier.TIER_2: 50.0,
-	TopicData.Tier.TIER_3: 25.0,
-	TopicData.Tier.TIER_4: 10.0,
-}
-
-
 static func generate_conviction_topic(
 	record: CrimeRecord,
 	convicted: L5RCharacterData,
@@ -676,7 +668,11 @@ static func generate_conviction_topic(
 	var title: String = "%s convicted of %s" % [convicted.character_name, crime_name]
 
 	var tier: TopicData.Tier = topic_tier as TopicData.Tier
-	var momentum: float = TOPIC_INITIAL_MOMENTUM.get(topic_tier, 10.0)
+	# Route through the canonical per-tier momentum table (s16.1 crisis-band floors) so a
+	# conviction topic enters court discussion at the SAME band as any other topic of its tier.
+	# The prior inline copy had tiers 2/3/4 each 1 point low (top of the band below), classifying
+	# every conviction topic one crisis-band weaker than canonical.
+	var momentum: float = TopicMomentumSystem.initial_momentum_for_tier(tier)
 
 	var category: TopicData.Category = TopicData.Category.LEGAL
 	if record.crime_type == Enums.CrimeType.MAHO:

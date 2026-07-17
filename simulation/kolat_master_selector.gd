@@ -289,7 +289,7 @@ static func _classify_tier(sect: int, npc: L5RCharacterData) -> int:
 				return 2
 			return 3
 		Enums.KolatSect.SILK:
-			if npc.school_name in ["Shosuro Actor", "Doji Courtier", "Kitsuki Investigator"] \
+			if npc.school in ["Shosuro Actor", "Doji Courtier", "Kitsuki Investigator"] \
 				and npc.school_rank >= 5:
 				return 1
 			if _skill(npc, "Acting") >= 4 and _skill(npc, "Sincerity (Deceit)") >= 4:
@@ -322,7 +322,7 @@ static func _classify_tier(sect: int, npc: L5RCharacterData) -> int:
 				return 2
 			return 3
 		Enums.KolatSect.LOTUS:
-			if npc.school_name in ["Shosuro Infiltrator", "Shosuro Actor"] and npc.school_rank >= 5:
+			if npc.school in ["Shosuro Infiltrator", "Shosuro Actor"] and npc.school_rank >= 5:
 				return 1
 			if _skill(npc, "Stealth") >= 4 and _best_weapon_skill(npc) >= 5:
 				return 2

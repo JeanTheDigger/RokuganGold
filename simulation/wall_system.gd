@@ -317,6 +317,32 @@ static func get_jade_per_warrior(force_size: String) -> int:
 	return 0
 
 
+# -- Wall Jade Supply thresholds (s2.4.11 D5, s2.4.15 — LOCKED) ---------------
+# Critical: jade at or below one Small sortie's finger allocation
+# ("at or below minimum Small sortie allocation", s2.4.11 D5). Routine: below
+# two sortie seasons of coverage = one Small + one Medium sortie (s2.4.11 D5,
+# "enough for one Small and one Medium sortie before running critically low").
+# Both thresholds derive from the LOCKED per-warrior finger allocations; the
+# int-floor mirrors the existing inline computation so behaviour is preserved.
+
+## Jade fingers at or below which a Tower is jade-critical and sorties are
+## blocked (s2.4.11 D5 / s2.4.15). One Small sortie's allocation.
+static func jade_critical_threshold(garrison_pu: int) -> float:
+	return float(int(garrison_pu * SORTIE_SMALL_MAX_PCT) * SORTIE_SMALL_JADE_PER_WARRIOR)
+
+
+## The routine jade coverage a Tower should hold: one Small + one Medium sortie
+## (s2.4.11 D5 "two sortie seasons of coverage"). The resupply refill target.
+static func jade_routine_target(garrison_pu: int) -> float:
+	return jade_critical_threshold(garrison_pu) \
+		+ float(int(garrison_pu * SORTIE_MEDIUM_MAX_PCT) * SORTIE_MEDIUM_JADE_PER_WARRIOR)
+
+
+## True when a Tower's jade stockpile is at or below the critical threshold.
+static func is_jade_critical(jade_stockpile: float, garrison_pu: int) -> bool:
+	return jade_stockpile <= jade_critical_threshold(garrison_pu)
+
+
 ## Validate all preconditions for ordering a sortie per s2.4.11 and s55.23a.
 ## Returns {"can_sortie": bool, "blocked_reason": String, "force_size": String}.
 static func validate_sortie(

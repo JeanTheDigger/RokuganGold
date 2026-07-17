@@ -329,16 +329,22 @@ static func estimate_seasonal_effect(
 	has_court_access: bool,
 	visits_conducted: int,
 	letters_sent: bool,
+	escalated: bool = false,
 ) -> int:
 	var effect: int = 0
 	var halved: bool = directive.get("effectiveness_halved", false)
+	# Escalated (fabrication-authorized) directives operate at maximum intensity (s55.22b §3.2);
+	# baseline directives at the per-channel minimum. Both constant sets are LOCKED.
+	var court_c: int = COURT_EFFECT_MAX if escalated else COURT_EFFECT_MIN
+	var visit_c: int = VISIT_EFFECT_MAX if escalated else VISIT_EFFECT_MIN
+	var letter_c: int = LETTER_EFFECT_MAX if escalated else LETTER_EFFECT_MIN
 
 	if has_court_access:
-		effect += COURT_EFFECT_MIN
+		effect += court_c
 	if visits_conducted > 0:
-		effect += VISIT_EFFECT_MIN * visits_conducted
+		effect += visit_c * visits_conducted
 	if letters_sent:
-		effect += LETTER_EFFECT_MIN
+		effect += letter_c
 
 	if halved:
 		effect = effect / 2

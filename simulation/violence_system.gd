@@ -106,10 +106,15 @@ static func apply_consequences(
 	if evaluation["infamy_gain"] > 0.0:
 		HonorGlorySystem.apply_infamy_change(attacker, evaluation["infamy_gain"])
 
+	# Pattern B: the honor/glory/infamy above are ALREADY applied to the attacker. The returned
+	# stat deltas use the guard-compliant `subject_*` pre-applied names (Design Decision #6), NOT
+	# the Pattern-A `honor_change`/`glory_change`/`infamy_change` keys EffectApplicator consumes —
+	# so if a future caller ever routes this dict through EffectApplicator the attacker is not
+	# double-charged. `punishment`/`topic_tier` are non-stat metadata.
 	return {
-		"honor_change": evaluation["honor_loss"],
-		"glory_change": evaluation["glory_loss"],
-		"infamy_change": evaluation["infamy_gain"],
+		"subject_honor_loss": evaluation["honor_loss"],
+		"subject_glory_loss": evaluation["glory_loss"],
+		"subject_infamy_gain": evaluation["infamy_gain"],
 		"punishment": evaluation["punishment"],
 		"topic_tier": evaluation["topic_tier"],
 	}

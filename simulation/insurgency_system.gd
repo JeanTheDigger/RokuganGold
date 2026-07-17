@@ -200,8 +200,13 @@ static func get_spawn_chance(
 			if world_state.get("disbanded_units_unpaid", false):
 				base += 0.10
 		Enums.InsurgencyType.TAINT_MANIFESTATION:
-			var ptl: float = world_state.get("ptl", 0.0)
-			if ptl < 3.0:
+			# Read the province's REAL Taint Level (the exact value get_eligible_types
+			# gates eligibility on, line 149; ProvinceData is already a param). This
+			# previously read a dead world_state["ptl"] key that NO producer ever wrote
+			# -> always 0.0 -> this branch always returned 0.0, so TAINT_MANIFESTATION
+			# could NEVER spawn from the seasonal pass (the PTL-3 Shadowlands escalation
+			# was inert). The 3.0 threshold is GDD-locked (s11.11); spawn is automatic.
+			if province.province_taint_level < 3.0:
 				return 0.0
 			base = 1.0  # automatic at PTL >= 3
 		Enums.InsurgencyType.NEZUMI_INFESTATION:

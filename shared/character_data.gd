@@ -159,6 +159,15 @@ func clear_day_buff(buff_id: String) -> void:
 @export var infamy: float = 0.0
 @export var insight_rank: int = 1
 
+# -- s57.25.7 Tattoo SEEK_TATTOO tracking --------------------------------------
+## Absolute season (year*4 + season) when this Togashi monk reached their current insight rank.
+## Drives SEEK_TATTOO urgency scaling (seasons-at-rank-unfilled); -1 = untracked (urgency 0). Stamped
+## by the rank-advancement producers when a Togashi monk ranks up, so urgency resets each rank.
+@export var tattoo_rank_reached_season: int = -1
+## Permanent BLOCKED state (s57.25.7): all 9 body locations occupied, no room for a new ability tattoo.
+## Once set, SEEK_TATTOO urgency/travel stop — the monk accepts their spiritual ceiling.
+@export var seek_tattoo_blocked: bool = false
+
 # -- Wounds --------------------------------------------------------------------
 # Total wounds taken. Wound levels derived from Earth ring at query time.
 
@@ -178,6 +187,10 @@ func clear_day_buff(buff_id: String) -> void:
 @export var shadowlands_powers: Array[ShadowlandsPowerData] = []
 ## Highest Taint Rank already processed for rank-up mutation/power events.
 @export var taint_rank_last_processed: int = 0
+## Jade Petal Tea management window (s2.4.15): IC day through which this
+## character is dosed and their Taint growth is suppressed (managed, not cured).
+## -1 = not managed. Set seasonally by the Wall Tea pass for dosed garrison.
+@export var tea_managed_until_ic_day: int = -1
 
 # -- Equipment & Outfit --------------------------------------------------------
 
@@ -223,6 +236,11 @@ var combat_ring_deltas: Dictionary = {}
 @export var military_rank: Enums.MilitaryRank = Enums.MilitaryRank.NONE
 @export var commanded_unit_id: int = -1
 @export var assigned_company_id: int = -1
+## s11.7a battle record: per-commander combat history the LOCKED promotion criteria read
+## (battles_fought/won/lost, companies_destroyed_under_command, battles_as_chui/as_taisa). Empty {}
+## until the character first commands a company in a resolved battle; the mutator is
+## MilitaryPromotionSystem.record_battle, driven by _record_battle_participation at the battle sites.
+@export var battle_record: Dictionary = {}
 @export var current_objective: String = ""
 @export var physical_location: String = ""
 @export var travel_destination: String = ""

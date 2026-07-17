@@ -156,3 +156,95 @@ static func check_win_condition(
 	if String(candidate.special_data.get("kolat_candidate_pipeline_stage", "")) == "compromised":
 		return false
 	return true
+
+
+# === WORLD-STATE BUNDLE ======================================================
+# All Kolat endgame world-state lives in one mutable Dictionary passed by
+# reference into the orchestrator. This is the authoritative record — Tiger's
+# special_data candidate fields (s54.7i) are a courtesy mirror so the pipeline
+# survives Tiger's death (a freshly-seated Tiger inherits the bundle, not the
+# dead Master's sheet). Keys:
+#   exposure (int 0–100), awareness (int 0–100), response_active (bool),
+#   identified_ids (Array[int] — Imperial-known Kolat member ids),
+#   candidate_id (int, -1 = none), backup_ids (Array[int]),
+#   pipeline_stage (String), installed_ic_day (int, -1 = not installed),
+#   victory_ic_day (int, -1 = win not yet fired).
+
+## Build a fresh, fully-defaulted bundle (world generation / first load).
+static func new_bundle() -> Dictionary:
+	return {
+		"exposure": 0,
+		"awareness": 0,
+		"response_active": false,
+		"identified_ids": [],
+		"candidate_id": -1,
+		"backup_ids": [],
+		"pipeline_stage": "",
+		"installed_ic_day": -1,
+		"victory_ic_day": -1,
+		# Case ids already counted toward awareness (dedup, s54.7i +5 per operative).
+		"awareness_cases": [],
+		# Tier-90 emergency: identified members suspend operations and go dark.
+		"go_dark": false,
+		# Tier-100 catastrophic purge fired once (no re-fire; a new generation reseeds).
+		"purge_done": false,
+		# Tier-50 Tiger "degrade Imperial task force" priority added once.
+		"task_force_flagged": false,
+	}
+
+
+## Ensure every key exists (heals a partial bundle loaded from an older save).
+static func ensure_bundle(b: Dictionary) -> void:
+	var defaults: Dictionary = new_bundle()
+	for k: String in defaults:
+		if not b.has(k):
+			b[k] = defaults[k]
+
+
+## Add `delta` to a bundle scalar ("exposure" / "awareness"), clamped 0–100.
+static func bump(b: Dictionary, key: String, delta: int) -> void:
+	b[key] = apply_delta(int(b.get(key, 0)), delta)
+
+
+## Whether the Empire has identified this character as a Kolat member.
+static func is_identified(b: Dictionary, character_id: int) -> bool:
+	return character_id in (b.get("identified_ids", []) as Array)
+
+
+## Record that the Empire has identified a Kolat member (dedup). Identifying a
+## Master or senior operative is what the tier-90/100 purge acts on (s54.7i).
+static func identify(b: Dictionary, character_id: int) -> void:
+	if character_id < 0:
+		return
+	var ids: Array = b.get("identified_ids", [])
+	if character_id not in ids:
+		ids.append(character_id)
+	b["identified_ids"] = ids
+
+
+# === CANDIDATE SCORING (s54.7i) ==============================================
+# Structural, no invented numbers: a candidate for the Regent/Advisor seat is
+# scored on the levers that actually decide an Imperial court appointment —
+# court standing (Status), court competence (Courtier + Etiquette), and
+# proximity to the Imperial capital (already at the seat of appointment).
+# A conscious Kolat member or an installed Dream sleeper is required (s54.7i:
+# "a conscious Kolat member or a Dream sleeper with an appropriate command").
+
+## True if the character is a usable candidate vehicle (conscious agent or sleeper).
+static func is_candidate_eligible(c: L5RCharacterData) -> bool:
+	if c == null or CharacterStats.is_dead(c) or c.is_pc:
+		return false
+	if c.kolat_sect != Enums.KolatSect.NONE:
+		return true
+	# A Dream sleeper carries an installed trigger phrase (s54.7e).
+	return String(c.trigger_phrase) != ""
+
+
+## Court-appointment score for a candidate. `at_capital` adds the proximity
+## weight the real appointment scorer also rewards.
+static func candidate_score(c: L5RCharacterData, at_capital: bool) -> float:
+	var court: float = float(c.skills.get("Courtier", 0)) + float(c.skills.get("Etiquette", 0))
+	var score: float = c.status * 3.0 + court
+	if at_capital:
+		score += 5.0
+	return score

@@ -659,20 +659,16 @@ static func resolve_ask_for_introduction(
 # -- Debate Disposition Tier Lookup -------------------------------------------
 
 static func get_debate_disposition_tier(disposition: int) -> int:
-	if disposition >= 91:
-		return DEBATE_DISPOSITION_TIERS["devoted"]
-	if disposition >= 61:
-		return DEBATE_DISPOSITION_TIERS["sworn"]
-	if disposition >= 31:
-		return DEBATE_DISPOSITION_TIERS["friend"]
-	if disposition >= 11:
-		return DEBATE_DISPOSITION_TIERS["acquaintance"]
-	if disposition >= -10:
-		return DEBATE_DISPOSITION_TIERS["stranger"]
-	if disposition >= -30:
-		return DEBATE_DISPOSITION_TIERS["rival"]
-	if disposition >= -60:
-		return DEBATE_DISPOSITION_TIERS["enemy"]
+	# LOCKED s12.2 tier boundaries via the canonical DispositionSystem.get_tier arbiter,
+	# not a hand-copied threshold ladder (drift hazard). "sworn" == the 61–90 TRUSTED_ALLY band.
+	match DispositionSystem.get_tier(disposition):
+		DispositionSystem.Tier.DEVOTED: return DEBATE_DISPOSITION_TIERS["devoted"]
+		DispositionSystem.Tier.TRUSTED_ALLY: return DEBATE_DISPOSITION_TIERS["sworn"]
+		DispositionSystem.Tier.FRIEND: return DEBATE_DISPOSITION_TIERS["friend"]
+		DispositionSystem.Tier.ACQUAINTANCE: return DEBATE_DISPOSITION_TIERS["acquaintance"]
+		DispositionSystem.Tier.STRANGER: return DEBATE_DISPOSITION_TIERS["stranger"]
+		DispositionSystem.Tier.RIVAL: return DEBATE_DISPOSITION_TIERS["rival"]
+		DispositionSystem.Tier.ENEMY: return DEBATE_DISPOSITION_TIERS["enemy"]
 	return DEBATE_DISPOSITION_TIERS["blood_enemy"]
 
 

@@ -232,10 +232,3144 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-17 (s57.21 military unification — STAGE 2b: promotion-from-within; serving Chui/Taisa were EXCLUDED from higher-tier candidacy contra LOCKED s11.7 line 311; owner-approved "Tiered-command, staged", runtime-verified 28/28)
+Owner-approved (2026-07-17, "2a and then 2b") third stage — the promotion-from-within payoff that closes the loop opened by
+Stage 2a. With Stage 2a now accruing `battles_as_chui`/`battles_as_taisa` up the command chain, a serving officer could finally
+MEET the LOCKED promotion prerequisites — but the candidate-gathering filter still EXCLUDED every serving officer, so the eligibility
+they'd earned was unusable. `_gather_promotion_candidates` (day_orchestrator.gd:18332) had the filter `if c.commanded_unit_id >= 0:
+continue`, which drops any officer already holding a command (a Chui commands a company_id, a Taisa a legion_id — both `>= 0`). But
+the LOCKED s11.7 line 311 is explicit: **"Candidates: Chui currently serving in the Go-hatamoto"** — a *serving* Chui IS the intended
+Taisa-vacancy candidate (and, symmetrically, a serving Taisa the intended Shireikan-vacancy candidate). So the filter made the
+LOCKED promotion-from-within path impossible: `_refill_unit_tier` (the T3 Legion/Section refill) could only ever draw from *un*commanded
+officers, of which the pure-generated pop-B world has almost none — leaving Taisa/Shireikan vacancies starved even after Stage 2a made
+the counters accrue. **The relaxation is a LOCKED requirement, not a design decision** (line 311 names serving Chui as candidates
+verbatim); the safety of admitting them is guaranteed by `MilitaryPromotionSystem.select_best_candidate`'s own LOCKED eligibility
+gates (`is_eligible_for_taisa` needs `battles_as_chui >= 1` + Battle ≥ 4; `is_eligible_for_shireikan` needs `battles_as_taisa >= 2` +
+Battle ≥ 5), which do the real filtering — so relaxing the *pool* filter cannot admit an under-qualified officer. FIX (pure structural
+relaxation + a cascade-vacate, **no invented values** — every threshold is `MilitaryPromotionSystem`'s own, the vacate reuses the
+Stage 1 disjoint-id guarantee): **(1)** `_gather_promotion_candidates` gains a defaulted `admit_serving: bool = false`; the
+`commanded_unit_id >= 0` filter is now `if c.commanded_unit_id >= 0 and not admit_serving: continue`. The refill path
+(`_refill_unit_tier`, both Legion=TAISA and Section=SHIREIKAN tiers) passes `admit_serving=true`; **the CHUI company-promotion path
+(`_process_military_promotions`) keeps the default `false`** — its original "unassigned only" pool, so pop-A garrison-company
+promotion is **byte-for-byte unchanged (zero regression)**. The rank filter (`military_rank >= rank_needed → continue`) still applies,
+so a same-rank officer is never a candidate for their own tier. **(2)** the deeper half — **promotion-from-within must VACATE the old
+slot** so the vacancy cascade refills it (owner: "a promoted officer vacates their old slot, which the refill cascades to fill").
+`_apply_command_refill_results` gains a defaulted `companies: Array = []`; before overwriting `character.commanded_unit_id = unit_id`
+it captures `old_unit = character.commanded_unit_id` and, when `old_unit >= 0 and old_unit != unit_id`, calls the new
+`_vacate_unit_command(old_unit, companies, legions_raw, sections_raw)` — which scans all three unit arrays and sets the matching
+unit's `commander_id = -1`. **The scan is unambiguous BECAUSE of Stage 1** (company ids start above every unit id → disjoint id
+spaces → at most one array holds any id). So a serving Chui promoted to Taisa leaves their **company** vacant (→ a CHUI vacancy the
+next-season company-promotion pass fills), and a serving Taisa promoted to Shireikan leaves their **legion** vacant (→ a TAISA vacancy
+the next-season refill fills) — the cascade the owner described. The promoted officer still inherits the dead predecessor's slot
+(op_superior + role, unchanged from T3), and the raw unit is rewritten so the next tick's liveness bake keeps the new commander.
+`companies` threaded through the seasonal call site (already in scope at day_orchestrator:1754). **Timing is safe:** all refill
+COMPUTE (`_refill_unit_tier` × 2, sharing the `claimed` dedup set) runs before any APPLY, so a serving officer is still "commanding
+their old unit" during compute (their old legion isn't seen as vacant this pass — only becomes vacant at apply, refilled next
+season); a candidate claimed for one vacancy is never selected for another. Runtime-verified 28/28
+(`tests/verify_military_unification_stage2b.gd`): the admit_serving gate (a serving Chui EXCLUDED with `false`, ADMITTED with `true`,
+same-rank Taisa still rank-filtered out); `_vacate_unit_command` clears the correct tier only (company/legion/section) and no-ops on
+an unknown id; **end-to-end** — a battle-tested serving Chui fills a vacant Legion (→ Taisa, inheriting the dead Taisa's Shireikan
+superior + "Legion Commander" role, its raw legion rewritten) AND its old company is vacated, while a battle-tested serving Taisa
+fills a vacant Section (→ Shireikan, inheriting the Rikugunshokan superior + "Section Commander" role) AND its old legion is vacated,
+with the shared `claimed` dedup holding across both tiers; an **ineligible** serving Chui (Battle 4 but `battles_as_chui == 0`) leaves
+the Legion seat vacant and their company command intact (the LOCKED gate rejects them). Full project `--import` parse-clean; the T3
+`verify_military_refill.gd` re-passes 22/22 (the two defaulted params are backward-compatible, and admitting serving officers only
+ADDS candidates — the eligibility gates never let an under-qualified one through). **With Stage 1 + 2a + 2b, the s57.21 unified
+military hierarchy is self-feeding:** companies link into legions (S1), battle experience flows up the chain (S2a), and vacancies at
+every tier refill from the serving officers directly below (S2b) — a Chui rises to Taisa, a Taisa to Shireikan, each promotion
+cascading a fresh vacancy the next tier fills. **DEFERRED (Stage 3, owner-approved, NEXT):** `army_id` membership onto linked
+companies + the Army→Sections→Legions→Companies mobilization chain-walk + T3-tier (Taisa/Shireikan) demotion (no pass touches the
+top-tier demotion yet — `_process_military_demotions` iterates `companies` only). Stage 2b is a clean structural fix (a LOCKED-mandated
+filter relaxation + a Stage-1-enabled cascade-vacate), independently verifiable, with zero regression to the company-promotion path.
+
+### Systems Added 2026-07-17 (s57.21 military unification — STAGE 2a: up-chain battle_record credit; the Shireikan-eligibility rung was UNREACHABLE; owner-approved "credit up the command chain", runtime-verified 18/18)
+Owner-approved (2026-07-17, "2a and then 2b") second stage — the payoff of the Stage 1 chain closure. Before this, the battle_record
+producer `DayOrchestrator._record_side_participation` credited **only the direct company commander** (Chui/Gunso) — no walk up the
+command chain. Since a Taisa commands a *legion* (never a battling company) and a Shireikan a *section*, **`battles_as_taisa` could
+never accrue for anyone**, leaving the LOCKED s11.7 Shireikan-eligibility rung (`is_eligible_for_shireikan` needs `battles_as_taisa
+>= 2`) **permanently unreachable** — a dead promotion branch. **The GDD LOCKS the ladder + counters (s11.7 lines 309–319:
+Chui→Taisa needs `battles_as_chui >= 1`, Taisa→Shireikan needs `battles_as_taisa >= 2`, plus Battle-skill minimums) but does NOT
+pin the ACCRUAL TRIGGER** (it never states "credit the Taisa when a unit under them fights" vs "only when personally commanding a
+fighting company"; the s52 2.5×/3.0× participate-vs-command split governs the XP multiplier, not `battle_record`). So the accrual
+rule was a genuine design decision — **owner-approved: credit up the command chain, one battle per engagement per commander, at
+their own rank.** FIX (now possible ONLY because Stage 1 linked companies into legions): `_record_side_participation`, after
+crediting the company commander, walks the **UNIT chain** — `company.parent_legion_id` → the legion's `commander_id` (the Taisa) →
+`legion.parent_section_id` → the section's `commander_id` (the Shireikan) — and records **one** battle for each via a new shared
+`_credit_commander_battle` helper (deduped per engagement via the same `seen` set, so a Taisa whose legion sent 3 companies to one
+battle earns ONE battle, not 3; win/loss = that side's outcome; at each officer's own `military_rank`, stamping `last_battle_season`
+so the s52 battle-XP multiplier also credits them). **Unit chain, not person chain (the one subtle call):** `legion.commander_id` is
+kept current by the T3 refill on a Taisa's death, whereas a subordinate Chui's `operational_superior_id` still points at the
+refilled-out *corpse* — so walking `operational_superior_id` would credit a dead Taisa (skipped by the `is_dead` guard → the NEW
+Taisa silently starves). `record_battle`'s per-rank branch gives the Taisa `battles_as_taisa++` (the exact LOCKED counter the
+Shireikan rung reads); the Shireikan gets `battles_fought++` only (no per-rank counter — its Rikugunshokan rung has **no** battle-count
+minimum per s11.7 line 315, so none is needed). **No invented values** — the credit magnitudes/counters are `record_battle`'s own,
+the chain is the LOCKED s57.21.3 unit hierarchy, the eligibility thresholds are untouched. Threaded `military_legions`/`military_sections`
+(which `advance_day` already holds) through both battle paths as defaulted params: the field-battle path (`_process_military_daily`
+→ `_resolve_army_battles` → the producer) and the storm-assault path (`_process_storm_assault_results` → the producer). **Graceful/
+backward-compatible:** with empty legion/section arrays the producer is company-commander-only (the exact pre-Stage-2 behavior — the
+pre-existing `verify_battle_record.gd` re-passes 22/22); a dead up-chain commander is skipped without blocking the Shireikan credit;
+an unresolvable legion/section is skipped. Runtime-verified 18/18 (`tests/verify_battle_record_upchain.gd`): a Chui + its legion's
+Taisa (`battles_as_taisa` 1) + that legion's Shireikan (`battles_fought` 1, no `battles_as_taisa`) all credited, the Taisa **deduped
+to ONE battle** across two of its companies in the same engagement; two engagements accrue `battles_as_taisa == 2` and a Battle-5
+Taisa then clears `is_eligible_for_shireikan`; a defender-side loss records `battles_lost` up the chain; empty arrays leave the Taisa
+UNTOUCHED (backward-compat); a dead up-chain Taisa is skipped while the Shireikan is still credited (no crash). Full project `--import`
+parse-clean. **With this, the s11.7 Taisa→Shireikan promotion rung can finally be fed** — a serving Taisa accrues battle experience
+from the companies actually under their legion. **DEFERRED (Stage 2b, owner-approved, NEXT):** the `_gather_promotion_candidates`
+`commanded_unit_id >= 0` filter still EXCLUDES every serving Chui/Taisa, contra the LOCKED s11.7 line 311 ("Candidates: Chui currently
+serving in the Go-hatamoto") — so even with `battles_as_taisa` now accruing, a serving Taisa can't yet be a Shireikan candidate; 2b
+relaxes that filter so promotion-from-within works (a promoted officer vacates their old slot, which the refill cascades to fill).
+Stage 3 (army_id membership + army-mobilization chain-walk + T3-tier demotion) remains after 2b.
+
+### Systems Added 2026-07-17 (s57.21 pop-A/pop-B military unification — STAGE 1: de-clobber + Company→Legion linkage; latent clobber bug fixed, T2 gate ACTIVATED; owner-approved "Tiered-command, staged", runtime-verified 17/17)
+Owner-approved (2026-07-17, "Yes" on the presented **Tiered-command, staged** unification model) first stage of unifying the two
+disjoint world-gen military populations that the s57.21 T1/T2/T3 notes flagged as the outstanding "Unify military populations"
+work. **Pop-A** (`WorldBootstrap._create_initial_military`) builds one battling Company per real BUSHI officer (rank ≥ CHUI) — these
+accrue `battle_record` and are the promotion/demotion candidate pool; **Pop-B** (`WorldPopulationGenerator._generate_military_commanders`)
+builds the LOCKED Army→Section→Legion officer chain (Taisa/Shireikan/Rikugunshokan with `commanded_unit_id` pointing at their own
+unit) but with ZERO battling companies under them. Two seams kept them apart, one a **latent LIVE bug**: (1) the pop-A loop set
+`c.commanded_unit_id = next_company_id` **UNCONDITIONALLY** over every rank-≥CHUI officer (world_bootstrap.gd:1240) — **including the
+pop-B Taisa/Shireikan/Rikugunshokan** (they ARE clan BUSHI with `military_rank` ≥ TAISA, so the loop picked them up) — **clobbering
+the legion/section/army pointer** the s57.21 generator had stamped on them, silently defeating the s57.21 **T2 vacant-superior gate**
+(a Taisa's `commanded_unit_id` no longer indexed a legion → the gate fell to its graceful "unresolvable → allow" path, so it never
+actually gated); and (2) **no linkage** — every Chui-company had `parent_legion_id = -1`, so `legion.constituent_companies` was always
+empty and the Company→Legion→Section→Army chain never closed. Plus an **id-space collision hazard**: `next_company_id` (from 1) and the
+pop-B `next_unit_id` (from 1) OVERLAP, so a Chui's `company_id` could equal a Taisa's `legion_id` — an ambiguity in the shared
+`commanded_unit_id` namespace. FIX (pure structural wire, **no invented values** — the unit counts stay the LOCKED s57.21 constants,
+the linkage reuses the shipped `constituent_companies`/`parent_legion_id` fields, and the chain resolution is s57.21.3's own
+`operational_superior_id`→`commanded_unit_id` mirror): `_create_initial_military` gains a defaulted `legions: Array = []` param (the
+pop-B `military_legions` raw dicts, threaded from the call site where they're already in scope in `pop_result`) and — **(1) de-clobber**
+— the company-creation gate is narrowed from `military_rank >= 2` to `military_rank >= 2 and military_rank < Enums.MilitaryRank.TAISA`,
+so only Nikutai/Gunso/Chui get a company and **Taisa/Shireikan/Rikugunshokan keep their legion/section/army pointer intact**; **(2)
+link** — each Chui-company resolves its Taisa via `chars_by_id[c.operational_superior_id]` (when that superior is a TAISA), reads the
+Taisa's `commanded_unit_id` as the legion id, and — when that legion exists in the passed `legions` — stamps the company's
+`parent_legion_id`/`parent_section_id` and appends the `company_id` to the legion's `constituent_companies` (mutating the raw dict
+in place, so it persists into `WorldState.military_legions`); **(3) de-conflict ids** — `next_company_id` now starts at
+`max_unit_id + 1` (the highest allocated unit id, always a legion id given the army→section→legions allocation order), so a
+`company_id` can never equal any army/section/legion id. **Graceful everywhere:** empty `legions` → counter starts at 1 (unchanged
+pre-fix behavior for a no-pop-B world); a company-tier officer whose superior is not a Taisa (garrison/wall) → **unlinked**
+`parent_legion_id = -1` (no crash, no regression — those independent garrison companies stay as before); an unresolvable legion →
+unlinked. **This ACTIVATES the s57.21 T2 vacant-superior gate** — a Taisa's `commanded_unit_id` is once again a real legion id that
+resolves up to its Section's Shireikan liveness check (the whole point of T2, previously inert because the clobber pointed it at a
+company_id the legions map never held). Runtime-verified 17/17 (`tests/verify_military_unification_stage1.gd`): Taisa/Shireikan/
+Rikugunshokan keep their unit pointer (5/3/1, NOT clobbered) and get NO company; exactly the 3 company-tier officers (2 Chui + 1
+garrison Gunso) get companies, none commanded by a Taisa/Shireikan/Rikugunshokan; both Chui-companies link to legion 5 (`parent_legion_id`
+5, `parent_section_id` 3) and are appended to `legion.constituent_companies`; every company id is above the max legion id (no collision);
+and the garrison Gunso (superior = a Shireikan, not a Taisa) gets an UNLINKED company (`parent_legion_id` -1) without a crash. **Also
+LIVE-world-confirmed 12/12** on the REAL bootstrapped roster (`tests/verify_military_unification_live.gd`, seed 424242 — 3821 chars /
+701 companies / 80 legions / 20 sections / 20 armies): company ids DISJOINT from all unit ids (0 collisions); **0 rank-≥TAISA officers
+command a company** (the clobber is gone); **all 80 legions commanded by their Taisa + all 20 sections by their Shireikan**, with the
+surplus 12 Taisa + 2 Shireikan correctly UNSET (`commanded_unit_id` -1 — the s2.4 Wall command roster, a separate Tower-command
+structure, NOT a pop-B legion) and **0 "other"** (no corruption); **all 560 pop-B Chui-companies (80 legions × 7) linked to their
+legion** with every linked company's Chui→Taisa→legion `commanded_unit_id` mirror holding (0 bad back-refs), the 141 unlinked companies
+being garrison/Wall officers whose superior is not a Taisa (graceful). Full project `--import` parse-clean. **DEFERRED (documented — the later stages of the approved plan, NOT this commit):** Stage 2 feeds the
+now-connected chain into the starved pools (promotion/refill/demotion candidate gathering + `battle_record` accrual walking the real
+Company→Legion→Section chain, so a Taisa's battles/eligibility flow from the companies actually under them — today `battle_record` only
+reaches fought-company commanders and demotion iterates `companies` only); Stage 3 wires `army_id` membership + the army-mobilization
+chain-walk (Army→Sections→Legions→Companies) and T3-tier demotion (Taisa/Shireikan, which no pass touches yet). Stage 1 alone is a
+clean structural fix — it removes the latent clobber bug and closes the org chain, with each later stage independently verifiable.
+
+### Systems Added 2026-07-17 (s55.22b Otomo Seiyaku alliance-suppression EFFECT MADE LIVE — the whole mechanic was decorative; owner-approved "Committed-flat", runtime-verified 12/12)
+Owner-approved (2026-07-17, "Go" on the recommended **Committed-flat** model) resolution of the highest-impact genuinely-inert
+system found by two independent dormant sweeps this session. The s55.22b Otomo Seiyaku directive lifecycle
+(`OtomoSeiyakuSystem.process_seasonal_review` → `DayOrchestrator._process_seiyaku_review`) ran fully — scanning
+Champion-pair disposition, assigning operatives, escalating, cancelling, detection (topic-seeding), exhaustion topics —
+but **applied ZERO disposition suppression anywhere**, so the entire "the Otomo suppress two clans' warming alliance"
+mechanic was decorative. The per-directive suppression arbiter `OtomoSeiyakuSystem.estimate_seasonal_effect`
+(otomo_seiyaku_system.gd:327) — the SOLE reader of the `effectiveness_halved` flag set by `apply_detection` — had **ZERO
+production callers** (grep-confirmed), and its four MAX per-channel constants (`COURT_EFFECT_MAX -8` / `VISIT_EFFECT_MAX -5`
+/ `LETTER_EFFECT_MAX -2` / and `COMBINED_EFFECT_MAX -12`) were **defined-never-read**. So the detection wire's
+effectiveness-halving half was inert (it halved an effect never computed), and a targeted alliance decayed only through
+its own neglect, never through Otomo pressure. **The application target was LOCKED, not unpinned** (the sweep's initial
+"undefined" read was over-conservative): s55.22b §2.1 + §7 state the Otomo watch — and thus suppress — the **Champion-to-
+Champion disposition of the targeted pair**, "operating entirely through the existing disposition system, no new axis."
+`_build_champion_dispositions` already resolves those two Champion characters (status ≥ 7.0, no lord, alive). FIX (owner-
+approved **Committed-flat**, **no invented values** — every number is a shipped s55.22b constant): **(1)**
+`estimate_seasonal_effect` gains a defaulted `escalated: bool = false` param that switches the per-channel constants MIN→MAX
+(consuming the four dead MAX constants) — so a baseline directive scores the LOCKED per-channel minimums and a fabrication-
+authorized (`escalated`) one runs at max intensity. **(2)** new `DayOrchestrator._apply_seiyaku_suppression`, called at the
+end of `_process_seiyaku_review` (once per season, after the detection reset + directive lifecycle), resolves each active
+directive's two Champions and applies `estimate_seasonal_effect(directive, has_court_access=true, visits_conducted=1,
+letters_sent=true, escalated)` — the **committed-directive channel set** (an assigned operative uses all channels per §3, so
+the directive commitment IS the activity; no per-operative action tracking needed), which yields −6/season baseline, −12
+escalated (−15 raw clamped), and internally halves for a detected directive (−3 baseline). The delta is applied
+**symmetrically to BOTH Champions' disposition toward each other** (§3.1 "poisons each side's view of the other"), clamped
+**never below the +31 formal-alliance floor** (`get_alliance_disposition_floor`, LOCKED §6.2) and to 100. Missing/dead
+Champion → skip; no directive → no-op. So a Crab–Crane Champion alliance at +50 now erodes −6/season under an Otomo
+directive (−12 escalated), halved to −3 the season it is detected, and cannot be pushed below +31 once the two Champions
+formally ally — exactly the s55.22b design ("costly and fragile, but resistible by two clans actively maintaining the
+relationship"). Runtime-verified 12/12 (`tests/verify_seiyaku_suppression.gd`): the arbiter (committed base −6, escalated
+−12 clamped, detected halves base→−3 and raw escalated −15→−7); end-to-end through the **real** `_apply_seiyaku_suppression`
+(a base directive drops BOTH Champions by 6, escalated by 12, detected by 3; the +31 formal-alliance floor holds against a
+−12 escalated hit at disposition 35; no-directive and missing-Champion guards leave disposition untouched). Full project
+`--import` parse-clean. **With this, the s55.22b suppression effect is live** — the topic-seeding AND the effectiveness-
+halving halves of the detection wire now both matter. DEFERRED (documented, not this wire): the **real-activity** model
+(threading each operative's actual court/visit/letter actions against the pair) is the larger alternative the owner did not
+pick; the diffuse "+5 sympathy toward the targeted clans from all who learn" stays deferred (no per-clan sympathy field);
+the §3.2 Fabrication/ACQUIRE_LEVERAGE escalation ACTIONS are separate from this disposition effect (the `escalated` flag
+here only raises the suppression intensity, which is the LOCKED §3.2 consequence the effect models).
+
+### Systems Added 2026-07-17 (s57.23a A9 garden-commission abandonment PARTIAL MITIGATION WIRED — dead @export field + defined-never-read const + a LIVE fairness bug, runtime-verified 17/17)
+Owner-authorized dormant-sweep finding (art/craft layer). The LOCKED s57.23a **A9 partial-mitigation** rule
+("Partial mitigation — `progress_at_abandonment >= 50% of threshold`: Honor -0.25, disposition -4", gdd
+lines 124-125) was **never applied**: `CommissionRecordData.progress_at_abandonment` (commission_record_data.gd:50)
+was WRITTEN at the abandonment writeback (`= record.cultivation_progress`, day_orchestrator:35737) but READ at
+**ZERO** production sites, and `GardenSystem.PARTIAL_MITIGATION_THRESHOLD` (=0.5, garden_system.gd:46) was
+**defined-never-read** — so the live abandonment writeback in `DayOrchestrator._process_garden_seasonal_maintenance`
+(day_orchestrator:35739) applied the **FULL** `-ABANDONMENT_HONOR_LOSS` (0.5) and **FULL** `-ABANDONMENT_DISPOSITION_LOSS`
+(8) UNCONDITIONALLY. A near-complete vassal garden (an artisan who cultivated most of the way to the target quality
+before abandoning) was punished **exactly as harshly as an untouched one** — a genuine LIVE fairness bug, and the
+whole point of the A9 mitigation tier was inert. FIX (pure LOCKED wire, **no invented values** — every number is a
+shipped constant): the writeback now computes `threshold = QUALITY_THRESHOLD.get(record.target_quality_tier, 20)`
+(the per-tier cumulative-progress ceiling, 20/40/70/110/160) and `mitigated = record.progress_at_abandonment >=
+int(PARTIAL_MITIGATION_THRESHOLD * threshold)` (the A9 "50% of threshold" cutoff, keyed on the record's OWN target
+tier — so the dead field is now READ against `target_quality_tier`), and when mitigated applies **half** the shipped
+consts (`ABANDONMENT_HONOR_LOSS * 0.5` = -0.25 Honor, `ABANDONMENT_DISPOSITION_LOSS / 2` = -4 disposition) instead of
+the full values — the exact A9 mitigated pair. Non-mitigated abandonment (< 50% progress) is unchanged (full -0.5 /
+-8), so this is strictly a fairness improvement for the near-complete case, no regression on the untouched case.
+`progress_at_abandonment` is still stamped `= record.cultivation_progress` right before (the field is now both written
+AND read), retiring both the dead field and the defined-never-read const. Runtime-verified 17/17
+(`tests/verify_garden_abandonment_mitigation.gd`): the mitigation constants (full 0.5/8, threshold 0.5, tier1 20);
+end-to-end through the **real** `_process_garden_seasonal_maintenance` — a tier-1 commission abandoned at progress 5
+(< 10 = 50% of 20) takes the FULL -0.5/-8 while `progress_at_abandonment` is recorded, one abandoned at exactly 10
+(the boundary) or 18 takes HALF -0.25/-4; and the per-tier threshold (tier 3 → threshold 70, cutoff 35: progress 34 →
+full, 35 → half), proving the cutoff scales with `target_quality_tier`, not a fixed 10. Full project `--import`
+parse-clean. **With this, A9 partial mitigation is live** — an artisan who nearly finished a commissioned garden
+before abandoning is punished at half cost, as s57.23a mandates. DEFERRED (documented, design-gated — NOT this wire):
+the A10 forgiveness-appeal ActionID (`forgiveness_appeal_season` field, `DECEIT_*` consts) needs an unbuilt
+APPEAL_FORGIVENESS action + the Sincerity(Honesty/Deceit) roll pipeline; the A11 Daimyo-forced-removal topic path is
+separate governance work.
+
+### Systems Added 2026-07-17 (s57.54.10d operational-superior CO budget MADE SPENDABLE — the LOCKED budget was unspendable; owner-approved "Shape A (CO-spending)" + "Propagate superior's objective", runtime-verified 33/33)
+Owner-approved (AskUserQuestion 2026-07-17, two-part: **Shape A (CO-spending)** then **Propagate superior's objective**)
+resolution of the deferred s57.54.10d operational-superior Civilian Order budget — the item the CLAUDE.md deferred note
+called "design-gated, not a structural wire." `StrategicReview.get_operational_superior_co_budget` (2/day for 1–3
+subordinates, 3/day for 4+, LOCKED) was **assigned to nobody** (`DayOrchestrator._reset_all_ap` set only the s57.34.2
+lord-rank budget, 0 for a non-lord op-superior) AND was **unspendable even if granted** — the DEEPER BLOCKER re-confirmed
+2026-07-16: EVERY civilian-order ActionID is `NPCDecisionEngine.LORD_ONLY_ACTIONS`, the wave gate is `is_lord and
+civilian_orders_remaining > 0` (a Taisa is non-lord), AND — the piece that killed the naive "relax ASSIGN_VASSAL_OBJECTIVE"
+fix — **no need routes any character to self-select a subordinate delegation**: vassal delegation runs entirely through
+the SEASONAL Strategic Review (`_evaluate_vassal_objectives` → `REASSIGN_VASSAL_OBJECTIVE` → `_process_vassal_reassignments`,
+gated `_is_lord_tier`, FREE), and the daily-loop `ASSIGN_VASSAL_OBJECTIVE` ActionID's top-scoring NeedType `ASSIGN_OBJECTIVE`
+is **never produced as a need anywhere** in `/simulation` (dead for lords too). So the authority-relaxation path was a
+dead end. FIX (owner-approved **Shape A** — a DEDICATED daily CO-spending pass, the op-superior counterpart to the lord-tier
+seasonal channel; **no wave/LORD_ONLY/executor changes**, no duplicate execution path since non-lord op-superiors never enter
+the wave CO loop): **(1)** `StrategicReview.co_budget_for_subordinate_count(count)` extracted (LOCKED 0/1-3→2/4+→3), and
+`get_operational_superior_co_budget` refactored onto it (one source of the values). **(2)** `_reset_all_ap` builds a one-pass
+living-subordinate-count map from `characters` and applies the **s57.54.10d max-rule** — `civilian_order_budget_max =
+maxi(lord_rank_budget, co_budget_for_subordinate_count(sub_count))` — so a non-lord Taisa (rank budget 0) with 1–3 subs gets
+2, and a lord op-superior uses the higher of the two (LOCKED "use the higher"). **(3)** New daily
+`DayOrchestrator._process_operational_coordination` (wired after the standing-assignment block, after `_reset_all_ap` sets
+the budget): for each living non-PC op-superior with `civilian_orders_remaining > 0` and an **active** primary of their own,
+it directs each **idle** operational subordinate (living, non-PC, `operational_superior_id == superior`, primary empty or
+COMPLETED — the same idle test the seasonal lord→vassal pass uses) — up to the CO budget — by assigning a copy of the
+**superior's OWN active primary objective** (owner-approved **Propagate**: `need_type` + `target_province_id`/`target_clan`/
+`target_npc_id` copied, `assigned_by = superior`, `source = "operational_coordination"`), transferring the s55.6 knowledge
+(`InformationSystem.transfer_objective_knowledge`, the exact call the seasonal pass uses), and **decrementing 1 CO per
+directed subordinate**. **No invented values/types** — the objective is the superior's own existing operational directive
+propagated down the chain (the natural military meaning of "coordinating subordinates"); the CO tiers + max-rule are the
+arbiter's own s57.54.10d constants. **Self-refreshing + non-clobbering:** only IDLE subs are filled (an active-primary Chui
+executing their own lord's order is untouched); a directed sub becomes ACTIVE (not re-directed); when it completes → idle →
+re-directed next day with the superior's THEN-current objective. An idle/no-primary superior coordinates nothing (spends no
+CO). Runtime-verified 33/33 (`tests/verify_operational_coordination.gd`): the CO-budget tiers (0/1-3/4+); the `_reset_all_ap`
+max-rule (non-lord Taisa 2 subs → 2, lord 5 subs → max(10,3)=10, non-superior → 0); coordination (2 idle Chui inherit the
+Taisa's DEFEND_PROVINCE need_type + province target, `assigned_by`/`source` stamped, 2 CO spent); active-sub-not-clobbered;
+idle/COMPLETED superior → no coordination; budget exhaustion (budget 1, 2 idle subs → exactly 1 directed); dead/PC-sub +
+PC-superior guards; and target_clan/target_npc_id propagation (no phantom target_province_id when the source lacks it). Full
+project `--import` parse-clean. **With this, the s57.54.10d CO budget is live and spendable** — a Taisa/Shireikan now
+coordinates their idle subordinates onto their own operation, paying CO, as the LOCKED spec intends. DEFERRED (documented,
+NOT this wire): the daily-loop `ASSIGN_VASSAL_OBJECTIVE` ActionID stays dead for everyone (its `ASSIGN_OBJECTIVE` need-producer
+is unbuilt; lord vassal delegation is the separate seasonal channel) — the dedicated pass is the op-superior's channel, so
+neither the wave gate nor `LORD_ONLY_ACTIONS` nor the executor writeback needed relaxing.
+
+### Systems Added 2026-07-16 (s15.2/s16.4 court-close commitment recording WIRED — every court closed as "no_resolution"; zero-caller arbiter + dead field, runtime-verified 16/16)
+Owner-approved dormant-sweep finding (social/court layer). `CourtSystem.record_commitment` (the **SOLE writer** of
+`CourtSessionData.commitments_made`, court_system.gd:255) had **ZERO production callers** (grep-confirmed: only its own
+def + `tests/`), so `commitments_made` sat at its `@export` default `[]` **forever** — and the live consumer
+`CourtSystem.generate_court_close_topic` (called on EVERY court close, day_orchestrator:21083 → `_topic_from_dict` →
+`active_topics`) reads `court.commitments_made.is_empty() and court.wars_resolved_during.is_empty()` (court_system.gd:333)
+and so **ALWAYS returned the generic `"no_resolution"` TIER_4 rumor**. The higher-tier `"concluded"` outcome topic
+(**Imperial Winter Court → TIER_2, Clan Champion Court → TIER_3**, court_system.gd:344-363) could **never spawn** — so the
+world's political rumor mill never reflected actual court decisions, even at the Empire's grandest courts where lords bound
+themselves publicly. FIX (pure structural wire, **no invented values** — every field is real data already in scope): the
+live PUBLIC_DECLARATION writeback `DayOrchestrator._process_voluntary_declarations` (called at day_orchestrator:819) already
+creates a `CourtCommitmentData` for a successful declaration with the active `court` **unambiguously in scope** (found via
+`_find_active_court_for_character`, ACTIVE-gated) and even duplicates `court.attendee_ids` as witnesses — it now ALSO calls
+`CourtSystem.record_commitment(court, lord_id, commitment_type, topic.title, court.attendee_ids)` right after appending the
+commitment. `record_commitment` self-gates on `court.phase == ACTIVE` (always true here) and stores the real
+character_id/commitment_type/description/witnesses/ic_day. So a court where a lord made a binding public declaration now
+closes with the escalated `"concluded"` topic. Runtime-verified 16/16 (`tests/verify_court_commitment_record.gd`): the
+arbiter (appends on an ACTIVE court, rejects a non-active one, witnesses default to attendees); `generate_court_close_topic`
+(empty → `no_resolution` TIER_4; with a commitment → `concluded`, Imperial Winter → TIER_2 / Champion → TIER_3, count
+reported); and **end-to-end through the real `_process_voluntary_declarations`** (a lord's PUBLIC_DECLARATION at a Champion
+Court records the commitment onto the court → the court now closes `concluded`/TIER_3 instead of `no_resolution`/TIER_4,
+while a quiet control court still closes `no_resolution`). Full project `--import` parse-clean. **DEFERRED (documented,
+design-gated — NOT this wire):** the sibling `record_war_resolution` / `wars_resolved_during` (the other dead arm) — the
+LIVE war-termination path (`_process_war_terminations`, from NEGOTIATE_SURRENDER actions) has **no court in scope**, and the
+only court↔war linkage (`CourtSessionData.peace_court_war_id`) lives entirely inside the **zero-caller dead-twin peace-court
+subsystem** (`WarTermination.create_peace_court`/`conclude_peace_court`, already documented as needing an unbuilt
+convene-trigger). Wiring war-resolution recording needs that peace-court mechanism (owner design), not a structural wire.
+
+### Known Code Issues — Deferred (2026-07-16, trade-route BLOCKADE cluster — sub-tile-blocked (s11.7a HOLD), do NOT re-audit)
+A military/battle dormant sweep surfaced the s55.21.11 **BLOCKADE_TRADE_ROUTE** cluster as an undocumented dormant system:
+the action is a live, NPC-selectable ActionID (`action_executor:2004` → `_compute_blockade_effects` →
+`StarvationWarfare.execute_blockade`; scored 95 under BLOCKADE_TRADE_ROUTE in `objective_alignment.json`) but is a **silent
+no-op** — `NPCDecisionEngine._build_blockade_metadata` (npc_decision_engine:5727) hardcodes `route_id: -1`, so the writeback
+`DayOrchestrator._apply_blockade` (day_orchestrator:18596) early-returns before disrupting any route or declaring the
+blockade-war, leaving `StarvationWarfare.can_blockade` / `lift_blockade` / `get_blockaded_routes` as downstream-dead
+zero-callers. **VERDICT: BLOCKED on sub-tile army position (s11.7a HOLD), NOT a clean structural wire — do NOT wire.** The
+LOCKED spec (s55.21.11 §2.1, "BLOCKADE_TRADE_ROUTE (1 AP, Lord-tier, ON_CAMPAIGN)") defines the mechanic as: "**Station a
+military unit on a sub-tile through which an enemy trade route passes** ... Requires an active military unit of minimum 0.5
+PU in the target sub-tile. **If the unit is defeated or retreats, the blockade ends automatically.**" So (a) the route that
+gets blockaded is *the one passing through the army's sub-tile* — resolving a `route_id` requires knowing where the army is
+stationed, which is precisely the sub-tile army-position data on the s11.7a HOLD (`can_blockade(army_pu, is_at_route_node)`
+is a zero-caller for the same reason — the `is_at_route_node` precondition is uncheckable); picking an arbitrary inter-clan
+route would **invent** the targeting mechanic (forbidden). And (b) the auto-lift ("unit defeated or retreats") + the
+Finding-2 zero-caller `lift_blockade` are equally sub-tile-gated — since Finding 1 means no `"blockade_%s"` route is ever
+placed, a peace-restore lift wire (`WarTermination.restore_trade_routes_for_peace` clears only `"war_*"` routes) would be a
+no-op that can never fire, so wiring it now adds unverifiable plumbing for an unreachable state. Confirmed the sole
+trade-blockade path: `IMPOSE_EMBARGO` is only a scoring-list literal (npc_decision_engine:3307, no executor), so there is no
+alternate clan-level embargo action to wire in its place. The `route_id: -1` hardcode is the correct/expected state until
+sub-tile army movement (s11.7a) exists — this is Section C "Areas Requiring Sub-Tile Map Data", not a dormant wire.
+(TradeRouteData carries only `province_a_id`/`province_b_id` — no clan field — so even the province→clan resolution would
+need injecting; but the fundamental blocker is the army-sub-tile-position targeting, not the plumbing.)
+
+### Systems Added 2026-07-16 (s56.16 SPIRIT_BIND ritual-selection WIRED — the 4th dead effect-writeback arm; the NPC engine never selected a binding spell, runtime-verified 16/16)
+Completes the owner's "activate all four dead writeback arms" intent (the curriculum patch below stocked
+`bonds_of_ningen_do` on the Kuni but nothing ever SELECTED it). The **SPIRIT_BIND** effect-cast writeback
+(`DayOrchestrator._process_ritual_spell_writebacks`, day_orchestrator:34047) is fully wired end-to-end — on a
+successful binding-spell cast it calls `SpellSystem.find_bindable_spirit_event(ritual_spell_id, province_id,
+spiritual_insurgency_events)` to **suppress one active, unresolved REALM_OVERLAP spiritual-insurgency event at the
+caster's province** (`target_event.resolved = true`, `resolution_type = "spirit_bind"`), the s56.16 magical
+counterpart to the shugenja-ritual resolution — but it was **PERMANENTLY DORMANT** because the NPC PERFORM_RITUAL
+metadata selection (`_populate_action_metadata`) had **no SPIRIT_BIND branch**: its ritual-spell preference chain was
+Taint (PURIFY/REMOVE_TAINT) → ritual-honor → detection, so `ritual_spell_id` was **never** a binding spell and
+`find_bindable_spirit_event` was **never called from a live path** (grep-confirmed: only its own def + `tests/`).
+So a Kuni standing in a province overlapped by Gaki-Do/Toshigoku/Chikushudo/Sakkaku/Yume-Do never bound the intrusion,
+and the whole s56.16 magical-suppression path was inert. FIX (pure structural wire, **no invented values** — the
+selection reuses the shipped `get_best_castable_spell_by_effect`, the realm-matching is the writeback's own s34
+`BINDABLE_REALMS` constant): **(1) producer** — `_inject_base_character_context` gains a defaulted
+`spiritual_insurgency_events` param (threaded from `advance_day`, already in scope at the call site) and builds
+`spiritual_overlap_province_ids` = the provinces of every **active, unresolved `REALM_OVERLAP`** event (dedup, mirrors
+the sibling `taint_topic_province_ids` build), injected per-character on each `ws`. **(2) carrier** — new
+`ContextSnapshot.spiritual_overlap_province_ids` + `build_context` read (mirrors `taint_topic_province_ids`).
+**(3) consumer** — the PERFORM_RITUAL selection adds a SPIRIT_BIND branch **below Taint, above ritual-honor**: when the
+Taint branch selected nothing AND `not ctx.spiritual_overlap_province_ids.is_empty()`, it picks
+`get_best_castable_spell_by_effect(character, SPIRIT_BIND)` (→ `bonds_of_ningen_do` for a Rank-3+ Kuni; the junior
+falls through). **Priority is faithful** — Shadowlands Taint is graver than a spirit-realm overlap, AND
+`bonds_of_ningen_do` explicitly **excludes Jigoku/Shadowlands** (s34), so it could never address taint anyway. The
+gate mirrors the shipped PURIFY convention (non-empty-set, not caster-province-specific); the writeback's
+`find_bindable_spirit_event` does the province+realm match and **gracefully no-ops** if the caster isn't co-located
+with a bindable-realm event (so a non-co-located cast wastes nothing beyond the ritual). Runtime-verified 16/16
+(`tests/verify_spirit_bind_selection.gd`): the selection helper (senior Kuni → `bonds_of_ningen_do`, junior → `""`);
+the **real** `_inject_base_character_context` end-to-end (builds the set from a mix — two active overlaps present, a
+RESOLVED overlap + an ELEMENTAL_IMBALANCE excluded, a duplicate deduped); `build_context` carries it (+ empty default);
+the **real** `_populate_action_metadata` selection (senior Kuni + overlap + no-taint → `bonds_of_ningen_do`; taint +
+overlap → `purge_the_taint` wins; no-overlap → not bonds; junior + overlap → falls through); and the writeback matcher
+(`find_bindable_spirit_event` binds a GAKI_DO overlap at the caster's province, no-ops at a different province, and does
+NOT bind a JIGOKU overlap). Full project `--import` parse-clean. **With this, all four effect-writeback arms
+(PURIFY_AREA / REMOVE_TAINT / HEAL_WOUNDS / SPIRIT_BIND) are live** — a Kuni now purifies Taint, removes it, and binds a
+spirit-realm overlap; an Iuchi heals. DEFERRED (documented, not this wire): `freedom_of_the_air` (Air ML2, the other
+SPIRIT_BIND spell, realm-agnostic incl. Meido) is not in any school's starting set, so only a shugenja who learns it in
+play selects it — the branch already handles it via the effect query the moment it's known.
+
+### Systems Added 2026-07-16 (shugenja starting-spell CURRICULUM patch — PURIFY/REMOVE_TAINT/HEAL effect-writebacks were DEAD for lack of a known spell; owner-approved "minimal curriculum patch", runtime-verified 19/19)
+Owner-approved (AskUserQuestion "Authorize a minimal curriculum patch" → "Approve — heal → Iuchi", 2026-07-16)
+resolution of a **systemic dormant layer** found by the spell-layer follow-up sweep. The per-effect spell-cast
+writebacks in `DayOrchestrator._process_ritual_spell_writebacks` for **PURIFY_AREA / REMOVE_TAINT / HEAL_WOUNDS /
+SPIRIT_BIND** are wired end-to-end (NPC ritual/heal metadata selects a spell → `resolve_cast` → the writeback applies
+the effect), but were **permanently inert**: no shugenja's `_SCHOOL_STARTING_SPELLS` set contained a spell of any of
+those effects, so `get_best_spell_by_effect` always returned `""` and the four writeback arms never fired. The sets
+only cover DETECT (`sense`), COMMUNE (`commune`), and RITUAL_HONOR (`purification_of_the_kami`/`gift_of_amaterasu`/
+`bentens_touch`) — `purge_the_taint`, `tomb_of_jade`, `regrow_the_wound`, `bonds_of_ningen_do` etc. were in NOBODY's
+`spells_known`, and there is no NPC spell-progression to grant them (the sets are flagged PROVISIONAL, "actual school
+curricula require s28/s29 review"). FIX (owner-approved curriculum patch — the school assignments are the authorized
+design call; every spell/effect is the shipped library's own, no invented values): **(1)** the **Kuni Shugenja** (the
+Crab anti-Shadowlands specialists — Taint purification, jade magic, spirit-warding is their canonical role) start
+knowing `purge_the_taint` (PURIFY_AREA, Earth ML3), `tomb_of_jade` (REMOVE_TAINT, Earth ML4), and `bonds_of_ningen_do`
+(SPIRIT_BIND, Earth ML3) — all Earth, their primary ring; **(2)** the **Iuchi Shugenja** (Unicorn practical support
+magic) start knowing `regrow_the_wound` (HEAL_WOUNDS, Water ML3). ML3/ML4 as starting spells is already precedented
+(Isawa starts with `command` ML3): a Rank-1 caster **knows** them and casts once their rank permits. **Coupled
+correctness fix (necessary so the patch does not regress junior casters):** the NPC ritual/heal/worship SELECTION must
+never pick a spell the caster cannot yet cast (a Rank-1 Kuni who knows `purge_the_taint` ML3 must not be selected to
+attempt an uncastable ritual instead of falling through to a castable fallback). Rather than change the widely-tested
+pure `get_best_spell_by_effect` (highest-ML **known** — its GUT tests assert exactly that), a new
+`SpellSystem.get_best_castable_spell_by_effect` (highest-ML **castable** — gated on `can_cast`: rank ≥ ML, a free slot,
+and any Ishiken/Void gate) was added, and the **five production wrappers** (`get_best_healing_spell` /
+`get_best_taint_removal_spell` / `get_best_purify_spell` / `get_best_detection_spell` / `get_best_ritual_spell`) + the
+inline PURIFY selection now route through it. Behavior-preserving for every pre-existing ML1 effect spell (they were
+always castable at Rank 1); the pure query is untouched so its tests pass. This ACTIVATES the **PURIFY_AREA,
+REMOVE_TAINT, and HEAL_WOUNDS** writeback arms immediately (their selection wires already exist) and **stocks
+`bonds_of_ningen_do` on the Kuni** for the SPIRIT_BIND arm (whose selection wire is the immediate follow-on — the
+ritual selection does not yet prefer a spirit-bind spell at a REALM_OVERLAP province). Runtime-verified 19/19
+(`tests/verify_shugenja_curriculum.gd`): the Kuni + Iuchi curriculum additions (originals preserved; the heal is
+Iuchi-scoped, Kitsu does NOT get it); the castable selectors (a senior Kuni's PURIFY→`purge_the_taint` / REMOVE_TAINT→
+`tomb_of_jade` / SPIRIT_BIND→`bonds_of_ningen_do`; a Rank-1 Kuni falls through [`""`]; a Rank-3 Kuni casts purge ML3 but
+not tomb ML4; senior/junior Iuchi likewise); the pure `get_best_spell_by_effect` stays castability-agnostic; and the
+ML1 detection/ritual-honor paths are unchanged. Full project `--import` parse-clean (0 errors); the pure-query GUT tests
+(`get_best_spell_by_effect_picks_highest_ml`, the INFORMATION_GATHER highest-ML test) are preserved because that query
+was not changed, and `get_best_purify_spell`'s rank-3 GUT fixture stays castable → `purge_the_taint`. **With this, three
+of the four dead effect-writebacks are live** — a rank-capable Kuni now reduces province PTL / cleanses Taint by
+casting, and a rank-capable Iuchi magically heals. DEFERRED (the SPIRIT_BIND selection wire, next commit; and: the
+per-locale/other-school curriculum breadth stays PROVISIONAL pending s28/s29 school curricula — this is the minimal
+patch the owner authorized, not a full curriculum pass).
+
+### Systems Added 2026-07-16 (s37:3 Void-spell / Isawa Ishiken gate WIRED — the whole Void-spell layer was DEAD; owner-approved "Master of Void only", runtime-verified 14/14)
+Owner-approved (AskUserQuestion "Master of Void only", 2026-07-16) resolution of a **triple-coupled dead layer**:
+**NO NPC could ever cast a Void spell.** GDD s37:3 (LOCKED): "Void spells are only castable by ishiken — shugenja
+with the **Ishiken-do Advantage**" (s45:385 ISHIKEN_DO is shugenja-only; s29.5:251 the Isawa Ishiken-dō school
+"Requires: Ishiken-do"). Three coupled defects made the entire Void half of the spell library inert: (1)
+`SpellSystem.can_cast` gated Void spells (`spell.get("i", true)`) on the **school STRING** `"Isawa Ishiken"`, not the
+LOCKED ISHIKEN_DO advantage; (2) `AdvantageSystem.assign_derived_advantages` **granted** ISHIKEN_DO only for
+`school == "Isawa Ishiken"` — a school string **world-gen never produces** (the Phoenix Elemental Masters are generated
+via `_generate_positioned_character` with a generic Isawa school, then only `role_position` is stamped `"Master of Void"`);
+and (3) the Master of Void — canonically an ishiken, one per game — was therefore never granted the advantage AND never
+given the Isawa Ishiken **starting Void spells** (`assign_starting_spells` keys on school, and the Void set lives only
+under `STARTING_SPELLS["Isawa Ishiken"]`, never assigned). Net: the ISHIKEN_DO advantage existed, the Void spells
+existed (all `"i": true`, e:4), the gate existed — but the three never connected, so `can_cast` returned false for every
+Void spell for every character in a real world. FIX (three structural wires, **no invented values** — the ISHIKEN_DO
+gate is the LOCKED s37:3 rule, the starting Void set is the shipped `STARTING_SPELLS["Isawa Ishiken"]` table, the grant
+keys on the canonical `"Master of Void"` role string [confirmed by `succession_system:675`]): **(1)** `can_cast`'s Void
+branch now passes when `AdvantageSystem.has_advantage(character, ISHIKEN_DO)` — the LOCKED gate — keeping the
+`"Isawa Ishiken"` school-string / `school_paths` check as a **backward-compat OR-fallback** (so legacy hand-built
+characters + the two GUT tests `test_can_cast_ishiken_*` still pass unchanged); **(2)** `assign_derived_advantages`
+grants ISHIKEN_DO to `school == "Isawa Ishiken" OR role_position == "Master of Void"` (the pass runs at
+`world_bootstrap:491`, AFTER `generate_world_population` at :460, so the Master's role is already stamped); **(3)** the
+Master of Void generation block (`world_population_generator:313`) now calls
+`SpellSystem.assign_starting_spells(master, "Isawa Ishiken")` when `element == "Void"`, appending the three Void ML1
+starting spells (`sense_void`/`boundless_sight`/`see_through_lies`) to the base Isawa set — so the Master actually
+**knows** Void spells. Runtime-verified 14/14 (`tests/verify_ishiken_void.gd`): the gate (plain shugenja without the
+advantage CANNOT cast a Void spell; the same shugenja WITH ISHIKEN_DO CAN; a non-Void elemental spell is unaffected);
+the school-string + school_paths OR-fallbacks (a legacy `"Isawa Ishiken"` character casts Void with no advantage); the
+grant (Master of Void → ISHIKEN_DO; Master of Fire → NOT); and **end-to-end** — a generated-style Master of Void KNOWS
++ has the advantage + `can_cast("sense_void")` is true, while a plain Isawa Shugenja of the same rank/ring cannot. Full
+project `--import` parse-clean (0 errors); the two legacy `test_spell_system` Void-gate tests preserved by the
+OR-fallback. **With this, the Void-spell layer is live** — the Phoenix Master of Void can finally cast the Void magic
+s37 grants only to ishiken. DEFERRED (documented, owner-scoped): only the Master of Void is an ishiken (the owner's
+"Master of Void only" scope — a per-clan or per-shugenja fraction would require an invented %); a PC Ishiken path is on
+the s60.2 no-PC-shugenja HOLD; the wider Void spell *progression* beyond the starting set rides the general spell-
+advancement system (not this wire).
+
+### Systems Added 2026-07-16 (s29.15.4 Doji R3 "The Perfect Gift" WIRED — zero-caller technique arbiter + dead field + stale "+15/already-wired" docs, owner-approved "Fresh dormant sweep", runtime-verified 16/16)
+Second finding from the owner-approved "Fresh dormant sweep" (2026-07-16). `SkillResolver.execute_perfect_gift`
+(the Doji Courtier Rank-3 technique — a Courtier/Awareness roll at **TN 20** that writes a one-shot
+Devotion-equivalent disposition modifier onto the recipient: **+20 base / +35 at +1 Raise / +50 at +2 Raises**,
+one-shot per relationship via a non-stacking guard) had **ZERO production callers** (grep-confirmed: only its own def +
+`tests/`), and its data field `L5RCharacterData.perfect_gift_targets` was a **dead field** touched only inside that
+dormant func. So a Doji Courtier R3+ delivering a gift **never received the technique** — the entire s29.15.4 mechanic
+was inert. **DOCS were doubly stale (corrected here):** both `00_INDEX.md` (line 665) and an old "Systems Added
+2026-05-18" changelog entry claimed "R3 Perfect Gift (one-shot **+15** disposition on gift, once per target)" — but the
+wire never existed (zero callers) AND the value was wrong: the LOCKED GDD (`gdd/s29.15_...:47`) and the arbiter's own
+constants (`PERFECT_GIFT_TN 20`, `PERFECT_GIFT_BASE_DISP 20`, `PERFECT_GIFT_RAISE_VALUES [20,35,50]`) both specify
+**+20/+35/+50**. The "+15/already-wired" was simply inaccurate documentation contradicted by the LOCKED GDD and the
+code — NOT a binding alternative value. FIX (pure structural wire of the existing LOCKED arbiter through its
+GDD-intended trigger, **no invented values** — every number is the arbiter's own s29.15.4 constant): the intended
+trigger is an **accepted gift**, and DELIVER_GIFT is a fully live channel (`ActionExecutor._try_execute_deliver_gift`
+→ `GiftGivingSystem.resolve_deliver_gift`), so `_try_execute_deliver_gift`, **on a successful gift** (`outcome ==
+"success"`), now calls `SkillResolver.execute_perfect_gift(character, recipient, dice_engine)` — an **auto-rider**
+matching every other courtier technique (Doji R1a free raise, Yasuki/Kitsuki R1, etc. are all auto-applied inside the
+resolver/executor, not separate ActionIDs → NOT a duplicate execution path). The arbiter **self-gates** (returns
+`wrong_school`/`rank_too_low`/`already_applied` BEFORE rolling, so a non-Doji giver wastes no RNG and gets no effect)
+and is **Pattern B** (pre-applies the disposition to `recipient.disposition_values[doji]` directly), so the wire
+surfaces it **only as observability metadata** (`perfect_gift_applied` / `perfect_gift_disposition`) — never a Pattern-A
+key, so `EffectApplicator` never re-applies it (the LOCKED Effect-Application naming guard). The technique's own
+non-stacking guard (`target in perfect_gift_targets`) enforces "one shot per relationship." Also corrected `00_INDEX.md`
+line 665 to the true value + wiring (a Code Implementation Status correction — the one gdd file editable without approval
+for status). Runtime-verified 16/16 (`tests/verify_perfect_gift.gd`): the three arbiter gates (non-Doji → `wrong_school`
+with no disposition; a rank-1 Doji → `rank_too_low`; a repeat target → `already_applied`, unchanged); the success path
+(a strong Doji clears TN 20 → `disposition_applied` is a LOCKED tier value in {20,35,50}, the recipient's disposition
+toward the Doji is raised by exactly that via Pattern B, and the target is recorded in `perfect_gift_targets`); the
+non-stacking one-shot (a second attempt → `already_applied`, no further disposition); and **end-to-end through the real
+`_try_execute_deliver_gift`** (a Doji's accepted gift surfaces `perfect_gift_applied: true` + a LOCKED disposition tier +
+raises the recipient's disposition ≥ 20, while a non-Doji [Bayushi] giver fires no Perfect Gift). Full project `--import`
+parse-clean. **With this, `execute_perfect_gift` is live and `perfect_gift_targets` is no longer a dead field** — a Doji
+Courtier's gift now cements a Devotion-equivalent bond, as s29.15.4 mandates. DEFERRED (documented, faithful scope): the
+GDD's "Connects to R1b — a Doji who used DISCERN_NEED first has better information" bonus is not modeled (DISCERN_NEED
+already gives its own separate intel; no combined-bonus mechanic exists), and the technique fires on any accepted gift
+(the NPC engine has no separate "invoke technique" action — auto-rider is the established courtier-technique convention).
+
+### Systems Added 2026-07-16 (s15.8 Otomo institutional Gossip/Disclose leans WIRED — the dead `get_otomo_lean` arbiter, owner-approved "Fresh dormant sweep", runtime-verified 8/8)
+Owner-approved (AskUserQuestion "Fresh dormant sweep", 2026-07-16 → the sweep's top finding) resolution of a
+**zero-caller institutional-lean arbiter**. `CourtPrioritySystem.get_otomo_lean(action_id)` (GOSSIP → **+15**,
+DISCLOSE → **+10**; its LOCKED constants `OTOMO_GOSSIP_LEAN 15` / `OTOMO_DISCLOSE_LEAN 10`) had **ZERO production
+callers** (grep-confirmed: only its own def + `tests/`). The NPC decision engine applies per-action school/family
+institutional leans in a well-established `score_all` loop series (DISCERN_NEED Yasuki/Doji +20, ANNOUNCE_HUNT school
+±15, TRAIN_ANIMAL ±10, CONDUCT_TEA_CEREMONY guest/clan, PURCHASE_MARKET/CONDUCT_COMMERCE school+honor, COMMISSION_SHIP
+gated on `ctx.family`) — but **no loop ever added the Otomo lean**, so a generated Otomo NPC never received their
+institutional preference and the entire s15.8 "Otomo Institutional Behavior — LOCKED" ("the Otomo are always the
+serpents in the garden") was inert for the deliberate-action path. GOSSIP and DISCLOSE are **live generated options**
+across every social context (AT_COURT / AT_OWN_HOLDINGS / VISITING option lists, AP costs 1 each). FIX (pure structural
+wire mirroring the sibling lean loops, **no invented values** — the +15/+10 are the arbiter's own s15.8 constants,
+matching the LOCKED GDD "Gossip +15 to any Gossip action in any setting… Disclose +10 in any setting"): a new
+`score_all` loop, gated on `ctx.family == "Otomo"` (the identity gate already used by the COMMISSION_SHIP lean at
+`npc_decision_engine:3741`; `ctx.family` populated at `build_context:44`), adds
+`CourtPrioritySystem.get_otomo_lean(option.action_id)` to each option's `disposition_modifier` — so an Otomo NPC's
+GOSSIP is weighted +15 and DISCLOSE +10 over every non-Otomo family, wherever those actions are generated (court +
+personal-visit contexts), matching the GDD's "apply in ALL contexts" for the deliberate AP-action channel. Runtime-verified
+8/8 (`tests/verify_otomo_lean.gd`): the arbiter constants (GOSSIP 15 / DISCLOSE 10 / CHARM 0); the **Otomo-vs-control
+delta** through the real `score_all` (an Otomo NPC's GOSSIP disposition_modifier is exactly +15 over a non-Otomo Scorpion
+family, DISCLOSE +10, CHARM unchanged — the delta isolates the lean from every other scoring component); and two
+different non-Otomo families score identically (no family lean leaks). Full project `--import` parse-clean. **With this,
+`get_otomo_lean` is live** — Otomo courtiers now lean into gossip and reputation-damaging disclosure as s15.8 mandates.
+DEFERRED (documented, blocked — NOT this wire): the s15.8 **+10 inter-clan-damage lean** (`OTOMO_INTER_CLAN_DAMAGE_LEAN`)
+and the **absolute goodwill prohibition** (`is_otomo_blocked_action`) both need a per-option "builds/worsens inter-clan
+goodwill" classification that no option carries yet; the **Rival-escalation** path (`should_otomo_escalate` → fabricate
+accusations) needs an escalation trigger; and the **daily-conversation topic-weighting** (s12.6) + **letter
+negative-framing** (s12.7) channels are separate bulk-resolution paths that do not route through `score_all` (the GDD's
+"all contexts" for those two channels is a broader wiring — not a one-line lean). This lands the clean deliberate-action
+half (the two GDD-named +15/+10 leans on the live GOSSIP/DISCLOSE actions).
+
+### Known Code Issues (found and fixed 2026-07-16, Winter Court delegate scoring dropped the Perform skill — a bare-category vs sub-skill mismatch, owner-approved "Case-mismatch sweep", runtime-verified 6/6)
+A **bare-category-vs-sub-skill mismatch** (the sibling of the `Games`→`Games: Go` / `Theology`→`Lore: Theology`
+class, surfaced by the owner-approved case-mismatch sweep). `WinterCourtSystem._score_delegate_candidate` scores a
+Winter Court delegation candidate by their court skills — `Etiquette + Sincerity + Courtier + Perform`, summed then
+`/ 4.0` — but **`Perform` is a skill CATEGORY**: characters store the sub-skills (`Perform: Song`, `Perform: Dance`,
+`Perform: Oratory`, …), never a bare `"Perform"` key, so `candidate.skills.get("Perform", 0)` **was always 0.**
+Every candidate's performance ability was silently dropped from the delegate court-skill score (and the sum was still
+divided by 4, diluting the other three real skills). So a gifted performer courtier was scored no higher than a
+tone-deaf one when a Champion picked Winter Court delegates. FIX (behavior-correcting, **no invented value** — it
+reads the candidate's REAL Perform skill via the canonical resolver): `candidate.skills.get("Perform", 0)` →
+`NPCDecisionEngine._best_skill_rank("Perform", candidate.skills)`, the shared helper that resolves the five skill
+CATEGORIES (`Lore`/`Games`/`Perform`/`Craft`/`Artisan`) to the highest-ranked matching sub-skill (`Perform:` prefix)
+— the exact resolution the `Games: Go` fix + the NPC competence scorer already use, so no divergent copy. The other
+three terms (Etiquette/Sincerity/Courtier) are standalone skills, unaffected. Runtime-verified 6/6
+(`tests/verify_winter_court_perform_skill.gd`): the helper resolves `Perform: Song 5 → 5`, takes the max across
+sub-skills, returns 0 for no-perform and for a (non-canonical) bare `"Perform"` key; and end-to-end through the real
+`_score_delegate_candidate`, a candidate with `Perform: Song 5` now scores strictly higher than an identical
+candidate without it, and a pure-Perform candidate outscores a no-court-skill one (proving the term now contributes
+rather than being dropped). Full project `--import` parse-clean. **With this, a courtier's performance skill counts
+toward Winter Court delegate selection**, as the scoring intends. The same sweep also **checked all clan/family/
+school/role/skill literal comparisons** across `/simulation` + `/shared`: clan/family comparisons are all canonical
+(the Festival-of-Akodo `"lion"` was the only mistyped clan literal — fixed in the entry below), role_position
+comparisons resolve (`"Master of " + element` correctly produces `"Master of Void"` etc.), `.school_name` has zero
+comparisons (dead field), and skill lookups are otherwise all canonical sub-skills. DEFERRED (documented, NOT a
+case-mismatch — a **world-gen instantiation gap** needing an owner decision, do NOT re-audit as a typo): the Void-spell
+Ishiken gate (`SpellSystem.can_cast`: `character.school != "Isawa Ishiken"`) and the ISHIKEN_DO advantage grant
+(`AdvantageSystem` line ~1982: `character.school == "Isawa Ishiken"`) both key on the school string **`"Isawa Ishiken"`,
+which is spelled consistently everywhere** (it is a live `STARTING_SPELLS` key) BUT is **NOT a `WorldGenerator.SCHOOL_DATA`
+key** (only `"Isawa Shugenja"` exists) — so no character is ever created as an Isawa Ishiken, meaning **all s37 Void
+spells are un-castable and ISHIKEN_DO is never granted at world-start.** This is NOT a typo (the string matches itself);
+it is a world-gen question — whether/which characters (the Phoenix Master of Void? a fraction of Isawa?) should be
+generated with the `"Isawa Ishiken"` school or the ISHIKEN_DO advantage — which the GDD does not pin down, so it needs
+owner design input (cannot invent a world-gen rule). Flagged for a future owner decision.
+
+### Known Code Issues (found and fixed 2026-07-16, s11.5 Festival of Akodo Lion-honor bonus — a lowercase-clan case mismatch left the bonus DEAD for every Lion samurai, runtime-verified 6/6)
+A **case-mismatch dead-branch** (the sibling of the `school_name`/`Theology`/`Games` string-mismatch class, on the
+festival layer). `ActionExecutor._execute_perform_worship` applies `honor_change = ctx.festival_honor_gain`, plus **+0.1
+more** when `ctx.festival_has_lion_honor` (the LOCKED s11.5 **Festival of Akodo** `lion_honor` effect — the Lion Clan's
+founding-Kami celebration) AND `character.clan == "lion"`. But clans are stored **capitalized** (`"Lion"`) EVERYWHERE
+else in the codebase — every other Lion comparison uses `"Lion"` (e.g. `action_executor:4841`), and world-gen never
+writes a lowercase clan — so the lowercase literal `"lion"` **NEVER matched**, and the entire Lion honor bonus was
+**dead for every Lion character during their own festival.** The base festival honor (Bon Festival `honor_gain`) worked
+(it has no clan gate); only the clan-scoped Lion bonus mis-fired. FIX (one-character structural correction, **no invented
+value**: the `+0.1` is the LOCKED s11.5:109 magnitude — "Lion characters who participate gain **+0.1 Honor**" — already
+in the code, gated on a mistyped clan check; the effect is the LOCKED Festival-of-Akodo `lion_honor` flag): `character.clan
+== "lion"` → `character.clan == "Lion"`. Confirmed the case-mismatch was the codebase's **only** lowercase-clan comparison
+(a full scan of `clan == "<clan>"` across all nine clans + Imperial found zero other lowercase literals). Runtime-verified
+6/6 (`tests/verify_festival_lion_honor.gd`): a Lion char during the `lion_honor` festival now gains `honor_change == 0.1`
+(was 0.0 — the dead branch); a non-Lion (Crane) gets nothing; a Lion with no festival active gets nothing; a
+(non-canonical) lowercase `"lion"` clan correctly does NOT match (the fix keys on the canonical `"Lion"`); and the bonus
+stacks on top of a co-occurring base festival honor (base 0.2 + lion 0.1 → 0.3, non-Lion keeps only 0.2). Full project
+`--import` parse-clean. **With this, a Lion samurai who performs worship during the Festival of Akodo receives the LOCKED
++0.1 Honor**, as s11.5 mandates. (Discovered during an economy/imperial/festival dormant sweep; the same sweep confirmed
+the Imperial Edict apply-effect chain is LIVE — `process_daily_compliance` → `_apply_compliant_edict` dispatches all 7
+`apply_*` handlers — and that `FestivalSystem.get_glory_gain_festivals` is a harmless dead twin, NOT a clean wire: the
+live festival-glory path deliberately splits poetry/martial into separate `festival_glory_poetry`/`festival_glory_martial`
+world-state keys, both consumed in the executor, whereas the arbiter returns a combined float — rerouting would change
+behavior. The `RiceMarketSystem` posting/auction layer and `RegionalPriceModifiers` remain DEFERRED as already documented.)
+
+### Systems Added 2026-07-16 (s52 battle XP multiplier season-wide WIRED — the `in_battle_ids` hardcoded `[]`; the entire 2.5×/3.0× combat-season activity bonus was DEAD, owner-approved "Wire it season-wide", runtime-verified 18/18)
+Owner-approved (AskUserQuestion "Wire it season-wide", 2026-07-16) resolution of a **hardcoded-dead builder key**
+disabling a whole downstream XP tier. `NPCAdvancement.get_activity_multiplier` (npc_advancement.gd:91, s52 Part 3
+LOCKED) grants the **battle** activity multiplier — **2.5× participating / 3.0× commanding** (`MULTIPLIER_BATTLE` /
+`MULTIPLIER_COMMANDING_BATTLE`, the two GDD-locked constants) — to every combatant listed in
+`world_state["in_battle_ids"]`, checked FIRST (highest priority, above siege/court/crisis). But the SOLE builder of
+that world_state, `DayOrchestrator._build_advancement_world_state`, **hardcoded `"in_battle_ids": []`** (its
+`active_armies` param was entirely unread), so the set was **always empty** — **no NPC ever received the battle
+multiplier.** Officers who fought and commanded a full season of Mass Battles earned peacetime-rate XP (the
+worst-affected being the very Taisa/Shireikan the s57.21 promotion ladder needs to advance). The producer
+`battle_record` was live (the per-rank promotion counters landed alongside this session), but it carried **no season
+stamp**, so the seasonal pass had no way to tell WHO fought THIS season. FIX (pure structural wire of the LOCKED
+value — **no invented values**; the multipliers are the consumer's own s52 constants, the stamp is
+`TimeSystem.get_absolute_season`): **(1) producer stamp** — `_record_side_participation` gains a defaulted
+`ic_day: int = -1` and, when a commander records a battle, stamps `battle_record["last_battle_season"] =
+TimeSystem.get_absolute_season(ic_day)` (threaded from `_record_battle_participation` → both live call sites — the
+field-battle `_resolve_army_battles` and the storm-assault path — which already have `ic_day` in scope). **(2)
+consumer reconstruction** — `_build_advancement_world_state` gains `ic_day: int = -1` and rebuilds `in_battle_ids`
+from every character whose `battle_record["last_battle_season"]` equals the **JUST-ENDED** absolute season. **Critical
+timing (the one subtlety):** seasonal advancement fires at the START of the new season (day_orchestrator:1839, inside
+the `is_season_boundary` block), BEFORE any of the new season's battles, so the credited season is
+`get_absolute_season(ic_day) - 1` — the season that just closed. Threaded `ic_day` through `_process_npc_advancement`
+(which already receives it) → `_build_advancement_world_state`. **Self-cleaning (no accumulator, no manual clear):**
+`last_battle_season` is a single per-character int that is only "current" for one season, so a commander who fought
+two seasons ago is automatically NOT re-credited (the stamp no longer matches `just-ended`), and a fresh battle simply
+overwrites it — no WorldState membership-set to build, reset, or leak. **First-boundary guard** (edge case caught in
+validation): the seasonal block also fires on day 0/1 (`is_season_boundary` via `ic_day <= 1`), where
+`get_absolute_season(ic_day) - 1 == -1` — the same value an unstamped/empty `battle_record` returns from its `.get`
+default. A `prev_abs_season >= 0` guard skips the loop before the first season has ended, so an unstamped character is
+never falsely credited on world-start (a real stamp is always `get_absolute_season(...) >= 0`, so it can never collide
+with the -1 default at any later boundary). **Graceful degradation** (no invention): every
+new param defaults to -1, so the pre-fix 4-arg `_record_battle_participation` call shape (used by
+`tests/verify_battle_record.gd`) still records the battle and leaves NO stamp, and `_build_advancement_world_state`
+with `ic_day < 0` yields an empty `in_battle_ids` (no crash). Runtime-verified 16/16
+(`tests/verify_battle_xp_multiplier.gd`): the producer stamps `last_battle_season` on both attacker + defender
+commanders (dead/`-1` commanders unstamped); the builder credits ONLY the just-ended season (never-fought / fought-two-
+seasons-ago / fought-this-current-season all excluded — the self-cleaning guarantee) and defaults empty on `ic_day <
+0`; end-to-end producer→builder→`get_activity_multiplier` yields **3.0× for a commanding Taisa**, **2.5× for a
+participating no-command soldier**, **1.0× for a bystander who never fought**; and the 4-arg backward-compat path
+records the battle with no stamp; and the first-boundary edge (ic_day 0/1, `prev_abs_season == -1`) credits no
+unstamped character. Full project `--import` parse-clean; `verify_battle_record.gd` re-passes 22/22 (the
+defaulted param is backward-compatible). **With this, `in_battle_ids` is no longer dead** — a season of combat now
+earns the LOCKED 2.5×/3.0× advancement bonus, so battle-tested officers actually accrue the XP their promotion ladder
+requires.
+
+### Systems Added 2026-07-16 (s57.22.5 COMPOSE_THEATER_PIECE priority arbiter WIRED — zero-caller arbiter + broken priority-1 + injection gap, owner-approved "Theater compose-priority arbiter", runtime-verified 14/14)
+Owner-approved (AskUserQuestion "Theater compose-priority arbiter", 2026-07-16) resolution of a **zero-caller arbiter
+with a latent priority bug** on the s57.22 theater layer. GDD s57.22.5 (LOCKED, line 61): when COMPOSE_THEATER_PIECE
+fires, the engine advances **exactly one** WIP piece per AP by the priority "(1) pieces serving an active political
+NeedType (DAMAGE_RELATIONSHIP or MOVE_TOPIC_POSITION) rank above ARTISTIC_EXPRESSION pieces; (2) among same-priority
+pieces, the most-progressed toward its threshold (highest `craft_progress`/threshold ratio); (3) ties broken by
+most-recently-declared piece." `TheaterSystem.select_composition_piece_to_advance` **encoded this ordering but had
+ZERO production callers** — the live compose path (`NPCDecisionEngine._build_compose_theater_metadata`) just grabbed
+`int(wip_ids[0])` (the first WIP piece in **injection order**), ignoring the LOCKED priority entirely. Worse, the
+arbiter's own **priority-1 was a dead branch**: it computed `is_political = active_need_type in political_types` but
+**never used `is_political` in the `sort_custom` comparator** — so even if it had been called, a political piece would
+NOT have ranked above an artistic one (only ratio + recency were sorted). A composer with an in-progress
+scandal-play (DAMAGE_RELATIONSHIP) and an in-progress art-play would advance whichever happened to be injected first,
+not the political one the GDD mandates. **Third bug — the injection gap:** `DayOrchestrator._inject_theater_context`
+appended a character's own WIP piece **id** to `wip_ids` but `continue`d **before** adding the piece **object** to
+`pieces_by_id`, so the per-character `_theater_pieces_by_id` map (the only place the engine can read a WIP piece's
+progress/threshold/political flag) **lacked every WIP piece** — the arbiter had nothing to read even once called.
+FIX (three coordinated structural wires, **no invented values** — every input is a live per-piece field):
+**(1) arbiter priority-1 made real** — the comparator now ranks by `a.political_need_type != ""` vs
+`b.political_need_type != ""` (political-first) BEFORE the ratio + `piece_id` tiebreak; the dead `is_political` /
+`political_types` locals are removed and the now-unused need param renamed `_active_need_type`. The political
+determination reads **`TheaterPieceData.political_need_type`** (declared field, default `""`, **stamped at composition
+start** in `_build_compose_theater_metadata` only when the need is DAMAGE_RELATIONSHIP/MOVE_TOPIC_POSITION) — so
+"serves a political NeedType" is the piece's own recorded purpose, the faithful reading (a piece is political by what it
+was composed FOR, not by the current tick's need — the prior `active_need_type` gate was the wrong axis). **(2)
+injection gap closed** — `_inject_theater_context` now adds the WIP piece object to `pieces_by_id` alongside the id, so
+`_theater_pieces_by_id` carries every WIP piece the arbiter needs. **(3) consumer wired to the arbiter** —
+`_build_compose_theater_metadata`, when WIP pieces exist, resolves the WIP piece objects from
+`ctx.known_objectives["_theater_pieces_by_id"]` (filtered to `wip_ids`) and calls
+`TheaterSystem.select_composition_piece_to_advance(ctx.character_id, wip_pieces, need.need_type)`, using
+`chosen.piece_id`; it **falls back to `wip_ids[0]`** only when the piece objects are unresolvable (backward-compatible
+with a pre-fix injected state). The arbiter's own author/complete/`lost`/`abandoned_incomplete` filters are unchanged.
+Runtime-verified 14/14 (`tests/verify_theater_compose_priority.gd`): priority-1 (a political piece is selected over a
+**far-more-progressed** artistic piece; MOVE_TOPIC_POSITION also counts as political); priority-2 (highest progress
+ratio wins among same-priority pieces, both artistic-vs-artistic and political-vs-political); priority-3 (equal
+political-status + equal ratio → highest `piece_id`); the filters (completed/lost/abandoned/other-author excluded →
+only the live own-WIP piece survives; nothing eligible → null); the injection (a WIP piece object is exposed in
+`_theater_pieces_by_id` — the closed gap); and end-to-end through `_build_compose_theater_metadata` (with the artistic
+piece FIRST in `wip_ids`, the builder still returns the political piece's id via the arbiter — proving it is no longer
+`wip_ids[0]`; and the unresolvable-pieces path falls back to `wip_ids[0]`). Full project `--import` parse-clean.
+**With this, `select_composition_piece_to_advance` is live and its LOCKED priority-1 actually fires** — a composer
+progresses their political play ahead of their art play, as s57.22.5 mandates.
+
+### Systems Added 2026-07-16 (s57.21 military unit hierarchy — T3: dead-commander → FILL_VACANCY Legion/Section refill now LIVE, owner-approved, runtime-verified 22/22 + latent scoring-crash fix)
+Completes the s57.21 hierarchy trilogy (T1 instantiate, T2 gate, T3 refill), unblocked by the s11.7a battle_record
+producer landed alongside (entry directly below). Before T3, a dead generated Legion/Section commander (a
+Taisa/Shireikan from `_generate_military_commanders`) left the persistent `military_legions`/`military_sections`
+raw unit's `commander_id` naming the corpse — T2's read-time liveness bake correctly fired the vacant-superior GATE
+(the section/legion could not campaign), but **nothing ever REFILLED the slot**, so it stayed leaderless forever.
+T3 adds the seasonal `DayOrchestrator._process_military_command_refill(legions_raw, sections_raw, characters_by_id)`
+(+ `_refill_unit_tier` + `_apply_command_refill_results`), wired into the seasonal military block right after
+promotion/demotion. It reuses the SAME LOCKED promotion machinery as company commands — `_gather_promotion_candidates`
++ `MilitaryPromotionSystem.select_best_candidate` with `rank_needed` **TAISA for a vacant Legion, SHIREIKAN for a
+vacant Section** (LOCKED s57.21) — so the eligibility (`is_eligible_for_taisa` needs `battles_as_chui >= 1`;
+`is_eligible_for_shireikan` needs `battles_as_taisa >= 2`) reads the now-live battle_record. **Vacancy detection:**
+a unit is vacant iff its stored `commander_id` is dead/missing (a live commander is skipped). **Slot inheritance
+(no invention):** the new commander inherits the dead predecessor's slot wholesale — same `commanded_unit_id`
+(the unit id), same `operational_superior_id`, same `role_position` (the slot's superior never changes, only the
+person; the dead predecessor's record is still in `characters_by_id`, so those are readable). **Persistence:** the
+new commander is written into the persistent raw unit's `commander_id`, so the next tick's liveness bake keeps it.
+**Graceful + no double-claim:** if no eligible officer exists the slot stays vacant (the gate keeps blocking that
+unit's campaigns until a qualified officer emerges); a `claimed` set shared across both tiers prevents one candidate
+filling two vacancies in a single pass. **LATENT CRASH FIXED (found by T3, pre-existing):** `_gather_promotion_candidates`
+passed `personality_virtue` as the raw `Enums.BushidoVirtue` **enum**, but `select_best_candidate`'s
+`score_taisa_candidate`/`score_shireikan_candidate` take a **String** (keyed into `*_PERSONALITY` via `.to_upper()`)
+→ "Cannot convert argument from int to String" crash. Latent because the CHUI promotion path rarely reaches a
+vacancy+candidate; T3 exercises the TAISA/SHIREIKAN scoring arms for the first time. Fixed by converting via
+`Enums.bushido_virtue_name(c.bushido_virtue)` (the uppercase key the tables already expect) — repairs BOTH the
+existing CHUI promotion scoring AND the T3 refill. Runtime-verified 22/22 (`tests/verify_military_refill.gd`): a dead
+Taisa's Legion is refilled by the best-Battle eligible uncommanded officer (inheriting Shireikan-100 superior +
+"Taisa" role, raw unit rewritten, new commander now a Taisa commanding legion 20); a LIVING Taisa is untouched; a
+candidate with NO battle record leaves the slot vacant (raw unit still names the corpse, liveness bake vacates at
+read time); two vacant legions + one candidate claim it exactly once (no double-assign); and a Shireikan seat
+requires `battles_as_taisa >= 2` (a 1-battle officer is rejected, a 2-battle officer fills it, inheriting the
+Rikugunshokan-5 superior). Full project `--import` parse-clean; T2 gate driver re-passes 19/19 (no regression).
+**With T1+T2+T3, the s57.21 unit hierarchy is instantiated, persisted, gated, AND self-healing on commander death.**
+DEFERRED (documented, owner-acknowledged as the separate larger option "Unify military populations"): the two
+disjoint military populations mean a PURE-GENERATED officer (population B) never commands a battling company
+(population A), so the refill is starved of pop-B candidates until A/B reconciliation — but it is fully correct and
+LIVE for ANY battle-tested uncommanded officer, and the machinery fires the moment such a candidate exists.
+
+### Systems Added 2026-07-16 (s11.7a battle_record PRODUCER — the phantom field goes LIVE; owner-approved "Resolve battle_record", runtime-verified 22/22)
+Owner-approved (AskUserQuestion "Resolve battle_record", 2026-07-16) resolution of a documented **phantom field**
+(`Known Code Issues — Deferred 2026-07-08`: "the `battle_record` phantom key ... TAISA/SHIREIKAN promotion arms are
+dead branches"). `L5RCharacterData.battle_record` was read at THREE live sites in `_gather_promotion_candidates`
+(day_orchestrator:18208-18210 — `battles_commanded` = `battle_record.get("battles_fought")`, plus `battles_as_chui`
+/ `battles_as_taisa`), the factory `MilitaryPromotionSystem.create_battle_record` and mutator `record_battle` both
+existed — but **the field was NOT DECLARED on the character sheet, the factory OMITTED the per-rank keys, and
+`record_battle` had ZERO production callers**, so every read returned 0 (the guard `if c.battle_record is Dictionary
+else 0` masked the absent field). Net: the CHUI-promotion **scoring** input `battles_commanded` was permanently 0,
+and the LOCKED TAISA/SHIREIKAN **eligibility** arms (`is_eligible_for_taisa` needs `battles_as_chui >= 1`;
+`is_eligible_for_shireikan` needs `battles_as_taisa >= 2`) could never pass. FIX (three parts, no invented values —
+the per-rank counter is the definitional meaning of the field's own name): **(1) field** — declared
+`@export var battle_record: Dictionary = {}` (empty = no record; readers already guard `is Dictionary`); **(2)
+factory + mutator** — `create_battle_record()` now seeds the two missing keys (`battles_as_chui`/`battles_as_taisa`,
+both 0), and `record_battle` gained a defaulted `military_rank` param that increments the per-rank counter off the
+commander's rank AT battle time (CHUI → `battles_as_chui`, TAISA → `battles_as_taisa`, else neither); the base
+counters are now `.get`-defensive so a partial legacy record can't crash; **(3) producer** — new
+`DayOrchestrator._record_battle_participation(battle_result, atk_company_dicts, def_company_dicts, characters_by_id)`
+(+ `_record_side_participation`) wired right after BOTH `resolve_and_reconcile_battle` sites (the field-battle
+`_resolve_army_battles` and the storm-assault path): every LIVING company commander who participated records one
+battle at their current `military_rank` (won iff their side is the victor; a draw counts as fought), **deduped per
+commander** (one engagement = one battle even across multiple commanded companies), dead/`-1` commanders skipped,
+pre-existing records ACCUMULATE (never reset). With this, `battle_record` is no longer a phantom — the CHUI-promotion
+scoring reads real `battles_commanded`, the enlisted eligibility reads real `battles_fought`, and the per-rank
+counters accrue for battle-tested officers. Runtime-verified 22/22 (`tests/verify_battle_record.gd`): the factory
+seeds all six keys; `record_battle` increments per-rank correctly (NONE → no per-rank, CHUI → `battles_as_chui`,
+TAISA → `battles_as_taisa`, accumulating); and end-to-end `_record_battle_participation` records one battle for the
+attacker Taisa (deduped across two companies, WON as a Taisa) and the defender Chui (LOST as a Chui), skips the dead
+commander + the `-1` commander, and accumulates a second engagement (fought 2 / battles_as_taisa 2). Full project
+`--import` parse-clean. **DEFERRED (documented, owner-acknowledged as the separate larger option "Unify military
+populations"):** the two disjoint military populations mean the GENERATED Taisa/Shireikan (population B, from
+`_generate_military_commanders`) never command the per-bushi battling companies (population A), so a pure-generated
+officer still accrues no record — the battle_record producer is fully correct and LIVE for any officer who commands
+a battling company, but reconciling populations A/B (so generated commanders lead real companies) is a separate
+design change. This LANDS the field + producer (independently valuable: CHUI scoring + enlisted eligibility now
+read real data); the s57.21 T3 Legion/Section refill is re-enabled on top (next).
+
+### Systems Added 2026-07-16 (s57.21 military unit hierarchy — T2: vacant-superior military-order gate now LIVE, owner-approved rule, runtime-verified 19/19)
+Follow-on to T1 (below), delivering the behavioral payoff. Before this, the executor's Taisa/Shireikan military-order
+gates in `ActionExecutor._validate_military_order` were dead **two ways**: (1) `military_data.legions`/`sections` were
+never populated (no unit Resources existed), so the gate short-circuited on the empty dicts, and (2) the two arbiters
+`MilitaryHierarchy.can_legion_coordinate`/`can_section_initiate_campaign` were **semantic no-ops** (`commander_id >= 0`
+— the acting commander IS the unit's commander, so always true; the prior session flagged this exact tautology). T2
+redesigns both arbiters to the **owner-approved vacant-superior rule** (AskUserQuestion 2026-07-16) — both halves trace
+to LOCKED s57.21.3 and are non-tautological: **(a)** a Taisa's ORDER_BATTLE/CONDUCT_RAID is blocked when their Legion's
+**parent Section has no living Shireikan** (`can_legion_coordinate(legion, sections)` → the parent Section's
+`commander_id`; s57.21.3 "A Go-hatamoto section without a Shireikan cannot initiate new campaigns"), and **(b)** a
+Shireikan's is blocked when **any constituent Legion has no living Taisa** (`can_section_initiate_campaign(section,
+legions)` → every legion in `section.constituent_legions` has a live `commander_id`; s57.21.3 "A Legion without a Taisa
+cannot execute coordinated manoeuvres"). **Liveness (owner-approved read-time vacate):** `_populate_military_data`
+(rewritten to also build `military_data.legions`/`sections` from the T1 WorldState raw arrays) sets each unit's
+`commander_id = -1` (vacant) when its commanding character is DEAD or missing (via `_live_commander_id` + the
+`characters_by_id` already in scope), so the arbiters read liveness directly off `commander_id` with **no invented
+values** — the whole rule is LOCKED s57.21.3 vacancy semantics. Threaded the T1 raw arrays into the daily pass:
+`WorldState.military_legions/sections` → `advance_one_day` → `advance_day` (2 new defaulted params) →
+`_populate_military_data` → the executor gate via `military_data`. Gate call sites updated (Taisa branch now `== TAISA`
+since a Shireikan's `commanded_unit_id` is a section_id that never indexes the legions map; block reasons
+`legion_superior_vacant` / `section_legion_vacant`). **Non-battle actions are unaffected** (only ORDER_BATTLE /
+CONDUCT_RAID gate); **graceful** (an unresolvable parent Section or empty `military_data` never blocks — the gate only
+fires when a vacancy is proven); **zero regression** (the population-A Company/Chui-garrison gate is untouched — those
+bushi carry `military_rank NONE`, so they never reach the Taisa/Shireikan branches; a generated Taisa's ORDER_BATTLE was
+*already* invalid pre-T1 via `no_commanded_unit`, so T1+T2 strictly ENABLES it when the superior is alive). The live
+path is wired: `ctx.commanded_unit_id = character.commanded_unit_id` (npc_decision_engine:199) carries the T1-stamped
+legion_id/section_id into the gate. Runtime-verified 19/19 (`tests/verify_military_gate.gd`): `_populate_military_data`
+bakes liveness (living→kept, dead/missing→-1, empty chars-map→ids intact); both arbiters (living superior→allow,
+dead Shireikan→legion blocked, dead subordinate Taisa→section blocked, unresolvable parent→graceful allow); and
+end-to-end `_validate_military_order` (Taisa ORDER_BATTLE valid with living Shireikan / blocked `legion_superior_vacant`
+with a dead one / CONDUCT_RAID likewise / ASSIGN_GARRISON NOT blocked; Shireikan ORDER_BATTLE valid with all Taisa alive
+/ blocked `section_legion_vacant` with a dead subordinate / empty military_data graceful). Full project `--import`
+parse-clean. **With T1+T2, the s57.21 unit hierarchy is instantiated, persisted, and its vacant-superior gate is LIVE.**
+DEFERRED — **T3:** commander death → FILL_VACANCY (s57.20.3) so a vacant Taisa/Shireikan slot is refilled by the lord
+with appointment authority. The read-time liveness vacate already makes the GATE correct on death; T3 is the refill
+objective trigger (the existing `_process_military_promotions` fills population-A *company* commands, not these
+generated Legion/Section commanders — a separate vacancy pass).
+
+### Systems Added 2026-07-16 (s57.21 military unit hierarchy — T1: instantiate Army/Section/Legion + person-chain from generated commanders, owner-approved GDD-scale, runtime-verified 22/22)
+Owner-approved ("Redesign gates + build" + "GDD-scale (grow legions)" + "From generated commanders", via AskUserQuestion)
+build of the s57.21 organizational hierarchy. Prior state (both diagnosed via a live-consumer grep): the LOCKED unit
+chain **did not exist** — `WorldPopulationGenerator._generate_military_commanders` created only Taisa+Chui **characters**
+(with `lord_id` set, but **no `operational_superior_id`, no `commanded_unit_id`, no Shireikan tier, and NO
+LegionData/SectionData/ArmyData Resources**), so the executor's Taisa/Shireikan military-order gates
+(`_validate_military_order`) could never resolve a unit — they short-circuit on the empty `military_data.legions`/
+`sections` dicts, AND the two gate arbiters (`MilitaryHierarchy.can_legion_coordinate`/`can_section_initiate_campaign`)
+were semantic no-ops (`commander_id >= 0` — the acting commander IS the commander, always true). The prior deferred note
+flagged this as "the multi-tier military command hierarchy is UNBUILT" + "owner-gated subsystem." **T1 (this commit, the
+zero-regression foundation) instantiates the LOCKED hierarchy from the generated commanders and persists it**; no gate
+consumes it yet (behaviorally inert until T2). `_generate_military_commanders` now builds, per clan, the LOCKED
+Army→Section→Legion→Company chain: **LOCKED per-clan army count** (`CLAN_ARMY_COUNT`: Crab/Lion 4, Crane/Dragon 2,
+Mantis/Unicorn 3, Phoenix/Scorpion/Imperial 1), one **Shireikan** per Section, one **Taisa** per Legion, one **Chui**
+per Company. **No invented scale** — `LEGIONS_PER_SECTION = 4` is the **LOCKED range FLOOR** (s57.21.1 "4-12 legions per
+Shireikan"), `COMPANIES_PER_LEGION = 7` is LOCKED (6 regular + 1 reserve); the one genuinely-unspecified value,
+`SECTIONS_PER_ARMY = 1` (a single-wing go-hatamoto), is flagged **PROVISIONAL** in-code (s57.21.1 gives "up to 48
+legions" per army but no exact section count). This grows each army from the prior invented `LEGIONS_PER_ARMY = 3`
+(which had no Shireikan tier at all) to the GDD-floor-faithful 4-legion section under a Shireikan. The **person chain
+mirrors the unit chain per s57.21.3**: Chui.operational_superior_id → Taisa → Shireikan → Rikugunshokan (the
+Rikugunshokan's stays -1 — they receive objectives from `lord_id`); `commanded_unit_id` points each commander at their
+own unit (Taisa = legion_id, Shireikan = section_id) so the executor gate can resolve up the organizational chain.
+Units are emitted as **raw dicts** (JSON-serializable, mirroring the existing `military_companies` precedent) with a
+single monotonic global id counter (no cross-clan id collision); `constituent_companies` is left empty (the Company
+tier is the separate per-bushi `military_companies` population, and s57.21 permits the top-down arrays unpopulated —
+see the existing "Military hierarchy constituent arrays — intentionally unpopulated" note). Threaded end-to-end:
+`generate_world_population` returns `military_armies/sections/legions` → `WorldBootstrap.bootstrap_world` return →
+`SimulationScheduler` assigns them to new `WorldState.military_armies/sections/legions: Array[Dictionary]` →
+`WorldStateSaver` save/load (JSON state, mirroring `military_companies`). **Zero regression:** the Company/Chui-garrison
+gate (population-A per-bushi companies) is untouched; T1 adds only new data + additive character fields nothing consumes
+yet (the daily `_populate_military_data` still inits `legions`/`sections` to `{}` — T2 populates them). Runtime-verified
+22/22 (`tests/verify_military_hierarchy_gen.gd`): Lion's full chain (4 armies × 1 section × 4 legions × 7 companies →
+4 Shireikan / 16 Taisa / 112 Chui, every legion→real section→real army with no orphan/skipped level, Taisa.commanded_unit_id
+== legion_id, Taisa.operational_superior_id == parent section's Shireikan, Shireikan.commanded_unit_id == section_id &
+op_superior == Rikugunshokan & constituent_legions populated, every Chui.op_superior a real Taisa, every army commanded
+by the Rikugunshokan); LOCKED per-clan army counts (Crab/Crane/Dragon/Phoenix/Scorpion/Unicorn/Mantis); and globally-
+unique unit ids across clans. Full project `--import` parse-clean. Rank-distribution self-corrects (the ~189 added
+commanders stay within per-clan RANK_DISTRIBUTION targets; the backfill subtracts them). **DEFERRED — T2 (next):**
+populate `military_data.legions/sections` in `_populate_military_data` from the WorldState arrays + redesign
+`can_legion_coordinate`/`can_section_initiate_campaign` to the owner-approved **vacant-superior** rule (Taisa
+ORDER_BATTLE/CONDUCT_RAID blocked when the Legion's parent Section has no living Shireikan; Shireikan campaign blocked
+when a constituent Legion has no living Taisa — both trace to LOCKED s57.21.3, both non-tautological, evaluated with
+`characters_by_id` liveness). **T3:** commander death → vacate unit (`commander_id = -1`) → FILL_VACANCY (s57.20.3).
+
+### Systems Added 2026-07-16 (s12.11 FABRICATE_SECRET mints physical proof — the dead `physical_proof_item_id` producer, owner-approved narrow, runtime-verified 25/25)
+Owner-approved ("Narrow: FABRICATE_SECRET mints proof", via AskUserQuestion) resolution of the last documented
+**dead-field with a fully-wired consumer** in the secret/inventory layer. `SecretData.physical_proof_item_id` had
+**ZERO producers** — world-gen never set it and no production pass wrote it — so its complete downstream chain was
+permanently dead: `DayOrchestrator._inject_...known_secrets` stamps `"has_proof": s.physical_proof_item_id >= 0`
+(day_orchestrator:19283) → `NPCDecisionEngine._pick_best_secret` carries `has_proof` into action metadata → the
+EXPOSE_SECRET_PUBLICLY / EXPOSE_SECRET_PRIVATELY executors read `action.metadata.has_proof`
+(action_executor:1672/1709) → `SecretSystem.reveal_privately`/`expose_publicly` grant
+`PHYSICAL_PROOF_FREE_RAISES` (=1) free raises when `has_proof` (secret_system:190/236). Because
+`physical_proof_item_id` stayed at its `-1` default for **every** secret, `has_proof` was **always false** — no
+fabricator ever got the s12.8 +1 Free Raise on a later exposure, and the s12.11 Evidence-item→proof link the GDD
+mandates ("Evidence: acquired through covert actions serving as physical proof ... Grants 1 Free Raise when used in
+Expose a Secret Publicly or Reveal a Secret Privately") never formed. The prior deferred note called this
+"blocked on the unbuilt physical-inventory layer (no physical-item-transfer ActionIDs exist)"; the owner authorized
+the **NARROW** producer that needs no item-economy: a **successful FABRICATE_SECRET mints the forged document that IS
+the secret's proof** (a forged secret's physical evidence is, by definition, produced by the act of fabricating it —
+the one clean, GDD-adjacent producer, no item market / no NPC-theft scoring). FIX (pure structural wire + the LOCKED
+s12.11 Evidence category, **no invented values**): `DayOrchestrator._process_fabricate_secret_writebacks` gains
+defaulted `next_item_id`/`characters_by_id` params (threaded from `advance_day`, both already in scope at the call
+site) and, on a successful fabrication whose fabricator is living & resolvable & the secret has no proof yet, mints a
+covert-produced item via `InventorySystem.create_item(id, name, ItemCategory.EVIDENCE, ItemSize.SMALL, 1,
+is_evidence=true)` (Evidence, Small = a document, Normal quality — all the LOCKED s12.11 Evidence-category values),
+appends it to the fabricator's **on-person** `items` (a real, steal-able/destroyable inventory item per s12.11), and
+stamps `sd.physical_proof_item_id = item_id`. The `has_proof` predicate then reads true and the already-wired +1 Free
+Raise fires on any later Expose/Reveal of that fabricated secret. **Graceful degradation** (no invention): an
+unresolvable or dead fabricator mints no proof and the secret is still appended (backward-compatible with the prior
+3-arg call shape); a secret that already carries proof is never re-minted (idempotent). Runtime-verified 25/25
+(`tests/verify_fabricate_proof.gd`): a successful fabrication mints exactly one EVIDENCE/is_evidence/Small/Normal/
+on-person item, links it, and advances `next_item_id`; a FAILED fabrication mints nothing (counter + inventory + secret
+list untouched); an unresolvable AND a dead fabricator mint no proof yet still append the secret; a secret with existing
+proof is not re-minted; and **end-to-end** — after minting, the orchestrator's `has_proof` predicate is true and
+`SecretSystem.expose_publicly(..., has_proof=true)` returns `free_raises == PHYSICAL_PROOF_FREE_RAISES` (1) while a
+proofless control returns 0. Full project `--import` parse-clean. **With this, `physical_proof_item_id` is no longer a
+dead field** — a fabricated secret now carries the forged document that grants its exposer the LOCKED s12.8 +1 Free
+Raise. DEFERRED (documented, still design-gated — NOT this narrow producer): the broader physical-inventory MANIPULATION
+suite (GIVE_ITEM/PICKPOCKET/SEND_ITEM/STORE_ITEM/DESTROY_ITEM ActionIDs + an item-economy), and proof for **non-forged**
+secrets (a real secret's physical proof needs an evidence-discovery/covert-acquisition action to set the field, which
+those ActionIDs would provide).
+
+### Known Code Issues (found and fixed 2026-07-09, s4.3.17 trade-route Rung-3 gate ignored the clan — market-purchase feasibility mis-fired empire-wide — runtime-verified 9/9)
+A **produced-imprecisely / dead-param** bug (the author left a `# TODO: Filter trade routes by clan` marker at `npc_decision_engine:5872`). `_has_active_trade_routes(trade_routes, _clan)` **ignored its `_clan` param entirely** — it returned true if ANY undisrupted `TradeRouteData` existed **anywhere in the world**. Its sole consumer is the s4.3.17 war-readiness **feasibility ladder Rung 3 (Market Purchase)**: `FeasibilityLedger.try_market_purchase` returns `applied:false, reason:"no_trade_routes"` when `has_trade_routes` is false (a clan can't reach a market without a route). Because the flag was global, **a clan with NO trade routes of its own still passed the gate** (as long as some other clan's route was undisrupted), AND — the more damaging half — **disrupting a clan's OWN trade routes did NOT block their market purchase** (the flag stayed true off unrelated foreign routes), defeating trade-route disruption as a war-pressure lever. The value flowed `_build_feasibility_context` → `ladder_context.has_trade_routes` → `war_justification` → `feasibility_ledger.try_market_purchase`, so every lord's war-readiness market-purchase rung read the wrong signal. FIX (pure structural filter, **no invented values** — the "route connects a province" relation is `TradeRouteData.connects`/`province_a_id`/`province_b_id` per s4.3.18, and the clan's province ids are ALREADY computed at the call site as `clan_province_ids`): `_has_active_trade_routes(trade_routes, clan_province_ids)` now returns true iff an **undisrupted** route connects one of the **clan's own** provinces; the call site passes `clan_province_ids` instead of `character.clan`. Handles both the `TradeRouteData` and the defensive `Dictionary` route forms (filtering the dict form by its `province_a_id`/`province_b_id` keys). Runtime-verified 9/9 (`tests/verify_trade_route_clan_filter.gd`): an undisrupted route between OTHER clans' provinces no longer counts (the bug); an undisrupted route touching a clan province counts (either a- or b-side, `connects` symmetric); a disrupted own-route does NOT count (disruption blocks the rung); own-cut + foreign-active still blocked; empty routes / no-provinces-clan → false; and the Dictionary-form fallback filters by province ids too. Full project `--import` parse-clean. **With this, `_has_active_trade_routes` is clan-scoped** — the Rung-3 market-purchase gate now correctly reflects whether the clan itself can reach a market, and trade-route disruption meaningfully constrains an enemy's war readiness.
+
+### Systems Added 2026-07-09 (s57.25.7 SEEK_TATTOO max-urgency escalation WIRED — the last dead half of get_seek_tattoo_urgency, owner-approved "1 2 and 3", runtime-verified 14/14)
+Owner-approved ("1 2 and 3", 2026-07-09) resolution of the one deferred piece the SEEK/GRANT tattoo build left open.
+`TattooSystem.get_seek_tattoo_urgency` (85/90/95 by `seasons_at_rank_unfilled`) had ONE live consumer — the GRANT pass's
+highest-urgency recipient selection — but its **other** LOCKED effect was dead: s57.25.7 "after **3 IC seasons** unfilled,
+SEEK_TATTOO overrides all objectives **except a direct lord command + active military deployment**." The engine ranks objectives
+by precedence TIERS (primary > kolat > standing), not a numeric objective score, so the 95 had **no numeric slot to feed** — the
+LOCKED escalation is a `resolve_goal` **precedence override**, not a scoring bump. Wired that override (pure LOCKED-derived
+structural change, **no invented values** — the 3-season / MAXIMUM_SCORE / lord-command / on-campaign gates are all the arbiter's
+own s57.25.7 constants): **(1)** the SEEK pass (`_assign_seek_tattoo_standing_objectives`) now takes `ic_day` and stamps
+`urgency_seasons = seasons_at_rank_unfilled(char, ic_day)` onto the assigned SEEK_TATTOO standing dict every tick (re-stamped even
+when the standing already IS SEEK_TATTOO, so the clock stays fresh; -1/untracked → 0); the daily call site passes `ic_day`.
+**(2)** new `NPCDecisionEngine._seek_tattoo_max_urgency_override(character, ctx, objectives)` — true iff the standing is
+SEEK_TATTOO AND `get_seek_tattoo_urgency(urgency_seasons) == SEEK_TATTOO_MAXIMUM_SCORE` (≥3 seasons) AND the primary is **not**
+a direct lord command (`assigned_by < 0` or `== self`) AND `ctx.context_flag != ON_CAMPAIGN`. **(3)** `resolve_goal`'s standard
+(non-lord-tier) primary branch skips a self-selected primary when the override holds, falling through to the standing step so
+SEEK_TATTOO wins. The FAMILY_DAIMYO combined-pool branch is untouched (a Family Daimyo is never a rank-seeking Togashi monk — that
+branch requires `is_lord` at FAMILY_DAIMYO tier; monks hit the standard `else` branch), and a **direct lord command** (externally-
+assigned primary) or **active deployment** (ON_CAMPAIGN) always wins, faithful to the two LOCKED exceptions. Below maximum urgency
+(≤2 seasons, score ≤90) the primary keeps standard precedence — zero behavior change for the common case; the escalation is the
+edge case the GDD names (a monk kept at rank without their allotment long enough that seeking becomes overriding). Runtime-verified
+14/14 (`tests/verify_seek_urgency_escalation.gd`): the override predicate (max-urgency+self-primary → true; 2-season/non-SEEK-standing/
+lord-command/on-campaign → false; self-assigned primary → true); end-to-end `resolve_goal` (max urgency returns SEEK_TATTOO over a
+self PERFORM_RITUAL primary; low urgency + lord command + on-campaign all keep the primary); and the SEEK-pass urgency stamp
+(4-season stamp, re-stamp to 0 after a rank reset, ic_day-1 → 0). Full project `--import` parse-clean; the SEEK/GRANT driver
+re-passes 21/21 (the new defaulted `ic_day` param is backward-compatible). **With this, `get_seek_tattoo_urgency` is fully live** —
+both the recipient-selection AND the precedence-escalation halves. The s57.25.7 ability-tattoo loop has no remaining deferred logic
+except the combat-layer tattoo *powers* (ASCII/s40 PC-travel HOLD) and the ise-zumi "unknown elder pathway" GATHER_INTELLIGENCE
+query-target producer (documented).
+
+### Systems Added 2026-07-09 (s57.25.7 SEEK_TATTOO / GRANT_TATTOO ability-tattoo loop WIRED — the dead ability-grant NeedTypes, owner-approved "B and C", runtime-verified 21/21)
+Owner-approved ("B and C", 2026-07-09) build of the s57.25.7 ability-tattoo subsystem — the last documented "owner-gated
+subsystem" tattoo item. `SEEK_TATTOO` and `GRANT_TATTOO` were **fully SCORED** in `objective_alignment.json` (SEEK →
+OFFER_ART_COMMISSION 95 / BEGIN_TRAVEL 90 / ASK_FOR_INTRODUCTION 80 / PROBE 75 / WRITE_LETTER 70; GRANT → APPLY_TATTOO 95) and
+the arbiter layer was complete (`has_unfilled_ability_slots` / `count_ability_tattoos` / `is_seek_tattoo_blocked` /
+`get_seek_tattoo_urgency`), but **NEITHER NeedType was ever ASSIGNED to any character** — so no Togashi monk ever sought an
+ability tattoo and no elder ever prioritised granting one; the entire s57.25.7 ise-zumi/elder loop was dead, and APPLY_TATTOO's
+metadata hardcoded `is_ability_tattoo:false` / never set `target_npc_id`. On reading the LOCKED s57.25.7 in full, the earlier
+"genuine design surface" concern dissolved — the GDD locks **every** value (the 95/90/85/80/75 scores, the 1/2/3-season urgency
+tiers, activation/deactivation, the BLOCKED state, recipient selection = "the elder prioritises the one with the highest urgency
+score"), so this is structural wiring, not invention. **The one genuine gap the deferred note named — "a seasons-at-rank tracker
+with no producer" — is the only new value routed, and it is a LOCKED-derived structural stamp** (the current absolute season,
+via `TimeSystem.get_absolute_season`). **Build (three tranches):**
+- **T1 — urgency tracker + helpers.** New `L5RCharacterData.tattoo_rank_reached_season` (absolute season the current insight
+  rank was reached; -1 = untracked → urgency 0) + `seek_tattoo_blocked` (permanent s57.25.7 BLOCKED flag). PRODUCER: both
+  rank-advancement sites (seasonal `_process_npc_advancement` loop + solo-TRAIN `_process_rank_advancement_writebacks`) now stamp
+  `tattoo_rank_reached_season = get_absolute_season(ic_day)` when a Togashi monk ranks up, so urgency resets each rank (the GDD's
+  "seasons at the current rank without receiving their allotment"). New `TattooSystem.seasons_at_rank_unfilled(char, ic_day)`,
+  `is_seeking_tattoo(tattoos, char)` (Togashi + unfilled slots + not BLOCKED), and `draw_ability_for_grant(tattoos, recipient,
+  dice)` (an ability the recipient doesn't already carry, from the s57.25.6 canonical `ALL_TATTOO_ABILITIES` via the seeded dice —
+  the same PROVISIONAL rng-within-a-LOCKED-set draw world-gen already uses; the GDD locks the count/consent but leaves the elder's
+  specific ability choice as "the elder decides within school logic").
+- **T2 — the two standing passes** (`DayOrchestrator._assign_seek_tattoo_standing_objectives` /
+  `_assign_grant_tattoo_standing_objectives`, run after `_clear_stale_context_flags`, both self-correcting). SEEK: for each living
+  non-PC Togashi monk — set the permanent BLOCKED flag when all 9 body locations are occupied; assign `SEEK_TATTOO` standing when
+  seeking (overriding only the peacetime `PERFORM_RITUAL` default / empty slot — a magistrate/lord-assigned standing is respected);
+  revert a stale `SEEK_TATTOO` → `PERFORM_RITUAL` once filled/blocked. GRANT: group active seekers (in Togashi territory) by
+  `physical_location`, and for each qualified elder (Togashi school, school Rank 3+, Artisan: Tattooing 3+, in Togashi territory,
+  co-located with ≥1 seeker) pick the **highest-urgency** co-located seeker (deterministic lowest-id tie-break, elder excluded),
+  resolve the grant params (`get_available_locations`[0] + `draw_ability_for_grant`), assign `GRANT_TATTOO` standing, and inject
+  `world_states[elder]["grant_tattoo_target"] = {recipient_id, body_location, ability}` (added to the daily stale-key clear so it
+  never goes stale); revert a stale `GRANT_TATTOO` → `PERFORM_RITUAL` when no seeker is co-located. **Togashi territory = the
+  character's province is Dragon-clan** (`_in_togashi_territory` via the daily `character_province_map` — the faithful mapping of
+  the GDD's "in Togashi territory / Dragon Clan territory"; no explicit territory field exists).
+- **T3 — APPLY_TATTOO ability metadata.** New `ContextSnapshot.grant_tattoo_target` (read in `build_context` from the injected
+  world_state). `_populate_action_metadata`'s APPLY_TATTOO branch, when `ctx.grant_tattoo_target` is non-empty, sets
+  `option.target_npc_id = recipient`, `is_ability_tattoo=true`, `ability`, `in_togashi_territory=true`, quality NORMAL (ability
+  tattoos aren't aesthetically graded, s57.25.8) — the fields the **Phase-4c precondition filter** requires (it reads
+  `target_npc_id`, SKIPS the decorative `can_receive_decorative` gate for ability tattoos, and authoritatively stamps
+  `body_location`/`world_tattoos` + runs consent — Dragon is NO_RELUCTANCE so a seeking monk always consents). Decorative APPLY_TATTOO
+  is **untouched** (the else-branch is byte-identical to the prior metadata → zero regression). **The executor
+  (`_execute_apply_tattoo`) + creation writeback were ALREADY complete for ability tattoos** — they read `is_ability`/`ability`/
+  `in_togashi_territory`, call `can_apply_ability_tattoo`, and `create_tattoo(..., is_ability, ability, ...)` sets
+  `is_ability_tattoo` + `ability_granted` — so no executor change was needed; only the metadata + standing were missing.
+**End-to-end loop (all through the daily-AP APPLY_TATTOO channel the GDD specifies — NOT a duplicate channel):** rank-up stamps the
+urgency clock → SEEK pass assigns `SEEK_TATTOO` → the monk's scored travel/ask/offer actions carry them to a qualified elder →
+co-location in Dragon lands → GRANT pass assigns the elder `GRANT_TATTOO` + resolves the target → APPLY_TATTOO@95 fires with the
+ability metadata → executor gates+rolls → writeback creates the ability TattooData → the monk's slot count rises → SEEK reverts once
+filled. Runtime-verified 21/21 (`tests/verify_seek_grant_tattoo.gd`): the pure helpers (urgency by elapsed absolute season; seeking
+gated on Togashi/unfilled/not-blocked; the ability draw excludes owned + returns NONE when all owned; the Dragon-territory check);
+the SEEK pass (assign when seeking, don't-assign when filled, respect a magistrate's UPHOLD_LAW, revert a stale SEEK→PERFORM_RITUAL,
+the all-9-occupied → BLOCKED transition); and the GRANT pass (qualified elder assigned GRANT_TATTOO + the injected target points at
+the **highest-urgency** co-located seeker with a body_location + drawn ability; under-skilled elder / out-of-Dragon-territory → no
+grant; a stale GRANT with no seeker reverts to PERFORM_RITUAL). Full project `--import` parse-clean; adoption/rest/bodyguard/settlement
+drivers re-pass (no regression from the shared-file edits). **With this, `SEEK_TATTOO` + `GRANT_TATTOO` are no longer dead
+NeedTypes** — the s57.25.7 ability-tattoo loop is live. DEFERRED (documented, not invented): the ise-zumi's "unknown elder pathway"
+GATHER_INTELLIGENCE "locate Togashi elder" score (75) is scored but has no query-target producer; the ability-tattoo COMBAT effects
+stay on the ASCII/s40 PC-travel HOLD (the grant creates the tattoo; its power fires on the combat layer). **`get_seek_tattoo_urgency`
+(the 85/90/95 objective-level urgency) — RESOLVED / WIRED 2026-07-09 (see the "s57.25.7 SEEK_TATTOO max-urgency escalation WIRED"
+changelog entry directly below); no longer deferred.**
+
+### Systems Added 2026-07-09 (settlement → governing-NPC linkage WIRED — the dead lord_character_id + shrine_custodian_id fields, owner-approved "B and C", runtime-verified 13/13)
+Owner-approved ("B and C", 2026-07-09) resolution of the last documented "clean-but-objected" dead-field cluster.
+`SettlementData.lord_character_id` (10 readers) and `shrine_custodian_id` (2 readers) were **zero-writer dead @export fields** —
+world-gen never set them and no production pass wrote them, so every reader misfired on the `-1` default: supply-share recipient
+resolution (`day_orchestrator:18312`), the art-ownership / daimyo-glory settlement→lord maps (5 sites: :34066/:34919/:35490/
+:35599/:35650/:35941, feeding sculpture/painting/garden display-ownership + art-visitor daimyo Glory), and the s57.26b shide
+custodian read (`origami_system:259`). The prior deferred note called this "NOT a clean wire" on two grounds — (a) populating
+them as stored world-gen fields duplicates the LIVE `_find_province_lord` heuristic into a **staleable cache** (the lord/custodian
+dies → the field points at a corpse), and (b) rerouting the 10+ consumers to a live resolver is a broad refactor. **Both objections
+dissolved by the design:** the new `DayOrchestrator._populate_settlement_governance` runs **DAILY and is fully self-correcting**
+(recomputed every tick from the current living population, so a dead lord's settlements re-point to the new highest-status governor
+the very next tick — there is no persisted stale-corpse cache; it is a per-tick projection, not a stored fact), and it resolves
+**every province in ONE O(chars) pass** (building per-clan / per-family / per-clan+family / global best-status maps + a
+highest-Insight-shugenja-by-location index, then stamping each settlement) instead of an O(chars) scan per province — so the 10+
+consumers were revived by simply **populating the fields they already read**, WITHOUT rerouting a single one. **No values/heuristics
+invented — the lord resolution replicates `_find_province_lord`'s EXACT clan/family wildcard semantics** (highest-status living
+char where `(prov.clan=="" OR c.clan==prov.clan) AND (prov.family=="" OR c.family==prov.family)`): clan+family both set → exact
+`best_cf` match, family only → `best_f` (any clan), clan only → `best_c`, both blank → `best_any`; a province with no matching
+lord → `-1`. `shrine_custodian_id` (religious settlements only — TEMPLE/SHINDEN/MONASTERY) = the highest-`get_insight_rank`
+shugenja (`school_type == SHUGENJA`) stationed at that settlement (`physical_location == str(settlement_id)`), else `-1` — the
+exact s57.26b/origami custodian read. Called in `advance_day` right after the `character_province_map` build (before the companion
+passes), so the linkage is fresh before any consumer runs that tick. Runtime-verified 13/13 (`tests/verify_settlement_governance.gd`):
+lord resolution across all four wildcard cases + the no-match `-1` + a parity spot-check against `_find_province_lord` itself;
+custodian = highest-Insight shugenja at a temple (a co-located bushi is NOT picked), `-1` for a non-religious settlement, `-1`
+for a religious settlement with no shugenja present; and the self-correction (living daimyo governs → daimyo dies → settlement
+re-points to the heir next pass → both dead → `-1`). Full project `--import` parse-clean. **With this, `lord_character_id` and
+`shrine_custodian_id` are no longer dead fields** — the whole art-ownership / supply-share / daimyo-glory / shide-custodian
+consumer set is live. (The `_find_province_lord` placeholder comment's "province → daimyo linkage is not explicit on ProvinceData"
+gap is now bridged by this daily projection; the two remain independent — `_find_province_lord` is still the ad-hoc single-province
+resolver, `_populate_settlement_governance` is the batch settlement-field producer.)
+
+### Systems Added 2026-07-09 (s22.5:33 adoption ACTIVATED — the dead ADOPTED_HEIR succession path, owner-approved, runtime-verified 20/20)
+Owner-approved ("Go", 2026-07-09) build of the s22.5:33 adoption mechanic. `L5RCharacterData.adopted_children_ids` was a
+**zero-writer dead field** that fed succession's ENTIRE Priority-4 ADOPTED_HEIR candidate path (`SuccessionSystem.get_candidates`
+:160-170, `_candidate_priority` :875, birth-order weight 4) plus the divination heir check (day_orchestrator:33582) — but
+NOTHING ever appended to it, so **no character ever had an adopted heir** and a lord with no bloodline heir simply had their
+line break (the s22.5 P6 "confirming lord selects — the family line is broken" outcome) with no adoption fallback. GDD s22.5:33
+(LOCKED): "Priest 4 — Adopted Heir: A character formally adopted into the family for the purpose of succession. Adoption is a
+deliberate action (1 AP) that generates an Adoption topic (Section 16.5) with the adoption_variant flag (clear_succession or
+questionable_legitimacy per Section 15.7)." **Placement (per the "check existing channels before wiring any ActionID" HARD
+CONSTRAINT):** heir designation is already a dedicated SEASONAL orchestrator pass (`DayOrchestrator._evaluate_heir_designations`
+→ `SuccessionSystem.designate_heir`), NOT a daily-AP action — so adoption (a sibling succession decision) was wired INTO that
+pass, not as a duplicate daily-AP ActionID (which would create a parallel succession-decision execution path — forbidden). The
+GDD's "1 AP" is the PC-facing framing; the NPC seasonal pass models the same decision without AP bookkeeping, exactly as the
+existing heir designation does. **The one design call the GDD leaves open — the NPC trigger + target — is the owner-approved
+heuristic (2026-07-09), every number LOCKED:** `_should_adopt_heir` fires when the lord is **Family Daimyo+** (`RoleRegistry.
+lord_rank_from_status ≥ FAMILY_DAIMYO`, i.e. status ≥ 6.0), has **no settled heir** (`designated_heir_id < 0`), has **not already
+adopted** (`adopted_children_ids` empty), and has **NO living biological child of the same clan** (a bloodline child of ANY age
+is the natural heir and blocks adoption; a dead child does not block). `_pick_adoption_candidate` selects the **highest-status
+UNMARRIED (`spouse_id < 0`) same-clan-AND-family adult (`age ≥ 18` — the world-gen adult-samurai gate, since `is_gempukku_ready`
+is a ChildRecord method not on the sheet) junior (`status < lord.status`)** who is **not already claimed** as any lord's designated
+heir or adopted child (a `claimed_ids` set built once per pass so an adoptee is never double-claimed). On adoption: append the
+adoptee to `adopted_children_ids`, `designate_heir` them (they are now the sole/strongest candidate), and generate the Adoption
+topic via `_create_adoption_topic` — `topic_type "adoption"` (the type the personality-lean tables already react to: chugi +5,
+gi's questionable −6), **variant `clear_succession`** (the `questionable_legitimacy` variant applies only to adopting an
+unacknowledged affair/secret-line child, and NO illegitimacy/affair-line signal is tracked on the character sheet, so it has no
+detectable trigger — documented, NOT invented), TIER_4 POLITICAL, subject = the adoptee (NEUTRAL role), known by both lord and
+adoptee. Runs BEFORE the ordinary candidate evaluation, so the adopted heir immediately becomes the designated heir; a lord who
+adopts this season is skipped by `_should_adopt_heir` next season (heir now settled / already adopted). Runtime-verified 20/20
+(`tests/verify_adoption.gd`): the four `_should_adopt_heir` gates (Family-Daimyo-rank / no-heir / not-already-adopted /
+living-same-clan-bio-child-blocks, dead-child-does-not-block); `_pick_adoption_candidate`'s full exclusion set (married / child-age
+/ different-family / different-clan / status≥lord / claimed → picks the highest-status unclaimed junior, null when none eligible);
+the topic (type/variant/tier/category/subject/clan+family/both-pools/id-advance); and end-to-end through `_evaluate_heir_designations`
+(a heirless SEIGYO Family Daimyo adopts + designates + topics, while a Family Daimyo WITH a living bio child does not). Full project
+`--import` parse-clean. **With this, `adopted_children_ids` is no longer a dead field** — the s22.5 ADOPTED_HEIR succession path is
+live. DEFERRED (documented, not invented): the `questionable_legitimacy` variant (needs an affair/secret-line-child signal on the
+character sheet); a PC-facing 1-AP ADOPT ActionID (the PC layer is on the PC-travel HOLD, and the seasonal NPC pass is the live
+channel).
+
+### Known Code Issues — Deferred (2026-07-09, dead-FIELD sweep — zero-writer @export fields, all survivors design-gated, do NOT re-audit)
+A NEW lens the prior function-focused sweeps missed: a mechanical scan of every scalar/bool `@export` field on
+`L5RCharacterData` + `ProvinceData`/`SettlementData`/`ClanData` + the system Resources (SecretData/FavorData/WarData/…) for
+fields **READ in production but NEVER WRITTEN** (the exact class as the civilian-order-budget / bodyguard / rested_last_night
+LIVE bugs this session fixed). Three were fixed (civilian_order_budget_max, assigned_protection_target_id, rested_last_night
+— see their changelog entries). **Every remaining zero-writer field is design-gated — documented so future sweeps skip them:**
+- **`SettlementData.lord_character_id` (10 readers) + `shrine_custodian_id` (2 readers) — RESOLVED / WIRED 2026-07-09
+  (owner-approved "B and C"), no longer dead fields.** See the "settlement → governing-NPC linkage WIRED" changelog entry
+  above: `DayOrchestrator._populate_settlement_governance` (daily, right after the `character_province_map` build) now
+  populates both fields. The prior "not a clean wire / staleable cache" objection was solved by making the pass **daily +
+  self-correcting** (recomputed every tick, so a dead lord's settlements re-point to the new highest-status governor next
+  tick — no stale-corpse cache) and resolving every province in ONE O(chars) pass (per-clan / per-family / per-clan+family /
+  global best-status maps) that replicates `_find_province_lord`'s exact clan/family wildcard semantics, so the 10+ consumers
+  were revived WITHOUT rerouting any of them to a live resolver.
+- **`L5RCharacterData.adopted_children_ids` — RESOLVED / WIRED 2026-07-09 (owner-approved), no longer dormant.** See the
+  "s22.5:33 adoption WIRED" changelog entry above: the seasonal `_evaluate_heir_designations` pass (the dedicated succession
+  channel, not a duplicate daily-AP ActionID) now adopts an heir for a heirless Family Daimyo+, feeding the ADOPTED_HEIR path.
+- **`L5RCharacterData.enhanced_void` — the +2k2 Void-spend variant.** The LOCKED techniques that grant it (Kaiu Method /
+  Yoritomo Joy of Plunder) are **skill-scoped** ("Void Points on **School Skills**"/"on any **Merchant Skill** grant +2k2"),
+  so the blanket boolean is a MISMATCH — wiring `enhanced_void = true` would grant +2k2 on ALL rolls (invention). Faithful
+  wiring needs a skill-context refactor of `VoidSystem.roll_bonus` + per-school skill-set maps; and its only consumer
+  (`spend_for_roll`) is the s40 tile-combat layer on the PC-travel HOLD anyway.
+- **`SecretData.physical_proof_item_id` — read once (has_proof signal).** Blocked on the unbuilt physical-inventory layer
+  (no physical-item-transfer ActionIDs exist; already documented DESIGN-GATED). A secret gets physical proof only when an
+  item-transfer mechanic can set it.
+- **`great_grandparent_records` — intentional 3-generation world-gen depth cap** (world-gen builds parent/grandparent
+  AncestorRecords, not great-grandparent; a minor family-bond disposition factor). Not a bug.
+- **`immune_to_fear` / `speaks_foreign` — already documented forward-wired** (no granting advantage/roster data set yet; the
+  read-side mechanism is complete and activates the moment a producer populates them).
+- **`MilitaryUnitData` hierarchy fields (`parent_army_id`/`parent_section_id`/`section_id`/`legion_id`/`army_id`/`clan_id`/
+  `is_reserve`) — the multi-tier military command hierarchy (legions→sections→armies as Resources) is UNBUILT.** World-gen
+  creates military *commanders* (Taisa per legion, Chui per company, as CHARACTERS) but never instantiates
+  `LegionData`/`SectionData`/`ArmyData` Resources or links companies into legions (`ArmyCombatSystem.create_company` /
+  `levy_system` set `parent_legion_id = -1`). So the `MilitaryHierarchy.can_legion_coordinate` / `can_section_initiate_campaign`
+  gates (action_executor:2996/3004) look up legions that never exist → null → the coordination gates no-op. Building the tier
+  hierarchy (world-gen creating + linking the Resources, s57.21 sections of 4-12 legions — the `LEGIONS_PER_ARMY=3` const is
+  already flagged PROVISIONAL/diverging-from-GDD) is an owner-gated subsystem, not a field wire.
+- **`LetterData.passage_destination_province` / `passage_koku_offered` — the s57.42/43 REQUEST_PASSAGE Sailing fields.**
+  Blocked on the deferred Sailing layer (no live REQUEST_PASSAGE ActionID / ship Lesser Zone; already documented DEFERRED).
+- **`TattooData.is_visible` — its sole reader `can_activate_tattoo` is itself a zero-caller ASCII/s40-blocked function**
+  (ability-tattoo activation fires on the combat/effect layer, PC-travel HOLD). Design-gated with the rest of the tattoo
+  combat layer.
+- **`ArtisanItemData.is_exceptional_weapon` / `is_sacred_weapon` / `history_points` — the s49 crafting attribute layer**;
+  the NPC crafting pipeline was removed as invented content (2026-05-26), and the live CRAFT executor does not set these, so
+  they stay unwritten until an owner-authorized crafting-attribute pipeline exists.
+- (False positives cleared: `life_extension_years`, `access_petition_denied_season`, `okiya_visit_counts`,
+  `commerce_conducted_seasons`, `cohabitation_days`, `violence_offense_days`, the xp_* fields, and all Array/Dict fields —
+  each IS written via `+=` / element-mutation / `.append` / a helper method [`set_day_buff` etc.], missed by the whole-object-
+  assignment regex.) **With this, the dead-field vein is swept to exhaustion — every clean no-invention wire is taken; the
+  rest are settlement-governance-linkage / ADOPT-pipeline / physical-inventory / skill-scoped-technique / unbuilt-military-
+  hierarchy / deferred-Sailing design work. The reactive-event pipeline was also verified symmetric (every injected
+  type/reactive_type has a consumer; every consumer arm a producer) — no orphaned producer/consumer.**
+
+### Known Code Issues (found and fixed 2026-07-09, s57.31.7a/s57.32.2 `rested_last_night` had ZERO producers — natural healing + Void refresh ignored every rest disqualifier — runtime-verified 12/12)
+A **zero-producer dead-field** (the sibling of the bodyguard / civilian-order-budget class, on the rest/recovery layer). `L5RCharacterData.rested_last_night` (@export, default **`true`**) is the SHARED gate BOTH the OOC-Day-Tick natural-healing pass (s57.31.7a) and the Void-Point-refresh pass (s57.32.2) read — via `DayOrchestrator._counts_as_rested(c, ic_day)` = `c.rested_last_night or power_of_ocean_until_ic_day >= ic_day` (day_orchestrator:6493, consumed at the OOC tick block :2293/:2299). The LOCKED lifecycle (s57.31.7a:195 + s57.32.2:15, both explicit): the flag **resets to true at the start of each OOC day** and is **flipped to false by any disqualifier occurring during the OOC day's 4 IC days — "active combat, continuous travel, watch-duty majority, starvation (2+ days without food/water), or specific blocking effects"** — so "a character who marches through the night does not benefit from the refresh." But **NOTHING in production ever WROTE the field** (grep-confirmed: the only refs were the @export decl + the two reader sites + `_counts_as_rested`), so it sat at its default `true` for every character forever → `_counts_as_rested` was ALWAYS true → **every character healed AND refreshed their full Void pool at every OOC tick regardless of whether they marched all night, fought, or starved.** The entire rest-disqualifier layer was inert; a courier who spends the whole session on the road recovered Void + Wounds identically to one resting safely in a castle. FIX (pure structural wire of the LOCKED lifecycle — **no invented values**; the reset/flip rule and the "continuous travel" disqualifier are the spec's own): new `DayOrchestrator._process_rest_tracking(characters, travel_arrivals, ic_day)` — the SOLE producer — is called each IC day **AFTER** the OOC-tick read (so this tick's read still reflects the just-completed window, then the reset opens the next one): on an OOC boundary (`ic_day % TICKS_PER_REAL_DAY == 0`) it resets every living character's flag to `true` (LOCKED "reset at the start of each OOC day"), and then for the current day it flips the flag to `false` for any character who **`TravelSystem.is_traveling(c)`** OR **arrived this day** (in `travel_arrivals`, having spent the day on the road — travel is processed at :186, before the OOC read, so a same-day arrival's `is_traveling` is already false and must be caught via the arrivals list). The `false` state persists across the 4-IC-day window (only the next boundary resets it), so travel on ANY day of the window denies healing + Void refresh at the next tick — exactly the LOCKED "any one disqualifier ... prevents natural healing." **Only continuous travel is wired** — the one clean, live, unambiguous disqualifier; **DEFERRED (documented, no per-character producer exists):** active-combat presence (no per-character "was in combat this OOC day" flag; most combat is on the s40 PC-travel HOLD), watch-duty majority (no watch-duty tracking), and per-character starvation (the sim tracks province `starvation_stage`, not per-person 24h-without-food — mapping province→person would be an interpretation, not built). **Power of the Ocean (s36) composes cleanly** — a traveling character flagged `false` still `_counts_as_rested` via the spell override (`power_of_ocean_until_ic_day >= ic_day`), unchanged. The `_counts_as_rested` doc comment already anticipated this producer ("overrides the rest system's flip-to-false for combat/travel"). Runtime-verified 12/12 (`tests/verify_rest_tracking.gd`): boundary reset (stationary → true; non-boundary does NOT reset a false flag — window persistence); travel flip (traveling → false; boundary+traveling → reset-then-flip = false, the new window disqualified); arrival flip (arrived-this-day → false despite `is_traveling==false`; an unrelated stationary char stays rested); full-window persistence (day-1 travel → false; days 2/3 stationary keep it false; `_counts_as_rested` false throughout; day-4 boundary resets true); dead-guard (a dead traveler untouched); and the Power-of-the-Ocean override. Full project `--import` parse-clean. **With this, `rested_last_night` is no longer a dead field** — traveling characters now forgo their OOC natural healing + Void refresh, the LOCKED s57.31.7a/s57.32.2 behavior.
+
+### Known Code Issues (found and fixed 2026-07-09, s12.8 bodyguard-assignment producer was NEVER wired — the entire household bodyguard defense was inert — runtime-verified 9/9)
+A **zero-producer dead-field** disabling a whole downstream combat path (the sibling of the civilian-order-budget class,
+applied to the assassination defense layer). `L5RCharacterData.assigned_protection_target_id` (the field that marks a
+character as another's assigned yojimbo) is the **SOLE input** to the execution-phase bodyguard-encounter path:
+`DayOrchestrator._find_bodyguard` / `_target_has_bodyguard` (day_orchestrator:29586/29593) resolve the target's guard
+ONLY by scanning for a character whose `assigned_protection_target_id == target.character_id`, and that guard drives the
+LIVE `AssassinationSystem.resolve_bodyguard_encounter` combat retry + `evaluate_bodyguard_response`. But **NOTHING in
+production ever WROTE that field** (grep-confirmed: world-gen never sets it, no assignment path stamped it) — it sat at
+its `@export` default `-1` for every character forever. So `_find_bodyguard` always returned null, `_target_has_bodyguard`
+was always false, and **the entire s12.8 "household assigns a bodyguard at suspicion ≥ 20" defense (`SUSPICION_BODYGUARD_THRESHOLD`
+= 20, s12.8 line 42) was dead** — a target under active assassination surveillance never got a yojimbo, the FIGHT_FIRST
+bodyguard-combat branch never fired, and `_npc_bodyguard_decision` / `evaluate_bodyguard_response` were unreachable. The
+household response tiers (0-9 none / 10-19 watchful / **20-29 bodyguard assigned** / 30+ lockdown) had their watchful and
+lockdown rungs live (investigation bonus / access-TN penalty) but the middle **bodyguard** rung produced nothing. FIX
+(pure structural wire of the LOCKED household-response tier — **no invented values**; the threshold + the loyalty gate are
+the arbiter's own s12.8 constants, and the selection metric mirrors the sibling `find_best_searcher` / `_find_bodyguard`):
+(1) new `AssassinationSystem.find_best_protector(target, assassin_id, characters_by_id)` — the best combat-capable LOYAL
+co-located household member (`_is_household_member` + `disposition ≥ LOYALTY_DISPOSITION_MINIMUM` 0, scored by
+`maxi(Kenjutsu, Iaijutsu)` — the exact combat measure `_find_bodyguard` uses), excluding the assassin, the target itself,
+dead candidates, anyone already guarding someone (`assigned_protection_target_id >= 0`), and non-co-located candidates.
+(2) `DayOrchestrator`'s ACCESS phase now, inside the existing `if AssassinationSystem.should_assign_bodyguard(op):` gate
+(suspicion ≥ 20), when the target has **no** guard yet (`_find_bodyguard(target) == null`), stamps
+`protector.assigned_protection_target_id = target.character_id` and reports `tick_result["bodyguard_assigned"]` — so the
+previously-dead execution-phase path now reaches. **Persistence design (documented, no invention):** an assigned bodyguard
+REMAINS the yojimbo — the GDD gives no de-assignment rule, so none is invented (a minor "protector pool depletion" over a
+very long game is acceptable; a guard who leaves the settlement stops resolving via the co-location gate, so a wandered-off
+guard is naturally inert). Runtime-verified 9/9 (`tests/verify_bodyguard_assignment.gd`): `find_best_protector` picks the
+highest-combat (Kenjutsu 5) loyal household member and, with it gone, the best-of-`max(Ken,Iai)` (Iaijutsu 3) direct
+vassal; it excludes the assassin / target / dead / disloyal (disposition < 0) / already-guarding / off-site candidates
+(→ null when all are excluded, then selects the lone eligible warrior past every gate); and end-to-end a stamped protector
+flips `_target_has_bodyguard` false → true and is resolved by `_find_bodyguard`, while a guard who then leaves the
+settlement no longer resolves. Full project `--import` parse-clean. **With this, `assigned_protection_target_id` is no
+longer a dead field** — the s12.8 bodyguard rung of the household-response ladder is live. DEFERRED (documented, not this
+fix): the s12.8 **PC crisis-event** bodyguard path (a PC target) is on the PC-travel HOLD; the daimyo/lord-ordered
+standing-yojimbo assignment (a bodyguard assigned by a lord's civilian order rather than reactively by the household under
+threat) is a separate governance channel with no current ActionID.
+
 All systems are implemented, tested, and passing. Before writing any new simulation
 file, search `/simulation/` and `/shared/` to confirm the system doesn't already exist.
 For per-section status (DONE / PARTIAL / NOT STARTED / REFERENCE) see the
 **Code Implementation Status** table at the bottom of `/gdd/00_INDEX.md`.
+
+### Known Code Issues (found and fixed 2026-07-08, s11.7 field rice-deprivation morale/health drain was produced-but-never-consumed — starving armies wasted away by nothing — runtime-verified 8/8)
+A **produced-but-not-consumed** dormant signal (the exact symmetric twin of the fixed "Army recovery computed but never applied" bug, same file/same pattern). `DayOrchestrator._process_field_deprivation` (the daily field-supply pass) computed, for every rice-starved field company, the **LOCKED s11.7 `ArmyUpkeepSystem.RICE_DEPRIVATION`** morale/health deltas (tick 2 → −3 morale / tick 3 → −3 morale, −5 health / tick 4 → −5 morale, −10 health) via `get_rice_deprivation_effect`, and packed them into `military_daily["deprivation_results"]` — but **`deprivation_results` had ZERO readers** (grep-confirmed: written at day_orchestrator:16649/16663, read nowhere; every other `_process_military_daily` output — movement/battle/siege/tether/recovery — is consumed via `military_daily.get(...)`). So a rice-starved field army lost **no** morale and **no** health, and the stat-mutating arbiters (`apply_rice_deprivation_tick` / `process_deprivation_tick`) were dead — the live path reimplemented deprivation as **report-only** and dropped the application. FIX (pure structural wire of the LOCKED value — **no invented values**; the per-day-application pattern is the sibling `_process_army_recovery`'s own): `_process_field_deprivation` gains a defaulted `companies` param (threaded from the call site where it is already in scope as the recovery pass's arg), builds a company-by-id map, and applies the rice delta to the SAME `cd["current_morale"]` / `cd["current_health"]` the recovery pass writes — floored at 0, per day, at the army's escalating deprivation tick (so a persistently unsupplied army wastes away 0 → −3 → −3/−5 → −5/−10 as its tick climbs). Runtime-verified 8/8 (`tests/verify_field_deprivation.gd`): each tick applies its exact RICE_DEPRIVATION delta (tick 2/3/4 morale −3/−3/−5, health 0/−5/−10; tick 1 no drain); morale/health floor at 0 for a near-broken company; a detached tether drains nothing; the report still records `morale_applied`/`health_applied`; and an empty-companies call is a safe report-only no-op. Full project `--import` parse-clean. **DEFERRED (documented — the arms half is DESIGN-GATED):** the `arms_effect` attack/defense penalty (`ARMS_DEPRIVATION`, also computed into the same report) has **no live consumer** — daily company dicts carry no mutable attack/defense, combat reads base `UNIT_STATS`, and no combat path reads `arms_deprivation_tick`; applying it needs a battle-time consumer built, not a one-line wire, so the arms drain stays report-only.
+
+### Known Code Issues (found and fixed 2026-07-08, s57.34 Civilian Order budget was NEVER assigned — the entire lord-governance channel was inert since inception — runtime-verified 13/13)
+A **zero-caller producer disabling an entire downstream channel** — the single highest-impact dormant defect found to date, and a genuine LIVE bug (not a dead twin). `CivilianOrderBudget.update_budget_for_character` is the **SOLE writer** of `L5RCharacterData.civilian_order_budget_max` (it sets it from the LOCKED s57.34.2 `BUDGET_BY_RANK` table: CITY_DAIMYO 5 / PROVINCIAL 8 / FAMILY_DAIMYO 10 / CLAN_CHAMPION 12 / IMPERIAL 15 / non-lord 0) — but it had **ZERO production callers** (grep-confirmed across the ENTIRE repo: the field is written nowhere else, and world-gen / `generate_character` never sets it either). So `civilian_order_budget_max` sat at its **@export default 0 for every character in production, forever.** The daily reset (`_reset_all_ap`) copied that 0 into `civilian_orders_remaining`, so the live wave-resolver gate `if is_lord and character.civilian_orders_remaining > 0` (npc_wave_resolver.gd:362/483) was **NEVER entered** — meaning **no lord could ever issue a single Civilian Order.** The whole s57.34 governance channel was dead since inception: **SET_TAX_RATE / SET_STIPEND_RATE** (economy), **ASSIGN_VASSAL_OBJECTIVE** (directing vassals), **REQUEST_ART / REQUEST_PERFORMANCE** (patronage), **ASSIGN_TO_MILITARY_SERVICE / ASSESS_PROVINCE_STATUS / APPROVE_CLAN_INDUCTION / TERMINATE_CONTRACT**, **SEND_INVITATION** (dual-cost court invitations), the non-military lord **ASSIGN_GARRISON / ORDER_*** civilian path, and the lord **WRITE_LETTER** civilian channel — every one aborted (the `execute_action` path returned `insufficient_civilian_orders`; the wave path never even reached them). Additionally, `resolve_daily_letter`'s "lords write letters via the budget, not the free pass" exclusion (`if civilian_order_budget_max > 0: return {}`, s57.34.7) was inert, so lords wrongly fell through the free daily-letter pass. This was invisible because every `verify_*.gd` / test that exercised civilian orders **constructed characters with an explicit budget in the fixture**, so the world-gen→reset→budget path was never exercised end-to-end. FIX (pure structural wire of the LOCKED arbiter, **no invented values** — the budgets are the arbiter's own s57.34.2 constants): `DayOrchestrator._reset_all_ap` now calls `CivilianOrderBudget.update_budget_for_character(c)` immediately before `c.civilian_orders_remaining = c.civilian_order_budget_max`, so the budget is recomputed from the character's CURRENT lord rank each day (also tracking status changes from promotion / succession / clan induction). Non-lords (status < CITY_DAIMYO) still get 0 (no regression). Runtime-verified 13/13 (`tests/verify_civilian_order_budget.gd`): the field defaults to 0 (the bug — the old reset copied 0 → dead channel); `update_budget_for_character` assigns the exact LOCKED budget for every rank (status 3→0 / 4→5 / 5→8 / 6→10 / 7→12 / 9→15); and the fixed `_reset_all_ap` gives a Champion 12 / a Family Daimyo 10 civilian orders (both were 0) while a non-lord stays 0, and a lord's `budget_max` is now > 0 so the s57.34.7 daily-letter exclusion works. Full project `--import` parse-clean. **DEFERRED (documented, not this fix — additionally gated):** the s57.54.10d operational-superior CO budget (`StrategicReview.get_operational_superior_co_budget`, 2/day for 1–3 subordinates / 3/day for 4+) for a NON-lord operational superior (e.g. a Taisa at status 3.5 → rank budget 0) is a separate zero-caller arbiter, but wiring it is blocked by the SAME wave-resolver gate — `if is_lord and …` excludes a non-lord operational superior even if given a CO budget — so it needs that gate relaxed to admit operational superiors, a behavioral change beyond this wire (a Shireikan at status 4.5 is already CITY_DAIMYO/is_lord and gets budget 5 from this fix). **DEEPER BLOCKER re-confirmed 2026-07-16 (do NOT re-attempt as a clean wire):** even granting the LOCKED budget AND relaxing the wave-resolver `is_lord` gate, the wire is **INERT** — EVERY `CivilianOrderBudget.PURE_ORDER_ACTIONS` civilian-order action (`ASSIGN_VASSAL_OBJECTIVE`, `SET_TAX_RATE`, `SET_STIPEND_RATE`, `REQUEST_ART/PERFORMANCE`, `ASSIGN_TO_MILITARY_SERVICE`, `ASSESS_PROVINCE_STATUS`, …) is ALSO in `NPCDecisionEngine.LORD_ONLY_ACTIONS` (npc_decision_engine:3259), so a non-lord operational superior's option set is filtered to ZERO civilian-order actions (`_is_lord_only_blocked` → `not ctx.is_lord`); the `MILITARY_OR_CIVILIAN_ACTIONS` route through the *military* order budget for a rank-holder, not civilian orders. So a Taisa granted a CO budget has **no valid civilian-order action to spend it on** — `_resolve_civilian_order` returns `{}` (empty `order_options`) and the budget is wasted. Making it meaningful requires either relaxing `ASSIGN_VASSAL_OBJECTIVE` from lord-only to lord-OR-operational-superior (an **authority-model design decision** — s57.54.10d grants the budget "for coordinating subordinates" but names NO ActionID, and letting a Taisa direct a Chui via a civilian order is a new authority mapping) or a NEW operational-coordination ActionID. The LOCKED spec supplies the budget values, not the spendable action; this is design-gated, not a structural wire. **RESOLVED 2026-07-17 (owner-approved, see the "s57.54.10d operational-superior CO budget MADE SPENDABLE" changelog entry at the top):** neither the wave gate nor `LORD_ONLY_ACTIONS` nor the daily-loop `ASSIGN_VASSAL_OBJECTIVE` ActionID was the right lever (that ActionID's `ASSIGN_OBJECTIVE` need-producer is unbuilt, so it is dead for lords too — lord vassal delegation is the SEASONAL Strategic Review channel). Instead the owner approved **Shape A**: `_reset_all_ap` now assigns the LOCKED op-superior CO budget (max-rule with the lord budget), and a NEW dedicated daily pass `_process_operational_coordination` spends it — an op-superior directs each idle subordinate onto a copy of the superior's OWN active primary objective (owner-approved "propagate the superior's objective"), 1 CO each. No wave/LORD_ONLY/executor change (op-superiors are non-lords who never enter the wave CO loop). Runtime-verified 33/33.
+
+### Known Code Issues (found and fixed 2026-07-08, s57.23a B6 bonsai→garden integration boost never applied — zero-caller arbiter — runtime-verified 10/10)
+A **zero-caller effect arbiter** (the sibling of the OFFER_FAVOR / supply-share-ratio class). `GardenSystem.get_garden_effective_tier(garden, bonsai_display_id)`
+(s57.23a **B6** / s57.24.9 LOCKED: "When bonsai displayed in a zone containing an active garden, garden's effective visitor tier
+increases by 1 (capped at Legendary). The boost is presence-based — bonsai quality_tier does not affect the magnitude") had **ZERO
+production callers** (grep-confirmed: only its own def + `tests/`). The live garden-visit pass `DayOrchestrator._process_garden_visitor_effects`
+computed the visitor disposition bonus via `GardenSystem.apply_visitor`, which reads the **raw `garden.current_tier`** and never
+factored in a co-displayed bonsai — so a bonsai displayed at a garden's settlement gave the garden **zero** visitor-tier boost, and
+the entire s57.24.9 integration mechanic was inert. FIX (pure LOCKED wiring, **no invented values** — the +1/cap-5/presence-based
+rule is the arbiter's own s57.23a B6 constant): `apply_visitor` gains an optional `effective_tier: int = -1` override (when ≥ 0 it
+replaces `garden.current_tier` in the `VISITOR_DISPOSITION_BY_TIER` lookup — backward-compatible, the single existing caller is the
+garden pass; every other path is untouched). `_process_garden_visitor_effects` gains a defaulted `active_bonsai` param (threaded from
+`advance_day`, where it is already passed to the sibling bonsai pass), builds the set of settlement_ids hosting an active
+(non-dead, displayed) bonsai, and per garden computes `eff_tier = get_garden_effective_tier(garden, present ? 1 : -1)` fed into
+`apply_visitor`. Zones proxy to settlement level throughout the art system, so "bonsai in the garden's zone" = a bonsai whose
+`display_settlement_id == garden.settlement_id` (the one faithful mapping). The s57.27:115 familiarity decay still scales the
+(now-boosted) bonus afterward — the two LOCKED effects compose. Runtime-verified 10/10 (`tests/verify_garden_bonsai_b6.gd`): the
+arbiter (raw tier / +1 with bonsai / Legendary cap at 5); `apply_visitor`'s override (bonus == effective tier, creator still
+excluded, backward-compatible default); and end-to-end through `_process_garden_visitor_effects` — a tier-2 garden gives a visitor
++2 alone but **+3 with a co-displayed active bonsai**, while a bonsai at a DIFFERENT settlement or a DEAD bonsai gives no boost (+2).
+Full project `--import` parse-clean. (Found by a targeted art/lifecycle dormant sweep; the same sweep confirmed the rest of that
+domain is dead-duplicates [`get_maintain_tn`, `check_witness_immunity`, `resolve_performance_roll` — effect already applied inline]
+or design-gated [garden voluntary/daimyo-removal cluster, sacking-survival, emakimono-copy, `guardian_ward_value` — all need an
+unbuilt trigger/consumer], and a parallel newer-systems sweep [kolat/wall/spiritual/maho/insurgency] found NO clean wire — every
+remaining zero-caller there is a superseded aggregate twin [`compute_ptl_change`/`compute_stability_change` would double-count live
+piecemeal producers] or design-gated [`compute_susceptibility`/`get_crisis_tier`/`compute_garrison_honor_gain`(PROVISIONAL)] — do
+NOT re-audit those.)
+
+### Systems Added 2026-07-08 (s55.11 PROACTIVE duel path ACTIVATED — Trigger 1 public insult, owner-approved, runtime-verified 11/11)
+Owner-approved activation ("Continue, all of those, go") of the fifth of six design-gated systems. `ReactiveDecisions.evaluate_duel_trigger`
+— the s55.11 DELIBERATE proactive-duel evaluation (capability check → target-assessment → personality gate → ISSUE_DUEL_CHALLENGE)
+— was **fully built but had ZERO callers**, and no grievance→challenge event producer existed, so an NPC could never proactively
+challenge someone to a duel (only the RESPONSE path DUEL_CHALLENGE_RECEIVED was wired). The GDD s55.11 lists four trigger
+conditions (public insult / family-clan dishonored / cornered-in-court / eliminate-objective) — all GDD-specified, so this is a
+wiring gap, not a design gap. Wired **Trigger 1 (public insult received)** end-to-end (the cleanest, highest-value trigger;
+PUBLIC_INSULT is a live action): (1) **producer** — `_process_brash_reactions` (the PUBLIC_INSULT reaction pass) now, when the
+s45 Brash disadvantage does NOT compel an involuntary challenge (not brash, or brash-but-composed), injects a `GRIEVANCE` event
+into the insulted target's `pending_events` (deduped per insulter, living non-PC non-self target) — the deliberate counterpart to
+the involuntary Brash compulsion; (2) **reactive arm** — `evaluate_reactive_event` routes `"GRIEVANCE"` → `evaluate_duel_trigger`
+(giving the dormant function its first caller; a failed gate returns a clean PASS no-op); (3) **issuance writeback** — new
+`_process_proactive_duel_writebacks` scans the reactive results for a `GRIEVANCE` → `ISSUE_DUEL_CHALLENGE` and injects a
+`DUEL_CHALLENGE_RECEIVED` into the insulter (first-blood, sanctioned — the honorable insult-duel form, s4.8), reusing the fully-wired
+response path (accept/decline → `resolve_accepted_duel` → duel death → succession). **No values invented** — the gates/thresholds
+are `evaluate_duel_trigger`'s own (the one PROVISIONAL is its pre-existing Iaijutsu≥3 capability threshold, unchanged). Multi-tick
+chain: insult (tick N) → GRIEVANCE → deliberate evaluation (tick N+1) → DUEL_CHALLENGE_RECEIVED → response (tick N+2). Runtime-verified
+11/11 (`tests/verify_proactive_duel.gd`): the reactive arm returns ISSUE_DUEL_CHALLENGE for a YU bushi and PASS when the personality
+(JIN) or capability (no-YU/Iaijutsu-0/no-allies) gates block; the producer injects a GRIEVANCE on a successful insult and nothing on
+a failed one; and the issuance writeback injects exactly one first-blood/sanctioned DUEL_CHALLENGE_RECEIVED naming the correct
+challenger, with same-challenger dedup. Full project `--import` parse-clean. **DEFERRED (follow-ons, need their own event producers):**
+Trigger 2 (a Tier-3+ Dishonor/Betrayal topic about the NPC's family/clan → grievance), Trigger 3 (lost a PUBLIC_DEBATE with no
+recovering court actions), Trigger 4 (an ELIMINATE_CHARACTER primary targeting a co-located character). The core proactive path
+(`evaluate_duel_trigger`) is now live and any new trigger just injects a `GRIEVANCE` with its `trigger_type`.
+**FOLLOW-ON (2026-07-08, GOSSIP + EXPOSE_SECRET_PUBLICLY — the other two GDD-named Trigger-1 sources — runtime-verified 16/16):**
+the GDD Trigger 1 list is verbatim "A PUBLIC_INSULT, **GOSSIP, or EXPOSE_SECRET_PUBLIC** action has publicly damaged this NPC's
+reputation" — only PUBLIC_INSULT was wired above. New producer `_process_reputation_grievance_triggers` (wired beside
+`_process_brash_reactions` in the same post-wave pass) scans day results for a successful **GOSSIP** or **EXPOSE_SECRET_PUBLICLY**
+and injects a `GRIEVANCE` naming the ACTOR into the reputation-damaged **SUBJECT**'s `pending_events` (the subject is the gossip
+`effects.gossip_subject_id` / exposure `effects.subject_id`, NOT the listener). These two have **no Brash coupling** (the subject is
+talked-*about*, not slighted to their face), so they go straight to the deliberate GRIEVANCE — no involuntary path. **Faithful
+concealment gate (no invention):** a GOSSIP whose `effects.source_concealed` is true injects **nothing** — the subject cannot
+challenge a gossiper they cannot identify (s15.4 source concealment); an open gossip and any public exposure name a known actor and
+do inject. Guards mirror the insult producer (living non-PC non-self subject, per-(subject,actor) dedup). The reactive arm + issuance
+writeback are unchanged (they consume the same `GRIEVANCE`), so this is a pure producer extension. Runtime-verified 16/16
+(`tests/verify_proactive_duel.gd` gains `_test_gossip_and_expose_grievance`): open gossip → subject grieves the gossiper; concealed
+gossip → nothing; public secret exposure → subject grieves the exposer; a failed exposure and a self-gossip (actor==subject) → nothing.
+Full project `--import` parse-clean. **With this, all three GDD-named Trigger-1 sources are live.** Triggers 2-3 remain deferred
+(need their own producers + genuine ambiguity — Trigger 2 must resolve WHICH person a family/clan-dishonor topic names as the
+duel target from the topic's perpetrator, and Trigger 3 needs session-scoped "no remaining court actions" state). **Trigger 4 is
+NOT a clean wire and is DEFERRED PERMANENTLY (do NOT re-attempt):** the GDD frames it as a reactive path, but ISSUE_DUEL_CHALLENGE
+is ALREADY a scored action under the `ELIMINATE_CHARACTER` NeedType in `objective_alignment.json` (the normal AP loop selects it,
+and the executor already sets `to_death = true` for ELIMINATE_CHARACTER) — so a reactive Trigger-4 producer would create a
+**duplicate execution path**, which the CLAUDE.md hard constraint explicitly forbids ("Do not create duplicate execution paths.
+Check existing channels before wiring any ActionID"). The eliminate-via-duel behavior is already live through the scored channel.
+
+### Known Code Issues (found and fixed 2026-07-09, `school_name`/`school_rank` dead-field cluster — 2nd batch of the 2026-06-12 migration; broke the APPLY_TATTOO ability gate + more from world-start — runtime-verified 20/20)
+A **dead-field / stale-cache** cluster (the sibling of the 2026-06-12 `school_name` fix, which migrated 8 readers but MISSED a second
+batch of 6, plus a never-initialized twin cache). **(A) `school_name` never written → always `""`.** `L5RCharacterData.school_name` (the
+redundant duplicate of the canonical `.school`, which `generate_character` always sets) has **ZERO production writers** (grep-confirmed) yet
+**6 live readers still used it**, each silently misbehaving because `""` matches no school name: `action_executor:6371`
+(`can_apply_ability_tattoo(character.school_name, …)` — the **APPLY_TATTOO ability-grant gate**, so `is_togashi_school("")`→false → **no
+elder could EVER grant an ability tattoo**), `npc_decision_engine:734` (`can_receive_decorative(…, recipient.school_name, …)` — the
+**decorative-slot gate**, so `""`→ a tattooed monk could wrongly receive decorative work while ability slots were unfilled, violating
+s57.25.3), `kata_system:368` (**Mirumoto/Kakita ring reduction** — never fired) + `:442` (**named-kata school gate** — never fired), and
+`kolat_master_selector:292`/`:325` (**Kolat T1 school criteria** — never matched at world-gen). **(B) `school_rank` never initialized →
+stale 1.** `school_rank` (the twin denormalized cache of the school/insight rank — the advancement passes at `day_orchestrator:7514` /
+`npc_advancement:590` keep it `== get_insight_rank`) was set by neither `generate_character` nor world-gen, so it sat at its **@export
+default 1 for every world-gen NPC** until the first seasonal advancement tick lazily self-healed it (`new_rank > old_rank` → bump +
+**a spurious Tier-4 "rank-up" topic per senior character**). So from world-start the ability gate (`>=3`), kiho eligibility
+(`kiho_system:150`), and Kolat T1 criteria (`>=5/4`, and Kolat selection runs ONLY at world-gen) all read rank 1 regardless of the
+character's real rank. FIX (pure dead-field migration + cache init, **no invented values** — every target is the existing canonical field):
+(1) the 6 `.school_name` reads → `.school`; (2) `generate_character` now sets `c.school_rank = c.insight_rank` right after it syncs
+`insight_rank` (both are caches of `CharacterStats.get_insight_rank` — the same formula the advancement sync uses), and the WorldBootstrap
+post-mutation resync loop sets `school_rank` alongside `insight_rank` (so advantage/kolat/kuroiban/tattoo-artist skill boosts that change
+the computed rank keep both caches correct). NOTE: `get_insight_rank` recomputes rank from rings/skills, so the generation `insight_rank`
+PARAM is NOT the resulting rank (a param-3 Togashi computes to Rank 2); `school_rank` correctly holds the COMPUTED rank (consistent with
+advancement). Follow-on: the shipped tattoo-artist **Togashi elder** (`_TATTOO_ARTIST_SPECS`) was created at param `insight_rank=3` → computed
+Rank 2, but the GDD requires the ability-tattoo elder be **Rank 3+**, so its param was bumped to 4 (computes to 4) — a genuine granting elder
+(future-proofs GRANT_TATTOO); the shipped seeding/bond were unaffected (neither gates on the elder's live rank). Runtime-verified 20/20
+(`tests/verify_school_field_fix.gd`): `generate_character` sets `school_rank == insight_rank` (rank 1/3/5, no stale-1); the ability gate now
+passes for a computed-Rank-3+ Togashi elder in Togashi territory (fails outside, fails for a junior/non-Togashi, and the dead `school_name`
+path would still fail — proving the field was the bug); and the kata Mirumoto/Kakita reduction now fires for Mirumoto/Kakita and not Akodo.
+Full project `--import` parse-clean. `school_name` now has ZERO production readers (left declared for save compat).
+
+### Systems Added 2026-07-09 (s57.25.8 tattoo ARTIST-NPC seeding + s57.25.4 world-start disposition bond ACTIVATED — completes the tattoo world-gen layer; owner-directed "do all three", runtime-verified 45/45)
+The last deferred piece of s57.25.8. World-start tattoos were seeded (decorative + Togashi ability) but every one carried
+`artist_id = -1` (no in-game artist), so the **s57.25.4 disposition bond — the SOLE live `artist_id` consumer** (fired by the
+APPLY_TATTOO writeback, `day_orchestrator:30751` via `TattooSystem.get_disposition_bond`) — could never form for the world-start
+population, and s57.25.9 provenance always resolved "unknown." Two structural halves: **(1) artist NPCs.**
+`WorldBootstrap._seed_tattoo_artists` (new) seeds one tattoo-artist NPC per relevant clan/family via `WorldGenerator.generate_character`
+on a **reused existing clan school** (Dragon → Kitsuki Investigator, Crab → Kaiu Engineer [the artisan family], Mantis → Yoritomo
+Bushi, Daidoji → Daidoji Iron Warrior, Togashi elder → Togashi Tattooed Order) + injects the **LOCKED Artisan: Tattooing floor rank**
+(s57.25.8: Dragon/Crab/Mantis **2+**, Daidoji **1+**, Togashi elder **3+** as a Rank-3 monk) — **no invented archetype** (owner:
+"reuse a generic artisan school"). Created BEFORE `_assign_physical_locations` so they flow through every downstream pass (placement,
+contacts, advantages, insight resync, armor) as ordinary citizens; `next_character_id` threaded through `next_char_arr` so the id
+counter stays correct. `seed_world_start_tattoos` gains a defaulted `artist_by_category` param ({category → artist_id}, empty {} →
+the prior `-1` no-bond degradation, so the verify driver's 3-arg calls are unchanged); each recipient branch (dragon/crab/mantis/
+daidoji/togashi) stamps its category's artist onto the tattoo. **(2) s57.25.4 bond.** `_apply_world_start_tattoo_bonds` applies the
+LOCKED bidirectional bond per tattoo (Normal +1 / Fine +2 / Exceptional +3 / Masterwork +4 / Legendary +5), **mirroring the live
+APPLY_TATTOO effect** (`disposition_change` actor→recipient + `recipient_disposition_change` recipient→actor) applied directly to
+`disposition_values` (clampi −100..100), additive, never degrades ("no stacking cap"); a self-applied Togashi tattoo (artist ==
+recipient) is skipped (mechanically inert per GDD). **No values invented** — the bond magnitudes are the arbiter's own s57.25.4
+constants, the Tattooing floors are s57.25.8's own, the bond application is the live path's own pattern. **PROVISIONAL / owner-
+overridable (flagged in-code):** one artist per clan/family — the GDD "at minimum one" floor read at CLAN granularity (a reduction
+from the per-major-Dragon-province / per-Crab-Mantis-holding / per-major-Daidoji-holding literal); the reused school per clan; the
+artist character insight_rank (structural, a seasoned artisan — the Tattooing *rank* is LOCKED). The per-locale artist distribution
+(which would bound the bond to local clienteles rather than one artist per whole clan) is the remaining PROVISIONAL refinement — swap
+the `_TATTOO_ARTIST_SPECS` rows to expand. Runtime-verified 45/45 (`tests/verify_worldgen_tattoos.gd`, +21): `_seed_tattoo_artists`
+(5 artists, distinct ids, `next_char` advances by 5, each with its LOCKED Tattooing floor rank + real clan/family); artist_id routing
+(Crab-Hida tattoos carry the 'crab' id, Togashi ability tattoos carry the elder id, empty map → −1 backward-compatible); and the bond
+(Normal+Fine stack to +3 bidirectionally, artist_id<0 applies nothing, self-tattoo adds no self-disposition entry). Full project
+`--import` parse-clean. **With this, the s57.25.8 tattoo world-gen layer is complete** (decorative + Togashi ability + artist NPCs +
+bond); only the per-locale artist multiplication is a PROVISIONAL refinement, and the ability-tattoo *combat effects* stay on the
+ASCII/s40 PC-travel HOLD.
+
+### Systems Added 2026-07-09 (s57.25.8 Togashi ABILITY tattoo world-gen ACTIVATED — completes tattoo seeding; owner-directed "what do you want here", runtime-verified 24/24)
+Follow-on to the decorative slice below. Togashi/Kikage/Hoshi tattooed-monk NPCs now spawn with their **LOCKED per-rank ability-tattoo
+allotment** (Togashi 2/2/2, Kikage 1/1/1, Hoshi 1@R1 + 1@R4 — cumulative via the existing `get_allotment_for_rank`, keyed on the monk's
+`insight_rank` school-rank proxy). `TattooSystem.seed_world_start_tattoos` now routes a tattooed-monk school (`is_togashi_school`) to
+`_seed_ability_tattoos` (instead of returning empty): it seeds the exact locked count of `is_ability_tattoo=true` tattoos, each a distinct
+ability drawn **deterministically (seeded dice, no duplicates per monk)** from the s57.25.6 canonical `ALL_TATTOO_ABILITIES` list (the 25
+`Enums.TattooAbility` values minus NONE) onto distinct non-HEAD locations. **The one design call (owner-directed "what do you want here",
+2026-07-09):** s57.25 says only "the elder decides within school logic" and gives NO deterministic per-rank ability-selection rule, so the
+specific abilities are a **PROVISIONAL, owner-overridable seeded draw** (flagged in-code) — modeling the elder's opaque choice; this is the
+same rng-within-a-locked-set latitude as the decorative body-location/quality picks (the *count* per rank is LOCKED, only the *selection*
+is drawn). Faithful: the abilities are combat effects on the ASCII/s40 layer (PC-travel HOLD), so a blind draw is inert until that layer is
+live and can be refined then; quality NORMAL (ability tattoos aren't aesthetically graded; the quality-tiered s57.25.4 bond is absent with
+`artist_id = -1` anyway). Runtime-verified 24/24 (`tests/verify_worldgen_tattoos.gd`, +6): the exact locked allotments (Rank-1 Togashi → 2,
+**Rank-3 → 4 [the GDD worked example]**, Rank-5 → 6, Kikage R3 → 2, Hoshi R4 → 2, Hoshi R1 → 1) and per-monk constraints (all ability /
+non-NONE / artist −1 / no HEAD / distinct abilities+locations). Full project `--import` parse-clean. **The s57.25.8 artist-NPC seeding
++ s57.25.4 world-start bond are now DONE too (see the changelog entry above), so the tattoo world-gen layer is complete.** To pin the Togashi abilities to a fixed per-school sequence instead of the draw, swap
+`ALL_TATTOO_ABILITIES` / `_seed_ability_tattoos` — a one-function change.
+
+### Systems Added 2026-07-09 (s57.25.8 DECORATIVE tattoo world-gen ACTIVATED — the whole LOCKED section was inert; owner-directed "continue", runtime-verified 18/18)
+The **entire LOCKED s57.25.8 world-gen tattoo seeding was inert** — `WorldState.tattoos`/`next_tattoo_id` storage existed (+ saved) and
+the seed-probability helpers were built, but **NOTHING at world-gen called them**, so **no NPC started with any tattoo**, contradicting a
+full LOCKED section. Built the **DECORATIVE slice** (the fully-specified, no-open-design-space part): new `TattooSystem.seed_world_start_tattoos(character, dice, next_tattoo_id)`
+seeds the culturally-appropriate world-start tattoos per s57.25.8 — **Crab Hida warriors / Mantis bushi** 40–60% of 1–2 (via the LOCKED
+`should_seed_crab_mantis_tattoo` ≤0.6, count 1–2), **Daidoji** 50% single wrist/forearm (`should_seed_daidoji_tattoo` ≤0.5, duty/loyalty
+theme), **Dragon non-monk** 0–2 (`get_dragon_decorative_count` 0/1/2 thirds). Wired into `WorldBootstrap.bootstrap_world` (a per-character
+pass after the armor-loadout pass, returning `tattoos`/`next_tattoo_id`), mapped onto `WorldState.tattoos`/`next_tattoo_id` in
+`SimulationScheduler._bootstrap_fresh_world`, and persisted by the pre-existing `WorldStateSaver` DIR_TATTOOS resource-array path. Every
+value is LOCKED or an rng-within-a-locked-range pick (the codebase's standard deterministic world-gen procedure, all via the seeded
+`DiceEngine` — never `Array.shuffle`'s global RNG). **Bounded documented defaults (no open design space; flagged in-code):** the "Normal to
+Fine" quality split is uniform (`WORLD_GEN_TATTOO_FINE_CHANCE 0.5`, PROVISIONAL); the 1–2 count is uniform; `artist_id = -1` (world-start
+tattoos have no in-game artist → no s57.25.4 disposition bond forms — a graceful degradation, the artist-NPC seeding is DEFERRED, not an
+invented mechanic); body location is a random UNOCCUPIED eligible location with **HEAD never seeded** (s57.25.2 requires `is_bald` at
+application, which world-gen never sets); subject_type IMAGE, flavor description, topic_id −1 (no mechanic). **Faithful gating (no invention,
+all from clan/family/school fields):** Togashi tattooed-monk schools (`is_togashi_school`) are excluded (they get ability tattoos —
+deferred); Crab is Hida-warriors-only (per the GDD "Hida warriors and Mantis sailors"); non-eligible clans/families/dead → nothing. This
+lights up the LOCKED s57.25.8 decorative layer end-to-end: NPCs now bear their cultural tattoos, which the live READ_CHARACTER/PROBE/social-
+visibility surface (s57.25.5) can read. Runtime-verified 18/18 (`tests/verify_worldgen_tattoos.gd`): gating (Togashi monk / Lion / non-Hida
+Crab / dead → nothing); per-tattoo constraints (decorative-only, Normal/Fine, artist −1, no HEAD, no per-character location collision,
+Daidoji ≤1 wrist-only); the seed-probability bands land in the LOCKED ranges (Daidoji ~50%, Crab-Hida ≤~60%, Dragon ~⅔, counts 1–2 / ≤2);
+and id uniqueness + `next_tattoo_id` advancing by the seeded count. Full project `--import` parse-clean. **DEFERRED (open design space →
+owner decision, NOT built):** (1) **Togashi ability-tattoo allotment seeding** — a Rank-3 Togashi should spawn with 4 ability tattoos, but
+s57.25/57.25.6 give **no deterministic per-rank ability-selection rule** ("the elder decides within school logic"), so which of the 26+
+abilities each monk receives cannot be resolved without an owner rule [RESOLVED 2026-07-09 — PROVISIONAL seeded draw]; (2) the **s57.25.8
+artist-NPC seeding** (≥1 tattoo-artist per clan/family for valid `artist_id` references + the s57.25.4 disposition bond) [RESOLVED
+2026-07-09 — `WorldBootstrap._seed_tattoo_artists` + `_apply_world_start_tattoo_bonds`, runtime-verified 45/45].
+
+### Known Code Issues — Deferred (2026-07-09, post-succession-fix sweep — a whole inert LOCKED section + a dead-twin batch, do NOT re-audit)
+After the s22.5 succession wire (below), a fresh zero-caller sweep of the lifecycle / war / siege / naval / ronin / pc / artisan /
+bribery / tattoo layers found **NO further clean no-invention wire** — every survivor is a superseded twin, design-gated (missing
+producer/trigger/value), or ASCII/combat-blocked. Documented so future sweeps skip these exact items:
+- **s57.25.8 World-Generation tattoo seeding — DECORATIVE + Togashi ABILITY + ARTIST-NPC + s57.25.4 BOND are ALL DONE (see the three
+  changelog entries above); the tattoo world-gen layer is complete.** Decorative (Crab-Hida/Mantis 40–60% 1–2, Daidoji 50% wrist,
+  Dragon non-monk 0–2) + Togashi/Kikage/Hoshi ability tattoos + one artist NPC per clan/family (reused clan school + LOCKED
+  Artisan: Tattooing floor rank) + the bidirectional s57.25.4 disposition bond are wired end-to-end via
+  `TattooSystem.seed_world_start_tattoos` / `WorldBootstrap._seed_tattoo_artists` / `_apply_world_start_tattoo_bonds`,
+  runtime-verified 45/45. Only PROVISIONAL refinements remain (owner-overridable, NOT deferred work): per-locale artist
+  multiplication (one-per-clan floor vs the per-province/per-holding literal) and pinning the reused schools/insight ranks.
+- **SEEK_TATTOO / GRANT_TATTOO NeedTypes (s57.25.7) — RESOLVED / WIRED 2026-07-09 (owner-approved "B and C"), no longer deferred.** See
+  the "s57.25.7 SEEK_TATTOO / GRANT_TATTOO ability-tattoo loop WIRED" changelog entry above. On reading the LOCKED s57.25.7 in full, the
+  "genuine design surface" objection dissolved — the GDD locks every value (scores, 1/2/3-season urgency tiers, activation/BLOCKED,
+  recipient = "highest urgency"), so it was structural wiring after all. Built: the seasons-at-rank urgency tracker (the one "no producer"
+  gap — a LOCKED-derived stamp at rank-up) + `is_seeking_tattoo`/`draw_ability_for_grant` helpers (T1); the two self-correcting standing
+  passes `_assign_seek_tattoo`/`_assign_grant_tattoo` (T2, highest-urgency co-located seeker, Dragon-territory gate, BLOCKED transition);
+  and the APPLY_TATTOO ability metadata via `ctx.grant_tattoo_target` (T3). The executor + creation writeback were ALREADY complete for
+  ability tattoos, so no executor change was needed. Runtime-verified 21/21.
+- **Ability-tattoo activation (`get_active_ability_tattoo`/`can_activate_tattoo`/`compute_visibility`/`has_mantis_tattoo`/…) —
+  ASCII/s40-blocked** (the tattoo powers fire on the combat/effect layer under the PC-travel HOLD).
+- **Confirmed dead twins (superseded by a live path; do NOT wire):** `MarriageSystem.is_gempuku_eligible` (a 72-**season** duplicate
+  of the live 18-year day-based `L5RCharacterData.is_gempukku_ready` / `GEMPUKKU_AGE_DAYS 6480`); `MarriageSystem.get_birth_family_floors`
+  (a dead accessor — the live `DispositionSystem._get_birth_family_floor` reads the floors directly); `DispositionSystem.get_tier_name`
+  (cosmetic String helper, no gameplay consumer); `BriberySystem.apply_bribe_accepted`/`apply_bribe_refused`/`generates_public_topic`/
+  `get_report_behavior`/`destroy_physical_evidence` (the live bribery path routes `attempt_bribe` → `_apply_failed_bribe_evidence` +
+  `SecretSystem.apply_bribe_costs` in the executor/orchestrator, so the crime-record-mutating dedicated funcs are superseded);
+  `WarTermination.create_peace_court`/`conclude_peace_court`/`is_valid_peace_proxy`/`apply_willingness_modifier` (a higher-fidelity
+  peace-court negotiation superseding — live wars terminate via `resolve_negotiated_settlement`/`resolve_formal_surrender`/
+  `resolve_annihilation` with inline terms; the peace-court needs an unbuilt convene-trigger + terms-negotiation subsystem).
+  The war-aid-refusal cluster, siege event-pipeline (`active_sieges` never appended in live code), army-upkeep dead twins, and
+  information-system dead twins remain as already documented above.
+
+### Known Code Issues (found and fixed 2026-07-09, s22.5 succession transition-duration was a divergent inline copy — the 7-tick fast path was UNREACHABLE — runtime-verified 12/12)
+A **divergent-inline-copy / dormant-fast-path** wire (the sibling of the land-commander / social-TN class, applied to the succession
+lifecycle). `SuccessionSystem.get_transition_duration(is_clean, confirming_disp)` — the canonical s22.5 transition-duration arbiter
+(**clean succession + confirming-authority disposition ≥ 31 → CLEAN_SUCCESSION_MIN_TICKS 7 / clean low-disp → CLEAN_SUCCESSION_MAX_TICKS 14
+/ disputed → DISPUTED_MAX_TICKS 60**) had **ZERO production callers** (grep-confirmed: only its own def + `tests/`). The sole live consumer,
+`DayOrchestrator._process_successions`'s per-tick loop (:11890), **inlined its own `max_dur`** as `DISPUTED_MAX_TICKS (60)` unless the
+succession was `PENDING` → `CLEAN_SUCCESSION_MAX_TICKS (14)` — so it only ever yielded **14 or 60, and NEVER 7**. Result: the s22.5
+**7-tick fast path** ("a clean succession whose confirming authority holds the heir at Friend+ disposition resolves fastest") was
+**permanently unreachable** — every clean succession dragged out the full 14 ticks regardless of the confirming authority's standing,
+and the disposition-≥31 threshold in `get_transition_duration` was dead. The tell that this is a divergent copy: the inline path split
+on `SuccessionState` (PENDING vs else) while the arbiter splits on `is_clean` + `confirming_disp` — two different, drifting encodings of
+the same LOCKED rule. FIX (pure structural wire of the LOCKED arbiter — **no invented values**; the 7/14/60 are the arbiter's own s22.5
+constants): (1) `SuccessionData` gains a defaulted `transition_max_ticks: int = -1` (a data-carrier field, the sanctioned way to route a
+LOCKED value from producer to consumer); (2) the creation site (`_process_lord_deaths`, :11726 — where `is_clean` and `confirming_disp`
+are already computed for the DISPUTED-state branch) **stamps** `succession.transition_max_ticks = SuccessionSystem.get_transition_duration(is_clean, confirming_disp)`;
+(3) the tick loop **reads** `succ.transition_max_ticks`, falling back to the prior inline behavior only when it is the `-1` sentinel (a
+succession loaded from a pre-fix save). So a clean high-disposition succession now resolves in 7 ticks, a clean low-disposition one in
+14, and a disputed one in 60 — the fast path is live. **Emperor-succession path unaffected** (grep-confirmed): the orderly Imperial path
+sets `CONFIRMED` and is skipped by the tick loop (`if succ.state == CONFIRMED: continue`), and the DISPUTED Imperial path stamps 60 (its
+`is_clean` is false) — identical to the old fallback. Runtime-verified 12/12 (`tests/verify_succession_duration.gd`): the arbiter (clean+31/60
+→ 7, clean+30/0 → 14 at the boundary, disputed → 60 regardless of disp; the 7/14/60 constants distinct); and end-to-end through
+`_process_successions` — a stamped `transition_max_ticks=7` succession expires+confirms at **exactly tick 7** (its sole living candidate),
+the `-1`-fallback control expires at tick **14** (the pre-fix behavior), the fast path resolves strictly sooner than the fallback (proving
+the fix makes a difference), and a CONFIRMED succession is not ticked. Full project `--import` parse-clean.
+
+### Systems Added 2026-07-09 (s12.8:39 context-severity upgrade ACTIVATED — dead get_effective_severity + missing SecretData fields, owner-approved, runtime-verified 13/13)
+Owner-approved activation ("Continue, all of those, go", 2026-07-09) of a dormant LOCKED arbiter blocked on two missing data fields.
+GDD s12.8:39 (LOCKED): "a secret moves up one tier if it involves a character of higher Status than the subject, or if it occurred
+within the last 4 IC seasons." `SecretSystem.get_effective_severity(secret, subject_status, involved_status, seasons_since_act)`
+encodes this exactly — but had **ZERO production callers** (the live exposure funcs `reveal_privately`/`expose_publicly` used the raw
+`secret.severity`), because two of its three inputs had **no producer**: `SecretData` carried **no `involved_id`** (who else is in the
+secret) and **no creation-day** field. FIX (owner-approved defaults; **no invented values** — the tier logic + RECENCY_SEASONS=4 are
+the arbiter's own LOCKED constants): (1) `SecretData` gains `involved_id: int = -1` + `ic_day_created: int = -1` (both default -1 =
+unset → graceful raw severity); (2) the affair mint (`_mint_affair_secret`) stamps them (`involved_id = seducer`, `ic_day_created =
+ic_day`) — owner default "involved = the secret's other party (seducer/fabricator/briber) where one exists"; (3) new
+`SecretSystem.get_exposure_severity(secret, subject, characters_by_id, ic_day)` resolves the effective tier — `subject.status`,
+`involved.status` (from `involved_id`, sentinel -1.0 when unset/unresolvable → no involved bump), `seasons_since_act` via
+`TimeSystem.get_absolute_season(ic_day) − get_absolute_season(ic_day_created)` (−1 when either day is unset → the arbiter's own
+`>= 0` guard suppresses the recency bump) — and is wired into BOTH exposure funcs (`reveal_privately` gains trailing
+`characters_by_id`/`ic_day`; `expose_publicly` gains trailing `ic_day`), fed `characters_by_id` + `ctx.ic_day` from the executor. So
+exposure DAMAGE (disposition/honor/glory/infamy) now uses the effective severity, not the raw tier. **Graceful + backward-compatible:**
+a secret without context data (every non-affair mint today) exposes at raw severity; the default-arg exposure calls are unchanged.
+**FAITHFULLY PRESERVED (documented, NOT altered):** `get_effective_severity`'s own LOCKED guard `sev > TIER_1 and sev < TIER_4` only
+upgrades TIER_2/TIER_3 — a TIER_4 secret is NOT upgraded (its `sev < TIER_4` excludes it) and TIER_1 is already the ceiling; this is
+the arbiter's built behavior and is preserved as-is (changing it would alter a LOCKED-value arbiter — a separate owner decision).
+Runtime-verified 13/13 (`tests/verify_secret_context_severity.gd`): the helper (raw when unset; higher-status-involved bump T3→T2;
+recency bump T3→T2; lower-status/old/unresolvable → no bump; the T4-no-upgrade + T2→T1-ceiling guards); and the exposure integration
+(a T3 married-affair secret with a higher-status seducer exposes as effective T2 with a harsher per-witness disposition hit than a
+raw-T3 control; `reveal_privately` likewise; and the no-context-args call stays raw T3, backward-compatible). Full project `--import`
+parse-clean. **DEFERRED (documented):** only the affair secret currently stamps `involved_id`/`ic_day_created` (the bribe secrets are
+already TIER_1 so the arbiter's guard makes stamping them a no-op); the infrastructure now applies to ANY secret the moment its mint
+site sets the two fields — stamping the remaining mint sites (fabrication/witness) is a follow-on once each site's "involved party"
+semantics are pinned.
+
+### Systems Added 2026-07-09 (s12.8:271 affair-secret minting ACTIVATED — dead get_affair_severity + never-minted secret, owner-approved, runtime-verified 20/20)
+Owner-approved activation ("Continue, all of those, go", 2026-07-09) of a dormant LOCKED arbiter. GDD s12.8:271 (LOCKED) states
+"**the entanglement generates a secret object**" on a successful seduction, at a severity tier by the participants' circumstances —
+but the tier arbiter `SeductionSystem.get_affair_severity` (cross-clan+political → **T2** / married → **T3** / unmarried similar →
+**T4**) had **ZERO production callers**, and `DayOrchestrator._process_seduction_entanglements` created the entanglement while
+**never minting the mandated secret** — so the entire "discovery (EAVESDROP/SHADOW_TARGET) → blackmail (INTIMIDATE) → expose
+(EXPOSE_SECRET)" affair-scandal chain had no affair secret to consume. FIX (structural plumbing of a LOCKED arbiter + LOCKED
+secret-mint pattern; **no invented values** — the tiers are the arbiter's own s12.8:271 constants): the entanglement pass gains
+`active_secrets`/`next_secret_id` params (threaded from `advance_day`, both already in scope) and, on a NEW entanglement, mints the
+affair secret via new `_mint_affair_secret`. Every design choice is grounded: **subject = the seduced target** (line 289 "the seduced
+person suffers the affair scandal consequences" in every variant, and SEDUCE_FOR_LEVERAGE explicitly treats it as "leverage against
+the seduced target"); **known_by_ids = [seducer, target]** (LOCKED "initially known only to the two participants"); **severity** from
+`get_affair_severity(seducer.spouse_id>=0, target.spouse_id>=0, is_political_tension, is_cross_clan)`. The one §271 design signal —
+"political tension" — is the **OWNER-APPROVED default: cross-clan** (a cross-clan affair is inherently politically charged, and this
+matches the arbiter's own T2-first precedence; a same-clan affair is never T2). Minted via the established `SecretSystem.create_secret`
++ `next_secret_id[0]++` + `active_secrets.append` pattern; **deduped on the per-(seducer,target) `affair_<s>_<t>` slug** so re-seducing
+after a break (the affair secret "remains in existence", line 273) never mints a duplicate; **null-guarded** (unresolvable participants →
+no mint, no crash). The minted secret is immediately consumable by the LIVE chain: `DayOrchestrator` injects every secret whose
+`known_by_ids` contains a character into that character's `ws["known_secrets"]` (day_orchestrator:18897→18906), so the seducer can now
+EXPOSE/blackmail the affair and EAVESDROP/SHADOW writebacks extend `known_by_ids` to observers. Applies to all five Seduction ActionIDs
+(the seduced person suffers the scandal regardless of the seducer's motive). Runtime-verified 20/20 (`tests/verify_affair_secret.gd`):
+the arbiter (T4/T3/T2 + the T2-first precedence over married); `_mint_affair_secret` (subject=target, known_by=[both], correct severity,
+slug, not-fabricated, id advance, cross-clan→T2, per-pair dedup, null-guard); and end-to-end through `_process_seduction_entanglements`
+(a successful SEDUCE mints the affair secret known by both participants; a failed seduction mints nothing). Full project `--import`
+parse-clean. **DEFERRED (documented, not invented):** SEDUCE_TO_COMPROMISE's **additional** third-party political secret (line 289 —
+subject = the rival whose household was penetrated) needs the executor's intended-third-party target id, which the compromise path does
+not set; the affair-scandal secret on the seduced person (minted here for all five variants) is the base output.
+
+### Systems Added 2026-07-09 (s11.5b §5 Cunning-emperor blessing POLITICS ACTIVATED — dead ±10 arbiter + un-stamped clan field, owner-approved, runtime-verified 14/14)
+Owner-approved activation (AskUserQuestion "Cunning-emperor blessing politics", 2026-07-09) of a dormant + design-gated arbiter —
+the fifth design-gated Miya system brought live. `MiyaBlessingSystem.apply_cunning_modifier` (s11.5b §5, LOCKED: a Cunning emperor
+**+10** Need Score to a favored clan's provinces / **−10** to a disfavored clan's, before the annual rice-blessing province pick)
+was **doubly dead**: (1) it had **ZERO production callers** (`process_annual_blessing` built the scored array and called
+`select_provinces` directly, skipping the cunning pass — and an EARLIER CLAUDE.md note wrongly called it "already live via
+`_process_miya_blessing_followup`", corrected 2026-07-09), AND (2) the scored-province entry `_build_scored_provinces` produced never
+carried a `clan` field, so even a hand-inserted call would have matched `entry.get("clan","")` == "" and been a silent no-op. The GDD
+§5 LOCKS the ±10 effect but leaves it **discretionary** ("**May** add +10 to favored / −10 to disfavored") and locks NO rule for
+WHICH clan a Cunning emperor favors — the one design value. **OWNER-APPROVED RULE (2026-07-09):** favored = the clan whose champion
+holds the **HIGHEST** disposition toward the Emperor, disfavored = the **LOWEST** — the established Emperor↔clan convention
+(`CollectiveDisposition` has no Imperial participant, so a clan's standing with the throne routes through its champion, per the
+Emperor's-Peace fix), computed via the **same** "highest-status, `lord_id==-1` per clan" champion proxy + `champ.disposition_values[emperor_id]`
+read the sibling suspension-penalty pass (`_process_miya_blessing_followup`) already uses — **zero invented mechanic beyond the owner's
+favorite-selection rule; the ±10 magnitude is the arbiter's own LOCKED constant.** FIX (three parts, all structural): (1)
+`ResourceTick._build_scored_provinces` now stamps `"clan": prov.clan` on each scored entry (a real `ProvinceData` field the arbiter
+already expects); (2) new `DayOrchestrator._compute_cunning_blessing_clans(characters_by_id, emperor_id)` computes favored/disfavored
+by the owner rule — **no-op (both blank)** when there are < 2 clans OR the top and bottom champions tie (no real standing difference →
+no favoritism to express), deterministic clan-name tiebreak among equal extremes — called on the SPRING boundary only when
+`emperor_archetype == CUNNING` and fed to `spring_inputs["cunning_favored_clan"]`/`["cunning_disfavored_clan"]`; (3)
+`ResourceTick._apply_miya_blessing` forwards the two keys into the hand-built `inputs` dict (they were being dropped there), and
+`MiyaBlessingSystem.process_annual_blessing` applies `apply_cunning_modifier(scored_array, favored, disfavored)` before
+`select_provinces` when the archetype is CUNNING and at least one clan name is non-blank. Every OTHER archetype ignores the keys
+(no-op); a Cunning emperor with no standing difference among clans applies nothing. Runtime-verified 14/14
+(`tests/verify_miya_cunning.gd`): the arbiter (+10 favored / −10 disfavored / neutral unchanged / blank-names no-op); the
+favored/disfavored helper (highest-champ→favored, lowest→disfavored, ignores a higher-disp non-champion vassal, no-op on <2 clans /
+all-equal / no-emperor); and end-to-end through `process_annual_blessing` — with 2 low-score Crab + 3 high-score Lion provinces, an
+IRON emperor selects all 3 Lion (cunning keys ignored) while a CUNNING favored=Crab/disfavored=Lion flips the ±10 to select 2 Crab +
+1 Lion, and a CUNNING emperor with blank clans reverts to the raw all-Lion pick (the no-standing-difference no-op). Full project
+`--import` parse-clean.
+
+### Known Code Issues — Deferred (2026-07-09, TWO fresh whole-domain dormant sweeps — social-consequence + resource/economy/worship — NO clean wire remains, do NOT re-audit)
+Two systematic agent sweeps of the last two un-reconfirmed domains, each grepping every `static func` in-scope for production
+callers and tracing each zero-caller's intended consumer + GDD lock, cross-checked against the deferred lists above, plus a hand
+spot-check of the closest near-misses. **Result: ZERO clean structural wires remain** — every surviving dormant arbiter is
+design-gated behind an unbuilt trigger, a missing data field, or a missing central choke point (inventing past any of them would
+violate the "Do not invent mechanics" HARD CONSTRAINT). Documented so future sweeps skip these exact near-misses:
+- **`SecretSystem.get_effective_severity` (s12.8:39 LOCKED — +1 severity tier when a higher-Status character is involved OR the act
+  is < RECENCY_SEASONS old) — RESOLVED / ACTIVATED 2026-07-09 (owner-approved), no longer a dormant item.** `SecretData` gained
+  `involved_id` + `ic_day_created` (stamped at the affair mint; owner default "involved = the other party"), new
+  `SecretSystem.get_exposure_severity` resolves the effective tier, and both exposure funcs now apply it (fed `ctx.ic_day`). See the
+  "s12.8:39 context-severity upgrade ACTIVATED" changelog entry above.
+- **`SeductionSystem.get_affair_severity` (s12.8:271 LOCKED — unmarried→T4 / married→T3 / cross-clan+political→T2) — RESOLVED /
+  ACTIVATED 2026-07-09 (owner-approved), no longer a dormant item.** `_process_seduction_entanglements` now threads
+  `active_secrets`/`next_secret_id` and mints the affair secret via `_mint_affair_secret` (subject = the seduced target, known_by =
+  the two participants, severity from the arbiter, "political tension" = cross-clan per the owner default, per-pair dedup). See the
+  "s12.8:271 affair-secret minting ACTIVATED" changelog entry above.
+- **`DispositionSystem.get_authenticity_modifier` (s12.2:515 LOCKED — Devoted/Ally/Friend doing a hostile act → −1/−2 KEPT dice;
+  symmetric for friendly acts toward enemies).** Its sibling `get_raise_modifier` is already live in the social-TN calc, but this
+  one needs a per-action `action_is_hostile` classification (none exists) + a central social-roll choke point to inject a
+  keep-dice modifier (none exists) — a per-action hostility map + keep threading through every social roll.
+- **`MiyaBlessingSystem.apply_cunning_modifier` (s11.5b §5 — Cunning-emperor ±10 Need Score) — RESOLVED / ACTIVATED 2026-07-09
+  (owner-approved), no longer a dormant item.** Was truly zero-caller (+ the scored entry never carried a `clan` field); the owner
+  supplied the discretionary §5 favorite-selection rule (favored/disfavored = highest/lowest clan-champion disposition toward the
+  Emperor) and it is now wired end-to-end. See the "s11.5b §5 Cunning-emperor blessing POLITICS ACTIVATED" changelog entry above.
+- **The rest are design-gated clusters (trigger/field/consumer unbuilt), already the same class the deferred lists document:** the
+  s12.10a favor-DISPUTE suite (`can_dispute`/`resolve_dispute`/`get_dispute_witness_disposition` — no DISPUTE_FAVOR action);
+  `FavorSystem.is_blackmail_exposure_risk`/`forgive_favor` (no public-invocation-exposure / heir-forgiveness trigger);
+  `IntimidationSystem.generate_betrayal_topic` (no failed-blackmail→expose sequence tracking); `ViolenceSystem.should_escalate_to_killing`
+  (only the non-lethal bodyguard scuffle feeds `evaluate_violence`); the `SecretSystem` NPC-covert-selection/fabrication-detection
+  gates (`get_bribe_tn`/`detect_fabrication`/`should_generate_reputation_topic`/`passes_covert_filters`/`can_fabricate` — unbuilt
+  fields/actions); the `DispositionSystem` composite permanent+historical+temporary ledger (`compute_permanent_modifier`/
+  `compute_total_disposition`/`is_temporary_expired` — the same unfolded-ledger owner-gated architecture); and on the
+  resource/economy/worship side `WorshipSystem.get_minor_blessing_tier`/`compute_province_effective_maluses` (deferred four-level
+  minor-blessing layer / superseded by the live batch `compute_all_province_maluses`), `RegionalPriceModifiers.compute_final_price`
+  (needs the owner base-price table + item→category mapping), and the SUPERSEDED per-unit refactor seams
+  `ResourceTick.produce_iron_settlement`/`process_forge_conversion_single_clan` (effect fires via the inline batch passes —
+  harmless). **With this, all world-sim domains have been swept to exhaustion for clean no-invention wires; every remaining
+  dormant item is owner-gated design work, not a structural wire.**
+- **`InventorySystem` physical-item MANIPULATION layer (s12.11) — whole-layer dormant, DESIGN-GATED (documented 2026-07-09 so it is
+  not re-hunted).** The LIVE surface of InventorySystem is only THREE functions (`create_gift_item` [DELIVER_GIFT], `get_contraband_on_person`
+  + `get_item_size_string` [assassination CONCEAL_ITEM / contraband]). The entire physical-item *manipulation* suite — `give_directly`,
+  `send_by_messenger`, `receive_from_transit`, `move_to_storage`, `destroy_item`, `pickpocket`, `search_quarters` (the ITEM-theft one),
+  `has_evidence`/`get_evidence_items`/`get_items_in_tier`/`can_add_item`/`needs_concealment` — is **zero-caller** (grep-confirmed:
+  def + `tests/` only). NOT a clean wire: there are NO physical-item-transfer ActionIDs anywhere (GIVE_ITEM / PICKPOCKET / SEND_ITEM /
+  STORE_ITEM / DESTROY_ITEM don't exist — grep-confirmed empty), so wiring the layer means BUILDING a whole physical-inventory action
+  suite (ActionIDs + AP costs + context lists + objective_alignment scores + action_skill_map + personality filters + theft/detection
+  mechanics + an item-economy producer) — all game-design values requiring owner authorization, the same class as the deferred s11.8
+  Regional item-price market and the removed artisan-NPC pipeline. NOTE the name collision that is NOT a bug: the LIVE `SEARCH_QUARTERS`
+  ActionID searches for **secrets** (`SecretSystem.resolve_search_quarters`, a Stealth roll), a DIFFERENT capability from
+  `InventorySystem.search_quarters` (physically taking an item from quarters) — the two are unrelated, not a divergent copy. Gift-giving
+  (s12.3) and performative arts (s12.4) were swept in the same pass and are fully wired (zero dormant funcs).
+
+### Systems Added 2026-07-08 (s11.5b §4.3 Miya's Blessing Winter-Court PETITIONS ACTIVATED — dead petition_bonus producer, owner-approved, runtime-verified 15/15)
+Owner-approved activation ("Continue, all of those, go") of the fourth of six design-gated systems. The s11.5b §4.3
+Winter-Court-influence layer was **dormant at the producer end**: `MiyaBlessingSystem.compute_need_score` already CONSUMED a
+`petition_bonus` input per province (weighting which provinces receive the annual rice-blessing) and `compute_petition_bonus(success,
+raises)` computed the GDD value (+8 base, +2/raise, 0 on failure) — but **NOTHING ran the petitions**, so the input was always `{}`
+and Winter Court lobbying never affected the blessing. The GDD §4.3 is fully specified (LOCKED): during Winter Court, a Status-3.0+
+character may raise a petition (a Courtier(Manipulation)/Awareness roll vs TN 25) that adds +8 Need Score to the petitioned province
+(+2/raise); a Miya representative must be present; one petition per province. FIX: new
+`DayOrchestrator._process_miya_blessing_petitions` — resolved at the SPRING boundary (day 360, where the Imperial Winter Court is
+STILL active: it runs day 241→361, so the same annual event that hosts the petitions is live when the blessing consumes them, no
+cross-season tracker needed). It scans `active_courts` for an ACTIVE `IMPERIAL_WINTER_COURT` with a Miya-family attendee present,
+then each attending clan's best Status-3.0+ courtier rolls Courtier(Manipulation)/Awareness (via SkillResolver) vs TN 25 for that
+clan's neediest home province; the resulting `compute_petition_bonus` lands in `{province_id: bonus}` fed straight into
+`spring_inputs["petition_bonuses"]` → the blessing's `_build_scored_provinces`. Added GDD-LOCKED constants `MiyaBlessingSystem.PETITION_TN
+= 25` and `PETITION_MIN_STATUS = 3.0`. **PROVISIONAL / structural NPC selection (flagged — the GDD locks the roll/effect/gate but NOT
+which province a clan lobbies for or who petitions):** the petitioned province is the clan's lowest-stability home province (a direct
+GDD distress signal, already the blessing's own tiebreak), the petitioner is the clan's highest-Courtier Status-3.0+ attendee, and
+free raises are earned from margin (margin/5, the codebase's NPC bonus-scaling convention). Runtime-verified 15/15
+(`tests/verify_miya_petition.gd`): the constants + arbiter (+8/+12/0); `compute_need_score` adds the petition (+12 → +12); neediest-province
+selection (lowest stability; −1 for a clan with no province); the full flow (Miya present → a strong petitioner secures ≥ +8 on the
+neediest Crab province, the healthy one untouched); and the three gates (Miya-absent / only-Status-2.0 / inactive court → no
+petitions). Full project `--import` parse-clean.
+
+### Systems Added 2026-07-08 (s55.10 Winter-Court HOST ROTATION ACTIVATED — two phantom producers built, owner-approved, runtime-verified 6/6)
+Owner-approved activation ("Continue, all of those, go") of the third of six design-gated systems. `StrategicReview._evaluate_winter_court_host`
+(the Emperor's Autumn choice of which clan hosts the Imperial Winter Court, s55.10) scores each clan by
+`seasons_since_host = current_season_index − last_host_seasons[clan]` (capped 20, ×0.75), so a clan that hosted recently
+should yield to one that has waited longer — but BOTH keys were **phantoms with zero producers**: `current_season_index`
+was never set (only the CYCLIC `current_season` 0–3 was injected — useless for a monotonic "seasons since" difference), and
+`last_host_seasons` (a per-clan Winter-Court-hosting tracker) was never written. So the term was a CONSTANT for every clan
+(`0 − (−100) = 100` → capped 20 → +15 each) and never differentiated — a clan that hosted last year scored identically to
+one that never had, and host selection fell entirely to disposition/crisis/archetype (no rotation). **No values invented**
+— the score weights and the −100 default are the evaluator's own; the two producers are pure plumbing. FIX: (1)
+`_run_strategic_reviews` gains an `ic_day` param (threaded from `advance_day`) and injects
+`world_states["current_season_index"] = TimeSystem.get_absolute_season(ic_day)` (the monotonic `year*4 + season` index) in
+the war-context block, erased after the loop like the other scratch keys. (2) `_create_winter_court_from_directive` records
+`world_state["last_host_seasons"][host_clan] = TimeSystem.get_absolute_season(ic_day)` on successful court creation — a
+PERSISTENT top-level key (survives across ticks in-memory, deliberately NOT in the stale-key pass and NOT erased after the
+review loop), so a clan that just hosted scores its rotation term near 0 next Autumn while long-waiting clans get the full
++15. (`world_states` top-level scratch isn't saved across restart, so the rotation preference resets on reload — acceptable
+graceful degradation for an annual, self-healing preference; Winter Court is once/year so it re-establishes within a year
+or two.) Runtime-verified 6/6 (`tests/verify_winter_court_rotation.gd`, isolating the rotation term via IRON archetype [0
+preference] + empty disposition/crisis): a just-hosted clan yields to a never-hosted one; swapping recency flips the choice
+(proving the term is live, not constant); a longer-ago-hosted clan (20 seasons) beats a more-recent one (4 seasons); the
+pre-fix phantom state (no keys) collapses to iteration-order (the dead behavior); and the non-Autumn guard returns {}. Full
+project `--import` parse-clean.
+
+### Systems Added 2026-07-08 (s4.3.21 four-level worship maluses ACTIVATED — family/clan/empire blanketing, owner-approved, runtime-verified 10/10)
+Owner-approved activation ("Continue, all of those, go") of the second of six design-gated systems. The s4.3.21 kami-worship
+malus layer was **province-only**: `process_seasonal_worship` fully COMPUTES + STORES the family/clan/empire aggregate
+tiers (`family_tiers`/`clan_tiers`/`empire_tiers` in `worship_state`, via `evaluate_aggregate_thresholds`), and the
+canonical `get_worst_tier(province, family, clan, empire)` arbiter exists — but the live consumer
+`compute_all_province_maluses` read ONLY the province tier and never touched the three aggregate maps, so a Fortune the
+whole clan neglected inflicted nothing (contradicting the GDD's four-level design, where a failing clan-wide worship
+blankets the malus onto every member province). **No values invented** — the aggregate thresholds (family 60 / clan 150 /
+empire 800) are the GDD's own stated numbers (s4.3.21 line 1367), flagged PROVISIONAL only for map-dependent
+recalibration; the province threshold (10 WP) and the malus tables are LOCKED and unchanged. FIX: `compute_all_province_maluses`
+now, per province × Fortune, reads the province tier PLUS `family_tiers[prov.family][f]`, `clan_tiers[prov.clan][f]`,
+`empire_tiers[f]` and applies `get_worst_tier(...)` (WorshipTier enum NONE<RESTLESS<DISPLEASED<WRATHFUL, so `max` = worst
+severity) — so the harshest of the four scopes drives each province's malus. The result flows unchanged into the live
+seasonal consumer (`day_orchestrator:1617` → `_apply_worship_stability_maluses` + the resource/insurgency ticks), so a
+displeased clan now actually depresses pop growth / stability / koku / rice across all its provinces. Runtime-verified
+10/10 (`tests/verify_worship_four_level.gd`): `get_worst_tier` max-severity ordering; a failing FAMILY blankets its
+provinces (Benten WRATHFUL → −1.0 pop growth + `marriage_auto_fail` on the province, whose own tier is NONE); a failing
+CLAN blankets (DISPLEASED → −0.50); a failing EMPIRE blankets (RESTLESS → −0.25); the worst tier wins over a milder
+province tier (province RESTLESS + family WRATHFUL → −1.0); and all-NONE → empty combined (no malus). Full project
+`--import` parse-clean. The 60/150/800 thresholds remain PROVISIONAL pending a live playtest per the GDD flag, but they
+are the GDD's stated values — nothing invented.
+
+### Systems Added 2026-07-08 (s57.27:115 familiarity decay ACTIVATED — painting + garden, owner-approved, runtime-verified 24/24)
+Owner-approved activation ("Continue, all of those, go") of the first of six previously design-gated systems. The
+s57.27:115 familiarity-decay mechanic (LOCKED section; the *rates* are GDD-flagged PROVISIONAL/pending-playtest) was
+**dormant**: `PaintingSystem.FAMILIARITY_DECAY_RATE` had been deliberately zeroed in the invented-content audit, and the
+two display-start clocks (`PaintingData.continuous_display_start_ic_day`, `GardenData.installation_date`) were tracked at
+creation but **never read** — so a work displayed for decades gave the same visitor bonus as a fresh one, contradicting
+"a permanently-displayed work occupying the same slot > 1 IC year loses visitor impact." **No invented values** — every
+number is the GDD's own: standard tier 15%/IC year beyond the first, floor 50%; the fusuma + religious-statuary tier at
+HALF rate (7.5%/yr, floor 75%). FIX: (1) **canonical helper** — restored the four rate constants and added
+`PaintingSystem.familiarity_factor(ic_day, display_start_ic_day, half_rate)` as the SINGLE home for the decay math
+(`beyond_first = max(0, years−1)`; `max(floor, 1 − rate×beyond_first)`; returns 1.0 within the first year or when the
+clock is unset −1) — so paintings/gardens (and the deferred sculpture/bonsai) all read ONE formula, no divergent copies.
+(2) **painting visitor site** (`day_orchestrator` ~34836): the visitor `disposition_change` is now scaled by
+`familiarity_factor(ic_day, painting.continuous_display_start_ic_day, painting.format == FUSUMA)` and int-rounded — so a
+Fine kakemono (+2) held 3 IC years applies +1 (round(2×0.70)), a Masterwork (+4) at floor applies +2 (round(4×0.50)),
+and a fresh work is unchanged. Fusuma decays at the half rate (architectural, part of the space). (3) **garden visitor
+site** (~34269): the garden `bonus` is scaled by `familiarity_factor(ic_day, garden.installation_date, false)` (standard
+rate) with a `garden_bonus <= 0: continue` guard. The GDD's ikebana-exempt rule is honored for free (ikebana runs a
+separate lifespan path, never calls this). Runtime-verified 24/24 (`tests/verify_familiarity_decay.gd`): the rate
+constants (0.15/0.50/0.075/0.75); the GDD's own worked examples (Fine kakemono +2 → 1yr 1.0 / 2yr 0.85 / 3yr 0.70 / 4yr
+0.55 / 5yr+ 0.50 floor); the half-rate tier (2yr 0.925 / 3yr 0.85 / 4yr 0.775 / 5yr 0.75 floor); the guards (unset −1 →
+1.0, sub-year → 1.0, extreme age holds the floor); and the orchestrator scaling round-math (+2@3yr→1, +4@3yr→3,
++4@floor→2, +4@fresh→4). Full project `--import` parse-clean. **TIER 2 (bonsai + sculpture) now DONE (2026-07-08,
+runtime-verified 16/16 `tests/verify_familiarity_decay_tier2.gd`):** the two art forms that lacked a display-start clock
+each gained one — `BonsaiData.display_start_ic_day` (stamped in `_process_bonsai_display_writebacks` on DISPLAY_BONSAI,
+reset when moved to a different settlement, kept on re-display at the same slot; read STANDARD-rate at the bonsai visitor
+site — a bonsai is a living plant) and `SculptureData.display_start_ic_day` (stamped in `_auto_place_completed_sculpture`
+when a statuary/guardian enters its display slot; read HALF-rate at the sculpture visitor site — religious statuary per
+s57.27:115; distinct from the s57.28 `ic_day_placed_outdoor` wood-weathering clock). Both scale their visitor
+`disposition_change` by the same canonical `PaintingSystem.familiarity_factor` — so all FOUR permanently-displayed art
+forms (painting, garden, bonsai, sculpture) now decay consistently. Verified: fields default −1 (unplaced → factor 1.0);
+the bonsai clock stamps/preserves/resets correctly across DISPLAY_BONSAI; statuary + guardian stamp on placement; and the
+rate distinction (bonsai 3yr→0.70, sculpture 3yr→0.85). Ikebana stays exempt (separate lifespan path). The rate values
+remain PROVISIONAL pending a live playtest, per the GDD flag.
+
+### Known Code Issues (found and fixed 2026-07-08, GOSSIP base-TN was a divergent inline copy of a zero-caller arbiter — runtime-verified 8/8)
+A **divergent-inline-copy** dedup (the sibling of the PU-loss / land-commander / social-TN class, surfaced by the
+crime/legal/court sweep). `CourtActionSystem.compute_gossip_tn(subject_glory, gossiper_glory)` (s15.4 — the canonical
+gossip base-TN: `clampi(10 + subject_glory×5 − gossiper_glory×5, 5, 60)` — harder to spread gossip about a glorious
+subject, easier for a glorious gossiper) had **ZERO production callers** (grep-confirmed: only its own def). The sole
+live consumer, `ActionExecutor._execute_gossip` (fired each GOSSIP action via the executor dispatch), inlined the
+**byte-identical** `clampi(10 + int(subject_glory) * 5 - int(character.glory) * 5, 5, 60)` at `action_executor.gd:1032`
+— a hand-copy of the arbiter's own s15.4 formula, so the LOCKED TN lived in two places and would drift the moment
+either changed. FIX (behavior-preserving, **no invented values** — the formula is the arbiter's own s15.4 constant):
+the executor now calls `CourtActionSystem.compute_gossip_tn(subject_glory, character.glory)` (both inputs already in
+scope — `subject_glory` from the s45 CAST_OUT observed-glory line, `character.glory` the gossiper), so the formula
+lives in ONE place. Runtime-verified 8/8 (`tests/verify_gossip_tn_arbiter.gd`): the arbiter values (equal glory → 10,
+subject+2 → 20, gossiper+2 → floor 5), the [5,60] clamp band, and — the dedup guarantee — `compute_gossip_tn(subj,
+goss)` == the retired inline `clampi(10 + subj*5 - goss*5, 5, 60)` across every subject 0..10 × gossiper 0..10
+combination (0 mismatches). Full project `--import` parse-clean. **This was the ONE clean wire the crime/legal/court
+sweep found** — the rest of that domain is documented deferred below.
+
+### Known Code Issues — Deferred (2026-07-08, crime/legal/court dormant sweep — superseded twins + design-gated, do NOT re-audit)
+The crime/investigation/legal/court sweep (after the GOSSIP fix above) found **no other clean wires**. Recorded so
+future sweeps skip them:
+- **SUPERSEDED (dead twin of a live path):** the whole `FugitiveExtraditionSystem` harboring-lord decision suite
+  (`evaluate_extradition`/`select_response`/`get_*_consequences`/`create_extradition_request` — live path is
+  `ExtraditionSystem.evaluate_extradition`/`apply_cooperation`/`apply_refusal` at day_orchestrator:5256; only
+  `generates_sighting_topic`/`can_request_imperial_warrant`/`evaluate_imperial_warrant_compliance`/
+  `get_standing_warrant_consequences` are live); `RitsuyoSystem.get_defense_strength`/`get_prosecution_strength`/
+  `get_testimonial_advantage`/`is_testimony_worthless`/`is_low_honor_accused` (live hearing uses `get_testimony_weight`
+  at conviction_processor:188); `CrimeWiring.process_treason_defense_hearing`/`process_treason_conviction`/
+  `add_treason_evidence_to_case`/`process_trial_by_combat`/`process_attempted_murder` (superseded by the live
+  `ConvictionProcessor` treason path); `WinterCourtSystem.get_home_ground_bonus` (superseded by the ctx-dict
+  `ActionExecutor._get_winter_court_skill_bonus`; the arbiter needs a CourtSessionData the live site lacks).
+- **DESIGN-GATED (needs an unbuilt trigger/field/value):** the defense-hearing option cluster (`can_appoint_champion`/
+  `can_intervene`/`can_re_accuse` + costs — champion/intervention/re-accusation triggers unbuilt); magistrate
+  allocation (`get_conviction_cascade` governor/daimyo/champion cascades — live handles only the magistrate case,
+  plus `assign_replacement_magistrate`/`get_vacancy_effects`/`get_magistrate_count`/`get_yoriki_range`/…);
+  `ExtraditionSystem.can_petition_emerald_champion` + `FugitiveExtraditionSystem.get_covert_extraction_risk`/
+  `get_visibility_tier`/`get_concealment_tn`; `UnsanctionedKillingSystem.get_punishment_range`/
+  `is_ronin_killing_prosecutable`/`evaluate_conspiracy`/`is_manslaughter`; the investigation evidence-source adders
+  (`add_false_alibi_evidence`/`add_kitsuki_eye_evidence`/`add_confession_evidence`/`add_murder_weapon_evidence`/
+  `add_co_conspirator_evidence`/`add_intercepted_letter_evidence` + `calculate_witness_evidence`/`prioritize_witnesses`
+  — each needs its evidence-source action); the investigation tampering/concealment cluster
+  (`get_tampering_success_result`/`get_criminal_recall_tn`/… — tampering action unbuilt); the LegalStatusSystem
+  transition helpers (`flee`/`capture_fugitive`/`pardon`/`close_case`/`add_evidence`/… — live code sets
+  `record.legal_status` directly); the CourtSystem proxy-mandate + query helpers (`assign_proxy_mandate`/
+  `get_proxy_mandate`/`is_within_mandate`/…); CourtCommitmentSystem `decompose_commitment`/`should_deprioritize`/
+  `get_renege_willingness`; `WinterCourtSystem.is_action_blocked_by_emperors_peace` (no live action-gate calls it) +
+  `get_agenda_day_allocation`; `CrimeSystem.begin_investigation`/`formally_accuse`/`clear_suspect`/`check_escalation`
+  (state helpers bypassed — live sets legal_status directly). Also **not a clean wire (design-gated):**
+  `IntimidationSystem.get_witness_reaction` (a virtue-gated REI/GI/MEIYO refinement of the already-live blanket
+  `PUBLIC_WITNESS_DISPOSITION_LOSS` −2 witness loss — would change behavior without GDD confirming the gate, and needs
+  a per-witness application mechanism EffectApplicator lacks).
+
+### Known Code Issues — Deferred (2026-07-08, full-surface two-agent dormant sweep — NO clean wires remain, do NOT re-audit)
+After the PU-loss arbiter fix below, two systematic agent sweeps (military/kolat/spell AND
+economy/spiritual/info/family/naval) plus hand-probing of tattoo/advantage/kata/crime-legal/festival/edict/
+reactive/commitment/wind-down found **zero remaining clean one-commit wires** across the world-sim surface.
+Every remaining dormant item is either a SUPERSEDED dead duplicate of a live twin (harmless) or DESIGN-GATED
+behind an unbuilt trigger/subsystem or an unlocked-PROVISIONAL GDD value (needs owner approval, not a wire).
+Documented here so future sweeps skip them:
+- **SUPERSEDED (dead duplicate of a live twin — do NOT wire, would change behavior or is value-identical dead code):**
+  `ResourceTick.sum_mining_pu`/`sum_town_pu`/`sum_military_pu` (consumers sum PU inline); `ResourceTick.check_starvation`
+  (live path is `resolve_starvation_transition`); `MarriageSystem.decay_clan_boost`/`decay_family_boost` (live
+  `CollectiveDisposition.decay_marriage_boosts` uses a DIFFERENT seasons-acc model — swapping would change behavior);
+  `InformationSystem.process_observe_court`/`process_introduction`/`_get_target_actions` (live flow routes through
+  `CourtActionSystem` OBSERVE_COURT_ATTENDEES, s55.7.3); `SuccessionSystem.get_transition_effects`/`get_transition_duration`/
+  `contest_succession`/`get_designation_urgency`/`is_emperor_succession` (live emperor path calls `evaluate_emperor_succession`
+  directly); `GempukkuSystem.process_gempukku`/`count_clan_population`/`get_replenishment_needed`/`roll_natural_death`/
+  `generate_replenishment_character` (live entry is `process_seasonal_gempukku`); `SpiritualRitualSystem.diagnose`/
+  `run_summary_ritual`/`post_resolution_affliction_check` (live path `resolve_ritual_round`/`apply_resolution`).
+- **DESIGN-GATED (needs a new field/trigger/subsystem or an unlocked GDD value — owner approval required):**
+  the whole `RiceMarketSystem` posting/auction layer (`create_posting`/`adjust_price_after_season`/`should_withdraw`/
+  `resolve_purchases`/`get_active_routes_for_province` — `RicePostingData` never instantiated); `WorshipSystem`
+  four-level aggregate malus is **NO LONGER DEFERRED — activated 2026-07-08** (owner-approved; see the changelog
+  entry below) + `get_minor_blessing_tier` (Minor Blessing feature unbuilt); `SuccessionSystem.resolve_dragon_togashi_removal`
+  (live detector just `continue`s — needs a Phoenix-council-style removal handler); `HostageSystem.harm_hostage_consequences`
+  (the `harmed_hostage` −30 modifier IS registered but no HARM_HOSTAGE action/trigger exists); `LetterSystem.can_send_free_letter`/
+  `can_send_batch` (no letter-budget action gates on them — all live sends are narrative generators that bypass the budget);
+  `SailingSystem.self_captain_penalty`/`select_acting_captain`/`board_passengers` (no at-sea sailing-roll / captain-incapacitation
+  trigger, s57.42); the whole `SpiritualExposureSystem` Toshigoku/Chikushudo/Gaki periodic-check cluster (combat-loop unbuilt);
+  `TopicSystem.get_momentum_level` (`MomentumLevel` enum has zero consumers — sim gates on raw floats); `ReactiveDecisions.evaluate_duel_trigger`
+  (the s55.11 PROACTIVE duel-initiation path) is **NO LONGER DEFERRED — activated 2026-07-08** for Trigger 1 (public insult),
+  owner-approved; see the changelog entry below (Triggers 2–4 still need their own event producers). PaintingSystem `continuous_display_start_ic_day` familiarity decay
+  (s57.27:115) is **NO LONGER DEFERRED — activated 2026-07-08** with the GDD-stated rates (owner-approved); see the
+  "familiarity decay activated" changelog entry below.
+  `NavalCombatSystem` zero-external funcs (`resolve_ram_in_battle`/`resolve_naval_rout`/…) are internal combat mechanics
+  reachable from the live `resolve_naval_battle` chain, not effect arbiters — out of scope, not dormant.
+- **WHOLE-SIMULATION BACKSTOP SCAN (after the 3 domain agents — surfaced two systems no domain sweep hit; both DESIGN-GATED, not clean wires):**
+  (1) **`RegionalPriceModifiers` (s11.8) — the ENTIRE system is dormant, ZERO production callers.** It computes clan-territory
+  item-category price modifiers (`compute_final_price`/`get_territory_modifier`, GDD-LOCKED CLAN_MODIFIERS table) for
+  "purchasing/selling items within clan territory," but there is no item-category market-purchase point to consume it: the live
+  `PURCHASE_MARKET` is a flat abstract koku cost (no item/category/base-price) and `CONDUCT_COMMERCE` is a yield formula keyed on
+  the s4.3.8 *location* modifier, not s11.8 item-category clan modifiers. **RE-CONFIRMED BLOCKED-ON-INVENTION during the 2026-07-08
+  owner-approved activation pass (the sixth of six items): it CANNOT be activated without inventing.** The GDD s11.8 provides the
+  clan % modifiers (LOCKED, already in `CLAN_MODIFIERS`) but **NO base prices** — it says the modifier "adjusts the base market
+  price of the listed item category ... through the Commerce system (Section 51)", and neither s11.8, s51, s49, nor any code carries
+  a per-item-category base-price table. The one live price-bearing point (the `CRAFT` executor's `cost_in_koku` material cost) is a
+  crafting-material cost keyed on `Enums.CraftingCategory` (EQUIPMENT/…), which does NOT map to the s11.8 item categories ("Weapons",
+  "Food", "Silk", "Iron", …) without an invented mapping. So a faithful wire needs TWO GDD-undefined inputs — (a) a base-price table
+  for the s11.8 categories and (b) an item→category mapping — both of which are game-design values requiring owner authorization, not
+  code. Per the "Do not invent mechanics" HARD CONSTRAINT this stays deferred (documented so it is not re-attempted); `compute_final_price`
+  already takes `base_price` as a param, so the day the owner supplies the base-price table + category mapping it is a clean wire.
+  (2) **`MiyaBlessingSystem.compute_petition_bonus`** — the winter-court-petition→blessing trigger is
+  **NO LONGER DEFERRED — activated 2026-07-08** (owner-approved; see the changelog entry below): `_process_miya_blessing_petitions`
+  now resolves the s11.5b §4.3 petitions and feeds `petition_bonus` into the Spring blessing. (**`MiyaBlessingSystem.apply_cunning_modifier`
+  [§5 Cunning-emperor ±10 Need Score] — NO LONGER DEFERRED, ACTIVATED 2026-07-09** owner-approved; see the "s11.5b §5 Cunning-emperor
+  blessing POLITICS ACTIVATED" changelog entry above. It WAS doubly dead [zero callers + the scored entry never carried a `clan`
+  field] and an even-earlier note here wrongly called it "already live via `_process_miya_blessing_followup`" — both now resolved:
+  the owner's rule [favored/disfavored = highest/lowest clan-champion disposition toward the Emperor] supplied the discretionary
+  §5 favorite-selection value, and it is wired end-to-end.) The remaining whole-sim-scan hits are SUPERSEDED dead helpers of live systems
+  (harmless): `ArmyUpkeepSystem.compute_army_seasonal_costs`/`get_cost_tier` (live path is per-company `compute_company_seasonal_costs`);
+  `IntraClanCivilWar.get_active_precedent_bonus`/`get_dragon_treaty_penalty` (live path `apply_precedent_effect`);
+  `PUReconciliation.compute_company_pu_loss` (live path `reconcile_battle`/`process_army_dissolution`).
+- **PHANTOM-KEY SCAN (core engine files — day_orchestrator/npc_decision_engine/strategic_review/opportunity_scanner/objective_decomposer):**
+  no clean key-mismatch hoist remains (unlike the war-context / Emperor-vacancy fixes, where the value WAS produced elsewhere and
+  just needed injecting). Every remaining phantom is a ZERO-PRODUCER scanner-phantom needing a producer BUILT (design work / an
+  invented formula), so all are DESIGN-GATED: the `StrategicReview` scoring inputs `treasury_ratio` / `active_crises` /
+  `province_threats` / `crisis_momentum_by_clan` / `tier1_crisis_active` / `tier1_military_crisis_seasons` / `peace_attempted` /
+  `shogun_exists` / `avg_province_stability` / `low_stability_provinces` / `province_statuses`(top-level) — all read-with-default,
+  no producer. **RESOLVED (2026-07-08, owner-approved — see the changelog entry below):** the winter-court host-frequency
+  cooldown at `strategic_review:547` (`seasons_since_host = current_season_index − last_host_seasons[clan]`) — BOTH phantom
+  producers were built: `current_season_index` is now injected via `TimeSystem.get_absolute_season(ic_day)` and
+  `last_host_seasons` is written per-clan on Winter Court creation. The `opportunity_scanner` phantoms
+  (`border_weaknesses`/`threatened_provinces`/`sieged_allies`/`tainted_provinces`/`insurgent_provinces`/`resource_deficits`/
+  `famine_provinces`/`weak_neighbor_provinces`/…) were already documented as producer-less. The `npc_decision_engine` hits
+  (`always_blocked`/`conditional`/`secondary`/`applies_to`/`blocked_when`/`need`/`topic_types`/`stacks_per_crisis`/…) are
+  JSON-scoring-table keys whose producers live in `systems/npc_engine/data/tables/*.json` (not .gd) — false positives, fully wired.
+
+### Known Code Issues (found and fixed 2026-07-08, Peasant-Revolt suppression PU-loss magnitude was a divergent inline literal — canonical arbiter had ZERO callers — runtime-verified 7/7)
+A **hardcoded-literal / divergent-inline-copy** dedup (the sibling of the land-commander-bonus / social-TN
+class, surfaced by the military-systems sweep). `InsurgencySystem.get_pu_loss_on_suppression(ins)` (s11.11:147 —
+the canonical civilian-PU-loss magnitude a coordinated suppression inflicts on a Peasant Revolt: `ins.strength × 0.1`
+for `PEASANT_REVOLT`, else `0.0`) had **ZERO production callers** (grep-confirmed: only its own def + `tests/`). The
+sole live consumer, `DayOrchestrator`'s coordinated-suppression writeback (`_process_insurgencies` → the participant
+loop at ~:14586), re-checked the `PEASANT_REVOLT` type gate inline AND computed the loss as the **raw literal**
+`float(ins.strength) * 0.1 * float(effective_actions)` — a hand-copied duplicate of the arbiter's own s11.11:147
+`0.1` magnitude, so the LOCKED value lived in two places and would silently drift the moment either changed. FIX
+(behavior-preserving, **no invented values** — the `0.1` is the arbiter's own LOCKED constant): the inline site now
+calls `InsurgencySystem.get_pu_loss_on_suppression(ins) * float(effective_actions)`, so the magnitude lives in ONE
+place. Value-identical inside the existing `if ins.insurgency_type == PEASANT_REVOLT` block (the arbiter's
+PEASANT_REVOLT branch returns exactly `ins.strength * 0.1`); the outer type gate is retained (it also guards the
+`effective_actions` accumulation loop). Runtime-verified 7/7 (`tests/verify_revolt_pu_loss_arbiter.gd`): the arbiter
+tiers (strength 1→0.1, 5→0.5, 10→1.0; Ronin/Nezumi/Maho → 0.0), and — the dedup guarantee —
+`get_pu_loss_on_suppression(ins) * effective_actions` == the retired inline `strength * 0.1 * effective_actions`
+across every strength 1..12 × effective_actions 0..3 combination (0 mismatches). Full project `--import` parse-clean.
+**DEFERRED (documented from the same sweep, NOT quick wires — trigger/subsystem unbuilt, do not re-audit):**
+`WarSystem.is_annihilated` / `check_auto_escalation` / `apply_raw_shift` (dead twins of the live
+`WarTermination.check_annihilation` / inline `escalate`); `InsurgencySystem.resolve_suppression` (single-actor
+twin superseded by the live `resolve_coordinated_suppression`) + `attempt_detection`/`get_detection_tn` (a
+skill-roll detection superseded by the live patrol-concealment decrement) + `get_ronin_hire_cost`/`attempt_ronin_hire`
+(no action trigger); `NPCAdvancement.accumulate_daily_xp` (daily-granularity twin superseded by the batched
+seasonal accrual); `SiegeSystem.compute_garrison_effective_defense` (unused superset of the live
+`get_storm_defense_bonus`); the **`battle_record` phantom key** (`_gather_promotion_candidates` reads
+`c.battle_record.get("battles_as_chui"/"battles_as_taisa")` but no such field exists on L5RCharacterData and the
+sole mutator `MilitaryPromotionSystem.record_battle` has zero callers → TAISA/SHIREIKAN promotion arms are dead
+branches — needs a new character field + per-rank battle-count tracking, a design change); the entire enlisted
+promotion ladder (`create_battle_record`/`record_battle`/`can_promote_to_nikutai`/`can_promote_to_gunso` — no
+enlisted-rank store); the operational-hierarchy order-refusal/escalation/override cluster (`get_refusal_disposition_hit`/
+`will_escalate_refusal`/`get_escalation_outcome`/… — the refuse-order event trigger is unbuilt); the whole siege
+event-resolution pipeline (`create_siege_state`/`select_event`/`resolve_siege_event`/`apply_event_tick_change` —
+`active_sieges` is never appended to in live code, only loaded from saves); `AnimalHandlingSystem.can_command_to_attack`/
+`has_no_flee_override` (companion combat unbuilt); and `HuntSystem.can_request_invitation` (the status-band gate —
+a near-miss: the executor site has `ctx` but not `host_status`, the writeback site has both statuses but no `ctx`;
+neither holds all three validator inputs).
+
+### Known Code Issues (found and fixed 2026-07-07, entanglement neglect-break disposition loss never applied — the -10 abandonment consequence was dead — runtime-verified 12/12)
+A **produced-but-not-consumed** dormant signal (the cohabitation-bonus / route-integrity class). s12.8 line 273
+(LOCKED): "If three consecutive [maintenance] windows pass without contact, the entanglement breaks — the relationship
+flag clears, **the target's disposition drops −10 (feeling used and abandoned)**." `DayOrchestrator._process_entanglements`
+(the daily maintenance pass) **detected** the BROKEN transition (`SeductionSystem.check_maintenance` → BROKEN at 3 missed
+windows) and cleared the flag + emitted a `"broken"` event — but **NEVER applied the −10 disposition loss**. So a
+seducer could abandon an entanglement (neglect it to death) with **zero relationship consequence** — the jilted target
+felt nothing. IMPORTANT — this is the **NATURAL-decay break** (−10, s12.8:273), a **DISTINCT** locked value from the
+**formal-breakup** arbiter `SeductionSystem.break_entanglement` (−5 low / −15 high attachment, s12.8:275) — which is a
+deliberate action with no ActionID yet (correctly still deferred). Wiring `break_entanglement` onto the decay path (as a
+naive sweep would suggest) would apply the WRONG value; the fix uses the GDD's own neglect-break −10. FIX (pure LOCKED
+wiring, **no invented values** — the −10 is s12.8:273 verbatim, added as the named const
+`SeductionSystem.NEGLECT_BREAK_DISPOSITION_LOSS`): `_process_entanglements` gains a defaulted `characters_by_id` param
+(threaded from `advance_day`, sole caller updated) and, on the BROKEN transition, applies the −10 to the **target's
+disposition toward the seducer** via a new `_apply_entanglement_break_disposition` helper (resolves seducer/target from
+the entanglement dict, dead-guarded, self-pair guarded, clamped −100..100), reporting the applied delta on the `"broken"`
+result. Runtime-verified 12/12 (`tests/verify_entanglement_break_disposition.gd`): the locked const; a 3-window break
+removes the entanglement AND drops the target's disposition 20→10 (−10, reported on the result); an already-broken
+entanglement is removed with NO second charge; a NEGLECTED (1-window) entanglement is NOT removed and its disposition is
+UNCHANGED (no premature −10); and the dead-target / empty-`characters_by_id` guards remove the entanglement without a
+crash or disposition change (loss reported 0). Full project `--import` parse-clean. **DEFERRED (documented, not
+invented):** the s12.8:273 **−2 per missed window** neglect decay (while NEGLECTED, pre-break) — `check_maintenance`'s
+`missed_windows` accumulates cumulatively-but-re-derived each tick (it never advances `last_maintained_ic_day`), so
+"newly-missed windows" is ill-defined and a faithful per-window −2 needs that accumulation reworked to a clean
+per-window model first (a separate, behavior-changing edit — not a no-invention one-liner). The discrete −10 break is
+the clean, unambiguous half.
+
+### Known Code Issues (found and fixed 2026-07-07, theater DEDICATE_PIECE dropped the magnitude difficulty term + skipped can_dedicate — two dormant arbiters — runtime-verified 15/15)
+The dedication sibling of the PERFORM_THEATER fix above. `TheaterSystem.get_dedication_tn` (s57.22.10: **TN 10 +
+`disposition_magnitude`×2** — a more emotionally powerful piece is harder to convincingly re-dedicate to a new topic)
+and `can_dedicate` (the s57.22.10 preconditions: performer ∈ `known_by`, `< 2` topic slots filled, topic not already
+linked, topic known) both had **ZERO callers**. `ActionExecutor._execute_dedicate_piece` used a flat
+`tn = DEDICATION_BASE_TN + raises*5` — **dropping the `magnitude*2` difficulty term** (every dedication used the base
+TN 10 regardless of the piece's power) and **double-counting raises** (once in `tn`, again via the resolve_skill_check
+raises arg) — and gated only on "topic known", **missing** the known_by / ≤2-slot / not-already-linked preconditions (a
+non-author who never learned the piece could dedicate it; a piece could be over-linked past 2 topics). The executor's
+own comment admitted "resolved in writeback since we lack piece here" — but **no writeback re-applied** either arbiter.
+FIX (pure LOCKED wiring — the metadata builder already has the piece + the deciding `character`; **no invented values**):
+`_build_dedicate_piece_metadata` now scans the performable pieces × known topics for the first `(piece, topic)` pair
+that passes the canonical `TheaterSystem.can_dedicate(...)` gate, and carries `get_dedication_tn(piece)` (the
+magnitude-scaled TN) in metadata — retiring BOTH dormant arbiters at selection time; if no dedicatable pair exists it
+returns `piece_id -1` (the executor's existing block). The executor uses `meta.dedication_tn` and folds raises into the
+TN once (`0` raises to resolve_skill_check). Runtime-verified 15/15 (`tests/verify_theater_dedication_tn.gd`): the
+arbiter (magnitude 1/3/5 → TN 12/16/20); `can_dedicate`'s five branches (valid / not-in-known_by / 2-slots-full /
+topic-already-linked / topic-not-known); the builder picks the dedicatable piece (skips an un-known one), carries the
+magnitude-18 TN, and returns −1 when nothing is dedicatable; and the executor's TN is magnitude-scaled (a magnitude-5
+piece [TN 20] succeeds strictly less than a magnitude-1 piece [TN 12] for the same performer/seeds), with a base-TN
+fallback + the −1 block. Full project `--import` parse-clean. DEFERRED as before: the moderate/major favor-tier-style
+richer paths are unaffected; this is scoped to the dedication difficulty + precondition gate.
+
+### Known Code Issues (found and fixed 2026-07-07, theater performance roll bypassed the canonical resolver — casting-fit + Kyogen gate dropped + raises double-counted — runtime-verified 9/9)
+A **canonical-resolver-bypassed-by-a-divergent-inline-copy** fix (the land-commander-bonus class), plus a **latent
+double-count**. `TheaterSystem.resolve_performance_roll` (the s57.22.7 lead-performer arbiter) applies (a) the **s57.22.4
+casting-fit TN modifier** via `get_casting_tn_modifier` (same-clan −5 / enemy-clan +5 / gender+profession mismatch +5
+each, Noh-mask exemptions) and (b) the **s57.22.3 Kyogen minimum-Acting-rank gate** (Acting ≥ 3), folding raises into
+the TN **once**. But it had **ZERO callers** — the live `ActionExecutor._execute_perform_theater` inlined a bare
+`tn = PERFORMANCE_BASE_TN + raises*5` roll that **DROPPED BOTH** the casting-fit modifier and the Kyogen gate, AND
+**double-counted raises**: it set `tn = BASE + raises*5` and ALSO passed `raises` into `resolve_skill_check`, whose
+`roll_check` re-adds `raises*5` to the effective TN — so a raised performance needed `raises*10` of margin, not
+`raises*5`. Net: casting fit was inert (a Crab actor playing a Crane hero faced the same TN as playing an abstract
+concept), any actor could perform Kyogen regardless of Acting rank, and declared Raises were twice as costly as the
+GDD specifies (`get_casting_tn_modifier` was the dormant arbiter proving the drop). FIX (pure LOCKED wiring — the two
+missing inputs [lead role dict + style] are carried in metadata by `_build_perform_theater_metadata`, which already
+has the piece; **no invented values**): the executor now mirrors `resolve_performance_roll` exactly —
+`cast_mod = TheaterSystem.get_casting_tn_modifier(character, lead_role, style)` (the canonical arbiter),
+`tn = BASE + cast_mod + raises*5`, the Kyogen gate (`style == KYOGEN and Acting < KYOGEN_MIN_ACTING_RANK` → blocked
+`kyogen_acting_rank`), `resolve_skill_check(..., 0 raises, ...)` (raises folded into TN once — single count), and
+`margin = total − BASE − cast_mod`. `_build_perform_theater_metadata` now returns `piece_style` + `piece_lead_role`
+(primitives — `piece.roles[0]`) alongside `piece_id`. Runtime-verified 9/9 (`tests/verify_theater_casting_modifier.gd`):
+the arbiter (ABSTRACT 0, KABUKI clan mismatch +penalty, Noh-mask negates); **executor ≡ canonical** — identical
+`roll_total` + `success` across 24 config/seed pairs (abstract/mismatch/raises-2/Kyogen, same dice seed), proving zero
+divergence + single-count raises; a double-mismatch role (+10 TN) succeeds strictly less than the abstract role for a
+weak performer (cast_mod folded into TN, was dropped); and the Kyogen gate blocks Acting 2 (both paths) while Acting 4
+and KABUKI-Acting-2 pass. Full project `--import` parse-clean. Non-Kyogen/abstract-role performances by an ordinary
+actor are **behavior-preserving on the roll** (cast_mod 0, Kyogen gate n/a) EXCEPT that declared Raises now cost the
+correct `raises*5` instead of the buggy `raises*10` — a strict correctness gain.
+
+### Known Code Issues (found and fixed 2026-07-07, wood-guardian outdoor degradation never fired — inline placement omitted the ic_day_placed_outdoor stamp — runtime-verified 11/11)
+A **hardcoded-default dead-effect** (the sibling of the situational-modifier / dead-key classes, at the PRODUCER end).
+`SculptureSystem.apply_outdoor_degradation` (s57.28 — a WOOD GUARDIAN weathers **−1 quality tier per
+`WOOD_OUTDOOR_DEGRADATION_DAYS` = 1800 IC days**) is LIVE and seasonal (`DayOrchestrator._process_sculpture_...` →
+`apply_outdoor_degradation` at `day_orchestrator:35300`), but it **early-returns when `sculpture.ic_day_placed_outdoor < 0`**
+(the `@export` default). The **ONLY production producer** of that stamp is `SculptureSystem.place_sculpture:308`
+(`if material == WOOD: ic_day_placed_outdoor = ic_day`) — but the **live** placement path,
+`DayOrchestrator._auto_place_completed_sculpture` (fired when a COMPOSE_SCULPTURE completes, the sole in-game placement
+route), **inlines its own slot-assignment and BYPASSES `place_sculpture`**, so it never stamped the clock. Result: every
+wood guardian placed during play kept `ic_day_placed_outdoor` at the **−1 default**, `apply_outdoor_degradation` returned
+early **forever**, and the s57.28 outdoor-weathering mechanic was **completely dead** — a wood komainu pair never lost a
+tier no matter how many seasons it stood exposed. FIX (pure LOCKED wiring, **no invented values** — mirrors
+`place_sculpture` exactly): `_auto_place_completed_sculpture` gains an `ic_day` param (threaded from the completion site
+where it is already in scope) and, in the GUARDIAN branch, stamps `sculpture.ic_day_placed_outdoor = ic_day` when
+`material == WOOD` — the identical line `place_sculpture` uses. STONE/BRONZE guardians (indoors-durable) are untouched
+(only wood weathers outdoors, per `apply_outdoor_degradation`'s own `material != WOOD` guard). Runtime-verified 11/11
+(`tests/verify_sculpture_outdoor_degradation.gd`): an UNPLACED wood guardian never degrades even after 10× the window
+(the −1 early-return = the bug); after `_auto_place_completed_sculpture` stamps the clock, one full window elapses → the
+tier drops 3→2 (the revived effect), re-anchors, floors at tier 1; and a STONE guardian is placed but NOT stamped
+(`ic_day_placed_outdoor` stays −1) and never weathers. Full project `--import` parse-clean. **DOCUMENTED (harmless,
+not changed):** the inline path gates guardian placement on `is_statue_eligible` rather than `is_guardian_eligible`
+(a latent divergence from `place_sculpture`), but `STATUE_ELIGIBLE_TYPES == GUARDIAN_ELIGIBLE_TYPES` today
+(TEMPLE/SHINDEN/MONASTERY), so the two are equivalent — left as-is to keep this commit scoped to the degradation stamp.
+
+### Known Code Issues (found and fixed 2026-07-07, OFFER_FAVOR applied ZERO disposition — the s12.10 offer-disposition arbiter had zero callers — runtime-verified 12/12)
+A **zero-caller effect arbiter** (the sibling of the supply-share-ratio class). `FavorSystem.get_offer_disposition`
+(s12.10 lines 21-31 LOCKED: the disposition raise an offered favor grants — MINOR +6/+2-per-Raise, MODERATE +10/+3,
+MAJOR +15/+4, critical failure −5 — GDD: "**These replace the existing flat value in the Offer a Favor court action**,
+Section 15.4") and its constants `DISPOSITION_ON_OFFER`/`DISPOSITION_RAISE_BONUS`/`DISPOSITION_CRITICAL_FAILURE` had
+**ZERO production callers** (grep-confirmed: only their own defs + `tests/`). The live OFFER_FAVOR path
+(`ActionExecutor._execute_contested_court_action`) routes through `CourtActionSystem.resolve_offer_favor`, which returns
+`{success, requires_favor_creation}` with **NO `disposition_change`** on success (only `disposition_change: 0` on
+failure) — so the executor's `effects["disposition_change"] = resolution.get("disposition_change", 0)` was **always 0**.
+Result: a successful favor offer created the tracked favor debt (s15.4 "**Success: disposition raise** and a tracked
+favor debt") but applied **ZERO disposition** — the entire "offering a favor endears you" mechanic (the locked s12.10
+value that was meant to REPLACE the s15.4 flat value) was **dead**, and a critical failure applied 0 instead of the
+locked −5. FIX (pure LOCKED-only wiring, **no invented values** — every value is the arbiter's own s12.10 constant):
+the executor now, for `action_id == "OFFER_FAVOR"`, overrides `effects["disposition_change"]` with
+`FavorSystem.get_offer_disposition(FavorData.FavorTier.MINOR, raises, false)` on success and, on a **critical failure**
+(margin ≤ −10, the codebase-wide court crit-fail threshold), `get_offer_disposition(MINOR, 0, true)` (= −5). The tier is
+**MINOR** because the favor is minted at `FavorTier.MINOR` at **both** writeback sites (the FavorData at
+`day_orchestrator:27152` and the FAVOR_OBLIGATION commitment at `:29986`) — NPC offers are always MINOR (a documented
+pipeline limitation, not a value invented here). The value lands in `effects["disposition_change"]` — the exact slot the
+old flat value occupied (`_apply_disposition` actor→target), so this is the literal "replace the existing flat value"
+the GDD directs. Normal (non-critical) failures still emit 0 (s15.4 "Failure: … No effect"). Runtime-verified 12/12
+(`tests/verify_offer_favor_disposition.gd`): the arbiter tiers (MINOR 6/+2, MODERATE 10/+3, MAJOR 15/+4, crit −5); and
+end-to-end through the real `_execute_contested_court_action` — a strong actor succeeds 55+/60 and EVERY success emits
+`disposition_change == get_offer_disposition(MINOR, raises)` (≥ 6, was 0), while a weak actor's critical failures
+(margin ≤ −10) emit exactly −5 and ordinary failures emit 0. Full project `--import` parse-clean. **DEFERRED (documented,
+not invented):** the moderate/major offer tiers are unreachable because the OFFER_FAVOR writebacks hardcode MINOR (the
+favor-tier-selection surface is unbuilt); wiring a richer tier would need a design decision on how an NPC chooses favor
+magnitude, so only the live MINOR path is wired.
+
+### Known Code Issues (found and fixed 2026-07-07, anti-duplicate-court proposal guard read EMPTY top-level last_court_season — dead per-season court-call suppression — runtime-verified 7/7)
+The **empty-top-level-key** dormant class (the sibling of the strategic-review war-context fix, same seam).
+`StrategicReview._evaluate_call_court` (reached via `run_seasonal_review`/`run_emperor_review` during
+`_run_strategic_reviews`) reads `last_court_season` off the **top-level** `world_state` and guards
+`if last_court_season == current_season: return {}` — "the lord already held a court this season, don't propose
+another." But the producer `DayOrchestrator._track_court_called` writes it ONLY on the lord's **per-character**
+sub-dict (`world_states[lord_id]["last_court_season"]`), never at top level, so the read was **always the -1
+default** → `-1 == current_season` never held → the guard was DEAD and a lord re-proposed **CALL_COURT every
+season** (a redundant strategic directive; the creation-level settlement guard in `_apply_court_creation` still
+blocked an actual duplicate court, so no second court was created — the cost was the wasted directive proposal).
+Distinct from the earlier `current_season` fix (already injected this session for the WINTER call-court bonus +
+Emperor Winter-Court hosting): `last_court_season` is **per-lord**, so it must be injected inside the review loop,
+not once before it. FIX (pure plumbing, **no invented values** — `last_court_season` is the lord's real
+`_track_court_called` value, `current_season` the real enum): inside the `_run_strategic_reviews` per-lord loop
+(after the dead/PC/tier guards, before the Emperor/vassal branch) inject
+`world_states["last_court_season"] = int((world_states.get(lord.character_id, {}) as Dictionary).get("last_court_season", -1))`
+— the REVIEWED lord's own tracked value hoisted to the top-level scratch key for that iteration — erased after the
+loop alongside the other war-context scratch keys. Runtime-verified 7/7 (`tests/verify_call_court_guard.gd`): the
+consumer guard fires when `last_court_season == current_season` (no redundant proposal), the -1 pre-fix state
+re-proposes CALL_COURT (the dormant behaviour), a court held a DIFFERENT season still proposes; and the injection
+expression maps a per-character `last_court_season` to the top level (present → value, absent lord → -1, empty
+world_states → -1), so the fixed flow makes the guard fire. Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-07, supply-sharing amount ignored disposition — hardcoded-literal producer + dormant arbiter — runtime-verified 11/11)
+A **hardcoded-literal producer** feeding a **zero-caller arbiter** (the sibling of the situational-modifier / Togashi-hardcoded classes). `DispositionSystem.get_supply_share_ratio`
+(s12.2 line 403 LOCKED — Friend +31 sends ~half the surplus, scaling to the full amount at Devoted +61) and its
+gate `will_share_supplies` had **ZERO production callers**. The live supply-transfer path
+`DayOrchestrator._process_supply_sharing` (the SHARE_SUPPLIES writeback, which fulfils a RESOURCE_PROMISE created by
+REQUEST_ALLIED_AID) computed the shared amount as a **flat `surplus * 0.5`** — a hardcoded literal that ignored the
+giver's disposition toward the recipient entirely, so a Devoted ally shared no more than a bare Friend, and the
+GDD-locked proportional-scaling arbiter was inert. FIX (pure LOCKED wiring, **no invented values** — the 0.5→1.0
+ratio band is the arbiter's own s12.2:403 constants): the amount is now
+`surplus * maxf(0.5, DispositionSystem.get_supply_share_ratio(giver_disp))`, where `giver_disp` =
+`get_effective_disposition(giver, recipient_lord, characters_by_id)` (recipient resolved from the receiver
+settlement's `lord_character_id`, hoisted so the existing s12.2b intra-clan ripple reuses it). **Regression-free by
+construction:** the ratio is floored at the Friend baseline (0.5 = the +31 GDD ratio), so a *deliberately-chosen*
+SHARE_SUPPLIES shares MORE for a closer ally and never LESS than the prior flat 0.5 — and the giver→recipient
+disposition gate was already enforced upstream at REQUEST_ALLIED_AID (refuses < +31), so a promise-fulfilling giver
+is guaranteed Friend+ (ratio ≥ 0.5). An unresolvable/dead recipient lord falls back to the Friend-floor 0.5 (the
+prior behaviour). **DEFERRED (documented, not invented):** the below-Friend HARD REFUSE of s12.2:403 (`will_share_supplies`
+returning false) belongs to the GDD's REQUEST-response *auto-resolution* model ("resolves as a background calculation,
+no roll"), which is a **separate unbuilt path** — applying that refuse-gate to a deliberately-chosen action (which is
+not a refused request, and could suppress intra-clan feudal aid) would be a semantic mismatch, so only the
+amount-scaling arbiter is wired here. Runtime-verified 11/11 (`tests/verify_supply_share_ratio.gd`): the arbiter tiers
+(0.0 below +31, 0.5 at +31, ~1.0 at +60, 1.0 at +61+; the will_share gate at +31); and end-to-end through
+`_process_supply_sharing` on a surplus-100 giver — Devoted +70 shares the full 100 (was flat 50), Friend +31 shares 50,
++45 shares the proportional ~74, a below-Friend +5 chosen share floors at 50 (no regression), and an unresolvable
+recipient lord floors at 50 without a crash. Full project `--import` parse-clean.
+
+### Known Code Issues — Deferred (2026-07-07, consumer-side phantom-key sweep — trigger subsystem unbuilt)
+A consumer-side sweep (a LIVE consumer reads a field/key no producer writes) surfaced these; each is a genuine dead
+consumer but blocked because the intended PRODUCER subsystem is itself unbuilt — documented so they're not re-audited:
+- **`ProvinceStatus.has_alliance_protection` (s53:387) — the war/raid-target alliance guard.** `WarJustification.evaluate_province_weakness`
+  reads `not ps.has_alliance_protection` (a live raid/war-eligibility gate at objective_decomposer:1432/1447 +
+  npc_decision_engine:5544), but `build_province_statuses_from_data` never sets the field → permanently false → an
+  alliance never shields a province. BLOCKED: the only alliance data is `WarData.allied_clans_a/b`, populated ONLY by
+  `WarSystem.add_ally` — which has ZERO production callers (the SECURE_ALLIANCE/REQUEST_ALLIED_AID → add_ally hookup is
+  unbuilt), so allied_clans is always empty. Computing has_alliance_protection from it would still be always-false. This
+  is the same unbuilt s53 alliance/aid cluster as the war-aid-refusal arbiters above.
+- **`WallStatus.tea_stockpile_seasons` / `scout_deployed` / `scout_report_age` / `scout_report_elevated_activity` /
+  `max_taint_rank` (s55.23a wall-tower ladder).** `ObjectiveDecomposer._decompose_strengthen_wall` reads these in a
+  5-loop ladder (DEPLOY_SCOUTS → MAINTAIN_FORTIFICATION → MANAGE_TAINT/tea → jade → sortie), but the two `WallStatus`
+  builders set none of them. `tea_stockpile_seasons` (default 2.0) HAS a clean live source (`SettlementData.tea_stockpile`),
+  but wiring it is INERT: the first loop's `not scout_deployed` (a phantom, no producer) is permanently true, so
+  DEPLOY_SCOUTS returns FIRST and masks every branch beneath it — AND DEPLOY_SCOUTS has no executor/context-list/skill-map
+  (the scout-intel subsystem is unbuilt, the GDD-locked "DEPLOY_SCOUTS fires first" prerequisite). The ladder is also
+  reached only by a STRENGTHEN_WALL holder with NO garrison shortage AND no crisis (else the earlier shortage/crisis
+  branches fire), and the real wall maintenance (FORTIFY / Kuni purify / Taisa sortie / jade resupply) runs via the
+  dedicated standing passes, not this ladder. So the whole ladder below DEPLOY_SCOUTS is masked + superseded — blocked on
+  the unbuilt scout subsystem, not a one-line wire.
+
+### Known Code Issues — Deferred (2026-07-07, dormant-arbiter sweep — consumer/trigger unbuilt, NOT quick wires)
+A truly-dead-`static func` sweep (exclude only the def line + `tests/`) across war/succession/social systems surfaced
+several GDD-locked arbiters with ZERO callers, but each is dormant because its INTENDED consumer or trigger is itself
+unbuilt (design-gated), NOT because of a missing one-line call. Documented here so future sweeps don't re-investigate:
+- **`DispositionSystem.create_death_mutual_friend_modifier` (s12.2:289, shared grief).** A fully-built, GDD-exact
+  historical-disposition-modifier producer with zero callers — BUT wiring it would be a FALSE fix: `get_effective_disposition`
+  does NOT read `historical_modifiers` at all (it sums stored + family_bond + cohabitation + birth-floor only). The entire
+  Category-2 historical-modifier layer (incl. the LIVE assassination-ordering + commitment-renege producers) is an unfolded
+  ledger — the only consumers are `_decay_all_historical_modifiers` (housekeeping) and the vengeance-target scan
+  (day_orchestrator:13116, reads `modifier == -50`). Folding historical modifiers into effective disposition is a broad,
+  behavior-changing architectural decision (would suddenly bite assassination-ordering/renege) — owner-gated, not a wire.
+- **`WarSystem.check_auto_escalation` + `get_aid_request_honor_cost`/`get_refusal_honor_cost`/`get_refusal_disposition_effects`/
+  `get_territory_fall_honor_cost` (s53).** The escalation thresholds + aid-refusal honor/disposition penalties match the GDD
+  verbatim, but they form the s53 authority-escalation / formal-aid-request cluster, which the GDD says is "NOT automatic —
+  requires the lower authority to formally request aid OR personality-driven higher-authority intervention." The request-with-
+  consequences decision surface (superior refuses an escalated REQUEST_AID) is UNBUILT; wiring the arbiters alone would either
+  over-fire (auto-escalate) or have nothing to hang on. Design-gated cluster.
+- **`HostageSystem.harm_hostage_consequences` (s22.9a, −3.0 honor + `harmed_hostage` −30 modifier).** No HARM_HOSTAGE
+  action/trigger exists, AND the −30 uses the same unfolded historical-modifier ledger above. Needs a trigger + the ledger fold.
+- **`SuccessionSystem.contest_succession`.** A superseded ALTERNATIVE — disputed successions DO resolve, via the timeout →
+  `_rebuild_candidates` → `evaluate_all_candidates`/`confirm_successor` path in `_process_successions` (:11577). Wiring the
+  active-contest model instead is a design change, not a bug fix.
+- **`HonorGlorySystem.get_recognition_rank` (glory+infamy, s46:267).** No general glory-based recognition mechanic exists —
+  the only recognition in the sim is bounty/Wanted-advantage-TN driven (`_check_bounty_recognition`). Wiring it needs the
+  recognition FEATURE built, not just a call.
+- **`FavorSystem.can_unlock_supply_sharing` (s12.10:83) / `DispositionSystem.may_deliberately_mislead` (s12.6).** Both belong
+  to the unbuilt supply-REQUEST auto-resolution model / a false-info conversation branch respectively — consumer-side unbuilt.
+
+### Known Code Issues (found and fixed 2026-07-07, insurgency per-season economic drain never applied — the whole s11.11 economic-pressure layer was inert — runtime-verified 14/14)
+A **zero-caller effect arbiter** (the sibling of the koku-drain / route-integrity dormant class). `InsurgencySystem.get_koku_drain`
+(s11.11:161/505) and `get_rice_drain` (s11.11:249) return the GDD-LOCKED per-season economic drain each insurgency inflicts —
+but **neither had any production caller** (grep-confirmed: only their own defs + `tests/`). `InsurgencySystem.process_season` (the
+sole seasonal insurgency pass) never touched province Rice/Koku, so the ENTIRE s11.11 economic-pressure layer was dead: a Nezumi
+Infestation never stole rice from the province stockpile (s11.11:249 "Steals (Strength × 0.1) Rice … per season"), and a Ronin Bandit
+Uprising / Pirate Fleet never drained koku from the province's trade routes (s11.11:161 "−(Strength × 0.05) Koku per season" /
+s11.11:505 "0.05 Koku × Strength per season, cap −0.4 at Strength 8"). The whole point of s11.11's economic drain — making an
+insurgency *visible and costly even without an investigation action* — was inert; an ignored Strength-10 Nezumi colony could never
+"independently cause Shortage conditions through sustained Rice drain" (s11.11:253). FIX (pure LOCKED-only wiring, **no invented
+values** — every magnitude is the arbiter's own GDD constant): `DayOrchestrator._process_insurgencies` (the one seasonal pass, which
+already receives `settlements`) now, after removal, drains each **surviving** insurgency's GDD-locked ABSOLUTE amount from its
+province's settlement stockpiles via a new `_drain_province_stockpile(setts, amount, field)` helper (aggregate across the province's
+settlements, floored at 0) — Nezumi → `get_rice_drain` (rice), Ronin/Pirate → `get_koku_drain` (koku). The GDD frames these at
+"province stockpile"/"trade routes", but stockpiles live on `SettlementData.rice_stockpile`/`koku_stockpile`, so the province-level
+drain is taken from the province's settlements (the single faithful mapping). Applied to SURVIVING insurgencies only (post-removal),
+so a same-season suppression to Strength 0 inflicts no further drain. **DEFERRED (NOT applied — semantic mismatch, no invention):**
+the URBAN_CRIMINAL_NETWORK koku drain — `get_koku_drain` returns an absolute value for it, but s11.11:271 defines it as a **PERCENTAGE
+of the settlement's Koku *generation*** ("Strength × 2/3 %"), not an absolute stockpile drain, and needs the settlement's per-season
+koku generation which isn't available at this point; the koku drain is gated to RONIN_BANDIT/PIRATE_FLEET so the criminal absolute
+value never hits the stockpile. `get_pu_loss_on_suppression` is already live via the inline copy at `day_orchestrator:14580` (not a
+gap). Runtime-verified 14/14 (`tests/verify_insurgency_economic_drain.gd`): the arbiters return the locked amounts (Nezumi 4→0.4 rice,
+cap 1.0 at Strength≥10, non-Nezumi 0; Ronin 4→0.2 koku, Pirate 8→0.4 = the cap); the helper drains the aggregate across two
+settlements and floors at 0 on over-drain; and end-to-end through `_process_insurgencies` a Nezumi drains rice by Strength×0.1 (leaving
+koku untouched), a Ronin drains koku by Strength×0.05 (leaving rice untouched), and an Urban Criminal Network leaves BOTH stockpiles
+untouched (the deferred percent-of-generation branch never fires). Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, Togashi oversight read EMPTY top-level world_states["province_data"]/["active_wars"] — 4 triggers dead — runtime-verified 24/24)
+A **wrong-source dead-read** (surfaced while verifying the realm-overlap fix directly below). `DayOrchestrator._build_togashi_world_state`
+(the sole producer of the Dragon Champion's oversight world_state) sourced its province facts from
+`world_states.get("province_data", [])` and its war count from `world_states.get("active_wars", [])` — but
+**neither top-level key is EVER set**: both are stashed ONLY on the PER-CHARACTER sub-dicts
+(`world_states[char_id]["province_data"] = provinces.values()` / `["active_wars"] = g_active_wars`, in
+`_inject_base_character_context`), never on the top-level dict this function reads. So both reads always
+returned `[]`, and **FOUR oversight triggers were dead** across three axes: `provinces_in_rebellion`
+(IMPERIAL_COHESION `> REBELLION_THRESHOLD`), `active_inter_clan_wars` (IMPERIAL_COHESION `>= 2`),
+`max_non_shadowlands_ptl` (SPIRITUAL_HEALTH `> 3.0`), and `wall_breach_active` (SHADOWLANDS_CONTAINMENT) —
+plus the realm Dragon-territory check added in the fix below (its province→clan map was built from the same
+empty array). The Dragon Champion could never react to rebellions, multiple inter-clan wars, non-Shadowlands
+PTL spikes, or wall breaches from these signals. FIX (no invented values — just read the correct,
+already-available sources): `_process_togashi_oversight` already receives the real `provinces: Dictionary`
+(and now the real `active_wars: Array` of WarData, threaded from `advance_day`); `_build_togashi_world_state`
+sources `provinces_data` from `provinces.values()` and counts `inter_clan_wars` from the real WarData (active,
+distinct non-empty clans), each falling back to the legacy empty key only if a caller passes nothing — a
+strict improvement, since both were always empty. Resurrects all four triggers AND makes the realm
+Dragon-territory check (below) actually work. Runtime-verified 24/24 (`tests/verify_togashi_realm_overlap.gd`):
+with an EMPTY `world_states` + a real `provinces` Dictionary, the builder reports `provinces_in_rebellion` 1,
+`max_non_shadowlands_ptl` 5.0, `wall_breach_active` true (all 0/0/false pre-fix), the realm Dragon-territory
+flag flips true for a Dragon-province overlap; and with real `active_wars`, `active_inter_clan_wars` counts 2
+(fires IMPERIAL_COHESION) vs 1 (silent) vs a same-clan war (0), with the empty-args paths safely defaulting.
+Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, Togashi realm-overlap concern triggers were hardcoded dead — runtime-verified 14/14)
+A **hardcoded-dead-key** dormant signal (the producer exists but emits a constant). `TogashiOversight.spiritual_health_concern_fires`
+(s55.10.2, the Dragon Champion's SPIRITUAL_HEALTH oversight axis) fires on any of four triggers —
+`failing_worship_provinces` / `realm_overlap_in_dragon_territory` / `realm_overlaps_empire_wide` /
+`max_non_shadowlands_ptl` — but the **sole producer** of that oversight world_state,
+`DayOrchestrator._build_togashi_world_state`, **hardcoded** `"realm_overlaps_empire_wide": 0` and
+`"realm_overlap_in_dragon_territory": false` (literal constants), so the two realm-overlap triggers were
+permanently dead — the Dragon Champion could never react to spiritual realm overlaps, only to failing
+worship + non-Shadowlands PTL (the two live triggers). `realm_overlap_in_dragon_territory` is the
+non-redundant one: it is the Champion caring about overlaps on his OWN Dragon lands, a signal the
+empire-wide worship count cannot express. The live `SpiritualInsurgencySystem` produces the actual
+REALM_OVERLAP events (`spiritual_insurgency_events`, already an `advance_day` param) — they were simply
+never fed to the Togashi builder. FIX (pure fact computation — **no invented values**; the two GDD-locked
+thresholds live in the consumer): `_build_togashi_world_state` gains a `spiritual_events` param (threaded
+through `_process_togashi_oversight` from the `advance_day` scope) and now computes
+`realm_overlaps_empire_wide` = count of ACTIVE (`not resolved`) `REALM_OVERLAP` events, and
+`realm_overlap_in_dragon_territory` = whether any such event's province is Dragon-clan (province→clan
+map built from the `province_data` it already iterates). Non-REALM_OVERLAP events (ELEMENTAL_IMBALANCE)
+and resolved events are excluded. `crab_military_readiness` / `shadowlands_incursion_tier` (the other two
+hardcoded literals) are DEFERRED — both need an invented readiness/tier metric, not a plain fact, so they
+stay as-is (and `shadowlands_concern_fires` still has its live `wall_breach_active` trigger). Runtime-verified
+14/14 (`tests/verify_togashi_realm_overlap.gd`): the producer computes 0/false with no events (no
+regression), count 2 for two Lion overlaps (dragon false), count 1 + dragon TRUE for a Dragon-province
+overlap, excludes a resolved overlap, excludes an ELEMENTAL_IMBALANCE; and the consumer
+`spiritual_health_concern_fires` is silent at baseline, fires on a single Dragon-territory overlap (was
+dead), fires at the 3-overlap empire-wide threshold, and stays silent at 2 non-Dragon overlaps (below the
+locked threshold). Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, TAINT_MANIFESTATION could NEVER spawn — dead-key gate on the PTL-3 Shadowlands escalation — runtime-verified 6/6)
+A genuine **LIVE** bug (the dead-consumer class, surfaced by the situational-modifier fix directly above).
+`InsurgencySystem.get_spawn_chance` (s11.11) gated the Province Taint Manifestation branch on
+`var ptl: float = world_state.get("ptl", 0.0)` — but **NO producer anywhere ever writes a `ws["ptl"]`
+key** (grep-confirmed 0 writes across `/simulation` + `/shared`; the `{"ptl": …}` writes that exist are
+quest-seed / action-metadata, a different context that never feeds `process_season`). So it always read
+0.0, `if ptl < 3.0: return 0.0` ALWAYS fired, and **`TAINT_MANIFESTATION` insurgencies could never spawn
+from the seasonal pass** — the PTL-3 Shadowlands corruption→insurgency escalation (a core s11.11 mechanic)
+was completely inert, even in a province at PTL 9. The `world_state` gate was doubly dead because the SOLE
+spawner of this type is `process_season`'s spawn loop (grep-confirmed: every other `TAINT_MANIFESTATION`
+reference merely reads existing ones — quest seeds, decomposer, roster). The tell that it's a
+copy-from-the-wrong-source bug: the sibling `get_eligible_types` (line 149) already gates TAINT eligibility
+on the REAL ptl (`ptls.get(pid)` = `province.province_taint_level`) — so TAINT was made eligible at PTL≥3
+and then immediately zeroed by the dead-key chance. FIX (no invented values — the province already carries
+the real PTL as a param, and 3.0 is the same GDD-locked s11.11 threshold `get_eligible_types` uses): the
+branch now reads `province.province_taint_level` directly (`ProvinceData` is already a `get_spawn_chance`
+param, and it is the exact field `ptls` is built from — single source of truth), so `TAINT_MANIFESTATION`
+spawns automatically (chance 1.0) at PTL ≥ 3. Runtime-verified 6/6
+(`tests/verify_taint_manifestation_spawn.gd`): the consumer returns 1.0 at PTL 4.0/3.0 with an EMPTY ws
+(was 0.0 pre-fix — the whole bug), 0.0 at PTL 2.9, and now IGNORES a stale `ws["ptl"]=9.0` when the
+province PTL is 0 (proving it reads the province, not the dead key); and end-to-end through
+`process_season` a PTL-4.0 province deterministically spawns a `TAINT_MANIFESTATION` (chance 1.0) while a
+PTL-1.0 control never does across 30 seeds. Full project `--import` parse-clean.
+
+### Known Code Issues — Deferred (2026-07-06, second dormant sweep — real gaps needing broad surgery or an owner design decision, NOT clean one-commit fixes)
+A second produced-vs-consumed sweep of the reactive / court / Phoenix / letter / writeback pipeline surfaced
+these; each is a genuine dormant read/effect but is **deferred** (documented so it is not re-audited) — none
+is a safe no-invention one-committer:
+- **`reactive_timestamp` sort is a no-op (s55.13 "Reactive events first (timestamp order)" unimplemented).**
+  `NPCWaveResolver._gather_reactive_npcs` (npc_wave_resolver:726-731) sorts reactive NPCs by
+  `ws.get("reactive_timestamp", 0)`, but **NOTHING writes `reactive_timestamp`** (grep-confirmed: only the two
+  reads) — so `ts_a < ts_b` is always false and reactive NPCs resolve in `characters`-array order, not the
+  GDD-locked trigger/timestamp order (`gdd/s55.13_multi_npc_resolution_order.md:5`). DEFERRED because a
+  faithful fix is **broad surgery, not a one-liner**: reactive events are injected at **~21 sites** (5
+  `<var>.pending_events.append` + 16 `<var>_ws["pending_events"] = <arr>`, across 8+ ws-var names) and NONE
+  carry a trigger timestamp; there is no single-point hook (stamping in `_inject_base_character_context`
+  reproduces array order, and `ic_day` gives no intra-tick ordering since a reactive batch shares the prior
+  day — genuine trigger order needs a monotonic per-injection sequence stamped at every site). Practical
+  impact is a resolution-order determinism refinement among largely-independent events, so the risk of a
+  21-site edit outweighs the benefit; worth a deliberate reactive-pipeline pass, not a quick fix.
+- **Phoenix Grand Ritual devastation (s55.10.3.7) + Champion Defiance Path (s55.10.3.5) — dormant effects,
+  design-gated triggers.** `PhoenixCouncil.apply_grand_ritual_devastation` and `handle_unilateral_action`
+  (the sole `defiance_count`/`defiance_stage` incrementer) have **zero production callers**: the
+  `_directive_to_decision_type` map only covers WAR_READINESS→DEPLOY_GO_HATAMOTO / SEEK_PEACE→SIGN_TREATY, and
+  no path lets a Champion "proceed on a vetoed decision," so the LOCKED consequences (province stability→0 +
+  Master honor −2.0 + Emperor disposition −20; the Stage 2/3/4 diplomatic-suspend / shugenja-withdraw / unfit
+  removal) never fire. DEFERRED: the missing piece is **which strategic directive represents the ritual** and
+  **when the Champion defies** — both design decisions (same family as the acknowledged
+  `_directive_to_decision_type` coverage limitation), not values already in the consumer.
+- **Seigyo commitment deprioritization (s16.4) — `CourtCommitmentSystem.should_deprioritize` zero callers.**
+  Returns true for SEIGYO but nothing calls it; `get_priority` applies no Seigyo reduction. DEFERRED: the GDD
+  names the behavior but gives **no numeric priority reduction** (would be invented).
+- **`CourtCommitmentData.good_faith` produced-but-read-only-in-tests.** Written once (court_commitment_system:232)
+  but no production consumer (the renege path keys off `ap_spent_toward`). Reads as an observability/record
+  flag rather than a gating input; the GDD names no distinct consumer. DEFERRED (likely intentional record-keeping).
+
+### Known Code Issues (found and fixed 2026-07-06, Emperor FILL_VACANCY read a phantom key — the Imperial archetype-gated vacancy directive was permanently dead — runtime-verified 6/6)
+A **produced-but-never-produced key-mismatch** (the ConvictionProcessor `resolved`-string class, but on the
+Strategic-Review Emperor path). `StrategicReview._evaluate_vacancy_fill` (reached via `run_emperor_review`
+during `_run_strategic_reviews`) read the Emperor's vacancy list off `world_state.get("vacancies", [])` — a
+key **NOTHING in the codebase ever writes** — so it was always empty, the `if vacancies.is_empty(): return {}`
+guard always fired, and the Emperor's archetype-gated **FILL_VACANCY** directive (the one that applies
+`ARCHETYPE_VACANCY_MIN_SEASONS` seasons-vacant floors + archetype disposition/skill/clan-balance weights) was
+**permanently dead**; only the generic per-character NPC-engine vacancy path fired. The producer,
+`DayOrchestrator._populate_vacancy_intelligence` (run early each tick at ~:159, well before the seasonal
+reviews), writes `world_states["vacancy_data"]` keyed by lord_id and **appends the Emperor's court/Governor
+seats to `vacancy_data[emperor_id]`** — with entry dicts carrying exactly the `position_type`/`seasons_vacant`/
+`priority` keys the consumer iterates. FIX (pure key correction — **zero invented values**): read
+`world_state.get("vacancy_data", {}).get(emperor.character_id, [])` (the canonical key the live producer
+already populates). Runtime-verified 6/6 (`tests/verify_emperor_vacancy_fill.gd`): empty ws → {} (dead); the
+legacy phantom `vacancies` key → {} (now ignored); `vacancy_data[emperor_id]` → a FILL_VACANCY directive
+targeting the emperor and carrying the best vacancy; and `vacancy_data` keyed to a different lord → {} (per-lord
+keying respected). Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, has_naval_threat permanently false — the COMMISSION_SHIP defensive-ship decision was dead empire-wide — runtime-verified 5/5)
+The **empty-top-level-key** class at the SOURCE end (sibling of the Strategic-Review war-context fix, but
+in the early per-tick intelligence pass). `DayOrchestrator._populate_infrastructure_intelligence` builds the
+per-clan naval-threat map (`naval_threatened_clans`: a clan is threatened iff it is at war with a clan that
+owns ships, s57.18) by iterating `world_states.get("active_wars", [])` at the **top level** — but this
+function runs EARLY in `advance_day` (~:158), long before top-level `active_wars` is briefly set (only inside
+`_run_strategic_reviews` at ~:12859, and erased right after). So the read **always saw `[]`** →
+`naval_threatened_clans` was **permanently empty** → `world_states["_naval_threatened_clans"]` empty → the
+per-character `ws["has_naval_threat"] = g_naval_threatened_clans.has(c.clan)` was **always false** for every
+character → `ContextSnapshot.has_naval_threat` (npc_decision_engine:239) always false → the
+`objective_decomposer` **COMMISSION_SHIP** defensive-ship branch (`if ctx.is_coastal and ctx.has_naval_threat
+and not ctx.has_naval_assets`, priority 3) **never fired**: a coastal clan at war with a naval power never
+built a defensive ship. (`is_coastal`/`has_naval_assets` come from the real `ships` param, so only the threat
+leg was dead.) FIX (pure producer plumbing — **zero invented values**): `active_wars` (the real WarData array,
+already an `advance_day` param) is threaded into `_populate_infrastructure_intelligence` as a defaulted
+trailing param and the loop iterates it instead of the never-set top-level key. The loop already expects raw
+WarData (`if w is WarData`), so the param is a drop-in — no shape conversion (unlike the strategic-review
+`active_wars`, whose consumers wanted context-dicts; this consumer wants raw WarData). Runtime-verified 5/5
+(`tests/verify_naval_threat_intelligence.gd`): empty active_wars → empty threat map (the dead pre-fix); a
+naval Crab at war with a landlocked Lion → Lion naval-threatened, Crab not; two landlocked clans at war →
+nobody threatened; order-independent (clan_a or clan_b naval). Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, Strategic Review self-selection top-level plumbing — 3 more empty-key/wrong-shape corrections on the same seam — runtime-verified 13/13 + 11/11 regression)
+Follow-up sweep of the **same injection seam** as the war-context fix (an Explore sub-agent flagged the
+adjacent shape hazard), fixing three more dormant reads the lord Strategic-Review self-selection path makes
+off the TOP-LEVEL `world_states`. All three trace to the same root: `StrategicReview.run_seasonal_review`
+(and, through `_evaluate_self_selection` → `OpportunityScanner.select_primary_objective` →
+`_scan_military`) is handed the **top-level** dict, but the facts it reads are only ever written on
+PER-CHARACTER `ws` sub-dicts by `_inject_base_character_context` (which runs at ~373, before the seasonal
+reviews at ~1787, on the same shared dict). **Zero invented values** — every threshold lives in the consumer.
+- **(A) `known_clan_strengths` + `taint_topic_province_ids` hoisted to top-level (2 dead lord self-selection
+  military opportunities).** `_scan_military` reads `known_clan_strengths` (rival vs own clan strength →
+  BUILD_STRONGEST_FORCE at rival > own×1.3 / LEVY_TROOPS at ×1.1–1.3) and `taint_topic_province_ids`
+  (→ ELIMINATE_SHADOWLANDS) off the top-level dict — both empty there, so no lord ever self-selected those.
+  Hoisted the two GLOBAL facts to `world_states[...]` in `_inject_base_character_context` (they're the same
+  value for every lord; refreshed each tick before the reviews). **`active_insurgencies` deliberately NOT
+  hoisted:** it is an `Array[InsurgencyData]` but `_scan_military` types its loop `for ins: Dictionary`, so
+  hoisting the raw objects would **crash** the loop — and its blanket insurgency→ELIMINATE_SHADOWLANDS
+  mapping (fires even for peasant revolts) is redundant with / less correct than the taint-topic gate. The
+  other `_scan_*` opportunity keys (`border_weaknesses`, `threatened_provinces`, `sieged_allies`,
+  `tainted_provinces`, `insurgent_provinces`, `resource_deficits`, `famine_provinces`, `weak_neighbor_provinces`,
+  …) have **zero producers anywhere** — phantom keys the scanner was written against; reviving them needs
+  invented producers, so they stay deferred.
+- **(B) `current_season` injected as the int enum (Emperor Winter-Court hosting + WINTER call-court bonus
+  dead).** The court evaluators read top-level `world_state.get("current_season", 0)` as an **int enum**, but
+  it was only set per-character and there as a **STRING** season name — so the top-level read was always 0
+  (SPRING). `_evaluate_winter_court_host` guards `!= AUTUMN` → the Emperor could **never** host Winter Court
+  through the strategic-review path, and `_evaluate_call_court`'s WINTER +20 bonus never applied. Injected
+  `world_states["current_season"] = current_season` (the int-enum param) in the war-context block, erased
+  after the loop. (Verified no top-level string-reader collides — the one string reader,
+  `npc_decision_engine:5656`, reads the per-character ws in a different pass, after the erase.)
+- **(C) war-context `active_wars` shape corrected to CONTEXT-DICTS.** The just-committed war-context fix
+  injected **raw WarData** into top-level `active_wars`, but the downstream self-selection consumers
+  (`opportunity_scanner` `war if war is Dictionary else {}`, `objective_progress` `if war is Dictionary`)
+  read `clan_a`/`clan_b` and **silently no-op on raw WarData**. Changed the injection to
+  `WarSystem.wars_to_context_array(active_wars)` (the same context-dict form `_inject_base_character_context`
+  uses per-character; also filters to `is_active`). The two strategic evaluators only test `.is_empty()`/
+  `.size()` (shape-agnostic), so they are unaffected; the scanner/progress war-checks now actually fire.
+Runtime-verified 13/13 (`tests/verify_strategic_selfselect_context.gd`): `_scan_military` produces
+BUILD_STRONGEST_FORCE / LEVY_TROOPS / ELIMINATE_SHADOWLANDS only when the keys are present (empty ws → none);
+`_evaluate_winter_court_host` fires in AUTUMN + a champion and returns {} in SPRING / when the key is absent;
+and `wars_to_context_array` yields `is Dictionary` entries with `clan_a`/`clan_b` (raw WarData is not a
+Dictionary) and filters inactive wars. The prior war-context driver still passes 11/11 (the shape change
+does not affect the shape-agnostic evaluators). Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, Strategic Review war-context read from a never-written top-level key — SEEK_PEACE fully dead, WAR_READINESS primary/YU triggers dead — runtime-verified 11/11)
+The **empty-top-level-key** dormant class (the same one the Togashi realm-overlap fix just surfaced, but on the
+Strategic Review path). `world_states` is keyed by BOTH character_id (per-character ContextSnapshot sub-dicts)
+AND string keys, and `_inject_base_character_context` sets `ws["active_wars"]`/`ws["escalating_conflicts"]`
+ONLY on the per-character sub-dicts (`ws = world_states[c.character_id]`), NEVER on the top-level dict. But
+`StrategicReview.run_seasonal_review(lord, vassals, objectives_map, world_state)` is handed the **top-level**
+`world_states` (day_orchestrator `_run_strategic_reviews:12886`), and its two war evaluators read those keys
+off it: `_evaluate_seek_peace` guards `if world_state.get("active_wars", []).is_empty(): return {}` — which
+**ALWAYS fired** (top-level `active_wars` was never set), so SEEK_PEACE was **fully dead for every lord,
+including JIN** (who should always want peace during a war); and `_evaluate_war_readiness` reads the same
+`active_wars` (primary "we are at war" trigger) and `escalating_conflicts` (the YU-virtue "war is brewing"
+trigger) — both **permanently silent**. This starved two live consumers: the **Phoenix Council** vote flow
+(the Shiba Champion runs the vassal review path; `_directive_to_decision_type` maps SEEK_PEACE→SIGN_TREATY and
+the readiness directives→DEPLOY_GO_HATAMOTO) and the **Togashi** war/peace directive-alignment check
+(`is_directive_aligned`). FIX (pure producer plumbing — **zero invented values**, both facts already in scope
+as `_run_strategic_reviews` params): inject `world_states["active_wars"] = active_wars` and
+`world_states["escalating_conflicts"] = _extract_escalating_conflicts(active_topics, active_wars)` (the same
+extractor build_context uses) ONCE before the vassal-review loop, erased after it (alongside the existing
+`trainable_vassals`/`vengeance_targets`/`bitter_rivals` scratch keys, same pattern). Both consumers read the
+keys with only `.is_empty()`/`.size()`, so no threshold is touched. DEFERRED (not invented): the
+war-readiness **`elif` military_readiness < 0.7** branch (an unbuilt readiness metric — a plain fact would
+have to be invented) and `_evaluate_seek_peace`'s **war-duration** branch (needs `longest_war_duration_seasons`,
+a producer that doesn't exist yet) — so a non-JIN lord in a war still produces no SEEK_PEACE, and a non-YU lord
+facing only escalation still produces no WAR_READINESS; the JIN-during-war and at-war/YU-during-escalation
+paths are the revived ones. Runtime-verified 11/11 (`tests/verify_strategic_war_context.gd`): the dead guard
+(empty world_state → {} even for JIN); active_wars+JIN → SEEK_PEACE; active_wars → WAR_READINESS; escalating+YU
+→ WAR_READINESS; escalating+non-YU (military_readiness 1.0) → {} (elif deferred); and end-to-end
+`run_seasonal_review` produces BOTH directives with the war-context injected and NEITHER without it. Full
+project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, situational insurgency-spawn modifiers were dead — the whole escalation layer never fired — runtime-verified 17/17)
+A **produced-but-never-produced** dormant layer (the sibling of the route_integrity / hostage-War-Score
+class, but at the SOURCE end): `InsurgencySystem.get_spawn_chance` (s11.11, the sole seasonal insurgency
+spawn arbiter) reads ~11 per-province `world_state` keys whose modifier MAGNITUDES are GDD-locked *in the
+consumer* — but **NOTHING ever populated those keys**. The one caller,
+`DayOrchestrator._process_insurgencies`, built `per_province_ws` as `world_states.get(pid, {}).duplicate()`
++ only `is_patrolled`, so every read returned the default: `starvation_stage`→0, `under_garrisoned`→false,
+`empire_at_war`/`clan_at_war`→false, `lord_bushido_virtue`→NONE, etc. Result: **every insurgency spawn used
+only the flat stability-tier base** — a starving, under-garrisoned, Jin-less province was no likelier to
+revolt than a fed one, and PIRATE_FLEET (base 0.0 with no war) could **never spawn at all** on a stable
+coastal province regardless of how many wars raged. The entire situational escalation layer — the point of
+s11.11's spawn-chance table — was inert. FIX (pure producer plumbing — **zero invented values**, every
+magnitude and the one threshold are already GDD-locked in the consumer / `compute_stability_change`):
+`_process_insurgencies` now, in the same per-province ws loop that already injects `is_patrolled`, produces
+the **5 cleanly-computable facts** from existing state — `starvation_stage` = `province.starvation_stage`
+(the real ResourceTick-fed field); `under_garrisoned` = `garrison_pu < population_pu × 0.05` aggregated
+across the province's settlements (the LOCKED s11.11 under-garrison threshold from `compute_stability_change`);
+`empire_at_war` = `not active_wars.is_empty()`; `clan_at_war` = any active war involves `province.clan`
+(via `WarSystem.is_clan_involved`, ally-aware); `lord_bushido_virtue` = the province lord's virtue (via
+`_find_province_lord`). `active_wars`/`characters_by_id`/`settlements` threaded into `_process_insurgencies`
+as defaulted trailing params (backward-compatible, sole caller updated). This lights up PEASANT_REVOLT
+(starvation +0.10 / under-garrison +0.10 / Jin lord −0.10) and PIRATE_FLEET (empire 0.05 / clan +0.10).
+DEFERRED (no clean producer — flagged, NOT invented): `recent_maho_in_province`,
+`adjacent_war_ended_recently`, `disbanded_units_unpaid`, `adjacent_to_shinomen_or_shadowlands`,
+`nezumi_suppressed_recently`, `adjacent_pirate_count` — each needs history-tracking or adjacency+flags that
+don't exist yet. Runtime-verified 17/17 (`tests/verify_insurgency_spawn_modifiers.gd`): the consumer applies
+each wired key's LOCKED delta (PEASANT base 0.25, +HUNGER 0.35, +SHORTAGE-below-threshold 0.25, +under-garrison
+0.35, +Jin 0.15, all-stack 0.35; PIRATE stable-coastal no-war 0.0 / +empire 0.05 / +clan 0.15); and the
+producer is proven end-to-end through `_process_insurgencies` with same-seed paired runs (deterministic
+superset): PIRATE spawns for some seeds WITH a Crab war and **never** without (0/200), and HUNGER /
+under-garrisoned / non-Jin each produce a strict superset of PEASANT spawns vs their control. Full project
+`--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, ViolenceSystem naming-guard violation hardened — the last Pattern-B/Pattern-A footgun — runtime-verified 12/12)
+A **latent** correctness footgun (not a live bug — the same "would silently misbehave the moment a consumer
+reads it" class as the covert-killing severity fix). `ViolenceSystem.apply_consequences` (s11.3.12) pre-applies
+the attacker's honor/glory/infamy directly (Pattern B) AND then RETURNED them under the keys
+`honor_change`/`glory_change`/`infamy_change` — the EXACT Pattern-A keys `EffectApplicator` consumes
+(`effect_applicator.gd:353/372/411`). This violates the CLAUDE.md Effect Application **Design Decision #6**
+naming guard ("Never use `honor_change`… as return dict keys from a system that pre-applies mutations. Use
+`subject_honor_loss`/`subject_glory_loss`/`subject_infamy_gain`… to prevent EffectApplicator double-application").
+It was the codebase's ONLY remaining naming-guard violation (confirmed by a full double-applied-effect sweep).
+Not a live double-count ONLY because the sole caller (`day_orchestrator.gd:28828`, the non-lethal
+assassin-vs-bodyguard combat path) discards the return value — but the moment any future caller routed the dict
+through EffectApplicator, the attacker would be instantly double- (or, with the sibling glory/infamy, triple-)
+charged. FIX (behavior-preserving — the caller discards the return, grep-confirmed sole caller): the returned
+stat deltas now use the guard-compliant `subject_honor_loss`/`subject_glory_loss`/`subject_infamy_gain`
+pre-applied names (the SecretSystem/SeductionSystem convention, which EffectApplicator never consumes —
+grep-confirmed 0 reads); the Pattern-B mutations above are unchanged and still fire once; `punishment`/`topic_tier`
+(non-stat metadata) are preserved. Runtime-verified 12/12 (`tests/verify_violence_naming_guard.gd`): the attacker's
+honor/glory/infamy are each mutated exactly once (5.0→4.8 / 3.0→2.9 / 0.0→0.1); the return dict carries NONE of
+`honor_change`/`glory_change`/`infamy_change`/`infamy_gain`; and it carries the `subject_*` deltas + `punishment`
++ `topic_tier`. Full project `--import` parse-clean. With this, there are ZERO Pattern-B-pre-apply functions
+emitting a re-appliable Pattern-A stat key anywhere in the codebase.
+
+### Known Code Issues (found and fixed 2026-07-06, two disposition-tier ladders consolidated onto the canonical arbiter — behavior-preserving dedup — runtime-verified 16/16)
+A **duplicate-antipattern / drift-hazard** consolidation (the same class as the social-TN fix — agreed exactly
+today, but a hand-copied ladder that would silently drift from the LOCKED s12.2 boundaries). The canonical tier
+arbiter `DispositionSystem.get_tier` (BLOOD_ENEMY ≤ −61 / ENEMY ≤ −31 / RIVAL ≤ −11 / STRANGER ≤ 10 /
+ACQUAINTANCE ≤ 30 / FRIEND ≤ 60 / TRUSTED_ALLY ≤ 90 / DEVOTED, s12.2 LOCKED) was re-implemented INLINE as a
+hand-written 8-rung threshold ladder in two live consumers: `ActionExecutor._get_disposition_tier_name` (maps to
+a lowercase tier string) and `CourtActionSystem.get_debate_disposition_tier` (maps into the `DEBATE_DISPOSITION_TIERS`
+value dict, with "sworn" as its 61–90 TRUSTED_ALLY key). The boundaries MATCHED the canonical exactly today (no
+active bug), but each was a private hand-copy of the LOCKED table that would drift the moment either the canonical
+or a copy changed. FIX (behavior-preserving, no new numbers): both consumers now `match DispositionSystem.get_tier(disp)`
+and map the returned `Tier` enum to their own local representation (string / debate-dict value) — the threshold
+decision lives in ONE place (the canonical), while each keeps its distinct naming. Runtime-verified 16/16
+(`tests/verify_disposition_tier_dedup.gd`): both rerouted functions produce output IDENTICAL to the original inline
+ladders for EVERY disposition value −100..100 (0 mismatches across all 402 evaluations), plus all 14 tier-boundary
+spot-checks (−61/−60/−31/−30/−11/−10/10/11/30/31/60/61/90/91). Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, assassination-order honor cost applied TWICE — twin arbiters both fired — runtime-verified 14/14)
+A **twin-arbiter double-count** (the split-brain sub-class of the divergent-inline-copy bug) and a genuine
+LIVE correctness bug. The s12.8 "honor cost of ORDERING an assassination, rank-scaled by target Status"
+(≥8→−5 / ≥6→−4 / ≥3→−3 / else −2) is encoded by TWO value-identical arbiters: `AssassinationSystem.get_ordering_honor_loss`
+(the domain-owned canonical, rank-scales internally via `CrimeSystem.scale_honor_by_rank`) and the
+duplicate `SecretSystem.get_assassination_order_honor_cost` (a hand-copied dict `ASSASSINATION_ORDER_HONOR`,
+rank-scaled externally by the caller). Both fired for the SAME commission, in the SAME tick, on the SAME
+commissioner: `ActionExecutor._execute_commission_assassination` (~6005) computed the cost via the SecretSystem
+copy, **applied it** (`apply_honor_change`, the LOCKED Pattern-B commission-time charge — CLAUDE.md "applied at
+commission time (Pattern B)"), AND stashed it as `effects.subject_honor_loss` (a pure metadata key EffectApplicator
+does NOT consume — grep-confirmed 0 reads); then `DayOrchestrator._process_assassination_commissions` (~28656,
+called once/tick from `advance_day`) **re-applied** the same rank-scaled ordering honor via the domain arbiter,
+ignoring the stash. So every NEW commission charged the commissioner the ordering honor **twice**, and — because
+that writeback has a per-(assassin,target) dedup `continue` BEFORE the re-charge — a *duplicate* commission was
+charged only once, an inconsistency that is the tell of independently-drifted wiring. FIX (pure deletion +
+behavior-preserving consolidation, no new numbers): (1) **removed the writeback re-application** — the
+`_process_assassination_commissions` pass now only registers the assassination op (the executor's Pattern-B
+charge is the single, canonical application; `state["commissioner_id"]` is still set from `effects`). (2)
+**consolidated the executor onto the domain arbiter** — `_execute_commission_assassination` now computes the
+cost via `AssassinationSystem.get_ordering_honor_loss(target.status, character)` (identical ladder + identical
+internal `scale_honor_by_rank` → the exact same value as the old SecretSystem-copy call, verified across all
+Status tiers), so the live path runs through ONE arbiter and the two no longer drift. `SecretSystem.get_assassination_order_honor_cost`
++ its `ASSASSINATION_ORDER_HONOR` dict are retained (test-covered) but now have zero production callers —
+a documented dead-but-tested residual, no longer a drift hazard for production. Runtime-verified 14/14
+(`tests/verify_assassination_order_honor.gd`): the domain arbiter == the old SecretSystem-copy value across
+9 Status tiers (rank-scaled); the writeback leaves the commissioner's honor UNCHANGED (no second charge) while
+still registering the op with the correct commissioner_id; and the dedup path still skips a duplicate op with
+no re-charge. Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, land-commander battle bonus bypassed the canonical arbiter — Tactician/Strategist advantages silently dropped in every land battle — runtime-verified 8/8)
+A **canonical-arbiter-bypassed-by-a-divergent-inline-copy** fix (the seppuku/harvest/social-TN class), and
+a genuine LIVE gameplay bug. `ArmyCombatSystem.resolve_commander_bonus(commander, clan_id)` — the LOCKED
+land-commander battle-bonus arbiter (s11.7 / s45: Battle skill rank **+ Tactician (+5) + Strategist (+1k0)**,
+ring-typed via `RING_TO_BONUS_TYPE` with **clan-priority tie-breaking** `CLAN_RING_PRIORITY`) — had **ZERO
+production callers** (grep-confirmed: only its own def + `tests/`). The SOLE land-army battle-company builder
+`DayOrchestrator._build_battle_states` (used by BOTH the field-battle path `_resolve_army_battles` ~16337 AND
+the storm-assault path `_process_storm_assault_results` ~3070, via `resolve_and_reconcile_battle`) instead
+computed the bonus with the **naval-shaped inline copy** `_compute_captain_bonus` (a private DO helper also
+used by the s11.9 naval path at ~22207/22223). That copy **DROPS the Tactician (+5) and Strategist (+1k0)
+advantages entirely** (it returns just `battle_rank`) and uses a naive FIRE-biased first-wins ring tie-break
+with no clan priority. Result: a land commander with the **Tactician** or **Strategist** advantage (s45)
+conferred **ZERO** battle bonus in any field battle or storm assault — the advantage was inert — and ring
+ties resolved by FIRE-bias instead of the LOCKED clan-priority order. The CONSUMER side was fully wired and
+casualty-gated (`_get_effective_attack/defense/morale_defense` apply `commander_bonus` by type unless the
+commander is injured/dead); only the producer diverged. FIX (pure routing, no invented values — every value
+is the canonical arbiter's own s11.7/s45 constant): `_build_battle_states` now calls
+`ArmyCombatSystem.resolve_commander_bonus(commander, commander.clan)` (the commander's clan drives the
+clan-priority tie-break). **Naval left untouched** — `_compute_captain_bonus` (s11.9) is a separate GDD system
+and its two naval call sites are unchanged; only the land call site was rerouted. Behavior-preserving for an
+**ordinary** commander (no advantage, no ring tie): `get_tactician_modifier`/`get_strategist_battle_modifier`
+return 0, and the RING_TO_BONUS_TYPE map is identical between the two functions (FIRE/WATER→attack,
+EARTH/AIR→defense, VOID→morale), so a plain commander's bonus is unchanged; the only deltas are (a) a
+Tactician/Strategist commander now gets their advantage bonus, and (b) exact ring ties resolve by clan
+priority. The zero-battle-rank return-shape difference (`{}` vs `{"bonus_type":"","bonus_value":0}`) is
+harmless — the consumer reads `bonus.get("bonus_type","") == "attack"`, so both mean "no bonus". Runtime-verified
+8/8 (`tests/verify_land_commander_bonus.gd`): a plain Fire-dominant commander → attack bonus == Battle rank;
+a Tactician commander → Battle+5; a Strategist commander → Battle+1; `_build_battle_states` builds a company
+carrying the Tactician-boosted bonus and its effective attack reflects it; Battle-0 → no bonus. Full project
+`--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, performance_invitation_received reactive need was dead — targeted court commissions never reached the invited performer — runtime-verified 8/8)
+A **dead-consumer** dormant signal (the class where a consumer branch reads an event type no injector
+ever produces). `NPCDecisionEngine._decompose_reactive_event` has a live arm for
+`ev.type == "performance_invitation_received"` (s12.4 / s57.33.3) — it builds a
+`FULFILL_PERFORMANCE_REQUEST` need at **priority 2** for a TARGETED personal court performance
+commission (a named lord invites a specific performer) — but **nothing ever created that event**. The
+performance-request injector in `build_context` (npc_decision_engine ~:290) only emitted the
+`open_performance_request` type and `continue`d past every targeted request
+(`if req.get("target_performer_id", -1) >= 0: continue`). So a personal commission addressed to a
+specific courtier NEVER nudged that performer through the reactive path — it just sat in the court's
+`pending_performance_requests` until it expired 90 days later (the open-call path, and the
+`FULFILL_PERFORMANCE_REQUEST` fulfillment writeback in `day_orchestrator` ~:27065, were both already
+live — only the targeted injector was missing). FIX (pure routing, no invented values — the priority-2
+targeted / priority-1 open split is exactly what the existing consumer arms encode): the injector now,
+for a performer at an active court, FIRST scans for a request whose `target_performer_id` == this
+character that they `RequestPerformanceSystem.can_fulfill` (skill rank ≥ 1) and injects
+`performance_invitation_received` (the targeted arm), and only if none is addressed to them falls back
+to the prior `open_performance_request` scan — so a personal commission takes precedence over an open
+call, matching the consumer's priority-2-over-priority-1 ordering. Unskilled invited performers (fail
+`can_fulfill`) and no-court contexts inject nothing (unchanged). Runtime-verified 8/8
+(`tests/verify_performance_invitation.gd`): a targeted commission injects `performance_invitation_received`;
+an open request still injects `open_performance_request` (and NOT the targeted type); a
+targeted-to-someone-else request nudges this performer with nothing; a targeted-for-me + open pair
+injects only the targeted one (precedence); no active court injects nothing; an unskilled invited
+performer is not nudged. Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, route_integrity_reduced produced-but-never-consumed — Silk courier failures did nothing — runtime-verified 9/9)
+A produced-but-not-consumed dormant signal (the cohabitation/hostage-War-Score class). The
+RUN_COURIER_ROUTE failure writeback SET `L5RCharacterData.special_data["route_integrity_reduced"] = true`
+on the Silk Master — but that key had **exactly ONE reference in the whole repo** (the write): nothing
+ever READ it, and nothing ever CLEARED it. So a failed courier segment silently did nothing — the Silk
+network never reacted to a broken route. GDD s54.7c:53 (LOCKED): "Failure … flags route_integrity_reduced
+for that segment, **elevating MAINTAIN_KOLAT_NETWORK priority until the segment is repaired or abandoned**."
+FIX (no invented values — the priority + clear condition are LOCKED): (1) **clear on repair** — a clean
+RUN_COURIER_ROUTE (`route_clean`) now ERASES the flag (the segment is verified clean = repaired), instead
+of the prior no-op `continue`; a failed run still sets it. (2) **elevate on flag** — `_assign_kolat_standing_objectives`
+promotes MAINTAIN_KOLAT_NETWORK into the **kolat objective slot at priority 2** while the flag is set. This
+is the faithful mapping of "elevate priority": the Silk mandate is otherwise the FLAT standing objective
+(fires last in `resolve_goal`), and the kolat slot at priority 2 "yields to the primary but **precedes the
+standing objective**" (s54.7d cascade) — priority 2 is the LOCKED MAINTAIN_KOLAT_NETWORK below-80%-integrity
+tier (s54.7c:11). Placed BEFORE the standing-assignment `continue`s so it runs every tick for a Silk Master;
+only fills a FREE slot (never clobbers a Tiger directive — and the opportunistic pass, which runs after,
+leaves a non-opportunistic `source` untouched, s54.7 line 9082); and the elevation is removed when the flag
+clears (`source == "route_integrity"` → erase). Runtime-verified 9/9 (`tests/verify_route_integrity.gd`):
+a failed route elevates to the kolat slot (MAINTAIN_KOLAT_NETWORK / priority 2 / source route_integrity)
+while the standing mandate stays assigned; no flag → no elevation; the flag clearing removes the elevation
+(repair); a pre-existing Tiger directive is NOT clobbered; a non-Silk (Coin) Master is unaffected. Full
+project `--import` parse-clean. DOCUMENTED LIMITATION: the full network_integrity SCORE model (s54.7c:11
+priority 2 below 80% / priority 3 below 60%) is not implemented — the boolean flag is a proxy for
+"a segment failed → network degraded", mapped to the milder locked tier (priority 2); a true integrity
+score would let it reach priority 3, but that needs the score producer (a separate, unbuilt mechanic).
+
+### Known Code Issues (found and fixed 2026-07-06, siege War Score shifts were dead — consumer read a state nothing produces — runtime-verified 11/11)
+The sibling dormant-consumer bug surfaced by the territory-capture fix (was documented DEFERRED there;
+now fixed). `_process_siege_war_scores` (wired live in `_process_war_score_shifts`) read
+`military_daily["siege_results"]` for `resolved == "attacker_victory"` / `resolved ==
+"defender_victory"` and `attacker_clan`/`defender_clan` — but **nothing in the codebase ever produces
+those keys**: the raw siege-tick dicts carry `starvation`/`honor`/`ended`/`end_reason`, and the live
+storm-assault path emits `victor == "attacker"|"defender"` + `attacker_army_id`/`defender_army_id` (no
+`resolved`, no clans). So the loop's `if resolved.is_empty(): continue` fired every time — the function
+**never did anything**, and the LOCKED `WarSystem.SCORE_SHIFTS` keys `siege_won_attacker [12,8]` /
+`siege_won_defender [8,5]` were dead: **storming an enemy castle (or repelling an assault) moved the War
+Score by zero**, so sieges never affected the peace-negotiating position. FIX (no invented values — the
+shifts are LOCKED in SCORE_SHIFTS): rewired `_process_siege_war_scores(storm_assault_results, active_wars,
+companies, results)` to consume the REAL `storm_assault_results` (per-tick assault events — no dedup
+needed), resolving each side's clan from `companies` via the proven `_get_army_clan` helper (the same
+resolution `_process_battle_war_scores` uses), finding the war between them with the ally-aware
+`get_war_between`, and applying the shift to the winning side's PRINCIPAL clan (via `get_clan_side` →
+`clan_a`/`clan_b`, so `apply_score_shift`'s direct clan_a/clan_b match lands even for an allied victor).
+`storm_assault_results` threaded through `_process_war_score_shifts` (a defaulted trailing param) from
+the `advance_day` scope where it already lives. Guards: no war between the clans, same clan both sides,
+unknown army id (empty clan), non-victory result. Runtime-verified 11/11 (`tests/verify_siege_war_score.gd`):
+attacker win → +12/−8 on the correct sides; defender repel → +8/−5; an ALLIED attacker's win lands on
+its side's principal clan; and the four no-op guards. Full project `--import` parse-clean. DOCUMENTED
+LIMITATION (not invented): starvation-surrender attacker wins are not assaults, so they are not in
+`storm_assault_results` — their war impact flows through the now-wired territory capture + hostage War
+Score at `_capture_siege_hostages` (a faithful scoping: the storm assault is the decisive military event
+that moves War Score; starvation is attritional and its impact is the province + hostages). This also
+retires the dead `resolved == "attacker_victory"` read; the Dragon-schism check (17759) still reads the
+same never-produced key and is a separate dormant path (left scoped out — it needs the s55.10.2 Dragon
+schism context).
+
+### Known Code Issues (found and fixed 2026-07-06, siege captures never recorded to the war — wars transferred zero territory — runtime-verified 9/9)
+Same built-but-zero-callers dormant class as the hostage-War-Score fix, and a genuine LIVE gameplay bug.
+`WarSystem.record_province_capture` (appends the captured province to `war.provinces_captured_by_a/b`)
+was fully built AND its consumer chain is entirely LIVE — `WarTermination._get_captured_provinces`
+reads those arrays at peace to set `territory_demand` / `territory_count` / `territory_transferred`, and
+`apply_territory_transfer` flips `province.clan = winner_clan` — but the function had **ZERO production
+callers**, so the two arrays were **ALWAYS empty**. Result: **every war ended transferring zero
+territory regardless of who won** (a besieging clan could storm and hold enemy provinces all war and
+keep none at peace). NOTE the sibling bug this surfaced: `_process_siege_war_scores` and the Dragon-schism
+check read `resolved == "attacker_victory"`, a state **nothing ever produces** (the live storm-assault
+path emits `victor == "attacker"` + `end_reason == "storm_assault_success"`), so those two are also
+dormant — the real live siege-capture consumer is `_capture_siege_hostages` (fires once per won siege on
+`storm_assault_success`/`starvation`, dedup-guarded, already resolving `captor_lord_id` + `settlement_id`;
+where the hostage-War-Score fix also lives). FIX (no invented values — pure LOCKED wiring): new
+`_apply_siege_province_capture(settlement_id, captor_lord_id, settlements, provinces, active_wars,
+characters_by_id)` called from `_capture_siege_hostages` — resolves the captor's clan (attacking lord),
+the settlement's `province_id`, and the province's current owner = the **defender clan** (ownership only
+formally flips at peace via `apply_territory_transfer`, verified: `province.clan` is reassigned ONLY at
+`war_termination.gd:558`), finds the active war between captor and defender (ally-aware `get_war_between`),
+and delegates the side/ally bookkeeping to `record_province_capture` (appends to the capturing side,
+erases from the other — so a province changing hands over a war is tracked correctly). `settlements`
+(Array) + `provinces` (Dictionary keyed by province_id) threaded into `_capture_siege_hostages` (both in
+`advance_day` scope at the call site). No-op guards: unknown settlement/province, missing captor,
+self-clan province, no active war between the clans. `settlements`/`provinces` typing was the one real
+mistake caught in verification — `provinces` in `advance_day` is a **Dictionary** (province_id →
+ProvinceData), not an Array; the direct `provinces.get(province_id)` lookup is cleaner than an iteration.
+Runtime-verified 9/9 (`tests/verify_siege_province_capture.gd`): attacker capture recorded on its war
+side (not the other); an ALLIED captor's capture recorded to that side's PRINCIPAL list; the four no-op
+guards (self-clan / no war / unknown settlement / invalid captor); and the end-to-end chain — two
+recorded captures are then seen by `WarTermination._get_captured_provinces` (empty pre-fix). Full project
+`--import` parse-clean. s53 LOCKED anchor: "Terms require formally ceding provinces that were held at the
+start of the war." DEFERRED (documented, separate): `_process_siege_war_scores` / Dragon-schism
+`attacker_victory` dead-state is a distinct dormant-consumer bug (they read a `resolved` string the live
+path never emits) — not fixed here to keep this scoped to the territory-transfer chain.
+
+### Known Code Issues (found and fixed 2026-07-06, disposition→social-TN modifier consolidated onto the canonical arbiter — runtime-verified 17/17)
+The third finding of the divergence sweep — a **duplicate-antipattern** (agreed exactly today, but a
+drift hazard, and it left the canonical orphaned). `ActionExecutor._get_social_tn` re-derived the s12.2
+disposition-tier raise/free-raise table INLINE (Blood Enemy +10 TN … Devoted −15 TN), a hand-copy of
+`DispositionSystem.TARGET_RAISE_MODIFIERS` (raise modifier × 5 = the TN delta; boundaries matching
+`get_tier` exactly). The canonical `DispositionSystem.get_raise_modifier` had **ZERO callers** — an
+orphaned arbiter, while the live table lived in a divergent inline copy. FIX (behavior-preserving —
+verified identical across the full range): replaced the inline `if/elif` ladder with
+`tn += DispositionSystem.get_raise_modifier(target_disp) * 5`, so the social-TN calc and every other
+disposition consumer read the SAME per-tier table (a future change to the tier table now reaches the
+TN calc automatically), and the orphaned canonical gains its first caller. Runtime-verified 17/17
+(`tests/verify_social_tn_disposition.gd`): the routed `_get_social_tn` == base + `get_raise_modifier`×5
+== the legacy inline formula for ALL 201 disposition values (−100..+100, zero mismatches), plus every
+tier boundary spot-check (−61/−31/±11/±31/±61/±91). Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, two "canonical arbiter bypassed by a divergent inline copy" fixes — runtime-verified 12/12)
+A divergence-class sweep (the same anti-pattern as the seppuku/harvest/blackmail fixes) surfaced two
+inline copies of a canonical table/function that had drifted from the LOCKED source. Both fixes are
+pure routing — zero re-implemented logic, zero invented values.
+- **Conviction-topic momentum started one crisis-band too low (s16.1, LIVE).** `InvestigationSystem.generate_conviction_topic`
+  minted its topic momentum from a LOCAL `TOPIC_INITIAL_MOMENTUM` table whose tiers 2/3/4 were each
+  **exactly 1 point below** the canonical `TopicMomentumSystem.TIER_INITIAL_MOMENTUM` (26/51/80 → the
+  inline copy had 25/50/80) — landing at the TOP of the band below. Under the LOCKED s16.1 band floors
+  (Rumor 0–10 / Minor 11–25 / Secondary 26–50 / Major 51–75 / Unavoidable 76+), that meant **every
+  crime-conviction topic entered court discussion one full crisis-band weaker** than any other topic of
+  the same tier: a Tier-4 conviction read as RUMOR ("not yet a formal topic") instead of MINOR, Tier-3
+  as MINOR instead of SECONDARY, Tier-2 as SECONDARY instead of MAJOR (Tier-1 alone matched at 80 — the
+  off-by-one-on-3-of-4 asymmetry proves it was an inconsistent hand-copy, not a deliberate offset). This
+  drove momentum-band classification → court-agenda prominence, so convictions were systematically
+  under-weighted on the agenda. FIX: deleted the local table (it had ZERO other consumers) and routed
+  the one call site through `TopicMomentumSystem.initial_momentum_for_tier(tier)` — the same helper the
+  file's 6 `create_topic` calls already use. Conviction topics now enter at the same band as every other
+  topic of their tier.
+- **Assassination writeback classified covert killing as CAPITAL instead of SERIOUS (s57.47:33, latent).**
+  The assassination-detected-on-failure writeback (`_apply_assassination_outcome`) hand-built a
+  `CrimeRecord` and hardcoded `severity = CrimeSeverity.CAPITAL` for `UNSANCTIONED_COVERT_KILLING`,
+  conflating the execution SENTENCE (`UnsanctionedKillingSystem.get_consequences.capital = true`, the
+  punishment axis) with the `CrimeSeverity.CAPITAL` CLASSIFICATION enum. The canonical
+  `CrimeSystem.get_severity(UNSANCTIONED_COVERT_KILLING)` returns **SERIOUS** (s57.47:33 LOCKED:
+  "SERIOUS — Unsanctioned Covert Killing … Sentence: execution"), and the two SIBLING covert-killing
+  CrimeRecord sites both build via `create_crime_record` (→ SERIOUS) — this hand-built one was the lone
+  outlier. Latent (no production sentencing path currently reads `record.severity` — sentencing keys off
+  `crime_type`), but a genuine divergence from the canonical + LOCKED GDD that would silently misbehave
+  the moment any consumer reads severity. FIX: `record.severity = CrimeSystem.get_severity(Enums.CrimeType.UNSANCTIONED_COVERT_KILLING)`.
+  TREASON/MAHO/EMPEROR'S-PEACE stay CAPITAL (correct); the fix is scoped to covert killing.
+Runtime-verified 12/12 (`tests/verify_conviction_divergences.gd`): all four tiers' conviction momentum
+== the canonical table (no off-by-one) + each classifies at its correct crisis band; covert-killing
+severity == SERIOUS via both `get_severity` and `create_crime_record`, ≠ the hardcoded CAPITAL, TREASON
+still CAPITAL. Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, marriage-obligation favor never got a unique favor_id — bypassed the offer_favor factory — runtime-verified 11/11)
+Same "hand-built data object where a factory exists" sub-class as the blackmail-favor fix, but this one
+was a **latent correctness bug**, not a dormant no-op. The cross-clan marriage-obligation favor
+(s12.10 / s22.7) was minted by the ONLY inline `FavorData.new()` left in the codebase
+(`DayOrchestrator._apply_marriage`), which set favor_type / tier / creditor / debtor / created_ic_day /
+terms / source_action but **NOT `favor_id`** — so it defaulted to the `-1` sentinel. Every favor lookup
+(invoke / honor / break, at day_orchestrator lines 7257 / 7420) matches by `favor_id`, so ALL
+marriage-obligation favors shared id `-1` and were **indistinguishable** — a marriage favor could never
+be reliably invoked/honored/broken (the wrong one, or none, would match). FIX (no invented values —
+pure factory routing, matching the established pattern at 5 other sites: 19654 / 21774 / 21915 / 22492 /
+26848): compute `max_fid` (max existing favor_id + 1) and mint the favor via
+`FavorSystem.offer_favor(GENERAL, MODERATE, target_lord_id [creditor], proposing_lord_id [debtor],
+ic_day, "marriage_obligation", "ARRANGE_MARRIAGE", max_fid)`, which assigns the unique id. Field values
+are preserved exactly (GENERAL / MODERATE / creditor=target lord / debtor=proposing lord / terms /
+source_action) — the only change is that the favor now carries a real, unique, invokable id.
+BETWEEN_FAMILIES marriages (same clan, different family) still owe no favor. Runtime-verified 11/11
+(`tests/verify_marriage_favor_id.gd`): two cross-clan marriages mint two favors with UNIQUE ids (0, 1 —
+neither the `-1` default that was the bug); field values preserved; a between-families marriage owes no
+favor. Full project `--import` parse-clean. With this, there are ZERO inline `FavorData.new()` calls left
+— every favor in the sim routes through the `offer_favor` / `extract_blackmail_favor` factories.
+
+### Known Code Issues (found and fixed 2026-07-06, cohabitation disposition bonus — produced-but-not-consumed — runtime-verified 9/9)
+Another "producer wired, consumer missing" dormant signal. `DayOrchestrator._apply_cohabitation`
+(live, daily) increments a **monotonic per-pair IC-day counter** (`L5RCharacterData.cohabitation_days`)
+for every co-located living pair — but nothing ever read it: `DispositionSystem.compute_cohabitation_bonus`
+had ZERO production callers, and `get_effective_disposition` used only stored disposition + the
+biological-family bond. So long Winter Court / hostage stays built a counter that did nothing to the
+relationship. GDD s12.2 line 397 (LOCKED): **+0.1 disposition per IC day** spent in the same
+settlement (+12 over a 120-day Winter Court — the smallest increment; meaningful over a long stay,
+negligible over a few days). FIX (no invented numbers — rate LOCKED, no cap specified, the existing
+−100..+100 clamp bounds it): fold `int(compute_cohabitation_bonus(cohabitation_days.get(target_id, 0)))`
+into the `raw` accumulation in the FULL path of `get_effective_disposition` (alongside the family bond,
+before the birth-family floor + clamp). The counter-based read-time layering reconstructs the
+accumulated familiarity losslessly (the counter exists precisely so the sub-integer daily rate is not
+int-rounded away) and, like the family bond, never decays. The **degraded plain-lookup path** (called
+with `chars_by_id == {}`) is unchanged — cohabitation applies only where full effective disposition is
+computed. DEFERRED (documented, not invented): the GDD's optional **Family/Clan ripple** (line 393 —
+cohabitation friendship slightly improving view of the other's family/clan) is a separate add-on, not
+required for the core +0.1/day self-pair gain. Runtime-verified 9/9
+(`tests/verify_cohabitation_disposition.gd`): the +0.1/day rate; 120 co-days → +12; stacks with stored
+disposition; negligible over a few days; no record → unchanged; the degraded path excludes it; a very
+long co-residence clamps to +100. Full project `--import` parse-clean. TUNING (playtest): the counter is
+monotonic, so permanent co-residents (a castle household over years) accumulate toward the +100 clamp —
+faithful to the LOCKED "meaningful over a long stay" with no GDD cap, but worth watching in a live run.
+
+### Known Code Issues (found and fixed 2026-07-06, blackmail favor tier — bypassed arbiter + live bug — runtime-verified 12/12)
+Same "built arbiter bypassed by a buggy inline copy" class as the seppuku/harvest fixes,
+but this one was an **active correctness bug**, not just a dormant no-op.
+`FavorSystem.extract_blackmail_favor` (the LOCKED tier arbiter) had ZERO production callers —
+the live INTIMIDATE/blackmail writeback (`_process_blackmail_favor_writebacks`, called in
+`advance_day`) hand-built `FavorData` inline, and that copy diverged from GDD s12.10 line 89
+(LOCKED) **two ways**: (1) it hardcoded `FavorTier.MINOR` for EVERY extracted favor, and
+(2) it minted a tracked favor even for a Tier-4 secret. The LOCKED rule: the extracted favor
+tier **IS the secret's severity tier** — Tier 1 → Major, Tier 2 → Moderate, Tier 3 → Minor,
+Tier 4 → "vague goodwill that does not constitute a formal tracked favor." So blackmail with a
+high-value (existential/treason) secret was **under-rewarding** (major secrets yielded only
+minor favors), and Tier-4 secrets **wrongly created tracked favors** the spec forbids. FIX
+(no invented numbers — every value is in the LOCKED table): the INTIMIDATE executor now emits
+the secret's severity tier (already read from `action.metadata` for the blackmail roll — it's
+in scope only on the `has_secret` path, which is the only path that extracts favors) into the
+result `effects`, and the writeback replaces the inline loop with
+`FavorSystem.extract_blackmail_favor(secret_tier, creditor, debtor, count, ic_day, next_id)`,
+which maps tier→favor-tier via `_secret_tier_to_favor_tier` and returns `[]` for Tier 4 (the
+`secret_tier >= 4 → []` guard). Field values follow the canonical function — the
+`is_blackmail_extracted` flag (the one consumers actually read) is preserved; the cosmetic
+`source_action`/`terms` change from the old `"INTIMIDATE"`/`"blackmail_extracted"` strings to
+the canonical `"BLACKMAIL"`/`""`, and NO consumer reads those old strings (verified by grep).
+Runtime-verified 12/12 (`tests/verify_blackmail_favor_tier.gd`): Tier 1→MAJOR, 2→MODERATE,
+3→MINOR; **Tier 4 → no favor**; count == raises with unique ids + `is_blackmail_extracted` +
+correct creditor/debtor; missing `secret_tier` defaults to 3 (Minor); count-0 / non-INTIMIDATE
+/ failed results extract nothing. Full project `--import` parse-clean.
+
+### Systems Added 2026-07-06 (Emperor's Peace at Winter Court wired — s57.47 v624 / s55.10, owner-approved, runtime-verified 25/25)
+Same built-but-zero-callers dormant class as the seppuku/harvest arbiters.
+`WinterCourtSystem.is_action_blocked_by_emperors_peace` + `record_emperors_peace_violation`
+were fully built (all consequence values LOCKED in s57.47) but had **ZERO production
+callers** — the CAPITAL "Violation of the Emperor's Peace" crime could never occur, and the
+Winter Court's central lore guarantee was mechanically inert. The built `HOSTILE_ACTIONS`
+list even used **phantom ActionIDs** ("ATTACK"/"POISON"/"CHALLENGE_TO_DUEL"/"ASSASSINATION")
+matching no real engine action.
+- **Classification (owner-approved 2026-07-06).** Reconciled `HOSTILE_ACTIONS` to the real,
+  world-sim-reachable overt breaches — **INTIMIDATE** and an **UNSANCTIONED
+  `ISSUE_DUEL_CHALLENGE`**. Covert intrigue stays PERMITTED (the point of Winter Court); a
+  sanctioned duel is EXEMPT (the honorable form, and NPC duels default sanctioned);
+  **COMMISSION_ASSASSINATION is excluded** (covert, resolves off-site over days — not "the
+  hostile act within the settlement"); attack/poison/sabotage have no world-sim ActionID and
+  military acts aren't reachable by an attending courtier. A thin
+  `is_peace_violating_action(action_id, has_duel_sanction)` helper holds the list logic in ONE
+  place — the court-object predicate AND the new NPC filter delegate to it (no inline copy, the
+  anti-pattern this session has been fixing). No invented numbers — every value traces to s57.47
+  line 51; the classification is a faithful reconciliation of the placeholder list's intent.
+- **Block (deterrence).** `NPCDecisionEngine._apply_emperors_peace_precondition_filter` (Phase
+  4c) removes the overt breach from an attendee's options at an active **Imperial Winter Court**
+  (identified via the already-injected `ctx.active_court_at_location.court_type`, set only for
+  active-court attendees). Live effect = INTIMIDATE removed (sanctioned duels/covert/benign
+  kept); no-op at any other court or with no court. Matches every other "action unavailable
+  here" gate.
+- **Punish (backstop).** `DayOrchestrator._process_emperors_peace_violations` (post-wave, right
+  after `_process_crime_detection`) fires when a violation nonetheless EXECUTES at the active
+  Winter Court (a crisis-override bypass, an unsanctioned duel, or a future PC — the block
+  handles the normal NPC path). Delegates the LOCKED consequence table to
+  `record_emperors_peace_violation`: CAPITAL crime `ACCUSED` + `evidence_total 100` (→ the
+  conviction pipeline → execution without seppuku, Imperial jurisdiction), Tier-1 LEGAL topic,
+  at-act honor loss on the offender + family-daimyo Glory −1.0 (both Pattern B inside the fn).
+  Appends the returned record + topic; applies the Emperor's **−15 disposition toward the
+  offender's clan champion** (the clan's face to the throne — `CollectiveDisposition` has no
+  Imperial participant, so the individual `emperor.disposition_values` is the mechanism; falls
+  back to the offender if no living champion). Deduped per offender (one CAPITAL conviction is
+  terminal). Gated on the actor being in the winter court's `attendee_ids`.
+- Runtime-verified 25/25 (`tests/verify_emperors_peace.gd`): classification (INTIMIDATE breach /
+  sanctioned-vs-unsanctioned duel / covert permitted / assassination excluded) + the court-object
+  predicate (active+host vs away/non-active); the NPC filter (removes INTIMIDATE only at an active
+  Winter Court, keeps sanctioned duel/covert/benign, no-op at a provincial court / no court); the
+  recorder (CAPITAL crime + Tier-1 topic + −15 champion disposition + at-act honor + family Glory
+  −1.0, and no-ops for a sanctioned duel / non-attendee / no-winter-court / dedup). Full project
+  `--import` parse-clean. **DEFERRED (not this pass, all documented):** the PC path that could
+  commit a violation live is on the PC-travel HOLD; the recorder's live NPC exercise is thin by
+  design (the block prevents most). The `COVERT_ACTIONS_PERMITTED` constant is now inert
+  (no overlap with the narrowed `HOSTILE_ACTIONS`) but retained as intent documentation.
+
+### Known Code Issues (found and fixed 2026-07-06, military demotion-for-disposition never fired — dormant arbiter, runtime-verified 13/13)
+Same "built arbiter with ZERO production callers" class as the seppuku/hostage fixes. The seasonal
+military pass (`_process_military_seasonal` → `_process_military_promotions`, live every season)
+PROMOTES into vacant Company commands via the LOCKED `MilitaryPromotionSystem` arbiters
+(`find_vacancies` / `select_best_candidate`, both called at `day_orchestrator:17018/17028`) — but the
+sibling **demotion** arbiters `should_remove_for_disposition` (threshold −10) and `apply_demotion`
+(clears rank/command + −0.5 Glory) had **ZERO production callers** (grep-confirmed: only their own defs
++ `tests/`). So promotion fired while demotion was dead: a commander who came to loathe their appointing
+lord kept command forever, contradicting GDD s11.7 (LOCKED, "Demotion and Removal"): *"A commander whose
+disposition toward their appointing lord drops below −10 may be replaced for political reasons. Removal
+clears the character's military_rank and commanded_unit_id... they lose 0.5 Glory. A removed
+Rikugunshokan who was also a Family Daimyo retains their feudal position but loses military authority."*
+FIX (no invented numbers — the −10 threshold lives ONLY in `should_remove_for_disposition` and the −0.5
+Glory ONLY in `apply_demotion`, so BOTH dead functions are routed through with no re-implemented logic):
+new `_process_military_demotions(companies, characters_by_id)` scans each Company with a living
+`commander_id`, reads the commander's disposition toward `lord_id` (the canonical appointing-lord field,
+the pattern used across reactive/medicine/sentaku systems), and delegates the decision to
+`should_remove_for_disposition`. `_apply_demotion_results` applies each removal via a throwaway dict
+`view` fed to `apply_demotion` (which mutates military_rank→NONE / commanded_unit_id→−1 and returns
+`glory_loss`), writes the cleared state back onto the L5RCharacterData, applies `−glory_loss` via
+`HonorGlorySystem.apply_glory_change`, and vacates the Company (`commander_id = −1`, feeding next
+season's promotion refill). Because `apply_demotion` touches ONLY the military fields, a removed
+Rikugunshokan who is also a Family Daimyo keeps `role_position`/`lord_id` — the GDD's feudal-position
+carve-out, for free. Ordering: demotion is COMPUTED after `_process_military_promotions` inside the same
+seasonal call, against the CURRENT commander set (disjoint from the promotion candidate pool, which
+draws only from non-commanders), so **no character is both promoted and demoted in one tick** and there
+is no same-tick demote→re-promote churn; a demotion's freshly-vacated Company is refilled the following
+season. Applied at the existing seasonal apply site (beside `_apply_promotion_results`). No-op guards:
+lordless commander (no appointing lord), vacant/missing/dead commander. Runtime-verified 13/13
+(`tests/verify_military_demotion.gd`): threshold edge (−11 demoted, −10 kept, loyal kept); application
+(rank→NONE, command→−1, Glory 4.0→3.5, Company vacated); the Rikugunshokan-Daimyo feudal-position
+carve-out; and the lordless/vacant/missing-commander no-ops. Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, seduction entanglement could never be maintained — dead maintain_entanglement, runtime-verified 9/9)
+Same "built arbiter, ZERO callers" class. `SeductionSystem.maintain_entanglement` (resets the
+maintenance window: `last_maintained_ic_day = now`, `missed_windows = 0`, `state = ACTIVE`) had NO
+production callers. The live entanglement pass (`_process_entanglements` → `check_maintenance`) only
+ever DECAYS an entanglement (NEGLECTED → BROKEN after 3 missed 16-day windows, s12.8), and the SEDUCE
+writeback (`_process_seduction_entanglements`) treated a re-seduction against an EXISTING non-broken
+entanglement as a **duplicate to skip** — a no-op. So once established, an entanglement could only
+decay: nothing could ever refresh it, and the whole maintenance mechanic was one-directional.
+GDD s12.8 line 273 (LOCKED) is explicit: *"Contact that resets the maintenance window: any Seduction
+ActionID (any of the five) targeting the same person, OR WRITE_LETTER to the same person."* FIX
+(pure LOCKED behavior, no invented numbers): a successful SEDUCE against an existing non-broken
+entanglement now routes through `SeductionSystem.maintain_entanglement(existing, ic_day)` (the
+re-seduction IS maintenance per line 273) instead of no-op'ing; a new target still creates a fresh
+entanglement, and a BROKEN one still doesn't block a new one (unchanged). Both LOCKED maintenance channels are now wired: (1) **re-seduction** — a successful SEDUCE against an
+existing non-broken entanglement routes through `maintain_entanglement` instead of no-op'ing; (2)
+**love-letter** — a new end-of-tick pass `_maintain_entanglements_from_letters` (placed after every
+letter-creation pass so ordering is irrelevant) scans `pending_letters` for letters SENT this tick
+(`ic_day_sent == ic_day`) whose sender→recipient matches an active entanglement and maintains it (the
+GDD's *primary*, across-distance channel; a stale/prior-tick letter never re-maintains, and a letter
+never revives a BROKEN entanglement). Runtime-verified 15/15
+(`tests/verify_entanglement_maintenance.gd`): re-seduction refreshes a NEGLECTED entanglement to
+ACTIVE / 0 missed / window-reset WITHOUT a duplicate; a new target creates a second entanglement; a
+BROKEN entanglement stays broken while a fresh one is created ACTIVE; failed / non-creating results
+don't maintain; a same-tick letter to the entangled target resets the window while a prior-tick
+letter, a letter to a different person, and a letter to a broken entanglement all correctly don't.
+Full project `--import` parse-clean. **DEFERRED (owner-gated, no trigger):** `break_entanglement`
+(the formal-breakup arbiter, −15 disposition) — there is no BREAKUP action to call it, and the
+neglect-break −10 disposition / −2-per-missed-window decay are a separate `check_maintenance` gap.
+
+### Known Code Issues (found and fixed 2026-07-06, Kolat sleeper conditioning never decayed — dead degrade_sleeper_seasonal, runtime-verified 20/20)
+Same "built function, ZERO production callers" class as the demotion fix.
+`KolatSystem.degrade_sleeper_seasonal(sleeper, season_days)` encodes the s54.7c (LOCKED) rule
+*"conditioning_stability is a float 0–100 that degrades passively at a rate of 5 points per IC
+season without contact"* + accrues `sleeper_contact_overdue` — but **nothing called it**
+(grep-confirmed: only its own def + `tests/`). The daily tick ran only `process_sleeper_expiry`
+(day_orchestrator:1309), which touches ONLY magical (World is Truth) sleepers
+(`sleeper_expiry_ic_day >= 0`). So Dream-conditioned **psychological** sleepers never decayed —
+every one stayed permanently at 100 conditioning, permanently above the activation floor, and the
+entire maintenance loop (`MAINTAIN_SLEEPER_CONTACT` → `maintain_sleeper_contact` restores +10 /
+resets overdue, LOCKED s54.7c) was pointless (a Master would never NEED to maintain a sleeper).
+`conditioning_stability` is genuinely consumed — `can_activate_sleeper` requires it `>
+ACTIVATION_STABILITY_FLOOR` (50, LOCKED) — so the decay has real teeth: an unmaintained sleeper
+drifts below 50 in ~10 seasons and can no longer be activated. FIX (pure LOCKED-only wiring, no
+invented numbers — the −5/season and the +10/−reset restore are both s54.7c line 17 verbatim, and
+STABILITY_SEASONAL_DECAY/STABILITY_CONTACT_RESTORE match): a seasonal loop in `advance_day`'s
+`is_season_boundary` block (gated `ic_day > 1 and current_season != prev_season` so it fires once
+per REAL season change, not the day-0 startup) calls `degrade_sleeper_seasonal` on every living
+character with `season_days` = the just-ended season's length
+(`TimeSystem.SEASON_BOUNDARIES[prev_season+1] − [prev_season]`; SPRING/SUMMER 90, AUTUMN 60,
+WINTER 120). The function's own guards do all filtering — non-sleepers (default stability −1.0),
+mid-mission active-command sleepers, and magical sleepers are skipped, so only psychological Dream
+sleepers decay. The restore path is already reachable (the `MAINTAIN_SLEEPER_CONTACT` executor
+calls `maintain_sleeper_contact`), so the maintenance loop now genuinely closes. NOTE (forward-wire,
+not this fix): `sleeper_contact_overdue`'s consumer (a MAINTAIN_SLEEPER need-generation firing at
+the season-overdue threshold) is itself dormant, so that counter accumulates-but-inert for now —
+the `conditioning_stability` decay is the consumed, gameplay-affecting half. Runtime-verified 20/20
+(`tests/verify_sleeper_decay.gd`): −5/season + overdue accrual; the magical/active-command/
+non-sleeper guards + floor-at-0; the consumed consequence (fresh sleeper activatable → 10 seasons →
+50 → NOT activatable); the restore path (+10 cap 100, overdue reset); and the elapsed-season
+lengths. Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, intimidation compliance maintenance bypassed check_compliance_status — arbiter de-dup, runtime-verified 10/10)
+Self-introduced instance of the "canonical arbiter bypassed by an inline copy" anti-pattern: when
+the s12.9 Intimidation Compliance Tracker was first wired, `_process_intimidation_compliance`'s
+maintenance loop re-implemented the compliance-continuation decision inline (a chain of `continue`
+guards), leaving `IntimidationSystem.check_compliance_status` — the canonical 3-condition arbiter
+(`leverage_removed` / `pushback_succeeded` / `can_compliance_end`) — with ZERO callers. Behavior was
+identical (the inline covered the same three conditions), but the OR-logic was duplicated. FIX: the
+loop now only COMPUTES the arbiter's inputs and delegates the combination to `check_compliance_status`
+so the compliance-end rule lives in one place. The dead guard (liveness) stays inline — the arbiter
+takes primitives and can't see it — and the pushback roll keeps its short-circuit (only rolled when
+friendship/leverage haven't already ended it), so RNG consumption and behavior are byte-identical.
+No invented values. Runtime-verified 10/10 (`tests/verify_compliance_arbiter.gd`): the arbiter truth
+table + every maintenance branch (fresh/dead/friendship/leverage/persist). Full project `--import`
+parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, hostage leverage never shifted War Score — dormant SCORE_SHIFTS keys, runtime-verified 11/11)
+Same "produced-but-not-consumed" dormant-signal class as the army-dissolution / harvest-arbiter
+fixes. `WarSystem.SCORE_SHIFTS` defines the GDD-LOCKED hostage leverage keys `hostage_rank3`
+`[3,3]` and `hostage_rank5_champion` `[8,8]` (s22.9 line 97, cross-ref s53: "Rank 3+ hostage:
++3/−3 War Score, Rank 5+ or Champion's family: +8/−8 War Score" — the SOLE War Score consequence
+of taking a high-value prisoner, driving the peace-court negotiating position). But **neither key
+was ever passed to `apply_score_shift` anywhere** — grep-confirmed dead. Both hostage capture sites
+(`_capture_dead_commanders`, fed by the siege storm-assault path AND `_resolve_army_battles`; and
+`_capture_siege_hostages`, the siege-surrender occupant sweep) minted the `active_hostages` record
++ set `captive_status` but applied ZERO War Score shift — so capturing an enemy champion's heir in
+battle moved the war not at all.
+FIX (pure LOCKED-only wiring, no invented numbers): new `_apply_hostage_war_score(hostage,
+captor_lord_id, active_wars, characters_by_id)` called right after each `HostageSystem.capture_hostage`.
+It resolves captor + hostage clans (from `captor_lord_id` via `characters_by_id`), finds the active
+war between them (`WarSystem.get_war_between`, ally-aware), and — **delegating the rank→tier decision
+to the canonical `HostageSystem.get_leverage_value(insight_rank, is_champion_family)` arbiter** so the
+thresholds never diverge — maps leverage 8 → `hostage_rank5_champion`, 3 → `hostage_rank3`, 1 → no
+event (Rank <3). Champion-family = the hostage shares the `family` of their clan's living
+`CLAN_CHAMPION` (via `_extrad_find_clan_champion_id`). The shift is applied to the captor's SIDE's
+principal clan (`get_clan_side` → `war.clan_a`/`clan_b`) so `apply_score_shift` (which matches
+`clan_a`/`clan_b` directly) lands correctly even when the captor is an ALLIED clan. No-op guards:
+missing captor, self-clan hostage, no war between the clans, Rank <3 non-champion-family. `active_wars`
+threaded into `_capture_dead_commanders` (both callers — `_resolve_army_battles` already had it; the
+storm-assault path via a new defaulted `_process_storm_assault_results` param) and `_capture_siege_hostages`
+(all in `advance_day` scope). Runtime-verified 11/11 (`tests/verify_hostage_war_score.gd`): rank-3
+(+3/−3) / rank-5 (+8/−8) / rank-4→rank-3-tier; champion-family override (rank-2 Akodo vs a living
+Akodo champion → +8/−8) and its negative (rank-2 Matsu → no event); the four no-op guards; side
+direction (captor on side b → b gains / a loses); and the allied-captor case (Scorpion ally on side
+a → the +8 lands on principal Crab, not a silent no-op). Full project `--import` parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, army rout-dissolution never applied to the army lifecycle — runtime-verified 14/14)
+A "produced-but-not-consumed" dormant signal in the LIVE military battle loop.
+`ArmyCombatSystem.resolve_rout` computes the GDD-LOCKED army-wide, **post-pursuit
+≤20%-of-starting-Health dissolution** (s11.7 line 365) and `process_army_dissolution`
+reconciles the losses (Health → source-province PU) — and `resolve_and_reconcile_battle`
+carries both on `battle_result.rout` / `.dissolution`. But the field-battle path
+(`_resolve_army_battles`) **never applied that dissolved decision to the losing army
+entity**: only the voluntary `disband_ordered` path (`_process_disbands`) ever set
+`is_active = false`. A battle-dissolved army lingered in `active_armies` as a **phantom** —
+it kept marching (`_process_army_movements` and `_process_army_recovery` didn't check
+`is_active` at all, and `check_battle_trigger` matches enemies by tile, not liveness), so it
+re-triggered battles and healed companies whose Health had already been converted to PU death.
+FIX (pure wiring of the already-computed LOCKED outcome — **no invented numbers**; NOT the
+movement-level `ArmyMovementSystem.should_dissolve`, which is the pre-pursuit s11.7a helper of
+the still-blocked sub-tile layer): new `_apply_battle_army_dissolution` flips the losing side's
+army records inactive + halts them (clears is_moving/path/days + retreat/disband flags) when
+`battle_result.rout.dissolved` — attacker-victor dissolves the defender armies, defender-victor
+dissolves the attacker; no-op on a draw or a survivable rout (>20%). Added the standard
+`is_active` guard (the convention already used by `_process_disbands` / `_apply_retreat_orders`)
+to `_process_army_movements` and `_process_army_recovery` so the flip actually removes the army
+from play — this ALSO fixes a latent case where a **disbanded** army (the only prior
+`is_active=false` producer) could keep moving/healing — and filtered dissolved enemies out of
+the battle-defender set in `_resolve_army_battles`. The array entry is left in place (matches
+`_process_disbands`: `is_active`-guarded passes skip it). **DEFERRED (sub-tile-blocked, s11.7a):**
+the >20% "retreats to the previous sub-tile it came from" half (GDD line 363) — there is no
+previous-tile tracking at the province-battle layer and `_RETREAT_DEFAULT_DAYS` is 0 pending the
+sub-tile movement system; and the siege storm-assault battle path (its dissolution is a separate
+siege mechanic, s11.7 siege). Runtime-verified 14/14 (`tests/verify_army_dissolution.gd`): the
+applier flips the correct losing side (attacker-victor → defenders / defender-victor → attacker
+/ survivable-rout no-op / draw no-op / halt + flags cleared); the movement pass advances an
+active mover but FREEZES an inactive phantom (its `days_remaining` untouched); the recovery pass
+yields a result for an active army but NONE for a dissolved one. Full project `--import`
+parse-clean.
+
+### Known Code Issues (found and fixed 2026-07-06, harvest-destruction arbiter divergence — runtime-verified 21/21)
+Same "built arbiter bypassed by an inline copy" class as the SeppukuDecision fix. The NPC
+engine's `_is_harvest_blocked_by_virtue` (the RAID_HARVEST personality gate) had a hand-rolled
+virtue check that **diverged from the canonical `StarvationWarfare` arbiter (s4.3.17 Phase 4)
+twice**: (1) it never enforced the **Autumn-harvest-tick** requirement (GDD line 1041), so
+harvest destruction could be selected in ANY season; and (2) it treated **Rei as CONDITIONAL**
+(allowed on a prior formal demand) when the GDD makes Rei a **NEVER** virtue (line 1061,
+"barbaric and beneath a civilized lord"). Rewrote the gate to delegate to
+`StarvationWarfare.evaluate_ai_harvest_decision(virtue, season, has_army, …)` — the single
+GDD-faithful source (the same arbiter the world-sim harvest pass uses). Two structural helpers,
+no invented numbers: **season** is derived from `ctx.ic_day` (`_is_autumn_ic_day`: doy [180,240)
+per `TimeSystem.SEASON_BOUNDARIES` — `ctx.season` is never populated in this build), and the
+virtue string is **title-cased** (`_harvest_virtue_title_case`: `Enums.*_virtue_name` returns
+UPPERCASE keys, but the arbiter's `HARVEST_NEVER_VIRTUES`/`HARVEST_CONDITIONAL_VIRTUES` tables
+are title-case). The `has_army_in_province` hard gate is passed **satisfied and DEFERRED** to
+the sub-tile army-position system (s11.7a) — no in-province army presence is tracked yet, so the
+gate stays as it was (no behavior regression on that axis; the two fixed axes are the season +
+Rei ones). The existing `_evaluate_harvest_conditions(ctx)` (war-score/disposition/pending-event/
+action-log reads for no_other_path/hated_enemy/lord_commands/publicly_declared) is unchanged and
+feeds the arbiter's conditional check. **Selection-layer gate (not executor):** the honor cost is
+applied by EffectApplicator BEFORE `_apply_harvest_destruction`, so an executor-layer season block
+would orphan the honor charge — the gate belongs at option selection (engine), which is where it
+already lived. Runtime-verified 21/21 (`tests/verify_harvest_arbiter.gd`): NEVER virtues (Jin/Gi/
+Rei) blocked in Autumn regardless of conditions (**Rei even with a prior demand + hated enemy +
+lord command — THE key fix**); CONDITIONAL virtues gated on their specific condition
+(Meiyo→hated_enemy, Chugi→lord_commands, Makoto→publicly_declared, Yu→no_other_path); Shourido
+(Ketsui) allowed in Autumn but the SAME lord **blocked in Summer** (the season fix), and an
+allowed-in-Autumn Meiyo likewise blocked in Summer; the `_is_autumn_ic_day` window edges
+(180 inclusive / 240 exclusive / year-2 560→autumn / negative wrap) and the title-case helper.
+Full project `--import` parse-clean.
+
+### Systems Added 2026-07-06 (s4.3.21 worship tiers ACTIVATED — Model A, province-only, owner-approved, runtime-verified 16/13)
+`WorshipSystem.get_worship_tier` was a DISABLED stub (always NONE) — the GDD LOCKS the 10 WP/
+Fortune/season threshold + the three malus tiers but never states the WP→tier transition points.
+Owner-approved **Model A (magnitude / ratio-of-threshold)**: NONE ≥100%, RESTLESS 70–99%,
+DISPLEASED 40–69%, WRATHFUL <40%. The two band edges (`TIER_RESTLESS_RATIO 0.70` /
+`TIER_DISPLEASED_RATIO 0.40`) are the ONLY owner-set values; the threshold + maluses are LOCKED.
+Pure function of WP vs threshold → no per-season state (worship resets each season, overflow
+doesn't carry), scales to any threshold. This lights up the entire dormant province malus layer
+(pop/military/koku/rice/divination/stability/longevity) AND makes the just-wired divination
+meaningful — a WRATHFUL Fukurokujin (<4 WP) now correctly blocks divination for the province
+(worship still ACCUMULATES; only the reading is blocked, GDD-LOCKED, self-healing).
+- **PROVINCE-ONLY (the safety call).** The family/clan/empire aggregate tiers are still computed +
+  stored in `worship_state`, but `compute_all_province_maluses` now applies **only the province
+  tier** (`worst = pt`). The aggregate thresholds (60/150/800) are GDD-flagged PROVISIONAL (s4.3.21
+  line 1367, "recalculate once the map is built"), and the function would otherwise blanket the
+  WORST of {province, family, clan, empire} onto **every member province** off provisional numbers —
+  a potential empire-wide malus cascade. Only the LOCKED 10-WP province threshold drives maluses.
+  The aggregate tiers have no other consumer (verified) and the aggregate crisis topics aren't
+  implemented, so this fully contains the deferral; re-enabling the four-level model once the
+  aggregate thresholds lock is a documented one-block change in `compute_all_province_maluses`.
+- Runtime-verified: `tests/verify_worship_tiers.gd` 16/16 (bands, exact boundaries, threshold
+  scaling, threshold-0 guard, and the KEY guarantee — a province meeting its own WP is NOT
+  blanketed by a WRATHFUL family/clan/empire aggregate); `tests/verify_worship_divination.gd` 13/13
+  (fixtures updated to seed Fukurokujin healthy since they predated live tiers; test [3] keeps it
+  Wrathful to exercise the divination block). Full import parse-clean.
+
+### Systems Added 2026-07-06 (two more dormant-arbiter/signal wirings — s11.3.8 intercepted-letter + seppuku arbiter, owner-directed "fix these", runtime-verified 16/11)
+Same produced-vs-consumed dormant-system class as the treason/divination/succession fixes; both
+pure LOCKED-only wiring, no invented numbers.
+- **s11.3.8 INTERCEPTED_LETTER treason signal off letter interception.** The letter-interception
+  read (`_process_intercept_letter_writebacks`) existed but never turned a treasonous intercepted
+  letter into evidence. Now, AFTER a successful read (cipher gate passed, topic learned), if BOTH
+  the letter's sender and recipient pass the `_is_conscious_kolat_traitor` truth gate — i.e. the
+  interception surfaced Kolat NETWORK correspondence — it adds INTERCEPTED_LETTER hard evidence
+  (weight 50, LOCKED in TreasonSystem; ≥ the accusation threshold 40, so a single intercepted
+  network letter accuses) to each lord-bound conspirator's TREASON record via the existing gated
+  adder. Deduped per `letter_id` (a re-intercept never double-counts); a one-Kolat-party or
+  unreadable/ciphered letter adds nothing. The ONLY non-inventive treasonous-letter criterion
+  ("both correspondents are conscious lord-bound Kolat") — no content/intent detection invented.
+  `_process_intercept_letter_writebacks` gained trailing `crime_records`/`next_case_id`/`ic_day`
+  params (call site updated; all in `advance_day` scope); existing read behavior untouched.
+  Runtime-verified 16/16 (`tests/verify_treason_letter_signal.gd`).
+- **SeppukuDecision arbiter wired into the live seppuku choice (s57.47.4 / s18-19).** The
+  convicted-NPC seppuku response (RESPOND_TO_SEPPUKU, injected as a `seppuku_offered` reactive
+  event) resolved via a soft **70/30 objective_alignment tilt toward ACCEPT for everyone**, so the
+  deterministic personality arbiter `SeppukuDecision.will_accept_seppuku` — built + unit-tested but
+  with ZERO production callers — never actually decided (a Honor-Rank-0 wretch, arbiter "always
+  refuse," would still accept). `score_all` now overrides the two seppuku options'
+  objective_alignment with the arbiter's verdict (chosen +100, other −1000 so no additive
+  lean/urgency can flip it) when `need.source == "seppuku_offered"`. All values are the arbiter's
+  own LOCKED constants (Honor rank 0 → refuse; Bushido virtue → accept; Shourido Ketsui/Kanpeki/
+  Seigyo/Ishi → refuse, Dosatsu/Chishiki → accept). Falls back to the JSON tilt only when
+  `character` is absent (never on the reactive path). Runtime-verified 11/11
+  (`tests/verify_seppuku_arbiter.gd`) incl. the Honor-Rank-0-refuses-over-the-accept-tilt case.
+
+### Systems Added 2026-07-06 (s11.3.8 treason upstream + s4.3.21 worship divination — dormant-system wiring, owner-directed "Ok, fix these", runtime-verified 28/13)
+Two more fully-built-but-dormant systems brought live (found by the same produced-vs-consumed
+sweep that surfaced the Emperor succession routing). Both are pure upstream wiring of LOCKED
+specs — no invented numbers (the two GDD-silent values are DEFERRED, not filled in).
+- **s11.3.8 Treason detection upstream.** The ENTIRE downstream was wired (ConvictionProcessor
+  treason hearing with Honor-weighted testimony + authority escalation + trial-by-combat demand,
+  `_apply_acquittal` false-accusation honor, CONVICTION_CONSEQUENCES TREASON row, seppuku
+  pipeline) but NOTHING ever created a TREASON CrimeRecord or accumulated evidence — treason
+  never occurred in a live world. New DayOrchestrator layer: **truth gate**
+  (`_is_conscious_kolat_traitor`: records exist only for REAL traitors per the CrimeRecord
+  world-truth convention — conscious Kolat (`kolat_sect != NONE` or master) with a living lord;
+  dormant Dream sleepers are unwitting and excluded; innocents can never carry a TREASON record,
+  and the false-accusation machinery still fires when a guilty vassal WINS the hearing).
+  **Seasonal observable signals** (`_process_treason_signals`): a lord-assigned primary with
+  `seasons_without_progress >= 1` → OBJECTIVE_STALL (+5, LOCKED); the lord's intel
+  (`disposition_toward` KnowledgeEntry) showing the vassal at Friend+ (≥ +31) toward someone the
+  lord holds at Enemy (≤ −31) → DISPOSITION_ANOMALY (+8, LOCKED, deduped per pair via
+  evidence-item meta). First signal opens the investigation (record legal_status NONE →
+  UNDER_INVESTIGATION + LegalCaseEntry). **Accusation** at the LOCKED threshold 40 → ACCUSED via
+  LegalStatusSystem; ConvictionProcessor picks the case up 3 days later, unchanged.
+  **Acquittal political shield**: after ACQUITTED a new case seeds with the HALVED carry-over
+  (LOCKED) and re-accusation requires ≥ 20 NEW evidence past it (`REACCUSATION_NEW_EVIDENCE_MIN`).
+  **Signal 5 — co-conspirator naming** (`_process_treason_coconspirator_naming`, daily after
+  `conviction_results`): a convicted traitor's `kolat_superior_id` handler is named publicly
+  when the ConvictionProcessor computed `co_conspirators_named` (GI/MEIYO lord) →
+  CO_CONSPIRATOR_TESTIMONY +45 (LOCKED) = immediate accusation; CHUGI/SEIGYO keeps it private →
+  the lord gains a `treason_suspect` KnowledgeEntry (source TESTIMONY) instead. DEFERRED (no
+  producer exists — not invented): intercepted-letter hostile-intent, confession-via-PROBE,
+  suspicious-meeting (zone_event_log is ASCII-layer), voting-against-lord, failed-order signals.
+  Runtime-verified 28/28 (`tests/verify_treason_pipeline.gd`): truth gate, weight accumulation +
+  dedup, threshold→ACCUSED→hearing (all three resolutions incl. a legitimate trial-by-combat
+  demand), public/private naming, and the full acquittal-shield sequence.
+- **s4.3.21 Worship divination (v574: embedded in PERFORM_WORSHIP).** The LOCKED divination was
+  never resolved — shugenja worshipped blind, and the existing directed-worship consumer
+  ("worst known Restless+ fortune directs worship") had no knowledge source, so worship was
+  never directed. `_process_worship_divination` (daily, right after worship accumulation): each
+  successful shugenja PERFORM_WORSHIP rolls Lore: Theology + the Fortune's Ring vs TN 15
+  (`WorshipSystem.resolve_divination`, all LOCKED) — **directed** worship reads that one Fortune,
+  **split** reads all seven; **once per season per Fortune per shugenja**
+  (`_has_seasonal_worship_reading`, absolute-season keyed); the **Fukurokujin malus** applies
+  (Restless −1k0, Displeased −2k0, **Wrathful = divination impossible** for the province); a
+  failed roll learns nothing and may retry; a fresh reading REPLACES the stale one. Readings
+  land as `worship_state` KnowledgeEntry (DIRECT_OBSERVATION) with fortune/tier/scope/flavor.
+  NPC engine consumer: PERFORM_WORSHIP metadata now sets `directed_fortune` via
+  `_pick_divined_worship_fortune` — the worst KNOWN Restless+ Fortune directs the worship, all
+  healthy (or spiritually blind) → split across all seven. NOTE: tier readings are currently all
+  NONE because `WorshipSystem.get_worship_tier` is the documented DISABLED stub ("GDD does not
+  specify WP ratio thresholds") — the divination faithfully reads what the system knows and
+  becomes fully meaningful the moment the tier model activates; the consumer logic is verified
+  against synthetic Restless/Displeased readings. DEFERRED (LOCKED mechanic, NO GDD numeric —
+  not invented): the lord Honor loss on reporting a failed divination. Runtime-verified 13/13
+  (`tests/verify_worship_divination.gd`).
+
+### Systems Added 2026-07-06 (Kaiu Wall D5/D6/D7 — jade resupply, Jade Petal Tea, garrison Taint removal; owner-directed "keep implementing the wall elements", runtime-verified 26/18/12)
+Closes three of the Wall supply/support gaps the Phase-3 notes had left deferred. All
+world-sim-live (seasonal passes beside the existing Shireikan troop redeployment); all
+thresholds trace to LOCKED s2.4 values, with reserve/delivery amounts PROVISIONAL per the
+GDD's own "dynamic … not a fixed formula" reserve-sizing (s2.4.13 D3), sized from the
+LOCKED per-warrior/roster figures and re-tuning with garrison_pu in Phase 3.
+- **D5 — Jade resupply (s2.4.11 D5 / s2.4.13 D7 / s2.4.14 D7 / s2.4.15).** Closes the
+  headline gap: a Tower permanently stopped sortieing once its jade depleted (no refill
+  pipeline). `WallSystem` centralizes the jade thresholds — `jade_critical_threshold`
+  (one Small sortie's finger allocation, s2.4.11 D5), `jade_routine_target` (Small +
+  Medium = "two sortie seasons"), `is_jade_critical`; the three former inline computations
+  in `day_orchestrator` now call these (behaviour-preserving). `_process_wall_jade_resupply`
+  (seasonal): each living Shireikan refills below-routine Towers in their half from a
+  reserve in `supply_ledger["wall_jade_reserve"]`, priority per s2.4.13 D7 (critical → SS
+  Medium/High active fronts → routine top-up), each to the LOCKED routine target, draining
+  the reserve. No mine/forced-sale/clan-jade subsystem exists (s2.4.14 map/economy
+  dependency), so the Champion's mine-purchasing output is abstracted into a fixed per-half
+  seasonal delivery — the SAME abstraction the Ashigaru auto-flow uses for garrison_pu.
+  PROVISIONAL delivery 12 / reserve cap 24. Dead/no-tower/non-Shireikan guarded.
+  Runtime-verified 26/26 (`tests/verify_wall_jade_resupply.gd`).
+- **D6 — Jade Petal Tea (s2.4.11 D6 / s2.4.13 D8 / s2.4.15).** Tea manages the Taint of the
+  named characters STATIONED at a Tower (the Taisa / Kaiu Engineer / Kuni Shugenja /
+  Shireikan roster — the garrison the sim actually tracks Taint for; abstract garrison_pu
+  has no per-soldier Taint, the s2.4.11 D7 Phase-3 note). Managed, not cured. New
+  `SettlementData.tea_stockpile` (seeded WALL_TOWER_TEA = 4.0) + `L5RCharacterData.tea_managed_until_ic_day`
+  (@export → persist). The periodic taint roll now SKIPS a character whose managed window
+  covers the current IC day (s2.4.15 "significantly slows Taint growth"). `_process_wall_tea_resupply`
+  (seasonal): Shireikan refills below-target Towers from a Tea reserve (`supply_ledger["wall_tea_reserve"]`),
+  priority by Tainted concentration (s2.4.13 D8), target = one season of coverage for the
+  Tower's Tainted count (s2.4.11 D6); Brotherhood monastery cultivation (PTL-gated) is
+  abstracted into a fixed per-half delivery (PROVISIONAL 12 / cap 24). `_process_wall_tea_consumption`
+  (seasonal): each Tainted stationed character consumes one dose; on shortage RATION highest
+  Taint Rank first (s2.4.11 D6 / s2.4.15); dosed → managed until the next season boundary
+  (`_days_until_next_season`), undosed → unassisted growth rolls + a `went_without` shortage
+  report. Runtime-verified 18/18 (`tests/verify_wall_tea.gd`).
+- **D7 — Garrison Taint watch / Rank-4 removal (s2.4.11 D7 / s2.4.15 removal threshold, LOCKED).**
+  `_process_wall_taint_removal` (seasonal, after the Tea passes): each season the stationed
+  Kuni assesses the named garrison; a character at Taint Rank 4+ is removed from the Wall
+  immediately (pre-emptive Kuni doctrine). Removal uses the GDD's first, non-lethal option
+  ("sent to a Brotherhood monastery for management"): relocate to a same-clan off-Wall
+  settlement (`_find_clan_management_settlement`: monastery/temple/shinden preferred, inland
+  fallback, wrong-clan never chosen) + detach from the Wall hierarchy (`operational_superior_id`
+  and Tea flag cleared). REQUIRES a living Kuni Shugenja OR Kuni Witch-Hunter stationed at
+  the Tower (`_is_kuni_taint_assessor`; s2.4.11 D7); a Tower with no Kuni is operationally
+  blind and removes no one. WALL_TAINT_REMOVAL_RANK = 4 (LOCKED). Runtime-verified 12/12
+  (`tests/verify_wall_taint_removal.gd`).
+- **D4 (rice) — already functional, NO new work.** Tower rice is already consumed:
+  `ResourceTick.consume_rice_province` drains `garrison_pu` at MILITARY_RICE_PER_PU_PER_SEASON
+  (0.35) for wall towers, and province-pool production (`get_province_rice`) is the implicit
+  resupply — the "baseline drain the Crab absorb indefinitely" (s2.4). The only missing piece
+  is garrison HEALTH ATTRITION when supply runs dry, which is abstract-garrison Phase-3
+  territory with a GDD-undefined attrition rate (not invented). **D3 (scout coverage) —
+  BLOCKED:** needs a Hiruma-Scout-in-Shadowlands deployment mechanic (doesn't exist) AND the
+  horde-detection chance (GDD explicitly undefined). Both remain deferred.
+
+### Known Code Issues (found and fixed 2026-07-06, Emperor succession routing — dormant path, runtime-verified 18/18)
+- **`SuccessionSystem.evaluate_emperor_succession` had ZERO production callers — Emperor
+  death ran the generic clan path. FIXED.** `_process_lord_deaths` reads
+  `event["position_tier"]` defaulting to `PROVINCIAL_DAIMYO`, but NO death-event producer
+  ever sets `position_tier` — so `is_emperor_succession()` never matched and the Imperial
+  designated-heir→eldest-child→crisis logic (s22.5) never fired. The DOWNSTREAM was already
+  wired (`_apply_confirmed_successions` installs `world_states["emperor_id"]` when a CONFIRMED
+  succession's deceased held role EMPEROR — keyed on role, not position_tier); only the
+  upstream routing was missing. Fix: an Emperor death (detected by `role_position == EMPEROR`,
+  unique) now builds a proper IMPERIAL-tier SuccessionData from `evaluate_emperor_succession`
+  — orderly heir/child → CONFIRMED (successor_map + `apply_successor_inheritance`), crisis or
+  suspicious death → DISPUTED (resolves via the existing contest machinery). Extracted
+  `_build_succession_topic` (shared by the generic + Emperor paths). **Zero regression by
+  design:** only the EMPEROR role branches; every other lord tier is untouched. The broader
+  `position_tier`-always-provincial defect (champion/family confirming-authority is computed at
+  provincial tier for everyone) is LEFT AS-IS — correcting it would enable the Phoenix/Dragon
+  champion `continue` guards, which have no peacetime succession handler (`resolve_shiba_reincarnation`
+  only fires inside `_check_civil_war_resolution` during a Phoenix civil war), so it would REGRESS
+  peacetime champion succession; that's a design-gated s55.10.2/3 change for owner sign-off. All
+  values LOCKED (`RoleRegistry.lord_rank_from_status`, `CONFIRMING_TIER`, topic tiers) — no
+  invention. Runtime-verified 18/18 (`tests/verify_emperor_succession.gd`): evaluate ordering,
+  `_process_lord_deaths` → IMPERIAL CONFIRMED succession, full round-trip installing emperor_id +
+  role/status/vassal transfer, crisis/suspicious → DISPUTED.
+- **`ClanData.champion_id` never refreshed on a champion's death — same position_tier defect. FIXED.**
+  `_apply_confirmed_successions` updated `clans[clan].champion_id` only `if succ.position_tier ==
+  CLAN_CHAMPION` — never true (no producer sets position_tier), so a clan's `champion_id` was stuck
+  at its world-gen value forever after the champion died (the successor inherited the "Clan Champion"
+  role_position, so role-scanning systems found them, but every system reading `ClanData.champion_id`
+  directly used the dead id). Re-keyed on the deceased's ROLE (`old_role == RoleRegistry.CLAN_CHAMPION
+  or MINOR_CLAN_CHAMPION`), robustly parallel to the adjacent emperor_id update — no dependence on the
+  broken position_tier, no touch to the Phoenix/Dragon guards. Runtime-verified (same driver, 21/21):
+  champion_id → successor on a champion death; a non-champion succession leaves champion_id untouched.
+
+### Systems Added 2026-07-05 (s54.7i Kolat endgame loop — win condition, secrecy, Imperial counter-response, owner-approved, runtime-verified 44/44)
+Wires the previously-dormant `KolatSecrecy` data layer into the live loop, closing the
+conspiracy's endgame: the secrecy scalars now MOVE with real events, Tiger cultivates a
+candidate toward the throne, and the Empire fights back covertly. All numeric deltas /
+thresholds are GDD-locked (s54.7i); the code supplies only the event→delta mappings and
+the structural mechanisms (no invented game design — owner-approved 2026-07-05).
+- **State consolidation.** All endgame world-state lives in one mutable `kolat_secrecy`
+  Dictionary bundle (`KolatSecrecy.new_bundle`): exposure, awareness, response_active,
+  identified_ids, candidate_id/backup_ids/pipeline_stage/installed_ic_day, victory_ic_day,
+  awareness_cases (dedup), go_dark, purge_done, task_force_flagged. Added as a `WorldState`
+  field, passed by reference as the trailing `advance_day` param, mutated in place, persisted
+  by `WorldStateSaver` as one JSON blob (int/id-array coercion on load; the legacy
+  `kolat_exposure_level`/`imperial_awareness_level` scalars are seeded from / kept for the
+  bundle). `KolatSecrecy.ensure_bundle` heals a partial/empty bundle from any legacy caller.
+  Save/load round-trip runtime-verified (ints survive JSON, identified lookup intact).
+- **Phase 1 — scalar event hooks (all deltas GDD-locked).** `_process_kolat_death_exposure`
+  (before `death_events.clear()`): a Kolat-commissioned assassination that kills a magistrate
+  → exposure −5 (Lotus silences an investigator quietly). `_process_kolat_conviction_secrecy`
+  (after conviction): a traced Kolat covert killing → exposure +15 (org attribution) + awareness
+  +5; a convicted conscious member → exposure +10; a convicted Master → awareness +20 + identify.
+  `_process_kolat_investigation_awareness` (daily): an UNDER_INVESTIGATION record naming a
+  conscious Kolat member → awareness +5, once per case (dedup via bundle `awareness_cases`).
+  Threaded into `_process_kolat_writebacks` (Cloud RESURRECT_TOPIC −5, traced-merchant
+  SPONSOR_INSURGENCY +5) and `_process_witness_tampering_writebacks` (Coin BRIBE_WITNESS that
+  buries a report implicating the conspiracy −3). "Conscious member" = `kolat_sect != NONE`
+  (a Dream sleeper's conviction does NOT expose the conspiracy — an unwitting asset).
+- **Phase 2a — Imperial court seat refill (fixes a pre-existing never-refilled gap).** The 5
+  singleton court officers (Imperial Advisor / Chancellor / Herald / Treasurer / Voice of the
+  Emperor), created at world-gen with the Emperor as lord, were NEVER refilled on death — the
+  court hollowed out over a long run AND a dead Advisor permanently broke the Cunning/Warlike
+  Governor-appointment delegation. `_populate_vacancy_intelligence`'s Emperor block now adds an
+  Emperor FILL_VACANCY vacancy for any officer seat with no living holder; `_find_imperial_court_candidate`
+  scores available senior courtiers (no role, or a Senior Courtier ready for promotion; Status ≥ 3)
+  on Status×3 + Courtier+Etiquette + disposition-toward-Emperor×0.1 + Imperial-clan / traditional-family
+  bias (Advisor/Chancellor/Treasurer→Otomo, Herald→Miya, Voice→Seppun). Reuses the existing wired
+  APPOINT_TO_POSITION path. Structural (mirrors the Governor scorer), not invented design.
+- **Phase 2b — Tiger candidate pipeline + win condition (`_process_kolat_endgame`, seasonal).**
+  Requires a living Tiger (pipeline pauses without the routing node). Selects the best eligible
+  candidate vehicle (`KolatSecrecy.is_candidate_eligible`: a conscious Kolat member OR a Dream
+  sleeper) by court-appointment score (Status + Courtier/Etiquette + at-capital bonus), preferring
+  a backup on compromise/death. Stage machine driven by the candidate's REAL court state:
+  identified → cultivating (a conscious member gets a kolat objective — RAISE_DISPOSITION toward
+  the Emperor at the capital, else TRAVEL_TO the capital — so they win a vacant Imperial-proximity
+  seat through the normal appointment scorer; NO rigged appointment) → positioned (holds a senior
+  court role at the capital) → installed (holds a Regent/Advisor/Chancellor/Voice seat, records
+  `installed_ic_day`) → compromised (identified by the Empire → reset, elevate a backup). Up to 2
+  backups maintained; the pipeline mirrors onto Tiger's `special_data` (s54.7i record). Win check:
+  an installed candidate held one full IC year with awareness < 70 (and not compromised) → sets
+  `victory_ic_day` + returns a `kolat_victory` world-state event (fires once; the game does not end).
+- **Phase 3 — Imperial counter-response tiers (`_process_kolat_imperial_response`).** By awareness
+  tier (s54.7i, covert/deniable): ≥30 sets `imperial_response_active` + surfaces `kolat_active_provinces`
+  (provinces hosting an identified member, via `character_province_map`); ≥50 (Confirmed) adds Tiger's
+  "degrade Imperial task force" `kolat_strategic_priorities` entry (once); ≥90 (Significantly mapped)
+  sets `go_dark` — identified members suspend operations (their kolat objective slot cleared, and the
+  daily `_assign_kolat_standing_objectives` / `_assign_kolat_opportunistic_objectives` passes skip them);
+  =100 (Full knowledge) fires a one-shot covert purge (`purge_done`) — every identified living member is
+  quietly broken (kolat_sect→NONE, is_kolat_master→false, kolat/dirty/operational koku seized, objective
+  cleared), returned as a `kolat_purge` event, no public topic (s54.7i "broken quietly"). The identified
+  list is fed only by the Phase-1 awareness events (Master conviction / key discovery).
+- **Runtime-verified (Godot 4.6.2, headless driver `tests/verify_kolat_endgame.gd`, 44/44):** scalar/
+  bundle helpers; every event hook (Lotus −5, member +10, master +10/+20+identify, traced +15/+5,
+  investigation +5 dedup, non-Kolat no-op); the full pipeline (selects the eligible Kolat courtier over
+  a higher-Status non-member rival, cultivating→positioned→installed, cultivation objective installed,
+  Tiger mirror, win fires after 1 IC year + doesn't re-fire, awareness≥70 blocks); response tiers
+  (response flag, tier-50 task-force priority + active province, tier-90 go-dark + slot clear, tier-100
+  purge + funds seized + no re-fire). Save/load JSON coercion round-trip separately verified. Full
+  project `--import` parse-clean. LIMITATIONS / DEFERRED (unchanged design gaps, not this pass):
+  Tiger's Conclave loop, Tear routing, per-Master network-record lifecycle, heir-designation record,
+  and the topic/spell/insurgency-dependent executors. The candidate cultivation drives a conscious
+  member via the kolat objective slot; a sleeper candidate relies on its installed command (no
+  cultivation objective). The `_apply_appointment` executor sets role_position (what every consumer
+  checks) but not lord_id for the refilled court seats — documented, harmless.
+
+### Systems Added 2026-07-05 (s56.1.2 Oni Manifestation roster — gate lifted, runtime-verified 17/17)
+The ONI_MANIFESTATION quest seed was hardcoded `roster_ready: false` for TWO reasons; only
+one was ever the real blocker and it is now resolved. The **stat blocks** exist (OniBestiary,
+35 named oni, runtime-verified) — the gate stayed shut on "s54 oni stat blocks not yet
+transcribed." Lifted it with a solo named-boss roster, no invented mechanics.
+- **`QuestSeedSelector._oni_seed_entry`** flips `roster_ready` → true. The trigger logic
+  (Maho Cult Strength 10, or extreme PTL per s16.3) was already GDD-locked and wired; only
+  the roster was missing.
+- **`RosterCompositionSystem._compose_oni_manifestation`** (new `SEED_ONI_MANIFESTATION = 101`
+  case): GDD s56.1.2 says "a named Oni has manifested. Boss-tier encounter" and specifies NO
+  escort composition, so the roster is exactly ONE oni (solo boss, `has_named_npc_slot`, no
+  individual variance). Selection is structural, not invented: a deterministic pick from
+  `OniBestiary.boss_ids()` — the oni tagged `SpiritCreatureData.Tier.BOSS` in the s54.5
+  transcription (20 of them), sorted for reproducibility, chosen by the seed RNG. The chosen
+  oni id is the group's `unit_type`, placed at the leader slot.
+- **`OniBestiary.boss_ids()`** (new helper): the BOSS-tier oni ids, sorted. Naturally excludes
+  the spawn-only helper blocks (tasu_spawn / wakeru_lesser / *_spawn are not BOSS tier).
+- **Pipeline:** `MissionBuilder.assemble` now composes the oni roster, generates a terrain
+  template (generic — a boss manifests on whatever terrain; `_OBJECTIVES_BY_SEED` already maps
+  it to KILL_LEADER), and populates the single boss. The live combat spawn resolves the placed
+  oni id via `SpiritCombatant.spawn_by_id` — that spawn path is on the PC-travel HOLD, so the
+  headless-testable extent is seed→roster→map→population (consistent with the rest of the s56
+  layer). Runtime-verified (Godot 4.6.2, `tests/verify_oni_manifestation.gd`, 17/17): boss_ids
+  all resolvable BOSS oni + sorted + spawn-helpers excluded; solo-boss roster (count 1, leader,
+  no variance, deterministic); the cult-Strength-10 seed carries roster_ready=true; and the
+  end-to-end assemble produces a non-empty package placing a BOSS oni. Full project `--import`
+  parse-clean. NO invented numbers: solo-boss is the literal GDD reading, BOSS-tier is the
+  existing transcription tag, strength stays the GDD-triggered 10 (a solo boss doesn't scale a
+  headcount). DEFERRED (unchanged): the live PC-facing spawn + combat (PC-travel HOLD), and
+  allied-force / spiritual-overlap rosters (separate seeds).
 
 ### Known Code Issues (found and fixed 2026-05-18)
 - **DayOrchestrator._decay_civil_war_scars() — inverted filter. FIXED.**
@@ -5184,10 +8318,17 @@ Locks & Keys, was DROPPED — interior doors are paper screens and loot was alre
     retreat/failure spike); both default-inert and persist via WorldStateSaver's Resource array.
   - **Wiring:** these are pure, callable systems — the live consumer is the deferred ASCII combat
     turn loop. No orchestrator/seasonal wiring this tranche (NPCs don't resolve these; the
-    intensity-spike decay in the seasonal pass is forward-wired with no producer yet). Godot/GUT
-    unavailable here — validated by static review + parse-trace (DiceResult.total, Enums.Trait /
-    Ring / TerrainType members, CharacterStats.is_dead, SpellSystem.get_ring_value,
-    SkillResolver.resolve_skill_check signatures all confirmed). DEFERRED: live creature combat
+    intensity-spike decay in the seasonal pass is forward-wired with no producer yet).
+    **SpiritualRitualSystem RUNTIME-VERIFIED (2026-07-05, Godot 4.6.2, `tests/verify_spiritual_ritual.gd`,
+    29/29)** — upgrades the prior static-only claim: durations 10/20/30/50, the counter-ring table
+    (Fire→Water/Water→Earth/Earth→Fire/Air→Earth/Void→chosen), per-round resolution (took-damage +
+    wrong/undeclared-Void-counter → no progress; a strong shugenja progresses >150/200 realm rounds),
+    summary stacking (two shugenja out-progress one, a dead shugenja contributes 0, stops once the
+    needed duration is met with no over-count), the outcome spectrum (exactly-half → RETREAT boundary
+    confirmed), and apply_resolution's event mutation (FULL banks+resolves, PARTIAL banks cumulative,
+    RETREAT/FAILURE bank nothing + one-season spike, affliction check Catastrophic-only). No bugs found
+    — the ritual math is GDD-faithful. (The rest of s56.16 — SpiritBestiary pools, SpiritualExposureSystem,
+    the encounter/combat loop — remains validated by static review + parse-trace.) DEFERRED: live creature combat
     + special abilities (incorporeal/swarm/wail/hunger-pull/fire-trail), the Gaki-do exposure
     mechanic (Willpower erosion / Willpower-0 transformation / Buruburu attachment / Jigoku-
     corrupted Shozai-gaki).
@@ -6822,11 +9963,24 @@ war/peace; family: duel-death, rice-sharing, lord-raid, betrayal). Runtime-verif
 `OtomoSeiyakuSystem.apply_detection` was dead — the §6.1 detection/counterplay against Otomo
 alliance-suppression never fired. `DayOrchestrator._process_seiyaku_detection` (seasonal, before
 the seiyaku review) lets a co-located non-Otomo character detect each active suppression directive
-via a contested Courtier/Awareness roll; on success `apply_detection` halves the operative's
-effectiveness for the season (consumed by estimate_seasonal_effect) and a Tier-4 "Otomo
-Manipulation Detected — A/B Targeted" topic seeds to the detector. effectiveness_halved is reset
-each season (the per-court-session window). Values GDD-exact (halved effectiveness). Runtime-verified
-5/5 (strong detector halves + topic + learns; Otomo courtier excluded; runs vs strong operative).
+via a contested Courtier/Awareness roll; on success `apply_detection` sets `effectiveness_halved`
+and a Tier-4 "Otomo Manipulation Detected — A/B Targeted" topic seeds to the detector.
+effectiveness_halved is reset each season (the per-court-session window). Values GDD-exact.
+Runtime-verified 5/5 (strong detector halves + topic + learns; Otomo courtier excluded; runs vs
+strong operative). **CORRECTION (2026-07-17, confirmed by two independent dormant sweeps):** the
+original claim that `effectiveness_halved` is "consumed by `estimate_seasonal_effect`, the exact
+call the seasonal pass uses" is FALSE — `OtomoSeiyakuSystem.estimate_seasonal_effect`
+(otomo_seiyaku_system.gd:327, the sole reader of the flag at :334) has **ZERO production callers**,
+and `process_seasonal_review` applies NO disposition suppression anywhere. So the **topic-seeding**
+half of this detection wire IS live (the observable, driver-verified effect), but the
+**effectiveness-halving** half was inert. **RESOLVED 2026-07-17** (owner-approved "Committed-flat" —
+see the "s55.22b Otomo Seiyaku alliance-suppression EFFECT MADE LIVE" changelog entry at the top):
+the application target was in fact LOCKED (§2.1/§7 — the Champion-to-Champion pair disposition), and
+`estimate_seasonal_effect` is now called by `DayOrchestrator._apply_seiyaku_suppression` each season
+with the committed-directive channel set (an assigned operative uses all channels per §3, so no
+per-operative activity tracking is needed), applying −6/season baseline (−12 escalated via the now-
+consumed MAX constants, halved on detection) symmetrically to both Champions' disposition, clamped to
+the +31 formal-alliance floor. Runtime-verified 12/12.
 LIMITATION: the diffuse "+5 sympathy toward the targeted clans from all who learn" is deferred
 (no per-clan sympathy field).
 

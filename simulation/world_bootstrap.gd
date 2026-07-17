@@ -463,6 +463,15 @@ static func bootstrap_world(
 
 	var characters: Array = pop_result.get("characters", [])
 
+	# -- World-start tattoo artists (s57.25.8) -------------------------------------
+	# Seed one tattoo-artist NPC per relevant clan/family so world-start tattoos carry a valid
+	# artist_id (not the -1 no-bond sentinel), enabling the s57.25.4 disposition bond. Created
+	# BEFORE placement so the artists flow through every downstream pass (location, contacts,
+	# advantages, insight resync, armor) like any other citizen. Returns {category: artist_id}.
+	var next_char_arr: Array = [int(pop_result.get(
+		"next_character_id", pop_result.get("total_count", 0) + 1))]
+	var artist_by_category: Dictionary = _seed_tattoo_artists(characters, dice, next_char_arr)
+
 	_assign_physical_locations(characters, provinces, settlements, dice)
 	WorldPopulationGenerator._seed_co_located_contacts(
 		characters, baselines.get("clan", {}), baselines.get("family", {}),
@@ -470,6 +479,7 @@ static func bootstrap_world(
 
 	var military_data: Dictionary = _create_initial_military(
 		characters, clans, provinces, dice, settlements,
+		pop_result.get("military_legions", []),
 	)
 
 	var chars_by_id: Dictionary = {}
@@ -516,10 +526,13 @@ static func bootstrap_world(
 
 	# Resync the denormalized insight_rank cache after ALL world-gen character mutations
 	# (generate_character set it, but assign_derived_advantages / Kolat master skill boosts /
-	# Kuroiban can change skills afterward). Single idempotent pass — the canonical computed
-	# rank, so the spell ML gate / kolat / combat consumers are correct from world start.
+	# Kuroiban / the tattoo-artist skill injection can change skills afterward). Single idempotent
+	# pass — the canonical computed rank, so the spell ML gate / kolat / combat consumers are
+	# correct from world start. school_rank is the twin cache (advancement keeps it == insight_rank),
+	# so resync it too or the tattoo-ability / kiho / Kolat-T1 gates read a stale rank.
 	for _ic: L5RCharacterData in characters:
 		_ic.insight_rank = CharacterStats.get_insight_rank(_ic)
+		_ic.school_rank = _ic.insight_rank
 
 	# Refine the PROVISIONAL armor loadout now that position/role status is finalized.
 	# generate_character ran assign_by_profile at status 1.0 (most bushi -> ashigaru); re-run it
@@ -527,6 +540,22 @@ static func bootstrap_world(
 	# receive their tiered loadout. Idempotent; non-bushi stay unarmored.
 	for _ac: L5RCharacterData in characters:
 		ArmorSystem.assign_by_profile(_ac)
+
+	# -- World-start tattoos (s57.25.8) --------------------------------------
+	# Seed the culturally-appropriate tattoos s57.25.8 mandates: decorative (Crab Hida /
+	# Mantis 40-60% 1-2, Daidoji 50% wrist, Dragon non-monk 0-2) + Togashi ability tattoos.
+	# artist_by_category routes each recipient to its seeded artist so tattoos carry a valid
+	# artist_id; the s57.25.4 bond (Normal +1 .. Legendary +5, bidirectional) is then applied
+	# between each tattoo's artist and recipient -- mirroring the live APPLY_TATTOO
+	# disposition_change/recipient_disposition_change effect, applied directly to disposition_values.
+	var seeded_tattoos: Array = []
+	var next_tattoo_id: Array = [1]
+	for _tc: L5RCharacterData in characters:
+		var char_tattoos: Array = TattooSystem.seed_world_start_tattoos(
+			_tc, dice, next_tattoo_id, 0, artist_by_category)
+		for _tt: TattooData in char_tattoos:
+			seeded_tattoos.append(_tt)
+	_apply_world_start_tattoo_bonds(seeded_tattoos, chars_by_id)
 
 	# -- Starting navies (Naval Tranche 2, owner-approved 2026-07-02) ---------
 	var next_ship_id: Array = [1]
@@ -553,7 +582,11 @@ static func bootstrap_world(
 		"herald_id": pop_result.get("herald_id", -1),
 		"clan_champions": pop_result.get("clan_champions", {}),
 		"military_data": military_data,
-		"next_character_id": pop_result.get("next_character_id", pop_result.get("total_count", 0) + 1),
+		# s57.21 unit hierarchy (Army/Section/Legion raw dicts from the generated commanders).
+		"military_armies": pop_result.get("military_armies", []),
+		"military_sections": pop_result.get("military_sections", []),
+		"military_legions": pop_result.get("military_legions", []),
+		"next_character_id": next_char_arr[0],
 		"next_settlement_id": next_settlement_id,
 		"bloodspeaker_cells": bloodspeaker_result.get("cells", []),
 		"bloodspeaker_insurgencies": bloodspeaker_result.get("insurgencies", []),
@@ -569,6 +602,8 @@ static func bootstrap_world(
 		"named_vessels": navy_result["named_vessels"],
 		"next_ship_id": next_ship_id[0],
 		"water_subtiles": water_subtiles,
+		"tattoos": seeded_tattoos,
+		"next_tattoo_id": next_tattoo_id[0],
 	}
 
 
@@ -932,6 +967,7 @@ const WALL_TOWER_START_SI: int = 10               # pristine (+12 defense)
 const WALL_TOWER_GARRISON_PU: int = 3             # above MINIMUM_GARRISON_PU (1.0)
 const WALL_TOWER_JADE: float = 5.0                # non-critical (small-sortie min ~0.6)
 const WALL_TOWER_RICE: float = 10.0               # ~6-9 seasons of 0.35/PU drain
+const WALL_TOWER_TEA: float = 4.0                 # covers the 4-char command roster's Tainted seasons (PROVISIONAL)
 const WALL_PROVINCE_SS: int = 3                   # low tier (no extra SI decay)
 
 
@@ -976,6 +1012,7 @@ static func _create_wall_towers(
 		tower.wall_si = WALL_TOWER_START_SI
 		tower.jade_stockpile = WALL_TOWER_JADE
 		tower.rice_stockpile = WALL_TOWER_RICE
+		tower.tea_stockpile = WALL_TOWER_TEA
 
 		settlements.append(tower)
 		host_province.settlement_ids.append(next_id)
@@ -1011,6 +1048,82 @@ static func _create_clan_data(provinces: Dictionary) -> Dictionary:
 		clans[minor] = cd
 
 	return clans
+
+
+# -- World-Start Tattoo Artists (s57.25.8) ------------------------------------
+# Seeds one tattoo-artist NPC per relevant clan/family so world-start tattoos have a valid
+# artist_id -- enabling the s57.25.4 disposition bond (the sole LIVE artist_id consumer today,
+# via the APPLY_TATTOO writeback) and s57.25.9 provenance. Reuses an existing clan school as the
+# template (no invented archetype -- owner: "reuse a generic artisan school") + injects the
+# LOCKED Artisan: Tattooing floor rank. Returns {category: artist_id}.
+#   LOCKED (s57.25.8): the Tattooing floor ranks -- Dragon/Crab/Mantis 2+, Daidoji 1+, Togashi
+#     elder 3+ (a Togashi Rank 3+ monk) -- and the artist REQUIREMENT itself.
+#   PROVISIONAL (owner-overridable): one artist per clan/family, the GDD "at minimum one" floor
+#     read at CLAN granularity (a reduction from the per-major-province / per-holding-settlement
+#     literal); the reused school per clan; the artist character insight_rank (structural: a
+#     seasoned artisan). Flagged -- swap the spec rows to pin a fixed per-clan template.
+const _TATTOO_ARTIST_SPECS: Array = [
+	# [category, clan, family, school, insight_rank, tattooing_rank]
+	["dragon",  "Dragon", "Kitsuki",  "Kitsuki Investigator",   2, 2],
+	["crab",    "Crab",   "Kaiu",     "Kaiu Engineer",          2, 2],
+	["mantis",  "Mantis", "Yoritomo", "Yoritomo Bushi",         2, 2],
+	["daidoji", "Crane",  "Daidoji",  "Daidoji Iron Warrior",   2, 1],
+	# insight_rank param 4 (NOT 3) because get_insight_rank recomputes rank from rings/skills and a
+	# param-3 Togashi only computes to Rank 2 -- the GDD requires the ability-tattoo elder be Rank 3+,
+	# so param 4 (computes to 4) makes it a genuine granting elder (and future-proofs GRANT_TATTOO).
+	["togashi", "Dragon", "Togashi",  "Togashi Tattooed Order", 4, 3],
+]
+
+
+static func _seed_tattoo_artists(
+	characters: Array, dice: DiceEngine, next_char_arr: Array,
+) -> Dictionary:
+	var out: Dictionary = {}
+	for spec_v: Variant in _TATTOO_ARTIST_SPECS:
+		var spec: Array = spec_v as Array
+		var cid: int = next_char_arr[0]
+		next_char_arr[0] += 1
+		# horishi = tattoo master; a synthetic name (no public name generator exists), unique by id.
+		var artist: L5RCharacterData = WorldGenerator.generate_character(
+			cid, "%s Horishi" % str(spec[2]),
+			str(spec[1]), str(spec[2]), str(spec[3]), int(spec[4]), dice,
+		)
+		if artist == null:
+			continue
+		# Inject the LOCKED Artisan: Tattooing floor rank (s57.25.8); keep a higher rank if the
+		# reused school already grants more. Resync the denormalized insight cache afterward.
+		var cur: int = int(artist.skills.get("Artisan: Tattooing", 0))
+		artist.skills["Artisan: Tattooing"] = maxi(cur, int(spec[5]))
+		artist.insight_rank = CharacterStats.get_insight_rank(artist)
+		characters.append(artist)
+		out[str(spec[0])] = cid
+	return out
+
+
+# Applies the s57.25.4 bidirectional disposition bond for each world-start tattoo that carries a
+# real artist_id (Normal +1 / Fine +2 / Exceptional +3 / Masterwork +4 / Legendary +5). Mirrors
+# the live APPLY_TATTOO effect (disposition_change actor->recipient + recipient_disposition_change
+# recipient->actor) applied directly to disposition_values (clamped -100..100). Per tattoo, additive,
+# never degrades (s57.25.4 "no stacking cap"). Self-applied Togashi tattoos (artist == recipient) are
+# mechanically inert per the GDD but harmless -- skipped to avoid a self-disposition entry.
+static func _apply_world_start_tattoo_bonds(
+	tattoos: Array, chars_by_id: Dictionary,
+) -> void:
+	for t_v: Variant in tattoos:
+		var t: TattooData = t_v as TattooData
+		if t == null or t.artist_id < 0 or t.artist_id == t.recipient_id:
+			continue
+		var bond: int = TattooSystem.get_disposition_bond(t.quality_tier)
+		if bond == 0:
+			continue
+		var artist: L5RCharacterData = chars_by_id.get(t.artist_id)
+		var recipient: L5RCharacterData = chars_by_id.get(t.recipient_id)
+		if artist == null or recipient == null:
+			continue
+		artist.disposition_values[t.recipient_id] = clampi(
+			int(artist.disposition_values.get(t.recipient_id, 0)) + bond, -100, 100)
+		recipient.disposition_values[t.artist_id] = clampi(
+			int(recipient.disposition_values.get(t.artist_id, 0)) + bond, -100, 100)
 
 
 static func _assign_physical_locations(
@@ -1085,13 +1198,38 @@ static func _create_initial_military(
 	_provinces: Dictionary,
 	_dice: DiceEngine,
 	settlements: Array = [],
+	legions: Array = [],
 ) -> Dictionary:
+	## s57.21 pop-A/pop-B unification -- Stage 1 (de-conflict + chain linkage).
+	## Historically this gave EVERY rank->=CHUI officer their own one-company command and set
+	## commanded_unit_id = company_id UNCONDITIONALLY -- which CLOBBERED the legion/section pointer
+	## the s57.21 generator had already stamped on every Taisa/Shireikan/Rikugunshokan, silently
+	## defeating the T2 vacant-superior gate. Two fixes:
+	##   (1) Only CHUI and below (Nikutai/Gunso/Chui) command companies -- Taisa/Shireikan/
+	##       Rikugunshokan command legions/sections/armies, so their commanded_unit_id is left intact.
+	##   (2) Each Chui-company is LINKED into its Taisa's legion (parent_legion_id/parent_section_id +
+	##       legion.constituent_companies), closing the Company->Legion chain the T2 gate walks.
+	## Also separates the company id space from the unit id space (armies/sections/legions) so a
+	## Chui's company_id can never collide with a Taisa's legion_id in the commanded_unit_id namespace.
 	var settlement_to_province: Dictionary = {}
 	for s: SettlementData in settlements:
 		settlement_to_province[str(s.settlement_id)] = s.province_id
 
+	var chars_by_id: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		chars_by_id[c.character_id] = c
+
+	var legions_by_id: Dictionary = {}
+	var max_unit_id: int = 0
+	for lg: Dictionary in legions:
+		var lg_id: int = int(lg["legion_id"])
+		legions_by_id[lg_id] = lg
+		if lg_id > max_unit_id:
+			max_unit_id = lg_id
+
 	var companies: Array[Dictionary] = []
-	var next_company_id: int = 1
+	# Company ids live ABOVE every allocated unit id so a company_id and a legion_id are never equal.
+	var next_company_id: int = max_unit_id + 1
 
 	for clan_name: String in clans:
 		var clan_chars: Array = []
@@ -1105,8 +1243,20 @@ static func _create_initial_military(
 				mil_ranked.append(c)
 
 		for c: L5RCharacterData in mil_ranked:
-			if c.military_rank >= 2:
+			# Only company-tier officers (Nikutai/Gunso/Chui) get a company here. Taisa/Shireikan/
+			# Rikugunshokan already command their legion/section/army (commanded_unit_id set at gen).
+			if c.military_rank >= 2 and c.military_rank < Enums.MilitaryRank.TAISA:
 				var src_province: int = settlement_to_province.get(c.physical_location, -1)
+				var parent_legion_id: int = -1
+				var parent_section_id: int = -1
+				# Link this Chui-company into its Taisa's legion (Company->Legion chain closure).
+				var superior: L5RCharacterData = chars_by_id.get(c.operational_superior_id, null)
+				if superior != null and superior.military_rank == Enums.MilitaryRank.TAISA:
+					var legion: Dictionary = legions_by_id.get(superior.commanded_unit_id, {})
+					if not legion.is_empty():
+						parent_legion_id = int(legion["legion_id"])
+						parent_section_id = int(legion.get("parent_section_id", -1))
+						legion["constituent_companies"].append(next_company_id)
 				var company: Dictionary = {
 					"company_id": next_company_id,
 					"clan_name": clan_name,
@@ -1121,8 +1271,8 @@ static func _create_initial_military(
 					"destroyed": false,
 					"levy_raised_season": 0,
 					"source_province_id": src_province,
-					"parent_legion_id": -1,
-					"parent_section_id": -1,
+					"parent_legion_id": parent_legion_id,
+					"parent_section_id": parent_section_id,
 					"army_id": -1,
 				}
 				c.commanded_unit_id = next_company_id

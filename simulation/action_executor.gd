@@ -702,6 +702,18 @@ static func _try_execute_deliver_gift(
 	var roll: Dictionary = gift_result.get("roll", {})
 	var tn: int = GiftGivingSystem.TN_DELIVER_GIFT
 
+	# Doji Courtier R3 "The Perfect Gift" (s29.15.4, LOCKED): on an accepted gift, a Doji
+	# Courtier of school Rank 3+ finds the right gesture (Courtier/Awareness roll, TN 20)
+	# and writes a one-shot Devotion-equivalent disposition modifier onto the recipient —
+	# +20 base, +35 at +1 Raise, +50 at +2 Raises — once per relationship (the arbiter's
+	# own non-stacking guard). The arbiter self-gates on school/rank/already-applied BEFORE
+	# rolling (no wasted RNG for a non-Doji giver) and Pattern-B pre-applies the disposition
+	# to recipient.disposition_values, so it is surfaced here as observability metadata only
+	# (never a Pattern-A key → EffectApplicator does not re-apply it).
+	var perfect_gift: Dictionary = {}
+	if success:
+		perfect_gift = SkillResolver.execute_perfect_gift(character, recipient, dice_engine)
+
 	var effects: Dictionary = {
 		"recipient_disposition_change": gift_result.get("disposition_change", 0),
 		"recipient_modifiers": gift_result.get("modifiers_to_apply", []),
@@ -710,6 +722,8 @@ static func _try_execute_deliver_gift(
 		"gift_tier": tier,
 		"gift_subtype": subtype,
 		"gift_free_raises": gift_result.get("free_raises_applied", 0),
+		"perfect_gift_applied": bool(perfect_gift.get("success", false)),
+		"perfect_gift_disposition": int(perfect_gift.get("disposition_applied", 0)),
 		"noshi_item_id": noshi_item_id,
 		"noshi_is_mundane": noshi_is_mundane,
 		# Preserve generic-social effect keys so downstream consumers that read
@@ -975,6 +989,11 @@ static func _execute_intimidation(
 
 	if r.has("favors_extracted"):
 		effects["favors_extracted"] = r["favors_extracted"]
+		# Propagate the secret's severity tier so the writeback can extract the
+		# correct favor tier (s12.10 line 89 LOCKED: Tier 1->Major, 2->Moderate,
+		# 3->Minor, 4->no tracked favor). Blackmail (favors_extracted) only occurs
+		# on the has_secret path, where secret_tier was read from metadata above.
+		effects["secret_tier"] = int(action.metadata.get("secret_tier", 3))
 
 	return {
 		"success": r["success"],
@@ -993,20 +1012,16 @@ static func _execute_intimidation(
 
 
 static func _get_disposition_tier_name(disp: int) -> String:
-	if disp >= 91:
-		return "devoted"
-	if disp >= 61:
-		return "trusted_ally"
-	if disp >= 31:
-		return "friend"
-	if disp >= 11:
-		return "acquaintance"
-	if disp >= -10:
-		return "stranger"
-	if disp >= -30:
-		return "rival"
-	if disp >= -60:
-		return "enemy"
+	# Tier boundaries are the LOCKED s12.2 table — route through the canonical
+	# DispositionSystem.get_tier instead of a hand-copied threshold ladder (drift hazard).
+	match DispositionSystem.get_tier(disp):
+		DispositionSystem.Tier.DEVOTED: return "devoted"
+		DispositionSystem.Tier.TRUSTED_ALLY: return "trusted_ally"
+		DispositionSystem.Tier.FRIEND: return "friend"
+		DispositionSystem.Tier.ACQUAINTANCE: return "acquaintance"
+		DispositionSystem.Tier.STRANGER: return "stranger"
+		DispositionSystem.Tier.RIVAL: return "rival"
+		DispositionSystem.Tier.ENEMY: return "enemy"
 	return "blood_enemy"
 
 
@@ -1028,10 +1043,9 @@ static func _execute_gossip(
 	# s45 CAST_OUT: listener's sect may see subject's glory as infamy (zero effective glory).
 	var subject_glory: float = float(HonorGlorySystem.get_observed_glory_rank(subject, listener)) if subject != null else 0.0
 
-	var base_tn: int = clampi(
-		10 + int(subject_glory) * 5 - int(character.glory) * 5,
-		5, 60
-	)
+	# Gossip TN formula lives in the canonical arbiter (s15.4); the inline clampi()
+	# was a divergent copy of it.
+	var base_tn: int = CourtActionSystem.compute_gossip_tn(subject_glory, character.glory)
 
 	var deception_tn: int = SkillResolver.get_deception_defense_bonus(listener) if listener != null else 0
 	var tn: int = base_tn + deception_tn
@@ -1670,7 +1684,7 @@ static func _execute_expose_privately(
 		return {}
 
 	var has_proof: bool = action.metadata.get("has_proof", false)
-	var r: Dictionary = SecretSystem.reveal_privately(secret, character, recipient, subject, has_proof)
+	var r: Dictionary = SecretSystem.reveal_privately(secret, character, recipient, subject, has_proof, characters_by_id, ctx.ic_day)
 	r["subject_id"] = subject_id
 	r["secret_id"] = secret.secret_id
 
@@ -1708,7 +1722,7 @@ static func _execute_expose_publicly(
 
 	var has_proof: bool = action.metadata.get("has_proof", false)
 	var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
-	var r: Dictionary = SecretSystem.expose_publicly(secret, character, subject, witness_ids, characters_by_id, has_proof)
+	var r: Dictionary = SecretSystem.expose_publicly(secret, character, subject, witness_ids, characters_by_id, has_proof, ctx.ic_day)
 	r["subject_id"] = subject_id
 	r["secret_id"] = secret.secret_id
 
@@ -1778,18 +1792,11 @@ static func _get_social_tn(
 	var tn: int = SOCIAL_BASE_TN
 	var target_disp: int = ctx.dispositions.get(action.target_npc_id, 0)
 
-	# Per GDD s12.2: Free Raises (−5 TN) or additional Raises (+5 TN) by tier
-	if target_disp <= -61:
-		tn += 10  # Blood Enemy: +2 additional Raises
-	elif target_disp <= -31:
-		tn += 5   # Enemy: +1 additional Raise
-	# Rival (-30 to -11), Stranger (-10 to +10), Acquaintance (+11 to +30): no modifier
-	elif target_disp >= 91:
-		tn -= 15  # Devoted: 3 Free Raises
-	elif target_disp >= 61:
-		tn -= 10  # Trusted Ally: 2 Free Raises
-	elif target_disp >= 31:
-		tn -= 5   # Friend: 1 Free Raise
+	# Per GDD s12.2: Free Raises (−5 TN) or additional Raises (+5 TN) by disposition tier.
+	# Route through the canonical DispositionSystem arbiter (raise modifier × 5 = TN delta) so the
+	# per-tier table never diverges from the one every other disposition consumer uses. The prior
+	# inline copy re-derived the identical table by hand (a drift hazard, though it agreed exactly).
+	tn += DispositionSystem.get_raise_modifier(target_disp) * 5
 
 	if character != null and action.action_id in ["PUBLIC_DECLARATION", "OFFER_FAVOR"]:
 		var honor_mod: int = HonorGlorySystem.get_court_honor_modifier(character)
@@ -2462,7 +2469,7 @@ static func _execute_perform_worship(
 	var province_id: int = action.target_province_id
 
 	var honor_bonus: float = ctx.festival_honor_gain
-	if ctx.festival_has_lion_honor and character.clan == "lion":
+	if ctx.festival_has_lion_honor and character.clan == "Lion":
 		honor_bonus += 0.1
 
 	return {
@@ -2997,20 +3004,24 @@ static func _validate_military_order(
 			if action_id in ["ORDER_BATTLE", "CONDUCT_RAID", "RAID_HARVEST", "CONDUCT_SORTIE"]:
 				return {"valid": false, "reason": "unit_garrisoned"}
 
-	if ctx.military_rank >= Enums.MilitaryRank.TAISA:
+	var sections: Dictionary = military_data.get("sections", {})
+
+	# s57.21.3 vacant-superior gate: a Taisa's coordinated manoeuvre needs a living Shireikan above the
+	# Legion (checked via the Legion's parent Section). A Shireikan is ALSO a Taisa+ rank, but only a
+	# Taisa commands a Legion (commanded_unit_id == legion_id), so this fires only for the Legion tier.
+	if ctx.military_rank == Enums.MilitaryRank.TAISA:
 		if not legions.is_empty():
 			var legion: MilitaryUnitData.LegionData = legions.get(ctx.commanded_unit_id)
-			if legion != null and not MilitaryHierarchy.can_legion_coordinate(legion):
+			if legion != null and not MilitaryHierarchy.can_legion_coordinate(legion, sections):
 				if action_id in ["ORDER_BATTLE", "CONDUCT_RAID"]:
-					return {"valid": false, "reason": "legion_no_coordinator"}
+					return {"valid": false, "reason": "legion_superior_vacant"}
 
 	if ctx.military_rank >= Enums.MilitaryRank.SHIREIKAN:
-		var sections: Dictionary = military_data.get("sections", {})
 		if not sections.is_empty():
 			var section: MilitaryUnitData.SectionData = sections.get(ctx.commanded_unit_id)
-			if section != null and not MilitaryHierarchy.can_section_initiate_campaign(section):
+			if section != null and not MilitaryHierarchy.can_section_initiate_campaign(section, legions):
 				if action_id in ["ORDER_BATTLE", "CONDUCT_RAID"]:
-					return {"valid": false, "reason": "section_no_commander"}
+					return {"valid": false, "reason": "section_legion_vacant"}
 
 	return {"valid": true}
 
@@ -4671,6 +4682,15 @@ static func _execute_contested_court_action(
 	var effects: Dictionary = {}
 	if resolution.get("success", false):
 		effects["disposition_change"] = resolution.get("disposition_change", 0)
+		# s12.10 (LOCKED lines 21-31): the "Offer a Favor" disposition raise replaces the flat
+		# s15.4 value with the tiered FavorSystem.get_offer_disposition arbiter -- which had ZERO
+		# production callers, so a successful favor offer applied 0 disposition. NPC offers are
+		# always MINOR (the favor is minted at FavorTier.MINOR at both writeback sites), so the
+		# tier is MINOR: +6 base, +2 per Raise.
+		if action_id == "OFFER_FAVOR":
+			effects["disposition_change"] = FavorSystem.get_offer_disposition(
+				FavorData.FavorTier.MINOR, raises, false
+			)
 		if resolution.has("target_position_shift"):
 			effects["target_position_shift"] = resolution["target_position_shift"]
 		if resolution.has("position_durable"):
@@ -4697,6 +4717,13 @@ static func _execute_contested_court_action(
 		var fail_disp: int = resolution.get("disposition_change", 0)
 		if fail_disp != 0:
 			effects["disposition_change"] = fail_disp
+		# s12.10 (LOCKED line 31): critical failure on any tier -> -5 disposition ("the target
+		# thinks you are insincere or manipulative"). Critical failure = missing by 10+ (margin<=-10),
+		# the codebase-wide court critical-failure threshold. Routed through the same arbiter.
+		if action_id == "OFFER_FAVOR" and margin <= -10:
+			effects["disposition_change"] = FavorSystem.get_offer_disposition(
+				FavorData.FavorTier.MINOR, 0, true
+			)
 		if resolution.has("target_position_shift"):
 			effects["target_position_shift"] = resolution["target_position_shift"]
 		if resolution.has("position_hardened"):
@@ -6004,7 +6031,12 @@ static func _execute_commission_assassination(
 		}
 
 	var method: int = _select_assassination_method(assassin)
-	var honor_cost: float = CrimeSystem.scale_honor_by_rank(SecretSystem.get_assassination_order_honor_cost(target.status), character)
+	# Ordering honor cost (s12.8), rank-scaled by the commissioner's Honor Rank, via the
+	# assassination-domain arbiter (identical ladder + internal scale_honor_by_rank to the old
+	# SecretSystem.get_assassination_order_honor_cost copy — consolidated to one live arbiter so
+	# the two no longer drift). Applied here at commission time (Pattern B) and stashed as
+	# subject_honor_loss; the day-orchestrator writeback does NOT re-apply it.
+	var honor_cost: float = AssassinationSystem.get_ordering_honor_loss(target.status, character)
 	HonorGlorySystem.apply_honor_change(character, honor_cost)
 
 	return {
@@ -6354,7 +6386,7 @@ static func _execute_apply_tattoo(
 	if is_ability:
 		var in_togashi_territory: bool = action.metadata.get("in_togashi_territory", false)
 		if not TattooSystem.can_apply_ability_tattoo(
-			character.school_name, character.school_rank, in_togashi_territory
+			character.school, character.school_rank, in_togashi_territory
 		):
 			return {
 				"success": false, "action_id": "APPLY_TATTOO",
@@ -6878,14 +6910,34 @@ static func _execute_perform_theater(
 			"effects": {"blocked_reason": "no_piece_to_perform"},
 		}
 
-	var tn: int = TheaterSystem.PERFORMANCE_BASE_TN + raises * 5
+	# s57.22.4/22.3 casting fit + Kyogen gate: the canonical TheaterSystem.resolve_performance_roll
+	# applies the casting-fit TN modifier (get_casting_tn_modifier -- same-clan bonus / enemy-clan +
+	# gender/profession mismatch penalties, Noh-mask exemptions) AND the Kyogen minimum-Acting-rank
+	# gate, but this executor inlined a bare `tn = BASE + raises*5` roll that dropped BOTH -- and also
+	# DOUBLE-counted raises (once in `tn` and again via the resolve_skill_check raises arg, which
+	# roll_check re-adds as raises*5). Fix: mirror resolve_performance_roll exactly, routing the
+	# casting fit through the canonical get_casting_tn_modifier arbiter and folding raises into the TN
+	# once (0 raises passed to resolve_skill_check). The lead role + style are carried in metadata.
+	var style: int = meta.get("piece_style", TheaterSystem.Style.NOH)
+	var lead_role: Dictionary = meta.get("piece_lead_role", {})
+	var cast_mod: int = TheaterSystem.get_casting_tn_modifier(character, lead_role, style)
+	var tn: int = TheaterSystem.PERFORMANCE_BASE_TN + cast_mod + raises * 5
+
+	if style == TheaterSystem.Style.KYOGEN \
+			and character.skills.get("Acting", 0) < TheaterSystem.KYOGEN_MIN_ACTING_RANK:
+		return {
+			"success": false, "action_id": "PERFORM_THEATER_PIECE",
+			"character_id": character.character_id, "ic_day": ctx.ic_day, "season": ctx.season,
+			"effects": {"blocked_reason": "kyogen_acting_rank", "piece_id": piece_id},
+		}
+
 	var roll: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, "Acting", tn,
-		raises, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+		0, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
 	)
 	var total: int = roll.get("total", 0)
 	var success: bool = total >= tn
-	var margin: int = total - TheaterSystem.PERFORMANCE_BASE_TN
+	var margin: int = total - TheaterSystem.PERFORMANCE_BASE_TN - cast_mod
 	var is_critical: bool = success and margin >= TheaterSystem.CRITICAL_SUCCESS_MARGIN
 	var raises_succeeded: int = raises if success else 0
 
@@ -6933,11 +6985,15 @@ static func _execute_dedicate_piece(
 			"effects": {"blocked_reason": "no_known_topic"},
 		}
 
-	# Courtier / Awareness roll vs TN 10 + magnitude * 2 (resolved in writeback since we lack piece here)
-	var tn: int = TheaterSystem.DEDICATION_BASE_TN + raises * 5
+	# Courtier / Awareness roll vs the s57.22.10 dedication TN (10 + magnitude*2). The magnitude
+	# difficulty term was DROPPED by the old flat `DEDICATION_BASE_TN + raises*5` inline roll (and
+	# raises were double-counted, once in tn + again via the resolve_skill_check raises arg). The
+	# metadata builder now carries the canonical get_dedication_tn value; raises fold into the TN once.
+	var base_tn: int = meta.get("dedication_tn", TheaterSystem.DEDICATION_BASE_TN)
+	var tn: int = base_tn + raises * 5
 	var roll: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, "Courtier", tn,
-		raises, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
+		0, "", Enums.Trait.AWARENESS, 0, 0, 0, ctx.ic_day,
 	)
 	var total: int = roll.get("total", 0)
 

@@ -293,6 +293,20 @@ static func oni_ids() -> Array:
 	return catalog().keys()
 
 
+## Ids of the BOSS-tier named oni (the tier tag is from the s54.5 transcription).
+## Used to select the solo boss for an Oni Manifestation encounter (s56.1.2).
+## Sorted for deterministic, reproducible selection.
+static func boss_ids() -> Array:
+	var out: Array = []
+	var c: Dictionary = catalog()
+	for id: String in c:
+		var o: SpiritCreatureData = c[id]
+		if o != null and o.tier == SpiritCreatureData.Tier.BOSS:
+			out.append(id)
+	out.sort()
+	return out
+
+
 ## Fresh single oni by id, or null if unknown.
 static func get_oni(id: String) -> SpiritCreatureData:
 	var c: Dictionary = catalog()

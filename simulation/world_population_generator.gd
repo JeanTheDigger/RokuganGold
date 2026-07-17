@@ -80,8 +80,13 @@ const CLAN_ARMY_COUNT: Dictionary = {
 	"Imperial": 1,
 }
 
-# PROVISIONAL — GDD s57.21 specifies sections of 4-12 legions, not flat per-army.
-const LEGIONS_PER_ARMY: int = 3
+# s57.21.1 organizational hierarchy: Army -> Section (Shireikan) -> Legion (Taisa) -> Company (Chui).
+# SECTIONS_PER_ARMY is PROVISIONAL — s57.21.1 states a go-hatamoto holds "up to 48 legions, divided
+# into sections ... 4-12 legions per Shireikan" but gives no exact section count per army; 1 is the
+# minimum-viable go-hatamoto (a single wing). LEGIONS_PER_SECTION uses the LOCKED range FLOOR (the
+# stated minimum "4-12 legions per Shireikan"). COMPANIES_PER_LEGION is LOCKED (6 regular + 1 reserve).
+const SECTIONS_PER_ARMY: int = 1
+const LEGIONS_PER_SECTION: int = 4
 const COMPANIES_PER_LEGION: int = 7
 
 
@@ -314,6 +319,12 @@ static func _generate_clan_leadership(
 			master.role_position = "Master of " + element
 			master.school_type = Enums.SchoolType.SHUGENJA
 			master.status = 7.0
+			# The Master of Void is canonically an ishiken (s37:3): give them the Isawa Ishiken
+			# starting Void spells so those spells are actually in spells_known (the ISHIKEN_DO
+			# advantage that gates casting is granted by AdvantageSystem.assign_derived_advantages
+			# via the "Master of Void" role_position). Appends the void set to the base Isawa spells.
+			if element == "Void":
+				SpellSystem.assign_starting_spells(master, "Isawa Ishiken")
 			chars.append(master)
 
 	return chars
@@ -326,28 +337,81 @@ static func _generate_military_commanders(
 	rikugunshokan_id: int,
 	next_id: Array,
 	dice: DiceEngine,
-) -> Array:
+	next_unit_id: Array = [1],
+) -> Dictionary:
+	## s57.21.1 organizational hierarchy, instantiated from the generated commanders.
+	## Builds the LOCKED Army -> Section -> Legion -> Company chain for the clan: one Shireikan per
+	## Section (LOCKED army count / clan), one Taisa per Legion, one Chui per Company. The person chain
+	## (operational_superior_id) MIRRORS the unit chain (parent IDs) at every level per s57.21.3 --
+	## Chui -> Taisa -> Shireikan -> Rikugunshokan; the Rikugunshokan's operational_superior_id stays -1
+	## (they receive objectives from lord_id). commanded_unit_id points each commander at their own unit
+	## (Taisa=legion_id, Shireikan=section_id) so the executor's military-order gates can resolve up the
+	## organizational chain. Returns raw-dict units (JSON-serializable, mirroring military_companies) so
+	## WorldState can persist them; constituent_companies is left empty (the Company tier is the separate
+	## per-bushi population, and s57.21 permits the top-down arrays unpopulated -- see CLAUDE.md).
 	var chars: Array = []
+	var armies: Array = []
+	var sections: Array = []
+	var legions: Array = []
 	var army_count: int = CLAN_ARMY_COUNT.get(clan, 0)
 	var families: Array = CLAN_FAMILIES.get(clan, [])
 	if families.is_empty() or army_count == 0:
-		return chars
+		return {"chars": chars, "armies": armies, "sections": sections, "legions": legions}
 
 	for _a: int in range(army_count):
-		for _l: int in range(LEGIONS_PER_ARMY):
-			var fam: String = families[dice.rand_int_range(0, families.size() - 1)]
-			var taisa: L5RCharacterData = _generate_positioned_character(
-				next_id, PositionType.TAISA, clan, fam, dice, rikugunshokan_id,
+		var army_id: int = next_unit_id[0]
+		next_unit_id[0] += 1
+		var army: Dictionary = {
+			"army_id": army_id, "clan_id": clan,
+			"commander_id": rikugunshokan_id, "constituent_sections": [],
+		}
+
+		for _s: int in range(SECTIONS_PER_ARMY):
+			var section_id: int = next_unit_id[0]
+			next_unit_id[0] += 1
+			var s_fam: String = families[dice.rand_int_range(0, families.size() - 1)]
+			var shireikan: L5RCharacterData = _generate_positioned_character(
+				next_id, PositionType.SHIREIKAN, clan, s_fam, dice, rikugunshokan_id,
 			)
-			chars.append(taisa)
+			shireikan.operational_superior_id = rikugunshokan_id  # s57.21.3 person mirrors unit chain
+			shireikan.commanded_unit_id = section_id
+			chars.append(shireikan)
+			var section: Dictionary = {
+				"section_id": section_id, "parent_army_id": army_id,
+				"commander_id": shireikan.character_id, "constituent_legions": [],
+			}
+			army["constituent_sections"].append(section_id)
 
-			for _c: int in range(COMPANIES_PER_LEGION):
-				fam = families[dice.rand_int_range(0, families.size() - 1)]
-				chars.append(_generate_positioned_character(
-					next_id, PositionType.CHUI, clan, fam, dice, taisa.character_id,
-				))
+			for _l: int in range(LEGIONS_PER_SECTION):
+				var legion_id: int = next_unit_id[0]
+				next_unit_id[0] += 1
+				var l_fam: String = families[dice.rand_int_range(0, families.size() - 1)]
+				var taisa: L5RCharacterData = _generate_positioned_character(
+					next_id, PositionType.TAISA, clan, l_fam, dice, rikugunshokan_id,
+				)
+				taisa.operational_superior_id = shireikan.character_id
+				taisa.commanded_unit_id = legion_id
+				chars.append(taisa)
+				var legion: Dictionary = {
+					"legion_id": legion_id, "parent_section_id": section_id,
+					"commander_id": taisa.character_id, "home_province_id": -1,
+					"current_location_id": "", "constituent_companies": [],
+				}
+				section["constituent_legions"].append(legion_id)
 
-	return chars
+				for _c: int in range(COMPANIES_PER_LEGION):
+					var c_fam: String = families[dice.rand_int_range(0, families.size() - 1)]
+					var chui: L5RCharacterData = _generate_positioned_character(
+						next_id, PositionType.CHUI, clan, c_fam, dice, taisa.character_id,
+					)
+					chui.operational_superior_id = taisa.character_id
+					chars.append(chui)
+
+				legions.append(legion)
+			sections.append(section)
+		armies.append(army)
+
+	return {"chars": chars, "armies": armies, "sections": sections, "legions": legions}
 
 
 # -- Step 2: Province-Scaled Positions -----------------------------------------
@@ -985,12 +1049,21 @@ static func generate_world_population(
 				if c.school_type == Enums.SchoolType.BUSHI:
 					clan_rikugunshokans[clan] = c.character_id
 
+	# s57.21.1 military unit hierarchy (Army/Section/Legion Resources as raw dicts). A single monotonic
+	# id counter across all clans keeps unit ids globally unique so commanded_unit_id resolves cleanly.
+	var next_unit_id: Array = [1]
+	var all_armies: Array = []
+	var all_sections: Array = []
+	var all_legions: Array = []
 	for clan: String in GREAT_CLANS:
 		var rik_id: int = clan_rikugunshokans.get(clan, -1)
-		var mil_chars: Array = _generate_military_commanders(
-			clan, rik_id, next_id, dice,
+		var mil: Dictionary = _generate_military_commanders(
+			clan, rik_id, next_id, dice, next_unit_id,
 		)
-		all_characters.append_array(mil_chars)
+		all_characters.append_array(mil.get("chars", []))
+		all_armies.append_array(mil.get("armies", []))
+		all_sections.append_array(mil.get("sections", []))
+		all_legions.append_array(mil.get("legions", []))
 
 	var mantis_leadership: Array = _generate_clan_leadership("Mantis", next_id, dice)
 	all_characters.append_array(mantis_leadership)
@@ -1001,10 +1074,13 @@ static func generate_world_population(
 			clan_rikugunshokans["Mantis"] = c.character_id
 
 	var mantis_rik_id: int = clan_rikugunshokans.get("Mantis", -1)
-	var mantis_mil_chars: Array = _generate_military_commanders(
-		"Mantis", mantis_rik_id, next_id, dice,
+	var mantis_mil: Dictionary = _generate_military_commanders(
+		"Mantis", mantis_rik_id, next_id, dice, next_unit_id,
 	)
-	all_characters.append_array(mantis_mil_chars)
+	all_characters.append_array(mantis_mil.get("chars", []))
+	all_armies.append_array(mantis_mil.get("armies", []))
+	all_sections.append_array(mantis_mil.get("sections", []))
+	all_legions.append_array(mantis_mil.get("legions", []))
 
 	var minor_chars: Array = _generate_minor_clan_characters(
 		next_id, dice,
@@ -1101,4 +1177,7 @@ static func generate_world_population(
 		"clan_champions": clan_champions,
 		"total_count": all_characters.size(),
 		"next_character_id": next_id[0],
+		"military_armies": all_armies,
+		"military_sections": all_sections,
+		"military_legions": all_legions,
 	}

@@ -59,6 +59,10 @@ var active_tethers: Array[Dictionary] = []
 var order_states: Array[Dictionary] = []
 var military_companies: Array[Dictionary] = []
 var next_company_id: Array[int] = [1]
+# s57.21 unit organizational hierarchy (Army -> Section -> Legion), raw dicts like military_companies.
+var military_armies: Array[Dictionary] = []
+var military_sections: Array[Dictionary] = []
+var military_legions: Array[Dictionary] = []
 var active_wars: Array[WarData] = []
 var next_war_id: Array[int] = [1]
 var trade_routes: Array = []
@@ -149,9 +153,15 @@ var next_cell_id: Array[int] = [1]
 
 # -- Kolat secrecy & Imperial counter-response (s54.7i) ----------------------
 ## Public/PC knowledge of the conspiracy (0–100). Starts at 0 — nobody knows.
+## LEGACY mirror of kolat_secrecy["exposure"] (kept for external readers/saves).
 var kolat_exposure_level: int = 0
 ## Private Imperial knowledge of the conspiracy (0–100). Tracked separately.
+## LEGACY mirror of kolat_secrecy["awareness"].
 var imperial_awareness_level: int = 0
+## Authoritative Kolat endgame bundle (see KolatSecrecy.new_bundle): exposure,
+## awareness, response_active, identified_ids, candidate pipeline, victory day.
+## Mutated in place by the orchestrator; persisted as one JSON blob.
+var kolat_secrecy: Dictionary = KolatSecrecy.new_bundle()
 
 # -- Artisan & Crafting (s49) -------------------------------------------------
 var crafted_items: Array[ArtisanItemData] = []
@@ -405,7 +415,14 @@ func advance_one_day() -> Dictionary:
 		named_vessels,
 		next_ship_id,
 		water_subtiles,
+		kolat_secrecy,
+		military_legions,
+		military_sections,
 	)
+	# Keep the legacy s54.7i scalars in step with the authoritative bundle (no
+	# external reader, but the save should not carry a stale value).
+	kolat_exposure_level = int(kolat_secrecy.get("exposure", kolat_exposure_level))
+	imperial_awareness_level = int(kolat_secrecy.get("awareness", imperial_awareness_level))
 	_apply_succession_updates(result)
 	return result
 

@@ -592,7 +592,13 @@ static func _evaluate_vacancy_fill(
 	archetype: int,
 	world_state: Dictionary,
 ) -> Dictionary:
-	var vacancies: Array = world_state.get("vacancies", [])
+	# Read the Emperor's vacancy list off the canonical producer key. The producer
+	# (_populate_vacancy_intelligence, run early each tick) writes world_states["vacancy_data"]
+	# keyed by lord_id -- and appends the Emperor's court/Governor seats to vacancy_data[emperor_id].
+	# This evaluator previously read a phantom "vacancies" key that NOTHING writes -> always empty ->
+	# the Emperor's archetype-gated FILL_VACANCY directive (ARCHETYPE_VACANCY_MIN_SEASONS + disposition/
+	# skill weights) was permanently dead. Entry shape (position_type/seasons_vacant/priority) matches.
+	var vacancies: Array = world_state.get("vacancy_data", {}).get(emperor.character_id, [])
 	if vacancies.is_empty():
 		return {}
 
@@ -1587,9 +1593,15 @@ static func get_operational_superior_co_budget(
 			continue
 		if sub.operational_superior_id == character.character_id:
 			operational_count += 1
-	if operational_count == 0:
+	return co_budget_for_subordinate_count(operational_count)
+
+
+## The LOCKED s57.54.10d operational-superior Civilian Order budget by subordinate
+## count: 0 subordinates → 0, 1–3 → 2/day, 4+ → 3/day. Extracted so the daily CO
+## budget assignment (_reset_all_ap) and this query share one source of the values.
+static func co_budget_for_subordinate_count(operational_count: int) -> int:
+	if operational_count <= 0:
 		return 0
-	# 1–3 subordinates = 2 CO/day, 4+ = 3 CO/day (s57.54.10d).
 	return 2 if operational_count <= 3 else 3
 
 

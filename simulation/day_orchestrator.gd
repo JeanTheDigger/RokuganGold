@@ -112,8 +112,14 @@ static func advance_day(
 	named_vessels: Array = [],
 	next_ship_id: Array = [1],
 	water_subtiles: Array = [],
+	kolat_secrecy: Dictionary = {},
+	military_legions: Array = [],
+	military_sections: Array = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
+	# s54.7i Kolat endgame bundle — heal a partial/empty bundle so every pass can
+	# read every key. Empty {} arrives from any legacy caller not yet threading it.
+	KolatSecrecy.ensure_bundle(kolat_secrecy)
 
 	time_system.advance_tick()
 
@@ -148,10 +154,17 @@ static func advance_day(
 			if _pid >= 0:
 				character_province_map[_cpm_c.character_id] = _pid
 
+	# Settlement -> governing-NPC linkage (populates SettlementData.lord_character_id +
+	# shrine_custodian_id, previously zero-writer dead fields). Daily + self-correcting so the
+	# linkage tracks succession/death (a dead lord's settlements re-point to the new highest-status
+	# governor next tick). Revives the art-ownership / supply-share / daimyo-glory / shide-grant
+	# consumers that misfired on the -1 default.
+	_populate_settlement_governance(settlements, provinces, characters_by_id)
+
 	_process_companion_owner_deaths(characters, characters_by_id)
 	_process_companion_locations(characters, character_province_map)
 	_process_companion_deaths(characters, active_topics, next_topic_id, ic_day)
-	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state, named_vessels)
+	_populate_infrastructure_intelligence(world_states, provinces, settlements, ships, worship_state, named_vessels, active_wars)
 	_populate_vacancy_intelligence(world_states, characters, characters_by_id, companies, settlements, provinces, season_meta, navigation_zones)
 	_populate_resource_stockpiles(world_states, characters, provinces, settlements, clans, companies)
 	_populate_crime_suppression_data(world_states, settlements, provinces, current_season)
@@ -166,13 +179,24 @@ static func advance_day(
 	_assign_witch_hunter_standing_objectives(characters, objectives_map)
 	_assign_monk_standing_objectives(characters, objectives_map)
 	_assign_animal_companion_standing_objectives(characters, objectives_map, ic_day)
-	_assign_kolat_standing_objectives(characters, objectives_map)
-	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id)
+	_assign_kolat_standing_objectives(characters, objectives_map, kolat_secrecy)
+	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id, kolat_secrecy)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
+	# s57.54.10d: operational superiors spend their CO budget directing idle
+	# subordinates (propagating the superior's own active objective down the
+	# operational chain). Runs after _reset_all_ap sets the budget and after the
+	# standing passes, so it only fills subordinates still idle at this point.
+	_process_operational_coordination(characters, objectives_map, characters_by_id, current_season)
 
-	_populate_military_data(military_data, companies)
+	_populate_military_data(military_data, companies, military_legions, military_sections, characters_by_id)
 
 	_clear_stale_context_flags(world_states)
+	# s57.25.7 ability-tattoo loop (after clear_stale so grant_tattoo_target is freshly re-injected).
+	_assign_seek_tattoo_standing_objectives(characters, objectives_map, tattoos, ic_day)
+	_assign_grant_tattoo_standing_objectives(
+		characters, objectives_map, world_states, tattoos,
+		character_province_map, provinces, dice_engine, ic_day,
+	)
 	_clear_daily_spell_buffs(characters)
 	_inject_kolat_objective_flags(world_states, objectives_map)
 	_expire_province_weather(provinces, ic_day)
@@ -223,7 +247,7 @@ static func advance_day(
 
 	_remove_resolved_favors(favors)
 
-	var entanglement_results: Array = _process_entanglements(entanglements, ic_day)
+	var entanglement_results: Array = _process_entanglements(entanglements, ic_day, characters_by_id)
 	var bound_escape_results: Array = _process_bound_states(
 		bound_states, characters_by_id, dice_engine, ic_day
 	)
@@ -314,6 +338,7 @@ static func advance_day(
 		active_armies, active_sieges, active_tethers, order_states,
 		dice_engine, settlements, companies, wm_for_military,
 		active_wars, characters_by_id, provinces, active_hostages, ic_day,
+		military_legions, military_sections,
 	)
 
 	var dragon_schism_siege_event: Dictionary = {}
@@ -370,7 +395,7 @@ static func advance_day(
 		world_states, characters, active_topics, tattoos, trade_routes,
 		phoenix_council_state, companies, ic_day, current_season,
 		provinces, settlements, clans, active_wars, characters_by_id,
-		active_armies, insurgencies,
+		active_armies, insurgencies, spiritual_insurgency_events,
 	)
 	world_states["_crime_records"] = crime_records
 
@@ -421,6 +446,12 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id, dice_engine,
 	)
 
+	# s55.11 proactive duel (Trigger 1, public insult): issue the challenge for any GRIEVANCE
+	# reactive result whose deliberate evaluation returned ISSUE_DUEL_CHALLENGE.
+	_process_proactive_duel_writebacks(
+		day_result.get("results", []), characters_by_id, world_states,
+	)
+
 	# s57.18: a lord's ORDER_DEPLOY toward a coastal target sails their clan fleet there.
 	_process_fleet_deployment_writebacks(
 		day_result.get("results", []), ships, characters_by_id, water_subtiles,
@@ -469,6 +500,16 @@ static func advance_day(
 		dice_engine,
 	)
 
+	# s57.47 v624 / s55.10 — Emperor's Peace violation backstop. NPCs are deterred at
+	# the option layer (npc_decision_engine._apply_emperors_peace_precondition_filter),
+	# but if an overt hostile act still EXECUTES at an active Imperial Winter Court (a
+	# crisis-override bypass, an unsanctioned duel, or a future PC), record the CAPITAL
+	# crime + Tier-1 topic + the Emperor's -15 disposition toward the offender's clan.
+	_process_emperors_peace_violations(
+		day_result.get("results", []), active_courts, characters, characters_by_id,
+		crime_records, next_case_id, active_topics, next_topic_id, ic_day, world_states,
+	)
+
 	_seed_public_records_from_crime_results(
 		crime_results, day_result.get("results", []),
 		settlements, characters_by_id, ic_day, world_states,
@@ -483,7 +524,7 @@ static func advance_day(
 		day_result.get("results", []), characters_by_id,
 		active_topics, next_topic_id, insurgencies, next_insurgency_id,
 		ic_day, current_season, pending_letters, next_letter_id, settlements,
-		objectives_map,
+		objectives_map, kolat_secrecy,
 	)
 
 	_process_scene_examination_writebacks(
@@ -541,7 +582,7 @@ static func advance_day(
 		crime_records, characters_by_id,
 		active_topics, next_topic_id, ic_day, world_states,
 		active_secrets, next_secret_id, next_case_id, dice_engine,
-		death_events,
+		death_events, kolat_secrecy,
 	)
 
 	_process_commune_writebacks(
@@ -569,7 +610,7 @@ static func advance_day(
 
 	_process_fabricate_secret_writebacks(
 		day_result.get("results", []),
-		active_secrets, next_secret_id,
+		active_secrets, next_secret_id, next_item_id, characters_by_id,
 	)
 
 	_process_lying_honor_writebacks(
@@ -657,10 +698,15 @@ static func advance_day(
 		dice_engine,
 		settlements,
 		characters_by_id,
+		active_wars,
 		active_hostages,
 		ic_day,
+		military_legions,
+		military_sections,
 	)
-	_capture_siege_hostages(active_sieges, characters_by_id, companies, active_hostages, ic_day)
+	_capture_siege_hostages(
+		active_sieges, characters_by_id, companies, active_wars, active_hostages, ic_day,
+		settlements, provinces)
 
 	var purification_results: Array = _process_purification_effects(
 		day_result.get("results", []),
@@ -715,6 +761,13 @@ static func advance_day(
 
 	var worship_accumulation_results: Array = _process_worship_accumulation(
 		day_result.get("results", []), worship_state,
+	)
+
+	# s4.3.21 Divination (v574): a shugenja's successful PERFORM_WORSHIP also
+	# reads the worship state of the Fortune(s) prayed to — no extra AP.
+	_process_worship_divination(
+		day_result.get("results", []), worship_state, characters_by_id,
+		dice_engine, ic_day,
 	)
 
 	var letter_examination_results: Array = _process_letter_examinations(
@@ -795,6 +848,14 @@ static func advance_day(
 		dice_engine,
 	)
 
+	# s55.11 Trigger 1: GOSSIP / EXPOSE_SECRET_PUBLICLY reputation grievances (the other two
+	# GDD-named sources; PUBLIC_INSULT is handled by _process_brash_reactions above).
+	_process_reputation_grievance_triggers(
+		day_result.get("results", []),
+		characters_by_id,
+		world_states,
+	)
+
 	_process_contrary_reactions(
 		day_result.get("results", []),
 		characters_by_id,
@@ -848,6 +909,8 @@ static func advance_day(
 		entanglements,
 		ic_day,
 		characters_by_id,
+		active_secrets,
+		next_secret_id,
 	)
 
 	_process_assassination_commissions(
@@ -896,7 +959,7 @@ static func advance_day(
 	)
 
 	var war_score_results: Array = _process_war_score_shifts(
-		military_daily, military_effects, active_wars, companies,
+		military_daily, military_effects, active_wars, companies, storm_assault_results,
 	)
 
 	var naval_war_score_results: Array = _process_naval_war_scores(
@@ -1175,10 +1238,10 @@ static func advance_day(
 	)
 	_process_bonsai_display_writebacks(
 		day_result.get("results", []),
-		active_bonsai, characters_by_id, settlements,
+		active_bonsai, characters_by_id, settlements, ic_day,
 	)
 	_process_garden_visitor_effects(
-		active_gardens, characters, characters_by_id, settlements, ic_day,
+		active_gardens, characters, characters_by_id, settlements, ic_day, active_bonsai,
 	)
 
 	_process_bonsai_visitor_effects(
@@ -1297,6 +1360,9 @@ static func advance_day(
 
 	_process_kolat_master_succession(death_events, characters, characters_by_id, crime_records, dice_engine)
 	_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
+	# s54.7i: a Kolat-commissioned assassination that silenced a magistrate lowers
+	# public exposure (Lotus). Reads death_events before they are cleared.
+	_process_kolat_death_exposure(death_events, characters_by_id, kolat_secrecy)
 
 	death_events.clear()
 
@@ -1347,6 +1413,7 @@ static func advance_day(
 	_process_intercept_letter_writebacks(
 		day_result.get("results", []),
 		pending_letters, characters_by_id, current_season, dice_engine,
+		crime_records, next_case_id, ic_day,
 	)
 
 	_process_whispering_wind_writebacks(
@@ -1394,6 +1461,12 @@ static func advance_day(
 	var conviction_results: Array = ConvictionProcessor.process_accused_cases(
 		crime_records, characters_by_id, dice_engine, ic_day,
 		next_topic_id, active_topics, lord_map,
+	)
+
+	# s11.3.8e/f — treason co-conspirator naming: the convict's handler is either
+	# publicly named (+45 hard evidence) or privately tracked by the lord.
+	_process_treason_coconspirator_naming(
+		conviction_results, crime_records, characters_by_id, next_case_id, ic_day,
 	)
 
 	var trial_results: Array = _resolve_pending_trials(
@@ -1446,6 +1519,16 @@ static func advance_day(
 	# s2.3.23 / s57.47: a Governor convicted of a crime is automatically dismissed.
 	_process_conviction_dismissals(
 		conviction_results, crime_records, characters_by_id, navigation_zones,
+	)
+
+	# s54.7i Kolat secrecy: a traced Kolat assassination, a convicted member, or a
+	# convicted Master move the exposure/awareness scalars; an investigation naming
+	# a Kolat operative raises Imperial awareness.
+	_process_kolat_conviction_secrecy(
+		conviction_results, crime_records, characters_by_id, kolat_secrecy,
+	)
+	_process_kolat_investigation_awareness(
+		crime_records, characters_by_id, kolat_secrecy,
 	)
 
 	var info_results: Array = _process_info_events(
@@ -1524,6 +1607,7 @@ static func advance_day(
 	var insurgency_results: Dictionary = {}
 	var military_seasonal_result: Dictionary = {}
 	var wall_seasonal_result: Dictionary = {}
+	var kolat_endgame_result: Dictionary = {}
 	var gempukku_results: Dictionary = {}
 	var advancement_results: Dictionary = {}
 	var ronin_results: Dictionary = {}
@@ -1540,6 +1624,20 @@ static func advance_day(
 	var governor_review_results: Array = []
 	var is_season_boundary: bool = current_season != prev_season or ic_day <= 1
 	if is_season_boundary:
+		# s54.7c (LOCKED): a Dream-conditioned (psychological) sleeper's conditioning_stability
+		# degrades passively at 5 points per IC season without a MAINTAIN_SLEEPER_CONTACT, and
+		# sleeper_contact_overdue accrues the elapsed IC days. KolatSystem.degrade_sleeper_seasonal
+		# encodes this exactly but had ZERO callers (the daily tick only ran process_sleeper_expiry
+		# on MAGICAL sleepers), so psychological sleepers never decayed -- every sleeper stayed
+		# permanently above the activation floor and the whole maintenance loop (MAINTAIN_SLEEPER_CONTACT
+		# restores +10 / resets overdue) was pointless. The function's own guards skip non-sleepers
+		# (default stability -1.0), active-command sleepers, and magical (World is Truth) sleepers.
+		if ic_day > 1 and current_season != prev_season:
+			var _season_len: int = TimeSystem.SEASON_BOUNDARIES[int(prev_season) + 1] \
+				- TimeSystem.SEASON_BOUNDARIES[int(prev_season)]
+			for _slp: L5RCharacterData in characters:
+				if _slp != null and not CharacterStats.is_dead(_slp):
+					KolatSystem.degrade_sleeper_seasonal(_slp, _season_len)
 		# s11.5 Jeweled Championships: when a vacancy-triggered Jeweled Champion seat
 		# (Emerald/Jade/Amethyst/Ruby/Turquoise) is empty, the Emperor calls a championship
 		# to fill it. Checked each season.
@@ -1552,6 +1650,22 @@ static func advance_day(
 		var spring_inputs: Dictionary = miya_inputs.duplicate()
 		if current_season == TimeSystem.Season.SPRING and not miya_inputs.is_empty():
 			spring_inputs["current_ic_year"] = time_system.get_ic_year()
+			# s11.5b §4.3: resolve Winter Court petitions (the WC is still active at the Spring
+			# boundary, day 360 < its day-361 close) and feed the per-province Need-Score bonuses
+			# into the blessing. Previously always {} -- compute_petition_bonus had zero callers.
+			spring_inputs["petition_bonuses"] = _process_miya_blessing_petitions(
+				active_courts, characters_by_id, provinces, dice_engine,
+			)
+			# s11.5b §5 (owner-approved): a Cunning emperor politically weights the Blessing.
+			# Precompute favored/disfavored clans (highest/lowest clan-champion disposition
+			# toward the Emperor); the blessing applies apply_cunning_modifier before selection.
+			if int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)) \
+					== StrategicReview.EmperorArchetype.CUNNING:
+				var cunning_clans: Dictionary = _compute_cunning_blessing_clans(
+					characters_by_id, int(world_states.get("emperor_id", -1)),
+				)
+				spring_inputs["cunning_favored_clan"] = cunning_clans["favored"]
+				spring_inputs["cunning_disfavored_clan"] = cunning_clans["disfavored"]
 		worship_seasonal_results = _process_seasonal_worship(
 			worship_state, settlements, provinces,
 		)
@@ -1587,6 +1701,12 @@ static func advance_day(
 		)
 		_process_kolat_bribes_seasonal(characters, provinces)
 		_process_kolat_network_seasonal(characters, active_topics, next_topic_id, ic_day)
+		# s54.7i Kolat endgame: exposure decay, Tiger's candidate pipeline, Imperial
+		# counter-response tiers, and the win-condition check.
+		kolat_endgame_result = _process_kolat_endgame(
+			characters, characters_by_id, objectives_map, world_states,
+			character_province_map, ic_day, kolat_secrecy,
+		)
 		wall_seasonal_result = _process_wall_seasonal_pressure(
 			settlements, provinces, current_season, season_meta
 		)
@@ -1618,6 +1738,23 @@ static func advance_day(
 			military_seasonal_result.get("promotions", []),
 			characters_by_id, companies,
 		)
+		_apply_demotion_results(
+			military_seasonal_result.get("demotions", []),
+			characters_by_id, companies,
+		)
+		# s57.21.3 command-vacancy refill: a dead generated Legion/Section commander (Taisa/Shireikan)
+		# leaves the persistent raw unit's commander_id naming the corpse -- the read-time liveness bake
+		# fires the vacant-superior gate, but the slot must be REFILLED or it stays leaderless forever.
+		# Reuses the promotion machinery (no invention); eligibility now accrues via the live s11.7a
+		# battle_record producer. Runs after promotion/demotion so a same-season promoted/demoted
+		# character's command state is settled before the refill scan.
+		var command_refill_results: Array = _process_military_command_refill(
+			military_legions, military_sections, characters_by_id,
+		)
+		_apply_command_refill_results(
+			command_refill_results, military_legions, military_sections, characters_by_id, companies,
+		)
+		military_seasonal_result["command_refill"] = command_refill_results
 		military_seasonal_result["levy_suspicion"] = _process_levy_suspicion(
 			companies, active_wars, characters_by_id,
 			active_topics, next_topic_id, ic_day,
@@ -1656,7 +1793,7 @@ static func advance_day(
 		insurgency_results = _process_insurgencies(
 			insurgencies, provinces, dice_engine, current_season,
 			next_insurgency_id, world_states, worship_maluses,
-			season_meta, next_crisis_id,
+			season_meta, next_crisis_id, active_wars, characters_by_id, settlements,
 		)
 		# Resolve crisis topics tied to defeated insurgencies. Tier 1-3 topics never
 		# decay, so without this the topic of a suppressed insurgency leaks forever as
@@ -1719,6 +1856,7 @@ static func advance_day(
 			characters, objectives_map, world_states,
 			characters_by_id, marriages, active_wars,
 			active_topics, active_edicts, clans, current_season, dice_engine,
+			ic_day,
 		)
 		_assign_phoenix_champion_restore_objective(
 			characters, objectives_map, phoenix_council_state,
@@ -1747,7 +1885,7 @@ static func advance_day(
 				characters_by_id, world_states, active_topics,
 				next_topic_id, ic_day, active_civil_wars,
 				objectives_map, cw_season_count,
-				settlements, provinces,
+				settlements, provinces, spiritual_insurgency_events, active_wars,
 			)
 		if not phoenix_council_state.is_empty():
 			var emperor_id_for_phoenix: int = int(world_states.get("emperor_id", -1))
@@ -1760,7 +1898,7 @@ static func advance_day(
 				active_successions, next_succession_id,
 			)
 		_evaluate_heir_designations(
-			characters, characters_by_id, active_topics
+			characters, characters_by_id, active_topics, next_topic_id, ic_day
 		)
 		var provinces_array: Array = _dict_values_to_province_array(provinces)
 		var emperor_archetype: int = world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON)
@@ -1919,8 +2057,27 @@ static func advance_day(
 	)
 
 	# s2.4.13 D2 — Shireikan reinforce below-minimum Towers from surplus Towers.
+	# s2.4.13 D7 — Shireikan refill jade-depleted Towers from the reserve pool,
+	# keeping the sortie loop alive (a Tower no longer permanently stalls at 0 jade).
+	# s2.4.13 D8 / s2.4.15 — Shireikan refills Tea from the Brotherhood allocation,
+	# then each Tower doses its Tainted garrison (rationing highest Rank first).
+	# Dosed characters are managed (Taint growth suppressed); the undosed make
+	# unassisted growth rolls via the periodic-taint pass.
 	if is_season_boundary:
 		_process_shireikan_troop_redeployment(characters, settlements, provinces)
+		_process_wall_jade_resupply(characters, settlements, provinces)
+		_process_wall_tea_resupply(characters, settlements)
+		_process_wall_tea_consumption(characters, settlements, ic_day)
+		# s2.4.11 D7 / s2.4.15 — the stationed Kuni removes Rank-4 garrison from
+		# the Wall (pre-emptive removal threshold).
+		_process_wall_taint_removal(characters, settlements, provinces)
+		# s11.3.8a — treason detection signals accumulate seasonal evidence
+		# against conscious Kolat traitors; at threshold 40 the record flips to
+		# ACCUSED and the (already-wired) ConvictionProcessor takes over.
+		_process_treason_signals(
+			characters, characters_by_id, crime_records, next_case_id,
+			objectives_map, ic_day,
+		)
 
 	# OOC Day Tick — fires every 4 IC days (one real-world day, per GDD s13 /
 	# s57.44.2). Runs Wind-Down selection and Void Point refresh for all
@@ -1932,6 +2089,15 @@ static func advance_day(
 			world_states, active_topics, active_okiyas,
 		)
 
+	# s57.31.7a / s57.32.2 rest tracking — maintains the `rested_last_night` gate that BOTH natural
+	# healing and Void refresh read (via _counts_as_rested, inside the OOC tick block above). LOCKED
+	# lifecycle: reset true at the start of each OOC day, flipped false by disqualifiers occurring
+	# during the OOC day's 4 IC days. Runs AFTER the OOC read so this tick's read reflects the just-
+	# completed window; the reset then opens the next window. Only the CONTINUOUS-TRAVEL disqualifier
+	# is wired (the one clean, live, unambiguous condition — a character marching does not rest);
+	# active-combat/watch-duty/starvation disqualifiers are deferred (no per-character presence tracking).
+	_process_rest_tracking(characters, travel_arrivals, ic_day)
+
 	# Lifecycle cleanup: drop terminal (gone-from-world) art objects from their active
 	# registries — a destroyed garden, dead bonsai, or lost/abandoned-incomplete piece is no
 	# longer a live object (every consumer already skips them; nothing queries them post-terminal).
@@ -1942,6 +2108,12 @@ static func advance_day(
 	_remove_terminal_bonsai(active_bonsai)
 	_remove_terminal_paintings(active_paintings)
 	_remove_terminal_sculptures(active_sculptures)
+
+	# s12.8 line 273 (LOCKED): the OTHER maintenance trigger -- "WRITE_LETTER to the same person"
+	# resets an entanglement's maintenance window (the GDD's PRIMARY channel: a love letter sustains
+	# the romance across distance). Runs at end-of-tick, after every letter-creation pass, so it sees
+	# all letters sent this tick regardless of ordering.
+	_maintain_entanglements_from_letters(pending_letters, entanglements, ic_day)
 
 	return {
 		"ic_day": ic_day,
@@ -2005,6 +2177,7 @@ static func advance_day(
 		"edict_results": edict_results,
 		"active_edicts": active_edicts,
 		"wall_seasonal": wall_seasonal_result,
+		"kolat_endgame": kolat_endgame_result,
 		"wall_engineering_results": wall_engineering_results,
 		"sortie_results": sortie_results,
 		"storm_assault_results": storm_assault_results,
@@ -2044,8 +2217,36 @@ static func advance_day(
 # -- AP Reset ------------------------------------------------------------------
 
 static func _reset_all_ap(characters: Array) -> void:
+	# s57.54.10d: an operational superior (a Taisa/Shireikan holding
+	# operational_superior_id authority over subordinates) receives a Civilian
+	# Order budget for coordinating them — 2/day for 1–3 subordinates, 3/day for
+	# 4+ — even when they are not lord-tier (rank budget 0). A character who is
+	# BOTH a lord and an operational superior uses the HIGHER of the two budgets
+	# (max-rule, s57.54.10d). Count each superior's living subordinates once.
+	var sub_counts: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.operational_superior_id >= 0:
+			sub_counts[c.operational_superior_id] = int(sub_counts.get(c.operational_superior_id, 0)) + 1
+
 	for c: L5RCharacterData in characters:
 		ActionPointSystem.reset_daily_ap(c)
+		# s57.34.2: refresh the Civilian Order budget from the character's CURRENT lord rank
+		# before the daily reset. Without this, civilian_order_budget_max stays at its default 0
+		# for every character (update_budget_for_character had zero production callers), so the
+		# wave-resolver gate `is_lord and civilian_orders_remaining > 0` was never entered and the
+		# entire Civilian Order governance channel (SET_TAX_RATE, ASSIGN_VASSAL_OBJECTIVE,
+		# SEND_INVITATION, REQUEST_ART, lord WRITE_LETTER, …) was inert. Recomputing each day also
+		# tracks status changes from promotion / succession / clan induction.
+		CivilianOrderBudget.update_budget_for_character(c)
+		# s57.54.10d max-rule: lift the (possibly 0) lord-rank budget to the
+		# operational-superior budget when it is higher, so an op-superior can
+		# spend CO coordinating subordinates (_process_operational_coordination).
+		var op_budget: int = StrategicReview.co_budget_for_subordinate_count(
+			int(sub_counts.get(c.character_id, 0))
+		)
+		c.civilian_order_budget_max = maxi(c.civilian_order_budget_max, op_budget)
 		c.civilian_orders_remaining = c.civilian_order_budget_max
 		c.passage_request_count_today = 0
 		c.pieces_seen.erase("_performance_count_today")
@@ -2937,8 +3138,11 @@ static func _process_storm_assault_results(
 	dice_engine: DiceEngine,
 	settlements: Array,
 	characters_by_id: Dictionary,
+	active_wars: Array = [],
 	active_hostages: Array = [],
 	ic_day: int = 0,
+	military_legions: Array = [],
+	military_sections: Array = [],
 ) -> Array:
 	var results: Array = []
 
@@ -2992,11 +3196,19 @@ static func _process_storm_assault_results(
 			dice_engine, settlements, false, fort_bonus, {}, ef_atk, ef_def,
 		)
 
+		# s11.7a battle_record producer (storm-assault path — same as the field battle, incl. Stage 2
+		# up-chain credit to the companies' legion Taisa + that legion's section Shireikan).
+		_record_battle_participation(
+			battle_result, atk_dicts, def_dicts, characters_by_id, ic_day,
+			military_legions, military_sections,
+		)
+
 		var captor_lord_id: int = atk_dicts[0].get("lord_id", -1) if not atk_dicts.is_empty() else -1
 		var victor: String = battle_result.get("victor", "draw")
 		_capture_dead_commanders(
 			battle_result, victor, captor_lord_id,
-			str(siege_settlement_id), characters_by_id, active_hostages, ic_day, dice_engine,
+			str(siege_settlement_id), characters_by_id, active_wars, active_hostages, ic_day,
+			dice_engine,
 		)
 		_write_battle_results_to_companies(battle_result, companies)
 
@@ -3527,6 +3739,144 @@ static func _decay_all_knowledge(
 #   - Applies -1 stability to every Need Score > 0 province on suspension
 #     (penalty doubles after 2 consecutive years).
 
+# s11.5b §4.3 Winter Court Influence: during the Imperial Winter Court (still active at the Spring
+# boundary — it runs day 241..361), clan representatives lobby for specific provinces to receive
+# Miya's Blessing. A Miya representative must be present; any Status 3.0+ character may raise a
+# petition via a Courtier(Manipulation)/Awareness roll vs TN 25; success adds +8 Need Score to the
+# petitioned province, +2 per Raise; one petition per province. Returns {province_id: bonus} fed
+# straight into the Spring blessing's petition_bonuses input. Was fully dormant: compute_need_score
+# already CONSUMED petition_bonus and compute_petition_bonus computed the value, but nothing ran the
+# petitions -- the input was always {}. PROVISIONAL (structural NPC selection -- the GDD locks the
+# roll/effect/gate but not WHICH province a clan lobbies for or WHO petitions): the petitioned
+# province is the clan's lowest-stability home province (greatest need), and the petitioner is the
+# clan's highest-Courtier Status-3.0+ attendee. Free raises are earned from margin (margin/5), the
+# codebase convention for NPC bonus-scaling rolls.
+static func _process_miya_blessing_petitions(
+	active_courts: Array,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	dice_engine: DiceEngine,
+) -> Dictionary:
+	var petition_bonuses: Dictionary = {}
+	if dice_engine == null:
+		return petition_bonuses
+	for court_v: Variant in active_courts:
+		if not court_v is CourtSessionData:
+			continue
+		var court: CourtSessionData = court_v as CourtSessionData
+		if court.court_type != CourtSessionData.CourtType.IMPERIAL_WINTER_COURT:
+			continue
+		if not CourtSystem.is_active(court):
+			continue
+		# The Miya daimyo (or representative) must be present (s11.5b §4.3).
+		var miya_present: bool = false
+		for aid_v: Variant in court.attendee_ids:
+			var a: L5RCharacterData = characters_by_id.get(int(aid_v)) as L5RCharacterData
+			if a != null and not CharacterStats.is_dead(a) and a.family == "Miya":
+				miya_present = true
+				break
+		if not miya_present:
+			continue
+		# Each attending clan's best Status-3.0+ courtier lobbies for that clan's neediest province.
+		var best_by_clan: Dictionary = {}  # clan -> L5RCharacterData
+		for aid_v2: Variant in court.attendee_ids:
+			var a2: L5RCharacterData = characters_by_id.get(int(aid_v2)) as L5RCharacterData
+			if a2 == null or CharacterStats.is_dead(a2):
+				continue
+			if a2.status < MiyaBlessingSystem.PETITION_MIN_STATUS:
+				continue
+			if a2.clan.is_empty():
+				continue
+			var cur: L5RCharacterData = best_by_clan.get(a2.clan) as L5RCharacterData
+			if cur == null or int(a2.skills.get("Courtier", 0)) > int(cur.skills.get("Courtier", 0)):
+				best_by_clan[a2.clan] = a2
+		for clan_v: Variant in best_by_clan:
+			var clan: String = clan_v as String
+			var petitioner: L5RCharacterData = best_by_clan[clan] as L5RCharacterData
+			var target_pid: int = _miya_neediest_province_for_clan(clan, provinces)
+			if target_pid < 0:
+				continue
+			# One petition per province per Winter Court (record even a failure so it isn't retried).
+			if petition_bonuses.has(target_pid):
+				continue
+			var roll: Dictionary = SkillResolver.resolve_skill_check(
+				petitioner, dice_engine, "Courtier", MiyaBlessingSystem.PETITION_TN,
+				0, "Manipulation",
+			)
+			var success: bool = roll.get("success", false)
+			var free_raises: int = maxi(0, int(roll.get("margin", 0)) / 5)
+			petition_bonuses[target_pid] = MiyaBlessingSystem.compute_petition_bonus(success, free_raises)
+		return petition_bonuses  # one Imperial Winter Court at a time
+	return petition_bonuses
+
+
+static func _miya_neediest_province_for_clan(clan: String, provinces: Dictionary) -> int:
+	var best_pid: int = -1
+	var best_stability: float = 1.0e9
+	for pid_v: Variant in provinces:
+		var prov: ProvinceData = provinces[pid_v] as ProvinceData
+		if prov == null or prov.clan != clan:
+			continue
+		if prov.stability < best_stability:
+			best_stability = prov.stability
+			best_pid = prov.province_id
+	return best_pid
+
+
+# s11.5b §5 (owner-approved 2026-07-09): a Cunning emperor weights the annual Blessing as a
+# political tool -- MiyaBlessingSystem.apply_cunning_modifier adds +10 Need Score to a favored
+# clan's provinces and -10 to a disfavored clan's before selection. The GDD LOCKS the ±10 effect
+# but NOT which clan is favored/disfavored (it is discretionary -- "MAY add"), so the OWNER-APPROVED
+# rule is: favored = the clan whose champion holds the HIGHEST disposition toward the Emperor,
+# disfavored = the LOWEST. This uses the established Emperor<->clan convention (CollectiveDisposition
+# has no Imperial participant, so a clan's standing with the throne routes through its champion) via
+# the SAME "highest-status, lord_id==-1 per clan" proxy + champ.disposition_values[emperor_id] read
+# that the suspension-penalty pass (_process_miya_blessing_followup) already uses. No-op when the top
+# and bottom tie (all-equal standing -> no real favoritism to express); deterministic clan-name
+# tiebreak among equal extremes. The favored/disfavored blank -> the arbiter is a no-op.
+static func _compute_cunning_blessing_clans(
+	characters_by_id: Dictionary,
+	emperor_id: int,
+) -> Dictionary:
+	var result: Dictionary = {"favored": "", "disfavored": ""}
+	if emperor_id < 0:
+		return result
+	# Champion proxy: highest-status living character per clan with lord_id == -1 (the clan's
+	# face to the throne -- identical to the suspension-penalty pass below).
+	var champions: Dictionary = {}
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c) or c.clan == "" or c.character_id == emperor_id:
+			continue
+		if c.lord_id != -1:
+			continue
+		var existing: L5RCharacterData = champions.get(c.clan)
+		if existing == null or c.status > existing.status:
+			champions[c.clan] = c
+	if champions.size() < 2:
+		return result  # need at least two clans to express favoritism
+	var best_clan: String = ""
+	var best_disp: int = -101
+	var worst_clan: String = ""
+	var worst_disp: int = 101
+	var clan_names: Array = champions.keys()
+	clan_names.sort()  # deterministic tiebreak among equal extremes
+	for clan_name: String in clan_names:
+		var champ: L5RCharacterData = champions[clan_name]
+		var disp: int = int(champ.disposition_values.get(emperor_id, 0))
+		if disp > best_disp:
+			best_disp = disp
+			best_clan = clan_name
+		if disp < worst_disp:
+			worst_disp = disp
+			worst_clan = clan_name
+	if best_disp == worst_disp:
+		return result  # all clans equal toward the Emperor -> no favoritism without a real difference
+	result["favored"] = best_clan
+	result["disfavored"] = worst_clan
+	return result
+
+
 static func _process_miya_blessing_followup(
 	seasonal_result: Dictionary,
 	miya_inputs: Dictionary,
@@ -3710,6 +4060,63 @@ static func _find_province_lord(
 		if best == null or c.status > best.status:
 			best = c
 	return best
+
+
+## Settlement -> governing-NPC linkage (the PRODUCER for SettlementData.lord_character_id +
+## shrine_custodian_id -- previously zero-writer dead @export fields read by 10+ art-ownership /
+## supply-share / shide consumers, all misfiring on the -1 default). Replicates _find_province_lord's
+## clan/family wildcard heuristic EXACTLY, but resolves every province in one O(chars) pass (per-clan /
+## per-family / per-clan+family / global best-status maps) instead of an O(chars) scan per province.
+## Daily + self-correcting, so the linkage tracks succession/death without a stored-cache staleness bug
+## (a dead lord's settlements re-point to the new highest-status heir next tick). shrine_custodian_id is
+## the highest-Insight shugenja stationed at a religious settlement (the s57.26b shide-custodian read).
+static func _populate_settlement_governance(
+	settlements: Array,
+	provinces: Dictionary,
+	characters_by_id: Dictionary,
+) -> void:
+	var best_cf: Dictionary = {}   # "clan\tfamily" -> best-status L5RCharacterData
+	var best_c: Dictionary = {}    # clan -> best-status
+	var best_f: Dictionary = {}    # family -> best-status
+	var best_any: L5RCharacterData = null
+	var shug_by_loc: Dictionary = {}  # physical_location -> best-Insight shugenja there
+	for cid: int in characters_by_id:
+		var c: L5RCharacterData = characters_by_id[cid]
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var cf: String = c.clan + "\t" + c.family
+		if not best_cf.has(cf) or c.status > (best_cf[cf] as L5RCharacterData).status:
+			best_cf[cf] = c
+		if not best_c.has(c.clan) or c.status > (best_c[c.clan] as L5RCharacterData).status:
+			best_c[c.clan] = c
+		if c.family != "" and (not best_f.has(c.family) or c.status > (best_f[c.family] as L5RCharacterData).status):
+			best_f[c.family] = c
+		if best_any == null or c.status > best_any.status:
+			best_any = c
+		if c.school_type == Enums.SchoolType.SHUGENJA and c.physical_location != "":
+			var loc: String = c.physical_location
+			if not shug_by_loc.has(loc) \
+					or CharacterStats.get_insight_rank(c) > CharacterStats.get_insight_rank(shug_by_loc[loc]):
+				shug_by_loc[loc] = c
+	# Resolve each province's lord once, then stamp every settlement in it.
+	var prov_lord: Dictionary = {}
+	for pid: int in provinces:
+		var prov: ProvinceData = provinces[pid]
+		var lord: L5RCharacterData = null
+		if prov.family != "":
+			# clan+family both set -> exact match; family only -> family best (any clan, matching
+			# _find_province_lord's "clan == '' skips the clan filter" semantics).
+			lord = best_cf.get(prov.clan + "\t" + prov.family) if prov.clan != "" else best_f.get(prov.family)
+		elif prov.clan != "":
+			lord = best_c.get(prov.clan)
+		else:
+			lord = best_any
+		prov_lord[pid] = lord.character_id if lord != null else -1
+	for s: SettlementData in settlements:
+		s.lord_character_id = int(prov_lord.get(s.province_id, -1))
+		if s.settlement_type in Enums.RELIGIOUS_SETTLEMENT_TYPES:
+			var cust: L5RCharacterData = shug_by_loc.get(str(s.settlement_id))
+			s.shrine_custodian_id = cust.character_id if cust != null else -1
 
 
 # -- Famine Crisis Processing (s16.2) ------------------------------------------
@@ -4019,6 +4426,7 @@ static func _process_kolat_writebacks(
 	next_letter_id: Array = [1],
 	settlements: Array = [],
 	objectives_map: Dictionary = {},
+	kolat_secrecy: Dictionary = {},
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -4076,6 +4484,9 @@ static func _process_kolat_writebacks(
 				var actor: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
 				if actor != null and not CharacterStats.is_dead(actor):
 					HonorGlorySystem.apply_honor_change(actor, -float(effects.get("honor_loss", 0.5)))
+				# s54.7i: Cloud resurrecting cover topics muddies the evidence (exposure −5).
+				KolatSecrecy.bump(kolat_secrecy, "exposure",
+					KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.CLOUD_RESURRECT))
 
 			"SPONSOR_INSURGENCY":
 				if not effects.get("seeds_insurgency", false):
@@ -4119,6 +4530,9 @@ static func _process_kolat_writebacks(
 						"investigation", "sponsor_insurgency_trail",
 					)
 					active_topics.append(trail)
+					# s54.7i: the funding traced to a named merchant network (exposure +5).
+					KolatSecrecy.bump(kolat_secrecy, "exposure",
+						KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.TRACED_MERCHANT_NETWORK))
 
 			"BRIBE_GARRISON_COMMANDER":
 				var b_province: int = r.get("target_province_id", -1)
@@ -4361,13 +4775,16 @@ static func _process_kolat_writebacks(
 				active_topics.append(pp_topic)
 
 			"RUN_COURIER_ROUTE":
-				if effects.get("route_clean", true):
-					continue
-				# Failure flags route integrity (s54.7c) — a hint that elevates the
-				# Silk Master's network-maintenance priority. Stored as a flag on the
-				# Master until the segment is repaired.
+				# s54.7c: a failed segment flags route_integrity_reduced (elevating the Silk
+				# Master's MAINTAIN_KOLAT_NETWORK priority via the kolat slot in
+				# _assign_kolat_standing_objectives); a clean run REPAIRS the segment and clears
+				# the flag ("until the segment is repaired or abandoned").
 				var rc_master: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
-				if rc_master != null and not CharacterStats.is_dead(rc_master):
+				if rc_master == null or CharacterStats.is_dead(rc_master):
+					continue
+				if effects.get("route_clean", true):
+					rc_master.special_data.erase("route_integrity_reduced")
+				else:
 					rc_master.special_data["route_integrity_reduced"] = true
 
 			"SUBMIT_KOLAT_REPORT":
@@ -6199,6 +6616,34 @@ static func _counts_as_rested(c: L5RCharacterData, ic_day: int) -> bool:
 	return c.rested_last_night or c.power_of_ocean_until_ic_day >= ic_day
 
 
+## s57.31.7a / s57.32.2 rest tracking (the SOLE producer of the `rested_last_night` gate).
+## Called each IC day AFTER the OOC tick read. On an OOC-day boundary (ic_day % TICKS_PER_REAL_DAY
+## == 0) it resets every living character's flag to true — the LOCKED "reset to true at the start of
+## each OOC day". Then, for the current IC day, any character who is traveling (or arrived this day,
+## having spent the day on the road) has the flag flipped to false — the LOCKED "continuous travel"
+## disqualifier ("a character who ... marches through the night does not benefit from the refresh").
+## The false state persists across the 4-IC-day window (only the next boundary resets it), so a
+## character who travels on ANY day of the window is denied natural healing + Void refresh at the
+## next OOC tick. DEFERRED disqualifiers (no per-character producer exists): active-combat presence,
+## watch-duty majority, and per-character starvation (province starvation_stage is not per-person).
+static func _process_rest_tracking(
+	characters: Array,
+	travel_arrivals: Array,
+	ic_day: int,
+) -> void:
+	var is_boundary: bool = ic_day % TimeSystem.TICKS_PER_REAL_DAY == 0
+	var arrived_today: Dictionary = {}
+	for a: Dictionary in travel_arrivals:
+		arrived_today[int(a.get("character_id", -1))] = true
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if is_boundary:
+			c.rested_last_night = true
+		if TravelSystem.is_traveling(c) or arrived_today.has(c.character_id):
+			c.rested_last_night = false
+
+
 static func _clear_daily_spell_buffs(characters: Array) -> void:
 	for c: L5RCharacterData in characters:
 		if not c.active_day_buffs.is_empty():
@@ -6244,6 +6689,7 @@ static func _process_witness_tampering_writebacks(
 	next_case_id: Array = [1],
 	dice_engine: DiceEngine = null,
 	death_events: Array = [],
+	kolat_secrecy: Dictionary = {},
 ) -> void:
 	for result: Variant in results:
 		if not result is Dictionary:
@@ -6266,6 +6712,13 @@ static func _process_witness_tampering_writebacks(
 
 			if success:
 				record.witnesses.erase(witness_id)
+				# s54.7i: a Kolat member burying a report that implicates the
+				# conspiracy (the perpetrator is a Kolat member) lowers exposure (−3).
+				if action_id == "BRIBE_WITNESS" \
+						and _is_kolat_member(characters_by_id.get(criminal_id)) \
+						and _is_kolat_member(characters_by_id.get(record.perpetrator_id)):
+					KolatSecrecy.bump(kolat_secrecy, "exposure",
+						KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.COIN_BRIBE))
 				if action_id == "BRIBE_WITNESS":
 					var witness: L5RCharacterData = characters_by_id.get(witness_id)
 					var criminal: L5RCharacterData = characters_by_id.get(criminal_id)
@@ -6830,6 +7283,9 @@ static func _process_intercept_letter_writebacks(
 	characters_by_id: Dictionary,
 	current_season: int,
 	dice_engine: DiceEngine,
+	crime_records: Array,
+	next_case_id: Array,
+	ic_day: int,
 ) -> void:
 	# A successful INTERCEPT_LETTER now actually READS a letter in transit involving the
 	# target — the interceptor learns its topic. s33 Elemental Cipher resists: a ciphered
@@ -6889,6 +7345,39 @@ static func _process_intercept_letter_writebacks(
 			},
 			current_season,
 		))
+
+		# s11.3.8 INTERCEPTED_LETTER treason signal: if BOTH correspondents are
+		# conscious lord-bound Kolat conspirators, the interception has surfaced
+		# Kolat NETWORK correspondence = hard treason evidence (weight 50, LOCKED —
+		# 50 >= the accusation threshold 40, so a single network letter accuses).
+		# A letter with only one Kolat party adds nothing (no invented "hostile
+		# intent" read). Deduped per letter_id so a re-intercept never double-counts.
+		var sender: L5RCharacterData = characters_by_id.get(intercepted.sender_id)
+		var recipient: L5RCharacterData = characters_by_id.get(intercepted.recipient_id)
+		if not _is_conscious_kolat_traitor(sender, characters_by_id) \
+				or not _is_conscious_kolat_traitor(recipient, characters_by_id):
+			continue
+		for conspirator: L5RCharacterData in [sender, recipient]:
+			var record: CrimeRecord = _ensure_treason_record(
+				conspirator, crime_records, next_case_id, ic_day)
+			if record.legal_status == Enums.LegalStatus.ACCUSED \
+					or record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+				continue  # already in the conviction pipeline
+			var entry: LegalCaseEntry = _treason_case_for(record, conspirator, ic_day)
+			# Dedup: one INTERCEPTED_LETTER item per letter_id, ever.
+			var seen: bool = false
+			for item: Variant in entry.evidence_items:
+				if item is Dictionary \
+						and int((item as Dictionary).get("type", -1)) == TreasonSystem.TreasonEvidenceType.INTERCEPTED_LETTER \
+						and int((item as Dictionary).get("letter_id", -1)) == intercepted.letter_id:
+					seen = true
+					break
+			if seen:
+				continue
+			_add_treason_evidence_gated(
+				record, entry, TreasonSystem.TreasonEvidenceType.INTERCEPTED_LETTER,
+				ic_day, {"letter_id": intercepted.letter_id}
+			)
 
 
 static func _process_whispering_wind_writebacks(
@@ -7069,18 +7558,18 @@ static func _process_blackmail_favor_writebacks(
 		for f: Variant in favors:
 			if f is FavorData and (f as FavorData).favor_id >= max_id:
 				max_id = (f as FavorData).favor_id + 1
-		for i: int in range(count):
-			var favor := FavorData.new()
-			favor.favor_id = max_id + i
-			favor.favor_type = FavorData.FavorType.GENERAL
-			favor.tier = FavorData.FavorTier.MINOR
-			favor.creditor_id = creditor_id
-			favor.debtor_id = debtor_id
-			favor.created_ic_day = ic_day
-			favor.terms = "blackmail_extracted"
-			favor.source_action = "INTIMIDATE"
-			favor.is_blackmail_extracted = true
-			favors.append(favor)
+		# Route through the canonical arbiter (s12.10 line 89 LOCKED): the extracted
+		# favor tier is the secret's severity tier (Tier 1->Major, 2->Moderate,
+		# 3->Minor); a Tier-4 secret yields only vague goodwill -- NO tracked favor.
+		# The prior inline copy hardcoded MINOR for every tier and minted Tier-4
+		# favors the spec forbids.
+		var secret_tier: int = int(effects.get("secret_tier", 3))
+		var extracted: Array = FavorSystem.extract_blackmail_favor(
+			secret_tier, creditor_id, debtor_id, count, ic_day, max_id,
+		)
+		for fav_v: Variant in extracted:
+			if fav_v is FavorData:
+				favors.append(fav_v)
 
 
 static func _process_invoke_favor_writebacks(
@@ -7187,6 +7676,9 @@ static func _process_solo_training_writebacks(
 		# Rank-up occurred from solo training — sync stored field and flags (s48a A48a-3)
 		character.school_rank = new_rank
 		SkillResolver.apply_technique_flags(character)
+		# s57.25.7 SEEK_TATTOO urgency clock resets on a Togashi monk's rank-up.
+		if TattooSystem.is_togashi_school(character.school):
+			character.tattoo_rank_reached_season = TimeSystem.get_absolute_season(ic_day)
 		# Generate Tier 4 Personal topic (s48a A48a-2) and seed into character's own pool
 		var topic := TopicData.new()
 		topic.topic_id = next_topic_id[0]
@@ -7388,6 +7880,54 @@ static func _process_duel_challenge_writebacks(
 
 const DUEL_DECLINE_GLORY_LOSS: float = 0.0
 
+# s55.11 proactive duel: a GRIEVANCE reactive result whose deliberate evaluation
+# (evaluate_duel_trigger) passed the capability/target-assessment/personality gates and returned
+# ISSUE_DUEL_CHALLENGE. Issue the challenge -- inject DUEL_CHALLENGE_RECEIVED into the target (the
+# insulter) so their own reactive path decides accept/decline (the downstream is the existing wired
+# response path). Mirrors _process_brash_reactions' involuntary injection; here it is deliberate.
+static func _process_proactive_duel_writebacks(
+	results: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
+			continue
+		var d: Dictionary = r as Dictionary
+		if d.get("reactive_type", "") != "GRIEVANCE":
+			continue
+		if d.get("action", "") != "ISSUE_DUEL_CHALLENGE":
+			continue
+		var challenger_id: int = int(d.get("character_id", -1))
+		var defender_id: int = int(d.get("target_npc_id", -1))
+		if challenger_id < 0 or defender_id < 0 or challenger_id == defender_id:
+			continue
+		var defender: L5RCharacterData = characters_by_id.get(defender_id)
+		if defender == null or CharacterStats.is_dead(defender):
+			continue
+		var def_ws: Dictionary = world_states.get(defender_id, {})
+		var pending: Array = def_ws.get("pending_events", [])
+		# Dedup: don't stack a second challenge from the same challenger.
+		var already: bool = false
+		for ev_v: Variant in pending:
+			if ev_v is Dictionary \
+					and (ev_v as Dictionary).get("reactive_type", "") == "DUEL_CHALLENGE_RECEIVED" \
+					and int((ev_v as Dictionary).get("challenger_id", -1)) == challenger_id:
+				already = true
+				break
+		if already:
+			continue
+		pending.append({
+			"reactive_type": "DUEL_CHALLENGE_RECEIVED",
+			"challenger_id": challenger_id,
+			"to_death": false,       # a proactive honor duel over an insult is first-blood (s4.8)
+			"is_sanctioned": true,   # the honorable, sanctioned form
+			"is_public": bool(d.get("event_data", {}).get("is_public", true)),
+		})
+		def_ws["pending_events"] = pending
+		world_states[defender_id] = def_ws
+
+
 static func _process_duel_response_writebacks(
 	results: Array,
 	characters_by_id: Dictionary,
@@ -7437,9 +7977,14 @@ static func _process_duel_response_writebacks(
 		results.append(wrapped)
 
 
-# -- s45 BRASH: inject duel challenge when BRASH character fails Willpower check
-# after being successfully publicly insulted. The BRASH character challenges the
-# insulter; DUEL_CHALLENGE_RECEIVED goes into the insulter's pending_events.
+# -- PUBLIC_INSULT reactions: s45 BRASH (involuntary) + s55.11 proactive duel (deliberate).
+# When a character is successfully publicly insulted:
+#   * s45 BRASH: if the target has the Brash disadvantage and FAILS the Willpower composure roll,
+#     they are COMPELLED to challenge the insulter (DUEL_CHALLENGE_RECEIVED into the insulter).
+#   * s55.11 Trigger 1 (public insult received): otherwise (not brash, or brash-but-composed) a
+#     GRIEVANCE event is injected into the TARGET's own pending_events, so their reactive path runs
+#     evaluate_duel_trigger (capability/target-assessment/personality gates) and may DELIBERATELY
+#     issue the challenge. This is the deliberate counterpart to the involuntary Brash compulsion.
 static func _process_brash_reactions(
 	results: Array,
 	characters_by_id: Dictionary,
@@ -7456,35 +8001,112 @@ static func _process_brash_reactions(
 			continue
 		var insulter_id: int = d.get("character_id", -1)
 		var target_id: int = d.get("target_npc_id", -1)
-		if insulter_id < 0 or target_id < 0:
+		if insulter_id < 0 or target_id < 0 or insulter_id == target_id:
 			continue
 		var target: L5RCharacterData = characters_by_id.get(target_id)
-		if target == null or CharacterStats.is_dead(target):
+		if target == null or CharacterStats.is_dead(target) or target.is_pc:
 			continue
+
+		var brash_forced: bool = false
 		var brash_check: Dictionary = AdvantageSystem.check_brash_trigger(target, true)
-		if not brash_check.get("triggered", false):
+		if brash_check.get("triggered", false):
+			var tn: int = brash_check.get("tn", 25)
+			var brash_wound: int = CharacterStats.get_wound_penalty(target)
+			var roll: DiceResult = dice_engine.roll_and_keep(
+				target.willpower, target.willpower, false, false
+			)
+			var total: int = roll.total + int(target.honor) + brash_wound
+			if total < tn:
+				# Failed composure: BRASH compels an involuntary challenge into the insulter.
+				var insulter_ws: Dictionary = world_states.get(insulter_id, {})
+				var pending: Array = insulter_ws.get("pending_events", [])
+				pending.append({
+					"reactive_type": "DUEL_CHALLENGE_RECEIVED",
+					"challenger_id": target_id,
+					"to_death": false,
+					"is_sanctioned": true,
+					"is_public": true,
+					"brash_triggered": true,
+				})
+				insulter_ws["pending_events"] = pending
+				world_states[insulter_id] = insulter_ws
+				brash_forced = true
+
+		if not brash_forced:
+			# s55.11 Trigger 1: inject a GRIEVANCE into the target for the deliberate duel evaluation.
+			var target_ws: Dictionary = world_states.get(target_id, {})
+			var t_pending: Array = target_ws.get("pending_events", [])
+			var already: bool = false
+			for ev_v: Variant in t_pending:
+				if ev_v is Dictionary and (ev_v as Dictionary).get("reactive_type", "") == "GRIEVANCE" \
+						and int((ev_v as Dictionary).get("target_npc_id", -1)) == insulter_id:
+					already = true
+					break
+			if not already:
+				t_pending.append({
+					"reactive_type": "GRIEVANCE",
+					"trigger_type": "public_insult",
+					"target_npc_id": insulter_id,
+					"is_public": true,
+				})
+				target_ws["pending_events"] = t_pending
+				world_states[target_id] = target_ws
+
+
+# -- s55.11 Trigger 1 (public insult received) — the OTHER two GDD-named sources.
+# The GDD Trigger 1 list is "A PUBLIC_INSULT, GOSSIP, or EXPOSE_SECRET_PUBLIC action has publicly
+# damaged this NPC's reputation this session." PUBLIC_INSULT is handled by _process_brash_reactions
+# (it also carries the involuntary Brash path); GOSSIP and EXPOSE_SECRET_PUBLICLY have no Brash
+# coupling (the subject is talked-about, not slighted to their face), so they inject the deliberate
+# GRIEVANCE directly. The reputation-damaged NPC is the gossip/secret SUBJECT; the named target of
+# the grievance is the ACTOR (gossiper / exposer). A CONCEALED-source gossip injects nothing — the
+# subject cannot challenge a gossiper they cannot identify (s15.4 source concealment).
+static func _process_reputation_grievance_triggers(
+	results: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	for r: Variant in results:
+		if not r is Dictionary:
 			continue
-		var tn: int = brash_check.get("tn", 25)
-		var brash_wound: int = CharacterStats.get_wound_penalty(target)
-		var roll: DiceResult = dice_engine.roll_and_keep(
-			target.willpower, target.willpower, false, false
-		)
-		var total: int = roll.total + int(target.honor) + brash_wound
-		if total >= tn:
-			continue  # Passed — stays composed
-		# Failed: BRASH character challenges the insulter to a duel.
-		var insulter_ws: Dictionary = world_states.get(insulter_id, {})
-		var pending: Array = insulter_ws.get("pending_events", [])
+		var d: Dictionary = r as Dictionary
+		if not d.get("success", false):
+			continue
+		var action_id: String = d.get("action_id", "")
+		var effects: Dictionary = d.get("effects", {})
+		var subject_id: int = -1
+		if action_id == "GOSSIP":
+			if bool(effects.get("source_concealed", false)):
+				continue  # subject can't identify the gossiper -> no grievance
+			subject_id = int(effects.get("gossip_subject_id", -1))
+		elif action_id == "EXPOSE_SECRET_PUBLICLY":
+			subject_id = int(effects.get("subject_id", -1))
+		else:
+			continue
+		var actor_id: int = int(d.get("character_id", -1))
+		if subject_id < 0 or actor_id < 0 or subject_id == actor_id:
+			continue
+		var subject: L5RCharacterData = characters_by_id.get(subject_id)
+		if subject == null or CharacterStats.is_dead(subject) or subject.is_pc:
+			continue
+		var subj_ws: Dictionary = world_states.get(subject_id, {})
+		var pending: Array = subj_ws.get("pending_events", [])
+		var already: bool = false
+		for ev_v: Variant in pending:
+			if ev_v is Dictionary and (ev_v as Dictionary).get("reactive_type", "") == "GRIEVANCE" \
+					and int((ev_v as Dictionary).get("target_npc_id", -1)) == actor_id:
+				already = true
+				break
+		if already:
+			continue
 		pending.append({
-			"reactive_type": "DUEL_CHALLENGE_RECEIVED",
-			"challenger_id": target_id,
-			"to_death": false,
-			"is_sanctioned": true,
+			"reactive_type": "GRIEVANCE",
+			"trigger_type": "public_insult",
+			"target_npc_id": actor_id,
 			"is_public": true,
-			"brash_triggered": true,
 		})
-		insulter_ws["pending_events"] = pending
-		world_states[insulter_id] = insulter_ws
+		subj_ws["pending_events"] = pending
+		world_states[subject_id] = subj_ws
 
 
 # -- s45 CONTRARY: log informational event when CONTRARY character fails Willpower
@@ -7641,6 +8263,8 @@ static func _process_fabricate_secret_writebacks(
 	results: Array,
 	active_secrets: Array,
 	next_secret_id: Array,
+	next_item_id: Array = [1],
+	characters_by_id: Dictionary = {},
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -7661,6 +8285,27 @@ static func _process_fabricate_secret_writebacks(
 		var fabricator_id: int = d.get("character_id", -1)
 		if fabricator_id >= 0 and fabricator_id not in sd.known_by_ids:
 			sd.known_by_ids.append(fabricator_id)
+		# s12.11 (owner-approved narrow producer, 2026-07-16): a successful fabrication mints the forged
+		# document that serves as the secret's physical proof -- a covert-produced Evidence item
+		# (ItemCategory.EVIDENCE, is_evidence=true, Small size, Normal quality, s12.11). Setting the
+		# secret's physical_proof_item_id activates the ALREADY-wired +1 Free Raise on a later Expose a
+		# Secret Publicly / Reveal a Secret Privately (s12.8 has_proof consumer chain: day_orchestrator
+		# known_secrets injection -> _pick_best_secret -> executor -> SecretSystem.PHYSICAL_PROOF_FREE_RAISES).
+		# The forged proof lives in the fabricator's on-person inventory as a real, steal-able/destroyable
+		# item; it degrades gracefully (no proof minted) only if the fabricator is unresolvable/dead.
+		var fabricator: L5RCharacterData = characters_by_id.get(fabricator_id) as L5RCharacterData
+		if fabricator != null and not CharacterStats.is_dead(fabricator) and sd.physical_proof_item_id < 0:
+			var item_id: int = next_item_id[0]
+			next_item_id[0] += 1
+			var item_name: String = "Forged document"
+			if not sd.description.is_empty():
+				item_name = "Forged proof: %s" % sd.description
+			var item: Dictionary = InventorySystem.create_item(
+				item_id, item_name, InventorySystem.ItemCategory.EVIDENCE,
+				InventorySystem.ItemSize.SMALL, 1, true,
+			)
+			fabricator.items.append(item)
+			sd.physical_proof_item_id = item_id
 		active_secrets.append(sd)
 
 
@@ -8386,6 +9031,105 @@ static func _create_crime_topic(
 	return topic
 
 
+## s57.47 v624 / s55.10 — Emperor's Peace violation recorder (executor-side backstop).
+## Deterrence is handled at option selection; this fires when an overt hostile act still
+## executes at an active Imperial Winter Court. Delegates the LOCKED consequence table to
+## WinterCourtSystem.record_emperors_peace_violation (CAPITAL crime ACCUSED + evidence 100,
+## Tier-1 topic, at-act honor loss on the offender, family-daimyo Glory -1.0), appends the
+## record + topic, and applies the Emperor's -15 disposition toward the offender's clan.
+static func _process_emperors_peace_violations(
+	results: Array,
+	active_courts: Array,
+	characters: Array,
+	characters_by_id: Dictionary,
+	crime_records: Array,
+	next_case_id: Array,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	world_states: Dictionary,
+) -> void:
+	# At most one active Imperial Winter Court exists at a time.
+	var wc: CourtSessionData = null
+	for c_v: Variant in active_courts:
+		if not c_v is CourtSessionData:
+			continue
+		var c: CourtSessionData = c_v as CourtSessionData
+		if (c.court_type == CourtSessionData.CourtType.IMPERIAL_WINTER_COURT
+				and c.phase == CourtSessionData.CourtPhase.ACTIVE):
+			wc = c
+			break
+	if wc == null:
+		return
+
+	for result_v: Variant in results:
+		if not result_v is Dictionary:
+			continue
+		var r: Dictionary = result_v as Dictionary
+		var char_id: int = r.get("character_id", -1)
+		if not (char_id in wc.attendee_ids):
+			continue
+		var action_id: String = r.get("action_id", "")
+		var effects: Dictionary = r.get("effects", {})
+		# A sanctioned duel is exempt; NPC duels default sanctioned.
+		var has_duel_sanction: bool = bool(effects.get("is_sanctioned", true))
+		if not WinterCourtSystem.is_peace_violating_action(action_id, has_duel_sanction):
+			continue
+		var offender: L5RCharacterData = characters_by_id.get(char_id)
+		if offender == null or CharacterStats.is_dead(offender):
+			continue
+		if _has_open_peace_violation(offender.character_id, crime_records):
+			continue
+
+		var rec: Dictionary = WinterCourtSystem.record_emperors_peace_violation(
+			offender, action_id, wc, ic_day, next_case_id, next_topic_id, characters_by_id,
+		)
+		var crime_record: CrimeRecord = rec.get("crime_record")
+		if crime_record != null:
+			crime_records.append(crime_record)
+		var topic: TopicData = rec.get("topic")
+		if topic != null:
+			active_topics.append(topic)
+		_apply_emperors_peace_clan_disposition(
+			offender, int(rec.get("emperor_disposition_hit", -15)),
+			characters, characters_by_id, world_states,
+		)
+
+
+## True if the offender already carries a VIOLATION_EMPERORS_PEACE record (one CAPITAL
+## conviction is terminal — no need to re-record the same offender's peace-breaking).
+static func _has_open_peace_violation(offender_id: int, crime_records: Array) -> bool:
+	for rec_v: Variant in crime_records:
+		if rec_v is CrimeRecord:
+			var rec: CrimeRecord = rec_v as CrimeRecord
+			if (rec.perpetrator_id == offender_id
+					and rec.crime_type == Enums.CrimeType.VIOLATION_EMPERORS_PEACE):
+				return true
+	return false
+
+
+## GDD s57.47 line 51: "the offender's clan suffers disposition -15 from the Emperor
+## regardless of the Champion's involvement." Represented as the Emperor's standing
+## toward the clan's champion — its face to the throne — since the Emperor is not a
+## participant in the clan↔clan CollectiveDisposition graph. Falls back to the offender
+## if no living champion.
+static func _apply_emperors_peace_clan_disposition(
+	offender: L5RCharacterData,
+	hit: int,
+	characters: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id)
+	if emperor == null or CharacterStats.is_dead(emperor):
+		return
+	var champ_id: int = _extrad_find_clan_champion_id(offender.clan, characters)
+	var target_id: int = champ_id if champ_id >= 0 else offender.character_id
+	var cur: int = int(emperor.disposition_values.get(target_id, 0))
+	emperor.disposition_values[target_id] = clampi(cur + hit, -100, 100)
+
+
 static func _get_witnesses_at_location(
 	perpetrator_id: int,
 	location: String,
@@ -8665,13 +9409,19 @@ static func _assign_animal_companion_standing_objectives(
 static func _assign_kolat_standing_objectives(
 	characters: Array,
 	objectives_map: Dictionary,
+	kolat_secrecy: Dictionary = {},
 ) -> void:
+	var go_dark: bool = kolat_secrecy.get("go_dark", false)
+	var identified: Array = kolat_secrecy.get("identified_ids", [])
 	for character: L5RCharacterData in characters:
 		if character.is_pc:
 			continue
 		if not KolatSystem.is_master(character):
 			continue
 		if CharacterStats.is_dead(character):
+			continue
+		# s54.7i tier-90: an identified Master suspends operations (goes dark).
+		if go_dark and character.character_id in identified:
 			continue
 
 		var mandate: String = KolatSystem.standing_needtype_for_sect(character.kolat_sect)
@@ -8683,6 +9433,28 @@ static func _assign_kolat_standing_objectives(
 			objectives_map[char_id] = {}
 
 		var objectives: Dictionary = objectives_map[char_id]
+
+		# s54.7c (LOCKED): a Silk Master whose courier route failed (route_integrity_reduced)
+		# ELEVATES MAINTAIN_KOLAT_NETWORK priority "until the segment is repaired or abandoned".
+		# The mandate is the flat standing objective (fires last), so the elevation promotes it
+		# into the kolat slot at priority 2 — which "yields to the primary but precedes the standing
+		# objective" (s54.7d cascade, resolve_goal). priority 2 is the LOCKED MAINTAIN_KOLAT_NETWORK
+		# below-80%-integrity tier (s54.7c:11). Only fills a FREE slot (never clobbers a Tiger
+		# directive); the opportunistic pass leaves this non-opportunistic source untouched. The
+		# elevation clears when the flag clears (a clean route repairs the segment).
+		if character.kolat_sect == Enums.KolatSect.SILK:
+			var kolat_slot: Dictionary = objectives.get("kolat", {})
+			var route_reduced: bool = bool(character.special_data.get("route_integrity_reduced", false))
+			if route_reduced and kolat_slot.is_empty():
+				objectives["kolat"] = {
+					"need_type": "MAINTAIN_KOLAT_NETWORK",
+					"priority": 2,
+					"source": "route_integrity",
+					"auto_assigned": true,
+				}
+			elif not route_reduced and String(kolat_slot.get("source", "")) == "route_integrity":
+				objectives.erase("kolat")
+
 		var standing: Dictionary = objectives.get("standing", {})
 		if standing.get("need_type", "") == mandate:
 			continue
@@ -8808,11 +9580,17 @@ static func _assign_kolat_opportunistic_objectives(
 	characters: Array,
 	objectives_map: Dictionary,
 	characters_by_id: Dictionary,
+	kolat_secrecy: Dictionary = {},
 ) -> void:
+	var go_dark: bool = kolat_secrecy.get("go_dark", false)
+	var identified: Array = kolat_secrecy.get("identified_ids", [])
 	for character: L5RCharacterData in characters:
 		if character.is_pc or CharacterStats.is_dead(character):
 			continue
 		if not KolatSystem.is_master(character):
+			continue
+		# s54.7i tier-90: an identified Master suspends operations (goes dark).
+		if go_dark and character.character_id in identified:
 			continue
 
 		var char_id: int = character.character_id
@@ -8914,6 +9692,153 @@ static func _assign_monk_standing_objectives(
 			"priority": 3,
 			"auto_assigned": true,
 		}
+
+
+# -- s57.25.7 SEEK_TATTOO / GRANT_TATTOO Standing Needs -------------------------
+# The ability-tattoo loop between Togashi monks (seekers) and elders (granters). These NeedTypes
+# were fully SCORED in objective_alignment.json but NEVER ASSIGNED -- so no monk ever sought a
+# tattoo and no elder ever prioritised granting one (the whole s57.25.7 path was dead). Both passes
+# run AFTER the monk pass + clear_stale, are self-correcting (revert a stale standing when the
+# condition lapses), and only override the peacetime monk default (PERFORM_RITUAL) -- a
+# magistrate/lord-assigned standing is respected. All values are the GDD's own s57.25.7 constants.
+
+## Togashi territory = the character's current province is Dragon-clan (s57.25.7 "in Togashi
+## territory" / "Dragon Clan territory"). No explicit territory field exists, so this is the
+## faithful mapping via the daily character_province_map.
+static func _in_togashi_territory(
+	char_id: int, character_province_map: Dictionary, provinces: Dictionary,
+) -> bool:
+	var pid: int = int(character_province_map.get(char_id, -1))
+	if pid < 0:
+		return false
+	var prov: ProvinceData = provinces.get(pid)
+	return prov != null and prov.clan == "Dragon"
+
+
+static func _assign_seek_tattoo_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+	tattoos: Array,
+	ic_day: int = -1,
+) -> void:
+	for character: L5RCharacterData in characters:
+		if character.is_pc or CharacterStats.is_dead(character):
+			continue
+		if not TattooSystem.is_togashi_school(character.school):
+			continue
+		# BLOCKED transition (s57.25.7): all 9 body locations occupied -> permanent BLOCKED.
+		if not character.seek_tattoo_blocked \
+				and TattooSystem.is_seek_tattoo_blocked(tattoos, character.character_id):
+			character.seek_tattoo_blocked = true
+		var char_id: int = character.character_id
+		var objectives: Dictionary = objectives_map.get(char_id, {})
+		var standing: Dictionary = objectives.get("standing", {})
+		var st_need: String = standing.get("need_type", "")
+		if TattooSystem.is_seeking_tattoo(tattoos, character):
+			# Override the peacetime monk default / empty slot with SEEK_TATTOO. Respect a
+			# magistrate/lord-assigned standing (a non-ritual, non-seek standing).
+			if standing.is_empty() or st_need == "PERFORM_RITUAL" or st_need == "SEEK_TATTOO":
+				if not objectives_map.has(char_id):
+					objectives_map[char_id] = {}
+				# Stamp the seasons-at-rank urgency each pass so resolve_goal can escalate
+				# SEEK_TATTOO above a self-selected primary at maximum urgency (s57.25.7).
+				var urg: int = 0
+				if ic_day >= 0:
+					urg = TattooSystem.seasons_at_rank_unfilled(character, ic_day)
+				objectives_map[char_id]["standing"] = {
+					"need_type": "SEEK_TATTOO", "priority": 3, "auto_assigned": true,
+					"urgency_seasons": urg,
+				}
+		elif st_need == "SEEK_TATTOO":
+			# No longer seeking (filled or BLOCKED) -> revert to the monk default.
+			objectives_map[char_id]["standing"] = {
+				"need_type": "PERFORM_RITUAL", "priority": 3, "auto_assigned": true,
+			}
+
+
+static func _assign_grant_tattoo_standing_objectives(
+	characters: Array,
+	objectives_map: Dictionary,
+	world_states: Dictionary,
+	tattoos: Array,
+	character_province_map: Dictionary,
+	provinces: Dictionary,
+	dice: DiceEngine,
+	current_ic_day: int,
+) -> void:
+	# Group active seekers (in Togashi territory) by physical_location, with urgency.
+	var seekers_by_loc: Dictionary = {}
+	for character: L5RCharacterData in characters:
+		if character.is_pc or CharacterStats.is_dead(character):
+			continue
+		if not TattooSystem.is_togashi_school(character.school):
+			continue
+		if character.physical_location.is_empty():
+			continue
+		if not TattooSystem.is_seeking_tattoo(tattoos, character):
+			continue
+		if not _in_togashi_territory(character.character_id, character_province_map, provinces):
+			continue
+		var urg: int = TattooSystem.seasons_at_rank_unfilled(character, current_ic_day)
+		seekers_by_loc.get_or_add(character.physical_location, []).append(
+			{"char": character, "urg": urg}
+		)
+	for elder: L5RCharacterData in characters:
+		if elder.is_pc or CharacterStats.is_dead(elder):
+			continue
+		# Qualified elder: Togashi school, Rank 3+, Artisan: Tattooing 3+ (s57.25.7).
+		if not TattooSystem.is_togashi_school(elder.school):
+			continue
+		var eid: int = elder.character_id
+		var qualified: bool = elder.school_rank >= 3 \
+				and elder.skills.get("Artisan: Tattooing", 0) >= 3
+		var loc: String = elder.physical_location
+		var best: L5RCharacterData = null
+		if qualified and not loc.is_empty() and seekers_by_loc.has(loc) \
+				and _in_togashi_territory(eid, character_province_map, provinces):
+			# Highest-urgency co-located seeker (GDD: elder prioritises most-seasons-unfilled);
+			# deterministic tie-break by lowest character_id. Exclude the elder themselves.
+			var best_urg: int = -1
+			for entry: Dictionary in seekers_by_loc[loc]:
+				var s: L5RCharacterData = entry["char"]
+				if s.character_id == eid:
+					continue
+				var u: int = entry["urg"]
+				if u > best_urg or (u == best_urg and (best == null or s.character_id < best.character_id)):
+					best = s
+					best_urg = u
+		var granting: bool = false
+		if best != null:
+			var avail: Array = TattooSystem.get_available_locations(tattoos, best.character_id, false)
+			var ability: int = TattooSystem.draw_ability_for_grant(tattoos, best.character_id, dice)
+			if not avail.is_empty() and ability != Enums.TattooAbility.NONE:
+				granting = true
+				# Assign GRANT_TATTOO (overriding the elder's monk default / their own SEEK) + inject
+				# the resolved grant target for _populate_action_metadata to build APPLY_TATTOO.
+				var objs: Dictionary = objectives_map.get(eid, {})
+				var st_need: String = (objs.get("standing", {}) as Dictionary).get("need_type", "")
+				if objs.get("standing", {}).is_empty() or st_need in ["PERFORM_RITUAL", "SEEK_TATTOO"]:
+					if not objectives_map.has(eid):
+						objectives_map[eid] = {}
+					objectives_map[eid]["standing"] = {
+						"need_type": "GRANT_TATTOO", "priority": 3, "auto_assigned": true,
+					}
+				var ws: Dictionary = world_states.get(eid, {})
+				if not (ws is Dictionary):
+					ws = {}
+				ws["grant_tattoo_target"] = {
+					"recipient_id": best.character_id,
+					"body_location": avail[0],
+					"ability": ability,
+				}
+				world_states[eid] = ws
+		if not granting:
+			# No co-located seeker -> revert a stale GRANT_TATTOO standing to the monk default.
+			var objs2: Dictionary = objectives_map.get(eid, {})
+			if (objs2.get("standing", {}) as Dictionary).get("need_type", "") == "GRANT_TATTOO":
+				objectives_map[eid]["standing"] = {
+					"need_type": "PERFORM_RITUAL", "priority": 3, "auto_assigned": true,
+				}
 
 
 # -- Witch-Hunter Standing Need (s11.3.5) --------------------------------------
@@ -9457,13 +10382,9 @@ static func _assign_taisa_sortie_standing_objectives(
 			ss = (province as ProvinceData).shadowlands_strength
 
 		var garrison_above_minimum: bool = not WallSystem.is_garrison_below_minimum(tower.garrison_pu)
-		# Jade-critical threshold mirrors _set_wall_tower_context_flags: enough jade
-		# for one Small sortie's allocation (s2.4.15).
-		var min_jade: float = float(
-			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
-			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
-		)
-		var jade_critical: bool = tower.jade_stockpile <= min_jade
+		# Jade-critical threshold: enough jade for one Small sortie's allocation
+		# (s2.4.11 D5 / s2.4.15). Centralized in WallSystem.
+		var jade_critical: bool = WallSystem.is_jade_critical(tower.jade_stockpile, tower.garrison_pu)
 
 		var validation: Dictionary = WallSystem.validate_sortie(
 			ss, tower.wall_si, garrison_above_minimum, jade_critical, false,
@@ -9641,6 +10562,392 @@ static func _process_shireikan_troop_redeployment(
 			})
 
 	return results
+
+
+# -- Wall Jade Resupply — s2.4.11 D5 / s2.4.13 D7 / s2.4.14 D7 / s2.4.15 ------
+# Closes the sortie-loop gap: without a refill pipeline a Tower permanently
+# stops sortieing once its jade depletes. Per s2.4.13 D7 the Shireikan "retains
+# a jade reserve" and, when a Tower flags jade critical, "draw[s] from the
+# Shireikan's jade reserve immediately". Per s2.4.14 D7 the Champion tops the
+# supply chain by purchasing jade from mines each season. No mine/forced-sale/
+# clan-jade subsystem exists yet (s2.4.14 map/economy dependency), so the
+# Champion's mine-purchasing output is abstracted into a fixed per-half seasonal
+# delivery to each Shireikan's reserve — the SAME abstraction the Ashigaru auto-
+# flow uses for garrison_pu (s2.4.12: a structural per-season flow, no lord
+# action). Distribution priority follows s2.4.13 D7: critical Towers first (no
+# deliberation), then SS Medium/High (active sortie fronts), then the rest —
+# each refilled to the LOCKED routine target (Small + Medium sortie coverage,
+# s2.4.11 D5). Runs seasonally, alongside the troop redeployment.
+#
+# PROVISIONAL (GDD leaves reserve sizing "dynamic … not a fixed formula",
+# s2.4.13 D3): the per-season delivery and the reserve cap. Sized from the
+# GDD-LOCKED routine target — one half is 6 Towers, so a delivery that can refill
+# all six to routine keeps the loop alive, and the cap holds ~two seasons of that
+# (matching the Champion's s2.4.14 D7 "two full seasons of Wall consumption"
+# stockpile target, adapted per-half). garrison_pu is itself PROVISIONAL, so
+# these re-tune together in Phase 3.
+const SHIREIKAN_JADE_DELIVERY_PER_SEASON: float = 12.0
+const SHIREIKAN_JADE_RESERVE_CAP: float = 24.0
+static func _process_wall_jade_resupply(
+	characters: Array,
+	settlements: Array,
+	provinces: Dictionary,
+) -> Array:
+	var results: Array = []
+
+	var towers_by_number: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER and s.wall_tower_number >= 1:
+			towers_by_number[s.wall_tower_number] = s
+	if towers_by_number.is_empty():
+		return results
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.military_rank != Enums.MilitaryRank.SHIREIKAN:
+			continue
+
+		# Seat at Tower 3 → Southern half (1-6); Tower 10 → Northern half (7-12).
+		var seat: int = -1
+		for num: int in towers_by_number:
+			if str((towers_by_number[num] as SettlementData).settlement_id) == character.physical_location:
+				seat = num
+				break
+		var half: Array = range(1, 7) if seat <= 6 else range(7, 13)
+
+		var half_towers: Array = []
+		for num: int in half:
+			if towers_by_number.has(num):
+				half_towers.append(towers_by_number[num])
+
+		# Seasonal delivery from the (abstracted) Champion supply chain into the
+		# Shireikan's reserve, capped at a healthy level.
+		var reserve: float = float(character.supply_ledger.get("wall_jade_reserve", 0.0))
+		reserve = minf(SHIREIKAN_JADE_RESERVE_CAP, reserve + SHIREIKAN_JADE_DELIVERY_PER_SEASON)
+
+		# Order towers: critical first (no deliberation), then SS Medium/High
+		# active fronts, then the rest. Only towers below the routine target need
+		# a refill at all.
+		var needy: Array = []
+		for t: SettlementData in half_towers:
+			var target_jade: float = WallSystem.jade_routine_target(t.garrison_pu)
+			if t.jade_stockpile >= target_jade:
+				continue
+			var ss: int = 0
+			var prov: Variant = provinces.get(t.province_id, null)
+			if prov is ProvinceData:
+				ss = (prov as ProvinceData).shadowlands_strength
+			var crit: bool = WallSystem.is_jade_critical(t.jade_stockpile, t.garrison_pu)
+			var ss_tier: String = WallSystem.get_ss_tier(ss)
+			var active: bool = ss_tier == "medium" or ss_tier == "high"
+			# Priority rank: 0 critical, 1 active front, 2 routine top-up.
+			var rank: int = 2
+			if crit:
+				rank = 0
+			elif active:
+				rank = 1
+			needy.append({"tower": t, "rank": rank, "target": target_jade})
+		needy.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return int(a["rank"]) < int(b["rank"]))
+
+		for entry: Dictionary in needy:
+			if reserve <= 0.0:
+				break
+			var t: SettlementData = entry["tower"]
+			var target_jade: float = entry["target"]
+			var need: float = target_jade - t.jade_stockpile
+			if need <= 0.0:
+				continue
+			var give: float = minf(need, reserve)
+			t.jade_stockpile += give
+			reserve -= give
+			results.append({
+				"shireikan_id": character.character_id,
+				"tower": t.wall_tower_number,
+				"jade_delivered": give,
+				"was_critical": entry["rank"] == 0,
+			})
+
+		character.supply_ledger["wall_jade_reserve"] = reserve
+
+	return results
+
+
+# -- Wall Jade Petal Tea — s2.4.11 D6 / s2.4.13 D8 / s2.4.15 ------------------
+# Tea manages the Taint of the named characters STATIONED at a Tower (the
+# Taisa / Kaiu Engineer / Kuni Shugenja / Shireikan roster — the garrison the
+# sim actually tracks Taint for; abstract garrison_pu has no per-soldier Taint,
+# s2.4.11 D7 Phase-3 note). Two seasonal passes, mirroring jade:
+#   • _process_wall_tea_resupply — each Shireikan refills below-target Towers in
+#     their half from a Tea reserve (supply_ledger["wall_tea_reserve"]), priority
+#     by Tainted-character concentration (s2.4.13 D8). The Brotherhood monastery
+#     cultivation chain (s2.4.15, PTL-gated) isn't modelled, so its output is
+#     abstracted into a fixed per-half seasonal delivery — the same abstraction
+#     jade/garrison_pu use.
+#   • _process_wall_tea_consumption — each Tainted stationed character consumes
+#     one dose/season; if the stockpile can't cover all, RATION highest Taint
+#     Rank first (s2.4.11 D6 / s2.4.15). A dosed character is managed until the
+#     next season boundary (Taint growth suppressed by the periodic-roll skip);
+#     an undosed Tainted character makes unassisted growth rolls.
+# PROVISIONAL (s2.4.13 D3 dynamic reserve sizing): delivery + cap, sized from the
+# 4-char command roster × 6 Towers / half.
+const SHIREIKAN_TEA_DELIVERY_PER_SEASON: float = 12.0
+const SHIREIKAN_TEA_RESERVE_CAP: float = 24.0
+
+## Days from ic_day until the next season boundary (Tea management window).
+static func _days_until_next_season(ic_day: int) -> int:
+	var doy: int = ic_day % TimeSystem.IC_DAYS_PER_YEAR
+	for b: int in TimeSystem.SEASON_BOUNDARIES:
+		if b > doy:
+			return b - doy
+	return TimeSystem.IC_DAYS_PER_YEAR - doy
+
+
+## Count Tainted (Rank 1+) living named characters stationed at each Tower.
+## Returns settlement_id (String) -> Array[L5RCharacterData] sorted by Taint desc.
+static func _wall_tainted_by_tower(characters: Array, wall_towers: Dictionary) -> Dictionary:
+	var by_tower: Dictionary = {}
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.taint < 1.0:
+			continue
+		var loc: String = character.physical_location
+		if not wall_towers.has(loc):
+			continue
+		if not by_tower.has(loc):
+			by_tower[loc] = []
+		(by_tower[loc] as Array).append(character)
+	for loc: String in by_tower:
+		(by_tower[loc] as Array).sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+			return a.taint > b.taint)
+	return by_tower
+
+
+static func _process_wall_tea_resupply(
+	characters: Array,
+	settlements: Array,
+) -> Array:
+	var results: Array = []
+
+	var towers_by_number: Dictionary = {}
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER and s.wall_tower_number >= 1:
+			towers_by_number[s.wall_tower_number] = s
+			wall_towers[str(s.settlement_id)] = s
+	if towers_by_number.is_empty():
+		return results
+
+	var tainted: Dictionary = _wall_tainted_by_tower(characters, wall_towers)
+
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		if character.military_rank != Enums.MilitaryRank.SHIREIKAN:
+			continue
+
+		var seat: int = -1
+		for num: int in towers_by_number:
+			if str((towers_by_number[num] as SettlementData).settlement_id) == character.physical_location:
+				seat = num
+				break
+		var half: Array = range(1, 7) if seat <= 6 else range(7, 13)
+
+		var half_towers: Array = []
+		for num: int in half:
+			if towers_by_number.has(num):
+				half_towers.append(towers_by_number[num])
+
+		var reserve: float = float(character.supply_ledger.get("wall_tea_reserve", 0.0))
+		reserve = minf(SHIREIKAN_TEA_RESERVE_CAP, reserve + SHIREIKAN_TEA_DELIVERY_PER_SEASON)
+
+		# Target Tea per Tower = one season of coverage for its Tainted count
+		# (s2.4.11 D6). Higher Tainted concentration = higher priority (s2.4.13 D8).
+		var needy: Array = []
+		for t: SettlementData in half_towers:
+			var count: int = (tainted.get(str(t.settlement_id), []) as Array).size()
+			if count == 0:
+				continue
+			var target_tea: float = float(count)
+			if t.tea_stockpile >= target_tea:
+				continue
+			needy.append({"tower": t, "count": count, "target": target_tea})
+		needy.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return int(a["count"]) > int(b["count"]))
+
+		for entry: Dictionary in needy:
+			if reserve <= 0.0:
+				break
+			var t: SettlementData = entry["tower"]
+			var need: float = float(entry["target"]) - t.tea_stockpile
+			if need <= 0.0:
+				continue
+			var give: float = minf(need, reserve)
+			t.tea_stockpile += give
+			reserve -= give
+			results.append({
+				"shireikan_id": character.character_id,
+				"tower": t.wall_tower_number,
+				"tea_delivered": give,
+			})
+
+		character.supply_ledger["wall_tea_reserve"] = reserve
+
+	return results
+
+
+static func _process_wall_tea_consumption(
+	characters: Array,
+	settlements: Array,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_towers[str(s.settlement_id)] = s
+	if wall_towers.is_empty():
+		return results
+
+	var tainted: Dictionary = _wall_tainted_by_tower(characters, wall_towers)
+	var manage_until: int = ic_day + _days_until_next_season(ic_day)
+
+	for loc: String in tainted:
+		var tower: SettlementData = wall_towers[loc] as SettlementData
+		var members: Array = tainted[loc]  # already sorted highest Taint first
+		var dosed: int = 0
+		var without: Array = []
+		for ch: L5RCharacterData in members:
+			if tower.tea_stockpile >= 1.0:
+				tower.tea_stockpile -= 1.0
+				ch.tea_managed_until_ic_day = manage_until  # managed this season
+				dosed += 1
+			else:
+				# Ration exhausted — this (lower-Taint) member goes without and
+				# makes unassisted growth rolls (clear any stale management).
+				ch.tea_managed_until_ic_day = -1
+				without.append(ch.character_id)
+		results.append({
+			"tower": (tower.wall_tower_number if tower.wall_tower_number >= 1 else -1),
+			"tainted": members.size(),
+			"dosed": dosed,
+			"went_without": without,
+			"tea_shortage": not without.is_empty(),
+		})
+	return results
+
+
+# -- Wall Garrison Taint Watch — s2.4.11 D7 / s2.4.15 (removal threshold) -----
+# Each season the stationed Kuni assesses the named garrison. Taint Rank 4
+# triggers immediate removal from the garrison (s2.4.15 removal threshold —
+# LOCKED, pre-emptive Kuni doctrine, autonomous Taisa action). A named Rank-4
+# character is removed off the Wall for management (the GDD's first, non-lethal
+# option: "sent to a Brotherhood monastery for management") — relocated to a
+# same-clan off-Wall settlement (a monastery/temple/shinden if one exists, else
+# any inland settlement) and detached from the Wall command hierarchy. The
+# assessment REQUIRES a living Kuni (Shugenja or Witch-Hunter) stationed at the
+# Tower (s2.4.11 D7: assessment "can be performed by either a Kuni Shugenja or a
+# Kuni Witch Hunter"); a Tower with no Kuni is operationally blind and performs
+# no removal that season.
+const WALL_TAINT_REMOVAL_RANK: int = 4  # s2.4.15 removal threshold — LOCKED
+static func _process_wall_taint_removal(
+	characters: Array,
+	settlements: Array,
+	provinces: Dictionary,
+) -> Array:
+	var results: Array = []
+
+	var wall_towers: Dictionary = {}
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			wall_towers[str(s.settlement_id)] = s
+	if wall_towers.is_empty():
+		return results
+
+	# Living named characters stationed at each Tower, and whether a Kuni is present.
+	var stationed: Dictionary = {}   # tower loc (String) -> Array[L5RCharacterData]
+	var has_kuni: Dictionary = {}    # tower loc (String) -> bool
+	for character: L5RCharacterData in characters:
+		if CharacterStats.is_dead(character):
+			continue
+		var loc: String = character.physical_location
+		if not wall_towers.has(loc):
+			continue
+		if not stationed.has(loc):
+			stationed[loc] = []
+			has_kuni[loc] = false
+		(stationed[loc] as Array).append(character)
+		if _is_kuni_taint_assessor(character):
+			has_kuni[loc] = true
+
+	for loc: String in stationed:
+		if not bool(has_kuni[loc]):
+			continue  # no Kuni → no assessment this season (operationally blind)
+		var to_remove: Array = []
+		for ch: L5RCharacterData in stationed[loc]:
+			if MutationSystem.get_taint_rank(ch.taint) >= WALL_TAINT_REMOVAL_RANK:
+				to_remove.append(ch)
+		if to_remove.is_empty():
+			continue
+		var tower: SettlementData = wall_towers[loc] as SettlementData
+		var dest: int = _find_clan_management_settlement(settlements, provinces, tower.province_id)
+		for ch: L5RCharacterData in to_remove:
+			# Detach from the Wall garrison and relocate off the Wall for management.
+			ch.operational_superior_id = -1
+			ch.tea_managed_until_ic_day = -1
+			if dest >= 0:
+				ch.physical_location = str(dest)
+			results.append({
+				"tower": (tower.wall_tower_number if tower.wall_tower_number >= 1 else -1),
+				"removed_id": ch.character_id,
+				"taint_rank": MutationSystem.get_taint_rank(ch.taint),
+				"relocated_to": dest,
+			})
+	return results
+
+
+## A Kuni capable of assessing garrison Taint (s2.4.11 D7): a Kuni Shugenja or a
+## Kuni Witch-Hunter. Uses the same family/school signal as the s11.3.5 hunters.
+static func _is_kuni_taint_assessor(character: L5RCharacterData) -> bool:
+	if character.school == "Kuni Shugenja":
+		return true
+	if character.family == "Kuni" and (
+		"Witch-Hunter" in character.school or "Witch Hunter" in character.school
+	):
+		return true
+	return _is_kuni_witch_hunter(character)
+
+
+## First same-clan off-Wall settlement to receive a removed Rank-4 warrior for
+## management: prefer a religious house (monastery/temple/shinden), else any
+## non-Wall settlement in the clan's territory. Returns settlement_id or -1.
+static func _find_clan_management_settlement(
+	settlements: Array,
+	provinces: Dictionary,
+	tower_province_id: int,
+) -> int:
+	var clan: String = ""
+	var tprov: Variant = provinces.get(tower_province_id, null)
+	if tprov is ProvinceData:
+		clan = (tprov as ProvinceData).clan
+	if clan.is_empty():
+		return -1
+	var fallback: int = -1
+	for s: SettlementData in settlements:
+		if s.settlement_type == Enums.SettlementType.WALL_TOWER:
+			continue
+		var sprov: Variant = provinces.get(s.province_id, null)
+		if not (sprov is ProvinceData) or (sprov as ProvinceData).clan != clan:
+			continue
+		match s.settlement_type:
+			Enums.SettlementType.MONASTERY, Enums.SettlementType.TEMPLE, Enums.SettlementType.SHINDEN:
+				return s.settlement_id
+		if fallback < 0:
+			fallback = s.settlement_id
+	return fallback
 
 
 # -- ARTISTIC_EXPRESSION Standing Objective Assignment (s49) -------------------
@@ -10267,7 +11574,345 @@ static func _check_alibi_for_target(
 	return {}
 
 
+# -- Treason Detection & Evidence (s11.3.8) ------------------------------------
+# The DOWNSTREAM treason pipeline (ConvictionProcessor: authority chain, defense
+# hearing with Honor-weighted testimony, acquittal + false-accusation penalty,
+# capital sentencing + Tier-2 topic + seppuku offer) has been wired since the
+# legal pass — but NOTHING produced a TREASON CrimeRecord or accumulated the
+# s11.3.8b evidence signals, so treason never entered the pipeline. This is the
+# missing upstream.
+#
+# Truth layer (s11.3.8f LOCKED: "Kolat membership constitutes treason"): every
+# living conscious Kolat member (kolat_sect != NONE or is_kolat_master) with a
+# living lord is committing treason — the system always knows (the CrimeRecord
+# world-truth convention). Dormant Dream sleepers are excluded (unwitting
+# assets, s54.7c). Detection layer: the s11.3.8a signals accumulate the LOCKED
+# evidence weights on the suspect's LegalCaseEntry; the first signal opens the
+# investigation ("the lord … notices the pattern and assigns an investigation");
+# the accusation fires at the LOCKED threshold 40, gated after an acquittal by
+# the s11.3.8c political shield (+20 new evidence, REACCUSATION_NEW_EVIDENCE_MIN;
+# the halved evidence carries over — "halved, not zeroed").
+#
+# Signals wired (observable state only — evidence NEVER reads Kolat truth):
+#   • Signal 1 — objective stall: lord-assigned primary with
+#     seasons_without_progress >= 1 (s55.29 tracking) → +5 per season.
+#   • Signal 2 — disposition anomaly: the LORD's OWN intelligence
+#     (disposition_toward knowledge entries from the PROBE/READ_CHARACTER/
+#     informant writebacks) shows the vassal at Friend+ (>= +31, s12.2) toward a
+#     character the lord holds at Enemy or worse (<= -31, s12.2) → +8, deduped
+#     per (vassal, enemy) pair.
+#   • Signal 5 — co-conspirator testimony: on a treason conviction, the
+#     convict's handler (kolat_superior_id — s11.3.8f compartmentalization:
+#     "typically their handler") is named per the convicting lord's personality
+#     (should_name_co_conspirators, already computed by ConvictionProcessor):
+#     named publicly → +45 hard evidence on the handler; kept private → the lord
+#     records a treason_suspect intelligence entry (quiet surveillance).
+# DEFERRED signals (no clean observable producer, not invented): intercepted-
+# letter hostile intent (letters carry no hostility classification), confession
+# via PROBE (no treason SecretData exists), suspicious meeting (zone_event_log
+# is the ASCII layer), voting-against-lord / failed-order (needs per-order
+# outcome attribution). LIMITATION: evidence accumulates only against real
+# traitors (an innocent has no world-truth CrimeRecord to attach a case to);
+# the false-accusation machinery still fires when a guilty vassal WINS the
+# hearing (acquittal → lord honor loss — the political shield).
+
+static func _is_conscious_kolat_traitor(
+	c: L5RCharacterData,
+	characters_by_id: Dictionary,
+) -> bool:
+	if c == null or CharacterStats.is_dead(c) or c.is_pc:
+		return false
+	if c.kolat_sect == Enums.KolatSect.NONE and not c.is_kolat_master:
+		return false
+	if c.lord_id < 0:
+		return false
+	var lord: L5RCharacterData = characters_by_id.get(c.lord_id)
+	return lord != null and not CharacterStats.is_dead(lord)
+
+
+## The live (unconvicted) TREASON record for a perpetrator, or null.
+static func _find_treason_record(crime_records: Array, perpetrator_id: int) -> CrimeRecord:
+	for r: CrimeRecord in crime_records:
+		if r.crime_type == Enums.CrimeType.TREASON \
+				and r.perpetrator_id == perpetrator_id \
+				and r.ic_day_conviction < 0:
+			return r
+	return null
+
+
+static func _ensure_treason_record(
+	traitor: L5RCharacterData,
+	crime_records: Array,
+	next_case_id: Array,
+	ic_day: int,
+) -> CrimeRecord:
+	var existing: CrimeRecord = _find_treason_record(crime_records, traitor.character_id)
+	if existing != null:
+		return existing
+	var record := CrimeRecord.new()
+	record.case_id = next_case_id[0]
+	next_case_id[0] += 1
+	record.crime_type = Enums.CrimeType.TREASON
+	record.severity = Enums.CrimeSeverity.CAPITAL  # s11.3.8: "Capital. Always."
+	record.perpetrator_id = traitor.character_id
+	record.victim_id = traitor.lord_id  # the betrayed lord
+	record.location = traitor.physical_location
+	record.ic_day_committed = ic_day  # ongoing crime; recorded when the record opens
+	record.legal_status = Enums.LegalStatus.NONE  # undiscovered until a signal fires
+	crime_records.append(record)
+	return record
+
+
+## The suspect's ACTIVE case entry for this record — creates one (opening the
+## investigation) if none. After an acquittal, a NEW case is opened seeded with
+## the halved carry-over evidence (s11.3.8c: "halved, not zeroed").
+static func _treason_case_for(
+	record: CrimeRecord,
+	traitor: L5RCharacterData,
+	ic_day: int,
+) -> LegalCaseEntry:
+	for entry: Variant in traitor.legal_cases:
+		if not entry is LegalCaseEntry:
+			continue
+		var e: LegalCaseEntry = entry as LegalCaseEntry
+		if e.crime_record_id != record.case_id:
+			continue
+		if e.state in [Enums.LegalStatus.ACQUITTED, Enums.LegalStatus.DECREED_GUILTY, Enums.LegalStatus.PARDONED]:
+			continue
+		return e
+	var was_acquitted: bool = record.legal_status == Enums.LegalStatus.ACQUITTED
+	var new_entry: LegalCaseEntry = LegalStatusSystem.open_case(traitor, record.case_id, true)
+	if was_acquitted:
+		# Carry over the halved evidence; the accusation gate then requires +20
+		# NEW evidence past this baseline (the s11.3.8c political shield).
+		new_entry.evidence_total = record.evidence_total
+		new_entry.evidence_items.append({
+			"type": "acquittal_carryover",
+			"weight": record.evidence_total,
+			"ic_day": ic_day,
+			"hard": false,
+		})
+	record.legal_status = Enums.LegalStatus.UNDER_INVESTIGATION
+	return new_entry
+
+
+static func _treason_acquittal_carryover(entry: LegalCaseEntry) -> int:
+	for item: Variant in entry.evidence_items:
+		if item is Dictionary and str((item as Dictionary).get("type", "")) == "acquittal_carryover":
+			return int((item as Dictionary).get("weight", 0))
+	return 0
+
+
+## Add one signal's evidence and apply the accusation gate (threshold 40; after
+## an acquittal additionally +20 new evidence). `meta` is merged into the
+## evidence item (e.g. the anomaly pair for dedup).
+static func _add_treason_evidence_gated(
+	record: CrimeRecord,
+	entry: LegalCaseEntry,
+	evidence_type: TreasonSystem.TreasonEvidenceType,
+	ic_day: int,
+	meta: Dictionary = {},
+) -> Dictionary:
+	var res: Dictionary = TreasonSystem.add_treason_evidence(entry, evidence_type, ic_day)
+	if not meta.is_empty() and not entry.evidence_items.is_empty():
+		(entry.evidence_items[entry.evidence_items.size() - 1] as Dictionary).merge(meta)
+	record.evidence_total = entry.evidence_total
+
+	var accused: bool = false
+	if record.legal_status == Enums.LegalStatus.UNDER_INVESTIGATION \
+			and TreasonSystem.can_formally_accuse(entry):
+		var carry: int = _treason_acquittal_carryover(entry)
+		var reaccusation_ok: bool = carry <= 0 \
+			or (entry.evidence_total - carry) >= TreasonSystem.REACCUSATION_NEW_EVIDENCE_MIN
+		if reaccusation_ok:
+			record.legal_status = Enums.LegalStatus.ACCUSED
+			LegalStatusSystem.transition(entry, Enums.LegalStatus.ACCUSED, ic_day)
+			accused = true
+	res["accused"] = accused
+	return res
+
+
+## Seasonal s11.3.8a signal pass. Returns per-signal result dicts.
+static func _process_treason_signals(
+	characters: Array,
+	characters_by_id: Dictionary,
+	crime_records: Array,
+	next_case_id: Array,
+	objectives_map: Dictionary,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for c: Variant in characters:
+		if not c is L5RCharacterData:
+			continue
+		var traitor: L5RCharacterData = c as L5RCharacterData
+		if not _is_conscious_kolat_traitor(traitor, characters_by_id):
+			continue
+		var lord: L5RCharacterData = characters_by_id.get(traitor.lord_id)
+
+		# -- Signal 1: lord-assigned objective stall (+5/season) -----------------
+		var stall_fired: bool = false
+		var primary: Dictionary = objectives_map.get(traitor.character_id, {}).get("primary", {})
+		if int(primary.get("assigned_by", -1)) >= 0 \
+				and int(primary.get("seasons_without_progress", 0)) >= 1:
+			stall_fired = true
+
+		# -- Signal 2: disposition anomaly from the lord's intelligence (+8) -----
+		# The lord's PROBE/READ_CHARACTER/informant knowledge shows the vassal at
+		# Friend+ toward a character the lord holds at Enemy or worse (s12.2 tiers).
+		var anomalies: Array = []
+		for k: Variant in lord.knowledge_pool:
+			if not k is KnowledgeEntry:
+				continue
+			var ke: KnowledgeEntry = k as KnowledgeEntry
+			if ke.entry_type != "disposition_toward":
+				continue
+			if int(ke.data.get("target_character_id", -1)) != traitor.character_id:
+				continue
+			var toward: int = int(ke.data.get("toward_character_id", ke.data.get("toward_id", -1)))
+			if toward < 0 or toward == lord.character_id or toward == traitor.character_id:
+				continue
+			if int(ke.data.get("disposition", 0)) < 31:  # Friend tier onset (s12.2)
+				continue
+			if int(lord.disposition_values.get(toward, 0)) > -31:  # Enemy tier onset (s12.2)
+				continue
+			anomalies.append(toward)
+
+		if not stall_fired and anomalies.is_empty():
+			continue
+
+		var record: CrimeRecord = _ensure_treason_record(traitor, crime_records, next_case_id, ic_day)
+		if record.legal_status == Enums.LegalStatus.ACCUSED \
+				or record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+			continue  # already in the conviction pipeline
+		var entry: LegalCaseEntry = _treason_case_for(record, traitor, ic_day)
+
+		if stall_fired:
+			var r1: Dictionary = _add_treason_evidence_gated(
+				record, entry, TreasonSystem.TreasonEvidenceType.OBJECTIVE_STALL, ic_day
+			)
+			results.append({"signal": "objective_stall", "suspect_id": traitor.character_id,
+				"evidence_total": entry.evidence_total, "accused": r1["accused"]})
+
+		for enemy_id: int in anomalies:
+			# Dedup: one anomaly item per (vassal, enemy) pair, ever.
+			var seen: bool = false
+			for item: Variant in entry.evidence_items:
+				if item is Dictionary \
+						and int((item as Dictionary).get("type", -1)) == TreasonSystem.TreasonEvidenceType.DISPOSITION_ANOMALY \
+						and int((item as Dictionary).get("anomaly_toward", -1)) == enemy_id:
+					seen = true
+					break
+			if seen:
+				continue
+			var r2: Dictionary = _add_treason_evidence_gated(
+				record, entry, TreasonSystem.TreasonEvidenceType.DISPOSITION_ANOMALY,
+				ic_day, {"anomaly_toward": enemy_id}
+			)
+			results.append({"signal": "disposition_anomaly", "suspect_id": traitor.character_id,
+				"toward": enemy_id, "evidence_total": entry.evidence_total, "accused": r2["accused"]})
+	return results
+
+
+## Signal 5 — post-conviction co-conspirator naming (s11.3.8e/f). Consumes the
+## naming decision ConvictionProcessor already computed. The convict's known
+## contact is their handler (kolat_superior_id — compartmentalization).
+static func _process_treason_coconspirator_naming(
+	conviction_results: Array,
+	crime_records: Array,
+	characters_by_id: Dictionary,
+	next_case_id: Array,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	for cv: Variant in conviction_results:
+		if not cv is Dictionary:
+			continue
+		var conv: Dictionary = cv as Dictionary
+		if conv.get("outcome", "") != "convicted":
+			continue
+		if int(conv.get("crime_type", -1)) != Enums.CrimeType.TREASON:
+			continue
+		var convicted: L5RCharacterData = characters_by_id.get(int(conv.get("accused_id", -1)))
+		if convicted == null:
+			continue
+		var superior: L5RCharacterData = characters_by_id.get(convicted.kolat_superior_id)
+		if superior == null or CharacterStats.is_dead(superior):
+			continue
+		if not _is_conscious_kolat_traitor(superior, characters_by_id):
+			continue  # handler must themselves be a lord-bound conscious member
+
+		if bool(conv.get("co_conspirators_named", false)):
+			# Named publicly → hard evidence (+45) on the handler; network blown open.
+			var record: CrimeRecord = _ensure_treason_record(
+				superior, crime_records, next_case_id, ic_day
+			)
+			if record.legal_status == Enums.LegalStatus.ACCUSED \
+					or record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
+				continue
+			var entry: LegalCaseEntry = _treason_case_for(record, superior, ic_day)
+			var r: Dictionary = _add_treason_evidence_gated(
+				record, entry, TreasonSystem.TreasonEvidenceType.CO_CONSPIRATOR_TESTIMONY,
+				ic_day, {"named_by": convicted.character_id}
+			)
+			results.append({"named_publicly": true, "co_conspirator_id": superior.character_id,
+				"evidence_total": entry.evidence_total, "accused": r["accused"]})
+		else:
+			# Kept private → the convicting lord records quiet intelligence
+			# ("names stay in lord's IntelDB, quiet investigation continues").
+			var lord: L5RCharacterData = characters_by_id.get(convicted.lord_id)
+			if lord == null or CharacterStats.is_dead(lord):
+				continue
+			var already: bool = false
+			for k: Variant in lord.knowledge_pool:
+				if k is KnowledgeEntry and (k as KnowledgeEntry).entry_type == "treason_suspect" \
+						and int((k as KnowledgeEntry).data.get("target_character_id", -1)) == superior.character_id:
+					already = true
+					break
+			if not already:
+				var ke := KnowledgeEntry.new()
+				ke.source = Enums.KnowledgeSource.TESTIMONY
+				ke.entry_type = "treason_suspect"
+				ke.data = {
+					"target_character_id": superior.character_id,
+					"named_by": convicted.character_id,
+					"ic_day": ic_day,
+				}
+				InformationSystem.add_knowledge(lord, ke)
+			results.append({"named_publicly": false, "co_conspirator_id": superior.character_id,
+				"intel_holder_id": convicted.lord_id})
+	return results
+
+
 # -- Lord Death / Orphaned Objectives (s55.33) --------------------------------
+
+## Build the succession TopicData from a SuccessionData (shared by the generic
+## clan path and the Emperor path). Consumes a next_topic_id counter.
+static func _build_succession_topic(
+	succession: SuccessionData,
+	is_disputed: bool,
+	current_tick: int,
+	next_topic_id: Array,
+) -> TopicData:
+	var topic_dict: Dictionary = SuccessionSystem.generate_succession_topic(
+		succession, is_disputed
+	)
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = topic_dict.get("slug", "")
+	topic.title = topic_dict.get("title", "Succession")
+	topic.momentum = topic_dict.get("momentum", 10.0)
+	topic.topic_type = "succession"
+	topic.variant = topic_dict.get("variant", "clean")
+	topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
+	topic.category = topic_dict.get("category", TopicData.Category.POLITICAL)
+	topic.ic_day_created = current_tick
+	var subject_ids: Array = topic_dict.get("subject_ids", [])
+	if not subject_ids.is_empty():
+		topic.subject_character_id = subject_ids[0]
+	return topic
+
 
 static func _process_lord_deaths(
 	death_events: Array,
@@ -10331,6 +11976,54 @@ static func _process_lord_deaths(
 		var suspicious: bool = event.get("suspicious_death", false)
 		var cause: SuccessionData.VacancyCause = SuccessionData.VacancyCause.DEATH
 
+		# The Emperor's death routes to Imperial succession (s22.5 — designated
+		# heir → eldest child → crisis), NOT the generic clan path: no vassal
+		# confirms the Emperor. Detected by role, since no death-event producer
+		# sets position_tier (it defaults to PROVINCIAL_DAIMYO, so the dormant
+		# is_emperor_succession/evaluate_emperor_succession path never fired). The
+		# _process_successions writeback already installs the new emperor_id when a
+		# CONFIRMED succession's deceased held role EMPEROR — only this upstream
+		# routing was missing.
+		if deceased.role_position == RoleRegistry.EMPEROR:
+			var emp_succ := SuccessionSystem.trigger_succession(
+				deceased, cause, Enums.LordRank.IMPERIAL, current_tick, suspicious
+			)
+			emp_succ.succession_id = next_succession_id[0]
+			next_succession_id[0] += 1
+			var emp: Dictionary = SuccessionSystem.evaluate_emperor_succession(
+				deceased, characters_by_id
+			)
+			var emp_successor: int = int(emp.get("successor_id", -1))
+			var emp_crisis: bool = bool(emp.get("crisis", false))
+			if emp_successor >= 0:
+				emp_succ.candidate_ids.append(emp_successor)
+			# A clear heir/child is orderly; a crisis (no candidate) or a
+			# suspicious death is disputed — same clean/disputed logic the generic
+			# path uses (suspicious_death → not clean).
+			var emp_disputed: bool = emp_crisis or suspicious
+			if emp_disputed:
+				emp_succ.state = SuccessionData.SuccessionState.DISPUTED
+			var emp_topic := _build_succession_topic(
+				emp_succ, emp_disputed, current_tick, next_topic_id
+			)
+			active_topics.append(emp_topic)
+			active_successions.append(emp_succ)
+			if emp_successor >= 0 and not emp_disputed:
+				SuccessionSystem.confirm_successor(emp_succ, emp_successor)
+				successor_map[dead_lord_id] = emp_successor
+				var emp_chosen: L5RCharacterData = characters_by_id.get(emp_successor)
+				if emp_chosen != null:
+					SuccessionSystem.apply_successor_inheritance(emp_chosen, deceased)
+			all_results.append({
+				"emperor_succession": true,
+				"deceased_id": dead_lord_id,
+				"successor_id": emp_successor,
+				"crisis": emp_crisis,
+				"method": emp.get("method", ""),
+				"disputed": emp_disputed,
+			})
+			continue
+
 		if SuccessionSystem.is_phoenix_champion_succession(deceased.clan, position_tier):
 			continue
 		if SuccessionSystem.is_dragon_togashi_removal(deceased.clan, position_tier):
@@ -10359,27 +12052,17 @@ static func _process_lord_deaths(
 		var is_clean: bool = SuccessionSystem.is_clean_succession(
 			succession, candidates, confirming_disp
 		)
+		# s22.5 (LOCKED): route the canonical transition-duration arbiter (clean+high-disp -> 7 /
+		# clean -> 14 / disputed -> 60) and carry its value to the tick loop, which otherwise
+		# inlined a divergent copy that never reached the 7-tick fast path.
+		succession.transition_max_ticks = SuccessionSystem.get_transition_duration(
+			is_clean, confirming_disp
+		)
 
 		if not is_clean:
 			succession.state = SuccessionData.SuccessionState.DISPUTED
 
-		var topic_dict: Dictionary = SuccessionSystem.generate_succession_topic(
-			succession, not is_clean
-		)
-		var topic := TopicData.new()
-		topic.topic_id = next_topic_id[0]
-		next_topic_id[0] += 1
-		topic.slug = topic_dict.get("slug", "")
-		topic.title = topic_dict.get("title", "Succession")
-		topic.momentum = topic_dict.get("momentum", 10.0)
-		topic.topic_type = "succession"
-		topic.variant = topic_dict.get("variant", "clean")
-		topic.tier = topic_dict.get("tier", TopicData.Tier.TIER_4)
-		topic.category = topic_dict.get("category", TopicData.Category.POLITICAL)
-		topic.ic_day_created = current_tick
-		var subject_ids: Array = topic_dict.get("subject_ids", [])
-		if not subject_ids.is_empty():
-			topic.subject_character_id = subject_ids[0]
+		var topic := _build_succession_topic(succession, not is_clean, current_tick, next_topic_id)
 		active_topics.append(topic)
 
 		active_successions.append(succession)
@@ -10534,9 +12217,13 @@ static func _process_successions(
 		if succ.state == SuccessionData.SuccessionState.RESOLVED:
 			continue
 
-		var max_dur: int = SuccessionSystem.DISPUTED_MAX_TICKS
-		if succ.state == SuccessionData.SuccessionState.PENDING:
-			max_dur = SuccessionSystem.CLEAN_SUCCESSION_MAX_TICKS
+		# Use the canonical duration stamped at creation (s22.5 arbiter). Fallback for a succession
+		# created before this field existed / loaded from an old save: the prior inline behavior.
+		var max_dur: int = succ.transition_max_ticks
+		if max_dur < 0:
+			max_dur = SuccessionSystem.DISPUTED_MAX_TICKS
+			if succ.state == SuccessionData.SuccessionState.PENDING:
+				max_dur = SuccessionSystem.CLEAN_SUCCESSION_MAX_TICKS
 
 		var tick_result := SuccessionSystem.process_tick(succ, max_dur)
 		if tick_result["expired"]:
@@ -11804,10 +13491,47 @@ static func _run_strategic_reviews(
 	clans: Dictionary = {},
 	current_season: int = 0,
 	dice_engine: DiceEngine = null,
+	ic_day: int = -1,
 ) -> Array:
 	var results: Array = []
 	var emperor_id: int = int(world_states.get("emperor_id", -1))
 	var emperor_archetype: int = int(world_states.get("emperor_archetype", StrategicReview.EmperorArchetype.IRON))
+
+	# Inject the war-context keys StrategicReview.run_seasonal_review's evaluators read from the
+	# TOP-LEVEL world_states. These were NEVER set at top level -- active_wars / escalating_conflicts
+	# are stashed only on PER-CHARACTER sub-dicts (ws[char_id][...]), not the top-level dict passed
+	# to run_seasonal_review. So _evaluate_seek_peace (gated on `active_wars.is_empty()`) ALWAYS
+	# returned {} -- SEEK_PEACE was fully dead, even for JIN lords -- and _evaluate_war_readiness's
+	# primary (`active_wars`) and YU-virtue (`escalating_conflicts`) triggers never fired. That
+	# starved the Phoenix Council SIGN_TREATY / DEPLOY_GO_HATAMOTO vote flow (the Shiba Champion
+	# runs through this vassal path) and the Togashi war/peace directive-alignment check. Both
+	# values are lord-agnostic and already in scope -> injected once, erased after the loop.
+	# (military_readiness -- the war-readiness `elif` branch -- stays deferred: it needs an invented
+	# readiness metric, not a plain fact.)
+	# Inject the CONTEXT-DICT form (clan_a/clan_b keys), not raw WarData: the strategic evaluators
+	# only test .is_empty()/.size() (shape-agnostic), but the same top-level dict is passed on to the
+	# self-selection path where opportunity_scanner (`war if war is Dictionary else {}`) and
+	# objective_progress (`if war is Dictionary`) read clan_a/clan_b and SILENTLY no-op on raw WarData.
+	# wars_to_context_array also filters to is_active, matching the per-character `g_active_wars` form.
+	world_states["active_wars"] = WarSystem.wars_to_context_array(active_wars)
+	world_states["escalating_conflicts"] = _extract_escalating_conflicts(active_topics, active_wars)
+	# current_season (the int-enum param) is likewise read off the TOP-LEVEL world_state by the court
+	# evaluators (_evaluate_winter_court_host guards `!= AUTUMN`; _evaluate_call_court's WINTER +20
+	# bonus), but was only ever set per-character -- and there as a STRING season name, not the int
+	# enum the consumers compare against. So the Emperor could never host Winter Court through the
+	# strategic-review path and the WINTER call-court bonus never applied. Inject the int enum here.
+	world_states["current_season"] = current_season
+	# s55.10 Winter-Court HOST ROTATION: _evaluate_winter_court_host scores each clan by
+	# seasons-since-last-hosted = current_season_index - last_host_seasons[clan]. Both were phantom
+	# keys (zero producers), so the rotation term was a constant (0 - (-100) = 100, capped at 20) for
+	# EVERY clan and never differentiated — a clan that hosted last year scored the same as one that
+	# never has. current_season_index needs the MONOTONIC absolute season (only the cyclic
+	# current_season was injected) -> inject it here (erased after the loop). last_host_seasons is the
+	# persistent per-clan Winter-Court tracker written by _create_winter_court_from_directive on
+	# court creation; it lives at the top level (survives across ticks, not in the stale-key pass) and
+	# is read directly by the evaluator. No invented values -- the score weights are the evaluator's own.
+	if ic_day >= 0:
+		world_states["current_season_index"] = TimeSystem.get_absolute_season(ic_day)
 
 	for lord: L5RCharacterData in characters:
 		if CharacterStats.is_dead(lord):
@@ -11816,6 +13540,18 @@ static func _run_strategic_reviews(
 			continue
 		if not _is_lord_tier(lord):
 			continue
+		# s55.10 anti-duplicate-court guard: _evaluate_call_court reads `last_court_season` off the
+		# TOP-LEVEL world_state, but _track_court_called writes it ONLY on the lord's per-character
+		# sub-dict (world_states[lord_id]["last_court_season"]). So the top-level read was always the
+		# -1 default -> `last_court_season == current_season` never held -> the "already held a court
+		# this season, don't propose another" guard was DEAD, and a lord re-proposed CALL_COURT every
+		# season (redundant directive; the creation-level settlement guard still blocked an actual
+		# duplicate court). Inject the REVIEWED lord's own tracked value at top level for this
+		# iteration (per-lord, so it must be set inside the loop; erased after). No invented values --
+		# last_court_season is the lord's real _track_court_called value, current_season the real enum.
+		world_states["last_court_season"] = int(
+			(world_states.get(lord.character_id, {}) as Dictionary).get("last_court_season", -1)
+		)
 		if lord.character_id == emperor_id and emperor_id >= 0:
 			var clan_champions: Array = _get_clan_champions(characters)
 			var directives: Array = StrategicReview.run_emperor_review(
@@ -11842,6 +13578,13 @@ static func _run_strategic_reviews(
 	world_states.erase("trainable_vassals")
 	world_states.erase("vengeance_targets")
 	world_states.erase("bitter_rivals")
+	world_states.erase("active_wars")
+	world_states.erase("escalating_conflicts")
+	world_states.erase("current_season")
+	world_states.erase("current_season_index")
+	# NOTE: last_host_seasons is deliberately NOT erased -- it is the persistent per-clan
+	# Winter-Court-hosting tracker (written on court creation), not a per-tick scratch key.
+	world_states.erase("last_court_season")
 
 	# Champion Strategic Evaluation (s57.54) — runs quarterly for each Clan Champion.
 	if dice_engine != null and not clans.is_empty():
@@ -13512,8 +15255,11 @@ static func _process_insurgency_suppression(
 				if o == "success" or o == "partial":
 					effective_actions += 1
 			if effective_actions > 0:
+				# PU loss magnitude lives in the canonical arbiter (s11.11 line 147); the
+				# inline `ins.strength * 0.1` literal was a divergent copy of it.
 				_apply_revolt_pu_loss(
-					prov, settlements, float(ins.strength) * 0.1 * float(effective_actions)
+					prov, settlements,
+					InsurgencySystem.get_pu_loss_on_suppression(ins) * float(effective_actions)
 				)
 		# Per-participant critical failure: Down→survival roll, else death (line 107).
 		for p: Dictionary in participants:
@@ -13620,18 +15366,65 @@ static func _process_insurgencies(
 	worship_maluses: Dictionary = {},
 	season_meta: Dictionary = {},
 	next_crisis_id: Array = [1],
+	active_wars: Array = [],
+	characters_by_id: Dictionary = {},
+	settlements: Array = [],
 ) -> Dictionary:
 	var ptls: Dictionary = {}
 	for pid: int in provinces:
 		var prov: ProvinceData = provinces[pid]
 		ptls[pid] = prov.province_taint_level
 
+	# Populate the mechanically-computable situational spawn modifiers that
+	# InsurgencySystem.get_spawn_chance (s11.11) reads from per-province world_state.
+	# The modifier MAGNITUDES are GDD-locked in the consumer; this only produces the
+	# facts (no invented values). The whole situational layer was dead because nobody
+	# ever populated these keys. Wired here (the one seasonal insurgency pass):
+	#   starvation_stage   -> PEASANT_REVOLT +0.10 at HUNGER+  (province.starvation_stage, ResourceTick-fed)
+	#   under_garrisoned   -> PEASANT_REVOLT +0.10             (garrison < population*0.05, the LOCKED
+	#                                                           s11.11 under-garrison threshold from
+	#                                                           compute_stability_change; aggregated
+	#                                                           across the province's settlements)
+	#   empire_at_war      -> PIRATE_FLEET base 0.05           (any active war)
+	#   clan_at_war        -> PIRATE_FLEET +0.10               (province clan involved in a war)
+	#   lord_bushido_virtue-> PEASANT_REVOLT -0.10 if JIN      (province lord's virtue)
+	# DEFERRED (no clean producer — flagged, NOT invented): recent_maho_in_province /
+	# adjacent_war_ended_recently / disbanded_units_unpaid / adjacent_to_shinomen_or_shadowlands /
+	# nezumi_suppressed_recently / adjacent_pirate_count (need history-tracking or adjacency+flags
+	# that don't exist yet).
+	var empire_at_war: bool = not active_wars.is_empty()
+	# Aggregate per-province population/garrison PU from settlements for the under-garrison check.
+	var prov_pop: Dictionary = {}
+	var prov_gar: Dictionary = {}
+	for _sv: Variant in settlements:
+		if _sv is SettlementData:
+			var _s: SettlementData = _sv as SettlementData
+			if _s.province_id < 0:
+				continue
+			prov_pop[_s.province_id] = prov_pop.get(_s.province_id, 0) + _s.population_pu
+			prov_gar[_s.province_id] = prov_gar.get(_s.province_id, 0) + _s.garrison_pu
 	var patrolled: Dictionary = season_meta.get("patrolled_provinces", {})
 	var per_province_ws: Dictionary = {}
 	for pid: int in provinces:
+		var prov2: ProvinceData = provinces[pid]
 		var ws: Dictionary = world_states.get(pid, {}).duplicate()
 		if patrolled.has(pid):
 			ws["is_patrolled"] = true
+		ws["starvation_stage"] = prov2.starvation_stage
+		var _pop: int = prov_pop.get(pid, 0)
+		if _pop > 0 and prov_gar.get(pid, 0) < _pop * 0.05:
+			ws["under_garrisoned"] = true
+		if empire_at_war:
+			ws["empire_at_war"] = true
+			if prov2.clan != "":
+				for _w: Variant in active_wars:
+					if _w is WarData and WarSystem.is_clan_involved(_w as WarData, prov2.clan):
+						ws["clan_at_war"] = true
+						break
+		if not characters_by_id.is_empty():
+			var _lord: L5RCharacterData = _find_province_lord(prov2, characters_by_id)
+			if _lord != null:
+				ws["lord_bushido_virtue"] = _lord.bushido_virtue
 		per_province_ws[pid] = ws
 
 	var next_ins_id: int = next_insurgency_id[0] if not next_insurgency_id.is_empty() else 1
@@ -13681,8 +15474,61 @@ static func _process_insurgencies(
 			if rpd.active_insurgency_id == ins.insurgency_id:
 				rpd.active_insurgency_id = -1
 
+	# Apply the per-season economic drain each surviving insurgency inflicts on its
+	# province (s11.11, GDD-locked ABSOLUTE amounts -- no invented values):
+	#   NEZUMI_INFESTATION -> Rice  (Strength * 0.1, cap 1.0 at Strength 10; s11.11:249/253)
+	#   RONIN_BANDIT       -> Koku  (Strength * 0.05 from the province's trade routes; s11.11:161)
+	#   PIRATE_FLEET       -> Koku  (0.05 * Strength, cap -0.4 at Strength 8; s11.11:505)
+	# The GDD frames these at "province stockpile"/"trade routes", but stockpiles live on
+	# settlements, so the province-level drain is taken from the province's settlement
+	# stockpiles (aggregate, floored at 0). Applied to SURVIVING insurgencies only (post-
+	# removal), so a same-season suppression to Strength 0 inflicts no further drain.
+	# DEFERRED (NOT applied -- semantic mismatch, no invention): URBAN_CRIMINAL_NETWORK koku
+	# (s11.11:271 is a PERCENTAGE of settlement Koku *generation*, not an absolute stockpile
+	# drain, and needs the settlement's per-season koku generation which isn't available here;
+	# get_koku_drain's criminal branch returns an absolute value that must not hit the stockpile).
+	if not settlements.is_empty():
+		var settlements_by_prov: Dictionary = {}
+		for _dv: Variant in settlements:
+			if _dv is SettlementData:
+				var _ds: SettlementData = _dv as SettlementData
+				if _ds.province_id < 0:
+					continue
+				if not settlements_by_prov.has(_ds.province_id):
+					settlements_by_prov[_ds.province_id] = []
+				(settlements_by_prov[_ds.province_id] as Array).append(_ds)
+		for ins2: InsurgencyData in insurgencies:
+			var prov_setts: Array = settlements_by_prov.get(ins2.province_id, [])
+			if prov_setts.is_empty():
+				continue
+			var rice_drain: float = InsurgencySystem.get_rice_drain(ins2)
+			if rice_drain > 0.0:
+				_drain_province_stockpile(prov_setts, rice_drain, "rice_stockpile")
+			if ins2.insurgency_type == Enums.InsurgencyType.RONIN_BANDIT \
+					or ins2.insurgency_type == Enums.InsurgencyType.PIRATE_FLEET:
+				var koku_drain: float = InsurgencySystem.get_koku_drain(ins2)
+				if koku_drain > 0.0:
+					_drain_province_stockpile(prov_setts, koku_drain, "koku_stockpile")
+
 	result["resolved_crisis_ids"] = resolved_crisis_ids
 	return result
+
+
+# Subtract `amount` from the aggregate of a province's settlement `field` stockpile,
+# taking from each settlement in turn and flooring at 0 (s11.11 economic drain).
+static func _drain_province_stockpile(setts: Array, amount: float, field: String) -> void:
+	var remaining: float = amount
+	for _sv: Variant in setts:
+		if remaining <= 0.0:
+			break
+		if not (_sv is SettlementData):
+			continue
+		var s: SettlementData = _sv as SettlementData
+		var have: float = s.get(field)
+		var take: float = minf(have, remaining)
+		if take > 0.0:
+			s.set(field, have - take)
+			remaining -= take
 
 
 # -- Spiritual Insurgency Processing (s56.16, season boundary) ----------------
@@ -14688,7 +16534,20 @@ static func _evaluate_heir_designations(
 	characters: Array,
 	characters_by_id: Dictionary,
 	active_topics: Array,
+	next_topic_id: Array = [1000],
+	ic_day: int = 0,
 ) -> void:
+	# s22.5:33 adoption — a Family Daimyo+ with no living biological same-clan child and no settled
+	# heir formally adopts the best same-clan junior into the family for the purpose of succession.
+	# The set of characters already spoken for (any lord's designated heir or adopted child) so an
+	# adoptee is never double-claimed. Built once per pass.
+	var claimed_ids: Dictionary = {}
+	for l: L5RCharacterData in characters:
+		if l.designated_heir_id >= 0:
+			claimed_ids[l.designated_heir_id] = true
+		for aid: int in l.adopted_children_ids:
+			claimed_ids[aid] = true
+
 	for lord: L5RCharacterData in characters:
 		if CharacterStats.is_dead(lord):
 			continue
@@ -14697,6 +16556,23 @@ static func _evaluate_heir_designations(
 
 		if not SuccessionSystem.should_reevaluate_heir(lord):
 			continue
+
+		# Adoption fallback (s22.5:33) — runs before ordinary candidate evaluation. When the lord is
+		# genuinely without a bloodline heir, adopt an heir rather than leaving the line to break
+		# (the P6 "confirming lord selects" outcome). Adopting into the family makes the adoptee a P4
+		# ADOPTED_HEIR candidate (birth-order weight 4), which the succession system already consumes.
+		if _should_adopt_heir(lord, characters_by_id):
+			var adoptee: L5RCharacterData = _pick_adoption_candidate(
+				lord, characters, claimed_ids,
+			)
+			if adoptee != null:
+				lord.adopted_children_ids.append(adoptee.character_id)
+				SuccessionSystem.designate_heir(lord, adoptee.character_id)
+				claimed_ids[adoptee.character_id] = true
+				_create_adoption_topic(
+					lord, adoptee, active_topics, next_topic_id, ic_day, characters_by_id,
+				)
+				continue
 
 		var proxy := L5RCharacterData.new()
 		proxy.character_id = lord.character_id
@@ -14728,11 +16604,95 @@ static func _evaluate_heir_designations(
 			SuccessionSystem.designate_heir(lord, evals[0]["candidate_id"])
 
 
+## s22.5:33 — a lord adopts an heir when: Family Daimyo+ (heads a family line), no heir settled yet,
+## has not already adopted, and has NO living biological child of the same clan (a bloodline heir of
+## any age blocks adoption — they are the natural heir). Owner-approved trigger (2026-07-09).
+static func _should_adopt_heir(lord: L5RCharacterData, characters_by_id: Dictionary) -> bool:
+	if RoleRegistry.lord_rank_from_status(lord.status) < Enums.LordRank.FAMILY_DAIMYO:
+		return false
+	if lord.designated_heir_id >= 0:
+		return false
+	if not lord.adopted_children_ids.is_empty():
+		return false
+	for cid: int in lord.children_ids:
+		var child: L5RCharacterData = characters_by_id.get(cid)
+		if child != null and not CharacterStats.is_dead(child) and child.clan == lord.clan:
+			return false  # a living same-clan bloodline child is the natural heir
+	return true
+
+
+## s22.5:33 adoptee selection (owner-approved 2026-07-09): the highest-status UNMARRIED same-clan,
+## same-family, adult junior (status below the lord's) who is not already claimed as another lord's
+## heir/adopted child. "In their family" = same clan AND family; "junior" = lower status; adult =
+## age >= 18 (the same unmarried-adult-samurai gate world-gen uses at world_population_generator:754,
+## matching GEMPUKKU_AGE_DAYS = 18 IC years — is_gempukku_ready is a ChildRecord method, not on the
+## character sheet).
+static func _pick_adoption_candidate(
+	lord: L5RCharacterData,
+	characters: Array,
+	claimed_ids: Dictionary,
+) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.character_id == lord.character_id:
+			continue
+		if c.clan != lord.clan or c.family != lord.family:
+			continue
+		if c.spouse_id >= 0:
+			continue  # unmarried
+		if c.age < 18:
+			continue  # an adult samurai, not a child
+		if c.status >= lord.status:
+			continue  # a junior of the family
+		if claimed_ids.has(c.character_id):
+			continue  # not already someone's heir/adopted
+		if best == null or c.status > best.status:
+			best = c
+	return best
+
+
+## s22.5:33 / s16.5 — the Adoption topic. Variant is always clear_succession: the questionable_
+## legitimacy variant (s15.7) applies only to adopting an unacknowledged affair/secret-line child,
+## and no illegitimacy/affair-line signal is tracked on the character sheet, so it has no detectable
+## trigger (documented, NOT invented). The topic_type "adoption" is the one the personality-lean
+## tables already react to (chugi +5, gi's questionable -6).
+static func _create_adoption_topic(
+	lord: L5RCharacterData,
+	adoptee: L5RCharacterData,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+	characters_by_id: Dictionary,
+) -> void:
+	var topic := TopicData.new()
+	topic.topic_id = next_topic_id[0]
+	next_topic_id[0] += 1
+	topic.slug = "adoption_lord%d_heir%d_d%d" % [lord.character_id, adoptee.character_id, ic_day]
+	topic.title = "Adoption of an Heir by Lord %d" % lord.character_id
+	topic.topic_type = "adoption"
+	topic.variant = "clear_succession"
+	topic.tier = TopicData.Tier.TIER_4
+	topic.category = TopicData.Category.POLITICAL
+	topic.subject_character_id = adoptee.character_id
+	topic.subject_role = "NEUTRAL"
+	topic.clan_involved = lord.clan
+	topic.family_involved = lord.family
+	topic.ic_day_created = ic_day
+	topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+	active_topics.append(topic)
+	for h: L5RCharacterData in [lord, adoptee]:
+		if not CharacterStats.is_dead(h) and topic.topic_id not in h.topic_pool:
+			h.topic_pool.append(topic.topic_id)
+
+
 # -- Entanglement Maintenance (s12.8) -----------------------------------------
 
 static func _process_entanglements(
 	entanglements: Array,
 	ic_day: int,
+	characters_by_id: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 	var broken: Array = []
@@ -14747,10 +16707,16 @@ static func _process_entanglements(
 			ent["state"] = SeductionSystem.EntanglementState.BROKEN
 			ent["missed_windows"] = check.get("missed_windows", 3)
 			broken.append(ent)
+			# s12.8 line 273 (LOCKED): a neglect-break drops the target's disposition toward the
+			# actor -10 ("feeling used and abandoned"). This consequence was never applied -- the
+			# BROKEN branch only cleared the flag. (This is the natural-decay break, NOT the formal
+			# breakup arbiter's -5/-15 -- a distinct locked value.)
+			var disp_loss: int = _apply_entanglement_break_disposition(ent, characters_by_id)
 			results.append({
 				"entanglement": ent,
 				"event": "broken",
 				"missed_windows": check.get("missed_windows", 0),
+				"disposition_loss": disp_loss,
 			})
 		elif check.get("needs_maintenance", false):
 			ent["state"] = check.get("state", SeductionSystem.EntanglementState.NEGLECTED)
@@ -14765,6 +16731,25 @@ static func _process_entanglements(
 		entanglements.erase(ent)
 
 	return results
+
+
+static func _apply_entanglement_break_disposition(
+	ent: Dictionary,
+	characters_by_id: Dictionary,
+) -> int:
+	## Apply the s12.8:273 neglect-break disposition loss: the TARGET's disposition toward the
+	## SEDUCER drops NEGLECT_BREAK_DISPOSITION_LOSS (-10). Returns the applied delta (0 if skipped).
+	var seducer_id: int = int(ent.get("seducer_id", -1))
+	var target_id: int = int(ent.get("target_id", -1))
+	if seducer_id < 0 or target_id < 0 or seducer_id == target_id:
+		return 0
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	if target == null or CharacterStats.is_dead(target):
+		return 0
+	var loss: int = SeductionSystem.NEGLECT_BREAK_DISPOSITION_LOSS
+	var cur: int = target.disposition_values.get(seducer_id, 0)
+	target.disposition_values[seducer_id] = clampi(cur + loss, -100, 100)
+	return loss
 
 
 # -- Hostage System Processing (s22.9) ----------------------------------------
@@ -14915,6 +16900,7 @@ static func _capture_dead_commanders(
 	captor_lord_id: int,
 	location_str: String,
 	characters_by_id: Dictionary,
+	active_wars: Array,
 	active_hostages: Array,
 	ic_day: int,
 	dice_engine: DiceEngine,
@@ -14949,14 +16935,18 @@ static func _capture_dead_commanders(
 				cmd_id, captor_lord_id, HostageSystem.CaptureSource.BATTLE_CAPTURE,
 				location_str, ic_day,
 			))
+			_apply_hostage_war_score(commander, captor_lord_id, active_wars, characters_by_id)
 
 
 static func _capture_siege_hostages(
 	active_sieges: Array,
 	characters_by_id: Dictionary,
 	companies: Array,
+	active_wars: Array,
 	active_hostages: Array,
 	ic_day: int,
+	settlements: Array = [],
+	provinces: Dictionary = {},
 ) -> void:
 	var end_reasons: Array = ["storm_assault_success", "starvation"]
 	for siege: Dictionary in active_sieges:
@@ -14976,6 +16966,14 @@ static func _capture_siege_hostages(
 				break
 		if captor_lord_id < 0:
 			continue
+		# s53 (LOCKED): the attacker now holds the besieged settlement's province. Record it into
+		# the war's captured-province list so the territory-transfer terms at peace can demand/keep
+		# it (war_termination reads provinces_captured_by_a/b). Fires once per won siege alongside
+		# the hostage capture (same dedup), while province.clan is still the defender (ownership only
+		# formally flips at peace via apply_territory_transfer).
+		_apply_siege_province_capture(
+			settlement_id, captor_lord_id, settlements, provinces, active_wars, characters_by_id,
+		)
 		var loc_str: String = str(settlement_id)
 		for char_val: Variant in characters_by_id.values():
 			var character: L5RCharacterData = char_val as L5RCharacterData
@@ -14996,6 +16994,94 @@ static func _capture_siege_hostages(
 				character.character_id, captor_lord_id,
 				HostageSystem.CaptureSource.SIEGE_SURRENDER, loc_str, ic_day,
 			))
+			_apply_hostage_war_score(character, captor_lord_id, active_wars, characters_by_id)
+
+
+# s22.9 line 97 / s53 (LOCKED, cross-ref): capturing a high-value hostage shifts the War
+# Score between the captor's and hostage's clans -- Rank 3+ hostage +3/-3, Rank 5+ or a
+# Champion's-family hostage +8/-8. Both capture sites (battle + siege) minted the hostage
+# record but never applied this leverage shift, so WarSystem.SCORE_SHIFTS' "hostage_rank3"/
+# "hostage_rank5_champion" keys were dead. The rank->tier decision is delegated to the
+# canonical HostageSystem.get_leverage_value arbiter so the thresholds never diverge.
+static func _apply_hostage_war_score(
+	hostage: L5RCharacterData,
+	captor_lord_id: int,
+	active_wars: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	if hostage == null or captor_lord_id < 0:
+		return
+	var captor: L5RCharacterData = characters_by_id.get(captor_lord_id) as L5RCharacterData
+	if captor == null:
+		return
+	var captor_clan: String = captor.clan
+	var hostage_clan: String = hostage.clan
+	if hostage_clan.is_empty() or captor_clan.is_empty() or hostage_clan == captor_clan:
+		return
+	var war: WarData = WarSystem.get_war_between(active_wars, captor_clan, hostage_clan)
+	if war == null:
+		return
+	# Champion's family = the hostage shares the family of their clan's living champion.
+	var is_champ_family: bool = false
+	var champ_id: int = _extrad_find_clan_champion_id(hostage_clan, characters_by_id.values())
+	if champ_id >= 0:
+		var champ: L5RCharacterData = characters_by_id.get(champ_id) as L5RCharacterData
+		if champ != null and not champ.family.is_empty():
+			is_champ_family = (hostage.family == champ.family)
+	var leverage: int = HostageSystem.get_leverage_value(hostage.insight_rank, is_champ_family)
+	var key: String = ""
+	if leverage == HostageSystem.LEVERAGE_RANK5:
+		key = "hostage_rank5_champion"
+	elif leverage == HostageSystem.LEVERAGE_RANK3:
+		key = "hostage_rank3"
+	if key.is_empty():
+		return  # Rank < 3, not champion-family: no War Score event (GDD).
+	# apply_score_shift matches clan_a/clan_b directly, so resolve the captor's side to that
+	# side's principal clan -- lands correctly even when the captor is an allied clan.
+	var side: String = WarSystem.get_clan_side(war, captor_clan)
+	var winning_clan: String = war.clan_a if side == "a" else war.clan_b
+	WarSystem.apply_score_shift(war, key, winning_clan)
+
+
+# s53 (LOCKED, "Terms require formally ceding provinces held at the start of the war"): records the
+# besieged settlement's province into the war's captured-province list. WarSystem.record_province_capture
+# was fully built (and its consumer war_termination._get_captured_provinces / apply_territory_transfer
+# is LIVE) but had ZERO production callers -- so provinces_captured_by_a/b were ALWAYS empty and every
+# war ended transferring zero territory regardless of who won. Resolves the captor's clan (the attacking
+# lord's) and the defender clan (the province's current owner -- ownership only formally flips at peace),
+# finds the active war between them (ally-aware get_war_between), and delegates the side/ally bookkeeping
+# to record_province_capture (which appends to the capturing side and erases from the other).
+static func _apply_siege_province_capture(
+	settlement_id: int,
+	captor_lord_id: int,
+	settlements: Array,
+	provinces: Dictionary,
+	active_wars: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	if settlement_id < 0 or captor_lord_id < 0:
+		return
+	var captor: L5RCharacterData = characters_by_id.get(captor_lord_id) as L5RCharacterData
+	if captor == null or captor.clan.is_empty():
+		return
+	var province_id: int = -1
+	for s_val: Variant in settlements:
+		var sd: SettlementData = s_val as SettlementData
+		if sd != null and sd.settlement_id == settlement_id:
+			province_id = sd.province_id
+			break
+	if province_id < 0:
+		return
+	var pd: ProvinceData = provinces.get(province_id) as ProvinceData
+	if pd == null:
+		return
+	var defender_clan: String = pd.clan
+	if defender_clan.is_empty() or defender_clan == captor.clan:
+		return
+	var war: WarData = WarSystem.get_war_between(active_wars, captor.clan, defender_clan)
+	if war == null:
+		return
+	WarSystem.record_province_capture(war, province_id, captor.clan)
 
 
 # -- Bound Character Processing (s12.8) ---------------------------------------
@@ -15058,6 +17144,8 @@ static func _process_military_daily(
 	provinces: Dictionary = {},
 	active_hostages: Array = [],
 	ic_day: int = 0,
+	military_legions: Array = [],
+	military_sections: Array = [],
 ) -> Dictionary:
 	var disband_results: Array = _process_disbands(
 		active_armies, companies, settlements,
@@ -15066,7 +17154,7 @@ static func _process_military_daily(
 	var battle_results: Array = _resolve_army_battles(
 		movement_results, active_armies, companies, active_wars,
 		dice_engine, settlements, characters_by_id, worship_maluses,
-		provinces, active_hostages, ic_day,
+		provinces, active_hostages, ic_day, military_legions, military_sections,
 	)
 	var retreat_arrival_results: Array = _process_retreat_arrivals(
 		movement_results, active_armies, active_tethers,
@@ -15082,7 +17170,7 @@ static func _process_military_daily(
 		active_tethers, tether_results,
 	)
 	var deprivation_results: Array = _process_field_deprivation(
-		active_tethers, tether_results,
+		active_tethers, tether_results, companies,
 	)
 	var recovery_results: Array = _process_army_recovery(
 		active_armies, tether_by_army, companies, worship_maluses,
@@ -15106,6 +17194,13 @@ static func _process_army_movements(
 ) -> Array:
 	var results: Array = []
 	for army: Dictionary in active_armies:
+		# A dissolved/disbanded army (is_active == false) is gone from the World Map
+		# (GDD s11.7 line 365) — it neither moves nor triggers battles. This guard
+		# matches the convention used by _process_disbands / _apply_retreat_orders;
+		# the movement pass previously ignored it, so a battle-dissolved or disbanded
+		# army could keep marching as a phantom.
+		if not army.get("is_active", true):
+			continue
 		_initiate_retreat_march(army)
 		if not army.get("is_moving", false):
 			continue
@@ -15134,6 +17229,8 @@ static func _resolve_army_battles(
 	provinces: Dictionary = {},
 	active_hostages: Array = [],
 	ic_day: int = 0,
+	military_legions: Array = [],
+	military_sections: Array = [],
 ) -> Array:
 	var results: Array = []
 
@@ -15147,8 +17244,17 @@ static func _resolve_army_battles(
 		if arriving_army.is_empty():
 			push_warning("[Battle] Skipped: army %d not found in active_armies" % arriving_army_id)
 			continue
+		# A dissolved/disbanded army does not fight (GDD s11.7 line 365).
+		if not arriving_army.get("is_active", true):
+			continue
 
-		var enemy_army_ids: Array = bc.get("enemy_army_ids", [])
+		# Only active enemy armies at the tile join the defense — a dissolved army
+		# lingering in the array (check_battle_trigger matches by tile, not is_active)
+		# must not be re-fought.
+		var enemy_army_ids: Array = []
+		for eid: Variant in bc.get("enemy_army_ids", []):
+			if eid is int and _find_army_by_id(eid, active_armies).get("is_active", true):
+				enemy_army_ids.append(eid)
 		if enemy_army_ids.is_empty():
 			push_warning("[Battle] Skipped: no enemy army IDs for army %d" % arriving_army_id)
 			continue
@@ -15204,6 +17310,14 @@ static func _resolve_army_battles(
 			dice_engine, settlements, false, fort_bonus, worship_maluses, ef_atk, ef_def,
 		)
 
+		# s11.7a battle_record producer: every participating living commander records this engagement
+		# at their current rank (drives promotion scoring + TAISA/SHIREIKAN eligibility accrual). Stage 2
+		# also credits up the linked chain (the companies' legion Taisa + that legion's section Shireikan).
+		_record_battle_participation(
+			battle_result, atk_company_dicts, def_company_dicts, characters_by_id, ic_day,
+			military_legions, military_sections,
+		)
+
 		var field_victor: String = battle_result.get("victor", "draw")
 		var field_captor_lord_id: int = -1
 		if field_victor == "attacker" and not atk_company_dicts.is_empty():
@@ -15212,10 +17326,24 @@ static func _resolve_army_battles(
 			field_captor_lord_id = def_company_dicts[0].get("lord_id", -1)
 		_capture_dead_commanders(
 			battle_result, field_victor, field_captor_lord_id,
-			str(battle_province_id), characters_by_id, active_hostages, ic_day, dice_engine,
+			str(battle_province_id), characters_by_id, active_wars, active_hostages, ic_day,
+			dice_engine,
 		)
 
 		_write_battle_results_to_companies(battle_result, companies)
+
+		# GDD s11.7 line 365 (LOCKED): a routing army reduced to <=20% of its
+		# starting Health (computed post-pursuit by ArmyCombatSystem.resolve_rout,
+		# already carried on battle_result.rout / .dissolution + PU-reconciled) is
+		# DISSOLVED ENTIRELY -- removed from the World Map. That dissolved decision
+		# was produced but never applied to the army entity, so the loser lingered
+		# as a phantom (kept moving, re-triggered battles). Flip the losing side's
+		# army records inactive here. (The >20% "retreats to the previous sub-tile"
+		# half is deferred to the s11.7a sub-tile movement layer -- no previous-tile
+		# tracking and _RETREAT_DEFAULT_DAYS is 0 pending that system.)
+		_apply_battle_army_dissolution(
+			battle_result, field_victor, arriving_army_id, enemy_army_ids, active_armies,
+		)
 
 		battle_result["attacker_army_id"] = arriving_army_id
 		battle_result["defender_army_ids"] = enemy_army_ids
@@ -15226,6 +17354,41 @@ static func _resolve_army_battles(
 		results.append(battle_result)
 
 	return results
+
+
+## Apply the GDD s11.7 rout dissolution (line 365) to the losing side's army
+## records. resolve_rout already computed battle_result.rout.dissolved (the
+## army-wide, post-pursuit <=20%-of-starting-Health test) and reconciled the
+## Health -> PU loss; this only wires that outcome into the army lifecycle by
+## flipping the loser inactive + halting it, so the dissolved army leaves play.
+## No-op on a draw or a survivable rout (>20%, which retreats -- deferred to
+## the sub-tile layer). Never removes the array entry (matches _process_disbands:
+## is_active-guarded passes skip it).
+static func _apply_battle_army_dissolution(
+	battle_result: Dictionary,
+	victor: String,
+	attacker_army_id: int,
+	defender_army_ids: Array,
+	active_armies: Array,
+) -> void:
+	if victor != "attacker" and victor != "defender":
+		return
+	if not battle_result.get("rout", {}).get("dissolved", false):
+		return
+	var loser_ids: Array = defender_army_ids if victor == "attacker" else [attacker_army_id]
+	for lid: Variant in loser_ids:
+		if not (lid is int):
+			continue
+		var army: Dictionary = _find_army_by_id(lid, active_armies)
+		if army.is_empty():
+			continue
+		army["is_active"] = false
+		army["is_moving"] = false
+		army["destination_sub_tile"] = -1
+		army["path"] = []
+		army["days_remaining"] = 0
+		army.erase("retreat_ordered")
+		army.erase("disband_ordered")
 
 
 static func _get_army_companies(
@@ -15253,7 +17416,13 @@ static func _build_battle_states(
 		var cmd_id: int = cd.get("commander_id", -1)
 		if cmd_id >= 0 and characters_by_id.has(cmd_id):
 			commander = characters_by_id[cmd_id]
-			commander_bonus = _compute_captain_bonus(commander)
+			# Canonical land-commander bonus (s11.7): Battle rank + Tactician (+5) +
+			# Strategist (+1k0), ring-typed with clan-priority tie-break (s45). The prior
+			# _compute_captain_bonus (a naval-shaped inline copy, s11.9) silently DROPPED
+			# the Tactician/Strategist advantages and used a FIRE-biased tie-break, so the
+			# canonical arbiter had zero production callers and land commanders never got
+			# their advantage bonus.
+			commander_bonus = ArmyCombatSystem.resolve_commander_bonus(commander, commander.clan)
 		var ut: int = cd.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
 		var row: int = 1
 		if ut == Enums.CompanyUnitType.ASHIGARU_ARCHERS and col > 0:
@@ -15263,6 +17432,105 @@ static func _build_battle_states(
 		))
 		col += 1
 	return states
+
+
+# Producer for the s11.7a battle_record (previously a phantom: the field/factory/mutator existed but
+# NOTHING wrote a record, so battles_fought/battles_as_chui/battles_as_taisa were always 0 and every
+# promotion criterion that reads them was dead). After a resolved battle, each LIVING company commander
+# who participated records one battle at their CURRENT military_rank (won iff their side is the victor;
+# a draw counts as fought). Deduped per commander -- one engagement is one battle even across multiple
+# commanded companies. This drives the CHUI-promotion scoring (battles_commanded) and, over time,
+# accrues the battles_as_chui/battles_as_taisa the LOCKED TAISA/SHIREIKAN eligibility arms require.
+# No invented values: record_battle keys the per-rank counter off the field's own definitional meaning.
+static func _record_battle_participation(
+	battle_result: Dictionary,
+	atk_company_dicts: Array,
+	def_company_dicts: Array,
+	characters_by_id: Dictionary,
+	ic_day: int = -1,
+	legions_raw: Array = [],
+	sections_raw: Array = [],
+) -> void:
+	var victor: String = battle_result.get("victor", "draw")
+	var seen: Dictionary = {}
+	# s57.21.3 up-chain credit maps (empty when the caller passes no unit arrays -> company-commander-only,
+	# the pre-Stage-2 behavior). Built once per engagement; consumed by _record_side_participation.
+	var legions_by_id: Dictionary = {}
+	for lg: Dictionary in legions_raw:
+		legions_by_id[int(lg.get("legion_id", -1))] = lg
+	var sections_by_id: Dictionary = {}
+	for sc: Dictionary in sections_raw:
+		sections_by_id[int(sc.get("section_id", -1))] = sc
+	_record_side_participation(
+		atk_company_dicts, victor == "attacker", characters_by_id, seen, ic_day, legions_by_id, sections_by_id,
+	)
+	_record_side_participation(
+		def_company_dicts, victor == "defender", characters_by_id, seen, ic_day, legions_by_id, sections_by_id,
+	)
+
+
+static func _record_side_participation(
+	company_dicts: Array,
+	won: bool,
+	characters_by_id: Dictionary,
+	seen: Dictionary,
+	ic_day: int = -1,
+	legions_by_id: Dictionary = {},
+	sections_by_id: Dictionary = {},
+) -> void:
+	for cd: Dictionary in company_dicts:
+		# The company commander (Chui/Gunso) records the engagement at their own rank.
+		_credit_commander_battle(int(cd.get("commander_id", -1)), won, characters_by_id, seen, ic_day)
+		# s57.21.3 up-chain credit (Stage 2): the Taisa commanding this company's legion earns a battle
+		# at TAISA rank -> battles_as_taisa, the s11.7 Shireikan-eligibility rung that no producer could
+		# feed before Stage 1 linked the chain; and that legion's section Shireikan earns a battle too.
+		# Deduped per engagement via the shared `seen` set. Uses the UNIT chain (parent_legion_id ->
+		# legion.commander_id) -- always current after a refill, unlike the person chain, where a
+		# subordinate's operational_superior_id can still point at a refilled-out corpse.
+		var legion_id: int = int(cd.get("parent_legion_id", -1))
+		if legion_id < 0:
+			continue
+		var legion: Dictionary = legions_by_id.get(legion_id, {})
+		if legion.is_empty():
+			continue
+		_credit_commander_battle(int(legion.get("commander_id", -1)), won, characters_by_id, seen, ic_day)
+		var section_id: int = int(legion.get("parent_section_id", -1))
+		if section_id < 0:
+			continue
+		var section: Dictionary = sections_by_id.get(section_id, {})
+		if section.is_empty():
+			continue
+		_credit_commander_battle(int(section.get("commander_id", -1)), won, characters_by_id, seen, ic_day)
+
+
+static func _credit_commander_battle(
+	cmd_id: int,
+	won: bool,
+	characters_by_id: Dictionary,
+	seen: Dictionary,
+	ic_day: int = -1,
+) -> void:
+	## Record one battle for a commander at their own rank, deduped per engagement via `seen`.
+	## Marks `seen` BEFORE the liveness check (a dead commander is skipped, not retried), matching the
+	## pre-Stage-2 behavior. record_battle increments battles_fought/won/lost + the per-rank counter
+	## (CHUI->battles_as_chui, TAISA->battles_as_taisa); a Shireikan gets no per-rank counter (its
+	## Rikugunshokan rung has no battle-count minimum) but still accrues battles_fought for scoring.
+	if cmd_id < 0 or seen.has(cmd_id):
+		return
+	seen[cmd_id] = true
+	var commander: L5RCharacterData = characters_by_id.get(cmd_id)
+	if commander == null or CharacterStats.is_dead(commander):
+		return
+	if not (commander.battle_record is Dictionary) or (commander.battle_record as Dictionary).is_empty():
+		commander.battle_record = MilitaryPromotionSystem.create_battle_record()
+	MilitaryPromotionSystem.record_battle(
+		commander.battle_record, won, 0, commander.military_rank,
+	)
+	# Stamp the absolute season this participation occurred in, so the seasonal advancement
+	# pass can grant the s52 battle activity multiplier (2.5x participating / 3.0x commanding)
+	# to everyone who fought this season. Self-cleaning: only "current" for one season.
+	if ic_day >= 0:
+		(commander.battle_record as Dictionary)["last_battle_season"] = TimeSystem.get_absolute_season(ic_day)
 
 
 const _TERRAIN_TO_BATTLE_TERRAIN: Dictionary = {
@@ -15554,6 +17822,10 @@ static func _process_army_recovery(
 
 	var results: Array = []
 	for army: Dictionary in active_armies:
+		# A dissolved/disbanded army does not recover (GDD s11.7 line 365 -- it is
+		# gone; its Health was already reconciled to PU loss on the source province).
+		if not army.get("is_active", true):
+			continue
 		var army_id: int = army.get("army_id", -1)
 		var is_moving: bool = army.get("is_moving", false)
 		if is_moving:
@@ -15637,7 +17909,20 @@ static func _process_army_recovery(
 static func _process_field_deprivation(
 	active_tethers: Array,
 	tether_results: Array,
+	companies: Array = [],
 ) -> Array:
+	# s11.7 field deprivation: a rice-starved field army loses morale/health per day at its
+	# escalating deprivation tick (RICE_DEPRIVATION 2→-3 morale / 3→-3/-5 / 4→-5/-10, all LOCKED).
+	# Previously this pass only REPORTED the effect (deprivation_results had zero readers), so a
+	# starving army wasted away by nothing — the symmetric twin of the fixed "army recovery computed
+	# but never applied" bug. Apply the rice delta to the same cd["current_morale"]/["current_health"]
+	# the recovery pass writes. (The arms attack/defense half stays report-only — no daily company
+	# dict carries mutable attack/defense; a battle-time consumer is unbuilt, DESIGN-GATED.)
+	var companies_by_id: Dictionary = {}
+	for c_v: Variant in companies:
+		if c_v is Dictionary:
+			companies_by_id[int((c_v as Dictionary).get("company_id", -1))] = c_v
+
 	var non_detached: Array = []
 	for t: Dictionary in active_tethers:
 		if not t.get("detached", false):
@@ -15656,15 +17941,33 @@ static func _process_field_deprivation(
 		var company_ids: Array = tether.get("company_ids", [])
 		var rice_effect: Dictionary = ArmyUpkeepSystem.get_rice_deprivation_effect(rice_tick) if rice_tick > 0 else {}
 		var arms_effect: Dictionary = ArmyUpkeepSystem.get_arms_deprivation_effect(arms_tick) if arms_tick > 0 else {}
+		var d_morale: int = int(rice_effect.get("morale", 0))
+		var d_health: int = int(rice_effect.get("health", 0))
 		var per_company: Array = []
 
 		for cid: Variant in company_ids:
+			var applied_morale: int = 0
+			var applied_health: int = 0
+			if (d_morale < 0 or d_health < 0) and companies_by_id.has(int(cid)):
+				var cd: Dictionary = companies_by_id[int(cid)]
+				var base: Dictionary = ArmyCombatSystem.UNIT_STATS.get(
+					cd.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY), {})
+				if d_morale < 0:
+					var cur_m: int = int(cd.get("current_morale", base.get("morale", 0)))
+					cd["current_morale"] = maxi(0, cur_m + d_morale)
+					applied_morale = cd["current_morale"] - cur_m
+				if d_health < 0:
+					var cur_h: int = int(cd.get("current_health", base.get("health", 0)))
+					cd["current_health"] = maxi(0, cur_h + d_health)
+					applied_health = cd["current_health"] - cur_h
 			per_company.append({
 				"company_id": int(cid),
 				"rice_tick": rice_tick,
 				"arms_tick": arms_tick,
 				"rice_effect": rice_effect,
 				"arms_effect": arms_effect,
+				"morale_applied": applied_morale,
+				"health_applied": applied_health,
 			})
 
 		results.append({
@@ -15714,9 +18017,16 @@ static func _process_military_seasonal(
 	var promotion_results: Array = _process_military_promotions(
 		companies, characters_by_id,
 	)
+	# Demotion is computed against the CURRENT commander set (disjoint from the promotion
+	# candidate pool, which draws only from non-commanders), so no character is both promoted
+	# and demoted in one tick. A demotion's freshly-vacated Company is refilled next season.
+	var demotion_results: Array = _process_military_demotions(
+		companies, characters_by_id,
+	)
 	return {
 		"upkeep": upkeep_results,
 		"promotions": promotion_results,
+		"demotions": demotion_results,
 	}
 
 
@@ -15958,9 +18268,71 @@ static func _apply_promotion_results(
 				break
 
 
+# s11.7 (LOCKED, Demotion and Removal): "A commander whose disposition toward their appointing
+# lord drops below -10 may be replaced for political reasons. Removal clears the character's
+# military_rank and commanded_unit_id... they lose 0.5 Glory." The sibling promotion arbiters
+# (find_vacancies / select_best_candidate) run live every season, but MilitaryPromotionSystem's
+# should_remove_for_disposition + apply_demotion had ZERO production callers -- promotion fired
+# while demotion was dead, so a commander who came to loathe their lord kept command forever.
+# The threshold (-10) lives only in should_remove_for_disposition and the -0.5 Glory only in
+# apply_demotion, so both are routed through (no re-implemented logic / no invented numbers).
+static func _process_military_demotions(
+	companies: Array,
+	characters_by_id: Dictionary,
+) -> Array:
+	var results: Array = []
+	for company: Dictionary in companies:
+		var commander_id: int = company.get("commander_id", -1)
+		if commander_id < 0:
+			continue
+		var commander: L5RCharacterData = characters_by_id.get(commander_id)
+		if commander == null or CharacterStats.is_dead(commander):
+			continue
+		var lord_id: int = commander.lord_id
+		if lord_id < 0:
+			continue  # No appointing lord to be disaffected with.
+		var disp: int = int(commander.disposition_values.get(lord_id, 0))
+		if MilitaryPromotionSystem.should_remove_for_disposition(disp):
+			results.append({
+				"unit_id": company.get("company_id", -1),
+				"commander_id": commander_id,
+			})
+	return results
+
+
+static func _apply_demotion_results(
+	demotion_results: Array,
+	characters_by_id: Dictionary,
+	companies: Array,
+) -> void:
+	for demo: Dictionary in demotion_results:
+		var char_id: int = demo.get("commander_id", -1)
+		var unit_id: int = demo.get("unit_id", -1)
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		# Mutation + Glory magnitude via the canonical arbiter (a throwaway view carries the
+		# dict-shaped state apply_demotion mutates; only military_rank/commanded_unit_id are
+		# cleared, so a removed Rikugunshokan who is also a Family Daimyo keeps their feudal
+		# position per GDD s11.7).
+		var view: Dictionary = {
+			"military_rank": character.military_rank,
+			"commanded_unit_id": character.commanded_unit_id,
+		}
+		var applied: Dictionary = MilitaryPromotionSystem.apply_demotion(view)
+		character.military_rank = view.get("military_rank", Enums.MilitaryRank.NONE)
+		character.commanded_unit_id = int(view.get("commanded_unit_id", -1))
+		HonorGlorySystem.apply_glory_change(character, -float(applied.get("glory_loss", 0.0)))
+		for company: Dictionary in companies:
+			if company.get("company_id", -1) == unit_id:
+				company["commander_id"] = -1
+				break
+
+
 static func _gather_promotion_candidates(
 	vacancy: Dictionary,
 	characters_by_id: Dictionary,
+	admit_serving: bool = false,
 ) -> Array:
 	var candidates: Array = []
 	var rank_needed: int = vacancy.get("rank_needed", Enums.MilitaryRank.CHUI)
@@ -15971,7 +18343,15 @@ static func _gather_promotion_candidates(
 			continue
 		if c.military_rank >= rank_needed:
 			continue
-		if c.commanded_unit_id >= 0:
+		# s11.7 line 311 (LOCKED): "Candidates: Chui currently serving in the Go-hatamoto" -- a serving
+		# officer (commanded_unit_id >= 0) IS a valid higher-tier candidate (Stage 2b). The refill path
+		# (Legion/Section) passes admit_serving=true so serving Chui become Taisa candidates and serving
+		# Taisa become Shireikan candidates; the company-tier CHUI promotion keeps admit_serving=false
+		# (its original "unassigned only" pool -- zero regression to pop-A garrison companies). The
+		# LOCKED eligibility gates in select_best_candidate (battles_as_chui >= 1 for Taisa,
+		# battles_as_taisa >= 2 for Shireikan) ensure only genuinely battle-tested serving officers
+		# qualify; a promoted serving officer's old slot is vacated at apply time so the cascade refills it.
+		if c.commanded_unit_id >= 0 and not admit_serving:
 			continue
 
 		var battle_skill: int = c.skills.get("Battle", 0)
@@ -15982,7 +18362,11 @@ static func _gather_promotion_candidates(
 			"school_rank": c.school_rank,
 			"glory": c.glory,
 			"disposition": 10,
-			"personality_virtue": c.bushido_virtue,
+			# select_best_candidate's score_*_candidate expect the virtue as an uppercase String
+			# (keyed into *_PERSONALITY), not the raw BushidoVirtue enum -- passing the int crashed
+			# score_taisa_candidate/score_shireikan_candidate (latent: the CHUI path rarely reaches a
+			# vacancy+candidate; the s57.21 refill exercises the TAISA/SHIREIKAN arms for the first time).
+			"personality_virtue": Enums.bushido_virtue_name(c.bushido_virtue),
 			"battles_commanded": c.battle_record.get("battles_fought", 0) if c.battle_record is Dictionary else 0,
 			"battles_as_chui": c.battle_record.get("battles_as_chui", 0) if c.battle_record is Dictionary else 0,
 			"battles_as_taisa": c.battle_record.get("battles_as_taisa", 0) if c.battle_record is Dictionary else 0,
@@ -15990,6 +18374,150 @@ static func _gather_promotion_candidates(
 		})
 
 	return candidates
+
+
+# s57.20.3 / s57.21.3 (LOCKED, command vacancy): when a generated Legion/Section commander (a Taisa/
+# Shireikan from world-population -- "population B") dies, their unit's stored commander_id in the
+# persistent military_legions / military_sections raw arrays still names the corpse. The read-time
+# liveness bake (_populate_military_data -> commander_id -1) correctly makes the vacant-superior GATE
+# fire, but nothing ever REFILLS the slot, so the Legion/Section stays permanently leaderless. This
+# seasonal pass fills the vacancy via the SAME promotion machinery as company commands
+# (_gather_promotion_candidates / select_best_candidate; rank_needed TAISA for a Legion, SHIREIKAN for
+# a Section -- both LOCKED s57.21). The new commander inherits the dead predecessor's slot wholesale:
+# same commanded_unit_id, same operational_superior_id, same role_position (the slot's superior never
+# changes -- only the person). If no eligible officer exists (e.g. no battle-tested Taisa for a
+# Shireikan seat, LOCKED battles_as_taisa >= 2, now accrued via the live s11.7a battle_record
+# producer), the slot stays vacant (graceful -- the gate keeps blocking that unit's campaigns until a
+# qualified officer emerges). Company-tier refill is the separate _process_military_promotions pass
+# (per-bushi "population A"); this handles the generated Legion/Section tier only. No invented values:
+# every threshold/score is MilitaryPromotionSystem's own.
+static func _process_military_command_refill(
+	legions_raw: Array,
+	sections_raw: Array,
+	characters_by_id: Dictionary,
+) -> Array:
+	var results: Array = []
+	# A candidate claimed by one vacancy this pass must not be selected for another (the compute phase
+	# reads live commanded_unit_id, which is only mutated at apply time). Shared across both tiers so a
+	# Chui promoted into a Legion is not also drafted into a Section this same season.
+	var claimed: Dictionary = {}
+	_refill_unit_tier(legions_raw, "legion_id", Enums.MilitaryRank.TAISA, characters_by_id, claimed, results)
+	_refill_unit_tier(sections_raw, "section_id", Enums.MilitaryRank.SHIREIKAN, characters_by_id, claimed, results)
+	return results
+
+
+static func _refill_unit_tier(
+	units_raw: Array,
+	id_key: String,
+	rank_needed: int,
+	characters_by_id: Dictionary,
+	claimed: Dictionary,
+	results: Array,
+) -> void:
+	for unit: Dictionary in units_raw:
+		var commander_id: int = unit.get("commander_id", -1)
+		# Vacant iff the stored commander is dead/missing (a live commander needs no refill).
+		if commander_id >= 0:
+			var commander: L5RCharacterData = characters_by_id.get(commander_id)
+			if commander != null and not CharacterStats.is_dead(commander):
+				continue
+		var unit_id: int = unit.get(id_key, -1)
+		if unit_id < 0:
+			continue
+		var vacancy: Dictionary = {"unit_id": unit_id, "rank_needed": rank_needed}
+		# admit_serving=true: a Legion/Section vacancy accepts serving lower-tier officers (a serving
+		# Chui for a Taisa seat, a serving Taisa for a Shireikan seat) per LOCKED s11.7 line 311.
+		var candidates: Array = _gather_promotion_candidates(vacancy, characters_by_id, true)
+		var filtered: Array = []
+		for cand: Dictionary in candidates:
+			if not claimed.has(int(cand.get("character_id", -1))):
+				filtered.append(cand)
+		if filtered.is_empty():
+			continue
+		var best: Dictionary = MilitaryPromotionSystem.select_best_candidate(filtered, rank_needed)
+		if best.is_empty():
+			continue
+		var new_id: int = int(best.get("character_id", -1))
+		if new_id < 0:
+			continue
+		claimed[new_id] = true
+		# Inherit the dead predecessor's slot (superior + role); only the person changes. A dead
+		# character is not removed from characters_by_id, so the predecessor record is still readable.
+		var op_superior: int = -1
+		var role: String = ""
+		var predecessor: L5RCharacterData = characters_by_id.get(commander_id)
+		if predecessor != null:
+			op_superior = predecessor.operational_superior_id
+			role = predecessor.role_position
+		results.append({
+			"unit_id": unit_id,
+			"id_key": id_key,
+			"rank_needed": rank_needed,
+			"new_commander_id": new_id,
+			"operational_superior_id": op_superior,
+			"role_position": role,
+		})
+
+
+static func _apply_command_refill_results(
+	refill_results: Array,
+	legions_raw: Array,
+	sections_raw: Array,
+	characters_by_id: Dictionary,
+	companies: Array = [],
+) -> void:
+	for r: Dictionary in refill_results:
+		var new_id: int = int(r.get("new_commander_id", -1))
+		var character: L5RCharacterData = characters_by_id.get(new_id)
+		if character == null:
+			continue
+		var unit_id: int = int(r.get("unit_id", -1))
+		# Stage 2b promotion-from-within: a serving officer promoted into this Legion/Section vacates
+		# their OLD command so the cascade refills it (a serving Chui -> Taisa leaves their company
+		# vacant; a serving Taisa -> Shireikan leaves their legion vacant). ids are disjoint (Stage 1),
+		# so the vacate scans all three unit arrays and clears whichever holds the old command.
+		var old_unit: int = character.commanded_unit_id
+		if old_unit >= 0 and old_unit != unit_id:
+			_vacate_unit_command(old_unit, companies, legions_raw, sections_raw)
+		var rank: int = int(r.get("rank_needed", Enums.MilitaryRank.NONE))
+		character.military_rank = rank
+		character.commanded_unit_id = unit_id
+		var op_superior: int = int(r.get("operational_superior_id", -1))
+		if op_superior >= 0:
+			character.operational_superior_id = op_superior
+		var role: String = r.get("role_position", "")
+		if not role.is_empty():
+			character.role_position = role
+		# Write the new commander into the persistent raw unit so the next tick's liveness bake keeps it.
+		var id_key: String = r.get("id_key", "")
+		var target: Array = legions_raw if id_key == "legion_id" else sections_raw
+		for unit: Dictionary in target:
+			if int(unit.get(id_key, -1)) == unit_id:
+				unit["commander_id"] = new_id
+				break
+
+
+# Stage 2b: clear the commander_id of a promoted officer's OLD unit (company / legion / section) so the
+# vacancy cascade refills it next season. ids are disjoint across the three tiers (Stage 1 de-conflict:
+# company ids start above every unit id), so the scan is unambiguous -- at most one array holds the id.
+static func _vacate_unit_command(
+	old_unit_id: int,
+	companies: Array,
+	legions_raw: Array,
+	sections_raw: Array,
+) -> void:
+	for company: Dictionary in companies:
+		if int(company.get("company_id", -1)) == old_unit_id:
+			company["commander_id"] = -1
+			return
+	for legion: Dictionary in legions_raw:
+		if int(legion.get("legion_id", -1)) == old_unit_id:
+			legion["commander_id"] = -1
+			return
+	for section: Dictionary in sections_raw:
+		if int(section.get("section_id", -1)) == old_unit_id:
+			section["commander_id"] = -1
+			return
 
 
 # -- Military Effect Post-Processing -------------------------------------------
@@ -16270,7 +18798,24 @@ static func _process_supply_sharing(
 		if surplus <= 0.0:
 			continue
 
-		var amount: float = surplus * 0.5
+		# s12.2 line 403 (LOCKED): the supply-sharing amount scales with the giver's disposition
+		# toward the recipient lord -- Friend (+31) sends ~half the surplus, Devoted (+61+) the full
+		# amount. DispositionSystem.get_supply_share_ratio is the GDD arbiter (0.5 at +31 rising to
+		# 1.0 at +61); it was DORMANT (zero callers) and the amount was a flat surplus*0.5 (a
+		# hardcoded literal = the +31 Friend floor). Because this is a DELIBERATELY-CHOSEN
+		# SHARE_SUPPLIES (the giver is not refusing an incoming request -- the disposition gate was
+		# already enforced upstream at REQUEST_ALLIED_AID), the ratio is floored at the Friend
+		# baseline (0.5): a closer ally shares MORE while nothing shares LESS than before (zero
+		# regression). The below-Friend hard-refuse of s12.2:403 is the REQUEST-response
+		# auto-resolution model (a separate, unbuilt path), not this chosen action.
+		var recipient: L5RCharacterData = characters_by_id.get(receiver_settlement.lord_character_id)
+		var share_ratio: float = 0.5
+		if recipient != null and not CharacterStats.is_dead(recipient):
+			var giver_disp: int = DispositionSystem.get_effective_disposition(
+				character, recipient.character_id, characters_by_id,
+			)
+			share_ratio = maxf(0.5, DispositionSystem.get_supply_share_ratio(giver_disp))
+		var amount: float = surplus * share_ratio
 		var stage: int = _get_starvation_stage(receiver_settlement)
 		if stage <= 0:
 			continue
@@ -16288,7 +18833,7 @@ static func _process_supply_sharing(
 				"resolves_famine": share_result.get("resolves_famine", false),
 			})
 			# s12.2b Event Ripple: intra-clan rice sharing warms the two families' baseline.
-			var recipient: L5RCharacterData = characters_by_id.get(receiver_settlement.lord_character_id)
+			# (recipient resolved above for the disposition-scaled share amount.)
 			if recipient != null and recipient.clan == character.clan \
 					and character.family != "" and recipient.family != "":
 				CollectiveDisposition.apply_intra_clan_rice_sharing(
@@ -16330,13 +18875,14 @@ static func _process_war_score_shifts(
 	military_effects: Array,
 	active_wars: Array,
 	companies: Array,
+	storm_assault_results: Array = [],
 ) -> Array:
 	var results: Array = []
 	if active_wars.is_empty():
 		return results
 
 	_process_battle_war_scores(military_daily, military_effects, active_wars, companies, results)
-	_process_siege_war_scores(military_daily, active_wars, results)
+	_process_siege_war_scores(storm_assault_results, active_wars, companies, results)
 	_process_tether_war_scores(military_daily, active_wars, companies, results)
 
 	return results
@@ -16492,51 +19038,52 @@ static func _rank_to_death_event(rank: int) -> String:
 	return ""
 
 
+# s53 (LOCKED, SCORE_SHIFTS siege_won_attacker [12,8] / siege_won_defender [8,5]): a resolved
+# storm assault moves the War Score toward the victor. Previously this read
+# military_daily["siege_results"] for `resolved == "attacker_victory"` and `attacker_clan` -- keys
+# that NOTHING in the codebase ever produces (the raw siege-tick dicts carry starvation/honor/ended,
+# and the live storm-assault path emits `victor == "attacker/defender"` + army ids), so it NEVER
+# fired and both siege score shifts were dead. Now consumes the real storm_assault_results (per-tick
+# assault events -- no dedup needed), resolving each side's clan from companies (via _get_army_clan)
+# and the war between them (ally-aware get_war_between), applying the shift to the winning side's
+# principal clan. NOTE: starvation-surrender attacker wins are not an assault so aren't here -- their
+# war impact flows through the (now-wired) territory capture + hostage War Score at _capture_siege_hostages.
 static func _process_siege_war_scores(
-	military_daily: Dictionary,
+	storm_assault_results: Array,
 	active_wars: Array,
+	companies: Array,
 	results: Array,
 ) -> void:
-	var siege_results: Array = military_daily.get("siege_results", [])
-	for sr: Variant in siege_results:
+	for sr: Variant in storm_assault_results:
 		if not (sr is Dictionary):
 			continue
 		var sd: Dictionary = sr
-		var resolved: String = sd.get("resolved", "")
-		if resolved.is_empty():
+		var victor: String = sd.get("victor", "")
+		if victor != "attacker" and victor != "defender":
 			continue
 
-		var attacker_clan: String = sd.get("attacker_clan", "")
-		var defender_clan: String = sd.get("defender_clan", "")
-		if attacker_clan.is_empty() or defender_clan.is_empty():
+		var atk_clan: String = _get_army_clan(sd.get("attacker_army_id", -1), companies)
+		var def_clan: String = _get_army_clan(sd.get("defender_army_id", -1), companies)
+		if atk_clan.is_empty() or def_clan.is_empty() or atk_clan == def_clan:
 			continue
 
-		var event_type: String = ""
-		var winning_clan: String = ""
-		if resolved == "attacker_victory":
-			event_type = "siege_won_attacker"
-			winning_clan = attacker_clan
-		elif resolved == "defender_victory":
-			event_type = "siege_won_defender"
-			winning_clan = defender_clan
+		var event_type: String = "siege_won_attacker" if victor == "attacker" else "siege_won_defender"
+		var winning_clan: String = atk_clan if victor == "attacker" else def_clan
 
-		if event_type.is_empty():
+		# apply_score_shift matches war.clan_a/clan_b directly, so resolve the winner to that side's
+		# principal clan -- lands correctly even when the victor is an allied clan.
+		var war: WarData = WarSystem.get_war_between(active_wars, atk_clan, def_clan)
+		if war == null:
 			continue
-
-		for war: WarData in active_wars:
-			if not war.is_active:
-				continue
-			if WarSystem.is_clan_involved(war, winning_clan):
-				var r: Dictionary = WarSystem.apply_score_shift(
-					war, event_type, winning_clan,
-				)
-				results.append({
-					"war_id": war.war_id,
-					"event": event_type,
-					"clan": winning_clan,
-					"shift": r["shift"],
-				})
-				break
+		var side: String = WarSystem.get_clan_side(war, winning_clan)
+		var principal: String = war.clan_a if side == "a" else war.clan_b
+		var r: Dictionary = WarSystem.apply_score_shift(war, event_type, principal)
+		results.append({
+			"war_id": war.war_id,
+			"event": event_type,
+			"clan": winning_clan,
+			"shift": r["shift"],
+		})
 
 
 # -- Dragon Schism: High House of Light siege detection (s55.10.2.8) -----------
@@ -18870,6 +21417,7 @@ static func _clear_stale_context_flags(world_states: Dictionary) -> void:
 		"champion_conclusion_candidates", "local_tier3_candidates",
 		"has_active_contracts", "has_kolat_objective",
 		"has_taint_corroboration_target", "compliance_intimidators",
+		"grant_tattoo_target",
 		# Lord-specific keys (cleared so ex-lords don't retain stale data after succession)
 		"province_data", "settlements", "clans", "current_season",
 		"characters_by_id", "active_armies", "active_insurgencies",
@@ -18962,11 +21510,7 @@ static func _set_wall_tower_context_flags(
 		wstat.garrison_shortage_letter_season = tower.garrison_shortage_letter_season
 		wstat.garrison_shortage_courtier_dispatched = tower.garrison_shortage_courtier_dispatched
 		wstat.garrison_shortage_courtier_refused = tower.garrison_shortage_courtier_refused
-		var min_jade: float = float(
-			int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
-			* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
-		)
-		wstat.jade_stockpile_critical = tower.jade_stockpile <= min_jade
+		wstat.jade_stockpile_critical = WallSystem.is_jade_critical(tower.jade_stockpile, tower.garrison_pu)
 
 		ws["context_flag"] = Enums.ContextFlag.AT_WALL_TOWER
 		ws["zone_subtype"] = Enums.ZoneSubtype.WALL_TOWER
@@ -19078,11 +21622,7 @@ static func _inject_champion_wall_status(
 	wstat.garrison_shortage_letter_season = tower.garrison_shortage_letter_season
 	wstat.garrison_shortage_courtier_dispatched = tower.garrison_shortage_courtier_dispatched
 	wstat.garrison_shortage_courtier_refused = tower.garrison_shortage_courtier_refused
-	var min_jade: float = float(
-		int(tower.garrison_pu * WallSystem.SORTIE_SMALL_MAX_PCT)
-		* WallSystem.SORTIE_SMALL_JADE_PER_WARRIOR
-	)
-	wstat.jade_stockpile_critical = tower.jade_stockpile <= min_jade
+	wstat.jade_stockpile_critical = WallSystem.is_jade_critical(tower.jade_stockpile, tower.garrison_pu)
 	existing = existing.duplicate()
 	existing.append(wstat)
 	ws["wall_statuses"] = existing
@@ -19897,6 +22437,13 @@ static func _create_winter_court_from_directive(
 		commitments.append(cm)
 		next_commitment_id[0] += 1
 		commitments_created += 1
+
+	# s55.10 host-rotation tracker: record the absolute season this clan hosted so
+	# _evaluate_winter_court_host scores it lower next Autumn (recently-hosted clans yield
+	# to those that have waited longer). Persistent top-level key (not a per-tick scratch).
+	var lhs: Dictionary = world_state.get("last_host_seasons", {})
+	lhs[host_clan] = TimeSystem.get_absolute_season(ic_day)
+	world_state["last_host_seasons"] = lhs
 
 	return {
 		"court_id": court.court_id,
@@ -21927,7 +24474,49 @@ static func _process_seiyaku_review(
 		active_topics.append(topic)
 		result["exhaustion_topic_id"] = topic.topic_id
 
+	# s55.22b §3.1/§7: apply the per-season disposition suppression. Each active directive lowers
+	# BOTH targeted Champions' disposition toward each other (the pair the system scans), via the
+	# LOCKED estimate_seasonal_effect arbiter fed the committed-directive channel set (an assigned
+	# operative uses all channels per §3: court + one visit + letters). Escalated directives run at
+	# max intensity; detected directives are halved inside the arbiter. Clamped to the +31 formal-
+	# alliance floor when applicable. Operates entirely through the existing disposition system (§7).
+	_apply_seiyaku_suppression(seiyaku_state, characters)
+
 	return result
+
+
+static func _apply_seiyaku_suppression(
+	seiyaku_state: Dictionary,
+	characters: Array,
+) -> void:
+	var directives: Dictionary = seiyaku_state.get("active_directives", {})
+	if directives.is_empty():
+		return
+	# Resolve the current Great Clan Champion per clan (status >= 7.0, no lord, alive) — the same
+	# selection _build_champion_dispositions uses to build the scanned pair values.
+	var champions: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c.clan.is_empty() or c.lord_id != -1 or c.status < 7.0 or CharacterStats.is_dead(c):
+			continue
+		if not champions.has(c.clan) or c.status > champions[c.clan].status:
+			champions[c.clan] = c
+	for pair_key: Variant in directives.keys():
+		var directive: Dictionary = directives[pair_key]
+		var champ_a: L5RCharacterData = champions.get(directive.get("clan_a", ""))
+		var champ_b: L5RCharacterData = champions.get(directive.get("clan_b", ""))
+		if champ_a == null or champ_b == null:
+			continue
+		var escalated: bool = directive.get("escalated", false)
+		# A committed operative uses all channels (s55.22b §3): court access + one visit + letters.
+		var effect: int = OtomoSeiyakuSystem.estimate_seasonal_effect(directive, true, 1, true, escalated)
+		if effect >= 0:
+			continue
+		var floor: int = OtomoSeiyakuSystem.get_alliance_disposition_floor(seiyaku_state, pair_key as String)
+		# Poison each side's view of the other (s55.22b §3.1).
+		champ_a.disposition_values[champ_b.character_id] = clampi(
+			int(champ_a.disposition_values.get(champ_b.character_id, 0)) + effect, floor, 100)
+		champ_b.disposition_values[champ_a.character_id] = clampi(
+			int(champ_b.disposition_values.get(champ_a.character_id, 0)) + effect, floor, 100)
 
 
 static func _build_champion_dispositions(
@@ -21991,6 +24580,8 @@ static func _process_togashi_oversight(
 	current_season: int = 0,
 	settlements: Array = [],
 	provinces: Dictionary = {},
+	spiritual_events: Array = [],
+	active_wars: Array = [],
 ) -> Dictionary:
 	# Reappearance check runs BEFORE the dragon_autonomous_rule gate.
 	# The assaulting FC held autonomous rule; when he dies a new FC is found here.
@@ -22039,7 +24630,7 @@ static func _process_togashi_oversight(
 			fc_directives.append(d)
 
 	var oversight_world: Dictionary = _build_togashi_world_state(
-		world_states, characters, characters_by_id,
+		world_states, characters, characters_by_id, spiritual_events, provinces, active_wars,
 	)
 
 	var result: Dictionary = TogashiOversight.process_seasonal_oversight(
@@ -22140,6 +24731,9 @@ static func _build_togashi_world_state(
 	world_states: Dictionary,
 	characters: Array,
 	characters_by_id: Dictionary,
+	spiritual_events: Array = [],
+	provinces: Dictionary = {},
+	active_wars_real: Array = [],
 ) -> Dictionary:
 	var clan_strengths: Dictionary = {}
 	for c: L5RCharacterData in characters:
@@ -22149,25 +24743,66 @@ static func _build_togashi_world_state(
 			continue
 		clan_strengths[c.clan] = float(clan_strengths.get(c.clan, 0.0)) + c.status
 
-	var active_wars: Array = world_states.get("active_wars", [])
+	# Count active inter-clan wars from the REAL active_wars param (WarData). The top-level
+	# world_states["active_wars"] this used to read is never set either (only per-character
+	# sub-dicts get it, ws[char_id]["active_wars"]), so inter_clan_wars was always 0 and the
+	# IMPERIAL_COHESION "2+ inter-clan wars" trigger was dead. Every entry in active_wars is a
+	# clan-vs-clan war (intra-clan conflicts are the separate active_civil_wars system); guard
+	# on distinct, non-empty clans. Fall back to the legacy (empty) dict-count only if a caller
+	# passes no active_wars.
 	var inter_clan_wars: int = 0
-	for w: Variant in active_wars:
-		if w is Dictionary:
-			inter_clan_wars += 1
+	if not active_wars_real.is_empty():
+		for w: Variant in active_wars_real:
+			if w is WarData:
+				var wd: WarData = w as WarData
+				if wd.is_active and wd.clan_a != "" and wd.clan_b != "" and wd.clan_a != wd.clan_b:
+					inter_clan_wars += 1
+	else:
+		for w: Variant in world_states.get("active_wars", []):
+			if w is Dictionary:
+				inter_clan_wars += 1
 
-	var provinces_data: Array = world_states.get("province_data", [])
+	# Source the real provinces param. The top-level world_states["province_data"] key
+	# this function used to read is NEVER populated (province_data is stashed only on
+	# PER-CHARACTER world_state sub-dicts, ws[char_id]["province_data"], not the top-level
+	# dict passed here) -- so rebellion_count / max_non_shadowlands_ptl / wall_breach_active
+	# (and the realm Dragon-territory check below) were ALL reading an empty array, i.e.
+	# dead. Prefer the real provinces Dictionary; fall back to the legacy (empty) key only
+	# if a caller passes no provinces.
+	var provinces_data: Array = provinces.values() if not provinces.is_empty() else world_states.get("province_data", [])
 	var rebellion_count: int = 0
 	var max_non_sl_ptl: float = 0.0
 	var wall_breach: bool = false
 	var failing_worship: int = 0
+	var province_clan: Dictionary = {}
 	for p: Variant in provinces_data:
 		if p is ProvinceData:
+			province_clan[p.province_id] = p.clan
 			if p.active_insurgency_id >= 0:
 				rebellion_count += 1
 			if p.province_taint_level > 0.0 and p.clan != "Crab":
 				max_non_sl_ptl = maxf(max_non_sl_ptl, p.province_taint_level)
 			if p.shadowlands_strength > 0 and p.stability < 30.0:
 				wall_breach = true
+
+	# Spiritual realm overlaps (s55.10.2 SPIRITUAL_HEALTH concern). These two facts fed
+	# TogashiOversight.spiritual_health_concern_fires but were HARDCODED to 0/false in this
+	# builder -- the sole producer -- so the Dragon Champion's realm-overlap triggers were
+	# dead (only failing_worship + max_non_shadowlands_ptl could fire the concern). Computed
+	# from the live SpiritualInsurgencySystem events (no invented values -- plain facts):
+	# empire-wide count = active REALM_OVERLAP events; Dragon-territory = any active
+	# REALM_OVERLAP whose province is Dragon-clan (the Champion's home turf, non-redundant
+	# with the empire-wide worship signal).
+	var realm_overlaps_empire_wide: int = 0
+	var realm_overlap_in_dragon: bool = false
+	for ev: Variant in spiritual_events:
+		if ev is SpiritualInsurgencyData:
+			var sev: SpiritualInsurgencyData = ev as SpiritualInsurgencyData
+			if sev.resolved or sev.event_type != Enums.SpiritualEventType.REALM_OVERLAP:
+				continue
+			realm_overlaps_empire_wide += 1
+			if str(province_clan.get(sev.province_id, "")) == "Dragon":
+				realm_overlap_in_dragon = true
 
 	var worship_maluses: Dictionary = world_states.get("_worship_maluses", {})
 	for prov_id: Variant in worship_maluses:
@@ -22194,8 +24829,8 @@ static func _build_togashi_world_state(
 		"emperor_vacant": emperor_vacant,
 		"provinces_in_rebellion": rebellion_count,
 		"failing_worship_provinces": failing_worship,
-		"realm_overlaps_empire_wide": 0,
-		"realm_overlap_in_dragon_territory": false,
+		"realm_overlaps_empire_wide": realm_overlaps_empire_wide,
+		"realm_overlap_in_dragon_territory": realm_overlap_in_dragon,
 		"max_non_shadowlands_ptl": max_non_sl_ptl,
 		"wall_breach_active": wall_breach,
 		"shadowlands_incursion_tier": 0,
@@ -22737,7 +25372,7 @@ static func _process_npc_advancement(
 	var days_in_season: int = _get_season_days(current_season)
 
 	var adv_world_state: Dictionary = _build_advancement_world_state(
-		characters, active_courts, active_sieges, active_armies, insurgencies
+		characters, active_courts, active_sieges, active_armies, insurgencies, ic_day
 	)
 
 	var adv_result: Dictionary = NPCAdvancement.process_seasonal_advancement(
@@ -22776,6 +25411,10 @@ static func _process_npc_advancement(
 		var ranked_char: L5RCharacterData = chars_by_id_local.get(rut["character_id"]) as L5RCharacterData
 		if ranked_char != null and not ranked_char.topic_pool.has(topic.topic_id):
 			ranked_char.topic_pool.append(topic.topic_id)
+		# s57.25.7 SEEK_TATTOO urgency clock: a Togashi monk who ranks up resets their
+		# seasons-at-rank tracker (the new rank's ability allotment is now unfilled).
+		if ranked_char != null and TattooSystem.is_togashi_school(ranked_char.school):
+			ranked_char.tattoo_rank_reached_season = TimeSystem.get_absolute_season(ic_day)
 
 	return adv_result
 
@@ -22786,6 +25425,7 @@ static func _build_advancement_world_state(
 	active_sieges: Array,
 	active_armies: Array,
 	insurgencies: Array,
+	ic_day: int = -1,
 ) -> Dictionary:
 	var in_court_ids: Array = []
 	for court_entry_v: Variant in active_courts:
@@ -22814,8 +25454,25 @@ static func _build_advancement_world_state(
 			elif c.military_rank >= Enums.MilitaryRank.CHUI:
 				in_crisis_ids.append(c.character_id)
 
+	# Season-wide battle membership (s52 Part 3): a character earns the 2.5x/3.0x battle
+	# activity multiplier for the OOC season if their battle_record shows they fought in a
+	# battle during the JUST-ENDED season. Seasonal advancement fires at the START of the new
+	# season (before any of this season's battles), so the credited season is the previous
+	# absolute season. The last_battle_season stamp is per-character and self-cleaning (it is
+	# only "current" for one season), so no accumulator set or manual clear is needed.
+	var in_battle_ids: Array = []
+	if ic_day >= 0:
+		var prev_abs_season: int = TimeSystem.get_absolute_season(ic_day) - 1
+		# prev_abs_season >= 0 guard: a real stamp is always get_absolute_season(...) >= 0, while an
+		# unstamped/empty battle_record reads the -1 default. Before the first season has ended
+		# (ic_day in year-0 spring -> prev = -1) that -1 default would falsely match, so skip.
+		if prev_abs_season >= 0:
+			for c: L5RCharacterData in characters:
+				if c.battle_record is Dictionary and int((c.battle_record as Dictionary).get("last_battle_season", -1)) == prev_abs_season:
+					in_battle_ids.append(c.character_id)
+
 	return {
-		"in_battle_ids": [],
+		"in_battle_ids": in_battle_ids,
 		"in_siege_ids": in_siege_ids,
 		"in_court_ids": in_court_ids,
 		"in_crisis_ids": in_crisis_ids,
@@ -22988,15 +25645,21 @@ static func _apply_marriage(
 		var proposing_lord_id: int = effects.get("proposing_lord_id", -1)
 		var target_lord_id: int = effects.get("target_lord_id", -1)
 		if proposing_lord_id >= 0 and target_lord_id >= 0:
-			var favor := FavorData.new()
-			favor.favor_type = FavorData.FavorType.GENERAL
-			favor.tier = FavorData.FavorTier.MODERATE
-			favor.creditor_id = target_lord_id
-			favor.debtor_id = proposing_lord_id
-			favor.created_ic_day = ic_day
-			favor.terms = "marriage_obligation"
-			favor.source_action = "ARRANGE_MARRIAGE"
-			favors.append(favor)
+			# Route through the canonical FavorSystem.offer_favor factory (as the other 5 favor
+			# creation sites do) so the favor gets a UNIQUE favor_id. The inline FavorData.new()
+			# here set no favor_id, so every marriage-obligation favor defaulted to -1 -- they were
+			# indistinguishable and could never be reliably invoked/honored/broken (all favor
+			# lookups match by favor_id). Field values (GENERAL / MODERATE / creditor=target lord /
+			# debtor=proposing lord / terms / source_action) are preserved exactly.
+			var max_fid: int = 0
+			for f: Variant in favors:
+				if f is FavorData and (f as FavorData).favor_id >= max_fid:
+					max_fid = (f as FavorData).favor_id + 1
+			favors.append(FavorSystem.offer_favor(
+				FavorData.FavorType.GENERAL, FavorData.FavorTier.MODERATE,
+				target_lord_id, proposing_lord_id, ic_day,
+				"marriage_obligation", "ARRANGE_MARRIAGE", max_fid,
+			))
 			favor_created = true
 
 	var topic_id: int = -1
@@ -23388,6 +26051,91 @@ static func _process_champion_letter_dispatches(
 		pending_letters.append(letter)
 
 
+# -- Operational-Superior Subordinate Coordination (s57.54.10d) ----------------
+# An operational superior (a Taisa/Shireikan holding operational_superior_id
+# authority over subordinates, per s57.21) spends 1 Civilian Order per IDLE
+# subordinate they direct; the subordinate inherits a copy of the superior's OWN
+# current active primary objective (owner-approved 2026-07-17: propagate the
+# superior's operational directive down the chain — the natural military meaning
+# of "coordinating subordinates"; no new objective types/values are invented).
+# This is the op-superior counterpart to the lord-tier SEASONAL
+# _evaluate_vassal_objectives / _process_vassal_reassignments channel, which is
+# gated to _is_lord_tier and never covers a non-lord operational superior — so
+# before this the s57.54.10d CO budget those superiors receive was unspendable
+# (every civilian-order ActionID is LORD_ONLY, and no need routes a superior to
+# self-select a subordinate delegation). Runs daily after _reset_all_ap sets the
+# CO budget; directs only idle subordinates (never clobbers an active primary),
+# self-refreshing (a subordinate that completes → idle → re-directed with the
+# superior's then-current objective next day).
+static func _process_operational_coordination(
+	characters: Array,
+	objectives_map: Dictionary,
+	characters_by_id: Dictionary,
+	current_season: int,
+) -> void:
+	# Index living non-PC subordinates by their operational superior.
+	var subs_by_superior: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.operational_superior_id >= 0:
+			var arr: Array = subs_by_superior.get(c.operational_superior_id, [])
+			arr.append(c)
+			subs_by_superior[c.operational_superior_id] = arr
+
+	for superior: L5RCharacterData in characters:
+		if CharacterStats.is_dead(superior) or superior.is_pc:
+			continue
+		if superior.civilian_orders_remaining <= 0:
+			continue
+		var subs: Array = subs_by_superior.get(superior.character_id, [])
+		if subs.is_empty():
+			continue
+		# A superior can only propagate an objective they actually hold. An idle
+		# superior (no primary, or a completed one) has nothing to coordinate.
+		var sup_objs: Dictionary = objectives_map.get(superior.character_id, {})
+		var sup_primary: Dictionary = sup_objs.get("primary", {})
+		if sup_primary.is_empty() or sup_primary.get("status", "") == "COMPLETED":
+			continue
+		var directive_need: String = sup_primary.get("need_type", "")
+		if directive_need.is_empty():
+			continue
+
+		for sub: L5RCharacterData in subs:
+			if superior.civilian_orders_remaining <= 0:
+				break
+			var sub_objs: Dictionary = objectives_map.get(sub.character_id, {})
+			var sub_primary: Dictionary = sub_objs.get("primary", {})
+			# Direct only IDLE subordinates — the same idle test the seasonal
+			# lord→vassal pass (_evaluate_vassal_objectives) uses.
+			if not (sub_primary.is_empty() or sub_primary.get("status", "") == "COMPLETED"):
+				continue
+
+			var new_obj: Dictionary = {
+				"need_type": directive_need,
+				"assigned_by": superior.character_id,
+				"status": "ACTIVE",
+				"source": "operational_coordination",
+			}
+			if sup_primary.has("target_province_id"):
+				new_obj["target_province_id"] = sup_primary["target_province_id"]
+			if sup_primary.has("target_clan"):
+				new_obj["target_clan"] = sup_primary["target_clan"]
+			if sup_primary.has("target_npc_id"):
+				new_obj["target_npc_id"] = sup_primary["target_npc_id"]
+
+			if not objectives_map.has(sub.character_id):
+				objectives_map[sub.character_id] = {}
+			objectives_map[sub.character_id]["primary"] = new_obj
+
+			# s55.6: the superior transfers the relevant knowledge with the order.
+			InformationSystem.transfer_objective_knowledge(
+				superior, sub, new_obj, current_season, [], characters_by_id
+			)
+
+			superior.civilian_orders_remaining -= 1
+
+
 static func _process_vassal_reassignments(
 	strategic_results: Array,
 	objectives_map: Dictionary,
@@ -23571,6 +26319,126 @@ static func _process_worship_accumulation(
 				"total_wp": effects.get("total_wp", 0.0),
 			})
 	return results
+
+
+# -- s4.3.21 Divination — embedded in PERFORM_WORSHIP (v574, LOCKED) -----------
+# "When a shugenja spends 1 AP on PERFORM_WORSHIP, they also learn the worship
+# status of the Fortune(s) they prayed to. Directed worship reveals the status
+# of that one Fortune. Split worship reveals the status of all seven Great
+# Fortunes. No additional AP cost. The once-per-season frequency limit still
+# applies." The reading rolls WorshipSystem.resolve_divination (Lore: Theology
+# + the Fortune's Ring vs TN 15, honoring the Fukurokujin divination maluses —
+# Restless −1k0 / Displeased −2k0 / Wrathful impossible). A FAILED roll yields
+# no reading and does not consume the once-per-season limit (nothing learned).
+# Results are stored as "worship_state" KnowledgeEntry on the shugenja (one
+# current reading per Fortune, older replaced), which the PERFORM_WORSHIP
+# metadata consumer reads to pick directed-vs-split worship (s4.3.21 line 1391:
+# "If a Fortune is at Restless or worse the engine directs all worship there.
+# If all Fortunes are healthy it defaults to split.").
+# DEFERRED (LOCKED mechanic, NO GDD numeric): the lord's "immediate Honor loss"
+# when their shugenja reports a failure threshold — the amount is unspecified,
+# so it is not applied (not invented).
+static func _process_worship_divination(
+	day_results: Array,
+	worship_state: Dictionary,
+	characters_by_id: Dictionary,
+	dice_engine: DiceEngine,
+	ic_day: int,
+) -> Array:
+	var results: Array = []
+	if worship_state.is_empty() or dice_engine == null:
+		return results
+	var season: int = TimeSystem.get_absolute_season(ic_day)
+	for r: Variant in day_results:
+		if not (r is Dictionary):
+			continue
+		var result: Dictionary = r as Dictionary
+		if result.get("action_id", "") != "PERFORM_WORSHIP" or not result.get("success", false):
+			continue
+		var shugenja: L5RCharacterData = characters_by_id.get(result.get("character_id", -1))
+		if shugenja == null or CharacterStats.is_dead(shugenja):
+			continue
+		if shugenja.school_type != Enums.SchoolType.SHUGENJA:
+			continue  # s4.3.21: "Only Shugenja can read the current worship state"
+		var effects: Dictionary = result.get("effects", {})
+		var province_id: int = int(effects.get("province_id", -1))
+		if province_id < 0:
+			continue
+		var province_wp: Dictionary = (worship_state.get("province_wp", {}) as Dictionary).get(province_id, {})
+		if province_wp.is_empty():
+			continue
+
+		# Directed worship → the one Fortune prayed to (the wp_distribution key);
+		# split worship → all seven Great Fortunes.
+		var fortunes: Array = []
+		if bool(effects.get("directed", false)):
+			for f: Variant in (effects.get("wp_distribution", {}) as Dictionary):
+				fortunes.append(int(f))
+		else:
+			for f: int in range(WorshipSystem.GREAT_FORTUNE_COUNT):
+				fortunes.append(f)
+
+		# Fukurokujin's own displeasure degrades Divination itself (s4.3.21 malus).
+		var fk_wp: float = float(province_wp.get(int(Enums.GreatFortune.FUKUROKUJIN), 0.0))
+		var fk_tier: Enums.WorshipTier = WorshipSystem.get_worship_tier(fk_wp, WorshipSystem.PROVINCE_THRESHOLD)
+		var malus: Dictionary = WorshipSystem.FUKUROKUJIN_MALUS.get(fk_tier, {})
+
+		var theology: int = shugenja.skills.get("Lore: Theology", 0)
+		var wound_pen: int = CharacterStats.get_wound_penalty(shugenja)
+
+		for f: int in fortunes:
+			# Once-per-season gate: a Fortune already read this season yields no
+			# second reading (v574).
+			if _has_seasonal_worship_reading(shugenja, f, season):
+				continue
+			var ring: int = WorshipSystem.FORTUNE_RING.get(f, Enums.Ring.VOID)
+			var ring_value: int = CharacterStats.get_ring_value(shugenja, ring)
+			var div: Dictionary = WorshipSystem.resolve_divination(
+				dice_engine, theology, ring_value, f, province_wp, malus, wound_pen,
+			)
+			if not div.get("success", false):
+				continue  # failed roll — nothing learned, may retry on later worship
+			# Replace any older reading for this Fortune (one current reading each).
+			var i: int = shugenja.knowledge_pool.size() - 1
+			while i >= 0:
+				var old: Variant = shugenja.knowledge_pool[i]
+				if old is KnowledgeEntry and (old as KnowledgeEntry).entry_type == "worship_state" \
+						and int((old as KnowledgeEntry).data.get("fortune", -1)) == f:
+					shugenja.knowledge_pool.remove_at(i)
+				i -= 1
+			var ke := KnowledgeEntry.new()
+			ke.source = Enums.KnowledgeSource.DIRECT_OBSERVATION
+			ke.entry_type = "worship_state"
+			ke.season_acquired = season
+			ke.data = {
+				"fortune": f,
+				"province_id": province_id,
+				"tier": int(div.get("tier", Enums.WorshipTier.NONE)),
+				"scope": div.get("scope", "province"),
+				"flavor": div.get("flavor", ""),
+				"above_threshold": div.get("above_threshold", false),
+			}
+			InformationSystem.add_knowledge(shugenja, ke)
+			results.append({
+				"character_id": shugenja.character_id,
+				"fortune": f,
+				"tier": int(div.get("tier", Enums.WorshipTier.NONE)),
+				"province_id": province_id,
+			})
+	return results
+
+
+static func _has_seasonal_worship_reading(
+	shugenja: L5RCharacterData,
+	fortune: int,
+	season: int,
+) -> bool:
+	for k: Variant in shugenja.knowledge_pool:
+		if k is KnowledgeEntry and (k as KnowledgeEntry).entry_type == "worship_state" \
+				and int((k as KnowledgeEntry).data.get("fortune", -1)) == fortune \
+				and (k as KnowledgeEntry).season_acquired == season:
+			return true
+	return false
 
 
 static func _process_letter_examinations(
@@ -24223,6 +27091,7 @@ static func _populate_infrastructure_intelligence(
 	ships: Array,
 	worship_state: Dictionary,
 	named_vessels: Array = [],
+	active_wars: Array = [],
 ) -> void:
 	var worship_failing: Dictionary = {}  # province_id → clan
 	var border_no_fort: Dictionary = {}  # province_id → clan
@@ -24294,8 +27163,14 @@ static func _populate_infrastructure_intelligence(
 		if not v.is_destroyed and not v.owning_clan.is_empty():
 			clans_with_ships[v.owning_clan] = true
 
+	# Iterate the REAL active_wars param (WarData array). This function runs early in advance_day,
+	# long before top-level world_states["active_wars"] is briefly set (only during the seasonal
+	# strategic reviews, then erased), so reading that key here always saw [] -> naval_threatened_clans
+	# was permanently empty -> ws["has_naval_threat"] always false -> the objective_decomposer
+	# COMMISSION_SHIP defensive-ship branch (is_coastal AND has_naval_threat AND NOT has_naval_assets)
+	# never fired. The loop already expects raw WarData, so the param is a drop-in (s57.18).
 	var naval_threatened_clans: Dictionary = {}
-	for w: Variant in world_states.get("active_wars", []):
+	for w: Variant in active_wars:
 		if w is WarData:
 			var wd: WarData = w as WarData
 			if clans_with_ships.has(wd.clan_a):
@@ -24601,6 +27476,35 @@ static func _populate_vacancy_intelligence(
 					"province_id": -1,
 					"zone_id": gz.zone_id,
 					"candidate_id": gov_cand,
+					"seasons_vacant": 0,
+				})
+
+			# Imperial court seat refill (s11.5 / s54.7i): the five singleton court
+			# officers (Advisor, Chancellor, Herald, Treasurer, Voice) are created at
+			# world-gen with the Emperor as lord but were never refilled on death,
+			# leaving the court hollow (and breaking the Cunning/Warlike Governor
+			# delegation, which needs a living Advisor). Any officer seat with no
+			# living holder becomes an Emperor vacancy; the candidate is the best
+			# available courtier, biased to the seat's traditional Imperial family.
+			var held_court: Dictionary = {}
+			for hc: L5RCharacterData in characters:
+				if CharacterStats.is_dead(hc):
+					continue
+				if hc.role_position in _IMPERIAL_COURT_SEATS:
+					held_court[hc.role_position] = true
+			for seat_name: String in _IMPERIAL_COURT_SEATS:
+				if held_court.has(seat_name):
+					continue
+				var court_cand: int = _find_imperial_court_candidate(
+					emperor_char, seat_name, characters,
+				)
+				if not lord_vacancies.has(emperor_id):
+					lord_vacancies[emperor_id] = []
+				lord_vacancies[emperor_id].append({
+					"position_type": seat_name,
+					"priority": 2,
+					"province_id": -1,
+					"candidate_id": court_cand,
 					"seasons_vacant": 0,
 				})
 
@@ -24912,6 +27816,58 @@ static func _find_champion_recommendation(
 		var total: float = skill_score + status_score
 		if total > best_score:
 			best_score = total
+			best_id = c.character_id
+	return best_id
+
+
+# Refillable singleton Imperial court seats (s11.5). Created at world-gen with the
+# Emperor as lord; refilled on death by the Emperor's FILL_VACANCY pass.
+const _IMPERIAL_COURT_SEATS: Array[String] = [
+	RoleRegistry.IMPERIAL_ADVISOR, RoleRegistry.IMPERIAL_CHANCELLOR,
+	RoleRegistry.IMPERIAL_HERALD, RoleRegistry.IMPERIAL_TREASURER,
+	RoleRegistry.VOICE_OF_EMPEROR,
+]
+# Traditional Imperial family for each seat (world-gen assignment, s2.1). The
+# refill biases toward it but does not require it.
+const _IMPERIAL_SEAT_FAMILY: Dictionary = {
+	RoleRegistry.IMPERIAL_ADVISOR: "Otomo",
+	RoleRegistry.IMPERIAL_CHANCELLOR: "Otomo",
+	RoleRegistry.IMPERIAL_HERALD: "Miya",
+	RoleRegistry.IMPERIAL_TREASURER: "Otomo",
+	RoleRegistry.VOICE_OF_EMPEROR: "Seppun",
+}
+
+
+## Best candidate for a vacant Imperial court seat. Eligible = an available
+## senior courtier (no role, or a Senior Courtier ready for promotion). Scored on
+## court standing (Status), court competence (Courtier + Etiquette), disposition
+## toward the Emperor, and Imperial-clan / traditional-family bias. The
+## disposition term is the lever the Kolat candidate-cultivation objective builds
+## (s54.7i) — a well-backed candidate genuinely out-scores rivals for the seat.
+static func _find_imperial_court_candidate(
+	emperor: L5RCharacterData, seat_name: String, characters: Array,
+) -> int:
+	if emperor == null or CharacterStats.is_dead(emperor):
+		return -1
+	var pref_family: String = String(_IMPERIAL_SEAT_FAMILY.get(seat_name, ""))
+	var best_id: int = -1
+	var best_score: float = -1.0
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if not (c.role_position.is_empty() or c.role_position == RoleRegistry.SENIOR_COURTIER):
+			continue  # not available (holds a lordship / magistracy / other seat)
+		if c.status < 3.0:
+			continue  # Imperial court seats go to senior figures
+		var court: float = float(c.skills.get("Courtier", 0)) + float(c.skills.get("Etiquette", 0))
+		var score: float = c.status * 3.0 + court
+		score += float(c.disposition_values.get(emperor.character_id, 0)) * 0.1
+		if c.clan == "Imperial":
+			score += 5.0
+		if not pref_family.is_empty() and c.family == pref_family:
+			score += 5.0
+		if score > best_score:
+			best_score = score
 			best_id = c.character_id
 	return best_id
 
@@ -25295,6 +28251,12 @@ static func _process_voluntary_declarations(
 		cc.witness_ids = court.attendee_ids.duplicate()
 		court_commitments.append(cc)
 		created.append(cc)
+		# Record the declaration onto the court session too, so generate_court_close_topic
+		# reflects it (s15.2/s16.4): a court where a lord bound themselves publicly closes with
+		# the higher-tier "concluded" outcome topic instead of the generic "no_resolution" rumor.
+		CourtSystem.record_commitment(
+			court, lord_id, commitment_type, topic.title, court.attendee_ids,
+		)
 	return created
 
 
@@ -25805,6 +28767,7 @@ static func _inject_base_character_context(
 	characters_by_id: Dictionary = {},
 	active_armies: Array = [],
 	insurgencies: Array = [],
+	spiritual_insurgency_events: Array = [],
 ) -> void:
 	var taint_province_ids: Array = []
 	for t: Variant in active_topics:
@@ -25815,6 +28778,22 @@ static func _inject_base_character_context(
 			for pid: Variant in topic.provinces_affected:
 				if pid is int and pid >= 0 and pid not in taint_province_ids:
 					taint_province_ids.append(pid)
+
+	# Provinces with an active, unresolved spiritual REALM_OVERLAP event a binding spell can
+	# suppress (s56.16). The SPIRIT_BIND ritual-selection branch gates on this being non-empty;
+	# the writeback (find_bindable_spirit_event) then resolves only a matching-realm event at the
+	# caster's own province, so a non-co-located cast is a graceful no-op.
+	var spiritual_overlap_province_ids: Array = []
+	for se: Variant in spiritual_insurgency_events:
+		if se is not SpiritualInsurgencyData:
+			continue
+		var sev: SpiritualInsurgencyData = se as SpiritualInsurgencyData
+		if sev.resolved:
+			continue
+		if sev.event_type != Enums.SpiritualEventType.REALM_OVERLAP:
+			continue
+		if sev.province_id >= 0 and sev.province_id not in spiritual_overlap_province_ids:
+			spiritual_overlap_province_ids.append(sev.province_id)
 
 	var has_champion_authority: bool = PhoenixCouncil.has_champion_authority(phoenix_council_state) if not phoenix_council_state.is_empty() else false
 	var phoenix_champion_id: int = -1
@@ -25852,6 +28831,25 @@ static func _inject_base_character_context(
 	var g_clans_with_ships: Dictionary = world_states.get("_clans_with_ships", {})
 	var g_naval_threatened_clans: Dictionary = world_states.get("_naval_threatened_clans", {})
 	var g_active_wars: Array = WarSystem.wars_to_context_array(active_wars)
+
+	# Hoist the two type-safe GLOBAL military-opportunity facts to the TOP-LEVEL world_states so the
+	# lord Strategic-Review self-selection path sees them. OpportunityScanner._scan_military is
+	# invoked (via StrategicReview._evaluate_self_selection -> select_primary_objective) with the
+	# TOP-LEVEL world_states dict, but these keys are only ever written on PER-CHARACTER sub-dicts
+	# below -- so at the top level they read empty, and the lord self-selection BUILD_STRONGEST_FORCE /
+	# LEVY_TROOPS (from known_clan_strengths vs rivals) and ELIMINATE_SHADOWLANDS (from
+	# taint_topic_province_ids) opportunities NEVER fired for any lord. This injector runs once per
+	# tick (day_orchestrator ~373) before the seasonal strategic reviews (~1787) on the same shared
+	# dict, so the top-level copies are always the current tick's globals. Same empty-top-level-key
+	# class as the war-context fix; zero invented values -- every threshold (rival * 1.3 / * 1.1, the
+	# taint existence gate) lives in the consumer. known_clan_strengths is a Dictionary (read via
+	# .get()) and taint_topic_province_ids an Array[int] (read via a Variant loop), so both are
+	# type-safe at the consumer. `active_insurgencies` is DELIBERATELY NOT hoisted: it is an
+	# Array[InsurgencyData] but _scan_military types its loop `for ins: Dictionary`, so hoisting the
+	# raw objects would crash it -- and its ELIMINATE_SHADOWLANDS mapping (every insurgency type,
+	# incl. peasant revolts) is redundant with / less correct than the taint-topic Shadowlands gate.
+	world_states["known_clan_strengths"] = g_clan_strengths
+	world_states["taint_topic_province_ids"] = taint_province_ids
 
 	var province_values: Array = provinces.values()
 	var clan_values: Array = clans.values()
@@ -25914,6 +28912,7 @@ static func _inject_base_character_context(
 		ws["trade_routes"] = trade_routes
 		ws["settlement_koku_modifiers"] = g_settlement_koku_mods
 		ws["taint_topic_province_ids"] = taint_province_ids
+		ws["spiritual_overlap_province_ids"] = spiritual_overlap_province_ids
 		ws["unit_training_counts"] = unit_counts.get(c.clan, {})
 		ws["worship_failing_province_ids"] = g_worship
 		ws["border_province_ids_without_fort"] = g_border
@@ -26167,7 +29166,13 @@ static func _populate_crime_suppression_data(
 	world_states["_crime_suppression_data"] = per_settlement
 
 
-static func _populate_military_data(military_data: Dictionary, companies: Array) -> void:
+static func _populate_military_data(
+	military_data: Dictionary,
+	companies: Array,
+	legions_raw: Array = [],
+	sections_raw: Array = [],
+	characters_by_id: Dictionary = {},
+) -> void:
 	var companies_dict: Dictionary = {}
 	for mc: Dictionary in companies:
 		var cid: int = mc.get("company_id", -1)
@@ -26182,10 +29187,47 @@ static func _populate_military_data(military_data: Dictionary, companies: Array)
 		# deployment_status not stored in raw dict; default WITH_LEGION is correct
 		companies_dict[cid] = cd
 	military_data["companies"] = companies_dict
-	if not military_data.has("legions"):
-		military_data["legions"] = {}
-	if not military_data.has("sections"):
-		military_data["sections"] = {}
+
+	# s57.21 unit hierarchy (raw dicts -> Resources). A unit's commander_id is set to -1 (vacant) when
+	# its commanding character is DEAD or missing, so the vacant-superior gate arbiters read liveness
+	# directly off commander_id without threading characters_by_id into MilitaryHierarchy.
+	var legions_dict: Dictionary = {}
+	for lr: Dictionary in legions_raw:
+		var lid: int = lr.get("legion_id", -1)
+		if lid < 0:
+			continue
+		var ld: MilitaryUnitData.LegionData = MilitaryUnitData.LegionData.new()
+		ld.legion_id = lid
+		ld.parent_section_id = lr.get("parent_section_id", -1)
+		ld.commander_id = _live_commander_id(lr.get("commander_id", -1), characters_by_id)
+		ld.home_province_id = lr.get("home_province_id", -1)
+		ld.constituent_companies = lr.get("constituent_companies", [])
+		legions_dict[lid] = ld
+	military_data["legions"] = legions_dict
+
+	var sections_dict: Dictionary = {}
+	for sr: Dictionary in sections_raw:
+		var sid: int = sr.get("section_id", -1)
+		if sid < 0:
+			continue
+		var sd: MilitaryUnitData.SectionData = MilitaryUnitData.SectionData.new()
+		sd.section_id = sid
+		sd.parent_army_id = sr.get("parent_army_id", -1)
+		sd.commander_id = _live_commander_id(sr.get("commander_id", -1), characters_by_id)
+		sd.constituent_legions = sr.get("constituent_legions", [])
+		sections_dict[sid] = sd
+	military_data["sections"] = sections_dict
+
+
+static func _live_commander_id(commander_id: int, characters_by_id: Dictionary) -> int:
+	## Returns the commander_id if that character is alive (present + not dead), else -1 (vacant).
+	## An empty characters_by_id (a caller not threading liveness) leaves the id intact — graceful.
+	if commander_id < 0 or characters_by_id.is_empty():
+		return commander_id
+	var c: L5RCharacterData = characters_by_id.get(commander_id) as L5RCharacterData
+	if c == null or CharacterStats.is_dead(c):
+		return -1
+	return commander_id
 
 
 static func _process_doshin_seasonal_recovery(world_states: Dictionary) -> void:
@@ -27070,6 +30112,8 @@ static func _process_seduction_entanglements(
 	entanglements: Array,
 	ic_day: int,
 	characters_by_id: Dictionary = {},
+	active_secrets: Array = [],
+	next_secret_id: Array = [1],
 ) -> void:
 	for r: Dictionary in day_results:
 		var action_id: String = r.get("action_id", "")
@@ -27084,16 +30128,28 @@ static func _process_seduction_entanglements(
 		var target_id: int = int(r.get("target_npc_id", -1))
 		if seducer_id < 0 or target_id < 0:
 			continue
-		var duplicate: bool = false
+		# s12.8 line 273 (LOCKED): "Contact that resets the maintenance window: any Seduction
+		# ActionID (any of the five) targeting the same person." A re-seduction against an
+		# EXISTING non-broken entanglement is therefore maintenance, not a duplicate to skip --
+		# route it through SeductionSystem.maintain_entanglement (resets the window, missed_windows
+		# 0, state ACTIVE). Before this the re-seduce was a no-op, so entanglements could only ever
+		# decay (check_maintenance) and never be sustained.
+		var refreshed: bool = false
 		for existing: Dictionary in entanglements:
 			if int(existing.get("seducer_id", -1)) == seducer_id and int(existing.get("target_id", -1)) == target_id:
 				if int(existing.get("state", -1)) != SeductionSystem.EntanglementState.BROKEN:
-					duplicate = true
+					SeductionSystem.maintain_entanglement(existing, ic_day)
+					refreshed = true
 					break
-		if duplicate:
+		if refreshed:
 			continue
 		var variant: SeductionSystem.SeductionVariant = _get_seduction_variant_from_action_id(action_id)
 		entanglements.append(SeductionSystem.create_entanglement(seducer_id, target_id, ic_day, variant))
+		# s12.8:271 (LOCKED): "the entanglement generates a secret object" at a severity tier by the
+		# participants' circumstances -- the affair-scandal secret the discovery->blackmail->expose
+		# chain (EAVESDROP/SHADOW_TARGET/EXPOSE_SECRET) consumes. Was dormant: SeductionSystem.
+		# get_affair_severity (the LOCKED tier arbiter) had zero callers and no secret was ever minted.
+		_mint_affair_secret(seducer_id, target_id, characters_by_id, active_secrets, next_secret_id, ic_day)
 
 		if action_id == "SEDUCE_TO_COMPROMISE":
 			var seducer: L5RCharacterData = characters_by_id.get(seducer_id)
@@ -27101,6 +30157,91 @@ static func _process_seduction_entanglements(
 				HonorGlorySystem.apply_honor_change(
 					seducer, CrimeSystem.get_manipulating_honor(seducer)
 				)
+
+
+# s12.8:271 (LOCKED) affair-secret minting (owner-approved 2026-07-09). On a NEW entanglement the
+# seduction generates the affair-scandal secret at the LOCKED severity tier (SeductionSystem.
+# get_affair_severity: cross-clan+political -> T2 / married -> T3 / unmarried similar -> T4). Grounded,
+# no invented values: the tiers are the arbiter's own LOCKED constants; the secret is "initially known
+# only to the two participants" (known_by_ids = [seducer, target]); the subject is the SEDUCED TARGET
+# -- line 289 "the seduced person suffers the affair scandal consequences" in every variant, and
+# SEDUCE_FOR_LEVERAGE treats the secret as "leverage against the seduced target". The OWNER-APPROVED
+# default for the §271 "political tension" signal is cross-clan (a cross-clan affair is inherently
+# politically charged -- also consistent with the arbiter's own T2-first precedence). Deduped on the
+# per-(seducer,target) affair slug so re-seducing after a break (the affair secret "remains in
+# existence", line 273) never mints a duplicate. DEFERRED (documented): SEDUCE_TO_COMPROMISE's
+# ADDITIONAL third-party political secret (line 289 -- subject = the rival) needs the executor's
+# intended-third-party target id, which the compromise path does not set; the affair-scandal secret
+# on the seduced person (minted here for all five variants) is the base output.
+static func _mint_affair_secret(
+	seducer_id: int,
+	target_id: int,
+	characters_by_id: Dictionary,
+	active_secrets: Array,
+	next_secret_id: Array,
+	ic_day: int = -1,
+) -> void:
+	var seducer: L5RCharacterData = characters_by_id.get(seducer_id)
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	if seducer == null or target == null:
+		return  # cannot resolve circumstances -> skip (no crash; the entanglement still stands)
+	var slug: String = "affair_%d_%d" % [seducer_id, target_id]
+	for s_v: Variant in active_secrets:
+		var s_existing: SecretData = s_v as SecretData
+		if s_existing != null and s_existing.slug == slug:
+			return  # the affair secret already exists for this pair (persists past a break)
+	var seducer_married: bool = seducer.spouse_id >= 0
+	var target_married: bool = target.spouse_id >= 0
+	var is_cross_clan: bool = (
+		seducer.clan != "" and target.clan != "" and seducer.clan != target.clan
+	)
+	# Owner-approved default: "political tension" = cross-clan (matches the LOCKED arbiter's
+	# T2-first precedence). A same-clan affair is never Tier 2.
+	var is_political_tension: bool = is_cross_clan
+	var severity: SecretData.Severity = SeductionSystem.get_affair_severity(
+		seducer_married, target_married, is_political_tension, is_cross_clan
+	)
+	var desc: String = "%s is having an affair with %s" % [
+		seducer.character_name, target.character_name,
+	]
+	var secret: SecretData = SecretSystem.create_secret(
+		next_secret_id[0], target_id, severity, slug, desc
+	)
+	secret.known_by_ids = [seducer_id, target_id]  # LOCKED: initially known only to the two participants
+	# s12.8:39 context inputs: the seducer is the "involved" party (higher Status than the target
+	# bumps exposure severity +1 tier); ic_day_created stamps recency (< RECENCY_SEASONS -> +1 tier).
+	secret.involved_id = seducer_id
+	secret.ic_day_created = ic_day
+	next_secret_id[0] += 1
+	active_secrets.append(secret)
+
+
+# s12.8 line 273 (LOCKED): "WRITE_LETTER to the same person" also resets an entanglement's
+# maintenance window. Any letter a seducer sends this tick to their entangled target sustains the
+# romance (the GDD's primary, across-distance maintenance channel). Guards on ic_day_sent == ic_day
+# so a lingering pending letter never re-maintains, and skips BROKEN entanglements (a letter never
+# revives an ended relationship). Routes through the canonical maintain_entanglement arbiter.
+static func _maintain_entanglements_from_letters(
+	pending_letters: Array,
+	entanglements: Array,
+	ic_day: int,
+) -> void:
+	if entanglements.is_empty() or pending_letters.is_empty():
+		return
+	for letter_v: Variant in pending_letters:
+		var letter: LetterData = letter_v as LetterData
+		if letter == null or letter.ic_day_sent != ic_day:
+			continue  # only letters SENT this tick reset the window
+		var s_id: int = letter.sender_id
+		var r_id: int = letter.recipient_id
+		if s_id < 0 or r_id < 0:
+			continue
+		for ent: Dictionary in entanglements:
+			if int(ent.get("state", -1)) == SeductionSystem.EntanglementState.BROKEN:
+				continue
+			if int(ent.get("seducer_id", -1)) == s_id and int(ent.get("target_id", -1)) == r_id:
+				SeductionSystem.maintain_entanglement(ent, ic_day)
+				break
 
 
 # ==============================================================================
@@ -27134,10 +30275,12 @@ static func _process_assassination_commissions(
 		)
 		var commissioner_id: int = int(effects.get("commissioner_id", -1))
 		state["commissioner_id"] = commissioner_id
-		var commissioner: L5RCharacterData = characters_by_id.get(commissioner_id) as L5RCharacterData
-		var target_char: L5RCharacterData = characters_by_id.get(target_id) as L5RCharacterData
-		if commissioner != null and target_char != null:
-			HonorGlorySystem.apply_honor_change(commissioner, AssassinationSystem.get_ordering_honor_loss(target_char.status, commissioner))
+		# NOTE: the ordering honor cost (s12.8, rank-scaled by target Status) is applied ONCE, at
+		# commission time in ActionExecutor._execute_commission_assassination (Pattern B) — which also
+		# stashes it as effects.subject_honor_loss. This writeback previously RE-APPLIED the same
+		# rank-scaled ordering honor here via the domain arbiter, double-charging the commissioner
+		# every new commission (and only single-charging a deduped duplicate — an inconsistency).
+		# The re-application is removed; this pass only registers the assassination op.
 		active_assassination_ops.append(state)
 
 
@@ -27246,6 +30389,17 @@ static func _process_assassination_daily_tick(
 						tick_result["daily_detection"] = daily_detect
 
 					if AssassinationSystem.should_assign_bodyguard(op):
+						# s12.8 household response: at suspicion >= 20 the household assigns a bodyguard
+						# to the threatened member (the producer of assigned_protection_target_id, which
+						# the execution-phase bodyguard-encounter path reads). Assign once — only if the
+						# target has no guard yet — the best loyal co-located warrior.
+						if _find_bodyguard(target, characters_by_id) == null:
+							var protector: L5RCharacterData = AssassinationSystem.find_best_protector(
+								target, assassin.character_id, characters_by_id,
+							)
+							if protector != null:
+								protector.assigned_protection_target_id = target.character_id
+								tick_result["bodyguard_assigned"] = protector.character_id
 						var searcher: L5RCharacterData = AssassinationSystem.find_best_searcher(
 							target, assassin.character_id, characters_by_id,
 						)
@@ -27440,7 +30594,12 @@ static func _apply_assassination_outcome(
 		record.case_id = next_case_id[0]
 		next_case_id[0] += 1
 		record.crime_type = Enums.CrimeType.UNSANCTIONED_COVERT_KILLING
-		record.severity = Enums.CrimeSeverity.CAPITAL
+		# s57.47:33 (LOCKED) — Unsanctioned Covert Killing is severity SERIOUS (its sentence is
+		# execution, but that is the punishment axis, not the classification). Route through the
+		# canonical get_severity so this matches the sibling covert-killing sites (which build via
+		# create_crime_record); the prior hardcoded CAPITAL conflated the execution sentence with
+		# the CrimeSeverity.CAPITAL classification.
+		record.severity = CrimeSystem.get_severity(Enums.CrimeType.UNSANCTIONED_COVERT_KILLING)
 		record.perpetrator_id = assassin.character_id
 		record.victim_id = target.character_id
 		record.ic_day_committed = ic_day
@@ -28609,20 +31768,24 @@ static func _process_intimidation_compliance(
 		var target: L5RCharacterData = characters_by_id.get(tid)
 		if intimidator == null or target == null \
 				or CharacterStats.is_dead(intimidator) or CharacterStats.is_dead(target):
-			continue  # intimidator (or target) gone — compliance ends
-		# Friendship: intimidator's disposition toward target crosses into Friend range.
-		if IntimidationSystem.can_compliance_end(intimidator.disposition_values.get(tid, 0)):
-			continue
+			continue  # intimidator (or target) gone — compliance ends (liveness the arbiter can't see)
+		# The three GDD end-conditions the canonical arbiter decides on. We only compute the inputs
+		# here and delegate the OR-combination to IntimidationSystem.check_compliance_status so the
+		# compliance-end rule lives in ONE place (was re-implemented inline before this fix).
+		var disp: int = intimidator.disposition_values.get(tid, 0)
 		# Leverage removed: the blackmail secret has been exposed (no longer leverage).
 		var secret_id: int = e.get("leverage_secret_id", -1)
-		if secret_id >= 0 and _secret_is_exposed(secret_id, active_secrets):
-			continue
-		# Pushback: the target rolls Willpower vs TN 15 + intimidator's Intimidation rank.
-		var wp_roll: int = dice_engine.roll_and_keep(maxi(target.willpower, 1), maxi(target.willpower, 1), true).total
-		var pushback: Dictionary = IntimidationSystem.resolve_pushback(
-			wp_roll, intimidator.skills.get("Intimidation", 0))
-		if pushback.get("success", false):
-			continue  # target broke free
+		var leverage_removed: bool = secret_id >= 0 and _secret_is_exposed(secret_id, active_secrets)
+		# Pushback: the target rolls Willpower vs TN 15 + intimidator's Intimidation rank. Only rolled
+		# when neither friendship nor leverage-removal has already ended it (no wasted RNG).
+		var pushback_succeeded: bool = false
+		if not IntimidationSystem.can_compliance_end(disp) and not leverage_removed:
+			var wp_roll: int = dice_engine.roll_and_keep(
+				maxi(target.willpower, 1), maxi(target.willpower, 1), true).total
+			pushback_succeeded = IntimidationSystem.resolve_pushback(
+				wp_roll, intimidator.skills.get("Intimidation", 0)).get("success", false)
+		if not IntimidationSystem.check_compliance_status(disp, leverage_removed, pushback_succeeded):
+			continue  # compliance ended
 		survivors.append(e)
 	active_intimidations.assign(survivors)
 
@@ -29605,8 +32768,13 @@ static func _apply_confirmed_successions(
 			if c.lord_id == succ.deceased_id:
 				c.lord_id = succ.successor_id
 
-		# Update clan champion if applicable
-		if succ.position_tier == Enums.LordRank.CLAN_CHAMPION:
+		# Update clan champion if applicable. Keyed on the deceased's ROLE, not
+		# succ.position_tier — no death-event producer sets position_tier (it
+		# defaults to PROVINCIAL_DAIMYO), so the old position_tier == CLAN_CHAMPION
+		# guard never fired and ClanData.champion_id was stuck at its world-gen
+		# value after a champion's death. Robust + parallel to the emperor_id
+		# update below (which correctly keys on old_role).
+		if old_role == RoleRegistry.CLAN_CHAMPION or old_role == RoleRegistry.MINOR_CLAN_CHAMPION:
 			var cd: ClanData = clans.get(succ.clan)
 			if cd != null:
 				cd.champion_id = succ.successor_id
@@ -30256,6 +33424,9 @@ static func _inject_theater_context(
 			if piece.craft_progress >= 0:
 				if piece.author_id == char_id:
 					wip_ids.append(piece.piece_id)
+					# Expose the WIP piece object so the compose arbiter (§57.22.5) can read
+					# its progress/threshold/political_need_type when picking which to advance.
+					pieces_by_id[piece.piece_id] = piece
 				continue
 
 			# Completed piece.
@@ -32374,6 +35545,7 @@ static func _process_bonsai_display_writebacks(
 	active_bonsai: Array,
 	characters_by_id: Dictionary,
 	settlements: Array,
+	ic_day: int = -1,
 ) -> void:
 	## Set display_settlement_id on the bonsai when DISPLAY_BONSAI succeeds.
 	var settlements_by_id: Dictionary = {}
@@ -32414,6 +35586,10 @@ static func _process_bonsai_display_writebacks(
 					(b_v as BonsaiData).display_settlement_id = -1
 					break
 
+		# s57.27:115 familiarity clock: (re)start it when the bonsai begins displaying at a NEW
+		# settlement slot; keep it if re-displayed at the same slot (continuous display preserved).
+		if bonsai.display_settlement_id != settlement_id:
+			bonsai.display_start_ic_day = ic_day
 		bonsai.display_settlement_id = settlement_id
 		settlement.bonsai_display_slot = bonsai_id
 
@@ -32424,11 +35600,22 @@ static func _process_garden_visitor_effects(
 	characters_by_id: Dictionary,
 	settlements: Array,
 	ic_day: int,
+	active_bonsai: Array = [],
 ) -> void:
 	## Apply visitor disposition bonuses and glory ticks for co-located living characters.
 
 	if active_gardens.is_empty():
 		return
+
+	# s57.23a B6 (s57.24.9): a bonsai displayed in a zone containing an active garden raises the
+	# garden's effective visitor tier by 1 (capped at Legendary), presence-based. Zones proxy to
+	# settlement level, so collect the settlement_ids that host an active displayed bonsai.
+	var bonsai_settlements: Dictionary = {}
+	for b_v: Variant in active_bonsai:
+		var b: BonsaiData = b_v as BonsaiData
+		if b == null or b.is_dead or b.display_settlement_id < 0:
+			continue
+		bonsai_settlements[b.display_settlement_id] = true
 
 	# Build location → character list
 	var chars_at: Dictionary = {}
@@ -32467,17 +35654,28 @@ static func _process_garden_visitor_effects(
 			if GardenSystem.has_active_bonus(visitor, garden.garden_id, ic_day):
 				continue
 
+			# B6 boost: +1 effective tier when an active bonsai shares this garden's settlement.
+			var b6_marker: int = 1 if bonsai_settlements.has(garden.settlement_id) else -1
+			var eff_tier: int = GardenSystem.get_garden_effective_tier(garden, b6_marker)
 			var visit_result: Dictionary = GardenSystem.apply_visitor(
-				garden, visitor.character_id, garden.creator_id, ic_day,
+				garden, visitor.character_id, garden.creator_id, ic_day, eff_tier,
 			)
 			if visit_result.get("bonus", 0) <= 0:
+				continue
+
+			# s57.27:115 familiarity decay — a garden held in the same zone > 1 IC year
+			# loses visitor impact (standard 15%/yr, floor 50%).
+			var garden_fam: float = PaintingSystem.familiarity_factor(
+				ic_day, garden.installation_date, false)
+			var garden_bonus: int = int(round(float(visit_result["bonus"]) * garden_fam))
+			if garden_bonus <= 0:
 				continue
 
 			# Add temporary disposition modifier toward creator
 			var bucket: Array = visitor.temporary_modifiers.get(garden.creator_id, [])
 			bucket.append({
 				"event_type": "garden_visitor",
-				"value": visit_result["bonus"],
+				"value": garden_bonus,
 				"created_ic_day": ic_day,
 				"duration": GardenSystem.VISITOR_BONUS_DURATION_DAYS,
 			})
@@ -32574,10 +35772,17 @@ static func _process_bonsai_visitor_effects(
 			)
 			if visit.get("bonus", 0) <= 0:
 				continue
+			# s57.27:115 familiarity decay — a bonsai displayed in the same slot > 1 IC year loses
+			# visitor impact (standard 15%/yr, floor 50%; a bonsai is a living plant, not statuary).
+			var bonsai_fam: float = PaintingSystem.familiarity_factor(
+				ic_day, bonsai.display_start_ic_day, false)
+			var bonsai_bonus: int = int(round(float(visit["bonus"]) * bonsai_fam))
+			if bonsai_bonus <= 0:
+				continue
 			var bucket: Array = visitor.temporary_modifiers.get(bonsai.owner_id, [])
 			bucket.append({
 				"event_type": "bonsai_visitor",
-				"value": visit["bonus"],
+				"value": bonsai_bonus,
 				"created_ic_day": ic_day,
 				"duration": GardenSystem.VISITOR_BONUS_DURATION_DAYS,
 			})
@@ -32680,10 +35885,17 @@ static func _process_garden_seasonal_maintenance(
 			record.progress_at_abandonment = record.cultivation_progress
 			var daimyo: L5RCharacterData = characters_by_id.get(record.daimyo_id)
 			if artisan != null and not CharacterStats.is_dead(artisan):
-				HonorGlorySystem.apply_honor_change(artisan, -GardenSystem.ABANDONMENT_HONOR_LOSS)
+				# A9 partial mitigation: an artisan who reached >= 50% of the target
+				# threshold before abandoning is punished at half the honor/disposition
+				# cost (a near-complete garden is not the same offense as an untouched one).
+				var threshold: int = int(GardenSystem.QUALITY_THRESHOLD.get(record.target_quality_tier, 20))
+				var mitigated: bool = record.progress_at_abandonment >= int(GardenSystem.PARTIAL_MITIGATION_THRESHOLD * threshold)
+				var honor_loss: float = GardenSystem.ABANDONMENT_HONOR_LOSS * 0.5 if mitigated else GardenSystem.ABANDONMENT_HONOR_LOSS
+				var disp_loss: int = int(GardenSystem.ABANDONMENT_DISPOSITION_LOSS / 2) if mitigated else GardenSystem.ABANDONMENT_DISPOSITION_LOSS
+				HonorGlorySystem.apply_honor_change(artisan, -honor_loss)
 				if daimyo != null and not CharacterStats.is_dead(daimyo):
 					var disp: int = clampi(
-						artisan.disposition_values.get(daimyo.character_id, 0) - GardenSystem.ABANDONMENT_DISPOSITION_LOSS,
+						artisan.disposition_values.get(daimyo.character_id, 0) - disp_loss,
 						-100, 100,
 					)
 					artisan.disposition_values[daimyo.character_id] = disp
@@ -33033,7 +36245,11 @@ static func _process_painting_visitor_effects(
 
 			# Disposition toward creator
 			if creator != null and not CharacterStats.is_dead(creator):
-				var disp: int = visit_result.get("disposition_change", 0)
+				# s57.27:115 familiarity decay — fusuma decays at half rate.
+				var fam_factor: float = PaintingSystem.familiarity_factor(
+					ic_day, painting.continuous_display_start_ic_day,
+					painting.format == PaintingSystem.Format.FUSUMA)
+				var disp: int = int(round(float(visit_result.get("disposition_change", 0)) * fam_factor))
 				if disp != 0:
 					var bucket: Array = visitor.temporary_modifiers.get(painting.creator_id, [])
 					bucket.append({
@@ -33358,7 +36574,7 @@ static func _process_compose_sculpture_writebacks(
 			)
 			# On completion: auto-place if a slot is available at sculptor's last location.
 			if compose_result.get("completed", false):
-				_auto_place_completed_sculpture(sculpture, settlements_by_id)
+				_auto_place_completed_sculpture(sculpture, settlements_by_id, ic_day)
 				# Generate lifecycle topic
 				var topic_dict: Dictionary = SculptureSystem.generate_lifecycle_topic(
 					sculpture, "completion", "", ic_day,
@@ -33372,6 +36588,7 @@ static func _process_compose_sculpture_writebacks(
 static func _auto_place_completed_sculpture(
 	sculpture: SculptureData,
 	settlements_by_id: Dictionary,
+	ic_day: int = 0,
 ) -> void:
 	## Auto-place completed statuary/guardian into available slot at their settlement.
 	## Figurines skip (they go into inventory for DELIVER_GIFT).
@@ -33396,11 +36613,22 @@ static func _auto_place_completed_sculpture(
 				sculpture.creator_id, settlement):
 			settlement.statue_slot = sculpture.sculpture_id
 			sculpture.display_slot = SculptureSystem.DisplaySlot.STATUE_SLOT
+			# s57.27:115 familiarity clock (half-rate religious statuary).
+			sculpture.display_start_ic_day = ic_day
 	elif sculpture.format == SculptureSystem.Format.GUARDIAN:
 		if settlement.guardian_slot < 0 and SculptureSystem.has_guardian_permission(
 				sculpture.creator_id, settlement):
 			settlement.guardian_slot = sculpture.sculpture_id
 			sculpture.display_slot = SculptureSystem.DisplaySlot.GUARDIAN_SLOT
+			# s57.27:115 familiarity clock (half-rate religious statuary).
+			sculpture.display_start_ic_day = ic_day
+			# Wood guardians stand outdoors — stamp the degradation clock (s57.28: -1 tier per
+			# WOOD_OUTDOOR_DEGRADATION_DAYS). This inline placement bypassed the canonical
+			# SculptureSystem.place_sculpture, which alone set ic_day_placed_outdoor, so every
+			# in-game wood guardian left it at the -1 default and SculptureSystem.apply_outdoor_degradation
+			# (live, seasonal) early-returned forever — outdoor wood weathering was dead.
+			if sculpture.material == SculptureSystem.MaterialType.WOOD:
+				sculpture.ic_day_placed_outdoor = ic_day
 			# Mark guardian pair intact if this sculpture is the completing piece.
 			if sculpture.paired:
 				sculpture.pair_intact = true
@@ -33468,7 +36696,11 @@ static func _process_sculpture_visitor_effects(
 
 			# Disposition toward creator
 			if creator != null and not CharacterStats.is_dead(creator):
-				var disp: int = visit_result.get("disposition_change", 0)
+				# s57.27:115 familiarity decay — religious statuary decays at the HALF rate
+				# (7.5%/yr, floor 75%): a temple statue/komainu is part of the sacred space.
+				var sculpt_fam: float = PaintingSystem.familiarity_factor(
+					ic_day, sculpture.display_start_ic_day, true)
+				var disp: int = int(round(float(visit_result.get("disposition_change", 0)) * sculpt_fam))
 				if disp != 0:
 					var bucket: Array = visitor.temporary_modifiers.get(sculpture.creator_id, [])
 					bucket.append({
@@ -33578,6 +36810,10 @@ static func _process_periodic_taint_rolls(
 			continue
 		if ch.taint < 1.0:
 			continue  # Rank 0 — not yet Tainted enough to trigger rolls (Rank 0 roll period would fire but taint gain requires rank 1+)
+		# Jade Petal Tea suppresses Taint growth while the character is managed
+		# (s2.4.15: "significantly slows Taint growth" — managed, not cured).
+		if ch.tea_managed_until_ic_day >= ic_day:
+			continue
 		if not MutationSystem.should_roll_today(ch, ic_day):
 			continue
 		var earth: int = mini(ch.stamina, ch.willpower)
@@ -33737,3 +36973,414 @@ static func _apply_fool_impression(
 
 
 
+
+
+# =============================================================================
+# KOLAT ENDGAME — secrecy scalars, candidate pipeline, Imperial response (s54.7i)
+# =============================================================================
+# Wires the previously-dormant KolatSecrecy data layer into the live loop. The
+# secrecy scalars (exposure / awareness) are moved by real operation and
+# investigation events; Tiger cultivates a candidate toward an Imperial-proximity
+# seat; the Empire's covert counter-response escalates by awareness tier. All
+# numeric deltas and thresholds are GDD-locked in s54.7i — the code here supplies
+# only the event→delta mappings and the structural mechanisms.
+
+const _KOLAT_SENIOR_COURT_ROLES: Array[String] = [
+	"Senior Courtier", "Imperial Herald", "Imperial Treasurer",
+	"Sentaku Tribunal Chair", "Sentaku Tribunal Member", "Governor",
+]
+
+
+## A conscious Kolat member (Sect agent or Master). Sleepers are excluded —
+## an unwitting asset's conviction does not expose the conspiracy (s54.7i).
+static func _is_kolat_member(c: L5RCharacterData) -> bool:
+	return c != null and c.kolat_sect != Enums.KolatSect.NONE
+
+
+# -- Daily event hooks --------------------------------------------------------
+
+## Lotus silencing an investigator before they report (s54.7i, exposure −5): a
+## Kolat-commissioned assassination that kills a magistrate. Reads death_events
+## before they are cleared. The +15 org-attribution fires later, at trace time.
+static func _process_kolat_death_exposure(
+	death_events: Array, characters_by_id: Dictionary, kolat_secrecy: Dictionary,
+) -> void:
+	if kolat_secrecy.is_empty():
+		return
+	for ev: Variant in death_events:
+		if not ev is Dictionary:
+			continue
+		var e: Dictionary = ev as Dictionary
+		if String(e.get("cause", "")) != "assassination":
+			continue
+		var commissioner: L5RCharacterData = characters_by_id.get(int(e.get("commissioner_id", -1)))
+		if not _is_kolat_member(commissioner):
+			continue
+		var victim: L5RCharacterData = characters_by_id.get(int(e.get("character_id", -1)))
+		if victim == null:
+			continue
+		if victim.role_position in RoleRegistry.MAGISTRATE_POSITIONS:
+			KolatSecrecy.bump(kolat_secrecy, "exposure",
+				KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.LOTUS_ELIMINATE))
+
+
+## Conviction-driven secrecy movement (s54.7i). Runs after conviction processing.
+##  - Traced Kolat assassination (commissioner is a member): exposure +15
+##    (org attribution) AND awareness +5 (the trace reached an operative).
+##  - A convicted conscious member: exposure +10 (cover tied to crime).
+##  - A convicted Master: awareness +20 (capture+interrogation) + identify.
+static func _process_kolat_conviction_secrecy(
+	conviction_results: Array, crime_records: Array,
+	characters_by_id: Dictionary, kolat_secrecy: Dictionary,
+) -> void:
+	if kolat_secrecy.is_empty():
+		return
+	for conv: Variant in conviction_results:
+		if not conv is Dictionary:
+			continue
+		var cv: Dictionary = conv as Dictionary
+		if cv.get("outcome", "") != "convicted":
+			continue
+		var case_id: int = int(cv.get("case_id", -1))
+		var record: CrimeRecord = null
+		for r: CrimeRecord in crime_records:
+			if r.case_id == case_id:
+				record = r
+				break
+		if record == null:
+			continue
+
+		# Traced covert killing → organisation attribution.
+		if int(cv.get("crime_type", -1)) == Enums.CrimeType.UNSANCTIONED_COVERT_KILLING \
+				and record.commissioner_id >= 0:
+			var comm: L5RCharacterData = characters_by_id.get(record.commissioner_id)
+			if _is_kolat_member(comm):
+				KolatSecrecy.bump(kolat_secrecy, "exposure",
+					KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.ORG_ASSASSINATION))
+				KolatSecrecy.bump(kolat_secrecy, "awareness",
+					KolatSecrecy.awareness_delta(KolatSecrecy.AwarenessEvent.JADE_INTERNAL))
+
+		# A convicted conscious member's cover is publicly tied to crime.
+		var perp: L5RCharacterData = characters_by_id.get(record.perpetrator_id)
+		if _is_kolat_member(perp):
+			KolatSecrecy.bump(kolat_secrecy, "exposure",
+				KolatSecrecy.exposure_delta(KolatSecrecy.ExposureEvent.COVER_IDENTITY_CRIMINAL))
+			if perp.is_kolat_master:
+				KolatSecrecy.bump(kolat_secrecy, "awareness",
+					KolatSecrecy.awareness_delta(KolatSecrecy.AwarenessEvent.MASTER_INTERROGATED))
+				KolatSecrecy.identify(kolat_secrecy, perp.character_id)
+
+
+## Investigation reaching an operative internally (s54.7i, awareness +5): an
+## UNDER_INVESTIGATION crime record names a conscious Kolat member (perpetrator
+## or known suspect). Once per case (dedup via bundle awareness_cases).
+static func _process_kolat_investigation_awareness(
+	crime_records: Array, characters_by_id: Dictionary, kolat_secrecy: Dictionary,
+) -> void:
+	if kolat_secrecy.is_empty():
+		return
+	var flagged: Array = kolat_secrecy.get("awareness_cases", [])
+	for r: CrimeRecord in crime_records:
+		if r.legal_status != Enums.LegalStatus.UNDER_INVESTIGATION:
+			continue
+		if r.case_id in flagged:
+			continue
+		var named: Array = [r.perpetrator_id]
+		named.append_array(r.known_suspects)
+		var hit: bool = false
+		for nid: Variant in named:
+			if _is_kolat_member(characters_by_id.get(int(nid))):
+				hit = true
+				break
+		if hit:
+			KolatSecrecy.bump(kolat_secrecy, "awareness",
+				KolatSecrecy.awareness_delta(KolatSecrecy.AwarenessEvent.JADE_INTERNAL))
+			flagged.append(r.case_id)
+	kolat_secrecy["awareness_cases"] = flagged
+
+
+# -- Seasonal endgame pass ----------------------------------------------------
+
+## The seasonal Kolat endgame: exposure decay, response-state recompute, Tiger's
+## candidate pipeline, Imperial counter-response, and the win-condition check.
+## Returns a Dictionary merged into the advance_day result (kolat_victory /
+## kolat_purge world-state events, when they fire).
+static func _process_kolat_endgame(
+	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
+	world_states: Dictionary, character_province_map: Dictionary,
+	ic_day: int, kolat_secrecy: Dictionary,
+) -> Dictionary:
+	var result: Dictionary = {}
+	if kolat_secrecy.is_empty():
+		return result
+
+	# 1. Natural exposure decay + Imperial suppression (s54.7i, −2/season).
+	kolat_secrecy["exposure"] = KolatSecrecy.apply_seasonal_exposure_decay(
+		int(kolat_secrecy.get("exposure", 0)), int(kolat_secrecy.get("awareness", 0)))
+	# Prune awareness dedup list to live records is unnecessary — case ids are
+	# monotonic and the list is small; retention is harmless.
+
+	# 2. Imperial response state, broadcast for the magistrate/opportunistic passes.
+	var awareness: int = int(kolat_secrecy.get("awareness", 0))
+	kolat_secrecy["response_active"] = KolatSecrecy.is_response_active(awareness)
+	world_states["imperial_response_active"] = kolat_secrecy["response_active"]
+
+	# 3. Tiger's candidate pipeline (s54.7i).
+	_process_kolat_candidate_pipeline(
+		characters, characters_by_id, objectives_map, world_states, ic_day, kolat_secrecy)
+
+	# 4. Imperial counter-response tiers (s54.7i).
+	var purge: Dictionary = _process_kolat_imperial_response(
+		characters, characters_by_id, objectives_map, world_states,
+		character_province_map, kolat_secrecy)
+	if not purge.is_empty():
+		result["kolat_purge"] = purge
+
+	# 5. Win condition (s54.7i): installed candidate held one IC year, awareness < 70.
+	if String(kolat_secrecy.get("pipeline_stage", "")) == "installed" \
+			and int(kolat_secrecy.get("victory_ic_day", -1)) < 0:
+		var cand: L5RCharacterData = characters_by_id.get(int(kolat_secrecy.get("candidate_id", -1)))
+		if KolatSecrecy.check_win_condition(
+				cand, int(kolat_secrecy.get("installed_ic_day", -1)), ic_day, awareness):
+			kolat_secrecy["victory_ic_day"] = ic_day
+			result["kolat_victory"] = {
+				"ic_day": ic_day,
+				"candidate_id": int(kolat_secrecy.get("candidate_id", -1)),
+			}
+	return result
+
+
+## The living Tiger Master (routing node), or null. The pipeline pauses without one.
+static func _find_living_tiger(characters: Array) -> L5RCharacterData:
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.kolat_sect == Enums.KolatSect.TIGER and c.is_kolat_master:
+			return c
+	return null
+
+
+## Tiger's candidate pipeline (s54.7i). Selects/validates the primary candidate,
+## advances the stage from the candidate's real court standing, installs a
+## cultivation objective for a conscious member, maintains up to two backups, and
+## mirrors the fields onto Tiger's special_data (GDD courtesy record).
+static func _process_kolat_candidate_pipeline(
+	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
+	world_states: Dictionary, ic_day: int, kolat_secrecy: Dictionary,
+) -> void:
+	var tiger: L5RCharacterData = _find_living_tiger(characters)
+	if tiger == null:
+		return  # no routing node — pipeline pauses until a Tiger is seated
+
+	var emperor_id: int = int(world_states.get("emperor_id", -1))
+	var emperor: L5RCharacterData = characters_by_id.get(emperor_id)
+	var capital_loc: String = ""
+	if emperor != null and not CharacterStats.is_dead(emperor):
+		capital_loc = emperor.physical_location  # the Emperor sits at the capital
+
+	var identified: Array = kolat_secrecy.get("identified_ids", [])
+	var cand_id: int = int(kolat_secrecy.get("candidate_id", -1))
+	var cand: L5RCharacterData = characters_by_id.get(cand_id)
+	var stage: String = String(kolat_secrecy.get("pipeline_stage", ""))
+
+	# Compromise / death → drop the primary and elevate a backup (or reselect).
+	var invalid: bool = cand == null or CharacterStats.is_dead(cand) or cand_id in identified
+	if invalid:
+		if cand != null and cand_id in identified:
+			kolat_secrecy["pipeline_stage"] = "compromised"  # discovery (s54.7i)
+		cand_id = _kolat_elevate_or_select(
+			characters, cand_id, identified, capital_loc, kolat_secrecy)
+		kolat_secrecy["candidate_id"] = cand_id
+		kolat_secrecy["installed_ic_day"] = -1
+		kolat_secrecy["pipeline_stage"] = "identified" if cand_id >= 0 else ""
+		cand = characters_by_id.get(cand_id)
+		stage = String(kolat_secrecy.get("pipeline_stage", ""))
+
+	if cand == null:
+		_kolat_mirror_candidate(tiger, kolat_secrecy)
+		return
+
+	# Advance stage by the candidate's real court state.
+	var role: String = cand.role_position
+	var at_capital: bool = not capital_loc.is_empty() and cand.physical_location == capital_loc
+	if role in KolatSecrecy.IMPERIAL_PROXIMITY_ROLES:
+		if stage != "installed":
+			kolat_secrecy["pipeline_stage"] = "installed"
+			kolat_secrecy["installed_ic_day"] = ic_day
+	elif role in _KOLAT_SENIOR_COURT_ROLES and at_capital:
+		kolat_secrecy["pipeline_stage"] = "positioned"
+	else:
+		# Cultivating: a conscious member gets a Kolat objective pushing them toward
+		# the Imperial court (build disposition with the Emperor at the capital, so
+		# they win a vacant Imperial-proximity seat through the normal appointment
+		# scorer — no rigged appointment). Sleeper candidates are driven by their
+		# installed command and are not given an objective here.
+		if not kolat_secrecy.get("go_dark", false) \
+				and cand.kolat_sect != Enums.KolatSect.NONE and not cand.is_pc:
+			_kolat_install_cultivation(objectives_map, cand, emperor_id, capital_loc, at_capital)
+		kolat_secrecy["pipeline_stage"] = "cultivating"
+
+	# Maintain up to two backup candidates.
+	kolat_secrecy["backup_ids"] = _kolat_select_backups(
+		characters, cand_id, identified, capital_loc, 2)
+	_kolat_mirror_candidate(tiger, kolat_secrecy)
+
+
+## Elevate the highest-scored valid backup to primary; else select a fresh
+## candidate. Returns the new candidate id (-1 if none available).
+static func _kolat_elevate_or_select(
+	characters: Array, prev_id: int, identified: Array, capital_loc: String,
+	kolat_secrecy: Dictionary,
+) -> int:
+	for b_id: Variant in kolat_secrecy.get("backup_ids", []):
+		var bid: int = int(b_id)
+		if bid == prev_id or bid in identified:
+			continue
+		var b: L5RCharacterData = null
+		for c: L5RCharacterData in characters:
+			if c.character_id == bid:
+				b = c
+				break
+		if b != null and KolatSecrecy.is_candidate_eligible(b):
+			return bid
+	return _kolat_best_candidate(characters, prev_id, identified, capital_loc)
+
+
+## Best fresh candidate: highest court-appointment score among eligible vehicles
+## (conscious member or Dream sleeper), excluding `exclude_id` and identified ids.
+static func _kolat_best_candidate(
+	characters: Array, exclude_id: int, identified: Array, capital_loc: String,
+) -> int:
+	var best_id: int = -1
+	var best_score: float = -1.0
+	for c: L5RCharacterData in characters:
+		if c.character_id == exclude_id or c.character_id in identified:
+			continue
+		if not KolatSecrecy.is_candidate_eligible(c):
+			continue
+		var at_cap: bool = not capital_loc.is_empty() and c.physical_location == capital_loc
+		var s: float = KolatSecrecy.candidate_score(c, at_cap)
+		if s > best_score:
+			best_score = s
+			best_id = c.character_id
+	return best_id
+
+
+## Up to `limit` backup candidates, ordered best-first, excluding the primary.
+static func _kolat_select_backups(
+	characters: Array, primary_id: int, identified: Array, capital_loc: String, limit: int,
+) -> Array:
+	var scored: Array = []
+	for c: L5RCharacterData in characters:
+		if c.character_id == primary_id or c.character_id in identified:
+			continue
+		if not KolatSecrecy.is_candidate_eligible(c):
+			continue
+		var at_cap: bool = not capital_loc.is_empty() and c.physical_location == capital_loc
+		scored.append({"id": c.character_id, "score": KolatSecrecy.candidate_score(c, at_cap)})
+	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["score"] > b["score"])
+	var out: Array = []
+	for i: int in range(mini(limit, scored.size())):
+		out.append(int(scored[i]["id"]))
+	return out
+
+
+## Install the candidate cultivation Kolat objective: at the capital → build
+## disposition with the Emperor; otherwise travel to the capital first.
+static func _kolat_install_cultivation(
+	objectives_map: Dictionary, cand: L5RCharacterData,
+	emperor_id: int, capital_loc: String, at_capital: bool,
+) -> void:
+	if not objectives_map.has(cand.character_id):
+		objectives_map[cand.character_id] = {}
+	var obj: Dictionary = {
+		"priority": 3,
+		"kolat_objective": true,
+		"source": "kolat_candidate_cultivation",
+		"target_npc_id": -1,
+		"target_settlement_id": -1,
+		"target_province_id": -1,
+	}
+	if at_capital and emperor_id >= 0:
+		obj["need_type"] = "RAISE_DISPOSITION"
+		obj["target_npc_id"] = emperor_id
+	elif not capital_loc.is_empty():
+		obj["need_type"] = "TRAVEL_TO"
+		obj["target_settlement_id"] = int(capital_loc) if capital_loc.is_valid_int() else -1
+	else:
+		return  # no capital reference yet — nothing actionable
+	objectives_map[cand.character_id]["kolat"] = obj
+
+
+## Mirror the candidate pipeline fields onto Tiger's special_data (s54.7i record).
+static func _kolat_mirror_candidate(tiger: L5RCharacterData, kolat_secrecy: Dictionary) -> void:
+	tiger.special_data["kolat_primary_candidate_npc_id"] = int(kolat_secrecy.get("candidate_id", -1))
+	tiger.special_data["kolat_backup_candidate_npc_ids"] = kolat_secrecy.get("backup_ids", []).duplicate()
+	tiger.special_data["kolat_candidate_pipeline_stage"] = String(kolat_secrecy.get("pipeline_stage", ""))
+
+
+## Imperial counter-response tiers (s54.7i). Covert, institutional, deniable.
+## Returns a purge report Dictionary when the tier-100 purge fires (else {}).
+static func _process_kolat_imperial_response(
+	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
+	world_states: Dictionary, character_province_map: Dictionary, kolat_secrecy: Dictionary,
+) -> Dictionary:
+	var awareness: int = int(kolat_secrecy.get("awareness", 0))
+	var tier: int = KolatSecrecy.response_tier(awareness)
+
+	# Provinces hosting an identified member — surfaced so the magistrate patrol
+	# pass can bias investigation there (structural, no invented number).
+	var active_provs: Array = []
+	if tier >= KolatSecrecy.ResponseTier.SUSPICIOUS:
+		for mid: Variant in kolat_secrecy.get("identified_ids", []):
+			var m: L5RCharacterData = characters_by_id.get(int(mid))
+			if m != null and not CharacterStats.is_dead(m):
+				var prov: int = int(character_province_map.get(m.character_id, -1))
+				if prov >= 0 and prov not in active_provs:
+					active_provs.append(prov)
+	world_states["kolat_active_provinces"] = active_provs
+
+	# Tier 50+ (Confirmed): Tiger adds the "degrade Imperial task force" priority.
+	if tier >= KolatSecrecy.ResponseTier.CONFIRMED_THREAT \
+			and not kolat_secrecy.get("task_force_flagged", false):
+		var tiger: L5RCharacterData = _find_living_tiger(characters)
+		if tiger != null:
+			var priorities: Array = tiger.special_data.get("kolat_strategic_priorities", [])
+			priorities.append({
+				"target_description": "degrade Imperial task force",
+				"source": "imperial_response",
+			})
+			tiger.special_data["kolat_strategic_priorities"] = priorities
+			kolat_secrecy["task_force_flagged"] = true
+
+	# Tier 90+ (Significantly mapped): identified members go dark — suspend
+	# operations. Their Kolat objective slot is cleared and the opportunistic /
+	# standing passes skip them while go_dark is set.
+	kolat_secrecy["go_dark"] = tier >= KolatSecrecy.ResponseTier.SIGNIFICANTLY_MAPPED
+	if kolat_secrecy["go_dark"]:
+		for mid: Variant in kolat_secrecy.get("identified_ids", []):
+			var objs: Dictionary = objectives_map.get(int(mid), {})
+			if objs.has("kolat"):
+				objs.erase("kolat")
+
+	# Tier 100 (Full knowledge): one-shot covert purge of every identified member.
+	if tier >= KolatSecrecy.ResponseTier.FULL_KNOWLEDGE \
+			and not kolat_secrecy.get("purge_done", false):
+		var broken: Array = []
+		for mid: Variant in kolat_secrecy.get("identified_ids", []):
+			var m: L5RCharacterData = characters_by_id.get(int(mid))
+			if m == null or CharacterStats.is_dead(m):
+				continue
+			# Quietly broken (s54.7i): affiliation severed, funds seized, tasks cleared.
+			m.kolat_sect = Enums.KolatSect.NONE
+			m.is_kolat_master = false
+			m.kolat_koku = 0
+			m.dirty_koku = 0
+			m.operational_koku = 0
+			var objs2: Dictionary = objectives_map.get(int(mid), {})
+			if objs2.has("kolat"):
+				objs2.erase("kolat")
+			broken.append(int(mid))
+		kolat_secrecy["purge_done"] = true
+		return {"broken_ids": broken, "count": broken.size()}
+	return {}

@@ -248,11 +248,14 @@ static func check_composition_skill_gate(character: L5RCharacterData, target_mag
 static func select_composition_piece_to_advance(
 	character_id: int,
 	theater_pieces: Array,
-	active_need_type: String,
+	_active_need_type: String,
 ) -> TheaterPieceData:
-	## Select which WIP piece to advance per GDD s57.22.5 priority ordering.
-	## Priority: (1) political NeedType pieces, (2) highest progress ratio, (3) most recent.
-	var political_types: Array[String] = ["DAMAGE_RELATIONSHIP", "MOVE_TOPIC_POSITION"]
+	## Select which WIP piece to advance per GDD s57.22.5 (LOCKED) priority ordering:
+	## (1) pieces serving a political NeedType (DAMAGE_RELATIONSHIP / MOVE_TOPIC_POSITION,
+	##     carried per-piece on TheaterPieceData.political_need_type, stamped at composition
+	##     start) rank above ARTISTIC_EXPRESSION pieces; (2) among same-priority pieces, the
+	##     most-progressed toward its threshold (highest craft_progress / threshold ratio);
+	##     (3) ties broken by most-recently-declared piece (highest piece_id).
 	var candidates: Array[TheaterPieceData] = []
 	for p: TheaterPieceData in theater_pieces:
 		if p.craft_progress < 0 or p.lost or p.abandoned_incomplete:
@@ -264,15 +267,21 @@ static func select_composition_piece_to_advance(
 		return null
 	var threshold_func := func(pp: TheaterPieceData) -> int:
 		return get_composition_threshold(pp.target_magnitude, pp.num_roles_declared)
-	# Sort: political-need pieces first, then by progress ratio, then most recent
-	var is_political: bool = active_need_type in political_types
 	candidates.sort_custom(func(a: TheaterPieceData, b: TheaterPieceData) -> bool:
+		# Priority 1: a politically-motivated piece (political_need_type set) outranks an
+		# artistic-expression piece (empty political_need_type).
+		var a_political: bool = a.political_need_type != ""
+		var b_political: bool = b.political_need_type != ""
+		if a_political != b_political:
+			return a_political
+		# Priority 2: highest progress-toward-threshold ratio.
 		var ta: int = threshold_func.call(a)
 		var tb: int = threshold_func.call(b)
 		var ra: float = float(a.craft_progress) / float(maxi(1, ta))
 		var rb: float = float(b.craft_progress) / float(maxi(1, tb))
 		if ra != rb:
 			return ra > rb
+		# Priority 3: most-recently-declared piece.
 		return a.piece_id > b.piece_id
 	)
 	return candidates[0]
