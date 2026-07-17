@@ -182,6 +182,11 @@ static func advance_day(
 	_assign_kolat_standing_objectives(characters, objectives_map, kolat_secrecy)
 	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id, kolat_secrecy)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
+	# s57.54.10d: operational superiors spend their CO budget directing idle
+	# subordinates (propagating the superior's own active objective down the
+	# operational chain). Runs after _reset_all_ap sets the budget and after the
+	# standing passes, so it only fills subordinates still idle at this point.
+	_process_operational_coordination(characters, objectives_map, characters_by_id, current_season)
 
 	_populate_military_data(military_data, companies, military_legions, military_sections, characters_by_id)
 
@@ -2209,6 +2214,19 @@ static func advance_day(
 # -- AP Reset ------------------------------------------------------------------
 
 static func _reset_all_ap(characters: Array) -> void:
+	# s57.54.10d: an operational superior (a Taisa/Shireikan holding
+	# operational_superior_id authority over subordinates) receives a Civilian
+	# Order budget for coordinating them — 2/day for 1–3 subordinates, 3/day for
+	# 4+ — even when they are not lord-tier (rank budget 0). A character who is
+	# BOTH a lord and an operational superior uses the HIGHER of the two budgets
+	# (max-rule, s57.54.10d). Count each superior's living subordinates once.
+	var sub_counts: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c):
+			continue
+		if c.operational_superior_id >= 0:
+			sub_counts[c.operational_superior_id] = int(sub_counts.get(c.operational_superior_id, 0)) + 1
+
 	for c: L5RCharacterData in characters:
 		ActionPointSystem.reset_daily_ap(c)
 		# s57.34.2: refresh the Civilian Order budget from the character's CURRENT lord rank
@@ -2219,6 +2237,13 @@ static func _reset_all_ap(characters: Array) -> void:
 		# SEND_INVITATION, REQUEST_ART, lord WRITE_LETTER, …) was inert. Recomputing each day also
 		# tracks status changes from promotion / succession / clan induction.
 		CivilianOrderBudget.update_budget_for_character(c)
+		# s57.54.10d max-rule: lift the (possibly 0) lord-rank budget to the
+		# operational-superior budget when it is higher, so an op-superior can
+		# spend CO coordinating subordinates (_process_operational_coordination).
+		var op_budget: int = StrategicReview.co_budget_for_subordinate_count(
+			int(sub_counts.get(c.character_id, 0))
+		)
+		c.civilian_order_budget_max = maxi(c.civilian_order_budget_max, op_budget)
 		c.civilian_orders_remaining = c.civilian_order_budget_max
 		c.passage_request_count_today = 0
 		c.pieces_seen.erase("_performance_count_today")
@@ -25876,6 +25901,91 @@ static func _process_champion_letter_dispatches(
 		letter.ic_day_sent = ic_day
 		letter.ic_day_arrival = ic_day + 3  # PROVISIONAL: no adjacency data
 		pending_letters.append(letter)
+
+
+# -- Operational-Superior Subordinate Coordination (s57.54.10d) ----------------
+# An operational superior (a Taisa/Shireikan holding operational_superior_id
+# authority over subordinates, per s57.21) spends 1 Civilian Order per IDLE
+# subordinate they direct; the subordinate inherits a copy of the superior's OWN
+# current active primary objective (owner-approved 2026-07-17: propagate the
+# superior's operational directive down the chain — the natural military meaning
+# of "coordinating subordinates"; no new objective types/values are invented).
+# This is the op-superior counterpart to the lord-tier SEASONAL
+# _evaluate_vassal_objectives / _process_vassal_reassignments channel, which is
+# gated to _is_lord_tier and never covers a non-lord operational superior — so
+# before this the s57.54.10d CO budget those superiors receive was unspendable
+# (every civilian-order ActionID is LORD_ONLY, and no need routes a superior to
+# self-select a subordinate delegation). Runs daily after _reset_all_ap sets the
+# CO budget; directs only idle subordinates (never clobbers an active primary),
+# self-refreshing (a subordinate that completes → idle → re-directed with the
+# superior's then-current objective next day).
+static func _process_operational_coordination(
+	characters: Array,
+	objectives_map: Dictionary,
+	characters_by_id: Dictionary,
+	current_season: int,
+) -> void:
+	# Index living non-PC subordinates by their operational superior.
+	var subs_by_superior: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if CharacterStats.is_dead(c) or c.is_pc:
+			continue
+		if c.operational_superior_id >= 0:
+			var arr: Array = subs_by_superior.get(c.operational_superior_id, [])
+			arr.append(c)
+			subs_by_superior[c.operational_superior_id] = arr
+
+	for superior: L5RCharacterData in characters:
+		if CharacterStats.is_dead(superior) or superior.is_pc:
+			continue
+		if superior.civilian_orders_remaining <= 0:
+			continue
+		var subs: Array = subs_by_superior.get(superior.character_id, [])
+		if subs.is_empty():
+			continue
+		# A superior can only propagate an objective they actually hold. An idle
+		# superior (no primary, or a completed one) has nothing to coordinate.
+		var sup_objs: Dictionary = objectives_map.get(superior.character_id, {})
+		var sup_primary: Dictionary = sup_objs.get("primary", {})
+		if sup_primary.is_empty() or sup_primary.get("status", "") == "COMPLETED":
+			continue
+		var directive_need: String = sup_primary.get("need_type", "")
+		if directive_need.is_empty():
+			continue
+
+		for sub: L5RCharacterData in subs:
+			if superior.civilian_orders_remaining <= 0:
+				break
+			var sub_objs: Dictionary = objectives_map.get(sub.character_id, {})
+			var sub_primary: Dictionary = sub_objs.get("primary", {})
+			# Direct only IDLE subordinates — the same idle test the seasonal
+			# lord→vassal pass (_evaluate_vassal_objectives) uses.
+			if not (sub_primary.is_empty() or sub_primary.get("status", "") == "COMPLETED"):
+				continue
+
+			var new_obj: Dictionary = {
+				"need_type": directive_need,
+				"assigned_by": superior.character_id,
+				"status": "ACTIVE",
+				"source": "operational_coordination",
+			}
+			if sup_primary.has("target_province_id"):
+				new_obj["target_province_id"] = sup_primary["target_province_id"]
+			if sup_primary.has("target_clan"):
+				new_obj["target_clan"] = sup_primary["target_clan"]
+			if sup_primary.has("target_npc_id"):
+				new_obj["target_npc_id"] = sup_primary["target_npc_id"]
+
+			if not objectives_map.has(sub.character_id):
+				objectives_map[sub.character_id] = {}
+			objectives_map[sub.character_id]["primary"] = new_obj
+
+			# s55.6: the superior transfers the relevant knowledge with the order.
+			InformationSystem.transfer_objective_knowledge(
+				superior, sub, new_obj, current_season, [], characters_by_id
+			)
+
+			superior.civilian_orders_remaining -= 1
 
 
 static func _process_vassal_reassignments(
