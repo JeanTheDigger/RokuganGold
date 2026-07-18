@@ -97,7 +97,7 @@ static func spawn(realm: int, creature_id: String, instance_id: int) -> L5RChara
 
 ## Finds a creature by id across EVERY bestiary (spirit realms, oni, undead, elemental
 ## terrors + additional creatures, the Five Ancient Races, Shadowlands beasts, s54.2 monsters,
-## s54.1 natural creatures).
+## s54.1 natural creatures, the s54.4 Notable Lost).
 ## Returns a fresh
 ## SpiritCreatureData instance, or null if no bestiary holds the id. The realm-agnostic
 ## lookup the Shadowlands / Kaiu-Wall-horde / mission consumers use — every transcribed
@@ -111,7 +111,7 @@ static func find_creature(creature_id: String) -> SpiritCreatureData:
 	for cat: Dictionary in [OniBestiary.catalog(), UndeadBestiary.catalog(),
 			AdditionalCreaturesBestiary.catalog(), AncientRacesBestiary.catalog(),
 			ShadowlandsBeastBestiary.catalog(), MonsterBestiary.catalog(),
-			NaturalCreatureBestiary.catalog()]:
+			NaturalCreatureBestiary.catalog(), LostBestiary.catalog()]:
 		var cr2: SpiritCreatureData = cat.get(creature_id, null)
 		if cr2 != null:
 			return cr2

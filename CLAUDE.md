@@ -232,6 +232,54 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-18 (s54.4 The 4 Notable Lost TRANSCRIBED — the flat-bonus field + wiring built, the last deferred s54 bestiary item; runtime-verified 92/92)
+Greenfield content build (owner directive "continuing building GDD elements still not in the game", "1"). Closes the ONE item the s54
+CLOSEOUT AUDIT (below) left design-gated: the **4 Notable Lost** named boss-tier villains from s54.4 — **Doji Nashiko** (the Demon Bride
+of Fu Leng), **Hida Atarasi** (the First Akutenshi), **Moto Tsume** (General of the Shadowlands), **Daidoji Tsukuro** (the Fallen Crane).
+They were deferred because they are the ONLY s54 creatures whose stat blocks carry flat **`+X`** modifiers on the attack roll (Nashiko +8,
+Atarasi/Tsume +11, Tsukuro +8) AND, for one, on the damage roll (Tsukuro +2) — and `SpiritCreatureData` had **no flat-bonus field** (all
+174+31 prior bestiary entries are pure XkY dice). The owner-approved path was the **monster-puppet representation** (same class as the
+named Oni Lords already transcribed) + the small combat-layer field addition, since the flat `+X` values ARE the GDD's own (faithful,
+not invented). Three coordinated changes:
+- **Field:** new `SpiritCreatureData.attack_flat_bonus` / `damage_flat_bonus` (both default 0 → inert for every other creature and all
+  real characters). In L5R "7k4+8" = roll 7k4 and add 8 to the roll TOTAL (a flat add to the result, NOT a dice-count bump).
+- **Wiring:** `IndividualCombat.resolve_attack` adds `attacker.spirit_creature.attack_flat_bonus` to the accumulated `flat_bonus` (the roll
+  total, gated on `spirit_creature != null` → zero regression); `resolve_damage` adds `damage_flat_bonus` to the final `total`. Both sit in
+  the existing spirit-override branches (the same block that already substitutes the creature's fixed XkY to-hit/damage).
+- **Bestiary:** new `simulation/lost_bestiary.gd` (`class_name LostBestiary`, realm **JIGOKU**) transcribes all 4 via a `_make`/`_with2`
+  factory carrying the flat-bonus params, registered in `SpiritCombatant.find_creature`'s cross-bestiary catalog list. Combat-ready via
+  `SpiritCombatant.to_character_data()` + spawnable by id through `spawn_by_id`.
+**Faithful mapping decisions (no invention):** (1) **Void N* "(cannot spend Void points)"** → `void_rank 0` (no SPENDABLE Void pool) +
+descriptive `void_cannot_spend` — giving them a spendable Void would violate the asterisk. (2) **Atarasi "By weapon +9k0"** → his weapon is
+a tetsubo (catalog base 3k3) and Strength is 10, so final damage = 3k3 + Str10 (to rolled) + 9k0 = **22k3** (fixed; `strength_adds=false` on
+the puppet bakes the Strength into the transcribed dice — no double-add). (3) **Init flat bonuses** (Atarasi/Tsume +2) are
+**unrepresentable** — the puppet's initiative uses Reflexes+Insight (a documented SpiritCombatant approximation), so init dice/flats are
+inert. (4) **"Invulnerable" special ability** → wired `partial_invuln` (all 4). (5) **Wound track** — these list only a single "Dead" total
+(no penalty steps), so `wound_thresholds []` + `wounds_dead` = the Dead total. (6) **Descriptive (unwired) tags** for bespoke abilities
+pending their combat-layer consumer: `fear_power` (the Fear power grants a Fear rating but the stat blocks state **no number** → NOT
+invented, no `fear` value set), Atarasi's Avalanche `taint_touch_unarmed` + `raise_undead_on_kill`, `unearthly_regeneration` (no per-round
+amount stated → `regen_wounds 0`), `terror_of_fu_leng`, Tsukuro `undead` + `returns_from_grave` — the established pattern.
+The roster (all realm JIGOKU, BOSS tier): **Doji Nashiko** (Air6/Earth5/Fire4/Water4, Awa8/Wil7/Int6/Per5; Wakizashi 7k4+8 dmg 10k4 +
+Blackened Claws 8k4+8 dmg 10k5 multi_attack; ATN 35, Wounds 95, Taint 8), **Hida Atarasi** (Air3/Earth7/Fire4/Water4, Refl6/Sta10/Agi7/
+Str10; Tetsubo 10k9+11 dmg 22k3; ATN 45, Red 15, Wounds 197, Taint 9), **Moto Tsume** (Air6/Earth7/Fire5/Water5, Per6; Katana 10k6+11 dmg
+10k5; ATN 40, Red 13, Wounds 157, Taint 9), **Daidoji Tsukuro** (Air3/Earth4/Fire5/Water4, Awa4/Wil5/Per6; Katana 10k6+8 dmg 10k4+2; ATN 25,
+Red 3, Wounds 100, Taint 8, undead). Runtime-verified 92/92 (Godot 4.6.2, headless driver in the minimal autoload-free `mintest` project):
+catalog completeness (all 4 ids present + sorted, BOSS/JIGOKU/lost/partial_invuln/void_cannot_spend, void_rank 0, empty penalty thresholds,
+Dead total > 0); per-creature stat-block fidelity (rings, named traits, attack/damage XkY + flat, ATN, Reduction, Wounds, Taint, tags — incl.
+Nashiko's second attack + no-flat damage, Atarasi's 22k3 + Avalanche tags, Tsukuro's +2 damage flat + undead); `to_character_data` mapping
+(Atarasi puppet reflexes 6/stamina 10/agility 7/strength 10 + ring-min awareness 3/willpower 7/intelligence 4/perception 4, **void_ring 0 /
+current_void_points 0**, Reduction 15, **Armor TN 45** back-calc; Nashiko ATN 35 + reflexes 6/awareness 8); the **flat-bonus wiring** — a
+deterministic floor test (a synthetic 1k1+50 creature floors every damage roll ≥ 51 over 200 rolls; the flat-0 control falls below) AND a
+**seeded-paired mean-diff** (Tsukuro damage +2 → diff EXACTLY 2.0, Atarasi attack +11 → diff EXACTLY 11.0 over 600 seeded pairs, since the
+flat is added post-roll and consumes no extra dice); a full **cross-bestiary collision check** (the 4 Lost ids UNIQUE across every bestiary →
+**209 total distinct ids**, 0 collisions); and the **end-to-end spawn path** (`find_creature`/`spawn_by_id` resolve each Lost + a sibling
+s54.1 `bear` and s54.2 `ogre_base` still resolve, unknown id → null). Full project `--import` parse-clean. **With this, the s54
+statted-creature bestiary layer is COMPLETE** — 9 bestiaries (natural/monster/oni/ancient_races/shadowlands_beast/spirit/undead/
+additional_creatures + the 4 Notable Lost), 209 distinct `find_creature` ids; the previously-deferred flat-bonus-blocked item is closed.
+DEFERRED (documented, not invented): the descriptive-tag abilities (fear_power [no numeric Fear rating in the GDD], Atarasi's Avalanche
+taint-touch + raise-undead, Unearthly Regeneration [no per-round amount], Terror of Fu Leng, Tsukuro's return-from-grave) — none blocked on a
+known value, each awaiting its combat-layer consumer; and the live PC-facing spawn is on the PC-travel HOLD like the whole ASCII stack.
+
 ### s54 statted-creature bestiary layer — CLOSEOUT AUDIT (2026-07-18, s54.4 + s54.8 swept; layer complete for no-invention transcription, do NOT re-audit)
 After the s54.1 natural-creatures transcription (below), audited the two remaining s54 files that could conceivably hold un-transcribed
 combat stat blocks — **s54.4 "The Lost"** and **s54.8 "Ronin of the Empire"** — to confirm the bestiary layer is exhausted. **Result:
@@ -245,7 +293,11 @@ clean transcription.** Findings, recorded so future sweeps skip these exact item
   actual combat units (Bandit Rabble/Thug, Rebel Peasant/Ashigaru/Leader + the morale-break percentages) are **already implemented** in
   `RosterCompositionSystem` (s56.10) and `CombatController`'s 17 LOCKED unit types (morale BANDIT_RABBLE 40% / THUG 60% / REBEL_ASHIGARU
   70% / REBEL_LEADER unbreakable — matching s54.8 verbatim). Nothing to transcribe.
-- **s54.4 "The Lost" — the 4 Notable Lost are DEFERRED (design-gated), not a clean wire.** Its Lost *schools* (Dark Moto Cavalry,
+- **s54.4 "The Lost" — the 4 Notable Lost are DONE (2026-07-18; see the "s54.4 The 4 Notable Lost TRANSCRIBED" changelog entry above).**
+  The design gate below (the missing flat-bonus field) was resolved with the owner-approved monster-puppet representation + a small
+  combat-layer field addition (`attack_flat_bonus`/`damage_flat_bonus` on `SpiritCreatureData`, wired through the IndividualCombat
+  spirit-overrides). `LostBestiary` now holds all 4, `find_creature`-registered, runtime-verified 92/92. The layer is COMPLETE (209 ids).
+  The original deferral analysis (kept for the record): Its Lost *schools* (Dark Moto Cavalry,
   Maho-Bujin) are character-creation schools; its "New Lesser/Greater Shadowlands Powers (The Lost)" + "Powers of the Akutenshi" are s44
   MutationSystem-domain content, not a bestiary. The ONE bestiary candidate is the **4 Notable Lost named NPCs** — **Doji Nashiko** (the
   Demon Bride of Fu Leng; Init 10k9, Wakizashi 7k4+8 / Blackened Claws 8k4+8, dmg 10k4 / 10k5, ATN 35, Wounds 95), **Hida Atarasi** (the
@@ -261,9 +313,11 @@ clean transcription.** Findings, recorded so future sweeps skip these exact item
   `attack_flat_bonus`/`damage_flat_bonus` fields + threading them through the combat-resolution core + the SpiritCombatant to-hit/damage
   overrides is a combat-layer **feature addition** — plus these 4 are ALSO buildable via the Maho-Bujin / Dark Moto Cavalry Lost schools,
   so which representation (monster puppet vs. world-gen character) is a **design decision**. Deferred pending owner authorization for that
-  feature + representation call. **With this, the s54 statted-creature bestiary layer is complete for clean, no-invention transcription** —
-  8 rosters (`natural`/`monster`/`oni`/`ancient_races`/`shadowlands_beast`/`spirit`/`undead`/`additional_creatures` bestiaries, 205 distinct
-  find_creature ids); the only remaining item is the 4 flat-bonus-blocked Notable Lost, and the remaining s54 files (s54.0 framework, s54.3
+  overrides is a combat-layer **feature addition** — the representation call (monster puppet vs. world-gen character) was the design
+  decision that needed owner sign-off. **RESOLVED 2026-07-18** (owner-approved monster-puppet): the 4 are now transcribed in `LostBestiary`.
+  **With this, the s54 statted-creature bestiary layer is COMPLETE** — 9 rosters
+  (`natural`/`monster`/`oni`/`ancient_races`/`shadowlands_beast`/`spirit`/`undead`/`additional_creatures` bestiaries + the 4 Notable Lost,
+  **209 distinct find_creature ids**); the remaining s54 files (s54.0 framework, s54.3
   Bloodspeaker, s54.7 Kolat, plus the s54.8 archetypes above) are rules/factions/character-gen already implemented as systems.
 
 ### Systems Added 2026-07-18 (s54.1 Natural Creatures bestiary TRANSCRIBED — all 31 mundane animals, combat-ready + spawnable-by-id, runtime-verified 333/333)

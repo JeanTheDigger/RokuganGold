@@ -1508,6 +1508,11 @@ static func resolve_attack(
 	flat_bonus += adv_free_raises_atk * 5
 	flat_bonus -= adv_tn_atk
 
+	# s54.4 Notable Lost: flat "+X" attack modifier on the roll TOTAL (e.g. Atarasi 10k9+11).
+	# Inert (0) for every other creature and all real characters.
+	if attacker.spirit_creature != null:
+		flat_bonus += attacker.spirit_creature.attack_flat_bonus
+
 	# Unskilled rolls (skill_rank == 0) do not explode per L5R4e p.78.
 	# raises passed directly — roll_check applies raises * 5 to TN.
 	var result: Dictionary = dice_engine.roll_check(
@@ -1670,6 +1675,10 @@ static func resolve_damage(
 	# roll_damage handles the dice pool; we pass strength already absorbed above
 	var result: Dictionary = dice_engine.roll_damage(rolled, kept, 0, 0, explode_8, explode_9, can_explode)
 	var total: int = result["raw"] + feint_bonus + kata_dmg["flat_bonus"]
+	# s54.4 Notable Lost: flat "+X" damage modifier on the roll TOTAL (e.g. Nashiko 10k4+8).
+	# Inert (0) for every other creature and all real characters.
+	if attacker != null and attacker.spirit_creature != null:
+		total += attacker.spirit_creature.damage_flat_bonus
 
 	return {
 		"rolled": rolled,
