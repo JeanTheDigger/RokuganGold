@@ -232,6 +232,54 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-18 (s54.1 Natural Creatures bestiary TRANSCRIBED — all 31 mundane animals, combat-ready + spawnable-by-id, runtime-verified 333/333)
+Greenfield content build (owner directive "continuing building GDD elements still not in the game", "1"). s54.1 is the mundane-animal
+roster (dogs, horses, big cats, bears, sharks, snakes, birds, etc.) that s57.38 hunts and s57.39 animal-companions reference — the
+last-remaining core creature layer with no find_creature-registered spawn path. Same faithful, no-invention, headless-verifiable
+transcription the prior sessions did for the oni (s54.5), undead (s54.11), additional creatures (s54.12), spirit realms (s54.10),
+Five Ancient Races (s54.6), Shadowlands beasts (s54.9), and the s54.2 core monsters. **DE-CONFLICTION (the key step):** `animal_combatant.gd`
+(the s57.39 trained-companion adapter) already transcribes SIX of these s54.1 blocks — but under UPPERCASE species-enum keys
+(DOG/WAR_DOG/FALCON/RIDING_HORSE=Rokugani Pony/WARHORSE=Unicorn Riding Horse/WARCAT=Lion), keyed by SPECIES enum and **NOT** part of
+`find_creature`'s catalog — a DISJOINT catalog (different keys, different consumers). So all 31 can be transcribed into a
+find_creature-registered WILD-FAUNA bestiary with **zero** id collision; the six shared blocks are faithfully re-transcribed for the
+wild-spawn path. Pre-checked the two risky natural↔spirit name overlaps and resolved both: the natural Crane uses id **`crane`** (not
+`tsuru` — the Chikushudo crane SPIRIT in `AdditionalCreaturesBestiary`), the natural Fox uses id **`fox`** (not `kitsune` — the fox
+SPIRIT in `SpiritBestiary`). New `simulation/natural_creature_bestiary.gd` (`class_name NaturalCreatureBestiary`, pure class) transcribes
+**all 31** s54.1 stat blocks via the same `_make`/`_with2` factory the sibling bestiaries use — so every animal is combat-ready via
+`SpiritCombatant.to_character_data()` (rings→paired traits, named-trait overrides, real stat-block to-hit/damage/Armor-TN/Reduction/
+wound-track) and **spawnable by id** through `SpiritCombatant.spawn_by_id` (registered in `find_creature`'s cross-bestiary catalog list).
+The roster: **Dog, Unicorn War Dog, Falcon, Rokugani Pony, Unicorn Riding Horse, Utaku Battle Steed, Lion, Ox, Wolf, Ape, Badger, Bat,
+Bear, Boar, Cat, Crane, Crocodile, Eagle, Elephant, Flying Squirrel, Fox, Goat, Hare, Monkey, Octopus/Squid, Shark (Aoizame), Shark
+(Hohojirozame), Constrictor Snake, Poisonous Asp, Stag, Tiger.** **NO invented values** — every ring, trait, die, threshold, Fear, and
+Swift is the GDD's own. **realm/field mapping** (mirrors the sibling bestiaries): every natural animal is a mundane mortal → **NINGEN_DO**,
+all carry the `animal`+`natural` tags. **Multi-attack** creatures with two listed attacks (Claws+Bite, Kick+Trample, Tusks+Stamp, etc.) →
+primary attack + `multi_attack` + `_with2` (Utaku Battle Steed, Lion, Ox, Ape, Badger, Bear, Cat, Elephant, Octopus, Constrictor, Tiger —
+each with the GDD's own second attack/damage). **Grapple-and-drain** (Crocodile Tenacious Jaws 2k2/Turn, Constrictor Squeeze suffocation
+2k2/Round, Boar Disembowel 4k4/round) → the wired `swallow_damage_rolled/_kept` grapple-crush drain (GDD's own dice), plus a descriptive
+tag. **Fliers/gliders** store the default movement Swift in `swift` with a `flying`/`glider` tag (Falcon 5, Crane 4, Bat 3, Eagle 3, Flying
+Squirrel 2-base+glide-4). The **Hare** has NO attack (it flees) → `attack ""/0/0`, `damage 0/0`, tag `no_attack`. Every bespoke ability
+carries a descriptive (unwired) tag pending its combat-layer consumer (Scent, Charge, Eye Attack, Furious/Goring Charge, Echolocation/
+Disease Carrier, Cat Scratch Fever/Low-light Vision, Blood Frenzy/nose-Vulnerability, Poison/Venom trait-drain, Color Change, Rut,
+Headbutt, damage-cannot-explode, etc.) — the established pattern. All 31 use the standard PC-style Dead-threshold wound track (natural
+animals are mortal — no human_wounds/wounds_dead-0 special case). Runtime-verified 333/333 (Godot 4.6.2, headless driver in the minimal
+autoload-free `mintest` project): catalog completeness (all 31 ids present, correct size, `natural_creature_ids` sorted), every entry
+well-formed (non-null, realm NINGEN_DO, animal+natural tags, valid Armor TN + real wound track, valid attack+damage except the Hare's
+`no_attack`), stat-block fidelity spot-checks (Dog 1/2/1/1 Per3 4k3 Bite-3k3-2k1 ATN20/Red0 12/24 Swift2/scent; Bear Earth6/Str7 Claws-6k4-7k3
+ATN20/Red9 30/60/90 Fear2/Swift3/Huge + Bite2-5k4-4k3; Tiger 2/3/2/3 6k4-5k2 ATN25/Red4/dead48 Fear2/Swift1 + Bite2-4k4-3k3; Elephant Sta6/Str7
+Tusks-7k2 20/40/60/80/100 Red7/BOSS + Stamp2-4k4; Utaku Kick-4k3-6k2 + Trample2-6k4-6k4 Fear2/Red5; Falcon Swift5/flying/eye_attack init-5k5;
+Crocodile aquatic/tenacious_jaws swallow-2k2 Fear2; Constrictor Squeeze-2k2 + Grapple2-7k3-4k1; Boar Disembowel-4k4 Red12 30/75; Hare no_attack
+Swift3/dead10; Flying Squirrel glider/damage_no_explode), the **de-confliction** (natural `fox`/`crane` resolve distinctly from spirit
+`kitsune`/`tsuru`), a **full cross-bestiary collision check** (all 31 natural ids UNIQUE among the 174 other-bestiary ids → 205 total
+distinct, 0 collisions), AND the **end-to-end spawn/damage path** — `SpiritCombatant.spawn_by_id("bear")` yields a puppet carrying the
+`spirit_creature`, whose `resolve_damage("Claws")` averages 29.3 over 40 rolls (real 7k3 exploding stat-block damage, not the ~5 "unarmed"
+fallback — confirming the s54 damage override fires for a s54.1 animal); unknown id → null; `find_creature` resolves a s54.1 animal AND
+sibling-bestiary s54.2/s54.9 creatures still resolve through the shared catalog. Full project `--import` parse-clean. DEFERRED (documented
+above): the descriptive-tag abilities (Scent, Charge, Eye Attack, Furious/Goring Charge, Echolocation, Disease/Venom, Color Change, Rut,
+Headbutt, damage-no-explode, etc.) — none blocked on an unknown value, each awaiting its combat-layer consumer; and the live PC-facing
+spawn is on the PC-travel HOLD like the whole ASCII stack. NOTE the deliberate split: `animal_combatant.gd` (s57.39 companion combat, the
+6 trained species by enum) and `natural_creature_bestiary.gd` (this — the 31 wild-fauna by lowercase id in find_creature) are two disjoint
+catalogs serving two different consumers; the six shared blocks are faithfully transcribed in both.
+
 ### Systems Added 2026-07-18 (s54.2 Monsters & Nonhuman Races bestiary TRANSCRIBED — the 8 not-yet-in-game core monsters, combat-ready + spawnable-by-id, runtime-verified 114/114)
 Greenfield content build (owner directive "continuing building GDD elements still not in the game", "Ok go"). s54.2 is the CORE
 monster roster (bog hag, goblin, ogre, oni, nezumi, tsuno, undead) — the sibling to the s54.9 Shadowlands beasts, same faithful,
