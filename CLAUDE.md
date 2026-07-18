@@ -232,6 +232,32 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-18 (s54.4 Atarasi's Avalanche WIRED — the first Notable-Lost bespoke ability made live; the on-hit Taint-touch, runtime-verified 14/14)
+Greenfield follow-on to the 4-Notable-Lost transcription (below). Activates the first of the descriptive-tag abilities that transcription
+deferred: **Hida Atarasi's Avalanche** (s54.4) — "his unarmed strikes infuse the target with the Taint of the Shadowlands; the victim rolls
+**Earth at TN 20** or gains **1–5 points** of Shadowlands Taint." The ability is **fully numeric in the GDD** (Earth TN 20, 1–5 points), so it
+is a faithful wire with **zero invention**, reusing the established Gagoze taint-gaze pattern. FIX (one guarded block in
+`AsciiMapCombatOrchestrator._apply_hit`, right before the Disease/Poison per-hit blocks): on a landed hit where the attacker's
+`spirit_creature` carries the **`taint_touch_unarmed`** tag (Atarasi alone) AND the target is a **mortal** (`target.spirit_creature == null`,
+alive) AND the strike is **unarmed** (`weapon_name == "" or "unarmed"`), the victim rolls Earth (`CharacterStats.get_ring_value(target, EARTH)`,
+exploding) vs TN 20; a fail adds `dice.rand_int_range(1, 5)` to `target.taint` (clamped ≤ 100). The **s37 Strength-of-the-Crow `taint_resist`
+buff** on the victim's Participant aids the roll (`IndividualCombat.get_timed_modifier_total(t_p, "taint_resist")`), exactly as it aids the
+Gagoze gaze. **Unarmed gate (the one design nuance, faithful not invented):** the Atarasi monster-puppet routes *all* his attacks through the
+`"unarmed"` vehicle (SpiritCombatant sets no skills → `pick_best_weapon` returns `"unarmed"`, and the fixed 22k3 damage is substituted via the
+spirit override), so gating on `unarmed` fires on his hits today AND stays faithful ("his tetsubo would not taint") if a future representation
+ever gives him a real weapon. The **`not is_dead` gate is faithful, not a bug**: Atarasi's 22k3 blow one-shots a fragile mortal, and a corpse
+gains no Taint — only a target who **survives** the strike (a tanky bushi, high Reduction, or high Earth) is Tainted, which is exactly who
+accumulates Taint over a fight. The +1 Taint feeds the existing consumers (MutationSystem periodic-taint rolls → mutations/Lost, maho
+Channel-3 witch-hunter detection). Runtime-verified 14/14 (Godot 4.6.2, headless driver in the autoload-free `mintest` project; test mortals
+carry huge Reduction so they survive Atarasi's blow, isolating the Earth resist roll from lethality): Atarasi spawns with the tag / Nashiko
+without it; a low-Earth mortal gains bounded Taint across 12 unarmed hits; a **single** unarmed hit infuses exactly 1–5 points; a **high-Earth**
+(Earth 10 → 10k10 ≫ 20) mortal resists every hit (Taint stays 0); a **spirit** target (ogre puppet) is skipped; **Nashiko** (no
+`taint_touch_unarmed`) infuses no Taint even unarmed; a **real weapon** (katana) does NOT trigger it; and a large **`taint_resist`** buff (+30)
+holds an Earth-1 victim at 0 Taint. Full project `--import` parse-clean; zero regression (the block is gated on `taint_touch_unarmed`, borne by
+Atarasi alone). DEFERRED (documented, each still blocked on a missing consumer, NOT invented): Atarasi's **raise-undead-on-kill** (needs a
+reanimation mechanic), **Unearthly Regeneration** (no per-round amount stated in the GDD), and the other Notable-Lost descriptive tags
+(`fear_power` — no numeric Fear rating stated; `terror_of_fu_leng`; Tsukuro `returns_from_grave`) — each awaiting its combat-layer consumer.
+
 ### Systems Added 2026-07-18 (s54.4 The 4 Notable Lost TRANSCRIBED — the flat-bonus field + wiring built, the last deferred s54 bestiary item; runtime-verified 92/92)
 Greenfield content build (owner directive "continuing building GDD elements still not in the game", "1"). Closes the ONE item the s54
 CLOSEOUT AUDIT (below) left design-gated: the **4 Notable Lost** named boss-tier villains from s54.4 — **Doji Nashiko** (the Demon Bride

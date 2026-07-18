@@ -10709,6 +10709,23 @@ static func _apply_hit(
 			var fred: int = 0 if target.spirit_creature != null else maxi(0, target.armor_reduction)
 			WoundSystem.apply_damage(target, dice_engine.roll_and_keep(fc.followup_dmg_rolled, fc.followup_dmg_kept, true).total, fred)
 
+	# Atarasi's Avalanche (s54.4 Hida Atarasi): his UNARMED strikes infuse the target with
+	# Taint — the victim rolls Earth at TN 20 or gains 1-5 points of Shadowlands Taint. The
+	# puppet routes all of Atarasi's attacks through the "unarmed" vehicle (SpiritCombatant sets
+	# no skills → pick_best_weapon returns "unarmed"), so this fires on his hits; gating on the
+	# unarmed weapon keeps it faithful (his tetsubo would not taint) if a future representation
+	# gives him a real weapon. The s37 taint_resist buff aids the victim's roll (as with the
+	# Gagoze gaze). The kill→raise-undead half stays deferred (needs a reanimation mechanic).
+	# Mortal target only (a spirit/oni is already Tainted or immune).
+	if attacker.spirit_creature != null and target.spirit_creature == null and t_p != null \
+			and not CharacterStats.is_dead(target) \
+			and attacker.spirit_creature.has_tag("taint_touch_unarmed") \
+			and (weapon_name == "" or weapon_name == "unarmed"):
+		var _av_tr: int = IndividualCombat.get_timed_modifier_total(t_p, "taint_resist")
+		var _av_earth: int = maxi(1, CharacterStats.get_ring_value(target, Enums.Ring.EARTH) + _av_tr)
+		if dice_engine.roll_and_keep(_av_earth, _av_earth, true).total < 20:
+			target.taint = minf(100.0, target.taint + float(dice_engine.rand_int_range(1, 5)))
+
 	# Disease (s54.5/s54.11): a wounding hit by Byoki/Shikko/plague-zombie can infect a
 	# mortal target (cross-encounter drain resolved in the world-sim).
 	if attacker.spirit_creature != null and target.spirit_creature == null and raw > 0 \
