@@ -1058,8 +1058,14 @@ static func _execute_gossip(
 	var gossip_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var gossip_wound: int = CharacterStats.get_wound_penalty(character)
 	var gossip_mut: Dictionary = MutationSystem.get_skill_modifiers(character, primary_skill)
+	# s12.2 authenticity modifier (LOCKED s12.2:515, s15.4:181): gossiping about someone you
+	# genuinely like reduces dice KEPT ("hard to genuinely harm someone you care about").
+	# Actor's effective disposition toward the SUBJECT of the gossip; GOSSIP is hostile.
+	var gossip_auth: int = DispositionSystem.get_authenticity_modifier(
+		DispositionSystem.get_effective_disposition(character, subject_id, characters_by_id), true
+	) if subject != null else 0
 	var gossip_rolled: int = maxi(1, trait_val + skill_rank + gossip_mut["rolled"])
-	var gossip_kept: int = maxi(1, trait_val + gossip_mut["kept"])
+	var gossip_kept: int = maxi(1, trait_val + gossip_mut["kept"] + gossip_auth)
 	var roll_result: Dictionary = dice_engine.roll_check(
 		gossip_rolled, gossip_kept, tn, 0, gossip_wound, skill_rank > 0
 	)
@@ -1128,9 +1134,15 @@ static func _execute_public_insult(
 	var insult_wc: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var insult_wound_a: int = CharacterStats.get_wound_penalty(character)
 	var insult_mut_a: Dictionary = MutationSystem.get_skill_modifiers(character, primary_skill)
+	# s12.2 authenticity modifier (LOCKED s12.2:515, s15.4:243): insulting someone you have
+	# high disposition toward reduces dice KEPT. Actor's effective disposition toward the
+	# insulted target; PUBLIC_INSULT is hostile.
+	var insult_auth: int = DispositionSystem.get_authenticity_modifier(
+		DispositionSystem.get_effective_disposition(character, target_id, characters_by_id), true
+	) if target != null else 0
 	var attacker_total: int = dice_engine.roll_check(
 		maxi(1, trait_val + skill_rank + insult_mut_a["rolled"]),
-		maxi(1, trait_val + insult_mut_a["kept"]),
+		maxi(1, trait_val + insult_mut_a["kept"] + insult_auth),
 		0, 0, insult_wound_a, skill_rank > 0
 	).get("total", 0) + insult_wc
 

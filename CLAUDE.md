@@ -232,6 +232,33 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-18 (s12.2 authenticity modifier WIRED — GOSSIP + PUBLIC_INSULT; the zero-caller arbiter + an OVER-BROAD deferral note, runtime-verified 15/15)
+Resolution of a dormant LOCKED arbiter whose deferral note was too pessimistic. `DispositionSystem.get_authenticity_modifier(your_disposition,
+action_is_hostile)` (s12.2:515 LOCKED — "It is hard to genuinely harm someone you care about": a hostile act by a **Devoted** actor toward the
+target costs **−2 KEPT dice**, **Trusted Ally / Friend** −1; symmetric for a positive act toward a Rival/Enemy/Blood-Enemy) had **ZERO
+production callers** (grep-confirmed: only its own def + `tests/`). The sibling `get_raise_modifier` (the target→actor Raise/Free-Raise axis) is
+already live in `_get_social_tn`, but this one — the actor→target **kept-dice** axis — was never applied, so it was equally hard to gossip about
+your Devoted friend as about a stranger. The CLAUDE.md deferral called it blocked on "a per-action `action_is_hostile` classification (none
+exists) + a central social-roll choke point (none exists)" — but that is **over-broad for two of the actions the GDD explicitly names**:
+**GOSSIP** (s15.4:181 "gossiping about someone you genuinely like incurs a dice kept penalty") and **PUBLIC_INSULT** (s15.4:243 "insulting
+someone you have high disposition toward incurs dice kept penalty") are (a) GDD-classified **hostile** → the flag is a fixed `true`, no map
+needed, and (b) both compute their attacker **kept-dice term INLINE** in the executor (`_execute_gossip` `gossip_kept`, `_execute_public_insult`
+attacker kept) → no choke point needed. FIX (pure LOCKED wire, **no invented values** — the −1/−2 are the arbiter's own s12.2:515 constants):
+each executor folds `get_authenticity_modifier(get_effective_disposition(character, <subject/target>, characters_by_id), true)` into its inline
+kept term, **inside the existing `maxi(1, …)` floor** (a Devoted low-skill gossiper still keeps ≥1 die). The disposition axis is the LOCKED
+"**your own disposition toward the target**" — for GOSSIP that is the actor's effective disposition toward the **SUBJECT** of the rumor (the
+person harmed, s15.4:181), for PUBLIC_INSULT toward the **insulted target** (s15.4:243). Uses `get_effective_disposition` (the faithful
+family-bond/cohabitation/floor-inclusive read) since `characters_by_id` is in scope at both sites; a null/unresolvable subject → 0 (no penalty,
+no crash). Rolled dice, TN, and every other term are untouched (LOCKED says KEPT only). Runtime-verified 15/15 (`mintest/verify.gd`): the arbiter
+values are GDD-exact (hostile 95→−2 / 70→−1 / 31→−1 / 30→0 / −100→0; positive −95→−2 / −31→−1 / −30→0); effective==stored for isolated chars;
+end-to-end through the **real** executors, GOSSIP mean roll_total falls monotonically **Devoted(+95) 22.4 < Friend(+40) 29.7 < Neutral(0) 35.8**
+(exactly the 4k4→4k3→4k2 kept-dice progression), PUBLIC_INSULT Devoted 22.4 < Neutral 35.8; the `maxi(1,…)` floor holds for a Devoted 0-skill
+gossiper; and a null-subject GOSSIP resolves without crash. Full project `--import` parse-clean. **STILL DEFERRED (genuinely needs the choke
+point):** INTIMIDATE and EXPOSE_SECRET_PRIVATELY route their attacker roll through `SkillResolver.resolve_skill_check` (no inline kept term), and
+the positive-action-toward-enemy half (CHARM/PERSUADE −1/−2 vs a Rival/Enemy) is likewise SkillResolver-gated — those need the keep-dice modifier
+threaded into SkillResolver (the central social-roll choke point the original note describes), a broader change. This lands the clean
+inline-executor half; the deferral note is corrected to scope the remaining work precisely.
+
 ### Systems Added 2026-07-17 (s57.21 military unification — STAGE 3a: T3-tier (Taisa/Shireikan) demotion; the top-tier disposition-removal gap was UNREACHABLE; owner-approved "Tiered-command, staged", runtime-verified 30/30)
 Owner-approved (2026-07-17, "Tiered-command, staged") third-stage payoff on the demotion side. The company-tier disposition removal
 (`DayOrchestrator._process_military_demotions`, LOCKED s11.7 "Demotion and Removal": a commander whose disposition toward their
@@ -1723,9 +1750,17 @@ violate the "Do not invent mechanics" HARD CONSTRAINT). Documented so future swe
   the two participants, severity from the arbiter, "political tension" = cross-clan per the owner default, per-pair dedup). See the
   "s12.8:271 affair-secret minting ACTIVATED" changelog entry above.
 - **`DispositionSystem.get_authenticity_modifier` (s12.2:515 LOCKED — Devoted/Ally/Friend doing a hostile act → −1/−2 KEPT dice;
-  symmetric for friendly acts toward enemies).** Its sibling `get_raise_modifier` is already live in the social-TN calc, but this
-  one needs a per-action `action_is_hostile` classification (none exists) + a central social-roll choke point to inject a
-  keep-dice modifier (none exists) — a per-action hostility map + keep threading through every social roll.
+  symmetric for friendly acts toward enemies) — PARTIALLY RESOLVED / WIRED 2026-07-18 (GOSSIP + PUBLIC_INSULT).** The prior deferral
+  ("needs a per-action `action_is_hostile` classification + a central social-roll choke point") was OVER-BROAD: two of the actions
+  the GDD explicitly names for this modifier — **GOSSIP** (s15.4:181 "gossiping about someone you genuinely like incurs a dice kept
+  penalty") and **PUBLIC_INSULT** (s15.4:243 "insulting someone you have high disposition toward incurs dice kept penalty") — are
+  GDD-classified hostile (fixed `action_is_hostile = true`, no map needed) AND compute their attacker kept-dice term INLINE in the
+  executor (`_execute_gossip` `gossip_kept`, `_execute_public_insult` attacker kept), so no central choke point is needed either. See
+  the "s12.2 authenticity modifier WIRED" changelog entry at the top. STILL DEFERRED (genuinely needs the choke point): **INTIMIDATE**
+  and **EXPOSE_SECRET_PRIVATELY** route their attacker roll through `SkillResolver.resolve_skill_check` (not an inline kept term), so
+  wiring authenticity there needs the keep-dice modifier threaded into SkillResolver (the central social-roll choke point) — the
+  broader change the original note describes. The **positive-action-toward-enemy** half (CHARM/PERSUADE −1/−2 kept vs a Rival/Enemy)
+  is likewise SkillResolver-gated and deferred.
 - **`MiyaBlessingSystem.apply_cunning_modifier` (s11.5b §5 — Cunning-emperor ±10 Need Score) — RESOLVED / ACTIVATED 2026-07-09
   (owner-approved), no longer a dormant item.** Was truly zero-caller (+ the scored entry never carried a `clan` field); the owner
   supplied the discretionary §5 favorite-selection rule (favored/disfavored = highest/lowest clan-champion disposition toward the
