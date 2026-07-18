@@ -232,6 +232,58 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-18 (s54.2 Monsters & Nonhuman Races bestiary TRANSCRIBED — the 8 not-yet-in-game core monsters, combat-ready + spawnable-by-id, runtime-verified 114/114)
+Greenfield content build (owner directive "continuing building GDD elements still not in the game", "Ok go"). s54.2 is the CORE
+monster roster (bog hag, goblin, ogre, oni, nezumi, tsuno, undead) — the sibling to the s54.9 Shadowlands beasts, same faithful,
+no-invention, headless-verifiable transcription the prior sessions did for the oni (s54.5), undead (s54.11), additional creatures
+(s54.12), spirit realms (s54.10), Five Ancient Races (s54.6), and Shadowlands beasts (s54.9). **AUDIT-FIRST (the key step):** of the
+12 stat-blocked s54.2 entries, **4 were already transcribed / out-of-frame** and are correctly OMITTED to avoid duplicate ids in the
+cross-bestiary `find_creature` catalog — **Shozai-Gaki** + **Kappa** already live in `SpiritBestiary` (the s56.16 realm roster);
+**Ghost (Yorei)** has NO fixed stat block (the GDD says GMs build it from the deceased's own Rings/Traits/Skills — nothing to
+transcribe); the **five Nezumi Colony "Force Roster"** blocks are Company stat blocks (Health 153, Attack/Defense/Morale) for the
+s11.7 Army Combat System, NOT `SpiritCreatureData`. **DEFERRED (no-invention boundary):** the **four Nezumi warren archetypes**
+(Scout/Archer/Broodmother/Chieftain) give only Rings/traits/skills/equipment/morale — no explicit Init/Attack/Damage/Armor-TN/
+Reduction lines — so building them as combat `SpiritCreatureData` would require inventing those numbers (a bow-armed archer, a
+clawed broodmother, and a steel-armed chieftain each differ from the base spear, so inheriting the base lines would misrepresent
+them); only the COMPLETE base Ratling stat block (= "Nezumi Warrior") is transcribed. New `simulation/monster_bestiary.gd`
+(`class_name MonsterBestiary`, pure class) transcribes the remaining **8** stat blocks via the same `_make` factory the sibling
+bestiaries use — so every monster is combat-ready via `SpiritCombatant.to_character_data()` (rings→paired traits, named-trait
+overrides, real stat-block to-hit/damage/Armor-TN/Reduction/wound-track) and **spawnable by id** through `SpiritCombatant.spawn_by_id`
+(registered in `find_creature`'s cross-bestiary catalog list). The roster: **Bog Hag** (Jigoku Shadowlands infiltrator), **Goblin
+(Bakemono)** (the typical goblin — the s54.9 bestiary held only the 7 goblin VARIANTS, not this base), **Ogre** (the base Tainted
+ogre — distinct Red 10/dead 80 from s54.9's Free Ogre Red 15), **Ugulu no Oni** (a powerful oni NOT in the s54.5 oni bestiary),
+**Ratling (Nezumi)** (the complete base, = Nezumi Warrior), **Tsuno Warrior** (the base warrior — the s54.6 bestiary held only
+Ravager + Soultwister), **Undead Revenant**, and **Zombie** (the canonical base zombie — the undead bestiary held only the
+plague_zombie variant). **NO invented values** — every ring, trait, die, threshold and Taint Rank is the GDD's own. **realm/field
+mapping** (mirrors the sibling bestiaries): the Shadowlands monsters (bog hag/bakemono/ogre/ugulu/revenant/zombie) = **JIGOKU**; the
+Nezumi are a Taint-IMMUNE mortal race = **NINGEN_DO**; the Tsuno adapted to Toshigoku = **TOSHIGOKU** (matching the s54.6 tsuno
+entries). "Invulnerable"/"Invulnerability" (only jade/crystal/obsidian/magic wound) → wired `partial_invuln` (Bog Hag); Reduction
+"(X vs jade/crystal/obsidian)" → `reduction_jade/crystal/obsidian = X` (Ugulu 24→12 sacred); "Human-type Wound Ranks" (Nezumi, Tsuno)
+→ `wounds_dead 0` + empty thresholds + a `human_wounds` tag so `SpiritCombatant` applies the PC Earth-derived wound track (the s54.6
+convention); Nezumi "Name" trait (a Void-equivalent) → `void_rank` (SpiritCombatant maps it to the Void Ring + Void Points, per the
+GDD "functions mechanically in the same manner as the Void Ring"); Swift (Bakemono 2, Nezumi 2, Tsuno 3) → the `swift` field; every
+bespoke ability carries a descriptive (unwired) tag pending the same combat-wiring tranches the oni/undead abilities went through —
+Bog Hag Disease (1-in-5 chance, weekly Stamina drain — a different cadence from the wired DiseaseSystem tags) → `disease_wasting`;
+Skin Wearing → `skin_wearing`; Ugulu "immune to all arrows except armor-piercing" (no arrow-type field) → `immune_arrows`, "immune to
+two spells" → `spell_immunity`; Revenant/Zombie Beheading (called-shot 18+-Wound instant-kill) → `beheading`; Tsuno Special Weapon →
+`tsuno_blade`. Runtime-verified 114/114 (Godot 4.6.2, headless driver in the minimal autoload-free `mintest` project): catalog
+completeness (all 8 ids present, correct size, `monster_ids` sorted), every entry well-formed (non-null, valid attack + damage +
+Armor TN; human-type-wound creatures carry `wounds_dead 0` + empty thresholds, all others a Dead threshold), stat-block fidelity
+spot-checks (Bog Hag 3/3/3/2, Str3, 5k3 init, Claws 5k3 dmg 3k2, ATN20/Red5, Wounds 16/32/48/72, Taint4, partial_invuln+skin_wearing+
+disease_wasting; Bakemono 4k2/ATN15/Red3/9-18/Taint2/Swift2/SWARM; Ogre Sta6 Str6/8k2/ATN25/Red10/20-40-60-80/Fear2/Taint3/Huge; Ugulu
+Earth6 Str8/3k1 init/7k4 9k3/ATN10/Red24-12sacred/32-64-96-124/Fear3/Taint6/BOSS/immune_arrows+spell_immunity; Nezumi NINGEN_DO/4k3
+4k2/ATN20/Red0/Name1→void_rank1/Swift2/taint_immune+human_wounds; Tsuno TOSHIGOKU/5k4 init/7k3 6k3/ATN30/Red8/Fear2/Taint4/Swift3/
+tsuno_blade+human_wounds; Revenant 0/3/1/2/Sword 5k3 5k2/ATN15/Red5/dead72/Fear3/undead+beheading; Zombie 0/3/0/1/1k1 init/Club 4k2
+3k2/ATN10/Red5/dead72/Fear3/undead), AND the **end-to-end spawn/damage path** — `SpiritCombatant.spawn_by_id("ogre_base")` yields a
+puppet carrying the `spirit_creature`, whose `resolve_damage("Club")` averages 20.8 over 40 rolls (real 8k2 exploding stat-block
+damage, not the ~5 "unarmed" fallback — confirming the s54 damage override fires for a s54.2 monster); unknown id → null;
+`find_creature` resolves a s54.2 monster AND a sibling-bestiary s54.9 beast (`aka_name`) still resolves through the shared catalog.
+Full project `--import` parse-clean. DEFERRED (documented above): the 4 combat-incomplete Nezumi warren archetypes (roster-layer, no
+`SpiritCreatureData` stat lines — their intended consumer is `roster_composition_system` for the ASCII/army layer) and the
+descriptive-tag abilities (Skin Wearing, Disease, Beheading, immune_arrows/spell_immunity, Special Weapon, Aquatic, Trickery,
+Imitation, etc.) — none blocked on an unknown value, each awaiting its combat-layer consumer; the live PC-facing spawn is on the
+PC-travel HOLD like the whole ASCII stack.
+
 ### Systems Added 2026-07-18 (s54.9 Shadowlands Beasts bestiary TRANSCRIBED — 33 statted creatures, combat-ready + spawnable-by-id, runtime-verified 302/302)
 Greenfield content build (owner directive "continuing building GDD elements still not in the game"). s54.9 was a full roster of
 LOCKED-statted Shadowlands creatures with **no code transcription** — exactly the faithful, no-invention, headless-verifiable work prior
