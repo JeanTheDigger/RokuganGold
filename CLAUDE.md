@@ -320,10 +320,21 @@ military hierarchy is self-feeding:** companies link into legions (S1), battle e
 every tier refill from the serving officers directly below (S2b) — a Chui rises to Taisa, a Taisa to Shireikan, each promotion
 cascading a fresh vacancy the next tier fills. **Stage 3a (T3-tier Taisa/Shireikan demotion) — DONE 2026-07-17** (see the "STAGE 3a"
 changelog entry above; the top-tier demotion gap is closed — `_process_military_command_demotions` now removes a disloyal
-Taisa/Shireikan over the raw legion/section arrays, feeding the same refill cascade). **DEFERRED (Stage 3b, owner-approved, NEXT):**
-`army_id` membership onto linked companies + the Army→Sections→Legions→Companies mobilization chain-walk (no pass walks the full
-mobilization chain yet). Stage 2b is a clean structural fix (a LOCKED-mandated filter relaxation + a Stage-1-enabled cascade-vacate),
-independently verifiable, with zero regression to the company-promotion path.
+Taisa/Shireikan over the raw legion/section arrays, feeding the same refill cascade). **Stage 3b (army_id membership +
+mobilization chain-walk) — RE-ASSESSED 2026-07-17: NOT a clean structural wire, DESIGN-GATED (do NOT re-attempt without an owner
+ruling).** Investigation found both halves blocked: **(1)** the Army→Section→Legion→Company **mobilization chain-walk** has ZERO live
+consumers — `MilitaryHierarchy.get_army_sections`/`get_clan_armies`/`get_section_legions`/`get_legion_companies` are all zero-caller,
+and `WorldState.military_armies`/`military_sections` are stored+saved but never fed to any deploy/battle/mobilization pass, so building
+the walk is dead plumbing. **(2)** the company **`army_id` field is OVERLOADED** — it is read by `_process_levy_suspicion` (LIVE,
+`army_id >= 0` → exempt from private-army suspicion) AND by `_get_army_companies` (the MOBILE field-army battle collection: `c.army_id
+== <mobile army id>`, dormant under the s11.7a sub-tile HOLD — `ArmyMovementSystem.create_army_state` has zero callers, `active_armies`
+is never populated). The Stage-1 plan intended Stage 3b to stamp the *static organizational* army_id (Army→Section→Legion membership)
+onto linked companies, but that meaning COLLIDES with the *mobile-deployment* meaning `_get_army_companies` expects — a company is
+organizationally in Army 5 while NOT currently deployed in any field army; overloading one int field for both facts is wrong and a
+latent battle-corruption landmine the moment s11.7a is unblocked. Resolving it needs a design decision (a separate `org_army_id`
+company field, or an owner ruling that the overload is safe) — game design, not structural wiring, so it is owner-gated per the "Do
+not invent mechanics" hard constraint. Stage 2b is a clean structural fix (a LOCKED-mandated filter relaxation + a Stage-1-enabled
+cascade-vacate), independently verifiable, with zero regression to the company-promotion path.
 
 ### Systems Added 2026-07-17 (s57.21 military unification — STAGE 2a: up-chain battle_record credit; the Shireikan-eligibility rung was UNREACHABLE; owner-approved "credit up the command chain", runtime-verified 18/18)
 Owner-approved (2026-07-17, "2a and then 2b") second stage — the payoff of the Stage 1 chain closure. Before this, the battle_record
