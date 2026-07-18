@@ -232,6 +232,40 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### s54 statted-creature bestiary layer — CLOSEOUT AUDIT (2026-07-18, s54.4 + s54.8 swept; layer complete for no-invention transcription, do NOT re-audit)
+After the s54.1 natural-creatures transcription (below), audited the two remaining s54 files that could conceivably hold un-transcribed
+combat stat blocks — **s54.4 "The Lost"** and **s54.8 "Ronin of the Empire"** — to confirm the bestiary layer is exhausted. **Result:
+every genuine creature roster is now `find_creature`-registered; the one remaining candidate is design-gated (needs a new field), not a
+clean transcription.** Findings, recorded so future sweeps skip these exact items:
+- **s54.8 "Ronin of the Empire" — NO bestiary stat blocks. CLEAN.** Its Rank 2–5 Ronin Paths + Ronin Shugenja Schools are technique/
+  school definitions (character-creation, not creatures). Its ~24 NPC archetypes (Simple/Experienced Bandit, Bandit Lord, Conspiratorial
+  Madman, Kolat Assassin, Master Killer, disgraced yojimbo, heroes, pirates, priests, wandering swordsmen, Karatsu the Tyrant, etc.) are
+  **character-generation archetypes** — Rings + Traits + Infamy/Honor/Status/Insight-Rank + Skills + Advantages/Disadvantages + School/Rank,
+  with **NO Init/Attack/Damage/Armor-TN/Reduction/Wounds lines** — built via `WorldGenerator.generate_character`, not monster puppets. Its
+  actual combat units (Bandit Rabble/Thug, Rebel Peasant/Ashigaru/Leader + the morale-break percentages) are **already implemented** in
+  `RosterCompositionSystem` (s56.10) and `CombatController`'s 17 LOCKED unit types (morale BANDIT_RABBLE 40% / THUG 60% / REBEL_ASHIGARU
+  70% / REBEL_LEADER unbreakable — matching s54.8 verbatim). Nothing to transcribe.
+- **s54.4 "The Lost" — the 4 Notable Lost are DEFERRED (design-gated), not a clean wire.** Its Lost *schools* (Dark Moto Cavalry,
+  Maho-Bujin) are character-creation schools; its "New Lesser/Greater Shadowlands Powers (The Lost)" + "Powers of the Akutenshi" are s44
+  MutationSystem-domain content, not a bestiary. The ONE bestiary candidate is the **4 Notable Lost named NPCs** — **Doji Nashiko** (the
+  Demon Bride of Fu Leng; Init 10k9, Wakizashi 7k4+8 / Blackened Claws 8k4+8, dmg 10k4 / 10k5, ATN 35, Wounds 95), **Hida Atarasi** (the
+  First Akutenshi; Init 10k7+2, Heavy weapon 10k9+11, dmg by-weapon +9k0, ATN 45, Red 15, Wounds 197), **Moto Tsume** (General of the
+  Shadowlands; Init 10k9+2, Katana 10k6+11, dmg Katana 10k5, ATN 40, Red 13, Wounds 157), **Daidoji Tsukuro** (the Fallen Crane; Init 9k3,
+  Katana 10k6+8, dmg Katana 10k4+2, ATN 25, Red 3, Wounds 100). These are named boss-tier villains with full combat stat blocks — the same
+  class as the transcribed named Oni Lords — BUT they are the **only** s54 creatures whose stat blocks carry **flat `+X` bonuses** on the
+  attack roll (Nashiko +8, Atarasi/Tsume +11, Tsukuro +8) AND flat/weapon-specific **damage** ("By weapon +9k0", "Katana 10k5", "10k4+2").
+  `SpiritCreatureData` has **no flat attack-bonus / damage-bonus field** (verified — all 174 existing bestiary entries + the 31 natural are
+  pure XkY dice; grep-confirmed 0 `+X` in every prior s54 roster), and `IndividualCombat.resolve_attack`/`resolve_damage` apply no such
+  flat modifier. So a faithful transcription is NOT a data-only wire: dropping the `+8`/`+11` would badly misrepresent the stat block
+  (unfaithful), folding it into dice would invent a conversion (forbidden by the "do not invent mechanics" hard constraint), and adding
+  `attack_flat_bonus`/`damage_flat_bonus` fields + threading them through the combat-resolution core + the SpiritCombatant to-hit/damage
+  overrides is a combat-layer **feature addition** — plus these 4 are ALSO buildable via the Maho-Bujin / Dark Moto Cavalry Lost schools,
+  so which representation (monster puppet vs. world-gen character) is a **design decision**. Deferred pending owner authorization for that
+  feature + representation call. **With this, the s54 statted-creature bestiary layer is complete for clean, no-invention transcription** —
+  8 rosters (`natural`/`monster`/`oni`/`ancient_races`/`shadowlands_beast`/`spirit`/`undead`/`additional_creatures` bestiaries, 205 distinct
+  find_creature ids); the only remaining item is the 4 flat-bonus-blocked Notable Lost, and the remaining s54 files (s54.0 framework, s54.3
+  Bloodspeaker, s54.7 Kolat, plus the s54.8 archetypes above) are rules/factions/character-gen already implemented as systems.
+
 ### Systems Added 2026-07-18 (s54.1 Natural Creatures bestiary TRANSCRIBED — all 31 mundane animals, combat-ready + spawnable-by-id, runtime-verified 333/333)
 Greenfield content build (owner directive "continuing building GDD elements still not in the game", "1"). s54.1 is the mundane-animal
 roster (dogs, horses, big cats, bears, sharks, snakes, birds, etc.) that s57.38 hunts and s57.39 animal-companions reference — the
