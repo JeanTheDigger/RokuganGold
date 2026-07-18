@@ -232,6 +232,42 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-18 (s54.9 Shadowlands Beasts bestiary TRANSCRIBED — 33 statted creatures, combat-ready + spawnable-by-id, runtime-verified 302/302)
+Greenfield content build (owner directive "continuing building GDD elements still not in the game"). s54.9 was a full roster of
+LOCKED-statted Shadowlands creatures with **no code transcription** — exactly the faithful, no-invention, headless-verifiable work prior
+sessions did for the oni (s54.5), undead (s54.11), additional creatures (s54.12), and spirit realms (s54.10) bestiaries. New
+`simulation/shadowlands_beast_bestiary.gd` (`class_name ShadowlandsBeastBestiary`, pure class) transcribes **all 33** s54.9 stat blocks
+into `SpiritCreatureData` via the same `_make`/`_with2` factory pattern the sibling bestiaries use — so every beast is combat-ready via
+`SpiritCombatant.to_character_data()` (rings→paired traits, named-trait overrides, real stat-block to-hit/damage/Armor-TN/Reduction/wound-track)
+and **spawnable by id** through `SpiritCombatant.spawn_by_id` (registered in `find_creature`'s cross-bestiary catalog list). The roster:
+Aka-name, Dokufu (Mountain Spider) + Dokufu Spawn, Garegosu no Bakemono, the 7 Goblin/Bakemono variants (Berserker/Chucker/Shaman/Sneak/
+Warmonger/Omoni/King), Hanemuri, Kumo, Mamono, the 3 Monstrous Plants (Fudoshi/Lava Tree/Takesasu), Mountain Goblin, Nikumizu (Heart Grub),
+Obake, the 4 Ogres (Free/Leader/Overlord/Mage-Hag), Onibaba (Demon Crone), Onikage (Demon Steed), Sanshu Denki (Muck Monster), Swamp Goblin,
+the 3 Trolls (Common/Sea-Umibozu/Giant Sea-O-umi-bozu), Tsumunagi (Blood Eel), Yamauba (Mountain Ogress). **NO invented values** — every ring,
+trait, die, threshold, and Taint Rank is the GDD's own; realm = JIGOKU for all (Kumo tagged `chikushudo_origin` — Tainted, in the Shadowlands).
+**Tag/field mapping** (mirrors the sibling bestiaries): "Invulnerability"/"Invulnerable" (only jade/crystal/obsidian/magic wound) → wired
+`partial_invuln` (Goblin King, Onibaba, Yamauba); Lava Tree "Partial Invulnerability (Fire)" (immune to fire — it IS fire) → wired
+`flame_immune` (NOT partial_invuln); Reduction "(X vs jade/crystal/obsidian[/fire/magic])" → `reduction_jade/crystal/obsidian = X` (fire/magic
+have no field → a descriptive tag records the extra vulnerability); unconditional Reactions-Stage regen (Garegosu 4, Mountain Goblin 5, Obake 2)
+→ the `regen_wounds` field + descriptive `regen_per_round` (NOT the suppressible Gashadokuro `regeneration` tag); conditional regens (Mamono
+night-only, O-umi-bozu water-only) stay descriptive with `regen_wounds 0` (applying them always would over-buff); multi-attack (a Free/Simple
+attack paired with another) → `multi_attack` + `_with2` (Garegosu Tentacles+Bite, Goblin Berserker Knife+Bite, Onibaba Claws+Hair Tentacle,
+Sea Troll Claws+Tongue); Web (Dokufu 40'/8-tile, Kumo 20'/4-tile) → `ranged_entangle`; Swallow Whole / attach-and-drain (Sanshu Denki 2k1,
+Tsumunagi leech 2k2) → `swallow_damage_*`; O-umi-bozu Waterfall Crush → the auto-hit AoE ranged fields (8k4, radius 2, range 8); every other
+special ability carries a descriptive (unwired) tag pending the same combat-wiring tranches the oni/undead abilities went through. Runtime-verified
+302/302 (Godot 4.6.2, headless driver in the minimal autoload-free `mintest` project): catalog completeness (all 33 ids present, correct size),
+every entry well-formed (non-null, realm JIGOKU, `shadowlands` tag, a Dead threshold, valid attack + damage), stat-block fidelity spot-checks
+(Aka-name 1/2/1/3, Refl3/Agi3, 4k3 init, Claws 5k3, dmg 5k2, ATN20/Red5, Wounds 16:+5/32:Dead, Taint3/Swift1, 0 vs sacred; Dokufu Earth8/Str9,
+10k6, Red30/15-sacred, 40/80/120/160, Fear4/Taint6, BOSS, Web 8k3-entangle-range8; the 4 multi-attack pairs; Ogre Overlord Red25/dead100/Fear3;
+Lava Tree flame_immune-not-partial_invuln; Goblin King partial_invuln vs Warmonger not; the swallow/leech fields; O-umi-bozu Waterfall AoE +
+5-vs-sacred; Kumo web), AND the **end-to-end spawn/damage path** — `SpiritCombatant.spawn_by_id("aka_name")` yields a puppet carrying the
+`spirit_creature`, whose `resolve_damage("Claws")` averages 19.9 over 40 rolls (real 5k2 exploding stat-block damage, not the ~5 "unarmed"
+fallback — confirming the s54 damage override fires for a s54.9 beast); unknown id → null; `find_creature` resolves a Shadowlands beast. Full
+project `--import` parse-clean. DEFERRED (the same combat-wiring the sibling bestiaries staged): the descriptive-tag abilities (Gaze of Terror,
+Berserker Rage, Mob Leader, Feign Death, Camouflage/Venom, Daylight Sensitivity/Invisibility/night-Resurrection, Corrosive Sap/Leaf Senses,
+Acid Blast/Paralyzing Poison, Wasp Swarm, Demon Hair, Shock, Blind Hunter, Mother's Face, spellcasters, etc.) — none blocked on an unknown value,
+each awaiting its combat-layer consumer; the live PC-facing spawn is on the PC-travel HOLD like the whole ASCII stack.
+
 ### Systems Added 2026-07-18 (s12.2 authenticity modifier WIRED — GOSSIP + PUBLIC_INSULT; the zero-caller arbiter + an OVER-BROAD deferral note, runtime-verified 15/15)
 Resolution of a dormant LOCKED arbiter whose deferral note was too pessimistic. `DispositionSystem.get_authenticity_modifier(your_disposition,
 action_is_hostile)` (s12.2:515 LOCKED — "It is hard to genuinely harm someone you care about": a hostile act by a **Devoted** actor toward the
