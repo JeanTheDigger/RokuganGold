@@ -1584,6 +1584,11 @@ static func execute_melee_attack(
 		# splattered with acid sap for a fixed 1k1 Wounds (no save; within 5' = adjacency).
 		if int(dmg_result.get("wounds", 0)) > 0:
 			_apply_corrosive_sap(attacker, target, weapon_name, dice_engine)
+		# Shock (s54.9 Sanshu Denki / Sea Troll): anyone TOUCHING the creature with bare
+		# flesh or metal (a melee hit = adjacency + contact) suffers 3k1 Wounds, once per
+		# Round per character (no save; not wound-gated — touching, not damaging).
+		_apply_shock(attacker, a_p, target, weapon_name, dice_engine)
+
 
 		# Swallow Whole / Devour (s54.5): a wounding melee hit by a swallow creature wins a
 		# Contested Strength to engulf the victim (per-round damage applied in advance_round).
@@ -6905,6 +6910,39 @@ static func _apply_corrosive_sap(
 		return 0  # ranged attackers are not within 5'
 	var dmg: int = dice.roll_and_keep(1, 1, true).total
 	WoundSystem.apply_damage(attacker, dmg, 0)
+	return dmg
+
+
+## Shock (s54.9 Sanshu Denki / Sea Troll no Umibozu): "Anyone touching the [creature]
+## with bare flesh or metal objects suffers 3k1 Wounds ... This can affect each character
+## only once per Round." A MELEE hit (adjacency + contact) splatters the attacker for a
+## fixed 3k1 (no save; armour does not reduce — the retaliation-splatter convention),
+## once per Round per attacker (guarded via kata_used_this_round). Ranged attackers do
+## not touch the creature. Inert unless the struck TARGET is a `shock` creature.
+## DEFERRED (documented, not invented): the "-5 Initiative until the next Round's Reactions
+## Stage" clause (the engine re-rolls initiative each Round and has only a persistent
+## initiative_modifier, so a one-Round init drop has no faithful home), and the metal-vs-
+## wood distinction (WEAPON_CATALOG has no material field; every melee weapon is a touch,
+## which is the established no-invention convention — the shock also fires unarmed).
+static func _apply_shock(
+	attacker: L5RCharacterData,
+	a_p: IndividualCombat.Participant,
+	target: L5RCharacterData,
+	weapon_name: String,
+	dice: DiceEngine,
+) -> int:
+	if target.spirit_creature == null or not target.spirit_creature.has_tag("shock"):
+		return 0
+	if CharacterStats.is_dead(attacker):
+		return 0
+	if not IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+		return 0  # ranged attackers are not touching the creature
+	if a_p != null and a_p.kata_used_this_round.get("shock", false):
+		return 0  # affects each character only once per Round
+	var dmg: int = dice.roll_and_keep(3, 1, true).total
+	WoundSystem.apply_damage(attacker, dmg, 0)
+	if a_p != null:
+		a_p.kata_used_this_round["shock"] = true
 	return dmg
 
 
