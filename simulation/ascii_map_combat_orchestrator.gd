@@ -1164,6 +1164,7 @@ static func execute_climb_stairs(
 ## Melee attack on target_id. Costs a Complex action.
 ## maneuver: "" / "increased_damage" / "disarm" / "feint" /
 ##           "knockdown_biped" / "knockdown_quad" /
+##           "armor_break" (s54.6 Zokujin) /
 ##           "called_shot_limb" / "called_shot_hand" / "called_shot_head" /
 ##           "called_shot_small" / "extra_attack" / "guard"
 # Victory of the River (s30a, multi_victory_river_armor_pierce). All values GDD-given.
@@ -1694,6 +1695,18 @@ static func execute_melee_attack(
 					t_p.disarmed = true
 			else:
 				result["disarm_insufficient_raises"] = true
+
+		# Armor Break (s54.6 Zokujin, 2 Raises): a landed 2-Raise attack Earthshapes and destroys
+		# the target's WORN armor. Damage this hit still used the armor's Reduction (applied above);
+		# the armor is gone for subsequent hits. A creature wears no armor (armor_worn == null), so
+		# its natural hide/Reduction is untouched. Awakened/artifact armor would resist, but no such
+		# flag is tracked, so all worn armor is affected (documented limitation, no invention).
+		if maneuver == "armor_break" and target.armor_worn != null:
+			target.armor_tn_bonus = maxi(0, target.armor_tn_bonus - target.armor_worn.tn_bonus)
+			target.armor_reduction = maxi(0, target.armor_reduction - target.armor_worn.reduction)
+			target.armor_worn = null
+			result["armor_destroyed"] = true
+			log_entry["armor_destroyed"] = true
 
 	# Earthen Fist (s38 Earth): if an opponent's melee attack against the caster MISSES,
 	# the caster (who must be in Defense/Full Defense) may attempt a Disarm next Turn for
@@ -8919,6 +8932,13 @@ static func _npc_should_knockdown(state: MapCombatState, target_id: int, target:
 	return best >= 3  # a competent melee opponent worth disrupting
 
 
+# Armor Break is worthwhile only against a target that actually WEARS armor to destroy
+# (a creature/unarmored fighter has nothing to Earthshape). Structural AI heuristic — the
+# GDD gives no NPC policy; the Zokujin attempts it whenever there is worn armor to break.
+static func _npc_should_armor_break(target: L5RCharacterData) -> bool:
+	return target.armor_worn != null
+
+
 # Disarm is worthwhile only against a still-armed, HIGH-threat melee fighter (best melee
 # skill >= 4). A weapon strip neutralizes them for a turn (recovery costs an action) and
 # leaves them fighting unarmed. Structural AI heuristic — the GDD gives no NPC policy.
@@ -9039,6 +9059,14 @@ static func _npc_execute_attack(
 		# 5 Raises dedicated to Extra Attack; no other raise benefit (GDD s40).
 		# s24 Knives R7: one Free Raise toward Extra Attack lowers the Raises to declare.
 		raises = 5 - SkillMasterySystem.maneuver_free_raises(skill_name, skill_rank, "extra_attack")
+	elif (is_melee or target_in_melee) and attacker.spirit_creature != null \
+			and attacker.spirit_creature.has_tag("armor_break") \
+			and _npc_should_armor_break(target):
+		# Armor Break (2 Raises, s54.6 Zokujin): a Stonehunter/Shaman Earthshapes an enemy's WORN
+		# armor — a landed attack with 2 called Raises destroys it (in addition to damage). Fired
+		# whenever the target wears armor (the Zokujin signature). Structural AI (no GDD NPC policy).
+		raises = 2
+		maneuver = "armor_break"
 	elif (is_melee or target_in_melee) and skill_rank >= 5 \
 			and _npc_should_disarm(state, target_id, target):
 		# Disarm (3 Raises): a very skilled attacker strips a dangerous ARMED foe's weapon
