@@ -1660,6 +1660,17 @@ static func execute_melee_attack(
 		# opponent -3 to all rolls during their next Turn.
 		_apply_strength_of_the_spider(attacker, a_p, t_p, dmg_result.get("wounds", 0))
 
+		# Eye Attack (s54.1 Falcon): a strike dealing 10+ Wounds temporarily blinds the target
+		# (blood and pain) until the injury is treated with Medicine or magically healed. No
+		# in-combat cure exists, so the Blinded runs the skirmish (advance_round_reactions never
+		# rolls off Blinded). DEFERRED: 20+ Wounds destroys the eye (Missing Eye disadvantage) —
+		# the tile-combat puppet carries no Missing Eye field.
+		if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("eye_attack") \
+			and t_p != null and not CharacterStats.is_dead(target) \
+			and int(dmg_result.get("wounds", 0)) >= EYE_ATTACK_BLIND_WOUNDS \
+			and IndividualCombat.CONDITION_BLINDED not in t_p.conditions:
+			IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_BLINDED)
+
 		# Knockdown maneuver: contested Strength if hit.
 		if maneuver in ["knockdown_biped", "knockdown_quad"]:
 			# s34 The Mountain's Feet: defender's knockdown_resist buff adds extra rolled/kept dice.
@@ -10402,6 +10413,7 @@ const ACID_VOMIT_ATK_KEPT: int = 3
 const ACID_VOMIT_DR_ROLLED: int = 4      # 4k4 Wounds/Round (s54.5:261)
 const ACID_VOMIT_DR_KEPT: int = 4
 const ACID_VOMIT_ROUNDS: int = 5         # persists for five Rounds (s54.5:261)
+const EYE_ATTACK_BLIND_WOUNDS: int = 10  # s54.1:87 (10+ Wounds -> Blinded; 20+ Missing Eye deferred)
 static func _npc_maybe_acid_vomit(
 	state: MapCombatState,
 	char_id: int,
