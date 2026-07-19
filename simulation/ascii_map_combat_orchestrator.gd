@@ -7496,6 +7496,12 @@ static func advance_round(
 			var _bl_c: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
 			if _bl_c != null and not CharacterStats.is_dead(_bl_c):
 				WoundSystem.apply_damage(_bl_c, _bleed_amt, 0)
+		# s54.5 Hasaiki Vomit: a coat of volatile acid inflicts 4k4 Wounds/Round for 5 Rounds
+		# (a fresh roll each Round; armour does not reduce the acid — the shared splatter convention).
+		if IndividualCombat.get_timed_modifier_total(_tp, "acid") > 0:
+			var _ac_c: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
+			if _ac_c != null and not CharacterStats.is_dead(_ac_c):
+				WoundSystem.apply_damage(_ac_c, dice_engine.roll_and_keep(ACID_VOMIT_DR_ROLLED, ACID_VOMIT_DR_KEPT, true).total, 0)
 		# Gashadokuro Regeneration (s54.10): recover 10 Wounds at the start of each round,
 		# UNLESS a Wound threshold was crossed within the last 3 rounds (a section
 		# collapsed — _apply_hit set spirit_regen_suppressed_until).
@@ -8516,6 +8522,14 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "gaze_of_terror", "result": got})
 			return {"actions": actions_taken}
 
+	# -- Vomit (s54.5 Hasaiki no Oni): a Complex-action acid spit (max 50') that coats a fresh enemy
+	# with a 4k4/Round-for-5-Rounds acid DoT (to-hit ignores armour's effect on Armor TN).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("acid_vomit"):
+		var av: Dictionary = _npc_maybe_acid_vomit(state, npc_id, npc, dice_engine)
+		if av.get("success", false):
+			actions_taken.append({"action": "acid_vomit", "result": av})
+			return {"actions": actions_taken}
+	
 	# -- Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze that, on a won
 	# Contested Willpower, inflicts 1 full Rank of Taint on a mortal enemy (once each).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("taint_affliction"):
@@ -10376,6 +10390,66 @@ static func _npc_maybe_taint_gaze(
 ## vs TN 5 + 6*5 = 35 (s22.3 Fear TN); a failure sets a persistent spell_afraid + AFRAID (-1k0)
 ## that apply_fear_checks maintains until the timed modifier expires "at the Reactions stage of
 ## the following Round" (round + 2). Returns {} if not attempted.
+## Vomit (s54.5 Hasaiki no Oni, the Burning Sea): a Complex-action ranged spit of extremely
+## volatile acid, max range 50' (10 tiles), that IGNORES armour's effect on Armor TN for the
+## to-hit (s54.5:261). The Vomit is a 3k3 attack roll (s54.5:259); on a hit it coats the target,
+## who then suffers 4k4 Wounds/Round for 5 Rounds via the "acid" timed modifier (the per-Round
+## roll runs in advance_round; armour does not reduce the splatter). Skips an already-coated foe
+## (the 5-Round coat already covers them) and spits at the nearest fresh one instead. Returns {}.
+const ACID_VOMIT_RANGE_TILES: int = 10   # 50' = 10 tiles (s54.5:261)
+const ACID_VOMIT_ATK_ROLLED: int = 3     # Vomit 3k3 to-hit (s54.5:259)
+const ACID_VOMIT_ATK_KEPT: int = 3
+const ACID_VOMIT_DR_ROLLED: int = 4      # 4k4 Wounds/Round (s54.5:261)
+const ACID_VOMIT_DR_KEPT: int = 4
+const ACID_VOMIT_ROUNDS: int = 5         # persists for five Rounds (s54.5:261)
+static func _npc_maybe_acid_vomit(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Nearest living enemy within 50' that is not already acid-coated.
+	var victim_id := -1
+	var best_d := 1 << 30
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		var d := _chebyshev(cpos, state.positions[oid])
+		if d > ACID_VOMIT_RANGE_TILES:
+			continue
+		var vp0: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+		if vp0 != null and IndividualCombat.get_timed_modifier_total(vp0, "acid") > 0:
+			continue
+		if d < best_d:
+			best_d = d
+			victim_id = oid
+	if victim_id < 0:
+		return {}
+	var victim: L5RCharacterData = state.combatants.get(victim_id, null)
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(victim_id, null)
+	if t_p == null:
+		return {}
+	ts.consume_complex()
+	# Vomit to-hit vs Armor TN with armour's effect on Armor TN stripped (s54.5:261).
+	var to_hit: int = dice.roll_and_keep(ACID_VOMIT_ATK_ROLLED, ACID_VOMIT_ATK_KEPT, true).total
+	var atn: int = maxi(5, IndividualCombat.get_armor_tn(victim, t_p, dice, false, false, "") - maxi(0, victim.armor_tn_bonus))
+	if to_hit < atn:
+		return {"success": true, "hit": false, "roll": to_hit, "armor_tn": atn}
+	# Coat the target: 4k4/Round for 5 Rounds (advance_round ticks it; +1 so the first tick is next Round).
+	IndividualCombat.add_timed_modifier(t_p, "acid", 1, state.combat.round_number + 1 + ACID_VOMIT_ROUNDS, "acid_vomit")
+	return {"success": true, "hit": true, "victim": victim_id}
+
+
 const GAZE_OF_TERROR_FEAR_RANK: int = 6  # s54.9:47
 static func _npc_maybe_gaze_of_terror(
 	state: MapCombatState,
