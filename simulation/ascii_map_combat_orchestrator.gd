@@ -8501,6 +8501,14 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "electrical_jolt", "result": jolt})
 			return {"actions": actions_taken}
 
+	# -- Gaze of Terror (s54.9 Garegosu no Bakemono): a Complex-action gaze that singles out one
+	# living, non-blind enemy and inflicts a Fear 6 effect (Willpower vs TN 35).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("gaze_of_terror"):
+		var got: Dictionary = _npc_maybe_gaze_of_terror(state, npc_id, npc, chars_by_id, dice_engine)
+		if got.get("success", false):
+			actions_taken.append({"action": "gaze_of_terror", "result": got})
+			return {"actions": actions_taken}
+
 	# -- Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze that, on a won
 	# Contested Willpower, inflicts 1 full Rank of Taint on a mortal enemy (once each).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("taint_affliction"):
@@ -10353,6 +10361,68 @@ static func _npc_maybe_taint_gaze(
 		victim.taint = minf(100.0, victim.taint + 1.0)
 		return {"success": true, "victim": victim_id, "tainted": true}
 	return {"success": true, "victim": victim_id, "tainted": false}
+
+
+## Gaze of Terror (s54.9 Garegosu no Bakemono): a Complex-action gaze that singles out one
+## living enemy and inflicts a FEAR 6 effect (s54.9:47). The gaze does not affect a blind
+## target (or one immune to Fear). The victim rolls Willpower (+ fear-resist bonuses/modifiers)
+## vs TN 5 + 6*5 = 35 (s22.3 Fear TN); a failure sets a persistent spell_afraid + AFRAID (-1k0)
+## that apply_fear_checks maintains until the timed modifier expires "at the Reactions stage of
+## the following Round" (round + 2). Returns {} if not attempted.
+const GAZE_OF_TERROR_FEAR_RANK: int = 6  # s54.9:47
+static func _npc_maybe_gaze_of_terror(
+	state: MapCombatState,
+	gazer_id: int,
+	gazer: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(gazer_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var faction: String = state.factions.get(gazer_id, FACTION_NEUTRAL)
+	var pos: Vector2i = state.positions.get(gazer_id, Vector2i(-1, -1))
+	if pos.x < 0:
+		return {}
+	# nearest living enemy that is not already blind and not immune to Fear
+	var victim_id: int = -1
+	var best_d: int = 1 << 30
+	for cid: int in state.positions.keys():
+		if cid == gazer_id:
+			continue
+		if not _are_enemies(faction, state.factions.get(cid, FACTION_NEUTRAL)):
+			continue
+		var vc: L5RCharacterData = state.combatants.get(cid, chars_by_id.get(cid, null))
+		if vc == null or CharacterStats.is_dead(vc) or vc.immune_to_fear:
+			continue
+		var vp: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if vp != null and IndividualCombat.CONDITION_BLINDED in vp.conditions:
+			continue  # the gaze does not affect blind characters (s54.9:47)
+		var d: int = _chebyshev(pos, state.positions[cid])
+		if d < best_d:
+			best_d = d
+			victim_id = cid
+	if victim_id < 0:
+		return {}
+	var victim: L5RCharacterData = state.combatants.get(victim_id, chars_by_id.get(victim_id, null))
+	var vp2: IndividualCombat.Participant = state.combat.participants.get(victim_id, null)
+	if vp2 == null:
+		return {}
+	ts.consume_complex()
+	var tn: int = 5 + GAZE_OF_TERROR_FEAR_RANK * 5
+	var wp: int = maxi(1, victim.willpower + victim.fear_resist_willpower_bonus)
+	var fr_roll: int = IndividualCombat.get_timed_modifier_total(vp2, "fear_resist_rolled")
+	var fr_kept: int = IndividualCombat.get_timed_modifier_total(vp2, "fear_resist_kept")
+	var resist: int = dice.roll_and_keep(
+			wp + victim.fear_resist_rolled_bonus + fr_roll,
+			wp + victim.fear_resist_kept_bonus + fr_kept, true).total
+	if resist >= tn:
+		return {"success": true, "victim": victim_id, "afraid": false}
+	# duration: the effect lasts until the Reactions stage of the following Round (round + 2)
+	IndividualCombat.add_timed_modifier(vp2, "spell_afraid", 1, state.combat.round_number + 2, "gaze_of_terror")
+	if IndividualCombat.CONDITION_AFRAID not in vp2.conditions:
+		vp2.conditions.append(IndividualCombat.CONDITION_AFRAID)
+	return {"success": true, "victim": victim_id, "afraid": true}
 
 
 ## roll Contested Willpower. On success a cross-encounter possession_affliction is seeded on
