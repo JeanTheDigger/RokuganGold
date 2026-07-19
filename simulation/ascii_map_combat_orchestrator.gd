@@ -1716,6 +1716,21 @@ static func execute_melee_attack(
 		t_p.disarm_free_raises_pending = 3
 		result["earthen_fist_disarm_armed"] = true
 
+	# Weapon Break (s54.6 Zokujin): a metal-or-stone weapon that attacks the Zokujin and
+	# MISSES its Armor TN by 10 or more is warped, twisted, and useless -- added to the
+	# attacker's broken_weapons (-> unarmed fallback). Uses the BASE Armor TN (pre-raises),
+	# so an attack that only failed the attacker's declared Raises does not break the weapon.
+	# Magically awakened weapons are exempt, but no such flag is tracked (documented
+	# limitation, no invention), so all metal/stone weapons are affected.
+	if not result.get("hit", false) and target.spirit_creature != null \
+			and target.spirit_creature.has_tag("weapon_break") \
+			and _weapon_is_metal_or_stone(weapon_name) \
+			and int(result.get("roll", 0)) <= armor_tn - 10 \
+			and weapon_name not in a_p.broken_weapons:
+		a_p.broken_weapons.append(weapon_name)
+		result["weapon_broken"] = true
+		log_entry["weapon_broken"] = true
+
 	# Bishamon's Grasp (s38): record this attacker on the defender (who attacked me since
 	# my last Turn) so the defender can free-grapple them on their Turn.
 	if "Bishamon's Grasp" in t_p.active_kiho and attacker_id not in t_p.attacked_by_ids:
@@ -8937,6 +8952,24 @@ static func _npc_should_knockdown(state: MapCombatState, target_id: int, target:
 # GDD gives no NPC policy; the Zokujin attempts it whenever there is worn armor to break.
 static func _npc_should_armor_break(target: L5RCharacterData) -> bool:
 	return target.armor_worn != null
+
+
+# Weapon Break (s54.6 Zokujin) warps only a weapon "made of metal or stone", so a bare
+# hand/claw, or a wood/bamboo weapon (bokken, shinai, and the wooden Staves category), is
+# never affected. Material is a factual property of each named weapon type (no invention);
+# every other melee weapon (blades, knives, axes, spears, polearms, chains, war fan) is
+# metal/stone. Ranged/thrown weapons are excluded (not melee — they never reach this path).
+static func _weapon_is_metal_or_stone(weapon_name: String) -> bool:
+	if weapon_name == "" or weapon_name == "unarmed":
+		return false
+	if weapon_name == "bokken" or weapon_name == "shinai":
+		return false
+	var prof: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
+	if not bool(prof.get("melee", false)):
+		return false
+	if String(prof.get("skill", "")) == "Staves":
+		return false
+	return true
 
 
 # Disarm is worthwhile only against a still-armed, HIGH-threat melee fighter (best melee
