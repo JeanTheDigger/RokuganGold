@@ -1580,6 +1580,11 @@ static func execute_melee_attack(
 		if int(dmg_result.get("wounds", 0)) > 0:
 			_apply_burning_blood(attacker, target, weapon_name, dice_engine)
 
+		# Corrosive Sap (s54.9 Lava Tree): a MELEE attacker who DAMAGES the tree is
+		# splattered with acid sap for a fixed 1k1 Wounds (no save; within 5' = adjacency).
+		if int(dmg_result.get("wounds", 0)) > 0:
+			_apply_corrosive_sap(attacker, target, weapon_name, dice_engine)
+
 		# Swallow Whole / Devour (s54.5): a wounding melee hit by a swallow creature wins a
 		# Contested Strength to engulf the victim (per-round damage applied in advance_round).
 		if int(dmg_result.get("wounds", 0)) > 0:
@@ -6876,6 +6881,29 @@ static func _apply_wreathed_in_flames(
 	else:  # Medium (and any unspecified size)
 		rolled = 2; kept = 1
 	var dmg: int = dice.roll_and_keep(rolled, kept, true).total
+	WoundSystem.apply_damage(attacker, dmg, 0)
+	return dmg
+
+
+## Corrosive Sap (s54.9 Lava Tree): "If a lava tree is damaged, it leaks a viscous red sap
+## that inflicts 1k1 Wounds to the attacker if within 5'." A MELEE attacker (adjacent =
+## within 5') who deals net Wounds to the tree is splattered for a fixed 1k1 (no save; armour
+## does not reduce acid splatter — the retaliation-splatter convention). Ranged attackers
+## (not within 5') take nothing. Inert unless the struck TARGET is a corrosive_sap creature;
+## the wounds-dealt gate is applied at the call site ("if a lava tree is damaged").
+static func _apply_corrosive_sap(
+	attacker: L5RCharacterData,
+	target: L5RCharacterData,
+	weapon_name: String,
+	dice: DiceEngine,
+) -> int:
+	if target.spirit_creature == null or not target.spirit_creature.has_tag("corrosive_sap"):
+		return 0
+	if CharacterStats.is_dead(attacker):
+		return 0
+	if not IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+		return 0  # ranged attackers are not within 5'
+	var dmg: int = dice.roll_and_keep(1, 1, true).total
 	WoundSystem.apply_damage(attacker, dmg, 0)
 	return dmg
 
