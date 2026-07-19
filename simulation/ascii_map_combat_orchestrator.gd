@@ -1507,6 +1507,14 @@ static func execute_melee_attack(
 	atk_pen += SkillMasterySystem.chain_vs_restrained_bonus(
 		String(IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")),
 		int(attacker.skills.get("Chain Weapons", 0)), tgt_restrained)
+	# Tsuno Blade (s54.6/s54.2): the jagged Tsuno sword gains +1k0 to the attack roll against any
+	# opponent who has at least one Rank of Taint, the Spirit quality, or the Touch of the Spirit
+	# Realms Advantage. The tag marks the wielder (a Tsuno fights only with its Tsuno Blade), so
+	# the bonus rides the same rolled-die channel as the high-ground / chain-weapon bonuses.
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("tsuno_blade") \
+			and (MutationSystem.get_taint_rank(target.taint) >= 1 or target.spirit_creature != null \
+				or AdvantageSystem.has_advantage(target, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS)):
+		atk_pen += 1
 	# Defender mount/size for the mounted +1k0 (s40) and Burning Kiss of Steel +2k2 (s35).
 	var tgt_mounted: bool = t_p != null and IndividualCombat.CONDITION_MOUNTED in t_p.conditions
 	var tgt_large: bool = AdvantageSystem.has_advantage(target, Enums.Advantage.LARGE)
