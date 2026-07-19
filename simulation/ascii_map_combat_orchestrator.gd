@@ -8556,6 +8556,24 @@ static func execute_npc_turn(
 						if _tk.get("knocked_down", false):
 							IndividualCombat.apply_condition(_tk_p, IndividualCombat.CONDITION_PRONE)
 							actions_taken.append({"action": "tail_swipe_knockdown", "target": best_target})
+				# Hook Grapple (s54.11 Harionago): her Hair Hooks (the second) attack Grapples
+				# the foe — "If the Harionago hits an opponent with her hair hooks, she will use
+				# them to Grapple the enemy. She can use her claw attacks to damage a Grappled
+				# foe. An opponent who succeeds in breaking free suffers 1k1 Wounds as the hooks
+				# are pulled free" (GDD s54.11:37). Scoped to the SECOND (hair-hooks) strike, not
+				# the primary Claws (which damage the grappled foe), by hooking here after the
+				# multi-attack — exactly like the sibling tail_knockdown. Reuses the Entangle +
+				# gore-escape-payout pipeline: Entangled blocks the foe's movement (she claws it
+				# each turn), and setting the victim's gore_escape dice makes
+				# attempt_entangle_escape pay the 1k1 on a successful Strength break.
+				if mcr.has_tag("hook_grapple") and atk2.get("hit", false) \
+						and not CharacterStats.is_dead(target_char):
+					var _hg_p: IndividualCombat.Participant = state.combat.participants.get(best_target, null)
+					if _hg_p != null and IndividualCombat.CONDITION_ENTANGLED not in _hg_p.conditions:
+						IndividualCombat.apply_condition(_hg_p, IndividualCombat.CONDITION_ENTANGLED)
+						_hg_p.gore_escape_rolled = 1
+						_hg_p.gore_escape_kept = 1
+						actions_taken.append({"action": "hook_grapple", "target": best_target})
 	elif ts.can_use_free_move() and not ts.is_down_restricted(wl):
 		# Can still use free move to get closer.
 		var free_budget: int = free_move_budget(state, npc_id, npc)
