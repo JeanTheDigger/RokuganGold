@@ -10745,6 +10745,18 @@ static func _apply_hit(
 		elif pc.has_tag("poison_bite"):
 			if not DiseaseSystem.resolve_poison_resist_roll(target, 20, dice_engine):
 				DiseaseSystem.apply_poison(target, "stamina")
+		elif pc.has_tag("dazing_venom"):
+			# s54.1 Octopus/Squid (Tako) Poison Bite: a beak hit Dazes the target for 4
+			# Rounds; a Stamina Roll TN 20 halves that to 2 Rounds (the target is ALWAYS
+			# Dazed — the save only shortens the duration, GDD s54.1:427). Applied as a
+			# TIMED condition so it runs its full duration instead of being rolled off,
+			# exactly like the s54.10 paralysis venom. (Distinct from the komodo's
+			# `poison_bite` septic Stamina drain — the two abilities share the name
+			# "Poison Bite" in the GDD but have different mechanics.)
+			if t_p != null:
+				var _dz: int = 2 if DiseaseSystem.resolve_poison_resist_roll(target, 20, dice_engine) else 4
+				IndividualCombat.apply_timed_condition(
+					t_p, IndividualCombat.CONDITION_DAZED, state.combat.round_number + _dz)
 		elif pc.has_tag("venom_trait_drain"):
 			# s54.1 Poisonous Asp Venom: a bite drains Agility, Reflexes, Stamina, and
 			# Strength by 1 each (GDD-exact — all four Physical Traits). The GDD's first

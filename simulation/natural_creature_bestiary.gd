@@ -210,7 +210,7 @@ static func catalog() -> Dictionary:
 	c["octopus"] = _with2(_make("octopus", "Octopus / Squid (Tako)", SpiritCreatureData.Tier.HEAVY,
 		2, 2, 2, 2, {"reflexes": 3, "stamina": 4, "agility": 3, "strength": 4},
 		4, 3, "Tentacles", 5, 4, 4, 4, 20, 5, [16, 32], 48, 0,
-		["animal", "natural", "aquatic", "color_change", "poison_bite", "multi_attack"]),
+		["animal", "natural", "aquatic", "color_change", "dazing_venom", "multi_attack"]),
 		"Beak", 4, 4, 2, 2)
 
 	# --- Shark, Aoizame -----------------------------------------------------

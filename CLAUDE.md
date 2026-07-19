@@ -232,6 +232,29 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-19 (s54.1 Octopus "Poison Bite" MIS-WIRE FIXED — it was silently running the komodo's septic Stamina drain instead of its Daze; retag + timed-Daze wire, runtime-verified 12/12)
+Bug-fix + faithful re-wire, found while auditing the natural-creature poison abilities after the Asp Venom wire (below). The s54.1
+**Octopus / Squid (Tako)** and the s54.12 **Komodo Dragon** BOTH list a "Poison Bite" special ability, but the two are **mechanically
+different**: the octopus's bite **Dazes** the target (s54.1:427 — "Dazed for four Rounds ... A Stamina Roll at TN 20 reduces this to two
+rounds"), while the komodo's bite is **septic** (s54.12:139 — Stamina TN 20 or lose 1 Rank of Stamina). The octopus was tagged
+`poison_bite` (the komodo's tag), so it was routing through the komodo's Stamina-drain arm in `AsciiMapCombatOrchestrator._apply_hit` —
+**silently doing the wrong ability** (draining Stamina instead of Dazing). FIX (retag + one new arm, **no invented values** — the Dazed/4/2/
+TN-20 are the GDD's own s54.1:427 constants): (1) `NaturalCreatureBestiary` octopus tag `poison_bite` → **`dazing_venom`**; (2) new
+`dazing_venom` arm in the `_apply_hit` poison block (before the `venom_trait_drain` arm) — on a hit the target is **always Dazed**, a
+**Stamina Roll TN 20** (`DiseaseSystem.resolve_poison_resist_roll`, TRUE = saved) only **shortens** the duration: fail → **4 Rounds**, save →
+**2 Rounds**. Applied via the established **timed-condition** layer (`IndividualCombat.apply_timed_condition(t_p, CONDITION_DAZED,
+round_number + dur)`) so it runs its full duration instead of being rolled off by the per-round Dazed recovery — exactly like the s54.10
+paralysis venom. The mortal-target + `raw > 0` + not-dead gates are the poison block's own (a spirit target is skipped). Faithful nuance
+(same compromise as Atarasi's Avalanche): the GDD scopes the Daze to the **beak** attack specifically, but a skill-less spirit puppet routes
+every strike through the "unarmed" vehicle (no beak-vs-tentacle weapon distinction is surfaced at `_apply_hit`), so — like every other poison
+in this block (komodo bite, Gakimushi stinger) — it fires on any octopus hit; gating on `weapon_name == "Beak"` would make the ability
+**never fire** (strictly worse). Runtime-verified 12/12 (Godot 4.6.2, headless `mintest` driver): octopus carries `dazing_venom` and NOT
+`poison_bite`; a hit on a low-Stamina mortal applies a **timed** Dazed (`is_condition_timed` true) expiring at `round_number + 4` on a failed
+save; the octopus does **NOT** drain a Trait (`poison_affliction` empty — proving it's off the komodo arm); a high-Stamina (10k10) mortal
+saves → Daze reduced to `+ 2`; a spirit target is skipped; and the **komodo regression** holds — it still drains Stamina and does NOT Daze
+(the `poison_bite` arm is intact). Full-project `--import` parse-clean; the sibling Asp Venom driver re-passes 19/19 (shared poison block,
+no regression). With this, the two same-named-but-different s54 "Poison Bite" abilities are correctly disambiguated.
+
 ### Systems Added 2026-07-19 (s54.1 Poisonous Asp Venom WIRED — the last unwired natural-creature poison; the 4-Trait drain, runtime-verified 19/19)
 Greenfield content build (owner directive "keep on wiring stuff ... it's all in the GDD"). Wires the s54.1 Poisonous Asp (Hebi)'s **Venom** — the ONE
 poison tag (`venom_trait_drain`) the s54.1 transcription left descriptive while its sibling poisons (`poison_stinger`/`poisonous_stinger`/`poison_bite`/
