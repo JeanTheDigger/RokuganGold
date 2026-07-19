@@ -10780,6 +10780,25 @@ static func _apply_hit(
 			# restore collapses (the documented limitation shared by every wired poison).
 			for _pt: String in ["agility", "reflexes", "stamina", "strength"]:
 				DiseaseSystem.apply_poison(target, _pt)
+		elif pc.has_tag("stinger_paralysis"):
+			# s54.9 Takesasu (Stinger Plant) Poison/Acid Attack: on a hit the barbed thorn
+			# injects paralyzing poison — the victim rolls Earth at TN 25 or is PARALYZED,
+			# "unable to take Actions of any kind" (GDD s54.9:111). Applied as the timed
+			# CONDITION_INCAPACITATED (the full turn-skip gate), for the GDD's own recovery
+			# window: "paralysis wears off in approximately 10 minutes minus the victim's
+			# Stamina Rank" — so it auto-recovers (no soft-lock), and a re-sting refreshes
+			# the longer timer. (Distinct from the Shikage's `paralyzing_poison`, which is a
+			# per-Round escalating Reflexes drain — the Takesasu's is an immediate all-or-
+			# nothing Earth-TN-25 paralysis.) DEFERRED (the attach-drain half — the same layer
+			# the Sanshu Denki / Tsumunagi grapple-drain uses): the per-Round acid 2k1, the
+			# Contested-Agility stinger removal, and the Acid Blast death burst.
+			if t_p != null:
+				var _pe: int = maxi(1, CharacterStats.get_ring_value(target, Enums.Ring.EARTH))
+				if dice_engine.roll_and_keep(_pe, _pe, true).total < 25:
+					var _mins: int = maxi(1, 10 - target.stamina)
+					IndividualCombat.apply_timed_condition(
+						t_p, IndividualCombat.CONDITION_INCAPACITATED,
+						state.combat.round_number + _mins * IndividualCombat.ROUNDS_PER_MINUTE)
 		# Escalating poison (s54.5 Shikage): −1 Rank now + a per-Round Stamina TN 20 (+5/dose)
 		# drain until the victim saves or the Trait hits 0 (Willpower 0 → mind-controlled,
 		# Reflexes 0 → paralyzed). Each sting stacks a dose. The per-Round tick runs in

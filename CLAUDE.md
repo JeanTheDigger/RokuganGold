@@ -232,6 +232,30 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-19 (s54.9 Takesasu "Paralyzing Poison" MIS-WIRE FIXED — it was silently running the Shikage oni's escalating Reflexes drain instead of its immediate Earth-TN-25 paralysis; retag + timed-incapacitation wire, runtime-verified 14/14)
+The third same-family mis-wire found this session (the octopus + sting-ray fixes below share the class). The s54.9 **Takesasu (Stinger
+Plant)** and the s54.5 **Shikage no Oni** both have a "Paralyzing Poison", but the two are **mechanically different**: the Shikage's is a
+**per-Round escalating Reflexes drain** (−1 Reflexes now + a Stamina TN 20 tick each Round until the victim saves or Reflexes hits 0 →
+paralyzed, s54.5), while the Takesasu's is an **immediate all-or-nothing** paralysis — "the victim must succeed at an **Earth roll at TN 25**
+or be **paralyzed, unable to take Actions of any kind**" (GDD s54.9:111). But both carried the tag `paralyzing_poison`, which routes to the
+Shikage's escalating-Reflexes-drain arm — so the Takesasu was **silently running the wrong ability** (draining Reflexes over rounds instead
+of its instant Earth-TN-25 paralysis). FIX (retag + one new arm, **no invented values** — the Earth TN 25 and the recovery window are the
+GDD's own): (1) `ShadowlandsBeastBestiary` takesasu tag `paralyzing_poison` → **`stinger_paralysis`** (leaving the Shikage as the sole
+`paralyzing_poison` user — grep-confirmed); (2) new `stinger_paralysis` arm in the `_apply_hit` poison chain — on a hit the victim rolls
+**Earth vs TN 25** and, on a **fail**, is paralyzed via the **timed `CONDITION_INCAPACITATED`** (the full turn-skip gate the bind spells use,
+faithful to "unable to take Actions of any kind"). The duration is the GDD's own recovery window — **"approximately 10 minutes minus the
+victim's Stamina Rank"** → `maxi(1, 10 − stamina)` minutes × `ROUNDS_PER_MINUTE`, so the paralysis **auto-recovers (no soft-lock)** and a
+re-sting refreshes the longer timer. The mortal-target + not-dead gates are the poison block's own (a spirit target is skipped). **DEFERRED
+(the attach-drain half, documented — not invented):** the per-Round acid 2k1, the Contested-Agility stinger-removal, and the Acid Blast death
+burst — the same attach-drain layer the Sanshu Denki / Tsumunagi grapple-drain uses (the timed duration is applied from the hit, a documented
+simplification since the stinger-attach isn't modeled). Runtime-verified 14/14 (Godot 4.6.2, headless `mintest` driver): the takesasu carries
+`stinger_paralysis` and NOT `paralyzing_poison`; a hit on a low-Earth mortal applies a **timed** Incapacitated (`is_condition_timed` true)
+expiring at `round + (10 − Stamina) × ROUNDS_PER_MINUTE`; the takesasu does **NOT** drain Reflexes (`escalating_poison` empty — proving it's
+off the Shikage arm); a high-Earth (10k10) mortal saves TN 25 → not paralyzed; a spirit target is skipped; and the **Shikage regression**
+holds — it still runs the escalating drain and lacks `stinger_paralysis`. Full-project `--import` parse-clean; the sting-ray (12/12),
+octopus (12/12) and asp (19/19) drivers re-pass (shared poison block, no regression). With the octopus + sting-ray fixes below, all three
+same-family "Poison/Paralyzing" abilities that were mis-routed to a wired-but-wrong arm are now corrected and faithfully separated.
+
 ### Systems Added 2026-07-19 (s54.12 Sting Ray "Poison Stinger" MIS-WIRE FIXED — it was silently running the Gakimushi's Strength drain instead of its Daze; retag + roll-recoverable-Daze wire, runtime-verified 12/12)
 The sibling of the Octopus fix (below), in the stinger family. The s54.12 **Sting Ray (Kosen o Sasu)** and the s54.11 **Gakimushi** both
 have a stinger poison, but the two are **mechanically different**: the ray's is a "painful and disabling nerve poison — anyone struck by the

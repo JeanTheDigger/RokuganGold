@@ -172,7 +172,7 @@ static func catalog() -> Dictionary:
 	c["takesasu"] = _make("takesasu", "Takesasu (Stinger Plant)", SpiritCreatureData.Tier.TERRAIN,
 		0, 1, 0, 1, {"reflexes": 1, "agility": 3},
 		2, 1, "Poisonous vine", 4, 3, 1, 1, 5, 10, [], 5, 0,
-		["shadowlands", "terrain", "acid_blast", "paralyzing_poison", "fire_vulnerable"])
+		["shadowlands", "terrain", "acid_blast", "stinger_paralysis", "fire_vulnerable"])
 	c["takesasu"].taint_rank = 5
 
 	# --- Mountain Goblin (s54.9) --------------------------------------------
