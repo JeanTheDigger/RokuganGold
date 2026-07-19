@@ -10785,6 +10785,18 @@ static func _apply_hit(
 		elif pc.has_tag("poison_bite"):
 			if not DiseaseSystem.resolve_poison_resist_roll(target, 20, dice_engine):
 				DiseaseSystem.apply_poison(target, "stamina")
+		elif pc.has_tag("poison_claws"):
+			# s54.9 Aka-name Poison Claws: "any normal living creature wounded by an
+			# Aka-name must roll Stamina at TN 20 or suffer an additional 2k1 Wounds"
+			# (GDD s54.9:21). The extra damage is Wounds (already past armour — a poison),
+			# so applied raw via apply_damage(..., 0) — the shared poison-damage convention.
+			# The multiple-wounds clause ("the extra damage can happen any number of times")
+			# is satisfied by firing on every wounding hit. DEFERRED (the delayed-infection
+			# half — a sub-day/cross-encounter timeline like the other poison afflictions):
+			# the +10 TN penalty ten minutes later for two weeks, Medicine/Int TN 25 → +5.
+			if not DiseaseSystem.resolve_poison_resist_roll(target, 20, dice_engine):
+				var _pc_dmg: int = dice_engine.roll_and_keep(2, 1, true).total
+				WoundSystem.apply_damage(target, _pc_dmg, 0)
 		elif pc.has_tag("dazing_venom"):
 			# s54.1 Octopus/Squid (Tako) Poison Bite: a beak hit Dazes the target for 4
 			# Rounds; a Stamina Roll TN 20 halves that to 2 Rounds (the target is ALWAYS
