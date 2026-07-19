@@ -232,6 +232,29 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-19 (s54.1 Poisonous Asp Venom WIRED — the last unwired natural-creature poison; the 4-Trait drain, runtime-verified 19/19)
+Greenfield content build (owner directive "keep on wiring stuff ... it's all in the GDD"). Wires the s54.1 Poisonous Asp (Hebi)'s **Venom** — the ONE
+poison tag (`venom_trait_drain`) the s54.1 transcription left descriptive while its sibling poisons (`poison_stinger`/`poisonous_stinger`/`poison_bite`/
+`poison_stamina`) were already wired into the DiseaseSystem combat hook. The ability is **fully numeric in the GDD** (s54.1:475: "reduces the target's
+**Agility, Reflexes, Stamina, and Strength by 1** each hour ... a Stamina Roll TN 25 to prevent further penalties ... if Stamina is reduced to 0, Earth and
+Wounds become 0 as well and the victim dies"), so it is a faithful, **zero-invention** add reusing the established poison pattern. FIX (one guarded `elif`
+arm in the poison block of `AsciiMapCombatOrchestrator._apply_hit`, immediately after the `poison_bite` arm): on a `venom_trait_drain` creature's bite that
+draws blood (`raw > 0`) against a **mortal** (`target.spirit_creature == null`, alive), drain 1 Rank from **each of the four Physical Traits** via
+`DiseaseSystem.apply_poison(target, <trait>)` — the existing per-Trait banked model (`poison_affliction {"traits": {trait: count}}`) already lets multiple
+toxins coexist, and the daily `process_poison_daily` restores them all next tick. **Faithful mapping (no invention):** the drain lands **automatically**
+(no in-combat save) because the GDD's FIRST hour of exposure is automatic ("At the beginning of the **second** and each subsequent hour, the target may make
+a Stamina Roll TN 25") and a skirmish window falls entirely within that first hour — matching the established no-save stinger pattern. The per-hour TN 25
+resist saves and the slow Stamina-0 → death kill are the sub-day timeline the daily full-restore model collapses (the documented limitation shared by every
+wired poison). **Combat teeth:** the 4-Trait drop weakens the victim's attack rolls (Agility), Armor TN + initiative (Reflexes), damage (Strength), and
+wound capacity (Stamina) for the rest of the skirmish. Runtime-verified 19/19 (Godot 4.6.2, headless mintest driver): the asp spawns carrying
+`venom_trait_drain` and NONE of the already-wired stinger/bite tags; a single asp bite drains all four Physical Traits by **exactly 1** and banks them in
+`poison_affliction`; a second bite **stacks** to 2; `process_poison_daily` restores all four and clears the affliction; a non-venom ogre bite drains
+nothing; a **spirit** target is skipped (the hook is mortal-only); and heavy stacking floors each Trait at **0** (no underflow). Full project `--import`
+parse-clean; the `elif` gate on `venom_trait_drain` (borne by the asp alone) means zero regression to the other poison creatures. **With this, every s54.1
+natural-creature poison/venom is wired** into the DiseaseSystem combat hook. DEFERRED (documented, the same sub-day/daily-granularity limitation as the
+sibling poisons, NOT invented): the per-hour Stamina TN 25 resist and the multi-hour Stamina-0 → death kill both live outside the combat window under the
+next-tick full-restore model; the live PC-facing spawn is on the PC-travel HOLD like the whole ASCII stack.
+
 ### Systems Added 2026-07-18 (s54.4 Atarasi's Avalanche WIRED — the first Notable-Lost bespoke ability made live; the on-hit Taint-touch, runtime-verified 14/14)
 Greenfield follow-on to the 4-Notable-Lost transcription (below). Activates the first of the descriptive-tag abilities that transcription
 deferred: **Hida Atarasi's Avalanche** (s54.4) — "his unarmed strikes infuse the target with the Taint of the Shadowlands; the victim rolls

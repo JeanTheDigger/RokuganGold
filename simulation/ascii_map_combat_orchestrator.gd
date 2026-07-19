@@ -10745,6 +10745,17 @@ static func _apply_hit(
 		elif pc.has_tag("poison_bite"):
 			if not DiseaseSystem.resolve_poison_resist_roll(target, 20, dice_engine):
 				DiseaseSystem.apply_poison(target, "stamina")
+		elif pc.has_tag("venom_trait_drain"):
+			# s54.1 Poisonous Asp Venom: a bite drains Agility, Reflexes, Stamina, and
+			# Strength by 1 each (GDD-exact — all four Physical Traits). The GDD's first
+			# hour of exposure is automatic ("At the beginning of the SECOND and each
+			# subsequent hour, the target may make a Stamina Roll TN 25 to prevent further
+			# penalties"), and a combat window falls within that first hour, so the drain
+			# lands without a save — matching the no-save stinger pattern. The per-hour
+			# TN 25 resist and the Stamina-0 death are the sub-day timeline the daily full
+			# restore collapses (the documented limitation shared by every wired poison).
+			for _pt: String in ["agility", "reflexes", "stamina", "strength"]:
+				DiseaseSystem.apply_poison(target, _pt)
 		# Escalating poison (s54.5 Shikage): −1 Rank now + a per-Round Stamina TN 20 (+5/dose)
 		# drain until the victim saves or the Trait hits 0 (Willpower 0 → mind-controlled,
 		# Reflexes 0 → paralyzed). Each sting stacks a dose. The per-Round tick runs in
