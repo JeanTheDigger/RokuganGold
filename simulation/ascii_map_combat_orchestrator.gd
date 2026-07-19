@@ -8457,6 +8457,14 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "scream", "result": scr})
 			return {"actions": actions_taken}
 
+	# -- Electrical Jolt (s54.12 Eel / Den Unagi): a once-per-skirmish electrical burst.
+	# Anyone within 10' (2 tiles) suffers 2k1 Wounds and rolls Earth vs TN 20 or is Stunned.
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("electrical_jolt") and not p.ranged_aoe_used:
+		var jolt: Dictionary = _npc_maybe_electrical_jolt(state, npc_id, npc, dice_engine)
+		if jolt.get("success", false):
+			actions_taken.append({"action": "electrical_jolt", "result": jolt})
+			return {"actions": actions_taken}
+
 	# -- Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze that, on a won
 	# Contested Willpower, inflicts 1 full Rank of Taint on a mortal enemy (once each).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("taint_affliction"):
@@ -10051,6 +10059,71 @@ static func _npc_maybe_scream(
 				IndividualCombat.apply_condition(vp, IndividualCombat.CONDITION_STUNNED)
 				stunned += 1
 	return {"success": true, "stunned": stunned}
+
+## Electrical Jolt (s54.12 Eel / Den Unagi): the eel unleashes a jolt of electricity "once
+## per day" (once per skirmish here). Anyone within 10' (= 2 tiles) suffers 2k1 Wounds and
+## must roll Earth at TN 20 or be Stunned. Indiscriminate ("anyone in the water" -> both
+## factions AND spirit combatants; the Eel is Aquatic, so every combatant present is in the
+## water). Armour does not reduce the jolt (an electric shock in water bypasses armour, the
+## shared burst-splatter convention). Consumes the eel's Complex Action (it discharges instead
+## of biting), fired when at least one enemy is within range. Once-per-skirmish via the shared
+## ranged_aoe_used flag (the Eel bears no ranged_aoe_radius, so it never touches the Cauldron
+## Belch path -> no collision).
+static func _npc_maybe_electrical_jolt(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null or p.ranged_aoe_used:
+		return {}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Only worth discharging if a living enemy is within 10' (2 tiles).
+	var has_enemy: bool = false
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		if _chebyshev(cpos, state.positions[oid]) <= 2:
+			has_enemy = true
+			break
+	if not has_enemy:
+		return {}
+	ts.consume_complex()
+	p.ranged_aoe_used = true
+	# Discharge: every living combatant within 2 tiles (both factions/types), except the eel.
+	var hit: int = 0
+	var stunned: int = 0
+	for oid: int in state.positions.keys():
+		if oid == char_id:
+			continue
+		if _chebyshev(cpos, state.positions[oid]) > 2:
+			continue
+		var c: L5RCharacterData = state.combatants.get(oid, null)
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var dmg: int = dice.roll_and_keep(2, 1, true).total
+		WoundSystem.apply_damage(c, dmg, 0)
+		hit += 1
+		if CharacterStats.is_dead(c):
+			continue
+		var ce: int = maxi(1, CharacterStats.get_ring_value(c, Enums.Ring.EARTH))
+		if dice.roll_and_keep(ce, ce, true).total < 20:
+			var vp: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+			if vp != null:
+				IndividualCombat.apply_condition(vp, IndividualCombat.CONDITION_STUNNED)
+				stunned += 1
+	return {"success": true, "hit": hit, "stunned": stunned}
+
 
 
 ## Spirit Leeching (s54.5 Kommei): a Simple-action soul-fog. Marks each mortal enemy within
