@@ -10738,8 +10738,20 @@ static func _apply_hit(
 	if attacker.spirit_creature != null and target.spirit_creature == null and raw > 0 \
 			and not CharacterStats.is_dead(target):
 		var pc: SpiritCreatureData = attacker.spirit_creature
-		if pc.has_tag("poisonous_stinger") or pc.has_tag("poison_stinger"):
+		if pc.has_tag("poisonous_stinger"):
+			# s54.11 Gakimushi Poisonous Stinger: a paralyzing venom that drops Strength
+			# by 1 Rank per hit (Strength 0 → paralyzed until it wears off). GDD-exact.
 			DiseaseSystem.apply_poison(target, "strength")
+		elif pc.has_tag("dazing_sting"):
+			# s54.12 Sting Ray (Kosen o Sasu) Poison Stinger: "a painful and disabling
+			# nerve poison — anyone struck by the stinger is considered to be Dazed"
+			# (GDD s54.12:313 — NO save, NO stated duration). Applied as the STANDARD
+			# (non-timed) Dazed condition, so the victim rolls to shake it off per the
+			# normal recovery rules — the faithful reading of an unstated duration.
+			# (Distinct from the octopus `dazing_venom`, which the GDD gives a fixed
+			# 4/2-Round timed duration + a TN 20 save; the ray's poison states neither.)
+			if t_p != null:
+				IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_DAZED)
 		elif pc.has_tag("poison_stamina"):
 			DiseaseSystem.apply_poison(target, "stamina")
 		elif pc.has_tag("poison_bite"):

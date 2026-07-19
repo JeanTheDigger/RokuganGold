@@ -232,6 +232,28 @@ keeps the real code clean; it is no longer a directive to write tests.)
 
 ## What's Been Built So Far
 
+### Systems Added 2026-07-19 (s54.12 Sting Ray "Poison Stinger" MIS-WIRE FIXED — it was silently running the Gakimushi's Strength drain instead of its Daze; retag + roll-recoverable-Daze wire, runtime-verified 12/12)
+The sibling of the Octopus fix (below), in the stinger family. The s54.12 **Sting Ray (Kosen o Sasu)** and the s54.11 **Gakimushi** both
+have a stinger poison, but the two are **mechanically different**: the ray's is a "painful and disabling nerve poison — anyone struck by the
+stinger is considered to be **Dazed**" (s54.12:313, **NO save, NO stated duration**), while the Gakimushi's is a "paralyzing venom, reducing
+their **Strength** by 1 Rank per hit" (s54.11:97). But `_apply_hit` treated the two tags `poison_stinger` (ray) and `poisonous_stinger`
+(Gakimushi) as **synonyms**, routing BOTH to the Gakimushi's Strength-drain arm — so the ray was **silently draining Strength instead of
+Dazing**. The two tags map 1:1 to the two creatures (grep-confirmed: `sting_ray` is the sole `poison_stinger` user, `gakimushi` the sole
+`poisonous_stinger` user), so the fix cleanly disambiguates them. FIX (retag + one arm, **no invented values** — the ray's Daze is the GDD's
+own, and its unstated duration is honored by NOT inventing one): (1) `AdditionalCreaturesBestiary` sting-ray tag `poison_stinger` →
+**`dazing_sting`**; (2) narrowed the Strength-drain arm to `poisonous_stinger` only (the now-userless `poison_stinger` OR-clause dropped),
+and added a new `dazing_sting` arm applying the **STANDARD (non-timed) Dazed** condition (`IndividualCombat.apply_condition(t_p,
+CONDITION_DAZED)`) — so the victim **rolls to shake it off** per the normal per-round recovery, the faithful reading of "is Dazed" with no
+stated duration (**distinct from the octopus's `dazing_venom`, which the GDD DOES give a fixed 4/2-Round timed duration + a TN 20 save** — the
+ray's poison states neither, so it gets neither). No save (the GDD names none). The mortal-target + not-dead gates are the poison block's own
+(a spirit target is skipped). Runtime-verified 12/12 (Godot 4.6.2, headless `mintest` driver): the ray carries `dazing_sting` and NOT
+`poison_stinger`/`poisonous_stinger`; a sting applies a **non-timed** Dazed (`is_condition_timed` false — roll-recoverable); the ray does
+**NOT** drain a Trait (`poison_affliction` empty — proving it's off the Gakimushi arm); a spirit target is skipped; and the **Gakimushi
+regression** holds — it still drains Strength by 1 and does NOT Daze. Full-project `--import` parse-clean; the octopus (12/12) and asp (19/19)
+drivers re-pass (shared poison block, no regression). With the Octopus fix (below), the two same-family "Poison" abilities that were
+mis-routed to a wired-but-wrong arm are both corrected — and the three distinct stinger/venom-Daze mechanics (Gakimushi Strength-drain,
+octopus timed-Daze-with-save, sting-ray roll-recoverable-Daze) are now faithfully separated.
+
 ### Systems Added 2026-07-19 (s54.1 Octopus "Poison Bite" MIS-WIRE FIXED — it was silently running the komodo's septic Stamina drain instead of its Daze; retag + timed-Daze wire, runtime-verified 12/12)
 Bug-fix + faithful re-wire, found while auditing the natural-creature poison abilities after the Asp Venom wire (below). The s54.1
 **Octopus / Squid (Tako)** and the s54.12 **Komodo Dragon** BOTH list a "Poison Bite" special ability, but the two are **mechanically
