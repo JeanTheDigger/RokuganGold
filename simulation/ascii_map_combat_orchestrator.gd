@@ -1476,6 +1476,13 @@ static func execute_melee_attack(
 	a_p.spirit_attack_kept_bonus += charge_atk_bonus
 	a_p.spirit_damage_rolled_bonus += charge_dmg_bonus
 	a_p.spirit_damage_kept_bonus += charge_dmg_bonus
+	# Berserker Rage (s54.9 Goblin Berserker): on the first two Rounds of the skirmish the
+	# berserker adds +1k1 to its attack rolls (ending at the Reactions Stage of the second
+	# Round). Time-gated only -- no state trigger. Stacks on any aura/charge attack bonus.
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("berserker_rage") \
+			and state.combat.round_number <= 2:
+		a_p.spirit_attack_rolled_bonus += 1
+		a_p.spirit_attack_kept_bonus += 1
 	# s54.10: a hidden creature (Mujina / Ephemeral Form) that attacks reveals itself —
 	# it is targetable through its next turn.
 	_reveal_if_hidden(state, attacker_id, a_p)
@@ -10797,6 +10804,11 @@ static func _apply_hit(
 			reduction = SpiritAbilitySystem.reduction_for_kind(target.spirit_creature, w_kind)
 		# Protection of Yomi (Major Shapeshifter, s54.10): Reduction 5, stacks with natural.
 		reduction += SpiritAbilitySystem.protection_of_yomi_reduction(target.spirit_creature)
+		# Berserker Rage (s54.9 Goblin Berserker): +5 Reduction on the first two Rounds (its
+		# stat-block Reduction 3 -> the GDD's stated "total of 8"), ending at the Reactions Stage
+		# of the second Round. Additive on the creature's natural Reduction (like Protection of Yomi).
+		if target.spirit_creature.has_tag("berserker_rage") and state.combat.round_number <= 2:
+			reduction += 5
 		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, w_kind)
 		raw = 0 if filt["heals"] else int(round(float(raw) * float(filt["multiplier"])))
 	# Armor of the Emperor (s34 Earth 4): each individual kept damage die against the warded
