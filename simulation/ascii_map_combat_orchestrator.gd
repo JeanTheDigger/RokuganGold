@@ -10885,9 +10885,10 @@ static func _apply_hit(
 			# Stamina Rank" — so it auto-recovers (no soft-lock), and a re-sting refreshes
 			# the longer timer. (Distinct from the Shikage's `paralyzing_poison`, which is a
 			# per-Round escalating Reflexes drain — the Takesasu's is an immediate all-or-
-			# nothing Earth-TN-25 paralysis.) DEFERRED (the attach-drain half — the same layer
-			# the Sanshu Denki / Tsumunagi grapple-drain uses): the per-Round acid 2k1, the
-			# Contested-Agility stinger removal, and the Acid Blast death burst.
+			# nothing Earth-TN-25 paralysis.) The Acid Blast death burst is now wired (see the
+			# `_apply_acid_blast` death hook). DEFERRED (the attach-drain half — the same layer
+			# the Sanshu Denki / Tsumunagi grapple-drain uses): the per-Round acid 2k1 and the
+			# Contested-Agility stinger removal.
 			if t_p != null:
 				var _pe: int = maxi(1, CharacterStats.get_ring_value(target, Enums.Ring.EARTH))
 				if dice_engine.roll_and_keep(_pe, _pe, true).total < 25:
@@ -10932,6 +10933,14 @@ static func _apply_hit(
 			and not t_p.death_spawn_done and CharacterStats.is_dead(target):
 		t_p.death_spawn_done = true
 		_apply_retributive_taint(state, target, dice_engine)
+
+	# Acid Blast (s54.9 Takesasu): a slain takesasu's acid reservoir explodes, auto-inflicting
+	# 2k2 Wounds on anyone within 5' (1 tile). No save; indiscriminate (both factions/types).
+	if t_p != null and target.spirit_creature != null \
+			and target.spirit_creature.has_tag("acid_blast") \
+			and not t_p.death_spawn_done and CharacterStats.is_dead(target):
+		t_p.death_spawn_done = true
+		_apply_acid_blast(state, target, dice_engine)
 
 	# Divide the Soul (s37 Void): if either manifestation dies, both die.
 	if CharacterStats.is_dead(target) and state.divide_soul_pairs.has(target.character_id):
@@ -11076,6 +11085,30 @@ static func _spawn_on_death(state: MapCombatState, dead_creature: L5RCharacterDa
 
 ## Retributive Taint (s54.5 Pekkle): on death, every living mortal within 2 tiles (10 ft)
 ## rolls Earth TN 30 or gains 1–10 points of Taint. Returns the number of victims tainted.
+## Acid Blast (s54.9 Takesasu): "When a takesasu is destroyed, its acid reservoir explodes,
+## automatically inflicting 2k2 Wounds on anyone within 5 feet." A death-burst: every living
+## combatant within 1 tile (5') of the slain takesasu takes a fixed 2k2 (no save; armour does
+## not reduce — a caustic explosion, the retaliation-splatter convention). Indiscriminate
+## ("anyone" — both factions, mortal or spirit). Fires once per death (death_spawn_done guard).
+static func _apply_acid_blast(state: MapCombatState, dead_creature: L5RCharacterData, dice: DiceEngine) -> int:
+	var center: Vector2i = state.positions.get(dead_creature.character_id, Vector2i(-1, -1))
+	if center.x < 0:
+		return 0
+	var hit: int = 0
+	for cid: int in state.positions.keys():
+		if cid == dead_creature.character_id:
+			continue
+		if _chebyshev(center, state.positions[cid]) > 1:
+			continue
+		var c: L5RCharacterData = state.combatants.get(cid, null)
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var dmg: int = dice.roll_and_keep(2, 2, true).total
+		WoundSystem.apply_damage(c, dmg, 0)
+		hit += 1
+	return hit
+
+
 static func _apply_retributive_taint(state: MapCombatState, dead_creature: L5RCharacterData, dice: DiceEngine) -> int:
 	var center: Vector2i = state.positions.get(dead_creature.character_id, Vector2i(-1, -1))
 	if center.x < 0:
