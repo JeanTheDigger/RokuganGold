@@ -260,6 +260,8 @@ class Participant:
 	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
 	var spirit_attack_kept_bonus: int = 0  # s54.5 Charge: +N kept attack dice (the kept half of a +NkN charge bonus)
 	var spirit_damage_kept_bonus: int = 0  # s54.5 Charge: +N kept damage dice
+	var spirit_attack_flat_bonus: int = 0  # s54.5 Battlefield Acumen: +N to the attack-roll TOTAL (positional aura, spirit-only)
+	var spirit_damage_flat_bonus: int = 0  # s54.5 Battlefield Acumen: +N to the damage-roll TOTAL (spirit-only)
 	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive
 	# s35/s34/s33/s36 conjured elemental weapons (Katana of Fire, Tetsubo of Earth, Yari of Air,
 	# Bo of Water). {} = none; {rolled,kept,skill,trait,school_rank} = a created weapon the wielder
@@ -1513,6 +1515,9 @@ static func resolve_attack(
 	# Inert (0) for every other creature and all real characters.
 	if attacker.spirit_creature != null:
 		flat_bonus += attacker.spirit_creature.attack_flat_bonus
+		# s54.5 Battlefield Acumen: +N to the attack-roll TOTAL, one per other Nosloc no Oni within
+		# 50 feet (positional aura set by the orchestrator; 0 for every other creature).
+		flat_bonus += attacker_p.spirit_attack_flat_bonus
 
 	# Unskilled rolls (skill_rank == 0) do not explode per L5R4e p.78.
 	# raises passed directly — roll_check applies raises * 5 to TN.
@@ -1680,6 +1685,10 @@ static func resolve_damage(
 	# Inert (0) for every other creature and all real characters.
 	if attacker != null and attacker.spirit_creature != null:
 		total += attacker.spirit_creature.damage_flat_bonus
+		# s54.5 Battlefield Acumen: +N to the damage-roll TOTAL, one per other Nosloc no Oni
+		# within 50 feet (positional aura; 0 for every other creature).
+		if attacker_p != null:
+			total += attacker_p.spirit_damage_flat_bonus
 
 	return {
 		"rolled": rolled,

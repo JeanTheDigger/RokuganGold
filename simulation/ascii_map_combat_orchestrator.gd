@@ -1796,6 +1796,8 @@ static func execute_melee_attack(
 	a_p.spirit_damage_rolled_bonus = 0
 	a_p.spirit_attack_kept_bonus = 0
 	a_p.spirit_damage_kept_bonus = 0
+	a_p.spirit_attack_flat_bonus = 0
+	a_p.spirit_damage_flat_bonus = 0
 
 	if not bonus_attack:
 		if using_granted_attack:
@@ -9879,6 +9881,8 @@ static func _set_spirit_attack_auras(
 	a_p.spirit_damage_rolled_bonus = 0
 	a_p.spirit_attack_kept_bonus = 0
 	a_p.spirit_damage_kept_bonus = 0
+	a_p.spirit_attack_flat_bonus = 0
+	a_p.spirit_damage_flat_bonus = 0
 	var cr: SpiritCreatureData = attacker.spirit_creature
 	if cr == null:
 		return
@@ -9893,6 +9897,8 @@ static func _set_spirit_attack_auras(
 	var supreme_in_range: bool = false
 	var commanding_in_range: bool = false
 	var swarm_self: bool = cr.has_tag("swarm_attack")
+	var acumen_self: bool = cr.has_tag("battlefield_acumen")
+	var acumen_count: int = 0  # other Nosloc no Oni within 50 feet (10 tiles)
 	var swarm_count: int = 1 if (swarm_self and target_id >= 0) else 0
 	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-9999, -9999))
 	for cid: int in state.combat.participants:
@@ -9914,6 +9920,8 @@ static func _set_spirit_attack_auras(
 			supreme_in_range = true
 		if d <= 20 and ally.spirit_creature.has_tag("commanding_presence"):  # s54.10: 20 tiles
 			commanding_in_range = true
+		if acumen_self and d <= 10 and ally.spirit_creature.has_tag("battlefield_acumen"):  # 50 feet
+			acumen_count += 1
 		if swarm_self and target_id >= 0 and ally.spirit_creature.has_tag("swarm_attack") \
 				and _chebyshev(state.positions.get(cid, Vector2i(-9999, -9999)), tpos) <= 1:
 			swarm_count += 1
@@ -9951,6 +9959,14 @@ static func _set_spirit_attack_auras(
 	# a lone hanemuri gains nothing (faithful -- "alone they are cowardly").
 	if swarm_self and target_id >= 0:
 		atk_bonus += int(swarm_count / 3.0)
+	# Battlefield Acumen (s54.5 Nosloc no Oni): for every OTHER Nosloc no Oni within 50 feet,
+	# +1 to the TOTAL of all attack AND damage rolls (a self-reinforcing pack aura). Flat-total,
+	# not dice -- read in resolve_attack (flat_bonus) / resolve_damage (total). Tag-gated: only a
+	# Nosloc gains it, counting only other Nosloc. (Battle Skill Rolls are mass-battle, no tile
+	# consumer -- deferred.)
+	if acumen_self:
+		a_p.spirit_attack_flat_bonus = acumen_count
+		a_p.spirit_damage_flat_bonus = acumen_count
 	a_p.spirit_attack_rolled_bonus = atk_bonus
 	a_p.spirit_damage_rolled_bonus = dmg_bonus
 
