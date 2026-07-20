@@ -1113,6 +1113,15 @@ static func _sort_turn_order(state: CombatState) -> void:
 # -- Armor TN Computation (s40) -----------------------------------------------
 # =============================================================================
 
+# Blind Hunter (s54.9 Sanshu Denki): "Does not suffer any penalties for blindness, due to other
+# superior senses." A creature carrying this tag is exempt from every Blinded penalty (defender
+# Armor-TN collapse, attacker -1k1/-3k3, the blinded simple-move Athletics check). Inert for real
+# characters and every other creature (spirit_creature null / tag absent).
+static func is_blindness_immune(character: L5RCharacterData) -> bool:
+	return character != null and character.spirit_creature != null \
+		and character.spirit_creature.has_tag("blind_hunter")
+
+
 static func get_armor_tn(
 	character: L5RCharacterData,
 	participant: Participant,
@@ -1156,7 +1165,7 @@ static func get_armor_tn(
 		return 5 + character.armor_tn_bonus  # Stunned: Armor TN = 5 + armor bonuses
 	if CONDITION_INCAPACITATED in participant.conditions:
 		return 5 + character.armor_tn_bonus  # Held/bound/treated-as-Down: flat-footed
-	if CONDITION_BLINDED in participant.conditions:
+	if CONDITION_BLINDED in participant.conditions and not is_blindness_immune(character):
 		# Blinded base = Reflexes + 5 (armor still adds)
 		return character.reflexes + 5 + character.armor_tn_bonus
 
@@ -1461,7 +1470,7 @@ static func resolve_attack(
 	# s33 Castle of Air: a defender-imposed -Xk0 penalty on attacks against the warded caster.
 	if attacker_roll_penalty != 0:
 		rolled = maxi(0, rolled + attacker_roll_penalty)
-	if CONDITION_BLINDED in attacker_p.conditions:
+	if CONDITION_BLINDED in attacker_p.conditions and not is_blindness_immune(attacker):
 		if weapon.get("melee", true):
 			rolled = maxi(0, rolled - 1)
 			kept = maxi(1, kept - 1)
@@ -1972,7 +1981,7 @@ static func resolve_blinded_simple_move(
 	participant: Participant,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	if CONDITION_BLINDED not in participant.conditions:
+	if CONDITION_BLINDED not in participant.conditions or is_blindness_immune(character):
 		return {"required": false}
 	var athletics: int = character.skills.get("Athletics", 0)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(character)
