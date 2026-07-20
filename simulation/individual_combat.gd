@@ -1679,6 +1679,12 @@ static func resolve_damage(
 	# scaling — this controls explosion, not dice count).
 	if dmg_skill == "Ninjutsu":
 		can_explode = bugei_dmg_rank >= 5
+	# s54.1 Flying Squirrel (Musasabi) "Damage: 1k1 (cannot explode)" — the declared-but-unconsumed
+	# `damage_no_explode` creature tag (sole bearer, grep-confirmed): the creature's damage dice never
+	# explode. Zero-invention (the GDD states it verbatim). Inert for every other creature/character
+	# (gated on the spirit_creature tag).
+	if attacker != null and attacker.spirit_creature != null and attacker.spirit_creature.has_tag("damage_no_explode"):
+		can_explode = false
 	# s40 weapon special: a katana wielder may spend a Void Point (just-in-time) for +1k1 damage.
 	# NPC-only auto-spend (PCs choose via the future combat UI), once-per-Round throttle.
 	if weapon.get("void_point_damage", false) and attacker_p != null and not spirit_fixed_damage \
