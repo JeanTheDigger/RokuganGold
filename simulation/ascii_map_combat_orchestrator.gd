@@ -9849,6 +9849,9 @@ static func _set_spirit_attack_auras(
 	var mob_count: int = 1 if SpiritAbilitySystem.has_mob_aggression(cr) else 0
 	var rally_in_range: bool = false
 	var supreme_in_range: bool = false
+	var swarm_self: bool = cr.has_tag("swarm_attack")
+	var swarm_count: int = 1 if (swarm_self and target_id >= 0) else 0
+	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-9999, -9999))
 	for cid: int in state.combat.participants:
 		if cid == attacker.character_id:
 			continue
@@ -9866,6 +9869,9 @@ static func _set_spirit_attack_auras(
 		if d <= SpiritAbilitySystem.SUPREME_COMMANDER_RADIUS \
 				and SpiritAbilitySystem.is_supreme_commander(ally.spirit_creature):
 			supreme_in_range = true
+		if swarm_self and target_id >= 0 and ally.spirit_creature.has_tag("swarm_attack") \
+				and _chebyshev(state.positions.get(cid, Vector2i(-9999, -9999)), tpos) <= 1:
+			swarm_count += 1
 
 	# Mob Aggression: 3+ mob_frenzy creatures within 5 tiles → +1k0 Attack each.
 	if SpiritAbilitySystem.has_mob_aggression(cr) and mob_count >= SpiritAbilitySystem.MOB_MIN_COUNT:
@@ -9889,6 +9895,12 @@ static func _set_spirit_attack_auras(
 			state.tactical_engaged[key] = rec
 		atk_bonus += SpiritAbilitySystem.tactical_mastery_bonus(cr, int(rec["count"]))
 
+	# Swarm Attack (s54.9 Hanemuri): for every 3 swarm creatures attacking a single opponent,
+	# each gains +1k0 to its attack rolls (the flock's voracious ferocity). Counts co-faction
+	# swarm_attack allies in melee range of the target, plus the attacker itself. Tag-gated;
+	# a lone hanemuri gains nothing (faithful -- "alone they are cowardly").
+	if swarm_self and target_id >= 0:
+		atk_bonus += int(swarm_count / 3.0)
 	a_p.spirit_attack_rolled_bonus = atk_bonus
 	a_p.spirit_damage_rolled_bonus = dmg_bonus
 
