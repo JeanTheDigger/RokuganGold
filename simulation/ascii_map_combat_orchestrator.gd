@@ -8646,6 +8646,14 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "wasp_swarm", "result": ws})
 			return {"actions": actions_taken}
 
+	# -- Earthquake (s54.12 Yobuko): a Complex-action landslide/earthquake, identical to the spell
+	# Earthquake — 2k1 Wounds + Prone to every combatant on the map except the Yobuko itself.
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("earthquake"):
+		var eq: Dictionary = _npc_maybe_earthquake(state, npc_id, npc, dice_engine)
+		if eq.get("success", false):
+			actions_taken.append({"action": "earthquake", "result": eq})
+			return {"actions": actions_taken}
+
 	# -- Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze that, on a won
 	# Contested Willpower, inflicts 1 full Rank of Taint on a mortal enemy (once each).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("taint_affliction"):
@@ -10429,6 +10437,49 @@ static func _npc_maybe_electrical_jolt(
 				stunned += 1
 	return {"success": true, "hit": hit, "stunned": stunned}
 
+
+
+## Earthquake (s54.12 Yobuko): a wrathful mountain spirit triggers a landslide/avalanche/earthquake
+## to drive intrusive mortals out of its territory. GDD s54.12: "requires a Complex Action and
+## produces a mechanical effect identical to the spell Earthquake." Reuses the already-wired
+## SPELL_COMBAT_EFFECTS["earthquake"] (Earth 5, s34): 2k1 Wounds + knocked Prone to EVERY combatant
+## on the map EXCEPT the Yobuko itself (the caster alone is unaffected). No frequency cap — the GDD
+## states only "a Complex Action" (matching the sibling creature-turn Complex hooks, no per-encounter
+## limit). The 6k6-inside-buildings debris and "Stunned" halves are s34-spell sub-parts the shared
+## effect entry does not carry (the effect uses the Prone rider only), so they are not modeled here.
+static func _npc_maybe_earthquake(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Only worth triggering if a living enemy is present (radius 99 = whole map, so any distance).
+	var has_enemy: bool = false
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		has_enemy = true
+		break
+	if not has_enemy:
+		return {}
+	ts.consume_complex()
+	# Identical to the spell Earthquake: 2k1 + Prone, whole-map AoE, caster unaffected. Passing
+	# target_id=-1/target=null is safe — a self-centered AoE (aoe_radius>0, range_tiles 0) never
+	# dereferences the target in _gather_spell_targets.
+	var hits: Array = _apply_spell_combat_damage(
+		state, char_id, character, -1, null,
+		SpellSystem.SPELL_COMBAT_EFFECTS["earthquake"], "earthquake", dice)
+	return {"success": true, "hits": hits}
 
 
 ## Spirit Leeching (s54.5 Kommei): a Simple-action soul-fog. Marks each mortal enemy within
