@@ -1542,6 +1542,19 @@ static func execute_melee_attack(
 	# Defender mount/size for the mounted +1k0 (s40) and Burning Kiss of Steel +2k2 (s35).
 	var tgt_mounted: bool = t_p != null and IndividualCombat.CONDITION_MOUNTED in t_p.conditions
 	var tgt_large: bool = AdvantageSystem.has_advantage(target, Enums.Advantage.LARGE)
+	# Furious Charge (s54.1 Ox): the first Turn after it is wounded, the ox reacts with fury,
+	# charging the source of its pain -- for that one turn it suffers NO Wound Penalties and adds +10
+	# to its attack roll. A one-time surge (once per skirmish); once it passes, normal penalties resume.
+	# "First Turn after wounded" == the first attack the ox makes while carrying any wound.
+	var furious_active: bool = false
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("furious_charge") \
+			and attacker.wounds_taken > 0 and not a_p.furious_charge_done:
+		furious_active = true
+		a_p.furious_charge_done = true
+		# ignore Wound Penalties this turn (round-scoped negate; the multi-attack Trample benefits too)
+		IndividualCombat.add_timed_modifier(a_p, "negate_wound_penalty", 1, state.combat.round_number + 1, "furious_charge")
+		# +10 to the attack roll TOTAL via the s54.4 flat channel (temp-swap, restored below)
+		attacker.spirit_creature.attack_flat_bonus += 10
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
 		false, spend_void, tgt_mounted, maneuver,
@@ -1572,6 +1585,8 @@ static func execute_melee_attack(
 		if soh.get("rerolled", false):
 			result = soh["result"]
 			soh_rerolled = true
+	if furious_active:
+		attacker.spirit_creature.attack_flat_bonus -= 10  # restore the stat-block flat bonus (covers all rerolls)
 
 	var log_entry: Dictionary = {
 		"type": "melee_attack",

@@ -252,6 +252,7 @@ class Participant:
 	var insight_study_rounds: int = 0   # consecutive Complex Actions spent studying that target
 	var mirror_origin_id: int = -1      # s54.5 Dark Mirror duplicate: the creature it copied (attacks it first)
 	var scream_used: bool = false  # s54.12 Wanyudo Strength of the Dead: once-per-skirmish scream
+	var furious_charge_done: bool = false  # s54.1 Ox Furious Charge: the one-time wound-triggered rage has fired
 	var gore_escape_rolled: int = 0  # s54.5 Gore: extra damage dealt when pulling free of the tusks (0 = not gored)
 	var gore_escape_kept: int = 0
 	var freeze_break_tn: int = 0  # s36 Yuki's Touch: Strength TN to break free of the ice (0 = use the default entangle TN 20)
