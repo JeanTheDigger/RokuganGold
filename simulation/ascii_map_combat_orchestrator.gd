@@ -1483,6 +1483,15 @@ static func execute_melee_attack(
 			and state.combat.round_number <= 2:
 		a_p.spirit_attack_rolled_bonus += 1
 		a_p.spirit_attack_kept_bonus += 1
+	# Blood Frenzy (s54.1 Sharks): once there is blood in the water (any combatant has
+	# taken Wounds), the shark rolls +1k1 for all Attack and Damage rolls. State-gated,
+	# tag-gated. Stacks on any aura/charge attack bonus.
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("blood_frenzy") \
+			and _blood_in_the_water(state):
+		a_p.spirit_attack_rolled_bonus += 1
+		a_p.spirit_attack_kept_bonus += 1
+		a_p.spirit_damage_rolled_bonus += 1
+		a_p.spirit_damage_kept_bonus += 1
 	# s54.10: a hidden creature (Mujina / Ephemeral Form) that attacks reveals itself —
 	# it is targetable through its next turn.
 	_reveal_if_hidden(state, attacker_id, a_p)
@@ -9910,6 +9919,16 @@ static func _set_spirit_attack_auras(
 ## spirit attacker's co-located allies at attack time.
 static func _ally_lookup(state: MapCombatState, cid: int) -> L5RCharacterData:
 	return state.combatants.get(cid, null)
+
+
+# s54.1 Blood Frenzy: "blood in the water" -- true once any combatant has been wounded
+# (the whole aquatic encounter is in the water, so any bleeding combatant triggers it).
+static func _blood_in_the_water(state: MapCombatState) -> bool:
+	for cid: int in state.combat.participants:
+		var c: L5RCharacterData = _ally_lookup(state, cid)
+		if c != null and c.wounds_taken > 0:
+			return true
+	return false
 
 
 ## s54.10 invisibility/intangibility: an invisible (Mujina) or insubstantial
