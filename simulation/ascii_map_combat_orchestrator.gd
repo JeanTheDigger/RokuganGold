@@ -8556,6 +8556,15 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "black_fire", "result": bf})
 			return {"actions": actions_taken}
 
+	# -- Mob Leader (s54.9 Goblin Warmonger / King): a Complex-action Intimidation shout that
+	# rallies nearby goblins with +1k0 (or +2k0 on a big roll) to attack AND damage until the
+	# warmonger's next Turn. Its whole turn (the leader commands rather than swings).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("mob_leader"):
+		var ml: Dictionary = _npc_maybe_mob_leader(state, npc_id, npc, dice_engine)
+		if ml.get("success", false):
+			actions_taken.append({"action": "mob_leader", "result": ml})
+			return {"actions": actions_taken}
+
 	# -- Strength of the Dead (s54.12 Wanyudo): a once-per-skirmish scream that Stuns nearby
 	# mortal enemies (Contested Willpower).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("strength_of_the_dead") and not p.scream_used:
@@ -10659,6 +10668,79 @@ static func _npc_maybe_black_fire(
 	if bolts.is_empty():
 		return {}
 	return {"success": true, "bolts": bolts}
+
+
+# Mob Leader (s54.9 Goblin Warmonger / Goblin King): "As a Complex Action, the warmonger makes an
+# Intimidation (Bullying)/Willpower roll at TN 20. If successful, all goblins within hearing (up to
+# 10 goblins) gain a +1k0 bonus on attack and damage rolls. If the warmonger beats TN by 15 or more,
+# the bonus is +2k0 instead. The bonus lasts until the start of the warmonger's next Turn." Modeled
+# via short timed spell_attack_rolled + spell_damage_rolled modifiers (both read for spirit
+# attackers on top of their fixed stat-block attack/damage), expiring at round_number + 1 — the
+# start of the next round, ≈ the warmonger's next Turn, and a NON-STACKING window (the warmonger
+# shouts once per round and the prior round's buff is already expired when it re-shouts). The
+# Intimidation roll uses Willpower-only dice (skill 0) per the fixed-stat-block convention (spirit
+# puppets carry no skills; the warmonger's Willpower = its Earth ring). "Within hearing" = 10 tiles
+# (50'), reusing the Rally aura radius — the leader-rallying-mob analogue. All living co-faction
+# goblins in range are buffed (the leader itself included — "all goblins within hearing"; its own
+# self-buff is timing-inert), nearest-10 first (the GDD "up to 10 goblins" cap). Fires only when at
+# least one OTHER goblin ally is in range (a mob worth commanding); otherwise the warmonger fights.
+const MOB_LEADER_TN: int = 20
+const MOB_LEADER_BEAT_MARGIN: int = 15    # beat TN by 15+ -> +2k0 instead of +1k0
+const MOB_LEADER_HEARING_TILES: int = 10  # 50' (the Rally aura radius)
+const MOB_LEADER_MAX_GOBLINS: int = 10
+static func _npc_maybe_mob_leader(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Gather co-faction living goblins within hearing (the leader itself included). Require at least
+	# one OTHER goblin to make the Complex worthwhile (a lone leader's self-buff is timing-inert).
+	var cands: Array = []
+	var others: int = 0
+	for oid: int in state.positions.keys():
+		if state.factions.get(oid, FACTION_NEUTRAL) != faction:
+			continue
+		var g: L5RCharacterData = state.combatants.get(oid, null)
+		if g == null or CharacterStats.is_dead(g) or g.spirit_creature == null:
+			continue
+		if not g.spirit_creature.has_tag("goblin"):
+			continue
+		var d: int = _chebyshev(cpos, state.positions[oid])
+		if d > MOB_LEADER_HEARING_TILES:
+			continue
+		cands.append({"id": oid, "d": d})
+		if oid != char_id:
+			others += 1
+	if others < 1:
+		return {}
+	ts.consume_complex()
+	# Intimidation (Bullying)/Willpower roll — Willpower dice, skill 0 (fixed-stat-block convention).
+	var wp: int = maxi(1, character.willpower)
+	var roll: int = dice.roll_and_keep(wp, wp, true).total
+	if roll < MOB_LEADER_TN:
+		return {"success": true, "roll": roll, "buffed": 0, "bonus": 0}
+	var bonus: int = 2 if roll >= MOB_LEADER_TN + MOB_LEADER_BEAT_MARGIN else 1
+	cands.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["d"]) < int(b["d"]))
+	var expiry: int = state.combat.round_number + 1
+	var buffed: int = 0
+	for entry: Dictionary in cands:
+		if buffed >= MOB_LEADER_MAX_GOBLINS:
+			break
+		var gp: IndividualCombat.Participant = state.combat.participants.get(int(entry["id"]), null)
+		if gp == null:
+			continue
+		IndividualCombat.add_timed_modifier(gp, "spell_attack_rolled", bonus, expiry, "mob_leader")
+		IndividualCombat.add_timed_modifier(gp, "spell_damage_rolled", bonus, expiry, "mob_leader")
+		buffed += 1
+	return {"success": true, "roll": roll, "buffed": buffed, "bonus": bonus}
 
 
 const GAZE_OF_TERROR_FEAR_RANK: int = 6  # s54.9:47
