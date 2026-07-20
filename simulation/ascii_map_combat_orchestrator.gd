@@ -11009,7 +11009,21 @@ static func _apply_hit(
 				raw = raw - _ba_redirect
 		else:
 			state.blood_armor_links.erase(target.character_id)
+	# Blood Draining (s54.2 Shozai-Gaki): the gaki MAY forgo normal damage to drain the victim's
+	# blood through its translucent fingers -- a flat 12 Wounds (bypassing armor, a life-drain) that
+	# heals the gaki by the same amount. AI policy (the GDD leaves "may" to the creature): a badly-
+	# wounded gaki (GRAZED or worse -- "if it cannot feed it will suffer agonizing pain") feeds to
+	# sustain itself, trading its higher claw damage for the 12 heal; a healthy gaki claws for max.
+	var blood_drained: bool = false
+	if attacker.spirit_creature != null and target.spirit_creature == null \
+			and attacker.spirit_creature.has_tag("blood_drain") \
+			and CharacterStats.get_wound_level(attacker) >= Enums.WoundLevel.GRAZED:
+		raw = 12  # s54.2: flat 12 Wounds, drawn through the fingers
+		reduction = 0  # bypasses armor (a life-drain, not a weapon blow)
+		blood_drained = true
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
+	if blood_drained:
+		WoundSystem.heal_wounds(attacker, 12)  # s54.2: heals the gaki by the same amount
 
 	# s31 Concentration: a mid-cast caster struck for damage must pass Willpower (TN 5 + damage) or the
 	# spell is interrupted (aborted, no slot lost). A slain caster's cast simply lapses.
