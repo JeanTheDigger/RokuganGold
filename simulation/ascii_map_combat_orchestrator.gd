@@ -8784,6 +8784,12 @@ static func _npc_desired_stance(
 	wound_level: int,
 	chars_by_id: Dictionary,
 ) -> Enums.Stance:
+	# s54.5 Heedless Rage (Wakeru no Oni + its lesser split-spawn): the demon fights with
+	# heedless abandon, paying no attention to defense (destruction only makes it stronger
+	# via Endless Horde) -- it ALWAYS uses Full Attack in combat. Overrides all wound/ally
+	# stance logic. Tag-gated (spirit-only).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("heedless_rage"):
+		return Enums.Stance.FULL_ATTACK
 	var best_combat: int = 0
 	for skill_name: String in ["Kenjutsu", "Polearms", "Heavy Weapons", "Jiujutsu"]:
 		best_combat = maxi(best_combat, npc.skills.get(skill_name, 0))
