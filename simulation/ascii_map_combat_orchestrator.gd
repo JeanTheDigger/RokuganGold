@@ -8621,6 +8621,15 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "gaze_of_terror", "result": got})
 			return {"actions": actions_taken}
 
+	# -- Fear Enhancement (s54.5 Ianwa no Oni): once per encounter, magnify its Fear effect against a
+	# single target to Fear 8 (Willpower vs TN 45). A mental fear (not a gaze), so blind targets are
+	# affected; the enhanced fear persists for the skirmish (no stated duration).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("fear_enhancement") and not p.fear_enhancement_used:
+		var fe: Dictionary = _npc_maybe_fear_enhancement(state, npc_id, npc, chars_by_id, dice_engine)
+		if fe.get("success", false):
+			actions_taken.append({"action": "fear_enhancement", "result": fe})
+			return {"actions": actions_taken}
+
 	# -- Vomit (s54.5 Hasaiki no Oni): a Complex-action acid spit (max 50') that coats a fresh enemy
 	# with a 4k4/Round-for-5-Rounds acid DoT (to-hit ignores armour's effect on Armor TN).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("acid_vomit"):
@@ -10928,6 +10937,75 @@ static func _npc_maybe_gaze_of_terror(
 		return {"success": true, "victim": victim_id, "afraid": false}
 	# duration: the effect lasts until the Reactions stage of the following Round (round + 2)
 	IndividualCombat.add_timed_modifier(vp2, "spell_afraid", 1, state.combat.round_number + 2, "gaze_of_terror")
+	if IndividualCombat.CONDITION_AFRAID not in vp2.conditions:
+		vp2.conditions.append(IndividualCombat.CONDITION_AFRAID)
+	return {"success": true, "victim": victim_id, "afraid": true}
+
+
+## Fear Enhancement (s54.5 Ianwa no Oni, sole bearer, s54.5:125): "When facing a single individual,
+## once per encounter the Ianwa no Oni can magnify its Fear effect against that one target to Fear 8."
+## A Complex-action single-target fear magnify: the nearest living, non-Fear-immune enemy rolls its
+## Willpower (+ the full fear-resist stack) vs TN 45 (5 + 8*5) and, on a fail, is Afraid. Unlike the
+## Garegosu Gaze of Terror this is a MENTAL/presence fear (the Ianwa "communicates directly through
+## its mind"), NOT a gaze, so it is NOT gated on the target's sight — a Blinded target IS affected
+## (no blind-exclusion). The GDD states no expiry for the enhanced fear, so it persists for the
+## skirmish (the "no-stated-duration Fear" convention, matching _apply_fear_burst / maho Inspire
+## Fear: round + 9999). The once-per-encounter cap is the Participant.fear_enhancement_used flag,
+## checked by the dispatch before this is called (gated identically to the Wanyudo scream).
+const FEAR_ENHANCEMENT_RANK: int = 8  # s54.5:125 (magnified to Fear 8)
+static func _npc_maybe_fear_enhancement(
+	state: MapCombatState,
+	ianwa_id: int,
+	ianwa: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(ianwa_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var self_p: IndividualCombat.Participant = state.combat.participants.get(ianwa_id, null)
+	if self_p == null or self_p.fear_enhancement_used:
+		return {}
+	var faction: String = state.factions.get(ianwa_id, FACTION_NEUTRAL)
+	var pos: Vector2i = state.positions.get(ianwa_id, Vector2i(-1, -1))
+	if pos.x < 0:
+		return {}
+	# nearest living, non-Fear-immune enemy (a single individual). No blind-exclusion: this is a
+	# mental fear, not a gaze.
+	var victim_id: int = -1
+	var best_d: int = 1 << 30
+	for cid: int in state.positions.keys():
+		if cid == ianwa_id:
+			continue
+		if not _are_enemies(faction, state.factions.get(cid, FACTION_NEUTRAL)):
+			continue
+		var vc: L5RCharacterData = state.combatants.get(cid, chars_by_id.get(cid, null))
+		if vc == null or CharacterStats.is_dead(vc) or vc.immune_to_fear:
+			continue
+		if state.combat.participants.get(cid, null) == null:
+			continue
+		var d: int = _chebyshev(pos, state.positions[cid])
+		if d < best_d:
+			best_d = d
+			victim_id = cid
+	if victim_id < 0:
+		return {}
+	var victim: L5RCharacterData = state.combatants.get(victim_id, chars_by_id.get(victim_id, null))
+	var vp2: IndividualCombat.Participant = state.combat.participants.get(victim_id, null)
+	if vp2 == null:
+		return {}
+	ts.consume_complex()
+	self_p.fear_enhancement_used = true  # once per encounter
+	var tn: int = 5 + FEAR_ENHANCEMENT_RANK * 5
+	var wp: int = maxi(1, victim.willpower + victim.fear_resist_willpower_bonus)
+	var fr_roll: int = IndividualCombat.get_timed_modifier_total(vp2, "fear_resist_rolled")
+	var fr_kept: int = IndividualCombat.get_timed_modifier_total(vp2, "fear_resist_kept")
+	var resist: int = dice.roll_and_keep(
+			wp + victim.fear_resist_rolled_bonus + fr_roll,
+			wp + victim.fear_resist_kept_bonus + fr_kept, true).total
+	if resist >= tn:
+		return {"success": true, "victim": victim_id, "afraid": false}
+	IndividualCombat.add_timed_modifier(vp2, "spell_afraid", 1, state.combat.round_number + 9999, "fear_enhancement")
 	if IndividualCombat.CONDITION_AFRAID not in vp2.conditions:
 		vp2.conditions.append(IndividualCombat.CONDITION_AFRAID)
 	return {"success": true, "victim": victim_id, "afraid": true}
