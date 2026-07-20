@@ -9876,6 +9876,7 @@ static func _set_spirit_attack_auras(
 	var mob_count: int = 1 if SpiritAbilitySystem.has_mob_aggression(cr) else 0
 	var rally_in_range: bool = false
 	var supreme_in_range: bool = false
+	var commanding_in_range: bool = false
 	var swarm_self: bool = cr.has_tag("swarm_attack")
 	var swarm_count: int = 1 if (swarm_self and target_id >= 0) else 0
 	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-9999, -9999))
@@ -9896,6 +9897,8 @@ static func _set_spirit_attack_auras(
 		if d <= SpiritAbilitySystem.SUPREME_COMMANDER_RADIUS \
 				and SpiritAbilitySystem.is_supreme_commander(ally.spirit_creature):
 			supreme_in_range = true
+		if d <= 20 and ally.spirit_creature.has_tag("commanding_presence"):  # s54.10: 20 tiles
+			commanding_in_range = true
 		if swarm_self and target_id >= 0 and ally.spirit_creature.has_tag("swarm_attack") \
 				and _chebyshev(state.positions.get(cid, Vector2i(-9999, -9999)), tpos) <= 1:
 			swarm_count += 1
@@ -9911,6 +9914,11 @@ static func _set_spirit_attack_auras(
 	if supreme_in_range and SpiritAbilitySystem.is_toshigoku_musha(cr):
 		atk_bonus += 1
 		dmg_bonus += 1
+	# Commanding Presence (s54.10 Hengeyokai Spirit Lord): all spirit animals within 20 tiles
+	# of the spirit lord fight with +1k0 Attack while it is present. Beneficiary must be a
+	# chikushudo_spirit (the lord itself is NOT so tagged -> not self-buffed, like the General).
+	if commanding_in_range and cr.has_tag("chikushudo_spirit"):
+		atk_bonus += 1
 	# Tactical Mastery (the Ancient General itself, adapts): +1k0 after 3 rounds vs a
 	# target, +2k0 after 6. Track distinct rounds engaged against this target.
 	if cr.has_tag("adapts") and target_id >= 0:
