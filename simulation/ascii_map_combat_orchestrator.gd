@@ -1731,7 +1731,13 @@ static func execute_melee_attack(
 		# Disarm maneuver (s40, 3 Raises; banked Free Raises reduce the requirement). On a
 		# won Contested Strength the target's weapon hits the ground (persistent disarmed
 		# state — they fight unarmed until they recover it).
-		if maneuver == "disarm":
+		# s54.5 Genso no Oni Obsidian Daisho: its blades are spiritually bonded, so the creature
+		# "may not be targeted with the Disarm Maneuver" (s54.5:111). The maneuver is negated
+		# outright — the weapon is never knocked loose. Defender-side, tag-gated (sole bearer).
+		if maneuver == "disarm" and target.spirit_creature != null and target.spirit_creature.has_tag("no_disarm"):
+			result["disarm_immune"] = true
+			log_entry["disarm_immune"] = true
+		elif maneuver == "disarm":
 			# Consume any Free Raises banked toward a Disarm against this target
 			# (s40 weapon-grapple lose-control risk / Earthen Fist).
 			var disarm_free: int = a_p.disarm_free_raises_pending
