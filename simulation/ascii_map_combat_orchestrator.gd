@@ -9086,6 +9086,26 @@ static func _weapon_is_metal_or_stone(weapon_name: String) -> bool:
 	return true
 
 
+# s54.5 Quiet Death "Amorphous" — a cutting/slashing weapon is a rigid BLADED-EDGE weapon
+# (a formless jelly with no vital organs is barely harmed by cutting; there is nothing to
+# sever). Classification is by each weapon's real type — the same per-weapon-type factual
+# reading the weapon_break metal/stone helper uses, NOT an invented value: swords cut (the
+# wooden bokken/shinai excluded), the bladed knives cut (tanto/aiguchi/kama — NOT the blunt
+# sai/jitte parrying truncheons), the glaive polearms cut (naginata/bisento/nagamaki — NOT
+# the sasumata/sadegarami restraining forks), and the axes cut (masakiri/ono — NOT the
+# crushing tetsubo/dai_tsuchi). Spears (piercing), staves/war fan/unarmed (bludgeoning),
+# chain weapons (flexible/binding), and ranged weapons are NOT cutting. A creature's natural
+# attack ("Claws"/"Bite"/"Touch", not a catalog key) is likewise not a cutting WEAPON.
+const _CUTTING_WEAPONS: Array = [
+	"katana", "wakizashi", "no_dachi", "ninja_to", "parangu", "scimitar",  # swords
+	"tanto", "aiguchi", "kama",                                            # bladed knives
+	"naginata", "bisento", "nagamaki",                                     # glaive polearms
+	"masakiri", "ono",                                                     # axes
+]
+static func _weapon_is_cutting(weapon_name: String) -> bool:
+	return weapon_name in _CUTTING_WEAPONS
+
+
 # Disarm is worthwhile only against a still-armed, HIGH-threat melee fighter (best melee
 # skill >= 4). A weapon strip neutralizes them for a turn (recovery costs an action) and
 # leaves them fighting unarmed. Structural AI heuristic — the GDD gives no NPC policy.
@@ -11176,6 +11196,14 @@ static func _apply_hit(
 		# of the second Round. Additive on the creature's natural Reduction (like Protection of Yomi).
 		if target.spirit_creature.has_tag("berserker_rage") and state.combat.round_number <= 2:
 			reduction += 5
+		# Amorphous (s54.5 Quiet Death): a formless jelly with no vital organs — cutting/slashing
+		# weapons do little, so its Reduction rises from 10 to 20 against a bladed edge weapon.
+		# The declared-but-unconsumed `reduction_vs_cutting` creature tag (sole bearer,
+		# grep-confirmed) adds +10 when the strike is a cutting weapon. Zero-invention (the GDD
+		# states "Reduction: 10 (20 against cutting/slashing weapons)" verbatim). Additive on the
+		# creature's natural Reduction (like Protection of Yomi / Berserker Rage above).
+		if target.spirit_creature.has_tag("reduction_vs_cutting") and _weapon_is_cutting(weapon_name):
+			reduction += 10
 		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, w_kind)
 		raw = 0 if filt["heals"] else int(round(float(raw) * float(filt["multiplier"])))
 	# Armor of the Emperor (s34 Earth 4): each individual kept damage die against the warded
