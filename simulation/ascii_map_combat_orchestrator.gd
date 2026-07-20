@@ -8654,6 +8654,14 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "earthquake", "result": eq})
 			return {"actions": actions_taken}
 
+	# -- Terror of Fu Leng (s54.4 Moto Tsume): a Complex-action wave of supernatural terror that
+	# afflicts EVERYONE within line of sight (both factions) with a Fear 10 effect.
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("terror_of_fu_leng"):
+		var tfl: Dictionary = _npc_maybe_terror_of_fu_leng(state, npc_id, npc, dice_engine)
+		if tfl.get("success", false):
+			actions_taken.append({"action": "terror_of_fu_leng", "result": tfl})
+			return {"actions": actions_taken}
+
 	# -- Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze that, on a won
 	# Contested Willpower, inflicts 1 full Rank of Taint on a mortal enemy (once each).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("taint_affliction"):
@@ -10480,6 +10488,78 @@ static func _npc_maybe_earthquake(
 		state, char_id, character, -1, null,
 		SpellSystem.SPELL_COMBAT_EFFECTS["earthquake"], "earthquake", dice)
 	return {"success": true, "hits": hits}
+
+
+## Terror of Fu Leng (s54.4 Moto Tsume, akutenshi, sole bearer, s54.4:107): "The akutenshi unleashes a
+## wave of monstrous, supernatural terror that freezes the blood of everyone within sight. Activating
+## this power is a Complex Action and it affects everyone within line of sight. All targets are afflicted
+## with a Fear 10 effect." A Complex-action, faction-agnostic AoE fear: EVERY living combatant (both
+## factions/types, EXCLUDING the akutenshi itself) that the caster has line of sight to rolls its
+## Willpower (+ the full fear-resist stack — Kshatriya/buff Willpower/rolled/kept bonuses + the timed
+## fear_resist modifiers) vs TN 55 (5 + 10*5, s22.3) and, on a fail, is Afraid (−1k0 to all rolls); an
+## immune_to_fear target is exempt. The GDD states no expiry, so the fear persists for the skirmish
+## (round + 9999 — the same no-stated-duration Fear convention as _apply_fear_burst / Fear Enhancement
+## / maho Inspire Fear). The wave is worth a Turn only when at least one living enemy is within sight
+## (else the akutenshi acts otherwise). Fear 10 is the exact GDD rating; the per-target fear mechanic is
+## byte-for-byte the same one gaze_of_terror / _apply_fear_burst use (a self-contained inline copy — the
+## established _npc_maybe_* fear convention — so no shared primitive is disturbed).
+const TERROR_OF_FU_LENG_FEAR_RANK: int = 10  # s54.4:107 (Fear 10)
+static func _npc_maybe_terror_of_fu_leng(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Only worth unleashing if a living enemy is within line of sight.
+	var has_visible_enemy: bool = false
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		if _has_los(state.map, cpos, state.positions[oid]):
+			has_visible_enemy = true
+			break
+	if not has_visible_enemy:
+		return {}
+	ts.consume_complex()
+	# Fear 10 on EVERYONE within line of sight (both factions/types), except the akutenshi itself.
+	var tn: int = 5 + TERROR_OF_FU_LENG_FEAR_RANK * 5
+	var afraid: Array = []
+	var resisted: Array = []
+	for oid: int in state.positions.keys():
+		if oid == char_id:
+			continue
+		var c: L5RCharacterData = state.combatants.get(oid, null)
+		if c == null or CharacterStats.is_dead(c) or c.immune_to_fear:
+			continue
+		if not _has_los(state.map, cpos, state.positions[oid]):
+			continue
+		var tp: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+		if tp == null:
+			continue
+		var wp: int = maxi(1, c.willpower + c.fear_resist_willpower_bonus)
+		var fr_roll: int = IndividualCombat.get_timed_modifier_total(tp, "fear_resist_rolled")
+		var fr_kept: int = IndividualCombat.get_timed_modifier_total(tp, "fear_resist_kept")
+		var resist: int = dice.roll_and_keep(
+				wp + c.fear_resist_rolled_bonus + fr_roll,
+				wp + c.fear_resist_kept_bonus + fr_kept, true).total
+		if resist >= tn:
+			resisted.append(oid)
+			continue
+		IndividualCombat.add_timed_modifier(tp, "spell_afraid", 1, state.combat.round_number + 9999, "terror_of_fu_leng")
+		if IndividualCombat.CONDITION_AFRAID not in tp.conditions:
+			tp.conditions.append(IndividualCombat.CONDITION_AFRAID)
+		afraid.append(oid)
+	return {"success": true, "afraid": afraid, "resisted": resisted}
 
 
 ## Spirit Leeching (s54.5 Kommei): a Simple-action soul-fog. Marks each mortal enemy within
