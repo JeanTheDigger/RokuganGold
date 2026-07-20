@@ -1679,6 +1679,11 @@ static func execute_melee_attack(
 			# s24 Heavy Weapons R5: Free Raise toward Knockdown (+5 to the attacker's roll).
 			var atk_skill_kd: String = IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")
 			var kd_mastery_fr: int = SkillMasterySystem.maneuver_free_raises(atk_skill_kd, int(attacker.skills.get(atk_skill_kd, 0)), "knockdown")
+			# Headbutt (s54.1 Goat): a headbutting goat gains a Free Raise for Knockdown
+			# attempts (+5 to the Contested-Strength knockdown roll, the established Free-Raise
+			# mapping the Rhino/s24 mastery use). Tag-gated, borne by the goat alone.
+			if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("headbutt"):
+				kd_mastery_fr += 1
 			var kd: Dictionary = IndividualCombat.resolve_knockdown(
 				attacker, target, maneuver == "knockdown_quad", dice_engine, kd_mastery_fr * 5, kdr_r, kdr_k
 			)
@@ -8994,6 +8999,13 @@ static func _npc_should_armor_break(target: L5RCharacterData) -> bool:
 	return target.armor_worn != null
 
 
+# A goat's Headbutt (s54.1) drives off a STANDING intruder — a Prone target is already down,
+# so there is nothing to knock down. Tag-gated (no skill requirement; a goat fights unskilled).
+static func _npc_should_headbutt(state: MapCombatState, target_id: int) -> bool:
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	return t_p != null and not IndividualCombat.has_condition(t_p, IndividualCombat.CONDITION_PRONE)
+
+
 # Weapon Break (s54.6 Zokujin) warps only a weapon "made of metal or stone", so a bare
 # hand/claw, or a wood/bamboo weapon (bokken, shinai, and the wooden Staves category), is
 # never affected. Material is a factual property of each named weapon type (no invention);
@@ -9140,6 +9152,15 @@ static func _npc_execute_attack(
 		# whenever the target wears armor (the Zokujin signature). Structural AI (no GDD NPC policy).
 		raises = 2
 		maneuver = "armor_break"
+	elif (is_melee or target_in_melee) and attacker.spirit_creature != null \
+			and attacker.spirit_creature.has_tag("headbutt") \
+			and _npc_should_headbutt(state, target_id):
+		# Headbutt (s54.1 Goat): a goat drives off a STANDING intruder with a Knockdown. The
+		# Free Raise it gains for the attempt is applied to the contest in the post-hit block.
+		# Tag-gated, NOT skill-gated (a goat has combat skill 0 and never reaches the skill>=4
+		# Knockdown branch). Structural AI — the GDD gives no NPC maneuver policy.
+		raises = 2
+		maneuver = "knockdown_biped"
 	elif (is_melee or target_in_melee) and skill_rank >= 5 \
 			and _npc_should_disarm(state, target_id, target):
 		# Disarm (3 Raises): a very skilled attacker strips a dangerous ARMED foe's weapon
