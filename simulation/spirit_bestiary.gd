@@ -272,7 +272,7 @@ static func chikushudo_catalog() -> Dictionary:
 	c["spirit_snake"] = _make("spirit_snake", "Spirit Snake", SpiritCreatureData.Tier.MID,
 		1, 2, 1, 1, {"reflexes": 3, "agility": 3, "perception": 2},
 		3, 3, "Bite", 3, 3, 1, 1, 20, 0, [6], 12, 0,
-		["spirit", "chikushudo_spirit", "ambush", "venom", "concealment"], R)
+		["spirit", "chikushudo_spirit", "ambush", "venom_trait_drain", "concealment"], R)
 
 	# Named denizens (full s54.10 blocks — no overlay).
 	c["kitsune"] = _make("kitsune", "Kitsune", SpiritCreatureData.Tier.MID,
