@@ -2796,6 +2796,10 @@ static func execute_cast_spell(
 	var ts: TurnState = state.turn_states.get(caster_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
+	# s54.9 Obake Wasp Swarm: a swarmed caster is Dazed and cannot cast spells.
+	var caster_p_ws: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	if caster_p_ws != null and IndividualCombat.get_timed_modifier_total(caster_p_ws, "wasp_swarm") > 0:
+		return {"success": false, "reason": "wasp_swarm"}
 	if not SpellSystem.can_cast(caster, spell_id):
 		return {"success": false, "reason": "cannot_cast"}
 	# s35 cast-economy: Hurried Steps lets the next Fire ML<=3 cast be a Simple Action; The Element's
@@ -3296,6 +3300,10 @@ static func execute_cast_maho(
 	var ts = state.turn_states.get(caster_id, null)
 	if ts == null or not ts.can_use_complex():
 		return {"success": false, "reason": "no_complex_action"}
+	# s54.9 Obake Wasp Swarm: a swarmed maho-user is Dazed and cannot cast (checked before blood).
+	var caster_p_ws: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	if caster_p_ws != null and IndividualCombat.get_timed_modifier_total(caster_p_ws, "wasp_swarm") > 0:
+		return {"success": false, "reason": "wasp_swarm"}
 	# Effect-specific preconditions checked BEFORE paying blood (don't waste blood on an invalid cast):
 	# Bleeding reopens an existing wound; Blood Armor needs a living ally to sacrifice.
 	var _eff_kind: String = String(eff.get("kind", ""))
@@ -7551,6 +7559,12 @@ static func advance_round(
 			var _ac_c: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
 			if _ac_c != null and not CharacterStats.is_dead(_ac_c):
 				WoundSystem.apply_damage(_ac_c, dice_engine.roll_and_keep(ACID_VOMIT_DR_ROLLED, ACID_VOMIT_DR_KEPT, true).total, 0)
+		# s54.9 Obake Wasp Swarm: a swarmed victim takes 1k1 Wounds/Round automatically (armour does
+		# not reduce — the wasps burrow into the flesh). Persists until the skirmish ends.
+		if IndividualCombat.get_timed_modifier_total(_tp, "wasp_swarm") > 0:
+			var _ws_c: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
+			if _ws_c != null and not CharacterStats.is_dead(_ws_c):
+				WoundSystem.apply_damage(_ws_c, dice_engine.roll_and_keep(WASP_SWARM_DR_ROLLED, WASP_SWARM_DR_KEPT, true).total, 0)
 		# Gashadokuro Regeneration (s54.10): recover 10 Wounds at the start of each round,
 		# UNLESS a Wound threshold was crossed within the last 3 rounds (a section
 		# collapsed — _apply_hit set spirit_regen_suppressed_until).
@@ -8596,7 +8610,15 @@ static func execute_npc_turn(
 		if av.get("success", false):
 			actions_taken.append({"action": "acid_vomit", "result": av})
 			return {"actions": actions_taken}
-	
+
+	# -- Wasp Swarm (s54.9 Obake): a Complex-action swarm release (up to 60') that afflicts up to
+	# three fresh enemies with an automatic 1k1/Round wasp DoT + Dazed + no-cast; two swarms/skirmish.
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("wasp_swarm"):
+		var ws: Dictionary = _npc_maybe_wasp_swarm(state, npc_id, npc, dice_engine)
+		if ws.get("success", false):
+			actions_taken.append({"action": "wasp_swarm", "result": ws})
+			return {"actions": actions_taken}
+
 	# -- Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze that, on a won
 	# Contested Willpower, inflicts 1 full Rank of Taint on a mortal enemy (once each).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("taint_affliction"):
@@ -10607,6 +10629,79 @@ static func _npc_maybe_acid_vomit(
 	# Coat the target: 4k4/Round for 5 Rounds (advance_round ticks it; +1 so the first tick is next Round).
 	IndividualCombat.add_timed_modifier(t_p, "acid", 1, state.combat.round_number + 1 + ACID_VOMIT_ROUNDS, "acid_vomit")
 	return {"success": true, "hit": true, "victim": victim_id}
+
+
+## s54.9 Obake "Wasp Swarm": as a Complex Action the obake releases a vengeful swarm of angry
+## wasps (up to 60' = 12 tiles) that attacks up to THREE targets, inflicting 1k1 Wounds per Round
+## AUTOMATICALLY (no to-hit — the wasps burrow into flesh) and leaving each Dazed and unable to
+## cast spells. The obake controls enough wasps for TWO swarms at a time; a dispersed swarm cannot
+## be used again for a day (dispersal by an area-magic effect or a fire attack is a deferred cleanse,
+## like the acid's "washed away with water"), so a skirmish permits at most two releases. The
+## per-Round 1k1 tick runs in advance_round via the "wasp_swarm" timed modifier; the swarm persists
+## for the skirmish (there is no natural expiry — it swarms "so long as it remains"). A second
+## release spreads to fresh, un-swarmed foes. Zero-invention: every value is the GDD's own s54.9:143
+## constant (range 60', up to 3 targets, 1k1/Round automatic, Dazed + no-cast, two swarms).
+const WASP_SWARM_RANGE_TILES: int = 12   # up to 60' = 12 tiles (s54.9:143)
+const WASP_SWARM_MAX_TARGETS: int = 3    # "attacks up to three targets" (s54.9:143)
+const WASP_SWARM_DR_ROLLED: int = 1      # 1k1 Wounds/Round automatically (s54.9:143)
+const WASP_SWARM_DR_KEPT: int = 1
+const WASP_SWARM_MAX_SWARMS: int = 2     # "two swarms at a time" (s54.9:143)
+const WASP_SWARM_PERSIST: int = 9999     # skirmish-length (dispersal deferred — no natural expiry)
+static func _npc_maybe_wasp_swarm(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var op: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if op == null:
+		return {}
+	# The obake controls at most two swarms at a time (a per-skirmish release cap, tracked as a
+	# self timed modifier — dispersal-and-reuse is the deferred cleanse).
+	if IndividualCombat.get_timed_modifier_total(op, "wasp_swarm_count") >= WASP_SWARM_MAX_SWARMS:
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Gather living enemies within 60' that are NOT already swarmed (a second swarm spreads to fresh
+	# foes rather than re-covering the same victim), nearest first.
+	var cands: Array = []
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		var d := _chebyshev(cpos, state.positions[oid])
+		if d > WASP_SWARM_RANGE_TILES:
+			continue
+		var vp0: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+		if vp0 != null and IndividualCombat.get_timed_modifier_total(vp0, "wasp_swarm") > 0:
+			continue
+		cands.append({"id": oid, "d": d})
+	if cands.is_empty():
+		return {}
+	cands.sort_custom(func(a, b): return a["d"] < b["d"])
+	ts.consume_complex()
+	var expiry: int = state.combat.round_number + WASP_SWARM_PERSIST
+	# Mark this release against the two-swarm cap.
+	IndividualCombat.add_timed_modifier(op, "wasp_swarm_count", 1, expiry, "wasp_swarm")
+	var victims: Array = []
+	for i in range(mini(WASP_SWARM_MAX_TARGETS, cands.size())):
+		var tid: int = int(cands[i]["id"])
+		var t_p: IndividualCombat.Participant = state.combat.participants.get(tid, null)
+		if t_p == null:
+			continue
+		# The swarm ticks 1k1/Round (advance_round reads the modifier) and leaves the target Dazed +
+		# unable to cast (a timed Dazed persists — it is not rolled off — while the swarm lasts).
+		IndividualCombat.add_timed_modifier(t_p, "wasp_swarm", 1, expiry, "wasp_swarm")
+		IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_DAZED, expiry)
+		victims.append(tid)
+	return {"success": true, "hit": true, "victims": victims}
 
 
 # Black Fire (s54.5:379 Kyoso no Oni Spawn): "may hurl bolts of black fire at any foe within
