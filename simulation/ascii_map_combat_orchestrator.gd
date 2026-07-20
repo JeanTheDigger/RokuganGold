@@ -8547,6 +8547,15 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "possession", "result": poss})
 			return {"actions": actions_taken}
 
+	# -- Black Fire (s54.5 Kyoso no Oni Spawn): up to 4 Free bolts of soul-searing black fire at
+	# any foe within 50', each ignoring armour's effect on Armor TN AND Reduction, draining a
+	# Void Point (TN 15) and knocking out a foe drained to 0. Its whole turn (Multiple Arms).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("black_fire"):
+		var bf: Dictionary = _npc_maybe_black_fire(state, npc_id, npc, dice_engine)
+		if bf.get("success", false):
+			actions_taken.append({"action": "black_fire", "result": bf})
+			return {"actions": actions_taken}
+
 	# -- Strength of the Dead (s54.12 Wanyudo): a once-per-skirmish scream that Stuns nearby
 	# mortal enemies (Contested Willpower).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("strength_of_the_dead") and not p.scream_used:
@@ -10569,6 +10578,87 @@ static func _npc_maybe_acid_vomit(
 	# Coat the target: 4k4/Round for 5 Rounds (advance_round ticks it; +1 so the first tick is next Round).
 	IndividualCombat.add_timed_modifier(t_p, "acid", 1, state.combat.round_number + 1 + ACID_VOMIT_ROUNDS, "acid_vomit")
 	return {"success": true, "hit": true, "victim": victim_id}
+
+
+# Black Fire (s54.5:379 Kyoso no Oni Spawn): "may hurl bolts of black fire at any foe within
+# fifty feet ... ignore the effects of armor on the target's Armor TN and ignore Reduction.
+# Each time a foe is hit by black fire, he must make a Void roll at TN 15 or lose one Void Point.
+# If the bolt takes away his last Void Point (or he has none), he falls unconscious for one hour."
+# Multiple Arms: "up to four times in the same Round (once for each claw)" — Free actions, so
+# firing black fire is the spawn's whole turn (it forgoes its Claw attacks, per the GDD clause).
+const BLACK_FIRE_RANGE_TILES: int = 10  # 50'
+const BLACK_FIRE_ATK_ROLLED: int = 9    # Black Fire 9k5 to-hit
+const BLACK_FIRE_ATK_KEPT: int = 5
+const BLACK_FIRE_DMG_ROLLED: int = 3    # 3k2 damage
+const BLACK_FIRE_DMG_KEPT: int = 2
+const BLACK_FIRE_MAX_BOLTS: int = 4     # Multiple Arms
+const BLACK_FIRE_VOID_TN: int = 15
+static func _npc_maybe_black_fire(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	var bolts: Array = []
+	for _b in range(BLACK_FIRE_MAX_BOLTS):
+		# nearest living enemy within 50' (a `found` flag, NOT a negative-id sentinel — spirit-puppet
+		# enemies carry NEGATIVE ids, so a `victim_id < 0` "not found" test would skip every spirit foe)
+		var victim_id: int = 0
+		var found: bool = false
+		var best_d: int = 1 << 30
+		for oid: int in state.positions.keys():
+			if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+				continue
+			var v: L5RCharacterData = state.combatants.get(oid, null)
+			if v == null or CharacterStats.is_dead(v):
+				continue
+			var d: int = _chebyshev(cpos, state.positions[oid])
+			if d > BLACK_FIRE_RANGE_TILES:
+				continue
+			if d < best_d:
+				best_d = d
+				victim_id = oid
+				found = true
+		if not found:
+			break
+		var victim: L5RCharacterData = state.combatants.get(victim_id, null)
+		var t_p: IndividualCombat.Participant = state.combat.participants.get(victim_id, null)
+		if victim == null or t_p == null:
+			break
+		# to-hit vs Armor TN with armour's effect on Armor TN stripped ("ignore the effects of
+		# armor on the target's Armor TN"), floored at 5.
+		var to_hit: int = dice.roll_and_keep(BLACK_FIRE_ATK_ROLLED, BLACK_FIRE_ATK_KEPT, true).total
+		var atn: int = maxi(5, IndividualCombat.get_armor_tn(victim, t_p, dice, false, false, "") - maxi(0, victim.armor_tn_bonus))
+		if to_hit < atn:
+			bolts.append({"victim": victim_id, "hit": false, "roll": to_hit, "armor_tn": atn})
+			continue
+		# damage: 3k2, ignoring Reduction (the bolt "ignore[s] Reduction" → reduction 0)
+		var raw: int = dice.roll_and_keep(BLACK_FIRE_DMG_ROLLED, BLACK_FIRE_DMG_KEPT, true).total
+		var wd: Dictionary = WoundSystem.apply_damage(victim, raw, 0)
+		var bolt: Dictionary = {"victim": victim_id, "hit": true,
+			"wounds": wd.get("final_damage", raw), "dead": CharacterStats.is_dead(victim)}
+		# Void-drain rider (mortal targets — the soul-searing effect): Void roll TN 15 or lose 1 VP;
+		# if that drains the last point (or the foe had none) he falls unconscious for one hour.
+		if victim.spirit_creature == null and not CharacterStats.is_dead(victim):
+			var vr: int = maxi(1, CharacterStats.get_ring_value(victim, Enums.Ring.VOID))
+			var vroll: int = dice.roll_and_keep(vr, vr, true).total
+			if vroll < BLACK_FIRE_VOID_TN:
+				victim.current_void_points = maxi(0, victim.current_void_points - 1)
+				bolt["void_drained"] = true
+				if victim.current_void_points == 0:
+					# unconscious for one hour (600 rounds ≫ a skirmish); auto-wake-on-Void-regain
+					# has no combat producer, so the timer runs (documented limitation).
+					IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_INCAPACITATED,
+						state.combat.round_number + 60 * IndividualCombat.ROUNDS_PER_MINUTE)
+					bolt["unconscious"] = true
+		bolts.append(bolt)
+	if bolts.is_empty():
+		return {}
+	return {"success": true, "bolts": bolts}
 
 
 const GAZE_OF_TERROR_FEAR_RANK: int = 6  # s54.9:47
