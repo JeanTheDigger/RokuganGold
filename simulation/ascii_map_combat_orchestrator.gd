@@ -8790,6 +8790,11 @@ static func _npc_desired_stance(
 	# stance logic. Tag-gated (spirit-only).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("heedless_rage"):
 		return Enums.Stance.FULL_ATTACK
+	# s54.10 Relentless Aggression (Slaughter Spirit / Toshigokujin): cannot take ANY combat
+	# stance except Attack and Full Attack -- it can never turtle. Its skill-0 AI never seeks
+	# Full Attack on its own, so it fights in the aggressive Attack stance. Tag-gated (spirit).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("relentless_aggression"):
+		return Enums.Stance.ATTACK
 	var best_combat: int = 0
 	for skill_name: String in ["Kenjutsu", "Polearms", "Heavy Weapons", "Jiujutsu"]:
 		best_combat = maxi(best_combat, npc.skills.get(skill_name, 0))
