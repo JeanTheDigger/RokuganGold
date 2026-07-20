@@ -28,7 +28,7 @@ static func gaki_do_catalog() -> Dictionary:
 	c["usai_gaki_swarm"] = _make("usai_gaki_swarm", "Usai-gaki Swarm", SpiritCreatureData.Tier.SWARM,
 		1, 2, 1, 2, {"agility": 3},
 		3, 2, "Swarm Bite", 0, 0, 2, 1, 5, 10, [], 30, 0,
-		["spirit", "swarm", "area_denial", "automatic_hit", "fire_counter"])
+		["spirit", "swarm", "area_denial", "automatic_hit", "fire_double"])
 
 	c["jikininki"] = _make("jikininki", "Jikininki", SpiritCreatureData.Tier.MID,
 		2, 2, 2, 3, {"reflexes": 3, "agility": 3, "strength": 4},

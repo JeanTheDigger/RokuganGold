@@ -90,6 +90,12 @@ static func incoming_damage(creature: SpiritCreatureData, weapon_kind: String, i
 	if creature.has_tag("water_vulnerable") and weapon_kind == W_WATER:
 		mult = maxf(mult, 2.0)
 
+	# Usai-gaki Swarm (s54.10): "Fire Vulnerability — any fire source deals double damage."
+	# Distinct from the shadowlands "+1k1 extra fire" (fire_vulnerable, an additive, unwired
+	# here) — this is a clean ×2 multiplier, the exact mirror of water_vulnerable above.
+	if creature.has_tag("fire_double") and weapon_kind == W_FIRE:
+		mult = maxf(mult, 2.0)
+
 	return {"multiplier": mult, "heals": heals, "no_explode": no_explode}
 
 
