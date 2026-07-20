@@ -1492,6 +1492,13 @@ static func execute_melee_attack(
 		a_p.spirit_attack_kept_bonus += 1
 		a_p.spirit_damage_rolled_bonus += 1
 		a_p.spirit_damage_kept_bonus += 1
+	# Feeding Frenzy (s54.5 Wanizame no Oni): +2k2 to attack rolls against a target that has
+	# lost more than one Wound Rank (Grazed or worse). Attack-only; the "within 50'" clause is
+	# auto-satisfied for a melee bite (the target is adjacent). Tag-gated + target-condition-gated.
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("feeding_frenzy") \
+			and CharacterStats.get_wound_level(target) >= Enums.WoundLevel.GRAZED:
+		a_p.spirit_attack_rolled_bonus += 2
+		a_p.spirit_attack_kept_bonus += 2
 	# s54.10: a hidden creature (Mujina / Ephemeral Form) that attacks reveals itself —
 	# it is targetable through its next turn.
 	_reveal_if_hidden(state, attacker_id, a_p)
