@@ -8817,6 +8817,30 @@ static func execute_npc_turn(
 						_hg_p.gore_escape_rolled = 1
 						_hg_p.gore_escape_kept = 1
 						actions_taken.append({"action": "hook_grapple", "target": best_target})
+			# Multiple Tongues (s54.5 Akuma no Oni Spawn): "Can attack with all three
+			# tongues in the same Round, once with each tongue" — three Free-action
+			# Burning-Tongue strikes (8k4 to-hit, 2k2 damage each) in addition to the
+			# primary Claws. Free bonus strikes (bonus_attack=true, no action gate/
+			# consume — the tongues are Free Actions), each field-swapping the damage
+			# profile to the tongue 2k2 while the to-hit (8k4) is the creature's own
+			# attack profile (the GDD gives Claws and Tongues identical 8k4 to-hit).
+			# Each landed tongue routes through _apply_hit, whose already-wired
+			# burning_saliva arm sets the target on fire (the 1k1/round saliva DoT).
+			if mcr != null and mcr.has_tag("multiple_tongues") \
+					and target_in_melee and not CharacterStats.is_dead(target_char):
+				var _mt_dr: int = mcr.damage_rolled
+				var _mt_dk: int = mcr.damage_kept
+				mcr.damage_rolled = MULTIPLE_TONGUES_DMG_ROLLED
+				mcr.damage_kept = MULTIPLE_TONGUES_DMG_KEPT
+				for _tongue in range(MULTIPLE_TONGUES_COUNT):
+					if CharacterStats.is_dead(target_char):
+						break
+					var _mt: Dictionary = execute_melee_attack(
+						state, npc_id, best_target, npc, target_char, weapon_name,
+						0, dice_engine, "", false, true)
+					actions_taken.append({"action": "multiple_tongues", "result": _mt})
+				mcr.damage_rolled = _mt_dr
+				mcr.damage_kept = _mt_dk
 	elif ts.can_use_free_move() and not ts.is_down_restricted(wl):
 		# Can still use free move to get closer.
 		var free_budget: int = free_move_budget(state, npc_id, npc)
@@ -10876,6 +10900,14 @@ const BLACK_FIRE_DMG_ROLLED: int = 3    # 3k2 damage
 const BLACK_FIRE_DMG_KEPT: int = 2
 const BLACK_FIRE_MAX_BOLTS: int = 4     # Multiple Arms
 const BLACK_FIRE_VOID_TN: int = 15
+# Multiple Tongues (s54.5 Akuma no Oni Spawn): three Free-action Burning-Tongue
+# strikes per Round ("once with each tongue"), each 8k4 to-hit / 2k2 damage. The
+# to-hit (8k4) is the creature's own attack profile (the GDD gives Claws AND
+# Burning Tongues identical 8k4 to-hit), so only the damage is swapped to the
+# tongue's 2k2 for the bonus strikes.
+const MULTIPLE_TONGUES_COUNT: int = 3   # "all three tongues"
+const MULTIPLE_TONGUES_DMG_ROLLED: int = 2  # Burning Tongues 2k2 damage
+const MULTIPLE_TONGUES_DMG_KEPT: int = 2
 static func _npc_maybe_black_fire(
 	state: MapCombatState,
 	char_id: int,
