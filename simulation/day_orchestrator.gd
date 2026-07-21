@@ -2147,6 +2147,11 @@ static func advance_day(
 	# all letters sent this tick regardless of ordering.
 	_maintain_entanglements_from_letters(pending_letters, entanglements, ic_day)
 
+	# s57.47.5 (LOCKED): 3+ dishonorable-conduct offenses in a rolling 4-season window
+	# escalate to a Tier 4 "public misconduct" topic. Runs at end-of-tick so it sees every
+	# crime record created this day.
+	_process_dishonor_escalation(crime_records, characters_by_id, active_topics, next_topic_id, ic_day)
+
 	return {
 		"ic_day": ic_day,
 		"season": current_season,
@@ -14127,6 +14132,71 @@ static func _process_pc_mission_arrivals(
 			"engageable_seeds": engageable,
 		})
 	return out
+
+
+# -- Dishonorable-Conduct Escalation (s57.47.5, LOCKED) -----------------------
+# A samurai who commits dishonorable conduct 3+ times in a rolling 4-season window
+# escalates to formal censure: a Tier 4 topic "[Character] has become known for public
+# misconduct." Uses the existing CrimeSystem.check_escalation (ESCALATION_THRESHOLD=3,
+# ESCALATION_WINDOW_SEASONS=4) — previously test-only, never wired into the live loop.
+# Fires once per perpetrator while an escalation topic remains unresolved (dedup), so it
+# does not re-emit every subsequent offense.
+static func _process_dishonor_escalation(
+	crime_records: Array,
+	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
+) -> void:
+	# Group dishonorable-conduct records by perpetrator.
+	var by_perp: Dictionary = {}
+	for rec_v: Variant in crime_records:
+		var rec: CrimeRecord = rec_v as CrimeRecord
+		if rec == null or rec.crime_type != Enums.CrimeType.DISHONORABLE_CONDUCT:
+			continue
+		if rec.perpetrator_id < 0:
+			continue
+		if not by_perp.has(rec.perpetrator_id):
+			by_perp[rec.perpetrator_id] = []
+		by_perp[rec.perpetrator_id].append(rec)
+
+	for perp_id: int in by_perp:
+		if not CrimeSystem.check_escalation(
+				by_perp[perp_id], ic_day, InvestigationSystem.DAYS_PER_SEASON):
+			continue
+		var perp: L5RCharacterData = characters_by_id.get(perp_id)
+		if perp == null or CharacterStats.is_dead(perp):
+			continue
+		if _has_active_dishonor_escalation_topic(active_topics, perp_id):
+			continue  # already escalated (unresolved topic on file) — do not re-emit
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] = topic_id + 1
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			topic_id,
+			"%s has become known for public misconduct" % perp.character_name,
+			TopicData.Tier.TIER_4,
+			TopicData.Category.LEGAL,
+			ic_day,
+			TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
+			[],
+			perp.clan,
+			perp.family,
+			perp.character_id,
+			"dishonorable_conduct_escalation",
+			"",
+		)
+		topic.subject_role = "PERPETRATOR"
+		active_topics.append(topic)
+
+
+static func _has_active_dishonor_escalation_topic(active_topics: Array, perp_id: int) -> bool:
+	for t_v: Variant in active_topics:
+		var t: TopicData = t_v as TopicData
+		if t != null and not t.resolved \
+				and t.topic_type == "dishonorable_conduct_escalation" \
+				and t.subject_character_id == perp_id:
+			return true
+	return false
 
 
 # -- Auto-Conceal on Arrival (s12.8 CONCEAL_ITEM NPC Behavior) ----------------
