@@ -59,6 +59,29 @@ func on_pc_arrived(
 	return MissionEntryController.get_engageable_seeds(active_seeds)
 
 
+## Called by the session/net layer for a live (logged-in) PC using a
+## `pc_mission_arrivals` entry produced by DayOrchestrator._process_pc_mission_arrivals
+## (the Phase-1 daily arrival pass). The seeds are ALREADY classified in that entry
+## (`auto_seeds` / `engageable_seeds`), so this skips re-classification: it auto-launches
+## the first AUTO seed if present and idle, and returns the engageable PLAYER_INITIATED
+## seeds for the UI to offer. `arrival` is one entry:
+##   { pc_id, province_id, auto_seeds, engageable_seeds }.
+## The s56.19 "known, located" gate on PLAYER_INITIATED seeds is already enforced upstream
+## (QuestSeedSelector surfaces insurgency seeds only when `ins.detected`), so the engageable
+## list here is the set of world-known threats located in the PC's province.
+func on_pc_mission_arrival(
+		pc: L5RCharacterData,
+		province: ProvinceData,
+		province_history: Array,
+		arrival: Dictionary,
+		seed_str: String,
+) -> Array:
+	var auto: Array = arrival.get("auto_seeds", [])
+	if not auto.is_empty():
+		_launch(auto[0], province, province_history, pc, seed_str)
+	return arrival.get("engageable_seeds", [])
+
+
 ## Player fires ENGAGE_MISSION (1 AP) against a located player-initiated seed.
 ## Spends the AP and launches the mission. Returns true on launch.
 func engage(

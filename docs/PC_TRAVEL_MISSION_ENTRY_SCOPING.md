@@ -47,10 +47,16 @@ Original scope note (now satisfied): **In scope, no networking, no new design de
   producer.
 
 ### Phase 2 — Session/UI glue: actually launch the mission
-**Needs a Godot runtime + the session layer.** Drive `MissionFlow.on_pc_arrived`
-(or its pending-arrival equivalent) from Phase-1 output → `CombatScreen.start_mission`.
-Verify `MissionFlow` under Godot (it is currently unrun scaffolding). This is where an
-AUTO mission visibly launches for a live PC and where `ENGAGE_MISSION` becomes playable.
+**Needs a Godot runtime + the session layer.** Entry point added 2026-07-21:
+`MissionFlow.on_pc_mission_arrival(pc, province, province_history, arrival, seed_str)`
+consumes a Phase-1 `pc_mission_arrivals` entry directly (pre-classified seeds), auto-launches
+the first AUTO seed via `CombatScreen.start_mission`, and returns the engageable list.
+⚠ Like the rest of `MissionFlow` this is unverified scaffolding — it parse-checks but has
+never run under Godot; it must be exercised in a live Godot/session run before being relied
+on. **Remaining for Phase 2:** the session/net layer that, for each logged-in PC, looks up
+`province` / `province_history` / `seed_str` and calls this method — plus verifying the whole
+`MissionFlow` → `CombatScreen` → `AsciiMapView` chain under a real runtime. That runtime
+layer is networking/UI and cannot be validated in the headless environment.
 
 ### Phase 3 — Player-facing MUD navigation
 **Networking/UI.** Destination selection (MUD command) → `TravelSystem.begin_travel`,
@@ -69,10 +75,13 @@ side (`request_zone_move_to`, zone descriptions) partly exists.
    crossing (firing seeds in provinces merely passed through) needs a sub-tile route
    path, a Section-C map-data blocker. Decision: accept boundary-crossing ≈
    travel-completion for now, or hold that sub-trigger until sub-tile routes exist?
-3. **PLAYER_INITIATED discovery gate.** s56.19 says the PC assaults a "known, located
-   threat." Is the engageable-seed list gated on the PC's knowledge
-   (`met_characters` / topics, s22.3 / s29.15.24), or surfaced for any active
-   in-province seed? This is an undesigned gate — needs an owner rule.
+3. **PLAYER_INITIATED discovery gate — RESOLVED 2026-07-21 (interpretation).** s56.19 says
+   the PC assaults a "known, located threat." This is satisfied by the existing world-level
+   detection gate: `QuestSeedSelector.select_province_seeds` surfaces insurgency-sourced
+   seeds only when `ins.detected` is true, so the engageable list is exactly the set of
+   world-known threats located in the PC's province. No per-PC knowledge gate is added
+   (a detected insurgency is public knowledge). Owner may veto if a finer per-PC gate
+   (met_characters / topics) is wanted — the GDD language does not require it.
 4. **Target networking architecture.** `NetworkManager` is the pre-existing RPC layer
    built while networking was out of scope. Before building navigation on it, confirm
    the intended stack (ENet? WebSocket? single-player-first?) — CLAUDE.md's networking
