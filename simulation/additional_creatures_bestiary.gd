@@ -252,7 +252,7 @@ static func catalog() -> Dictionary:
 	c["sting_ray"] = _make("sting_ray", "Sting Ray (Kosen o Sasu)", SpiritCreatureData.Tier.SWARM,
 		1, 1, 0, 1, {"agility": 2, "perception": 2},
 		2, 2, "Stinger", 3, 2, 2, 1, 10, 0, [10], 20, 0,
-		["animal", "aquatic", "poison_stinger"], 1, _N)
+		["animal", "aquatic", "dazing_sting"], 1, _N)
 
 	c["blue_whale"] = _make("blue_whale", "Blue Whale (Kujira)", SpiritCreatureData.Tier.HEAVY,
 		2, 7, 2, 4, {"agility": 3},

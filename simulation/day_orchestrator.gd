@@ -1742,14 +1742,37 @@ static func advance_day(
 			military_seasonal_result.get("demotions", []),
 			characters_by_id, companies,
 		)
+		# s57.21 Stage 3 T3-tier demotion: a disloyal generated Taisa/Shireikan (disposition toward
+		# their appointing lord < -10) is removed for political reasons, exactly as the company pass
+		# above removes a Chui -- but at the Legion/Section tier the company pass never reaches. The
+		# vacated legion/section (commander_id -> -1) feeds the command-refill cascade below.
+		var command_demotion_results: Array = _process_military_command_demotions(
+			military_legions, military_sections, characters_by_id,
+		)
+		_apply_command_demotion_results(
+			command_demotion_results, characters_by_id, military_legions, military_sections,
+		)
+		military_seasonal_result["command_demotions"] = command_demotion_results
+		# Seed the refill's `claimed` set with this season's T3-demoted officers so a just-removed
+		# commander is not re-appointed into a vacated seat the same tick (see _process_military_command_refill).
+		# `demotion_slot_predecessors` (unit_id -> demoted commander id) lets the refill inherit each
+		# demotion-vacated seat's superior + role from the just-removed officer (the raw unit's
+		# commander_id is now -1, so the corpse-inheritance shortcut cannot see the predecessor).
+		var demoted_this_season: Dictionary = {}
+		var demotion_slot_predecessors: Dictionary = {}
+		for demo: Dictionary in command_demotion_results:
+			demoted_this_season[int(demo.get("commander_id", -1))] = true
+			demotion_slot_predecessors[int(demo.get("unit_id", -1))] = int(demo.get("commander_id", -1))
 		# s57.21.3 command-vacancy refill: a dead generated Legion/Section commander (Taisa/Shireikan)
 		# leaves the persistent raw unit's commander_id naming the corpse -- the read-time liveness bake
 		# fires the vacant-superior gate, but the slot must be REFILLED or it stays leaderless forever.
-		# Reuses the promotion machinery (no invention); eligibility now accrues via the live s11.7a
-		# battle_record producer. Runs after promotion/demotion so a same-season promoted/demoted
-		# character's command state is settled before the refill scan.
+		# It also fills a seat vacated by the Stage 3 T3 demotion just above. Reuses the promotion
+		# machinery (no invention); eligibility now accrues via the live s11.7a battle_record producer.
+		# Runs after promotion/demotion so a same-season promoted/demoted character's command state is
+		# settled before the refill scan.
 		var command_refill_results: Array = _process_military_command_refill(
 			military_legions, military_sections, characters_by_id,
+			demoted_this_season, demotion_slot_predecessors,
 		)
 		_apply_command_refill_results(
 			command_refill_results, military_legions, military_sections, characters_by_id, companies,
@@ -18329,6 +18352,84 @@ static func _apply_demotion_results(
 				break
 
 
+# s57.21 Stage 3 (LOCKED s11.7 "Demotion and Removal"): the T3-tier (Legion/Section) demotion pass --
+# the top-tier counterpart to _process_military_demotions, which reaches only the Company tier (it
+# iterates `companies`, and a Taisa commands a LEGION / a Shireikan a SECTION, both in the raw
+# military_legions/military_sections arrays that pass never sees). So a generated Taisa/Shireikan who
+# comes to loathe their appointing lord kept command forever -- the exact gap the company-tier removal
+# already closes for a Chui/Gunso. A T3 commander whose disposition toward their appointing lord
+# (commander.lord_id, the same axis the company pass reads) drops below the removal threshold is marked
+# for removal. Application (_apply_command_demotion_results) reuses the canonical apply_demotion arbiter
+# (clears military_rank + commanded_unit_id, -DEMOTION_GLORY_LOSS Glory; a removed Rikugunshokan-who-is-
+# also-a-Family-Daimyo keeps their feudal position -- only the military fields are touched) and vacates
+# the raw unit (commander_id -> -1), which feeds the command-refill cascade below. No invented values:
+# the -10 threshold and -0.5 Glory are MilitaryPromotionSystem's own, shared with the company pass.
+static func _process_military_command_demotions(
+	legions_raw: Array,
+	sections_raw: Array,
+	characters_by_id: Dictionary,
+) -> Array:
+	var results: Array = []
+	_gather_command_demotions(legions_raw, "legion_id", characters_by_id, results)
+	_gather_command_demotions(sections_raw, "section_id", characters_by_id, results)
+	return results
+
+
+static func _gather_command_demotions(
+	units_raw: Array,
+	id_key: String,
+	characters_by_id: Dictionary,
+	results: Array,
+) -> void:
+	for unit: Dictionary in units_raw:
+		var commander_id: int = int(unit.get("commander_id", -1))
+		if commander_id < 0:
+			continue
+		var commander: L5RCharacterData = characters_by_id.get(commander_id)
+		if commander == null or CharacterStats.is_dead(commander):
+			continue
+		var lord_id: int = commander.lord_id
+		if lord_id < 0:
+			continue  # No appointing lord to be disaffected with.
+		var disp: int = int(commander.disposition_values.get(lord_id, 0))
+		if MilitaryPromotionSystem.should_remove_for_disposition(disp):
+			results.append({
+				"unit_id": int(unit.get(id_key, -1)),
+				"id_key": id_key,
+				"commander_id": commander_id,
+			})
+
+
+static func _apply_command_demotion_results(
+	demotion_results: Array,
+	characters_by_id: Dictionary,
+	legions_raw: Array,
+	sections_raw: Array,
+) -> void:
+	for demo: Dictionary in demotion_results:
+		var char_id: int = int(demo.get("commander_id", -1))
+		var unit_id: int = int(demo.get("unit_id", -1))
+		var id_key: String = demo.get("id_key", "")
+		var character: L5RCharacterData = characters_by_id.get(char_id)
+		if character == null:
+			continue
+		var view: Dictionary = {
+			"military_rank": character.military_rank,
+			"commanded_unit_id": character.commanded_unit_id,
+		}
+		var applied: Dictionary = MilitaryPromotionSystem.apply_demotion(view)
+		character.military_rank = view.get("military_rank", Enums.MilitaryRank.NONE)
+		character.commanded_unit_id = int(view.get("commanded_unit_id", -1))
+		HonorGlorySystem.apply_glory_change(character, -float(applied.get("glory_loss", 0.0)))
+		# Vacate the raw unit so the command-refill cascade fills it (next scan). ids are disjoint
+		# across tiers (Stage 1), so id_key unambiguously selects legions vs sections.
+		var target: Array = legions_raw if id_key == "legion_id" else sections_raw
+		for unit: Dictionary in target:
+			if int(unit.get(id_key, -1)) == unit_id:
+				unit["commander_id"] = -1
+				break
+
+
 static func _gather_promotion_candidates(
 	vacancy: Dictionary,
 	characters_by_id: Dictionary,
@@ -18395,14 +18496,25 @@ static func _process_military_command_refill(
 	legions_raw: Array,
 	sections_raw: Array,
 	characters_by_id: Dictionary,
+	pre_claimed: Dictionary = {},
+	slot_predecessors: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 	# A candidate claimed by one vacancy this pass must not be selected for another (the compute phase
 	# reads live commanded_unit_id, which is only mutated at apply time). Shared across both tiers so a
-	# Chui promoted into a Legion is not also drafted into a Section this same season.
-	var claimed: Dictionary = {}
-	_refill_unit_tier(legions_raw, "legion_id", Enums.MilitaryRank.TAISA, characters_by_id, claimed, results)
-	_refill_unit_tier(sections_raw, "section_id", Enums.MilitaryRank.SHIREIKAN, characters_by_id, claimed, results)
+	# Chui promoted into a Legion is not also drafted into a Section this same season. `pre_claimed` is
+	# seeded with the officers just removed by this season's T3 demotion (Stage 3), so a disloyal
+	# Taisa/Shireikan removed this tick is not re-appointed into a vacated seat the same season -- their
+	# disposition toward the lord is still < -10, so a same-season re-appointment would only re-demote
+	# them next season (pure churn). They are free again next season, by which point the seat is filled.
+	# `slot_predecessors` (unit_id -> demoted commander id) lets a DEMOTION-vacated seat inherit the
+	# slot's superior + role: the dead-commander path reads them from the corpse still named by the raw
+	# unit, but a demotion vacates the raw commander_id to -1, so the (alive, rank-cleared) demoted
+	# officer -- whose operational_superior_id/role_position apply_demotion leaves intact -- is the slot
+	# predecessor. Reuses their OWN slot values (no invention), exactly as the dead path reuses the corpse.
+	var claimed: Dictionary = pre_claimed.duplicate()
+	_refill_unit_tier(legions_raw, "legion_id", Enums.MilitaryRank.TAISA, characters_by_id, claimed, results, slot_predecessors)
+	_refill_unit_tier(sections_raw, "section_id", Enums.MilitaryRank.SHIREIKAN, characters_by_id, claimed, results, slot_predecessors)
 	return results
 
 
@@ -18413,6 +18525,7 @@ static func _refill_unit_tier(
 	characters_by_id: Dictionary,
 	claimed: Dictionary,
 	results: Array,
+	slot_predecessors: Dictionary = {},
 ) -> void:
 	for unit: Dictionary in units_raw:
 		var commander_id: int = unit.get("commander_id", -1)
@@ -18441,11 +18554,16 @@ static func _refill_unit_tier(
 		if new_id < 0:
 			continue
 		claimed[new_id] = true
-		# Inherit the dead predecessor's slot (superior + role); only the person changes. A dead
-		# character is not removed from characters_by_id, so the predecessor record is still readable.
+		# Inherit the predecessor's slot (superior + role); only the person changes. Dead-commander
+		# refill: the corpse still named by the raw unit's commander_id carries them. Demotion-vacated
+		# refill: the raw commander_id is now -1, so fall back to the slot_predecessors map -- the alive,
+		# rank-cleared demoted officer whose op_superior/role apply_demotion left intact.
+		var pred_id: int = commander_id
+		if commander_id < 0 and slot_predecessors.has(unit_id):
+			pred_id = int(slot_predecessors[unit_id])
 		var op_superior: int = -1
 		var role: String = ""
-		var predecessor: L5RCharacterData = characters_by_id.get(commander_id)
+		var predecessor: L5RCharacterData = characters_by_id.get(pred_id)
 		if predecessor != null:
 			op_superior = predecessor.operational_superior_id
 			role = predecessor.role_position

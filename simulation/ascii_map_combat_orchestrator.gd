@@ -1164,6 +1164,7 @@ static func execute_climb_stairs(
 ## Melee attack on target_id. Costs a Complex action.
 ## maneuver: "" / "increased_damage" / "disarm" / "feint" /
 ##           "knockdown_biped" / "knockdown_quad" /
+##           "armor_break" (s54.6 Zokujin) /
 ##           "called_shot_limb" / "called_shot_hand" / "called_shot_head" /
 ##           "called_shot_small" / "extra_attack" / "guard"
 # Victory of the River (s30a, multi_victory_river_armor_pierce). All values GDD-given.
@@ -1475,6 +1476,29 @@ static func execute_melee_attack(
 	a_p.spirit_attack_kept_bonus += charge_atk_bonus
 	a_p.spirit_damage_rolled_bonus += charge_dmg_bonus
 	a_p.spirit_damage_kept_bonus += charge_dmg_bonus
+	# Berserker Rage (s54.9 Goblin Berserker): on the first two Rounds of the skirmish the
+	# berserker adds +1k1 to its attack rolls (ending at the Reactions Stage of the second
+	# Round). Time-gated only -- no state trigger. Stacks on any aura/charge attack bonus.
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("berserker_rage") \
+			and state.combat.round_number <= 2:
+		a_p.spirit_attack_rolled_bonus += 1
+		a_p.spirit_attack_kept_bonus += 1
+	# Blood Frenzy (s54.1 Sharks): once there is blood in the water (any combatant has
+	# taken Wounds), the shark rolls +1k1 for all Attack and Damage rolls. State-gated,
+	# tag-gated. Stacks on any aura/charge attack bonus.
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("blood_frenzy") \
+			and _blood_in_the_water(state):
+		a_p.spirit_attack_rolled_bonus += 1
+		a_p.spirit_attack_kept_bonus += 1
+		a_p.spirit_damage_rolled_bonus += 1
+		a_p.spirit_damage_kept_bonus += 1
+	# Feeding Frenzy (s54.5 Wanizame no Oni): +2k2 to attack rolls against a target that has
+	# lost more than one Wound Rank (Grazed or worse). Attack-only; the "within 50'" clause is
+	# auto-satisfied for a melee bite (the target is adjacent). Tag-gated + target-condition-gated.
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("feeding_frenzy") \
+			and CharacterStats.get_wound_level(target) >= Enums.WoundLevel.GRAZED:
+		a_p.spirit_attack_rolled_bonus += 2
+		a_p.spirit_attack_kept_bonus += 2
 	# s54.10: a hidden creature (Mujina / Ephemeral Form) that attacks reveals itself —
 	# it is targetable through its next turn.
 	_reveal_if_hidden(state, attacker_id, a_p)
@@ -1507,9 +1531,30 @@ static func execute_melee_attack(
 	atk_pen += SkillMasterySystem.chain_vs_restrained_bonus(
 		String(IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")),
 		int(attacker.skills.get("Chain Weapons", 0)), tgt_restrained)
+	# Tsuno Blade (s54.6/s54.2): the jagged Tsuno sword gains +1k0 to the attack roll against any
+	# opponent who has at least one Rank of Taint, the Spirit quality, or the Touch of the Spirit
+	# Realms Advantage. The tag marks the wielder (a Tsuno fights only with its Tsuno Blade), so
+	# the bonus rides the same rolled-die channel as the high-ground / chain-weapon bonuses.
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("tsuno_blade") \
+			and (MutationSystem.get_taint_rank(target.taint) >= 1 or target.spirit_creature != null \
+				or AdvantageSystem.has_advantage(target, Enums.Advantage.TOUCH_OF_THE_SPIRIT_REALMS)):
+		atk_pen += 1
 	# Defender mount/size for the mounted +1k0 (s40) and Burning Kiss of Steel +2k2 (s35).
 	var tgt_mounted: bool = t_p != null and IndividualCombat.CONDITION_MOUNTED in t_p.conditions
 	var tgt_large: bool = AdvantageSystem.has_advantage(target, Enums.Advantage.LARGE)
+	# Furious Charge (s54.1 Ox): the first Turn after it is wounded, the ox reacts with fury,
+	# charging the source of its pain -- for that one turn it suffers NO Wound Penalties and adds +10
+	# to its attack roll. A one-time surge (once per skirmish); once it passes, normal penalties resume.
+	# "First Turn after wounded" == the first attack the ox makes while carrying any wound.
+	var furious_active: bool = false
+	if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("furious_charge") \
+			and attacker.wounds_taken > 0 and not a_p.furious_charge_done:
+		furious_active = true
+		a_p.furious_charge_done = true
+		# ignore Wound Penalties this turn (round-scoped negate; the multi-attack Trample benefits too)
+		IndividualCombat.add_timed_modifier(a_p, "negate_wound_penalty", 1, state.combat.round_number + 1, "furious_charge")
+		# +10 to the attack roll TOTAL via the s54.4 flat channel (temp-swap, restored below)
+		attacker.spirit_creature.attack_flat_bonus += 10
 	var result: Dictionary = IndividualCombat.resolve_attack(
 		attacker, a_p, weapon_name, armor_tn, raises, dice_engine,
 		false, spend_void, tgt_mounted, maneuver,
@@ -1540,6 +1585,8 @@ static func execute_melee_attack(
 		if soh.get("rerolled", false):
 			result = soh["result"]
 			soh_rerolled = true
+	if furious_active:
+		attacker.spirit_creature.attack_flat_bonus -= 10  # restore the stat-block flat bonus (covers all rerolls)
 
 	var log_entry: Dictionary = {
 		"type": "melee_attack",
@@ -1579,6 +1626,16 @@ static func execute_melee_attack(
 		# (Defense) vs its TN or is splattered for the oni's burning-blood damage.
 		if int(dmg_result.get("wounds", 0)) > 0:
 			_apply_burning_blood(attacker, target, weapon_name, dice_engine)
+
+		# Corrosive Sap (s54.9 Lava Tree): a MELEE attacker who DAMAGES the tree is
+		# splattered with acid sap for a fixed 1k1 Wounds (no save; within 5' = adjacency).
+		if int(dmg_result.get("wounds", 0)) > 0:
+			_apply_corrosive_sap(attacker, target, weapon_name, dice_engine)
+		# Shock (s54.9 Sanshu Denki / Sea Troll): anyone TOUCHING the creature with bare
+		# flesh or metal (a melee hit = adjacency + contact) suffers 3k1 Wounds, once per
+		# Round per character (no save; not wound-gated — touching, not damaging).
+		_apply_shock(attacker, a_p, target, weapon_name, dice_engine)
+
 
 		# Swallow Whole / Devour (s54.5): a wounding melee hit by a swallow creature wins a
 		# Contested Strength to engulf the victim (per-round damage applied in advance_round).
@@ -1634,6 +1691,29 @@ static func execute_melee_attack(
 		# opponent -3 to all rolls during their next Turn.
 		_apply_strength_of_the_spider(attacker, a_p, t_p, dmg_result.get("wounds", 0))
 
+		# Eye Attack (s54.1 Falcon): a strike dealing 10+ Wounds temporarily blinds the target
+		# (blood and pain) until the injury is treated with Medicine or magically healed. No
+		# in-combat cure exists, so the Blinded runs the skirmish (advance_round_reactions never
+		# rolls off Blinded). DEFERRED: 20+ Wounds destroys the eye (Missing Eye disadvantage) —
+		# the tile-combat puppet carries no Missing Eye field.
+		if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("eye_attack") \
+			and t_p != null and not CharacterStats.is_dead(target) \
+			and int(dmg_result.get("wounds", 0)) >= EYE_ATTACK_BLIND_WOUNDS \
+			and IndividualCombat.CONDITION_BLINDED not in t_p.conditions:
+			IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_BLINDED)
+
+		# Eye Strike (s54.12 Night Heron): a beak strike dealing MORE than 10 Wounds strikes and
+		# destroys the foe's eye — the combat consequence is blindness. The destroyed eye is a
+		# permanent Missing Eye disadvantage; the tile-combat puppet carries no Missing Eye field,
+		# so (as with the Falcon's 20+ half) the permanence is DEFERRED and the manifestation is a
+		# persistent Blinded (advance_round_reactions never rolls off Blinded, so it runs the
+		# skirmish). Threshold >10 (= >= EYE_STRIKE_DESTROY_WOUNDS, the GDD's "more than 10").
+		if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("eye_strike") \
+			and t_p != null and not CharacterStats.is_dead(target) \
+			and int(dmg_result.get("wounds", 0)) >= EYE_STRIKE_DESTROY_WOUNDS \
+			and IndividualCombat.CONDITION_BLINDED not in t_p.conditions:
+			IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_BLINDED)
+
 		# Knockdown maneuver: contested Strength if hit.
 		if maneuver in ["knockdown_biped", "knockdown_quad"]:
 			# s34 The Mountain's Feet: defender's knockdown_resist buff adds extra rolled/kept dice.
@@ -1642,6 +1722,11 @@ static func execute_melee_attack(
 			# s24 Heavy Weapons R5: Free Raise toward Knockdown (+5 to the attacker's roll).
 			var atk_skill_kd: String = IndividualCombat.get_weapon_profile(weapon_name).get("skill", "")
 			var kd_mastery_fr: int = SkillMasterySystem.maneuver_free_raises(atk_skill_kd, int(attacker.skills.get(atk_skill_kd, 0)), "knockdown")
+			# Headbutt (s54.1 Goat): a headbutting goat gains a Free Raise for Knockdown
+			# attempts (+5 to the Contested-Strength knockdown roll, the established Free-Raise
+			# mapping the Rhino/s24 mastery use). Tag-gated, borne by the goat alone.
+			if attacker.spirit_creature != null and attacker.spirit_creature.has_tag("headbutt"):
+				kd_mastery_fr += 1
 			var kd: Dictionary = IndividualCombat.resolve_knockdown(
 				attacker, target, maneuver == "knockdown_quad", dice_engine, kd_mastery_fr * 5, kdr_r, kdr_k
 			)
@@ -1658,7 +1743,13 @@ static func execute_melee_attack(
 		# Disarm maneuver (s40, 3 Raises; banked Free Raises reduce the requirement). On a
 		# won Contested Strength the target's weapon hits the ground (persistent disarmed
 		# state — they fight unarmed until they recover it).
-		if maneuver == "disarm":
+		# s54.5 Genso no Oni Obsidian Daisho: its blades are spiritually bonded, so the creature
+		# "may not be targeted with the Disarm Maneuver" (s54.5:111). The maneuver is negated
+		# outright — the weapon is never knocked loose. Defender-side, tag-gated (sole bearer).
+		if maneuver == "disarm" and target.spirit_creature != null and target.spirit_creature.has_tag("no_disarm"):
+			result["disarm_immune"] = true
+			log_entry["disarm_immune"] = true
+		elif maneuver == "disarm":
 			# Consume any Free Raises banked toward a Disarm against this target
 			# (s40 weapon-grapple lose-control risk / Earthen Fist).
 			var disarm_free: int = a_p.disarm_free_raises_pending
@@ -1677,6 +1768,18 @@ static func execute_melee_attack(
 			else:
 				result["disarm_insufficient_raises"] = true
 
+		# Armor Break (s54.6 Zokujin, 2 Raises): a landed 2-Raise attack Earthshapes and destroys
+		# the target's WORN armor. Damage this hit still used the armor's Reduction (applied above);
+		# the armor is gone for subsequent hits. A creature wears no armor (armor_worn == null), so
+		# its natural hide/Reduction is untouched. Awakened/artifact armor would resist, but no such
+		# flag is tracked, so all worn armor is affected (documented limitation, no invention).
+		if maneuver == "armor_break" and target.armor_worn != null:
+			target.armor_tn_bonus = maxi(0, target.armor_tn_bonus - target.armor_worn.tn_bonus)
+			target.armor_reduction = maxi(0, target.armor_reduction - target.armor_worn.reduction)
+			target.armor_worn = null
+			result["armor_destroyed"] = true
+			log_entry["armor_destroyed"] = true
+
 	# Earthen Fist (s38 Earth): if an opponent's melee attack against the caster MISSES,
 	# the caster (who must be in Defense/Full Defense) may attempt a Disarm next Turn for
 	# no Raises — armed here via the existing disarm_free_raises_pending track.
@@ -1684,6 +1787,21 @@ static func execute_melee_attack(
 			and (t_p.stance == Enums.Stance.DEFENSE or t_p.stance == Enums.Stance.FULL_DEFENSE):
 		t_p.disarm_free_raises_pending = 3
 		result["earthen_fist_disarm_armed"] = true
+
+	# Weapon Break (s54.6 Zokujin): a metal-or-stone weapon that attacks the Zokujin and
+	# MISSES its Armor TN by 10 or more is warped, twisted, and useless -- added to the
+	# attacker's broken_weapons (-> unarmed fallback). Uses the BASE Armor TN (pre-raises),
+	# so an attack that only failed the attacker's declared Raises does not break the weapon.
+	# Magically awakened weapons are exempt, but no such flag is tracked (documented
+	# limitation, no invention), so all metal/stone weapons are affected.
+	if not result.get("hit", false) and target.spirit_creature != null \
+			and target.spirit_creature.has_tag("weapon_break") \
+			and _weapon_is_metal_or_stone(weapon_name) \
+			and int(result.get("roll", 0)) <= armor_tn - 10 \
+			and weapon_name not in a_p.broken_weapons:
+		a_p.broken_weapons.append(weapon_name)
+		result["weapon_broken"] = true
+		log_entry["weapon_broken"] = true
 
 	# Bishamon's Grasp (s38): record this attacker on the defender (who attacked me since
 	# my last Turn) so the defender can free-grapple them on their Turn.
@@ -1696,6 +1814,8 @@ static func execute_melee_attack(
 	a_p.spirit_damage_rolled_bonus = 0
 	a_p.spirit_attack_kept_bonus = 0
 	a_p.spirit_damage_kept_bonus = 0
+	a_p.spirit_attack_flat_bonus = 0
+	a_p.spirit_damage_flat_bonus = 0
 
 	if not bonus_attack:
 		if using_granted_attack:
@@ -2694,6 +2814,10 @@ static func execute_cast_spell(
 	var ts: TurnState = state.turn_states.get(caster_id, null)
 	if ts == null:
 		return {"success": false, "reason": "not_in_combat"}
+	# s54.9 Obake Wasp Swarm: a swarmed caster is Dazed and cannot cast spells.
+	var caster_p_ws: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	if caster_p_ws != null and IndividualCombat.get_timed_modifier_total(caster_p_ws, "wasp_swarm") > 0:
+		return {"success": false, "reason": "wasp_swarm"}
 	if not SpellSystem.can_cast(caster, spell_id):
 		return {"success": false, "reason": "cannot_cast"}
 	# s35 cast-economy: Hurried Steps lets the next Fire ML<=3 cast be a Simple Action; The Element's
@@ -3194,6 +3318,10 @@ static func execute_cast_maho(
 	var ts = state.turn_states.get(caster_id, null)
 	if ts == null or not ts.can_use_complex():
 		return {"success": false, "reason": "no_complex_action"}
+	# s54.9 Obake Wasp Swarm: a swarmed maho-user is Dazed and cannot cast (checked before blood).
+	var caster_p_ws: IndividualCombat.Participant = state.combat.participants.get(caster_id, null)
+	if caster_p_ws != null and IndividualCombat.get_timed_modifier_total(caster_p_ws, "wasp_swarm") > 0:
+		return {"success": false, "reason": "wasp_swarm"}
 	# Effect-specific preconditions checked BEFORE paying blood (don't waste blood on an invalid cast):
 	# Bleeding reopens an existing wound; Blood Armor needs a living ally to sacrifice.
 	var _eff_kind: String = String(eff.get("kind", ""))
@@ -6880,6 +7008,62 @@ static func _apply_wreathed_in_flames(
 	return dmg
 
 
+## Corrosive Sap (s54.9 Lava Tree): "If a lava tree is damaged, it leaks a viscous red sap
+## that inflicts 1k1 Wounds to the attacker if within 5'." A MELEE attacker (adjacent =
+## within 5') who deals net Wounds to the tree is splattered for a fixed 1k1 (no save; armour
+## does not reduce acid splatter — the retaliation-splatter convention). Ranged attackers
+## (not within 5') take nothing. Inert unless the struck TARGET is a corrosive_sap creature;
+## the wounds-dealt gate is applied at the call site ("if a lava tree is damaged").
+static func _apply_corrosive_sap(
+	attacker: L5RCharacterData,
+	target: L5RCharacterData,
+	weapon_name: String,
+	dice: DiceEngine,
+) -> int:
+	if target.spirit_creature == null or not target.spirit_creature.has_tag("corrosive_sap"):
+		return 0
+	if CharacterStats.is_dead(attacker):
+		return 0
+	if not IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+		return 0  # ranged attackers are not within 5'
+	var dmg: int = dice.roll_and_keep(1, 1, true).total
+	WoundSystem.apply_damage(attacker, dmg, 0)
+	return dmg
+
+
+## Shock (s54.9 Sanshu Denki / Sea Troll no Umibozu): "Anyone touching the [creature]
+## with bare flesh or metal objects suffers 3k1 Wounds ... This can affect each character
+## only once per Round." A MELEE hit (adjacency + contact) splatters the attacker for a
+## fixed 3k1 (no save; armour does not reduce — the retaliation-splatter convention),
+## once per Round per attacker (guarded via kata_used_this_round). Ranged attackers do
+## not touch the creature. Inert unless the struck TARGET is a `shock` creature.
+## DEFERRED (documented, not invented): the "-5 Initiative until the next Round's Reactions
+## Stage" clause (the engine re-rolls initiative each Round and has only a persistent
+## initiative_modifier, so a one-Round init drop has no faithful home), and the metal-vs-
+## wood distinction (WEAPON_CATALOG has no material field; every melee weapon is a touch,
+## which is the established no-invention convention — the shock also fires unarmed).
+static func _apply_shock(
+	attacker: L5RCharacterData,
+	a_p: IndividualCombat.Participant,
+	target: L5RCharacterData,
+	weapon_name: String,
+	dice: DiceEngine,
+) -> int:
+	if target.spirit_creature == null or not target.spirit_creature.has_tag("shock"):
+		return 0
+	if CharacterStats.is_dead(attacker):
+		return 0
+	if not IndividualCombat.get_weapon_profile(weapon_name).get("melee", true):
+		return 0  # ranged attackers are not touching the creature
+	if a_p != null and a_p.kata_used_this_round.get("shock", false):
+		return 0  # affects each character only once per Round
+	var dmg: int = dice.roll_and_keep(3, 1, true).total
+	WoundSystem.apply_damage(attacker, dmg, 0)
+	if a_p != null:
+		a_p.kata_used_this_round["shock"] = true
+	return dmg
+
+
 ## Swallow Whole / Devour (s54.5 Muduro/Kamu/Tsuburu/Utogu): on a wounding melee hit the
 ## swallow creature wins a Contested Strength (creature vs victim) to engulf the victim —
 ## who is Grappled (creature in control) and takes swallow damage each Round (advance_round)
@@ -7387,6 +7571,18 @@ static func advance_round(
 			var _bl_c: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
 			if _bl_c != null and not CharacterStats.is_dead(_bl_c):
 				WoundSystem.apply_damage(_bl_c, _bleed_amt, 0)
+		# s54.5 Hasaiki Vomit: a coat of volatile acid inflicts 4k4 Wounds/Round for 5 Rounds
+		# (a fresh roll each Round; armour does not reduce the acid — the shared splatter convention).
+		if IndividualCombat.get_timed_modifier_total(_tp, "acid") > 0:
+			var _ac_c: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
+			if _ac_c != null and not CharacterStats.is_dead(_ac_c):
+				WoundSystem.apply_damage(_ac_c, dice_engine.roll_and_keep(ACID_VOMIT_DR_ROLLED, ACID_VOMIT_DR_KEPT, true).total, 0)
+		# s54.9 Obake Wasp Swarm: a swarmed victim takes 1k1 Wounds/Round automatically (armour does
+		# not reduce — the wasps burrow into the flesh). Persists until the skirmish ends.
+		if IndividualCombat.get_timed_modifier_total(_tp, "wasp_swarm") > 0:
+			var _ws_c: L5RCharacterData = chars_by_id.get(_tp.character_id, state.combatants.get(_tp.character_id, null))
+			if _ws_c != null and not CharacterStats.is_dead(_ws_c):
+				WoundSystem.apply_damage(_ws_c, dice_engine.roll_and_keep(WASP_SWARM_DR_ROLLED, WASP_SWARM_DR_KEPT, true).total, 0)
 		# Gashadokuro Regeneration (s54.10): recover 10 Wounds at the start of each round,
 		# UNLESS a Wound threshold was crossed within the last 3 rounds (a section
 		# collapsed — _apply_hit set spirit_regen_suppressed_until).
@@ -8383,12 +8579,87 @@ static func execute_npc_turn(
 			actions_taken.append({"action": "possession", "result": poss})
 			return {"actions": actions_taken}
 
+	# -- Black Fire (s54.5 Kyoso no Oni Spawn): up to 4 Free bolts of soul-searing black fire at
+	# any foe within 50', each ignoring armour's effect on Armor TN AND Reduction, draining a
+	# Void Point (TN 15) and knocking out a foe drained to 0. Its whole turn (Multiple Arms).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("black_fire"):
+		var bf: Dictionary = _npc_maybe_black_fire(state, npc_id, npc, dice_engine)
+		if bf.get("success", false):
+			actions_taken.append({"action": "black_fire", "result": bf})
+			return {"actions": actions_taken}
+
+	# -- Mob Leader (s54.9 Goblin Warmonger / King): a Complex-action Intimidation shout that
+	# rallies nearby goblins with +1k0 (or +2k0 on a big roll) to attack AND damage until the
+	# warmonger's next Turn. Its whole turn (the leader commands rather than swings).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("mob_leader"):
+		var ml: Dictionary = _npc_maybe_mob_leader(state, npc_id, npc, dice_engine)
+		if ml.get("success", false):
+			actions_taken.append({"action": "mob_leader", "result": ml})
+			return {"actions": actions_taken}
+
 	# -- Strength of the Dead (s54.12 Wanyudo): a once-per-skirmish scream that Stuns nearby
 	# mortal enemies (Contested Willpower).
 	if npc.spirit_creature != null and npc.spirit_creature.has_tag("strength_of_the_dead") and not p.scream_used:
 		var scr: Dictionary = _npc_maybe_scream(state, npc_id, npc, dice_engine)
 		if scr.get("success", false):
 			actions_taken.append({"action": "scream", "result": scr})
+			return {"actions": actions_taken}
+
+	# -- Electrical Jolt (s54.12 Eel / Den Unagi): a once-per-skirmish electrical burst.
+	# Anyone within 10' (2 tiles) suffers 2k1 Wounds and rolls Earth vs TN 20 or is Stunned.
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("electrical_jolt") and not p.ranged_aoe_used:
+		var jolt: Dictionary = _npc_maybe_electrical_jolt(state, npc_id, npc, dice_engine)
+		if jolt.get("success", false):
+			actions_taken.append({"action": "electrical_jolt", "result": jolt})
+			return {"actions": actions_taken}
+
+	# -- Gaze of Terror (s54.9 Garegosu no Bakemono): a Complex-action gaze that singles out one
+	# living, non-blind enemy and inflicts a Fear 6 effect (Willpower vs TN 35).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("gaze_of_terror"):
+		var got: Dictionary = _npc_maybe_gaze_of_terror(state, npc_id, npc, chars_by_id, dice_engine)
+		if got.get("success", false):
+			actions_taken.append({"action": "gaze_of_terror", "result": got})
+			return {"actions": actions_taken}
+
+	# -- Fear Enhancement (s54.5 Ianwa no Oni): once per encounter, magnify its Fear effect against a
+	# single target to Fear 8 (Willpower vs TN 45). A mental fear (not a gaze), so blind targets are
+	# affected; the enhanced fear persists for the skirmish (no stated duration).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("fear_enhancement") and not p.fear_enhancement_used:
+		var fe: Dictionary = _npc_maybe_fear_enhancement(state, npc_id, npc, chars_by_id, dice_engine)
+		if fe.get("success", false):
+			actions_taken.append({"action": "fear_enhancement", "result": fe})
+			return {"actions": actions_taken}
+
+	# -- Vomit (s54.5 Hasaiki no Oni): a Complex-action acid spit (max 50') that coats a fresh enemy
+	# with a 4k4/Round-for-5-Rounds acid DoT (to-hit ignores armour's effect on Armor TN).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("acid_vomit"):
+		var av: Dictionary = _npc_maybe_acid_vomit(state, npc_id, npc, dice_engine)
+		if av.get("success", false):
+			actions_taken.append({"action": "acid_vomit", "result": av})
+			return {"actions": actions_taken}
+
+	# -- Wasp Swarm (s54.9 Obake): a Complex-action swarm release (up to 60') that afflicts up to
+	# three fresh enemies with an automatic 1k1/Round wasp DoT + Dazed + no-cast; two swarms/skirmish.
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("wasp_swarm"):
+		var ws: Dictionary = _npc_maybe_wasp_swarm(state, npc_id, npc, dice_engine)
+		if ws.get("success", false):
+			actions_taken.append({"action": "wasp_swarm", "result": ws})
+			return {"actions": actions_taken}
+
+	# -- Earthquake (s54.12 Yobuko): a Complex-action landslide/earthquake, identical to the spell
+	# Earthquake — 2k1 Wounds + Prone to every combatant on the map except the Yobuko itself.
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("earthquake"):
+		var eq: Dictionary = _npc_maybe_earthquake(state, npc_id, npc, dice_engine)
+		if eq.get("success", false):
+			actions_taken.append({"action": "earthquake", "result": eq})
+			return {"actions": actions_taken}
+
+	# -- Terror of Fu Leng (s54.4 Moto Tsume): a Complex-action wave of supernatural terror that
+	# afflicts EVERYONE within line of sight (both factions) with a Fear 10 effect.
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("terror_of_fu_leng"):
+		var tfl: Dictionary = _npc_maybe_terror_of_fu_leng(state, npc_id, npc, dice_engine)
+		if tfl.get("success", false):
+			actions_taken.append({"action": "terror_of_fu_leng", "result": tfl})
 			return {"actions": actions_taken}
 
 	# -- Taint Affliction (s54.5 Gagoze): a Complex-action burning gaze that, on a won
@@ -8528,6 +8799,48 @@ static func execute_npc_turn(
 						if _tk.get("knocked_down", false):
 							IndividualCombat.apply_condition(_tk_p, IndividualCombat.CONDITION_PRONE)
 							actions_taken.append({"action": "tail_swipe_knockdown", "target": best_target})
+				# Hook Grapple (s54.11 Harionago): her Hair Hooks (the second) attack Grapples
+				# the foe — "If the Harionago hits an opponent with her hair hooks, she will use
+				# them to Grapple the enemy. She can use her claw attacks to damage a Grappled
+				# foe. An opponent who succeeds in breaking free suffers 1k1 Wounds as the hooks
+				# are pulled free" (GDD s54.11:37). Scoped to the SECOND (hair-hooks) strike, not
+				# the primary Claws (which damage the grappled foe), by hooking here after the
+				# multi-attack — exactly like the sibling tail_knockdown. Reuses the Entangle +
+				# gore-escape-payout pipeline: Entangled blocks the foe's movement (she claws it
+				# each turn), and setting the victim's gore_escape dice makes
+				# attempt_entangle_escape pay the 1k1 on a successful Strength break.
+				if mcr.has_tag("hook_grapple") and atk2.get("hit", false) \
+						and not CharacterStats.is_dead(target_char):
+					var _hg_p: IndividualCombat.Participant = state.combat.participants.get(best_target, null)
+					if _hg_p != null and IndividualCombat.CONDITION_ENTANGLED not in _hg_p.conditions:
+						IndividualCombat.apply_condition(_hg_p, IndividualCombat.CONDITION_ENTANGLED)
+						_hg_p.gore_escape_rolled = 1
+						_hg_p.gore_escape_kept = 1
+						actions_taken.append({"action": "hook_grapple", "target": best_target})
+			# Multiple Tongues (s54.5 Akuma no Oni Spawn): "Can attack with all three
+			# tongues in the same Round, once with each tongue" — three Free-action
+			# Burning-Tongue strikes (8k4 to-hit, 2k2 damage each) in addition to the
+			# primary Claws. Free bonus strikes (bonus_attack=true, no action gate/
+			# consume — the tongues are Free Actions), each field-swapping the damage
+			# profile to the tongue 2k2 while the to-hit (8k4) is the creature's own
+			# attack profile (the GDD gives Claws and Tongues identical 8k4 to-hit).
+			# Each landed tongue routes through _apply_hit, whose already-wired
+			# burning_saliva arm sets the target on fire (the 1k1/round saliva DoT).
+			if mcr != null and mcr.has_tag("multiple_tongues") \
+					and target_in_melee and not CharacterStats.is_dead(target_char):
+				var _mt_dr: int = mcr.damage_rolled
+				var _mt_dk: int = mcr.damage_kept
+				mcr.damage_rolled = MULTIPLE_TONGUES_DMG_ROLLED
+				mcr.damage_kept = MULTIPLE_TONGUES_DMG_KEPT
+				for _tongue in range(MULTIPLE_TONGUES_COUNT):
+					if CharacterStats.is_dead(target_char):
+						break
+					var _mt: Dictionary = execute_melee_attack(
+						state, npc_id, best_target, npc, target_char, weapon_name,
+						0, dice_engine, "", false, true)
+					actions_taken.append({"action": "multiple_tongues", "result": _mt})
+				mcr.damage_rolled = _mt_dr
+				mcr.damage_kept = _mt_dk
 	elif ts.can_use_free_move() and not ts.is_down_restricted(wl):
 		# Can still use free move to get closer.
 		var free_budget: int = free_move_budget(state, npc_id, npc)
@@ -8595,6 +8908,17 @@ static func _npc_desired_stance(
 	wound_level: int,
 	chars_by_id: Dictionary,
 ) -> Enums.Stance:
+	# s54.5 Heedless Rage (Wakeru no Oni + its lesser split-spawn): the demon fights with
+	# heedless abandon, paying no attention to defense (destruction only makes it stronger
+	# via Endless Horde) -- it ALWAYS uses Full Attack in combat. Overrides all wound/ally
+	# stance logic. Tag-gated (spirit-only).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("heedless_rage"):
+		return Enums.Stance.FULL_ATTACK
+	# s54.10 Relentless Aggression (Slaughter Spirit / Toshigokujin): cannot take ANY combat
+	# stance except Attack and Full Attack -- it can never turtle. Its skill-0 AI never seeks
+	# Full Attack on its own, so it fights in the aggressive Attack stance. Tag-gated (spirit).
+	if npc.spirit_creature != null and npc.spirit_creature.has_tag("relentless_aggression"):
+		return Enums.Stance.ATTACK
 	var best_combat: int = 0
 	for skill_name: String in ["Kenjutsu", "Polearms", "Heavy Weapons", "Jiujutsu"]:
 		best_combat = maxi(best_combat, npc.skills.get(skill_name, 0))
@@ -8819,6 +9143,58 @@ static func _npc_should_knockdown(state: MapCombatState, target_id: int, target:
 	return best >= 3  # a competent melee opponent worth disrupting
 
 
+# Armor Break is worthwhile only against a target that actually WEARS armor to destroy
+# (a creature/unarmored fighter has nothing to Earthshape). Structural AI heuristic — the
+# GDD gives no NPC policy; the Zokujin attempts it whenever there is worn armor to break.
+static func _npc_should_armor_break(target: L5RCharacterData) -> bool:
+	return target.armor_worn != null
+
+
+# A goat's Headbutt (s54.1) drives off a STANDING intruder — a Prone target is already down,
+# so there is nothing to knock down. Tag-gated (no skill requirement; a goat fights unskilled).
+static func _npc_should_headbutt(state: MapCombatState, target_id: int) -> bool:
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(target_id, null)
+	return t_p != null and not IndividualCombat.has_condition(t_p, IndividualCombat.CONDITION_PRONE)
+
+
+# Weapon Break (s54.6 Zokujin) warps only a weapon "made of metal or stone", so a bare
+# hand/claw, or a wood/bamboo weapon (bokken, shinai, and the wooden Staves category), is
+# never affected. Material is a factual property of each named weapon type (no invention);
+# every other melee weapon (blades, knives, axes, spears, polearms, chains, war fan) is
+# metal/stone. Ranged/thrown weapons are excluded (not melee — they never reach this path).
+static func _weapon_is_metal_or_stone(weapon_name: String) -> bool:
+	if weapon_name == "" or weapon_name == "unarmed":
+		return false
+	if weapon_name == "bokken" or weapon_name == "shinai":
+		return false
+	var prof: Dictionary = IndividualCombat.get_weapon_profile(weapon_name)
+	if not bool(prof.get("melee", false)):
+		return false
+	if String(prof.get("skill", "")) == "Staves":
+		return false
+	return true
+
+
+# s54.5 Quiet Death "Amorphous" — a cutting/slashing weapon is a rigid BLADED-EDGE weapon
+# (a formless jelly with no vital organs is barely harmed by cutting; there is nothing to
+# sever). Classification is by each weapon's real type — the same per-weapon-type factual
+# reading the weapon_break metal/stone helper uses, NOT an invented value: swords cut (the
+# wooden bokken/shinai excluded), the bladed knives cut (tanto/aiguchi/kama — NOT the blunt
+# sai/jitte parrying truncheons), the glaive polearms cut (naginata/bisento/nagamaki — NOT
+# the sasumata/sadegarami restraining forks), and the axes cut (masakiri/ono — NOT the
+# crushing tetsubo/dai_tsuchi). Spears (piercing), staves/war fan/unarmed (bludgeoning),
+# chain weapons (flexible/binding), and ranged weapons are NOT cutting. A creature's natural
+# attack ("Claws"/"Bite"/"Touch", not a catalog key) is likewise not a cutting WEAPON.
+const _CUTTING_WEAPONS: Array = [
+	"katana", "wakizashi", "no_dachi", "ninja_to", "parangu", "scimitar",  # swords
+	"tanto", "aiguchi", "kama",                                            # bladed knives
+	"naginata", "bisento", "nagamaki",                                     # glaive polearms
+	"masakiri", "ono",                                                     # axes
+]
+static func _weapon_is_cutting(weapon_name: String) -> bool:
+	return weapon_name in _CUTTING_WEAPONS
+
+
 # Disarm is worthwhile only against a still-armed, HIGH-threat melee fighter (best melee
 # skill >= 4). A weapon strip neutralizes them for a turn (recovery costs an action) and
 # leaves them fighting unarmed. Structural AI heuristic — the GDD gives no NPC policy.
@@ -8939,6 +9315,23 @@ static func _npc_execute_attack(
 		# 5 Raises dedicated to Extra Attack; no other raise benefit (GDD s40).
 		# s24 Knives R7: one Free Raise toward Extra Attack lowers the Raises to declare.
 		raises = 5 - SkillMasterySystem.maneuver_free_raises(skill_name, skill_rank, "extra_attack")
+	elif (is_melee or target_in_melee) and attacker.spirit_creature != null \
+			and attacker.spirit_creature.has_tag("armor_break") \
+			and _npc_should_armor_break(target):
+		# Armor Break (2 Raises, s54.6 Zokujin): a Stonehunter/Shaman Earthshapes an enemy's WORN
+		# armor — a landed attack with 2 called Raises destroys it (in addition to damage). Fired
+		# whenever the target wears armor (the Zokujin signature). Structural AI (no GDD NPC policy).
+		raises = 2
+		maneuver = "armor_break"
+	elif (is_melee or target_in_melee) and attacker.spirit_creature != null \
+			and attacker.spirit_creature.has_tag("headbutt") \
+			and _npc_should_headbutt(state, target_id):
+		# Headbutt (s54.1 Goat): a goat drives off a STANDING intruder with a Knockdown. The
+		# Free Raise it gains for the attempt is applied to the contest in the post-hit block.
+		# Tag-gated, NOT skill-gated (a goat has combat skill 0 and never reaches the skill>=4
+		# Knockdown branch). Structural AI — the GDD gives no NPC maneuver policy.
+		raises = 2
+		maneuver = "knockdown_biped"
 	elif (is_melee or target_in_melee) and skill_rank >= 5 \
 			and _npc_should_disarm(state, target_id, target):
 		# Disarm (3 Raises): a very skilled attacker strips a dangerous ARMED foe's weapon
@@ -9615,6 +10008,8 @@ static func _set_spirit_attack_auras(
 	a_p.spirit_damage_rolled_bonus = 0
 	a_p.spirit_attack_kept_bonus = 0
 	a_p.spirit_damage_kept_bonus = 0
+	a_p.spirit_attack_flat_bonus = 0
+	a_p.spirit_damage_flat_bonus = 0
 	var cr: SpiritCreatureData = attacker.spirit_creature
 	if cr == null:
 		return
@@ -9627,6 +10022,12 @@ static func _set_spirit_attack_auras(
 	var mob_count: int = 1 if SpiritAbilitySystem.has_mob_aggression(cr) else 0
 	var rally_in_range: bool = false
 	var supreme_in_range: bool = false
+	var commanding_in_range: bool = false
+	var swarm_self: bool = cr.has_tag("swarm_attack")
+	var acumen_self: bool = cr.has_tag("battlefield_acumen")
+	var acumen_count: int = 0  # other Nosloc no Oni within 50 feet (10 tiles)
+	var swarm_count: int = 1 if (swarm_self and target_id >= 0) else 0
+	var tpos: Vector2i = state.positions.get(target_id, Vector2i(-9999, -9999))
 	for cid: int in state.combat.participants:
 		if cid == attacker.character_id:
 			continue
@@ -9644,6 +10045,13 @@ static func _set_spirit_attack_auras(
 		if d <= SpiritAbilitySystem.SUPREME_COMMANDER_RADIUS \
 				and SpiritAbilitySystem.is_supreme_commander(ally.spirit_creature):
 			supreme_in_range = true
+		if d <= 20 and ally.spirit_creature.has_tag("commanding_presence"):  # s54.10: 20 tiles
+			commanding_in_range = true
+		if acumen_self and d <= 10 and ally.spirit_creature.has_tag("battlefield_acumen"):  # 50 feet
+			acumen_count += 1
+		if swarm_self and target_id >= 0 and ally.spirit_creature.has_tag("swarm_attack") \
+				and _chebyshev(state.positions.get(cid, Vector2i(-9999, -9999)), tpos) <= 1:
+			swarm_count += 1
 
 	# Mob Aggression: 3+ mob_frenzy creatures within 5 tiles → +1k0 Attack each.
 	if SpiritAbilitySystem.has_mob_aggression(cr) and mob_count >= SpiritAbilitySystem.MOB_MIN_COUNT:
@@ -9656,6 +10064,11 @@ static func _set_spirit_attack_auras(
 	if supreme_in_range and SpiritAbilitySystem.is_toshigoku_musha(cr):
 		atk_bonus += 1
 		dmg_bonus += 1
+	# Commanding Presence (s54.10 Hengeyokai Spirit Lord): all spirit animals within 20 tiles
+	# of the spirit lord fight with +1k0 Attack while it is present. Beneficiary must be a
+	# chikushudo_spirit (the lord itself is NOT so tagged -> not self-buffed, like the General).
+	if commanding_in_range and cr.has_tag("chikushudo_spirit"):
+		atk_bonus += 1
 	# Tactical Mastery (the Ancient General itself, adapts): +1k0 after 3 rounds vs a
 	# target, +2k0 after 6. Track distinct rounds engaged against this target.
 	if cr.has_tag("adapts") and target_id >= 0:
@@ -9667,6 +10080,20 @@ static func _set_spirit_attack_auras(
 			state.tactical_engaged[key] = rec
 		atk_bonus += SpiritAbilitySystem.tactical_mastery_bonus(cr, int(rec["count"]))
 
+	# Swarm Attack (s54.9 Hanemuri): for every 3 swarm creatures attacking a single opponent,
+	# each gains +1k0 to its attack rolls (the flock's voracious ferocity). Counts co-faction
+	# swarm_attack allies in melee range of the target, plus the attacker itself. Tag-gated;
+	# a lone hanemuri gains nothing (faithful -- "alone they are cowardly").
+	if swarm_self and target_id >= 0:
+		atk_bonus += int(swarm_count / 3.0)
+	# Battlefield Acumen (s54.5 Nosloc no Oni): for every OTHER Nosloc no Oni within 50 feet,
+	# +1 to the TOTAL of all attack AND damage rolls (a self-reinforcing pack aura). Flat-total,
+	# not dice -- read in resolve_attack (flat_bonus) / resolve_damage (total). Tag-gated: only a
+	# Nosloc gains it, counting only other Nosloc. (Battle Skill Rolls are mass-battle, no tile
+	# consumer -- deferred.)
+	if acumen_self:
+		a_p.spirit_attack_flat_bonus = acumen_count
+		a_p.spirit_damage_flat_bonus = acumen_count
 	a_p.spirit_attack_rolled_bonus = atk_bonus
 	a_p.spirit_damage_rolled_bonus = dmg_bonus
 
@@ -9676,6 +10103,16 @@ static func _set_spirit_attack_auras(
 ## spirit attacker's co-located allies at attack time.
 static func _ally_lookup(state: MapCombatState, cid: int) -> L5RCharacterData:
 	return state.combatants.get(cid, null)
+
+
+# s54.1 Blood Frenzy: "blood in the water" -- true once any combatant has been wounded
+# (the whole aquatic encounter is in the water, so any bleeding combatant triggers it).
+static func _blood_in_the_water(state: MapCombatState) -> bool:
+	for cid: int in state.combat.participants:
+		var c: L5RCharacterData = _ally_lookup(state, cid)
+		if c != null and c.wounds_taken > 0:
+			return true
+	return false
 
 
 ## s54.10 invisibility/intangibility: an invisible (Mujina) or insubstantial
@@ -9968,6 +10405,186 @@ static func _npc_maybe_scream(
 				stunned += 1
 	return {"success": true, "stunned": stunned}
 
+## Electrical Jolt (s54.12 Eel / Den Unagi): the eel unleashes a jolt of electricity "once
+## per day" (once per skirmish here). Anyone within 10' (= 2 tiles) suffers 2k1 Wounds and
+## must roll Earth at TN 20 or be Stunned. Indiscriminate ("anyone in the water" -> both
+## factions AND spirit combatants; the Eel is Aquatic, so every combatant present is in the
+## water). Armour does not reduce the jolt (an electric shock in water bypasses armour, the
+## shared burst-splatter convention). Consumes the eel's Complex Action (it discharges instead
+## of biting), fired when at least one enemy is within range. Once-per-skirmish via the shared
+## ranged_aoe_used flag (the Eel bears no ranged_aoe_radius, so it never touches the Cauldron
+## Belch path -> no collision).
+static func _npc_maybe_electrical_jolt(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var p: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if p == null or p.ranged_aoe_used:
+		return {}
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Only worth discharging if a living enemy is within 10' (2 tiles).
+	var has_enemy: bool = false
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		if _chebyshev(cpos, state.positions[oid]) <= 2:
+			has_enemy = true
+			break
+	if not has_enemy:
+		return {}
+	ts.consume_complex()
+	p.ranged_aoe_used = true
+	# Discharge: every living combatant within 2 tiles (both factions/types), except the eel.
+	var hit: int = 0
+	var stunned: int = 0
+	for oid: int in state.positions.keys():
+		if oid == char_id:
+			continue
+		if _chebyshev(cpos, state.positions[oid]) > 2:
+			continue
+		var c: L5RCharacterData = state.combatants.get(oid, null)
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var dmg: int = dice.roll_and_keep(2, 1, true).total
+		WoundSystem.apply_damage(c, dmg, 0)
+		hit += 1
+		if CharacterStats.is_dead(c):
+			continue
+		var ce: int = maxi(1, CharacterStats.get_ring_value(c, Enums.Ring.EARTH))
+		if dice.roll_and_keep(ce, ce, true).total < 20:
+			var vp: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+			if vp != null:
+				IndividualCombat.apply_condition(vp, IndividualCombat.CONDITION_STUNNED)
+				stunned += 1
+	return {"success": true, "hit": hit, "stunned": stunned}
+
+
+
+## Earthquake (s54.12 Yobuko): a wrathful mountain spirit triggers a landslide/avalanche/earthquake
+## to drive intrusive mortals out of its territory. GDD s54.12: "requires a Complex Action and
+## produces a mechanical effect identical to the spell Earthquake." Reuses the already-wired
+## SPELL_COMBAT_EFFECTS["earthquake"] (Earth 5, s34): 2k1 Wounds + knocked Prone to EVERY combatant
+## on the map EXCEPT the Yobuko itself (the caster alone is unaffected). No frequency cap — the GDD
+## states only "a Complex Action" (matching the sibling creature-turn Complex hooks, no per-encounter
+## limit). The 6k6-inside-buildings debris and "Stunned" halves are s34-spell sub-parts the shared
+## effect entry does not carry (the effect uses the Prone rider only), so they are not modeled here.
+static func _npc_maybe_earthquake(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Only worth triggering if a living enemy is present (radius 99 = whole map, so any distance).
+	var has_enemy: bool = false
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		has_enemy = true
+		break
+	if not has_enemy:
+		return {}
+	ts.consume_complex()
+	# Identical to the spell Earthquake: 2k1 + Prone, whole-map AoE, caster unaffected. Passing
+	# target_id=-1/target=null is safe — a self-centered AoE (aoe_radius>0, range_tiles 0) never
+	# dereferences the target in _gather_spell_targets.
+	var hits: Array = _apply_spell_combat_damage(
+		state, char_id, character, -1, null,
+		SpellSystem.SPELL_COMBAT_EFFECTS["earthquake"], "earthquake", dice)
+	return {"success": true, "hits": hits}
+
+
+## Terror of Fu Leng (s54.4 Moto Tsume, akutenshi, sole bearer, s54.4:107): "The akutenshi unleashes a
+## wave of monstrous, supernatural terror that freezes the blood of everyone within sight. Activating
+## this power is a Complex Action and it affects everyone within line of sight. All targets are afflicted
+## with a Fear 10 effect." A Complex-action, faction-agnostic AoE fear: EVERY living combatant (both
+## factions/types, EXCLUDING the akutenshi itself) that the caster has line of sight to rolls its
+## Willpower (+ the full fear-resist stack — Kshatriya/buff Willpower/rolled/kept bonuses + the timed
+## fear_resist modifiers) vs TN 55 (5 + 10*5, s22.3) and, on a fail, is Afraid (−1k0 to all rolls); an
+## immune_to_fear target is exempt. The GDD states no expiry, so the fear persists for the skirmish
+## (round + 9999 — the same no-stated-duration Fear convention as _apply_fear_burst / Fear Enhancement
+## / maho Inspire Fear). The wave is worth a Turn only when at least one living enemy is within sight
+## (else the akutenshi acts otherwise). Fear 10 is the exact GDD rating; the per-target fear mechanic is
+## byte-for-byte the same one gaze_of_terror / _apply_fear_burst use (a self-contained inline copy — the
+## established _npc_maybe_* fear convention — so no shared primitive is disturbed).
+const TERROR_OF_FU_LENG_FEAR_RANK: int = 10  # s54.4:107 (Fear 10)
+static func _npc_maybe_terror_of_fu_leng(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Only worth unleashing if a living enemy is within line of sight.
+	var has_visible_enemy: bool = false
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		if _has_los(state.map, cpos, state.positions[oid]):
+			has_visible_enemy = true
+			break
+	if not has_visible_enemy:
+		return {}
+	ts.consume_complex()
+	# Fear 10 on EVERYONE within line of sight (both factions/types), except the akutenshi itself.
+	var tn: int = 5 + TERROR_OF_FU_LENG_FEAR_RANK * 5
+	var afraid: Array = []
+	var resisted: Array = []
+	for oid: int in state.positions.keys():
+		if oid == char_id:
+			continue
+		var c: L5RCharacterData = state.combatants.get(oid, null)
+		if c == null or CharacterStats.is_dead(c) or c.immune_to_fear:
+			continue
+		if not _has_los(state.map, cpos, state.positions[oid]):
+			continue
+		var tp: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+		if tp == null:
+			continue
+		var wp: int = maxi(1, c.willpower + c.fear_resist_willpower_bonus)
+		var fr_roll: int = IndividualCombat.get_timed_modifier_total(tp, "fear_resist_rolled")
+		var fr_kept: int = IndividualCombat.get_timed_modifier_total(tp, "fear_resist_kept")
+		var resist: int = dice.roll_and_keep(
+				wp + c.fear_resist_rolled_bonus + fr_roll,
+				wp + c.fear_resist_kept_bonus + fr_kept, true).total
+		if resist >= tn:
+			resisted.append(oid)
+			continue
+		IndividualCombat.add_timed_modifier(tp, "spell_afraid", 1, state.combat.round_number + 9999, "terror_of_fu_leng")
+		if IndividualCombat.CONDITION_AFRAID not in tp.conditions:
+			tp.conditions.append(IndividualCombat.CONDITION_AFRAID)
+		afraid.append(oid)
+	return {"success": true, "afraid": afraid, "resisted": resisted}
+
 
 ## Spirit Leeching (s54.5 Kommei): a Simple-action soul-fog. Marks each mortal enemy within
 ## 5 ft (1 tile) with a spirit_leech affliction lasting the oni's Air Ring in Rounds. Each
@@ -10127,6 +10744,434 @@ static func _npc_maybe_taint_gaze(
 		victim.taint = minf(100.0, victim.taint + 1.0)
 		return {"success": true, "victim": victim_id, "tainted": true}
 	return {"success": true, "victim": victim_id, "tainted": false}
+
+
+## Gaze of Terror (s54.9 Garegosu no Bakemono): a Complex-action gaze that singles out one
+## living enemy and inflicts a FEAR 6 effect (s54.9:47). The gaze does not affect a blind
+## target (or one immune to Fear). The victim rolls Willpower (+ fear-resist bonuses/modifiers)
+## vs TN 5 + 6*5 = 35 (s22.3 Fear TN); a failure sets a persistent spell_afraid + AFRAID (-1k0)
+## that apply_fear_checks maintains until the timed modifier expires "at the Reactions stage of
+## the following Round" (round + 2). Returns {} if not attempted.
+## Vomit (s54.5 Hasaiki no Oni, the Burning Sea): a Complex-action ranged spit of extremely
+## volatile acid, max range 50' (10 tiles), that IGNORES armour's effect on Armor TN for the
+## to-hit (s54.5:261). The Vomit is a 3k3 attack roll (s54.5:259); on a hit it coats the target,
+## who then suffers 4k4 Wounds/Round for 5 Rounds via the "acid" timed modifier (the per-Round
+## roll runs in advance_round; armour does not reduce the splatter). Skips an already-coated foe
+## (the 5-Round coat already covers them) and spits at the nearest fresh one instead. Returns {}.
+const ACID_VOMIT_RANGE_TILES: int = 10   # 50' = 10 tiles (s54.5:261)
+const ACID_VOMIT_ATK_ROLLED: int = 3     # Vomit 3k3 to-hit (s54.5:259)
+const ACID_VOMIT_ATK_KEPT: int = 3
+const ACID_VOMIT_DR_ROLLED: int = 4      # 4k4 Wounds/Round (s54.5:261)
+const ACID_VOMIT_DR_KEPT: int = 4
+const ACID_VOMIT_ROUNDS: int = 5         # persists for five Rounds (s54.5:261)
+const EYE_ATTACK_BLIND_WOUNDS: int = 10  # s54.1:87 (10+ Wounds -> Blinded; 20+ Missing Eye deferred)
+const EYE_STRIKE_DESTROY_WOUNDS: int = 11  # s54.12:219 Night Heron ("more than 10 Wounds" -> destroyed eye)
+static func _npc_maybe_acid_vomit(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Nearest living enemy within 50' that is not already acid-coated.
+	var victim_id := -1
+	var best_d := 1 << 30
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		var d := _chebyshev(cpos, state.positions[oid])
+		if d > ACID_VOMIT_RANGE_TILES:
+			continue
+		var vp0: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+		if vp0 != null and IndividualCombat.get_timed_modifier_total(vp0, "acid") > 0:
+			continue
+		if d < best_d:
+			best_d = d
+			victim_id = oid
+	if victim_id < 0:
+		return {}
+	var victim: L5RCharacterData = state.combatants.get(victim_id, null)
+	var t_p: IndividualCombat.Participant = state.combat.participants.get(victim_id, null)
+	if t_p == null:
+		return {}
+	ts.consume_complex()
+	# Vomit to-hit vs Armor TN with armour's effect on Armor TN stripped (s54.5:261).
+	var to_hit: int = dice.roll_and_keep(ACID_VOMIT_ATK_ROLLED, ACID_VOMIT_ATK_KEPT, true).total
+	var atn: int = maxi(5, IndividualCombat.get_armor_tn(victim, t_p, dice, false, false, "") - maxi(0, victim.armor_tn_bonus))
+	if to_hit < atn:
+		return {"success": true, "hit": false, "roll": to_hit, "armor_tn": atn}
+	# Coat the target: 4k4/Round for 5 Rounds (advance_round ticks it; +1 so the first tick is next Round).
+	IndividualCombat.add_timed_modifier(t_p, "acid", 1, state.combat.round_number + 1 + ACID_VOMIT_ROUNDS, "acid_vomit")
+	return {"success": true, "hit": true, "victim": victim_id}
+
+
+## s54.9 Obake "Wasp Swarm": as a Complex Action the obake releases a vengeful swarm of angry
+## wasps (up to 60' = 12 tiles) that attacks up to THREE targets, inflicting 1k1 Wounds per Round
+## AUTOMATICALLY (no to-hit — the wasps burrow into flesh) and leaving each Dazed and unable to
+## cast spells. The obake controls enough wasps for TWO swarms at a time; a dispersed swarm cannot
+## be used again for a day (dispersal by an area-magic effect or a fire attack is a deferred cleanse,
+## like the acid's "washed away with water"), so a skirmish permits at most two releases. The
+## per-Round 1k1 tick runs in advance_round via the "wasp_swarm" timed modifier; the swarm persists
+## for the skirmish (there is no natural expiry — it swarms "so long as it remains"). A second
+## release spreads to fresh, un-swarmed foes. Zero-invention: every value is the GDD's own s54.9:143
+## constant (range 60', up to 3 targets, 1k1/Round automatic, Dazed + no-cast, two swarms).
+const WASP_SWARM_RANGE_TILES: int = 12   # up to 60' = 12 tiles (s54.9:143)
+const WASP_SWARM_MAX_TARGETS: int = 3    # "attacks up to three targets" (s54.9:143)
+const WASP_SWARM_DR_ROLLED: int = 1      # 1k1 Wounds/Round automatically (s54.9:143)
+const WASP_SWARM_DR_KEPT: int = 1
+const WASP_SWARM_MAX_SWARMS: int = 2     # "two swarms at a time" (s54.9:143)
+const WASP_SWARM_PERSIST: int = 9999     # skirmish-length (dispersal deferred — no natural expiry)
+static func _npc_maybe_wasp_swarm(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var op: IndividualCombat.Participant = state.combat.participants.get(char_id, null)
+	if op == null:
+		return {}
+	# The obake controls at most two swarms at a time (a per-skirmish release cap, tracked as a
+	# self timed modifier — dispersal-and-reuse is the deferred cleanse).
+	if IndividualCombat.get_timed_modifier_total(op, "wasp_swarm_count") >= WASP_SWARM_MAX_SWARMS:
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Gather living enemies within 60' that are NOT already swarmed (a second swarm spreads to fresh
+	# foes rather than re-covering the same victim), nearest first.
+	var cands: Array = []
+	for oid: int in state.positions.keys():
+		if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+			continue
+		var v: L5RCharacterData = state.combatants.get(oid, null)
+		if v == null or CharacterStats.is_dead(v):
+			continue
+		var d := _chebyshev(cpos, state.positions[oid])
+		if d > WASP_SWARM_RANGE_TILES:
+			continue
+		var vp0: IndividualCombat.Participant = state.combat.participants.get(oid, null)
+		if vp0 != null and IndividualCombat.get_timed_modifier_total(vp0, "wasp_swarm") > 0:
+			continue
+		cands.append({"id": oid, "d": d})
+	if cands.is_empty():
+		return {}
+	cands.sort_custom(func(a, b): return a["d"] < b["d"])
+	ts.consume_complex()
+	var expiry: int = state.combat.round_number + WASP_SWARM_PERSIST
+	# Mark this release against the two-swarm cap.
+	IndividualCombat.add_timed_modifier(op, "wasp_swarm_count", 1, expiry, "wasp_swarm")
+	var victims: Array = []
+	for i in range(mini(WASP_SWARM_MAX_TARGETS, cands.size())):
+		var tid: int = int(cands[i]["id"])
+		var t_p: IndividualCombat.Participant = state.combat.participants.get(tid, null)
+		if t_p == null:
+			continue
+		# The swarm ticks 1k1/Round (advance_round reads the modifier) and leaves the target Dazed +
+		# unable to cast (a timed Dazed persists — it is not rolled off — while the swarm lasts).
+		IndividualCombat.add_timed_modifier(t_p, "wasp_swarm", 1, expiry, "wasp_swarm")
+		IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_DAZED, expiry)
+		victims.append(tid)
+	return {"success": true, "hit": true, "victims": victims}
+
+
+# Black Fire (s54.5:379 Kyoso no Oni Spawn): "may hurl bolts of black fire at any foe within
+# fifty feet ... ignore the effects of armor on the target's Armor TN and ignore Reduction.
+# Each time a foe is hit by black fire, he must make a Void roll at TN 15 or lose one Void Point.
+# If the bolt takes away his last Void Point (or he has none), he falls unconscious for one hour."
+# Multiple Arms: "up to four times in the same Round (once for each claw)" — Free actions, so
+# firing black fire is the spawn's whole turn (it forgoes its Claw attacks, per the GDD clause).
+const BLACK_FIRE_RANGE_TILES: int = 10  # 50'
+const BLACK_FIRE_ATK_ROLLED: int = 9    # Black Fire 9k5 to-hit
+const BLACK_FIRE_ATK_KEPT: int = 5
+const BLACK_FIRE_DMG_ROLLED: int = 3    # 3k2 damage
+const BLACK_FIRE_DMG_KEPT: int = 2
+const BLACK_FIRE_MAX_BOLTS: int = 4     # Multiple Arms
+const BLACK_FIRE_VOID_TN: int = 15
+# Multiple Tongues (s54.5 Akuma no Oni Spawn): three Free-action Burning-Tongue
+# strikes per Round ("once with each tongue"), each 8k4 to-hit / 2k2 damage. The
+# to-hit (8k4) is the creature's own attack profile (the GDD gives Claws AND
+# Burning Tongues identical 8k4 to-hit), so only the damage is swapped to the
+# tongue's 2k2 for the bonus strikes.
+const MULTIPLE_TONGUES_COUNT: int = 3   # "all three tongues"
+const MULTIPLE_TONGUES_DMG_ROLLED: int = 2  # Burning Tongues 2k2 damage
+const MULTIPLE_TONGUES_DMG_KEPT: int = 2
+static func _npc_maybe_black_fire(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	var bolts: Array = []
+	for _b in range(BLACK_FIRE_MAX_BOLTS):
+		# nearest living enemy within 50' (a `found` flag, NOT a negative-id sentinel — spirit-puppet
+		# enemies carry NEGATIVE ids, so a `victim_id < 0` "not found" test would skip every spirit foe)
+		var victim_id: int = 0
+		var found: bool = false
+		var best_d: int = 1 << 30
+		for oid: int in state.positions.keys():
+			if oid == char_id or not _are_enemies(faction, state.factions.get(oid, FACTION_NEUTRAL)):
+				continue
+			var v: L5RCharacterData = state.combatants.get(oid, null)
+			if v == null or CharacterStats.is_dead(v):
+				continue
+			var d: int = _chebyshev(cpos, state.positions[oid])
+			if d > BLACK_FIRE_RANGE_TILES:
+				continue
+			if d < best_d:
+				best_d = d
+				victim_id = oid
+				found = true
+		if not found:
+			break
+		var victim: L5RCharacterData = state.combatants.get(victim_id, null)
+		var t_p: IndividualCombat.Participant = state.combat.participants.get(victim_id, null)
+		if victim == null or t_p == null:
+			break
+		# to-hit vs Armor TN with armour's effect on Armor TN stripped ("ignore the effects of
+		# armor on the target's Armor TN"), floored at 5.
+		var to_hit: int = dice.roll_and_keep(BLACK_FIRE_ATK_ROLLED, BLACK_FIRE_ATK_KEPT, true).total
+		var atn: int = maxi(5, IndividualCombat.get_armor_tn(victim, t_p, dice, false, false, "") - maxi(0, victim.armor_tn_bonus))
+		if to_hit < atn:
+			bolts.append({"victim": victim_id, "hit": false, "roll": to_hit, "armor_tn": atn})
+			continue
+		# damage: 3k2, ignoring Reduction (the bolt "ignore[s] Reduction" → reduction 0)
+		var raw: int = dice.roll_and_keep(BLACK_FIRE_DMG_ROLLED, BLACK_FIRE_DMG_KEPT, true).total
+		var wd: Dictionary = WoundSystem.apply_damage(victim, raw, 0)
+		var bolt: Dictionary = {"victim": victim_id, "hit": true,
+			"wounds": wd.get("final_damage", raw), "dead": CharacterStats.is_dead(victim)}
+		# Void-drain rider (mortal targets — the soul-searing effect): Void roll TN 15 or lose 1 VP;
+		# if that drains the last point (or the foe had none) he falls unconscious for one hour.
+		if victim.spirit_creature == null and not CharacterStats.is_dead(victim):
+			var vr: int = maxi(1, CharacterStats.get_ring_value(victim, Enums.Ring.VOID))
+			var vroll: int = dice.roll_and_keep(vr, vr, true).total
+			if vroll < BLACK_FIRE_VOID_TN:
+				victim.current_void_points = maxi(0, victim.current_void_points - 1)
+				bolt["void_drained"] = true
+				if victim.current_void_points == 0:
+					# unconscious for one hour (600 rounds ≫ a skirmish); auto-wake-on-Void-regain
+					# has no combat producer, so the timer runs (documented limitation).
+					IndividualCombat.apply_timed_condition(t_p, IndividualCombat.CONDITION_INCAPACITATED,
+						state.combat.round_number + 60 * IndividualCombat.ROUNDS_PER_MINUTE)
+					bolt["unconscious"] = true
+		bolts.append(bolt)
+	if bolts.is_empty():
+		return {}
+	return {"success": true, "bolts": bolts}
+
+
+# Mob Leader (s54.9 Goblin Warmonger / Goblin King): "As a Complex Action, the warmonger makes an
+# Intimidation (Bullying)/Willpower roll at TN 20. If successful, all goblins within hearing (up to
+# 10 goblins) gain a +1k0 bonus on attack and damage rolls. If the warmonger beats TN by 15 or more,
+# the bonus is +2k0 instead. The bonus lasts until the start of the warmonger's next Turn." Modeled
+# via short timed spell_attack_rolled + spell_damage_rolled modifiers (both read for spirit
+# attackers on top of their fixed stat-block attack/damage), expiring at round_number + 1 — the
+# start of the next round, ≈ the warmonger's next Turn, and a NON-STACKING window (the warmonger
+# shouts once per round and the prior round's buff is already expired when it re-shouts). The
+# Intimidation roll uses Willpower-only dice (skill 0) per the fixed-stat-block convention (spirit
+# puppets carry no skills; the warmonger's Willpower = its Earth ring). "Within hearing" = 10 tiles
+# (50'), reusing the Rally aura radius — the leader-rallying-mob analogue. All living co-faction
+# goblins in range are buffed (the leader itself included — "all goblins within hearing"; its own
+# self-buff is timing-inert), nearest-10 first (the GDD "up to 10 goblins" cap). Fires only when at
+# least one OTHER goblin ally is in range (a mob worth commanding); otherwise the warmonger fights.
+const MOB_LEADER_TN: int = 20
+const MOB_LEADER_BEAT_MARGIN: int = 15    # beat TN by 15+ -> +2k0 instead of +1k0
+const MOB_LEADER_HEARING_TILES: int = 10  # 50' (the Rally aura radius)
+const MOB_LEADER_MAX_GOBLINS: int = 10
+static func _npc_maybe_mob_leader(
+	state: MapCombatState,
+	char_id: int,
+	character: L5RCharacterData,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(char_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var cpos: Vector2i = state.positions.get(char_id, Vector2i(-1, -1))
+	if cpos.x < 0:
+		return {}
+	var faction: String = state.factions.get(char_id, FACTION_NEUTRAL)
+	# Gather co-faction living goblins within hearing (the leader itself included). Require at least
+	# one OTHER goblin to make the Complex worthwhile (a lone leader's self-buff is timing-inert).
+	var cands: Array = []
+	var others: int = 0
+	for oid: int in state.positions.keys():
+		if state.factions.get(oid, FACTION_NEUTRAL) != faction:
+			continue
+		var g: L5RCharacterData = state.combatants.get(oid, null)
+		if g == null or CharacterStats.is_dead(g) or g.spirit_creature == null:
+			continue
+		if not g.spirit_creature.has_tag("goblin"):
+			continue
+		var d: int = _chebyshev(cpos, state.positions[oid])
+		if d > MOB_LEADER_HEARING_TILES:
+			continue
+		cands.append({"id": oid, "d": d})
+		if oid != char_id:
+			others += 1
+	if others < 1:
+		return {}
+	ts.consume_complex()
+	# Intimidation (Bullying)/Willpower roll — Willpower dice, skill 0 (fixed-stat-block convention).
+	var wp: int = maxi(1, character.willpower)
+	var roll: int = dice.roll_and_keep(wp, wp, true).total
+	if roll < MOB_LEADER_TN:
+		return {"success": true, "roll": roll, "buffed": 0, "bonus": 0}
+	var bonus: int = 2 if roll >= MOB_LEADER_TN + MOB_LEADER_BEAT_MARGIN else 1
+	cands.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["d"]) < int(b["d"]))
+	var expiry: int = state.combat.round_number + 1
+	var buffed: int = 0
+	for entry: Dictionary in cands:
+		if buffed >= MOB_LEADER_MAX_GOBLINS:
+			break
+		var gp: IndividualCombat.Participant = state.combat.participants.get(int(entry["id"]), null)
+		if gp == null:
+			continue
+		IndividualCombat.add_timed_modifier(gp, "spell_attack_rolled", bonus, expiry, "mob_leader")
+		IndividualCombat.add_timed_modifier(gp, "spell_damage_rolled", bonus, expiry, "mob_leader")
+		buffed += 1
+	return {"success": true, "roll": roll, "buffed": buffed, "bonus": bonus}
+
+
+const GAZE_OF_TERROR_FEAR_RANK: int = 6  # s54.9:47
+static func _npc_maybe_gaze_of_terror(
+	state: MapCombatState,
+	gazer_id: int,
+	gazer: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(gazer_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var faction: String = state.factions.get(gazer_id, FACTION_NEUTRAL)
+	var pos: Vector2i = state.positions.get(gazer_id, Vector2i(-1, -1))
+	if pos.x < 0:
+		return {}
+	# nearest living enemy that is not already blind and not immune to Fear
+	var victim_id: int = -1
+	var best_d: int = 1 << 30
+	for cid: int in state.positions.keys():
+		if cid == gazer_id:
+			continue
+		if not _are_enemies(faction, state.factions.get(cid, FACTION_NEUTRAL)):
+			continue
+		var vc: L5RCharacterData = state.combatants.get(cid, chars_by_id.get(cid, null))
+		if vc == null or CharacterStats.is_dead(vc) or vc.immune_to_fear:
+			continue
+		var vp: IndividualCombat.Participant = state.combat.participants.get(cid, null)
+		if vp != null and IndividualCombat.CONDITION_BLINDED in vp.conditions:
+			continue  # the gaze does not affect blind characters (s54.9:47)
+		var d: int = _chebyshev(pos, state.positions[cid])
+		if d < best_d:
+			best_d = d
+			victim_id = cid
+	if victim_id < 0:
+		return {}
+	var victim: L5RCharacterData = state.combatants.get(victim_id, chars_by_id.get(victim_id, null))
+	var vp2: IndividualCombat.Participant = state.combat.participants.get(victim_id, null)
+	if vp2 == null:
+		return {}
+	ts.consume_complex()
+	var tn: int = 5 + GAZE_OF_TERROR_FEAR_RANK * 5
+	var wp: int = maxi(1, victim.willpower + victim.fear_resist_willpower_bonus)
+	var fr_roll: int = IndividualCombat.get_timed_modifier_total(vp2, "fear_resist_rolled")
+	var fr_kept: int = IndividualCombat.get_timed_modifier_total(vp2, "fear_resist_kept")
+	var resist: int = dice.roll_and_keep(
+			wp + victim.fear_resist_rolled_bonus + fr_roll,
+			wp + victim.fear_resist_kept_bonus + fr_kept, true).total
+	if resist >= tn:
+		return {"success": true, "victim": victim_id, "afraid": false}
+	# duration: the effect lasts until the Reactions stage of the following Round (round + 2)
+	IndividualCombat.add_timed_modifier(vp2, "spell_afraid", 1, state.combat.round_number + 2, "gaze_of_terror")
+	if IndividualCombat.CONDITION_AFRAID not in vp2.conditions:
+		vp2.conditions.append(IndividualCombat.CONDITION_AFRAID)
+	return {"success": true, "victim": victim_id, "afraid": true}
+
+
+## Fear Enhancement (s54.5 Ianwa no Oni, sole bearer, s54.5:125): "When facing a single individual,
+## once per encounter the Ianwa no Oni can magnify its Fear effect against that one target to Fear 8."
+## A Complex-action single-target fear magnify: the nearest living, non-Fear-immune enemy rolls its
+## Willpower (+ the full fear-resist stack) vs TN 45 (5 + 8*5) and, on a fail, is Afraid. Unlike the
+## Garegosu Gaze of Terror this is a MENTAL/presence fear (the Ianwa "communicates directly through
+## its mind"), NOT a gaze, so it is NOT gated on the target's sight — a Blinded target IS affected
+## (no blind-exclusion). The GDD states no expiry for the enhanced fear, so it persists for the
+## skirmish (the "no-stated-duration Fear" convention, matching _apply_fear_burst / maho Inspire
+## Fear: round + 9999). The once-per-encounter cap is the Participant.fear_enhancement_used flag,
+## checked by the dispatch before this is called (gated identically to the Wanyudo scream).
+const FEAR_ENHANCEMENT_RANK: int = 8  # s54.5:125 (magnified to Fear 8)
+static func _npc_maybe_fear_enhancement(
+	state: MapCombatState,
+	ianwa_id: int,
+	ianwa: L5RCharacterData,
+	chars_by_id: Dictionary,
+	dice: DiceEngine,
+) -> Dictionary:
+	var ts: TurnState = state.turn_states.get(ianwa_id, null)
+	if ts == null or not ts.can_use_complex():
+		return {}
+	var self_p: IndividualCombat.Participant = state.combat.participants.get(ianwa_id, null)
+	if self_p == null or self_p.fear_enhancement_used:
+		return {}
+	var faction: String = state.factions.get(ianwa_id, FACTION_NEUTRAL)
+	var pos: Vector2i = state.positions.get(ianwa_id, Vector2i(-1, -1))
+	if pos.x < 0:
+		return {}
+	# nearest living, non-Fear-immune enemy (a single individual). No blind-exclusion: this is a
+	# mental fear, not a gaze.
+	var victim_id: int = -1
+	var best_d: int = 1 << 30
+	for cid: int in state.positions.keys():
+		if cid == ianwa_id:
+			continue
+		if not _are_enemies(faction, state.factions.get(cid, FACTION_NEUTRAL)):
+			continue
+		var vc: L5RCharacterData = state.combatants.get(cid, chars_by_id.get(cid, null))
+		if vc == null or CharacterStats.is_dead(vc) or vc.immune_to_fear:
+			continue
+		if state.combat.participants.get(cid, null) == null:
+			continue
+		var d: int = _chebyshev(pos, state.positions[cid])
+		if d < best_d:
+			best_d = d
+			victim_id = cid
+	if victim_id < 0:
+		return {}
+	var victim: L5RCharacterData = state.combatants.get(victim_id, chars_by_id.get(victim_id, null))
+	var vp2: IndividualCombat.Participant = state.combat.participants.get(victim_id, null)
+	if vp2 == null:
+		return {}
+	ts.consume_complex()
+	self_p.fear_enhancement_used = true  # once per encounter
+	var tn: int = 5 + FEAR_ENHANCEMENT_RANK * 5
+	var wp: int = maxi(1, victim.willpower + victim.fear_resist_willpower_bonus)
+	var fr_roll: int = IndividualCombat.get_timed_modifier_total(vp2, "fear_resist_rolled")
+	var fr_kept: int = IndividualCombat.get_timed_modifier_total(vp2, "fear_resist_kept")
+	var resist: int = dice.roll_and_keep(
+			wp + victim.fear_resist_rolled_bonus + fr_roll,
+			wp + victim.fear_resist_kept_bonus + fr_kept, true).total
+	if resist >= tn:
+		return {"success": true, "victim": victim_id, "afraid": false}
+	IndividualCombat.add_timed_modifier(vp2, "spell_afraid", 1, state.combat.round_number + 9999, "fear_enhancement")
+	if IndividualCombat.CONDITION_AFRAID not in vp2.conditions:
+		vp2.conditions.append(IndividualCombat.CONDITION_AFRAID)
+	return {"success": true, "victim": victim_id, "afraid": true}
 
 
 ## roll Contested Willpower. On success a cross-encounter possession_affliction is seeded on
@@ -10501,6 +11546,19 @@ static func _apply_hit(
 			reduction = SpiritAbilitySystem.reduction_for_kind(target.spirit_creature, w_kind)
 		# Protection of Yomi (Major Shapeshifter, s54.10): Reduction 5, stacks with natural.
 		reduction += SpiritAbilitySystem.protection_of_yomi_reduction(target.spirit_creature)
+		# Berserker Rage (s54.9 Goblin Berserker): +5 Reduction on the first two Rounds (its
+		# stat-block Reduction 3 -> the GDD's stated "total of 8"), ending at the Reactions Stage
+		# of the second Round. Additive on the creature's natural Reduction (like Protection of Yomi).
+		if target.spirit_creature.has_tag("berserker_rage") and state.combat.round_number <= 2:
+			reduction += 5
+		# Amorphous (s54.5 Quiet Death): a formless jelly with no vital organs — cutting/slashing
+		# weapons do little, so its Reduction rises from 10 to 20 against a bladed edge weapon.
+		# The declared-but-unconsumed `reduction_vs_cutting` creature tag (sole bearer,
+		# grep-confirmed) adds +10 when the strike is a cutting weapon. Zero-invention (the GDD
+		# states "Reduction: 10 (20 against cutting/slashing weapons)" verbatim). Additive on the
+		# creature's natural Reduction (like Protection of Yomi / Berserker Rage above).
+		if target.spirit_creature.has_tag("reduction_vs_cutting") and _weapon_is_cutting(weapon_name):
+			reduction += 10
 		var filt: Dictionary = SpiritAbilitySystem.incoming_damage(target.spirit_creature, w_kind)
 		raw = 0 if filt["heals"] else int(round(float(raw) * float(filt["multiplier"])))
 	# Armor of the Emperor (s34 Earth 4): each individual kept damage die against the warded
@@ -10537,7 +11595,21 @@ static func _apply_hit(
 				raw = raw - _ba_redirect
 		else:
 			state.blood_armor_links.erase(target.character_id)
+	# Blood Draining (s54.2 Shozai-Gaki): the gaki MAY forgo normal damage to drain the victim's
+	# blood through its translucent fingers -- a flat 12 Wounds (bypassing armor, a life-drain) that
+	# heals the gaki by the same amount. AI policy (the GDD leaves "may" to the creature): a badly-
+	# wounded gaki (GRAZED or worse -- "if it cannot feed it will suffer agonizing pain") feeds to
+	# sustain itself, trading its higher claw damage for the 12 heal; a healthy gaki claws for max.
+	var blood_drained: bool = false
+	if attacker.spirit_creature != null and target.spirit_creature == null \
+			and attacker.spirit_creature.has_tag("blood_drain") \
+			and CharacterStats.get_wound_level(attacker) >= Enums.WoundLevel.GRAZED:
+		raw = 12  # s54.2: flat 12 Wounds, drawn through the fingers
+		reduction = 0  # bypasses armor (a life-drain, not a weapon blow)
+		blood_drained = true
 	var wd_result: Dictionary = WoundSystem.apply_damage(target, raw, reduction)
+	if blood_drained:
+		WoundSystem.heal_wounds(attacker, 12)  # s54.2: heals the gaki by the same amount
 
 	# s31 Concentration: a mid-cast caster struck for damage must pass Willpower (TN 5 + damage) or the
 	# spell is interrupted (aborted, no slot lost). A slain caster's cast simply lapses.
@@ -10709,6 +11781,23 @@ static func _apply_hit(
 			var fred: int = 0 if target.spirit_creature != null else maxi(0, target.armor_reduction)
 			WoundSystem.apply_damage(target, dice_engine.roll_and_keep(fc.followup_dmg_rolled, fc.followup_dmg_kept, true).total, fred)
 
+	# Atarasi's Avalanche (s54.4 Hida Atarasi): his UNARMED strikes infuse the target with
+	# Taint — the victim rolls Earth at TN 20 or gains 1-5 points of Shadowlands Taint. The
+	# puppet routes all of Atarasi's attacks through the "unarmed" vehicle (SpiritCombatant sets
+	# no skills → pick_best_weapon returns "unarmed"), so this fires on his hits; gating on the
+	# unarmed weapon keeps it faithful (his tetsubo would not taint) if a future representation
+	# gives him a real weapon. The s37 taint_resist buff aids the victim's roll (as with the
+	# Gagoze gaze). The kill→raise-undead half stays deferred (needs a reanimation mechanic).
+	# Mortal target only (a spirit/oni is already Tainted or immune).
+	if attacker.spirit_creature != null and target.spirit_creature == null and t_p != null \
+			and not CharacterStats.is_dead(target) \
+			and attacker.spirit_creature.has_tag("taint_touch_unarmed") \
+			and (weapon_name == "" or weapon_name == "unarmed"):
+		var _av_tr: int = IndividualCombat.get_timed_modifier_total(t_p, "taint_resist")
+		var _av_earth: int = maxi(1, CharacterStats.get_ring_value(target, Enums.Ring.EARTH) + _av_tr)
+		if dice_engine.roll_and_keep(_av_earth, _av_earth, true).total < 20:
+			target.taint = minf(100.0, target.taint + float(dice_engine.rand_int_range(1, 5)))
+
 	# Disease (s54.5/s54.11): a wounding hit by Byoki/Shikko/plague-zombie can infect a
 	# mortal target (cross-encounter drain resolved in the world-sim).
 	if attacker.spirit_creature != null and target.spirit_creature == null and raw > 0 \
@@ -10721,13 +11810,80 @@ static func _apply_hit(
 	if attacker.spirit_creature != null and target.spirit_creature == null and raw > 0 \
 			and not CharacterStats.is_dead(target):
 		var pc: SpiritCreatureData = attacker.spirit_creature
-		if pc.has_tag("poisonous_stinger") or pc.has_tag("poison_stinger"):
+		if pc.has_tag("poisonous_stinger"):
+			# s54.11 Gakimushi Poisonous Stinger: a paralyzing venom that drops Strength
+			# by 1 Rank per hit (Strength 0 → paralyzed until it wears off). GDD-exact.
 			DiseaseSystem.apply_poison(target, "strength")
+		elif pc.has_tag("dazing_sting"):
+			# s54.12 Sting Ray (Kosen o Sasu) Poison Stinger: "a painful and disabling
+			# nerve poison — anyone struck by the stinger is considered to be Dazed"
+			# (GDD s54.12:313 — NO save, NO stated duration). Applied as the STANDARD
+			# (non-timed) Dazed condition, so the victim rolls to shake it off per the
+			# normal recovery rules — the faithful reading of an unstated duration.
+			# (Distinct from the octopus `dazing_venom`, which the GDD gives a fixed
+			# 4/2-Round timed duration + a TN 20 save; the ray's poison states neither.)
+			if t_p != null:
+				IndividualCombat.apply_condition(t_p, IndividualCombat.CONDITION_DAZED)
 		elif pc.has_tag("poison_stamina"):
 			DiseaseSystem.apply_poison(target, "stamina")
 		elif pc.has_tag("poison_bite"):
 			if not DiseaseSystem.resolve_poison_resist_roll(target, 20, dice_engine):
 				DiseaseSystem.apply_poison(target, "stamina")
+		elif pc.has_tag("poison_claws"):
+			# s54.9 Aka-name Poison Claws: "any normal living creature wounded by an
+			# Aka-name must roll Stamina at TN 20 or suffer an additional 2k1 Wounds"
+			# (GDD s54.9:21). The extra damage is Wounds (already past armour — a poison),
+			# so applied raw via apply_damage(..., 0) — the shared poison-damage convention.
+			# The multiple-wounds clause ("the extra damage can happen any number of times")
+			# is satisfied by firing on every wounding hit. DEFERRED (the delayed-infection
+			# half — a sub-day/cross-encounter timeline like the other poison afflictions):
+			# the +10 TN penalty ten minutes later for two weeks, Medicine/Int TN 25 → +5.
+			if not DiseaseSystem.resolve_poison_resist_roll(target, 20, dice_engine):
+				var _pc_dmg: int = dice_engine.roll_and_keep(2, 1, true).total
+				WoundSystem.apply_damage(target, _pc_dmg, 0)
+		elif pc.has_tag("dazing_venom"):
+			# s54.1 Octopus/Squid (Tako) Poison Bite: a beak hit Dazes the target for 4
+			# Rounds; a Stamina Roll TN 20 halves that to 2 Rounds (the target is ALWAYS
+			# Dazed — the save only shortens the duration, GDD s54.1:427). Applied as a
+			# TIMED condition so it runs its full duration instead of being rolled off,
+			# exactly like the s54.10 paralysis venom. (Distinct from the komodo's
+			# `poison_bite` septic Stamina drain — the two abilities share the name
+			# "Poison Bite" in the GDD but have different mechanics.)
+			if t_p != null:
+				var _dz: int = 2 if DiseaseSystem.resolve_poison_resist_roll(target, 20, dice_engine) else 4
+				IndividualCombat.apply_timed_condition(
+					t_p, IndividualCombat.CONDITION_DAZED, state.combat.round_number + _dz)
+		elif pc.has_tag("venom_trait_drain"):
+			# s54.1 Poisonous Asp Venom: a bite drains Agility, Reflexes, Stamina, and
+			# Strength by 1 each (GDD-exact — all four Physical Traits). The GDD's first
+			# hour of exposure is automatic ("At the beginning of the SECOND and each
+			# subsequent hour, the target may make a Stamina Roll TN 25 to prevent further
+			# penalties"), and a combat window falls within that first hour, so the drain
+			# lands without a save — matching the no-save stinger pattern. The per-hour
+			# TN 25 resist and the Stamina-0 death are the sub-day timeline the daily full
+			# restore collapses (the documented limitation shared by every wired poison).
+			for _pt: String in ["agility", "reflexes", "stamina", "strength"]:
+				DiseaseSystem.apply_poison(target, _pt)
+		elif pc.has_tag("stinger_paralysis"):
+			# s54.9 Takesasu (Stinger Plant) Poison/Acid Attack: on a hit the barbed thorn
+			# injects paralyzing poison — the victim rolls Earth at TN 25 or is PARALYZED,
+			# "unable to take Actions of any kind" (GDD s54.9:111). Applied as the timed
+			# CONDITION_INCAPACITATED (the full turn-skip gate), for the GDD's own recovery
+			# window: "paralysis wears off in approximately 10 minutes minus the victim's
+			# Stamina Rank" — so it auto-recovers (no soft-lock), and a re-sting refreshes
+			# the longer timer. (Distinct from the Shikage's `paralyzing_poison`, which is a
+			# per-Round escalating Reflexes drain — the Takesasu's is an immediate all-or-
+			# nothing Earth-TN-25 paralysis.) The Acid Blast death burst is now wired (see the
+			# `_apply_acid_blast` death hook). DEFERRED (the attach-drain half — the same layer
+			# the Sanshu Denki / Tsumunagi grapple-drain uses): the per-Round acid 2k1 and the
+			# Contested-Agility stinger removal.
+			if t_p != null:
+				var _pe: int = maxi(1, CharacterStats.get_ring_value(target, Enums.Ring.EARTH))
+				if dice_engine.roll_and_keep(_pe, _pe, true).total < 25:
+					var _mins: int = maxi(1, 10 - target.stamina)
+					IndividualCombat.apply_timed_condition(
+						t_p, IndividualCombat.CONDITION_INCAPACITATED,
+						state.combat.round_number + _mins * IndividualCombat.ROUNDS_PER_MINUTE)
 		# Escalating poison (s54.5 Shikage): −1 Rank now + a per-Round Stamina TN 20 (+5/dose)
 		# drain until the victim saves or the Trait hits 0 (Willpower 0 → mind-controlled,
 		# Reflexes 0 → paralyzed). Each sting stacks a dose. The per-Round tick runs in
@@ -10765,6 +11921,14 @@ static func _apply_hit(
 			and not t_p.death_spawn_done and CharacterStats.is_dead(target):
 		t_p.death_spawn_done = true
 		_apply_retributive_taint(state, target, dice_engine)
+
+	# Acid Blast (s54.9 Takesasu): a slain takesasu's acid reservoir explodes, auto-inflicting
+	# 2k2 Wounds on anyone within 5' (1 tile). No save; indiscriminate (both factions/types).
+	if t_p != null and target.spirit_creature != null \
+			and target.spirit_creature.has_tag("acid_blast") \
+			and not t_p.death_spawn_done and CharacterStats.is_dead(target):
+		t_p.death_spawn_done = true
+		_apply_acid_blast(state, target, dice_engine)
 
 	# Divide the Soul (s37 Void): if either manifestation dies, both die.
 	if CharacterStats.is_dead(target) and state.divide_soul_pairs.has(target.character_id):
@@ -10909,6 +12073,30 @@ static func _spawn_on_death(state: MapCombatState, dead_creature: L5RCharacterDa
 
 ## Retributive Taint (s54.5 Pekkle): on death, every living mortal within 2 tiles (10 ft)
 ## rolls Earth TN 30 or gains 1–10 points of Taint. Returns the number of victims tainted.
+## Acid Blast (s54.9 Takesasu): "When a takesasu is destroyed, its acid reservoir explodes,
+## automatically inflicting 2k2 Wounds on anyone within 5 feet." A death-burst: every living
+## combatant within 1 tile (5') of the slain takesasu takes a fixed 2k2 (no save; armour does
+## not reduce — a caustic explosion, the retaliation-splatter convention). Indiscriminate
+## ("anyone" — both factions, mortal or spirit). Fires once per death (death_spawn_done guard).
+static func _apply_acid_blast(state: MapCombatState, dead_creature: L5RCharacterData, dice: DiceEngine) -> int:
+	var center: Vector2i = state.positions.get(dead_creature.character_id, Vector2i(-1, -1))
+	if center.x < 0:
+		return 0
+	var hit: int = 0
+	for cid: int in state.positions.keys():
+		if cid == dead_creature.character_id:
+			continue
+		if _chebyshev(center, state.positions[cid]) > 1:
+			continue
+		var c: L5RCharacterData = state.combatants.get(cid, null)
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var dmg: int = dice.roll_and_keep(2, 2, true).total
+		WoundSystem.apply_damage(c, dmg, 0)
+		hit += 1
+	return hit
+
+
 static func _apply_retributive_taint(state: MapCombatState, dead_creature: L5RCharacterData, dice: DiceEngine) -> int:
 	var center: Vector2i = state.positions.get(dead_creature.character_id, Vector2i(-1, -1))
 	if center.x < 0:

@@ -252,6 +252,8 @@ class Participant:
 	var insight_study_rounds: int = 0   # consecutive Complex Actions spent studying that target
 	var mirror_origin_id: int = -1      # s54.5 Dark Mirror duplicate: the creature it copied (attacks it first)
 	var scream_used: bool = false  # s54.12 Wanyudo Strength of the Dead: once-per-skirmish scream
+	var fear_enhancement_used: bool = false  # s54.5 Ianwa no Oni Fear Enhancement: once-per-encounter Fear-8 magnify
+	var furious_charge_done: bool = false  # s54.1 Ox Furious Charge: the one-time wound-triggered rage has fired
 	var gore_escape_rolled: int = 0  # s54.5 Gore: extra damage dealt when pulling free of the tusks (0 = not gored)
 	var gore_escape_kept: int = 0
 	var freeze_break_tn: int = 0  # s36 Yuki's Touch: Strength TN to break free of the ice (0 = use the default entangle TN 20)
@@ -259,6 +261,8 @@ class Participant:
 	var spirit_damage_rolled_bonus: int = 0  # s54.10 Supreme Commander: +N rolled damage dice (spirit-only)
 	var spirit_attack_kept_bonus: int = 0  # s54.5 Charge: +N kept attack dice (the kept half of a +NkN charge bonus)
 	var spirit_damage_kept_bonus: int = 0  # s54.5 Charge: +N kept damage dice
+	var spirit_attack_flat_bonus: int = 0  # s54.5 Battlefield Acumen: +N to the attack-roll TOTAL (positional aura, spirit-only)
+	var spirit_damage_flat_bonus: int = 0  # s54.5 Battlefield Acumen: +N to the damage-roll TOTAL (spirit-only)
 	var void_dragon_ring: int = -1  # Touch the Void Dragon (s38): boosted Ring (Enums.Ring), -1 = inactive
 	# s35/s34/s33/s36 conjured elemental weapons (Katana of Fire, Tetsubo of Earth, Yari of Air,
 	# Bo of Water). {} = none; {rolled,kept,skill,trait,school_rank} = a created weapon the wielder
@@ -1110,6 +1114,15 @@ static func _sort_turn_order(state: CombatState) -> void:
 # -- Armor TN Computation (s40) -----------------------------------------------
 # =============================================================================
 
+# Blind Hunter (s54.9 Sanshu Denki): "Does not suffer any penalties for blindness, due to other
+# superior senses." A creature carrying this tag is exempt from every Blinded penalty (defender
+# Armor-TN collapse, attacker -1k1/-3k3, the blinded simple-move Athletics check). Inert for real
+# characters and every other creature (spirit_creature null / tag absent).
+static func is_blindness_immune(character: L5RCharacterData) -> bool:
+	return character != null and character.spirit_creature != null \
+		and character.spirit_creature.has_tag("blind_hunter")
+
+
 static func get_armor_tn(
 	character: L5RCharacterData,
 	participant: Participant,
@@ -1153,7 +1166,7 @@ static func get_armor_tn(
 		return 5 + character.armor_tn_bonus  # Stunned: Armor TN = 5 + armor bonuses
 	if CONDITION_INCAPACITATED in participant.conditions:
 		return 5 + character.armor_tn_bonus  # Held/bound/treated-as-Down: flat-footed
-	if CONDITION_BLINDED in participant.conditions:
+	if CONDITION_BLINDED in participant.conditions and not is_blindness_immune(character):
 		# Blinded base = Reflexes + 5 (armor still adds)
 		return character.reflexes + 5 + character.armor_tn_bonus
 
@@ -1458,7 +1471,7 @@ static func resolve_attack(
 	# s33 Castle of Air: a defender-imposed -Xk0 penalty on attacks against the warded caster.
 	if attacker_roll_penalty != 0:
 		rolled = maxi(0, rolled + attacker_roll_penalty)
-	if CONDITION_BLINDED in attacker_p.conditions:
+	if CONDITION_BLINDED in attacker_p.conditions and not is_blindness_immune(attacker):
 		if weapon.get("melee", true):
 			rolled = maxi(0, rolled - 1)
 			kept = maxi(1, kept - 1)
@@ -1507,6 +1520,14 @@ static func resolve_attack(
 	# Advantage free raises add +5 each to roll total; advantage TN penalties reduce it.
 	flat_bonus += adv_free_raises_atk * 5
 	flat_bonus -= adv_tn_atk
+
+	# s54.4 Notable Lost: flat "+X" attack modifier on the roll TOTAL (e.g. Atarasi 10k9+11).
+	# Inert (0) for every other creature and all real characters.
+	if attacker.spirit_creature != null:
+		flat_bonus += attacker.spirit_creature.attack_flat_bonus
+		# s54.5 Battlefield Acumen: +N to the attack-roll TOTAL, one per other Nosloc no Oni within
+		# 50 feet (positional aura set by the orchestrator; 0 for every other creature).
+		flat_bonus += attacker_p.spirit_attack_flat_bonus
 
 	# Unskilled rolls (skill_rank == 0) do not explode per L5R4e p.78.
 	# raises passed directly — roll_check applies raises * 5 to TN.
@@ -1659,6 +1680,12 @@ static func resolve_damage(
 	# scaling — this controls explosion, not dice count).
 	if dmg_skill == "Ninjutsu":
 		can_explode = bugei_dmg_rank >= 5
+	# s54.1 Flying Squirrel (Musasabi) "Damage: 1k1 (cannot explode)" — the declared-but-unconsumed
+	# `damage_no_explode` creature tag (sole bearer, grep-confirmed): the creature's damage dice never
+	# explode. Zero-invention (the GDD states it verbatim). Inert for every other creature/character
+	# (gated on the spirit_creature tag).
+	if attacker != null and attacker.spirit_creature != null and attacker.spirit_creature.has_tag("damage_no_explode"):
+		can_explode = false
 	# s40 weapon special: a katana wielder may spend a Void Point (just-in-time) for +1k1 damage.
 	# NPC-only auto-spend (PCs choose via the future combat UI), once-per-Round throttle.
 	if weapon.get("void_point_damage", false) and attacker_p != null and not spirit_fixed_damage \
@@ -1670,6 +1697,14 @@ static func resolve_damage(
 	# roll_damage handles the dice pool; we pass strength already absorbed above
 	var result: Dictionary = dice_engine.roll_damage(rolled, kept, 0, 0, explode_8, explode_9, can_explode)
 	var total: int = result["raw"] + feint_bonus + kata_dmg["flat_bonus"]
+	# s54.4 Notable Lost: flat "+X" damage modifier on the roll TOTAL (e.g. Nashiko 10k4+8).
+	# Inert (0) for every other creature and all real characters.
+	if attacker != null and attacker.spirit_creature != null:
+		total += attacker.spirit_creature.damage_flat_bonus
+		# s54.5 Battlefield Acumen: +N to the damage-roll TOTAL, one per other Nosloc no Oni
+		# within 50 feet (positional aura; 0 for every other creature).
+		if attacker_p != null:
+			total += attacker_p.spirit_damage_flat_bonus
 
 	return {
 		"rolled": rolled,
@@ -1953,7 +1988,7 @@ static func resolve_blinded_simple_move(
 	participant: Participant,
 	dice_engine: DiceEngine,
 ) -> Dictionary:
-	if CONDITION_BLINDED not in participant.conditions:
+	if CONDITION_BLINDED not in participant.conditions or is_blindness_immune(character):
 		return {"required": false}
 	var athletics: int = character.skills.get("Athletics", 0)
 	var wound_penalty: int = CharacterStats.get_wound_penalty(character)

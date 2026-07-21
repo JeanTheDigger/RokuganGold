@@ -30,6 +30,12 @@ enum Tier { SWARM, MID, HEAVY, BOSS, TERRAIN, POST_ENCOUNTER }
 @export var attack_kept: int = 0
 @export var damage_rolled: int = 0
 @export var damage_kept: int = 0
+# s54.4 Notable Lost: flat "+X" modifiers on the attack/damage ROLL TOTAL (not dice count).
+# In L5R "7k4+8" = roll 7k4 and add 8 to the total. 0 = none. Applied in the
+# IndividualCombat spirit-override branches. attack_flat_bonus is the to-hit "+X"
+# (e.g. Atarasi 10k9+11); damage_flat_bonus is the damage "+X" (e.g. Tsukuro 10k4+2).
+@export var attack_flat_bonus: int = 0
+@export var damage_flat_bonus: int = 0
 @export var armor_tn: int = 10
 @export var reduction: int = 0
 # s54.5/s54.11/s54.12 "Reduction X (Y against jade/crystal/obsidian)": juggernaut-type
