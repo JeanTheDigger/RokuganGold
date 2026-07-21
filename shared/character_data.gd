@@ -609,6 +609,11 @@ var taint_benefits_suppressed: bool = false
 @export var offline_policies: Dictionary = {}
 @export var bubble_scene_id: int = -1
 @export var bubble_anchor_ic_day: int = -1
+# Last province PCArrivalResolver processed for this PC (s56.19 entry mechanism).
+# -1 = logged out / not yet processed. Engine bookkeeping only — used to detect a
+# province change (travel completion / boundary crossing / login) so AUTO missions
+# fire on arrival. Never a design value.
+@export var last_arrival_province_id: int = -1
 
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------
