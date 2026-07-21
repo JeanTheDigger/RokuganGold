@@ -1050,7 +1050,11 @@ static func apply_population_growth_settlements(
 	for s: SettlementData in settlements:
 		if s.province_id != province.province_id:
 			continue
-		var growth: float = float(s.farming_pu) * seasonal_rate
+		# s4.3 Population Growth (LOCKED): "Growth scales with current PU" — the whole
+		# village's PU, not just the farming subset (the worked example applies the rate to
+		# total village PU). Base is population_pu; where the new PU lands (farming vs other)
+		# is left unchanged below, as the GDD does not specify it.
+		var growth: float = float(s.population_pu) * seasonal_rate
 		var growth_pu: int = int(growth)
 		if growth_pu > 0:
 			s.farming_pu += growth_pu
