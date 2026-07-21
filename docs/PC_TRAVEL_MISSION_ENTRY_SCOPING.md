@@ -31,11 +31,21 @@ Wired: `DayOrchestrator._process_pc_mission_arrivals` runs `PCArrivalResolver` o
 PC each day (after travel settles `physical_location`) and emits `pc_mission_arrivals`
 (`{pc_id, province_id, auto_seeds, engageable_seeds}` per PC with content) in the
 `advance_day` return dict. Province-change detection unifies the three arrival triggers.
-Producer only — no launch. Road Encounters (s4.3.11 / s56.1.5) are wired into the same
-pass: a PC travel-arrival into an under-garrisoned province rolls `check_road_encounter`
-(15% → Ronin Bandit AUTO seed), login excluded; destination-province-only until
-intermediate-route data exists. Remaining data-gap deferral: Wall Sortie seeds (no
-province-keyed wall-status source; `wall_statuses` passed empty).
+Producer only — no launch. The pass now produces the **complete** seed set:
+- Insurgency / PTL-oni / taint / spiritual seeds (via `select_province_seeds`).
+- Road Encounters (s4.3.11 / s56.1.5): a PC travel-arrival into an under-garrisoned
+  province rolls `check_road_encounter` (15% → Ronin Bandit AUTO), login excluded;
+  destination-province-only until intermediate-route data exists.
+- Wall Sortie (s2.4.11 / s56.1.2, PLAYER_INITIATED): `wall_statuses` is built from each
+  province's `shadowlands_strength`; `WallSystem.get_ai_sortie_size` sizes it and returns
+  "none" below the medium SS tier, so only a genuinely-threatened Wall province surfaces one.
+
+Caveat: the arrival pass fires on province change, so a **stationary** PC whose current
+province gains a new PLAYER_INITIATED option (a Wall Sortie as SS rises, or a newly-detected
+insurgency) won't see it via this pass — that on-demand engageable listing is the Phase-2
+session layer's job (re-query `select_province_seeds` / `get_engageable_seeds` at the PC's
+location when the player looks). No seed is lost; it is simply surfaced through a different
+channel. No remaining Phase-1 data-gap.
 
 Original scope note (now satisfied): **In scope, no networking, no new design decisions**
 (uses the owner-set trigger policy from s56.19). For each PC in `advance_day`:

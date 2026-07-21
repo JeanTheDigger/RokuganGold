@@ -14067,8 +14067,10 @@ static func _process_travel(
 # travel model carries no intermediate-province route, so only the destination province
 # entered is evaluated (a data limitation, not over/under-invention).
 #
-# Known Phase-1 limitation: wall_statuses is passed empty — no province-keyed wall-status
-# source exists yet — so Wall Sortie (PLAYER_INITIATED) seeds are not produced.
+# Wall Sortie seeds (s2.4.11 / s56.1.2, PLAYER_INITIATED): wall_statuses is built from each
+# province's shadowlands_strength; QuestSeedSelector sizes the sortie via
+# WallSystem.get_ai_sortie_size (returns "none" below the medium SS tier), so only a
+# genuinely-threatened Wall province surfaces a Wall Sortie the PC may choose to assault.
 static func _process_pc_mission_arrivals(
 	characters: Array,
 	provinces: Dictionary,
@@ -14085,15 +14087,22 @@ static func _process_pc_mission_arrivals(
 	for a: Dictionary in travel_arrivals:
 		travel_arrived_ids[int(a.get("character_id", -1))] = true
 
+	# Wall Sortie availability, keyed by province, sourced from the existing
+	# shadowlands_strength field (s2.4.10). QuestSeedSelector/WallSystem gate the size.
+	var wall_statuses: Dictionary = {}
+	for pid: Variant in provinces:
+		var wp: ProvinceData = provinces[pid] as ProvinceData
+		if wp != null and wp.shadowlands_strength > 0:
+			wall_statuses[wp.province_id] = {"ss": wp.shadowlands_strength}
+
 	var out: Array = []
 	for c: L5RCharacterData in characters:
 		if not c.is_pc:
 			continue
-		# seed is vestigial in select_province_seeds (deterministic from world state);
-		# pass ic_day. wall_statuses passed empty (see limitation above).
+		# seed is vestigial in select_province_seeds (deterministic from world state); pass ic_day.
 		var res: Dictionary = PCArrivalResolver.resolve_arrival(
 			c, settlement_province_map, provinces,
-			insurgencies, {}, bloodspeaker_cells, ic_day, spiritual_events)
+			insurgencies, wall_statuses, bloodspeaker_cells, ic_day, spiritual_events)
 		if not res.get("arrived", false):
 			continue
 		var province_id: int = res.get("province_id", -1)
