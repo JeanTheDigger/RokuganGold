@@ -1734,6 +1734,9 @@ static func advance_day(
 			seasonal_result, provinces, active_topics,
 			next_topic_id, ic_day, season_meta, next_crisis_id,
 		)
+		_process_starvation_effects(
+			seasonal_result, provinces, characters, characters_by_id,
+		)
 		_decay_all_historical_modifiers(characters, ic_day)
 		CollectiveDisposition.decay_marriage_boosts(
 			world_states.get("marriage_clan_boosts", {}),
@@ -4164,6 +4167,67 @@ static func _populate_settlement_governance(
 # consecutive seasons at positive Rice balance resolves the crisis.
 
 const _FAMINE_RECOVERY_THRESHOLD: int = 4  # 4 seasons per GDD s4.3.6 — locked s04.3a
+
+
+# -- Starvation Event Triggers (s4.3, LOCKED) ---------------------------------
+# The per-season MECHANICAL consequences of each starvation stage (the topics are
+# handled by _process_famine_crises above; only the stability/disposition/honor/glory
+# effects were unwired). Runs in the seasonal block off the same starvation_changes,
+# so each effect applies once per stage-season.
+#   SHORTAGE → Stability −1.
+#   HUNGER   → Stability −3; −5 disposition toward the ruling lord for directly
+#              connected characters (the lord's direct subordinates — vassals /
+#              retainers / serving family, per _get_vassals).
+#   FAMINE   → Stability −10; ruling-lord Honor −0.5 and Glory −0.3 per Famine season.
+# Stability maps 1:1 onto the 0–100 scale (Stability = 100 − accumulated Unrest).
+static func _process_starvation_effects(
+	seasonal_result: Dictionary,
+	provinces: Dictionary,
+	characters: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	var tick: Dictionary = seasonal_result.get("resource_tick", {})
+	var starvation: Dictionary = tick.get("starvation_changes", {})
+	if starvation.is_empty():
+		return
+	for pid: Variant in starvation:
+		var stage: int = int(starvation[pid].get("stage", ResourceTick.StarvationStage.CLEAR))
+		if stage <= ResourceTick.StarvationStage.CLEAR:
+			continue
+		var prov_v: Variant = provinces.get(int(pid), null)
+		if prov_v == null:
+			continue
+		var prov: ProvinceData = prov_v as ProvinceData
+
+		var stab_loss: float = 0.0
+		match stage:
+			ResourceTick.StarvationStage.SHORTAGE:
+				stab_loss = 1.0
+			ResourceTick.StarvationStage.HUNGER:
+				stab_loss = 3.0
+			ResourceTick.StarvationStage.FAMINE:
+				stab_loss = 10.0
+		prov.stability = clampf(prov.stability - stab_loss, 0.0, 100.0)
+
+		if stage < ResourceTick.StarvationStage.HUNGER:
+			continue
+		# HUNGER+ effects target the province's ruling lord. Each stage applies only the
+		# effects the LOCKED text lists FOR THAT STAGE (they are not stated to be
+		# cumulative): HUNGER → the −5 disposition hit; FAMINE → the Honor/Glory loss.
+		var lord: L5RCharacterData = _find_province_lord(prov, characters_by_id)
+		if lord == null or CharacterStats.is_dead(lord):
+			continue
+		if stage == ResourceTick.StarvationStage.HUNGER:
+			# −5 disposition toward the ruling lord for directly connected characters.
+			for sub: L5RCharacterData in _get_vassals(lord, characters):
+				if sub == null or CharacterStats.is_dead(sub):
+					continue
+				var cur: int = sub.disposition_values.get(lord.character_id, 0)
+				sub.disposition_values[lord.character_id] = clampi(cur - 5, -100, 100)
+		elif stage == ResourceTick.StarvationStage.FAMINE:
+			# Ruling-lord Honor −0.5 and Glory −0.3 per Famine season.
+			HonorGlorySystem.apply_honor_change(lord, -0.5)
+			HonorGlorySystem.apply_glory_change(lord, -0.3)
 
 
 static func _process_famine_crises(
