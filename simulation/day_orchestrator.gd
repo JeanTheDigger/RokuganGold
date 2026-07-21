@@ -15756,6 +15756,13 @@ static func _process_insurgencies(
 				var koku_drain: float = InsurgencySystem.get_koku_drain(ins2)
 				if koku_drain > 0.0:
 					_drain_province_stockpile(prov_setts, koku_drain, "koku_stockpile")
+			# s11.11:505 Coastal raiding — a Strength 3+ pirate fleet raids coastal
+			# villages: province Stability −1 per season (less than a bandit raid,
+			# because pirates target shipping, not peasants directly).
+			if ins2.insurgency_type == Enums.InsurgencyType.PIRATE_FLEET and ins2.strength >= 3:
+				var pprov: ProvinceData = provinces.get(ins2.province_id) as ProvinceData
+				if pprov != null:
+					pprov.stability = clampf(pprov.stability - 1.0, 0.0, 100.0)
 
 	result["resolved_crisis_ids"] = resolved_crisis_ids
 	return result
