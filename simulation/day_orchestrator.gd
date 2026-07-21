@@ -1686,10 +1686,17 @@ static func advance_day(
 			world_states, characters_by_id,
 		)
 		_populate_tax_modifiers(characters, characters_by_id, provinces, season_meta)
+		# s11.11:505 pirate merchant-avoidance: per-province active PIRATE_FLEET strength,
+		# consumed by the trade-route computation (Strength 4+ −10% naval income, 6+ closed).
+		var pirate_strength_by_province: Dictionary = {}
+		for pins: InsurgencyData in insurgencies:
+			if pins.insurgency_type == Enums.InsurgencyType.PIRATE_FLEET and pins.strength > 0:
+				var cur: int = int(pirate_strength_by_province.get(pins.province_id, 0))
+				pirate_strength_by_province[pins.province_id] = maxi(cur, pins.strength)
 		seasonal_result = _process_season_transition(
 			characters, provinces, current_season, season_meta,
 			approach_penalties, settlements, spring_inputs, worship_maluses,
-			emperor_tax_cfg, trade_routes,
+			emperor_tax_cfg, trade_routes, pirate_strength_by_province,
 		)
 		_apply_worship_stability_maluses(worship_maluses, provinces)
 		# s2.3.23 District Economics: Otosan Uchi districts generate koku from their
@@ -2696,6 +2703,7 @@ static func _process_season_transition(
 	worship_maluses: Dictionary = {},
 	emperor_tax_config: Dictionary = {},
 	trade_routes: Array = [],
+	pirate_strength_by_province: Dictionary = {},
 ) -> Dictionary:
 	_decay_all_knowledge(characters, current_season)
 
@@ -2721,7 +2729,7 @@ static func _process_season_transition(
 
 	var tick_result: Dictionary = ResourceTick.process_seasonal_tick(
 		province_array, settlements, season_name, season_meta, resolved_inputs,
-		worship_maluses, emperor_tax_config, trade_routes,
+		worship_maluses, emperor_tax_config, trade_routes, pirate_strength_by_province,
 	)
 
 	return {

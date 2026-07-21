@@ -212,6 +212,7 @@ static func compute_trade_route_koku(
 	province: ProvinceData,
 	routes: Array,
 	worship_maluses: Dictionary = {},
+	pirate_strength_by_province: Dictionary = {},
 ) -> float:
 	var prov_malus: Dictionary = worship_maluses.get(province.province_id, {})
 	if prov_malus.get("trade_route_koku_disabled", false):
@@ -220,8 +221,23 @@ static func compute_trade_route_koku(
 	for route: TradeRouteData in routes:
 		if route.is_disrupted:
 			continue
-		if route.connects(province.province_id):
-			total += route.koku_bonus_per_season
+		if not route.connects(province.province_id):
+			continue
+		var contribution: float = route.koku_bonus_per_season
+		# s11.11:505 pirate merchant-avoidance (NAVAL routes only): a pirate fleet at either
+		# endpoint drives merchant rerouting. Strength 6+ effectively closes the route (no
+		# income — no merchant sails pirate-infested waters unescorted); Strength 4+ cuts
+		# income 10%. The higher-strength endpoint governs.
+		if route.is_naval and not pirate_strength_by_province.is_empty():
+			var pstr: int = maxi(
+				int(pirate_strength_by_province.get(province.province_id, 0)),
+				int(pirate_strength_by_province.get(route.other_end(province.province_id), 0)),
+			)
+			if pstr >= 6:
+				continue  # route effectively closed
+			elif pstr >= 4:
+				contribution *= 0.9
+		total += contribution
 	return total
 
 

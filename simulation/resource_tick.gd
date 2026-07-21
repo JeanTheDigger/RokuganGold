@@ -314,7 +314,11 @@ static func process_seasonal_tick(
 	worship_maluses: Dictionary = {},
 	emperor_tax_config: Dictionary = {},
 	trade_routes: Array = [],
+	pirate_strength_by_province: Dictionary = {},
 ) -> Dictionary:
+	# s11.11:505 pirate merchant-avoidance: expose the per-province pirate-fleet strength to
+	# the trade-route computation via settlement_meta (same channel as _worship_maluses).
+	settlement_meta["_pirate_strength"] = pirate_strength_by_province
 	var results: Dictionary = {
 		"rice_consumed": {},
 		"starvation_changes": {},
@@ -1212,10 +1216,12 @@ static func _process_trade_route_koku(
 			typed_routes.append(r)
 	var worship_m: Dictionary = settlement_meta.get("_worship_maluses", {})
 	var garrison_data: Dictionary = settlement_meta.get("_garrison", {})
+	# s11.11:505 pirate merchant-avoidance on naval routes (built in advance_day).
+	var pirate_str: Dictionary = settlement_meta.get("_pirate_strength", {})
 	for prov: ProvinceData in provinces:
 		var pid: int = prov.province_id
 		var bonus: float = RiceMarketSystem.compute_trade_route_koku(
-			prov, typed_routes, worship_m,
+			prov, typed_routes, worship_m, pirate_str,
 		)
 		if bonus <= 0.0:
 			results[pid] = {"trade_koku": 0.0, "garrison_drain": 0.0}
