@@ -220,7 +220,8 @@ static func advance_day(
 	# the ASCII map (Phase 1; the launch is MissionFlow/CombatScreen's job).
 	var pc_mission_arrivals: Array = _process_pc_mission_arrivals(
 		characters, provinces, insurgencies, bloodspeaker_cells,
-		spiritual_insurgency_events, world_states.get("_settlement_province_map", {}), ic_day,
+		spiritual_insurgency_events, world_states.get("_settlement_province_map", {}),
+		settlements, travel_arrivals, ic_day,
 	)
 	_process_compulsion_on_arrival(
 		travel_arrivals, characters_by_id, settlements, world_states, dice_engine,
@@ -14058,12 +14059,16 @@ static func _process_travel(
 # PC) and never touches the ASCII map. Returns one entry per PC whose arrival
 # carries content: { pc_id, province_id, auto_seeds, engageable_seeds }.
 #
-# Known Phase-1 limitations (data gaps, not silent drops):
-#  - wall_statuses is passed empty — no province-keyed wall-status source exists yet,
-#    so Wall Sortie (PLAYER_INITIATED) seeds are not produced.
-#  - Road Encounters (s4.3.11, rolled per under-garrisoned province TRAVERSED) are a
-#    separate travel mechanism (QuestSeedSelector.check_road_encounter), not an
-#    arrival seed, and are not part of this pass.
+# Road Encounters (s4.3.11 / s56.1.5): a PC who TRAVELS into an under-garrisoned
+# province rolls QuestSeedSelector.check_road_encounter (15% → a Ronin Bandit AUTO
+# seed) on top of the province's standing seeds. Gated on a travel arrival (NOT login —
+# you are not ambushed by logging in at home) into a newly-entered province. Limitation:
+# s4.3.11 is "per under-garrisoned province TRAVERSED", but the settlement→settlement
+# travel model carries no intermediate-province route, so only the destination province
+# entered is evaluated (a data limitation, not over/under-invention).
+#
+# Known Phase-1 limitation: wall_statuses is passed empty — no province-keyed wall-status
+# source exists yet — so Wall Sortie (PLAYER_INITIATED) seeds are not produced.
 static func _process_pc_mission_arrivals(
 	characters: Array,
 	provinces: Dictionary,
@@ -14071,8 +14076,15 @@ static func _process_pc_mission_arrivals(
 	bloodspeaker_cells: Array,
 	spiritual_events: Array,
 	settlement_province_map: Dictionary,
+	settlements: Array,
+	travel_arrivals: Array,
 	ic_day: int,
 ) -> Array:
+	# PCs who reached their destination via TRAVEL this day (road-encounter eligible).
+	var travel_arrived_ids: Dictionary = {}
+	for a: Dictionary in travel_arrivals:
+		travel_arrived_ids[int(a.get("character_id", -1))] = true
+
 	var out: Array = []
 	for c: L5RCharacterData in characters:
 		if not c.is_pc:
@@ -14084,13 +14096,24 @@ static func _process_pc_mission_arrivals(
 			insurgencies, {}, bloodspeaker_cells, ic_day, spiritual_events)
 		if not res.get("arrived", false):
 			continue
+		var province_id: int = res.get("province_id", -1)
 		var auto: Array = res.get("auto_seeds", [])
 		var engageable: Array = res.get("engageable_seeds", [])
+
+		# Road encounter: travel arrival into an under-garrisoned province (s4.3.11).
+		if travel_arrived_ids.has(c.character_id):
+			var prov: ProvinceData = provinces.get(province_id)
+			if prov != null and ResourceTick.is_under_garrisoned(prov, settlements):
+				var re: Dictionary = QuestSeedSelector.check_road_encounter(prov, false, ic_day)
+				if re.get("triggered", false):
+					auto = auto.duplicate()
+					auto.append(re)
+
 		if auto.is_empty() and engageable.is_empty():
 			continue  # arrived, but this province has nothing to enter
 		out.append({
 			"pc_id": c.character_id,
-			"province_id": res.get("province_id", -1),
+			"province_id": province_id,
 			"auto_seeds": auto,
 			"engageable_seeds": engageable,
 		})

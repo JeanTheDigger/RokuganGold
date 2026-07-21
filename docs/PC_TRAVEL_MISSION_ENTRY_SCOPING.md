@@ -31,9 +31,11 @@ Wired: `DayOrchestrator._process_pc_mission_arrivals` runs `PCArrivalResolver` o
 PC each day (after travel settles `physical_location`) and emits `pc_mission_arrivals`
 (`{pc_id, province_id, auto_seeds, engageable_seeds}` per PC with content) in the
 `advance_day` return dict. Province-change detection unifies the three arrival triggers.
-Producer only — no launch. Data-gap deferrals (documented in code): Wall Sortie seeds
-(no province-keyed wall-status source; `wall_statuses` passed empty) and Road Encounters
-(`check_road_encounter`, a per-traversed-province travel mechanism, not an arrival seed).
+Producer only — no launch. Road Encounters (s4.3.11 / s56.1.5) are wired into the same
+pass: a PC travel-arrival into an under-garrisoned province rolls `check_road_encounter`
+(15% → Ronin Bandit AUTO seed), login excluded; destination-province-only until
+intermediate-route data exists. Remaining data-gap deferral: Wall Sortie seeds (no
+province-keyed wall-status source; `wall_statuses` passed empty).
 
 Original scope note (now satisfied): **In scope, no networking, no new design decisions**
 (uses the owner-set trigger policy from s56.19). For each PC in `advance_day`:
