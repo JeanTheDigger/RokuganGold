@@ -214,6 +214,14 @@ static func advance_day(
 	_process_duped_foolish_on_arrival(
 		travel_arrivals, characters_by_id, objectives_map, settlements,
 	)
+	# s56.19 PC mission entry: after travel/login has settled physical_location, detect
+	# each PC's province arrival and surface that province's classified quest seeds for
+	# the session layer. Headless producer only — never launches a mission or touches
+	# the ASCII map (Phase 1; the launch is MissionFlow/CombatScreen's job).
+	var pc_mission_arrivals: Array = _process_pc_mission_arrivals(
+		characters, provinces, insurgencies, bloodspeaker_cells,
+		spiritual_insurgency_events, world_states.get("_settlement_province_map", {}), ic_day,
+	)
 	_process_compulsion_on_arrival(
 		travel_arrivals, characters_by_id, settlements, world_states, dice_engine,
 	)
@@ -2167,6 +2175,7 @@ static func advance_day(
 		"festival_results": festival_results,
 		"favor_results": favor_results,
 		"travel_arrivals": travel_arrivals,
+		"pc_mission_arrivals": pc_mission_arrivals,
 		"auto_conceal_results": auto_conceal_results,
 		"progress_results": progress_results,
 		"letter_pass_results": letter_pass_results,
@@ -14037,6 +14046,55 @@ static func _process_travel(
 	characters: Array,
 ) -> Array:
 	return TravelSystem.process_travel_tick(characters)
+
+
+# -- PC Mission Entry — Arrival Pass (s56.19) ---------------------------------
+# Runs PCArrivalResolver over every PC each day. The resolver is province-change
+# detection, so this single pass uniformly catches all three owner-set arrival
+# triggers (travel completion, province-boundary crossing, login) — a PC whose
+# province has not changed since last run resolves cheaply to "not arrived".
+# Headless PRODUCER: it surfaces the destination province's classified seeds; it
+# does NOT launch a mission (that is MissionFlow/CombatScreen, and only for a live
+# PC) and never touches the ASCII map. Returns one entry per PC whose arrival
+# carries content: { pc_id, province_id, auto_seeds, engageable_seeds }.
+#
+# Known Phase-1 limitations (data gaps, not silent drops):
+#  - wall_statuses is passed empty — no province-keyed wall-status source exists yet,
+#    so Wall Sortie (PLAYER_INITIATED) seeds are not produced.
+#  - Road Encounters (s4.3.11, rolled per under-garrisoned province TRAVERSED) are a
+#    separate travel mechanism (QuestSeedSelector.check_road_encounter), not an
+#    arrival seed, and are not part of this pass.
+static func _process_pc_mission_arrivals(
+	characters: Array,
+	provinces: Dictionary,
+	insurgencies: Array,
+	bloodspeaker_cells: Array,
+	spiritual_events: Array,
+	settlement_province_map: Dictionary,
+	ic_day: int,
+) -> Array:
+	var out: Array = []
+	for c: L5RCharacterData in characters:
+		if not c.is_pc:
+			continue
+		# seed is vestigial in select_province_seeds (deterministic from world state);
+		# pass ic_day. wall_statuses passed empty (see limitation above).
+		var res: Dictionary = PCArrivalResolver.resolve_arrival(
+			c, settlement_province_map, provinces,
+			insurgencies, {}, bloodspeaker_cells, ic_day, spiritual_events)
+		if not res.get("arrived", false):
+			continue
+		var auto: Array = res.get("auto_seeds", [])
+		var engageable: Array = res.get("engageable_seeds", [])
+		if auto.is_empty() and engageable.is_empty():
+			continue  # arrived, but this province has nothing to enter
+		out.append({
+			"pc_id": c.character_id,
+			"province_id": res.get("province_id", -1),
+			"auto_seeds": auto,
+			"engageable_seeds": engageable,
+		})
+	return out
 
 
 # -- Auto-Conceal on Arrival (s12.8 CONCEAL_ITEM NPC Behavior) ----------------

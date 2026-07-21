@@ -26,9 +26,17 @@ s40 / s56 stack has been built-but-unreachable behind (the PC-travel HOLD).
 
 ## Remaining work, phased
 
-### Phase 1 — Headless: connect the resolver to the existing arrival pipeline
-**In scope now, no networking, no new design decisions** (uses the owner-set trigger
-policy from s56.19). For each PC in `advance_day`:
+### Phase 1 — Headless: connect the resolver to the existing arrival pipeline — **DONE 2026-07-21**
+Wired: `DayOrchestrator._process_pc_mission_arrivals` runs `PCArrivalResolver` over every
+PC each day (after travel settles `physical_location`) and emits `pc_mission_arrivals`
+(`{pc_id, province_id, auto_seeds, engageable_seeds}` per PC with content) in the
+`advance_day` return dict. Province-change detection unifies the three arrival triggers.
+Producer only — no launch. Data-gap deferrals (documented in code): Wall Sortie seeds
+(no province-keyed wall-status source; `wall_statuses` passed empty) and Road Encounters
+(`check_road_encounter`, a per-traversed-province travel mechanism, not an arrival seed).
+
+Original scope note (now satisfied): **In scope, no networking, no new design decisions**
+(uses the owner-set trigger policy from s56.19). For each PC in `advance_day`:
 - travel-completion: filter `travel_arrivals` for PCs → `PCArrivalResolver.resolve_arrival`.
 - login: call the resolver right after `PcSystem.login` sets `physical_location`.
 - store the returned `auto_seeds` / `engageable_seeds` on the PC as *pending arrival
