@@ -1,12 +1,15 @@
 # CLAUDE.md — Historical Changelog Archive
 
-This is the archived "What's Been Built So Far" section, moved out of CLAUDE.md
-on 2026-07-21 to cut per-turn token cost (it was 96% of the file and re-read every
-turn). It is NOT auto-loaded. Read it only when you need historical context on a
-specific past system — grep it for the section/system name.
+This file archives, out of CLAUDE.md and to cut per-turn token cost (CLAUDE.md
+was re-read in full every turn), material moved on 2026-07-21 in two rounds:
+the "What's Been Built So Far" changelog (round 1) plus the Section
+Quick-Reference table, Pending Migration Tasks, and the "Decisions Needed" A–F
+tables (round 2). It is NOT auto-loaded. Read it only when you need historical
+context or a specific reference table — grep it for the section/system name.
 
-Active rules, LOCKED design decisions, PROVISIONAL-value tables, and the
-"Decisions Needed" tables remain in CLAUDE.md.
+Active rules, LOCKED design decisions, hard constraints, and the active
+per-feature Authorization policy remain inline in CLAUDE.md; CLAUDE.md keeps
+compact pointers here for the reference tables listed above.
 
 ---
 
