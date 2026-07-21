@@ -35264,13 +35264,17 @@ static func _process_place_shide_writebacks(
 		if not place_result.get("success", false):
 			continue
 
-		# Generate lifecycle topic (s57.26b A25–A27).
-		var new_tier: int = place_result.get("new_tier", 0)
+		# Generate lifecycle topic (s57.26b A8 / A27 / A28, LOCKED).
+		var old_tier: int = place_result.get("old_tier", -1)
 		var is_upgrade: bool = place_result.get("is_replacement_upgrade", false)
-		var topic_tier: int = (
-			TopicData.Tier.TIER_3 if new_tier >= GiftGivingSystem.QualityTier.EXCEPTIONAL
-			else TopicData.Tier.TIER_4
-		)
+		# A27/A28: a replacement (a shide was already present) fires a topic ONLY when the
+		# new quality exceeds the old; an equal/lower-quality replacement generates no topic.
+		# A fresh placement (old_tier < 0, no prior shide) always fires. The placement state
+		# change itself already applied in place_shide above.
+		if old_tier >= 0 and not is_upgrade:
+			continue
+		# A8: placement/replacement topic tier is always TIER_4.
+		var topic_tier: int = TopicData.Tier.TIER_4
 		var title: String = (
 			settlement.settlement_name + " shrine shide upgraded"
 			if is_upgrade
