@@ -639,7 +639,7 @@ static func execute(
 		"margin": roll_result.get("total", 0) - tn,
 	}
 
-	_apply_effects(result, action, character, ctx)
+	_apply_effects(result, action, character, ctx, dice_engine)
 	return result
 
 
@@ -1824,6 +1824,7 @@ static func _apply_effects(
 	action: NPCDataStructures.ScoredAction,
 	_character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
+	dice_engine: DiceEngine = null,
 ) -> void:
 	var effects: Dictionary = {}
 	var action_id: String = action.action_id
@@ -1859,6 +1860,18 @@ static func _apply_effects(
 			effects = _compute_self_effects(action_id, action, _character)
 	else:
 		effects = _compute_failure_effects(action_id, result.get("margin", 0))
+
+	# Ide Emissary R1a "The Heart Speaks" (s29.15.15): a critical failure of a guarded
+	# Category 1/2/5 action lets the Ide reflexively roll Etiquette (Courtesy)/Awareness
+	# vs TN 20 to avoid the disposition penalty (action still fails; no positive result).
+	if dice_engine != null and int(effects.get("disposition_change", 0)) < 0 \
+			and action_id in IDE_HEART_SPEAKS_GUARDED \
+			and _character.school.begins_with("Ide Emissary"):
+		var heart_save: Dictionary = SkillResolver.resolve_skill_check(
+			_character, dice_engine, "Etiquette", IDE_HEART_SPEAKS_TN, 0,
+			"Courtesy", Enums.Trait.AWARENESS)
+		if heart_save.get("success", false):
+			effects["disposition_change"] = 0
 
 	# Commerce Rank-5 mastery (s24): a market BUY moves the final price up to 20% in
 	# the actor's favor. PURCHASE_MARKET is the sim's market-buy koku transaction; the
@@ -2968,6 +2981,15 @@ const CRITICAL_FAILURE_DISPOSITION: Dictionary = {
 	"PROVOKE_EMOTION": -5,
 	"DISCERN_NEED": -3,
 }
+
+# Ide Emissary R1a "The Heart Speaks" (s29.15.15, LOCKED): on a critical failure of a
+# Category 1/2/5 court action, the Ide reflexively rolls Etiquette (Courtesy)/Awareness
+# vs TN 20; on success the disposition penalty is skipped (the action still fails — no
+# positive result). The guarded actions are exactly those the GDD enumerates.
+const IDE_HEART_SPEAKS_TN: int = 20
+const IDE_HEART_SPEAKS_GUARDED: Array[String] = [
+	"CHARM", "NEGOTIATE", "IMPRESS", "PERSUADE", "LISTEN_REFLECT",
+]
 
 
 static func _get_no_roll_effects(action_id: String) -> Dictionary:
