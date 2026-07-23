@@ -1744,6 +1744,9 @@ static func advance_day(
 		_process_starvation_effects(
 			seasonal_result, provinces, characters, characters_by_id,
 		)
+		_process_ptl_taint_exposure(
+			characters, provinces, world_states.get("_settlement_province_map", {}), dice_engine,
+		)
 		_decay_all_historical_modifiers(characters, ic_day)
 		CollectiveDisposition.decay_marriage_boosts(
 			world_states.get("marriage_clan_boosts", {}),
@@ -4236,6 +4239,45 @@ static func _process_starvation_effects(
 			# Ruling-lord Honor −0.5 and Glory −0.3 per Famine season.
 			HonorGlorySystem.apply_honor_change(lord, -0.5)
 			HonorGlorySystem.apply_glory_change(lord, -0.3)
+
+
+# -- PTL Taint Exposure (s11.11, LOCKED) --------------------------------------
+# A character spending a full season in a PTL-elevated province must resist Taint or
+# gain 0.5 Taint Rank. Resistance is an Earth Ring roll (Stamina+Willpower) vs a
+# PTL-scaled TN (15 at PTL 3-5 / 25 at 6-8 / 35 at 9-10, InsurgencySystem.
+# get_taint_resistance_tn). Susceptibility (the s11.11 Character Susceptibility
+# framework) lowers the effective TN by 2 per point above 0. This is the PTL-EXPOSURE
+# roll — how a character first accrues Taint from the corrupted land; the s42 periodic
+# ESCALATION roll (_process_periodic_taint_rolls, for characters who already carry
+# Taint) is a separate mechanic, so there is no double-count. Seasonal.
+static func _process_ptl_taint_exposure(
+	characters: Array,
+	provinces: Dictionary,
+	settlement_province_map: Dictionary,
+	dice_engine: DiceEngine,
+) -> void:
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		var loc: String = c.physical_location
+		if loc.is_empty() or not loc.is_valid_int():
+			continue
+		var prov_id: int = int(settlement_province_map.get(loc.to_int(), -1))
+		if prov_id < 0:
+			continue
+		var prov: ProvinceData = provinces.get(prov_id) as ProvinceData
+		if prov == null:
+			continue
+		var base_tn: int = InsurgencySystem.get_taint_resistance_tn(prov.province_taint_level)
+		if base_tn <= 0:
+			continue  # PTL below the Touched threshold (3) — no exposure
+		var disp_to_lord: int = c.disposition_values.get(c.lord_id, 0) if c.lord_id >= 0 else 0
+		var susc: int = InsurgencySystem.compute_susceptibility(c, disp_to_lord)
+		var eff_tn: int = maxi(0, base_tn - 2 * maxi(0, susc))
+		var earth: int = CharacterStats.get_earth_ring(c)
+		var roll: Dictionary = dice_engine.roll_skill_check(earth, 0, eff_tn)
+		if int(roll.get("total", 0)) < eff_tn:
+			c.taint += 0.5
 
 
 static func _process_famine_crises(
