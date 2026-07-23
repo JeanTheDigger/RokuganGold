@@ -305,12 +305,17 @@ static func prioritize_witnesses(
 			"present": is_present,
 		})
 
+	# s57.16.4 (LOCKED) priority order: highest estimated awareness, THEN lowest Honor,
+	# THEN proximity (present-first) as the final tiebreak — awareness is primary, not
+	# proximity. (Prior code sorted present-first, contradicting the locked order.)
 	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		if a["present"] != b["present"]:
-			return a["present"]
 		if a["awareness"] != b["awareness"]:
 			return a["awareness"] > b["awareness"]
-		return a["honor"] < b["honor"]
+		if a["honor"] != b["honor"]:
+			return a["honor"] < b["honor"]
+		if a["present"] != b["present"]:
+			return a["present"]
+		return false
 	)
 
 	var result: Array = []
