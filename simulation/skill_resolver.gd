@@ -643,6 +643,17 @@ static func resolve_skill_check(
 
 	# School technique free raises (s29.15)
 	var technique_fr: int = get_technique_free_raises(character, skill_name)
+	# Ide Emissary R1b (s29.15.15): +1 Free Raise on Sincerity (Honesty) rolls.
+	if skill_name == "Sincerity" and context.get("is_honest", false) \
+			and character.school.begins_with("Ide Emissary"):
+		technique_fr += 1
+	# Ide Emissary R1c (s29.15.15): +5 TN on the Ide's own Sincerity (Deceit) rolls —
+	# they are trained toward honesty, so lying is mechanically harder. A +5 TN penalty
+	# subtracts 5 from the roll total (same sign convention as adv_tn below).
+	var ide_deceit_tn: int = 0
+	if skill_name == "Sincerity" and context.get("is_deceit", false) \
+			and character.school.begins_with("Ide Emissary"):
+		ide_deceit_tn = 5
 
 	# Asako R2: From the Ashes social buff (s29.15.10)
 	var ashes_bonus: int = 0
@@ -750,7 +761,7 @@ static func resolve_skill_check(
 	# genuine bonus (+). mutation_mod.tn uses MutationSystem's own "positive = benefit" convention,
 	# so it stays additive (its penalties are stored negative there).
 	var total_bonus: int = flat_bonus + wound_penalty + ((technique_fr + mastery_fr) * FREE_RAISE_VALUE) \
-		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) - adv_tn \
+		+ (adv_skill.get("free_raises", 0) * FREE_RAISE_VALUE) - adv_tn - ide_deceit_tn \
 		+ mutation_mod.get("tn", 0) - soft_hearted_tn + darling_bonus \
 		+ _get_possession_terror_penalty(character)
 	# s40 Armor special-rule TN penalty (Light: Athletics/Stealth; Heavy/Iron/Riding:
