@@ -1747,6 +1747,7 @@ static func advance_day(
 		_process_ptl_taint_exposure(
 			characters, provinces, world_states.get("_settlement_province_map", {}), dice_engine,
 		)
+		_process_pirate_reputation(insurgencies, provinces, characters, characters_by_id)
 		_decay_all_historical_modifiers(characters, ic_day)
 		CollectiveDisposition.decay_marriage_boosts(
 			world_states.get("marriage_clan_boosts", {}),
@@ -4239,6 +4240,37 @@ static func _process_starvation_effects(
 			# Ruling-lord Honor −0.5 and Glory −0.3 per Famine season.
 			HonorGlorySystem.apply_honor_change(lord, -0.5)
 			HonorGlorySystem.apply_glory_change(lord, -0.3)
+
+
+# -- Pirate Reputation (s11.11:505, LOCKED) -----------------------------------
+# "A province known for piracy suffers −3 disposition from trade-dependent clans
+# (Yasuki, Ide, Mantis) per season the fleet persists." The disposition drop lands on
+# the province's RULING LORD — the party held responsible for failing to keep the
+# waters safe — from every Yasuki-family, Ide-family, or Mantis-clan character. Applied
+# per surviving PIRATE_FLEET, seasonally. (Target/from-set resolved from the locked text;
+# the GDD names the clans and the "known for piracy" province, so the ruling lord is the
+# accountable subject.)
+static func _process_pirate_reputation(
+	insurgencies: Array,
+	provinces: Dictionary,
+	characters: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for ins: InsurgencyData in insurgencies:
+		if ins.insurgency_type != Enums.InsurgencyType.PIRATE_FLEET or ins.strength <= 0:
+			continue
+		var prov: ProvinceData = provinces.get(ins.province_id) as ProvinceData
+		if prov == null:
+			continue
+		var lord: L5RCharacterData = _find_province_lord(prov, characters_by_id)
+		if lord == null or CharacterStats.is_dead(lord):
+			continue
+		for c: L5RCharacterData in characters:
+			if c == null or c == lord or CharacterStats.is_dead(c):
+				continue
+			if c.family == "Yasuki" or c.family == "Ide" or c.clan == "Mantis":
+				var cur: int = c.disposition_values.get(lord.character_id, 0)
+				c.disposition_values[lord.character_id] = clampi(cur - 3, -100, 100)
 
 
 # -- PTL Taint Exposure (s11.11, LOCKED) --------------------------------------
