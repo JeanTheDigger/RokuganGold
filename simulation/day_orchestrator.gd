@@ -1732,6 +1732,10 @@ static func advance_day(
 			emperor_tax_cfg, trade_routes, pirate_strength_by_province,
 		)
 		_apply_worship_stability_maluses(worship_maluses, provinces)
+		# s4.3 Minor Fortune stability blessings (Hamanri, Ko-no-hama): positive
+		# per-season Stability additions for provinces that worship them, parallel
+		# to the Great Fortune maluses above. Province-only.
+		_apply_minor_fortune_stability(worship_state, provinces)
 		# s2.3.23 District Economics: Otosan Uchi districts generate koku from their
 		# own PU (the capital is carved out of the standard koku tick to avoid
 		# double-counting); each Governor retains 30%, the rest flows to the Emperor.
@@ -27244,6 +27248,31 @@ static func _apply_worship_stability_maluses(
 		if prov == null:
 			continue
 		prov.stability = clampf(prov.stability + stability_delta, 0.0, 100.0)
+
+
+# s4.3 Minor Fortune stability blessings (LOCKED). Indexed by Enums.MinorBlessingTier
+# [NONE, T1, T2, T3]. Hamanri: +2/3/5 Stability per season. Ko-no-hama: +1/2/3.
+# (Hamanri T2/T3 insurgency-suppression / corruption clauses and Ko-no-hama's
+# visiting-courtier disposition bonus are separate channels — forward-noted.)
+const _HAMANRI_STABILITY: Array = [0.0, 2.0, 3.0, 5.0]
+const _KONOHAMA_STABILITY: Array = [0.0, 1.0, 2.0, 3.0]
+
+static func _apply_minor_fortune_stability(
+	worship_state: Dictionary,
+	provinces: Dictionary,
+) -> void:
+	if worship_state.is_empty():
+		return
+	var pmt: Dictionary = worship_state.get("province_minor_tiers", {})
+	for pid: Variant in pmt:
+		var prov: ProvinceData = provinces.get(pid) as ProvinceData
+		if prov == null:
+			continue
+		var tiers: Dictionary = pmt[pid]
+		var delta: float = _HAMANRI_STABILITY[int(tiers.get(Enums.MinorFortune.HAMANRI, Enums.MinorBlessingTier.NONE))]
+		delta += _KONOHAMA_STABILITY[int(tiers.get(Enums.MinorFortune.KO_NO_HAMA, Enums.MinorBlessingTier.NONE))]
+		if delta > 0.0:
+			prov.stability = clampf(prov.stability + delta, 0.0, 100.0)
 
 
 static func _apply_tyrant_stability_penalty(
