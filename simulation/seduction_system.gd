@@ -62,6 +62,7 @@ static func resolve_seduction(
 	variant: SeductionVariant,
 	dice_engine: DiceEngine,
 	raises_called: int = 0,
+	seducer_flat_bonus: int = 0,
 ) -> Dictionary:
 	var tempt_rank: int = seducer.skills.get("Temptation", 0)
 	if tempt_rank == 0:
@@ -74,8 +75,12 @@ static func resolve_seduction(
 	# their resistance (Etiquette/Willpower + Honor) rather than presenting a static TN, so
 	# Soul of Stone's +3k0 manipulation resist attaches via the is_manipulation_resist context.
 	# Called raises raise the bar the seducer must clear. BASE_TN (0) folds into the seducer roll.
+	# seducer_flat_bonus lets callers apply a location-based modifier to the seducer's
+	# side (e.g. s4.3 Muzaka "opposing extraction rolls -X" on SEDUCE_FOR_INFO in a
+	# Muzaka-blessed province — passed as a negative value).
 	var seducer_result: Dictionary = SkillResolver.resolve_skill_check(
 		seducer, dice_engine, "Temptation", BASE_TN,
+		0, "", Enums.Trait.NONE, 0, 0, seducer_flat_bonus,
 	)
 	var target_result: Dictionary = SkillResolver.resolve_skill_check(
 		target, dice_engine, "Etiquette", 0,

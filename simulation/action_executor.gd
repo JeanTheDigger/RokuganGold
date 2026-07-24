@@ -1433,7 +1433,9 @@ static func _try_execute_covert(
 		"BRIBE_FOR_INFO":
 			if target == null:
 				return {}
-			var r: Dictionary = _resolve_bribe_attempt(character, target, action, dice_engine)
+			# s4.3 Muzaka: -3/5/8 to the briber's roll in a Muzaka-blessed province.
+			var muzaka_pen_b: int = _get_muzaka_extraction_penalty("BRIBE_FOR_INFO", province_minor_tiers)
+			var r: Dictionary = _resolve_bribe_attempt(character, target, action, dice_engine, muzaka_pen_b)
 			return _build_covert_result(action, ctx, "Temptation", r)
 
 		"FABRICATE_SECRET":
@@ -1447,7 +1449,13 @@ static func _try_execute_covert(
 			if target == null:
 				return {}
 			var variant: SeductionSystem.SeductionVariant = _get_seduction_variant(action_id)
-			var r: Dictionary = SeductionSystem.resolve_seduction(character, target, variant, dice_engine)
+			# s4.3 Muzaka: -3/5/8 to the seducer's roll in a Muzaka-blessed province.
+			# Only SEDUCE_FOR_INFO (extraction of information) is penalised; the other
+			# seduction variants are not in _MUZAKA_EXTRACTION_ACTIONS, so they get 0.
+			var muzaka_pen_s: int = _get_muzaka_extraction_penalty(action_id, province_minor_tiers)
+			var r: Dictionary = SeductionSystem.resolve_seduction(
+				character, target, variant, dice_engine, 0, muzaka_pen_s,
+			)
 			return _build_covert_result(action, ctx, "Temptation", r)
 
 		"EXPOSE_SECRET_PRIVATELY":
@@ -1563,8 +1571,11 @@ static func _resolve_bribe_attempt(
 	magistrate: L5RCharacterData,
 	action: NPCDataStructures.ScoredAction,
 	dice_engine: DiceEngine,
+	briber_flat_modifier: int = 0,
 ) -> Dictionary:
-	var bribe_result: Dictionary = BriberySystem.attempt_bribe(briber, magistrate, dice_engine)
+	var bribe_result: Dictionary = BriberySystem.attempt_bribe(
+		briber, magistrate, dice_engine, briber_flat_modifier,
+	)
 	var result: int = bribe_result.get("result", BriberySystem.BribeResult.REFUSED)
 	var success: bool = result == BriberySystem.BribeResult.ACCEPTED
 	var blocked: bool = result == BriberySystem.BribeResult.BLOCKED_BY_PERSONALITY
@@ -1816,10 +1827,12 @@ static func _get_minor_fortune_roll_bonus(action_id: String, province_minor_tier
 # s4.3 Muzaka (enigmas) "opposing extraction rolls -3/5/8": targeted secret-extraction
 # actions performed in a Muzaka-blessed province are penalised (Muzaka hides the
 # province's secrets). Owner-approved classification (2026-07-24) example set. EAVESDROP
-# is wired (its resolver exposes a clean initiator flat-bonus slot); BRIBE_FOR_INFO and
-# SEDUCE_FOR_INFO use heterogeneous resolvers (_resolve_bribe_attempt / SeductionSystem)
-# and are forward-noted. Deliberately disjoint from _MUZAKA_GATHER_ACTIONS (no sign clash).
-const _MUZAKA_EXTRACTION_ACTIONS: Array[String] = ["EAVESDROP"]
+# is wired via its contested-check flat-bonus slot; BRIBE_FOR_INFO (BriberySystem) and
+# SEDUCE_FOR_INFO (SeductionSystem) are wired via each resolver's briber/seducer flat-bonus
+# slot. Deliberately disjoint from _MUZAKA_GATHER_ACTIONS (no sign clash).
+const _MUZAKA_EXTRACTION_ACTIONS: Array[String] = [
+	"EAVESDROP", "BRIBE_FOR_INFO", "SEDUCE_FOR_INFO",
+]
 
 ## Negative flat modifier for the extractor's roll when a targeted extraction action is
 ## performed in a Muzaka-blessed province. 0 (no penalty) otherwise. Returned negative so
