@@ -721,6 +721,7 @@ static func advance_day(
 		ic_day,
 		military_legions,
 		military_sections,
+		world_states.get("_province_minor_tiers", {}),
 	)
 	_capture_siege_hostages(
 		active_sieges, characters_by_id, companies, active_wars, active_hostages, ic_day,
@@ -3238,6 +3239,7 @@ static func _process_storm_assault_results(
 	ic_day: int = 0,
 	military_legions: Array = [],
 	military_sections: Array = [],
+	province_minor_tiers: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 
@@ -3283,12 +3285,23 @@ static func _process_storm_assault_results(
 		var dotm: bool = _cast_drawing_on_the_mountain(
 			siege_settlement_id, characters_by_id, dice_engine)
 		var fort_bonus: int = SiegeSystem.get_storm_defense_bonus(true, dotm)
+		# s4.3 Kisada (persistence, Minor Fortune): the besieged province's blessing
+		# grants Garrison defense +1/2/3. In a storm assault the defenders ARE the
+		# garrison, so this folds into the defender-side fortification bonus. Hachiman /
+		# Osano-Wo (territorial) grant flat Attack + Morale to both sides, as in a field
+		# battle. Both key off the siege settlement's province.
+		var siege_province_id: int = _settlement_province_id(siege_settlement_id, settlements)
+		var siege_tiers: Dictionary = province_minor_tiers.get(siege_province_id, {})
+		var kisada_tier: int = int(siege_tiers.get(Enums.MinorFortune.KISADA, Enums.MinorBlessingTier.NONE))
+		fort_bonus += _KISADA_GARRISON_DEFENSE[kisada_tier]
+		var mf_siege: Dictionary = _minor_fortune_battle_bonus(siege_province_id, province_minor_tiers)
 		# s34 The Earth Flows: a Battle shugenja on either side re-shapes the ground (attack bonus).
 		var ef_atk: int = _cast_the_earth_flows(atk_dicts, characters_by_id, dice_engine)
 		var ef_def: int = _cast_the_earth_flows(def_dicts, characters_by_id, dice_engine)
 		var battle_result: Dictionary = resolve_and_reconcile_battle(
 			atk_states, def_states, Enums.BattleTerrainType.URBAN,
 			dice_engine, settlements, false, fort_bonus, {}, ef_atk, ef_def,
+			int(mf_siege["attack"]), int(mf_siege["morale"]),
 		)
 
 		# s11.7a battle_record producer (storm-assault path — same as the field battle, incl. Stage 2
@@ -17763,7 +17776,7 @@ static func _process_military_daily(
 		movement_results, active_armies, active_tethers,
 	)
 	var siege_results: Array = _process_siege_ticks(
-		active_sieges, dice_engine,
+		active_sieges, dice_engine, settlements, province_minor_tiers,
 	)
 	var tether_results: Array = _process_tether_ticks(
 		active_tethers, dice_engine, companies,
@@ -18358,12 +18371,22 @@ static func _find_settlement_for_province(
 static func _process_siege_ticks(
 	active_sieges: Array,
 	dice_engine: DiceEngine,
+	settlements: Array = [],
+	province_minor_tiers: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 	for siege: Dictionary in active_sieges:
 		var personality: String = siege.get("personality_tag", "default")
+		# s4.3 Kisada (persistence): the besieged province's blessing grants a
+		# surrender grace of +1/+2 seasons before forced starvation surrender.
+		var grace_ticks: int = 0
+		if not province_minor_tiers.is_empty():
+			var pid: int = _settlement_province_id(int(siege.get("settlement_id", -1)), settlements)
+			var kis: int = int((province_minor_tiers.get(pid, {}) as Dictionary).get(
+				Enums.MinorFortune.KISADA, Enums.MinorBlessingTier.NONE))
+			grace_ticks = _KISADA_SURRENDER_GRACE_SEASONS[kis] * InvestigationSystem.DAYS_PER_SEASON
 		var r: Dictionary = SiegeSystem.process_siege_tick(
-			siege, dice_engine, personality,
+			siege, dice_engine, personality, grace_ticks,
 		)
 		results.append(r)
 	return results
@@ -27349,6 +27372,21 @@ const _HACHIMAN_ATTACK: Array = [0, 0, 1, 2]
 const _HACHIMAN_MORALE: Array = [0, 1, 2, 3]
 const _OSANOWO_ATTACK: Array = [0, 1, 1, 2]
 const _OSANOWO_MORALE: Array = [0, 0, 2, 3]
+# s4.3 Kisada (persistence): Garrison defense +1/2/3 by tier. Folded into the
+# defender-side fortification bonus in a storm assault (defenders = the garrison).
+# T2/T3 "extra seasons before forced surrender" and T3 "siege morale loss halved"
+# hook the siege starvation/event tick — forward-noted, not wired here.
+const _KISADA_GARRISON_DEFENSE: Array = [0, 1, 2, 3]
+# s4.3 Kisada extra seasons the province holds before forced starvation surrender:
+# T1 none, T2 +1 season, T3 +2 seasons. Converted to grace ticks via DAYS_PER_SEASON.
+const _KISADA_SURRENDER_GRACE_SEASONS: Array = [0, 0, 1, 2]
+
+## Province the given settlement belongs to (-1 if not found).
+static func _settlement_province_id(settlement_id: int, settlements: Array) -> int:
+	for sv: Variant in settlements:
+		if sv is SettlementData and (sv as SettlementData).settlement_id == settlement_id:
+			return (sv as SettlementData).province_id
+	return -1
 
 ## Territorial (battle-province) Minor Fortune Attack/Morale bonus, summed across
 ## Hachiman + Osano-Wo tiers held by the province where the battle occurs. Returns

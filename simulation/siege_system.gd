@@ -182,7 +182,10 @@ static func compute_ticks_until_starvation(
 	return floori(rice_stockpile / daily)
 
 
-static func process_starvation_tick(siege_state: Dictionary) -> Dictionary:
+static func process_starvation_tick(
+	siege_state: Dictionary,
+	surrender_grace_ticks: int = 0,
+) -> Dictionary:
 	var consumption: float = compute_daily_consumption(
 		siege_state["civilian_pu"],
 		siege_state["garrison_pu"],
@@ -192,7 +195,25 @@ static func process_starvation_tick(siege_state: Dictionary) -> Dictionary:
 	siege_state["ticks_elapsed"] += 1
 	siege_state["ticks_since_sortie"] += 1
 
-	var starved: bool = siege_state["rice_stockpile"] <= 0.0
+	# s4.3 Kisada (Minor Fortune): a besieged province blessed by Kisada "holds one/
+	# two extra seasons before forced surrender under siege." surrender_grace_ticks
+	# (extra_seasons x DAYS_PER_SEASON, computed by the caller) delays the starvation
+	# surrender: when rice first runs out, a grace countdown starts; garrison_starved
+	# only fires once it expires. No Kisada -> grace 0 -> surrender immediately (default).
+	var out_of_food: bool = siege_state["rice_stockpile"] <= 0.0
+	var starved: bool = false
+	if out_of_food:
+		if surrender_grace_ticks > 0:
+			if not siege_state.get("starvation_grace_started", false):
+				siege_state["starvation_grace_started"] = true
+				siege_state["starvation_grace_remaining"] = surrender_grace_ticks
+			else:
+				siege_state["starvation_grace_remaining"] = maxi(
+					0, int(siege_state.get("starvation_grace_remaining", 0)) - 1,
+				)
+			starved = int(siege_state.get("starvation_grace_remaining", 0)) <= 0
+		else:
+			starved = true
 	if starved:
 		siege_state["garrison_starved"] = true
 
@@ -201,6 +222,7 @@ static func process_starvation_tick(siege_state: Dictionary) -> Dictionary:
 		"rice_remaining": siege_state["rice_stockpile"],
 		"starved": starved,
 		"ticks_elapsed": siege_state["ticks_elapsed"],
+		"starvation_grace_remaining": int(siege_state.get("starvation_grace_remaining", 0)),
 	}
 
 
@@ -438,11 +460,12 @@ static func process_siege_tick(
 	siege_state: Dictionary,
 	_dice: DiceEngine,
 	personality_tag: String,
+	surrender_grace_ticks: int = 0,
 ) -> Dictionary:
 	if siege_state["siege_ended"]:
 		return {"already_ended": true}
 
-	var starve_result: Dictionary = process_starvation_tick(siege_state)
+	var starve_result: Dictionary = process_starvation_tick(siege_state, surrender_grace_ticks)
 	var honor_result: Dictionary = process_honor_cowardice(
 		siege_state, personality_tag,
 	)
