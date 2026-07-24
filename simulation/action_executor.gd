@@ -397,7 +397,7 @@ static func execute(
 		return _execute_perform_worship(action, character, ctx, dice_engine)
 
 	if action_id == "SCOUT_ENEMY":
-		return _execute_scout_enemy(action, character, ctx, dice_engine)
+		return _execute_scout_enemy(action, character, ctx, dice_engine, province_minor_tiers)
 
 	if action_id == "CONDUCT_SORTIE":
 		return _execute_conduct_sortie(action, character, ctx)
@@ -1787,11 +1787,13 @@ const _MINOR_FORTUNE_ROLL_BONUS: Array = [0, 3, 5, 8]
 # KolatExecutor, not this generic roll path — forward-noted.
 const _TENGEN_COMM_ACTIONS: Array[String] = ["WRITE_LETTER"]
 # Muzaka (enigmas) "intelligence gathering in province". Owner-approved classification
-# (2026-07-24): the generic-path investigation actions. SCOUT_ENEMY and the COVERT
-# gathering actions (EAVESDROP, SEARCH_QUARTERS, ...) use dedicated handlers off this
-# path — forward-noted, along with Muzaka's "opposing extraction rolls -X" (a contested-
-# roll penalty, a separate injection).
-const _MUZAKA_GATHER_ACTIONS: Array[String] = ["INVESTIGATE_PROVINCE", "INVESTIGATE_RUMOR"]
+# (2026-07-24): the generic-path investigation actions plus SCOUT_ENEMY (military
+# reconnaissance, applied in its dedicated handler). The COVERT gathering actions
+# (EAVESDROP, SEARCH_QUARTERS, ...) use their own dedicated handlers — forward-noted,
+# along with Muzaka's "opposing extraction rolls -X" (a contested-roll penalty).
+const _MUZAKA_GATHER_ACTIONS: Array[String] = [
+	"INVESTIGATE_PROVINCE", "INVESTIGATE_RUMOR", "SCOUT_ENEMY",
+]
 
 ## Flat Tengen/Muzaka roll bonus for the acting character, from the Minor Fortune tier
 ## held by the province they are in. province_minor_tiers here is the actor's-province
@@ -2562,13 +2564,17 @@ static func _execute_scout_enemy(
 	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
+	province_minor_tiers: Dictionary = {},
 ) -> Dictionary:
 	# GDD s55.23.2: Vassal-level military reconnaissance. Roll Battle+Perception
 	# vs TN 20. Success: learn enemy army data. Critical failure: scouts detected.
 	const SCOUT_TN: int = 20
+	# s4.3 Muzaka (enigmas): +3/5/8 intelligence-gathering bonus when scouting from a
+	# Muzaka-blessed province (same classified helper as the generic-path intel actions).
+	var muzaka_flat: int = _get_minor_fortune_roll_bonus("SCOUT_ENEMY", province_minor_tiers)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, "Battle", SCOUT_TN,
-		0, "", Enums.Trait.NONE, 0, 0, 0
+		0, "", Enums.Trait.NONE, 0, 0, muzaka_flat
 	)
 	var success: bool = roll_result.get("success", false)
 	var margin: int = roll_result.get("margin", 0)
