@@ -343,11 +343,12 @@ static func advance_day(
 	_inject_self_offenses(characters, active_topics, world_states)
 
 	var wm_for_military: Dictionary = world_states.get("_worship_maluses", {})
+	var mft_for_military: Dictionary = world_states.get("_province_minor_tiers", {})
 	var military_daily: Dictionary = _process_military_daily(
 		active_armies, active_sieges, active_tethers, order_states,
 		dice_engine, settlements, companies, wm_for_military,
 		active_wars, characters_by_id, provinces, active_hostages, ic_day,
-		military_legions, military_sections,
+		military_legions, military_sections, mft_for_military,
 	)
 
 	var dragon_schism_siege_event: Dictionary = {}
@@ -1708,6 +1709,10 @@ static func advance_day(
 		# other effect clusters can read the province-only bonuses this season. Same
 		# channel as _worship_maluses / _pirate_strength.
 		season_meta["_province_minor_tiers"] = worship_state.get("province_minor_tiers", {})
+		# Mirror into world_states so the daily military/battle path (which runs
+		# earlier in advance_day, not just at season transition) can read the
+		# current-season territorial battle blessings — same channel as _worship_maluses.
+		world_states["_province_minor_tiers"] = worship_state.get("province_minor_tiers", {})
 		var worship_maluses: Dictionary = WorshipSystem.compute_all_province_maluses(
 			worship_state, provinces,
 		)
@@ -17742,6 +17747,7 @@ static func _process_military_daily(
 	ic_day: int = 0,
 	military_legions: Array = [],
 	military_sections: Array = [],
+	province_minor_tiers: Dictionary = {},
 ) -> Dictionary:
 	var disband_results: Array = _process_disbands(
 		active_armies, companies, settlements,
@@ -17751,6 +17757,7 @@ static func _process_military_daily(
 		movement_results, active_armies, companies, active_wars,
 		dice_engine, settlements, characters_by_id, worship_maluses,
 		provinces, active_hostages, ic_day, military_legions, military_sections,
+		province_minor_tiers,
 	)
 	var retreat_arrival_results: Array = _process_retreat_arrivals(
 		movement_results, active_armies, active_tethers,
@@ -17827,6 +17834,7 @@ static func _resolve_army_battles(
 	ic_day: int = 0,
 	military_legions: Array = [],
 	military_sections: Array = [],
+	province_minor_tiers: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 
@@ -17901,9 +17909,16 @@ static func _resolve_army_battles(
 		var ef_atk: int = _cast_the_earth_flows(atk_company_dicts, characters_by_id, dice_engine)
 		var ef_def: int = _cast_the_earth_flows(def_company_dicts, characters_by_id, dice_engine)
 
+		# s4.3 Hachiman / Osano-Wo (Minor Fortune, territorial): the battle province's
+		# blessing grants flat Attack + Morale to ALL armies fighting there, both sides.
+		var mf_battle: Dictionary = _minor_fortune_battle_bonus(
+			battle_province_id, province_minor_tiers,
+		)
+
 		var battle_result: Dictionary = resolve_and_reconcile_battle(
 			atk_states, def_states, battle_terrain,
 			dice_engine, settlements, false, fort_bonus, worship_maluses, ef_atk, ef_def,
+			int(mf_battle["attack"]), int(mf_battle["morale"]),
 		)
 
 		# s11.7a battle_record producer: every participating living commander records this engagement
@@ -21241,9 +21256,16 @@ static func resolve_and_reconcile_battle(
 	worship_maluses: Dictionary = {},
 	earth_flows_attacker: int = 0,
 	earth_flows_defender: int = 0,
+	minor_fortune_attack: int = 0,
+	minor_fortune_morale: int = 0,
 ) -> Dictionary:
 	_inject_worship_battle_maluses(attacker_states, worship_maluses)
 	_inject_worship_battle_maluses(defender_states, worship_maluses)
+	# s4.3 territorial Minor Fortune battle blessing (Hachiman / Osano-Wo): flat
+	# Attack + Morale to BOTH sides, added on top of any worship malus already set.
+	# Runs after the malus injection so it composes rather than being overwritten.
+	_inject_minor_fortune_battle_bonus(attacker_states, minor_fortune_attack, minor_fortune_morale)
+	_inject_minor_fortune_battle_bonus(defender_states, minor_fortune_attack, minor_fortune_morale)
 	var battle_result: Dictionary = ArmyCombatSystem.resolve_battle(
 		attacker_states, defender_states, terrain, dice_engine,
 		is_amphibious, fortification_bonus, earth_flows_attacker, earth_flows_defender,
@@ -27315,6 +27337,49 @@ static func _build_emperor_tax_config(
 		clan_disps[c.clan] = disp
 	config["clan_dispositions"] = clan_disps
 	return config
+
+
+# s4.3 Hachiman (battle) + Osano-Wo (fire & thunder) territorial blessing tiers (LOCKED).
+# Indexed by Enums.MinorBlessingTier [NONE, T1, T2, T3]. Attack maps to the company
+# attack value; Morale maps to morale_defense (the rout-resisting stat), consumed via
+# the same worship_attack_penalty / worship_morale_penalty keys.
+#   Hachiman:  T1 +1 morale; T2 +2 morale +1 atk; T3 +3 morale +2 atk (+rout -5%, forward-note)
+#   Osano-Wo:  T1 +1 atk;    T2 +1 atk +2 morale; T3 +2 atk +3 morale (+storm +10%, forward-note)
+const _HACHIMAN_ATTACK: Array = [0, 0, 1, 2]
+const _HACHIMAN_MORALE: Array = [0, 1, 2, 3]
+const _OSANOWO_ATTACK: Array = [0, 1, 1, 2]
+const _OSANOWO_MORALE: Array = [0, 0, 2, 3]
+
+## Territorial (battle-province) Minor Fortune Attack/Morale bonus, summed across
+## Hachiman + Osano-Wo tiers held by the province where the battle occurs. Returns
+## {"attack": int, "morale": int}; both 0 when the province holds neither blessing.
+static func _minor_fortune_battle_bonus(
+	battle_province_id: int,
+	province_minor_tiers: Dictionary,
+) -> Dictionary:
+	var tiers: Dictionary = province_minor_tiers.get(battle_province_id, {})
+	if tiers.is_empty():
+		return {"attack": 0, "morale": 0}
+	var hach: int = int(tiers.get(Enums.MinorFortune.HACHIMAN, Enums.MinorBlessingTier.NONE))
+	var osan: int = int(tiers.get(Enums.MinorFortune.OSANO_WO, Enums.MinorBlessingTier.NONE))
+	return {
+		"attack": _HACHIMAN_ATTACK[hach] + _OSANOWO_ATTACK[osan],
+		"morale": _HACHIMAN_MORALE[hach] + _OSANOWO_MORALE[osan],
+	}
+
+
+## Add the territorial battle bonus to every company on a side, composing with any
+## worship malus already injected (+= on the shared signed keys).
+static func _inject_minor_fortune_battle_bonus(
+	battle_states: Array,
+	attack_bonus: int,
+	morale_bonus: int,
+) -> void:
+	if attack_bonus == 0 and morale_bonus == 0:
+		return
+	for bc: Dictionary in battle_states:
+		bc["worship_attack_penalty"] = int(bc.get("worship_attack_penalty", 0)) + attack_bonus
+		bc["worship_morale_penalty"] = int(bc.get("worship_morale_penalty", 0)) + morale_bonus
 
 
 static func _inject_worship_battle_maluses(
