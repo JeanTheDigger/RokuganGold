@@ -128,6 +128,7 @@ static func execute(
 	worship_province_malus: Dictionary = {},
 	doshin_bonus: int = 0,
 	crime_records: Array = [],
+	province_minor_tiers: Dictionary = {},
 ) -> Dictionary:
 	var action_id: String = action.action_id
 
@@ -621,8 +622,15 @@ static func execute(
 	var tn: int = _get_tn_for_action(action_id, action, ctx, worship_province_malus, character)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var doshin_flat: int = _get_doshin_bonus(action_id, doshin_bonus)
+	# s4.3 Tengen (writing & literature, Minor Fortune): a character acting in a
+	# Tengen-blessed province gains +3/5/8 to WRITE_LETTER rolls. Flat roll bonus,
+	# same channel as the winter-court / doshin bonuses. ("intelligence communication
+	# actions" — the GDD's other Tengen category — is an undefined ActionID set and
+	# is forward-noted; only the concrete WRITE_LETTER action is wired.)
+	var tengen_flat: int = _get_tengen_roll_bonus(action_id, province_minor_tiers)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
-		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0, wc_bonus + doshin_flat
+		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0,
+		wc_bonus + doshin_flat + tengen_flat
 	)
 
 	var result: Dictionary = {
@@ -1768,6 +1776,21 @@ static func _get_co_located_ids(
 				and not CharacterStats.is_dead(c):
 			ids.append(c.character_id)
 	return ids
+
+
+# s4.3 Tengen roll bonus by MinorBlessingTier [NONE, T1, T2, T3].
+const _TENGEN_ROLL_BONUS: Array = [0, 3, 5, 8]
+
+## Flat Tengen roll bonus for the acting character, based on the Minor Fortune tier
+## held by the province they are in. Applies only to WRITE_LETTER (the one concrete
+## action in Tengen's LOCKED "WRITE_LETTER and intelligence communication actions"
+## clause; the latter category is an undefined ActionID set, forward-noted).
+## province_minor_tiers here is the actor's-province tier dict {MinorFortune -> tier}.
+static func _get_tengen_roll_bonus(action_id: String, province_minor_tiers: Dictionary) -> int:
+	if action_id != "WRITE_LETTER" or province_minor_tiers.is_empty():
+		return 0
+	var tier: int = int(province_minor_tiers.get(Enums.MinorFortune.TENGEN, Enums.MinorBlessingTier.NONE))
+	return _TENGEN_ROLL_BONUS[tier]
 
 
 # -- TN Calculation -----------------------------------------------------------

@@ -602,11 +602,15 @@ static func _execute_decision(
 	var sett_prov: Dictionary = world_state.get("_settlement_province_map", {})
 	var char_prov: int = sett_prov.get(char_loc, -1)
 	var wpm: Dictionary = wm_all.get(char_prov, {})
+	# s4.3 Minor Fortune: the actor's-province blessing tier dict, resolved the same
+	# way as the worship malus (physical_location -> settlement_province_map -> province).
+	var mft_all: Dictionary = world_state.get("_province_minor_tiers", {})
+	var char_minor: Dictionary = mft_all.get(char_prov, {})
 
 	var exec_result: Dictionary = ActionExecutor.execute(
 		action, character, ctx, dice_engine, action_skill_map,
 		military_data, characters_by_id, wpm, doshin_bonus_override,
-		crime_records,
+		crime_records, char_minor,
 	)
 	_apply_intimate_visit_bonus(exec_result, action, ctx)
 	return exec_result
