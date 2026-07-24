@@ -204,6 +204,30 @@ const DOJI_HONOR_THRESHOLD: float = 6.0
 const DOJI_FREE_RAISE_SKILLS: Array[String] = ["Courtier", "Sincerity", "Etiquette"]
 const FREE_RAISE_VALUE: int = 5
 
+## Yoritomo Courtier Intimidation passives (s29.15.20). R2 Storm Heart: Willpower is
+## considered one Rank higher when using Intimidation (the extra +1 vs lower-Status
+## samurai needs the target and is not applied in this single-actor resolver). R5 Strength
+## in All Things: +5k0 on any offensive Intimidation roll. Returns {trait, rolled, kept}.
+static func _yoritomo_intimidation_bonus(
+	character: L5RCharacterData, skill_name: String) -> Dictionary:
+	var out: Dictionary = {"trait": 0, "rolled": 0, "kept": 0}
+	if not character.school.begins_with("Yoritomo Courtier"):
+		return out
+	var base: String = skill_name
+	var colon: int = skill_name.find(":")
+	if colon >= 0:
+		base = skill_name.substr(0, colon).strip_edges()
+	if base != "Intimidation":
+		return out
+	var rank: int = CharacterStats.get_insight_rank(character)
+	if rank >= 2:
+		out["trait"] = 1  # R2: Willpower considered one Rank higher
+	if rank >= 5:
+		out["rolled"] = 5  # R5: +5k0 offensive Intimidation
+		out["kept"] = 5
+	return out
+
+
 ## Bayushi Courtier R1a (s29.15.13): Free Raises from an opponent's weakness — 1 per 3
 ## points of their Mental+Social Disadvantage point values, capped at 5. Only fires for a
 ## Bayushi Courtier. (The GDD also adds the severity of secrets the Bayushi holds about the
@@ -682,6 +706,9 @@ static func resolve_skill_check(
 	var adv_wound: int = AdvantageSystem.get_wound_tn_modifier(character)
 	var adv_trait: int = AdvantageSystem.get_trait_modifier(character, trait_used, context)
 	trait_value += adv_trait
+	# Yoritomo Courtier Intimidation passives (s29.15.20 R2/R5).
+	var yori_mod: Dictionary = _yoritomo_intimidation_bonus(character, skill_name)
+	trait_value += int(yori_mod["trait"])
 	trait_value += _mental_quickness_trait_bonus(character, trait_used)  # s35: +3 Int from imbued item
 	trait_value += _earths_touch_trait_bonus(character, trait_used)  # s34: +1 chosen Earth Trait
 	if wound_penalty < 0:
@@ -762,12 +789,13 @@ static func resolve_skill_check(
 		+ imbalance_mod.get("rolled", 0) + inheritance_mod.get("rolled", 0)
 		+ kiho_mod.get("rolled", 0) + void_mod.get("rolled", 0) + voice_mod.get("rolled", 0)
 		+ mq_mod.get("rolled", 0) + soul_mod + wisdom_mod + hunting_mod
+		+ int(yori_mod["rolled"])
 	)
 	var kept: int = (
 		trait_value + bonus_kept + adv_skill.get("kept", 0) + mutation_mod.get("kept", 0)
 		+ imbalance_mod.get("kept", 0) + inheritance_mod.get("kept", 0)
 		+ kiho_mod.get("kept", 0) + void_mod.get("kept", 0) + voice_mod.get("kept", 0)
-		+ mq_mod.get("kept", 0)
+		+ mq_mod.get("kept", 0) + int(yori_mod["kept"])
 	)
 	# s24 universal Rank-10 mastery: +1 Free Raise on all rolls using the skill.
 	var mastery_fr: int = SkillMasterySystem.universal_free_raise(skill_rank)
