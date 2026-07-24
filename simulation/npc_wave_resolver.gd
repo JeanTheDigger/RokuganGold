@@ -88,7 +88,9 @@ static func resolve_day_applied(
 		characters_by_id
 	)
 	var applied: Array = EffectApplicator.apply_day_results(
-		results, characters_by_id, provinces, action_log, settlements
+		results, characters_by_id, provinces, action_log, settlements,
+		world_states.get("_province_minor_tiers", {}),
+		world_states.get("_settlement_province_map", {}),
 	)
 	return {
 		"results": results,

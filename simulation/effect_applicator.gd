@@ -13,6 +13,8 @@ static func apply(
 	provinces: Dictionary,
 	action_log: Array,
 	settlements: Array = [],
+	province_minor_tiers: Dictionary = {},
+	settlement_province_map: Dictionary = {},
 ) -> Dictionary:
 	var applied: Dictionary = {
 		"disposition_changes": [],
@@ -47,8 +49,15 @@ static func apply(
 		result.get("season", 0))
 	_apply_target_witness_effects(effects, target_id, characters, applied)
 	_apply_disposition_ripple(effects, actor, target_id, characters, applied)
+	# s4.3 Goemon (heroes, Minor Fortune): a named character serving a Goemon-blessed
+	# province gains +0.1/0.2/0.3 Glory from any Glory-generating action. Province is
+	# resolved from the actor's physical_location via settlement_province_map (the
+	# codebase's established character->province pattern).
+	var goemon_glory: float = _goemon_glory_bonus(
+		actor, province_minor_tiers, settlement_province_map,
+	)
 	_apply_honor(effects, actor, applied)
-	_apply_glory(effects, actor, applied)
+	_apply_glory(effects, actor, applied, goemon_glory)
 	_apply_winner_glory(effects, characters, applied)
 	_apply_infamy(effects, actor, applied)
 	_apply_province_effects(effects, result, provinces, applied, settlements)
@@ -364,12 +373,39 @@ static func _apply_honor(
 
 # -- Glory ---------------------------------------------------------------------
 
+# s4.3 Goemon Glory addend by MinorBlessingTier [NONE, T1, T2, T3].
+const _GOEMON_GLORY_BONUS: Array = [0.0, 0.1, 0.2, 0.3]
+
+## Goemon Glory addend for the actor, based on the Minor Fortune tier held by the
+## province the actor is physically in. 0.0 unless both maps are supplied and the
+## province holds Goemon. Applied only to positive (Glory-generating) changes.
+static func _goemon_glory_bonus(
+	actor: L5RCharacterData,
+	province_minor_tiers: Dictionary,
+	settlement_province_map: Dictionary,
+) -> float:
+	if province_minor_tiers.is_empty() or settlement_province_map.is_empty():
+		return 0.0
+	if actor.physical_location.is_empty() or not actor.physical_location.is_valid_int():
+		return 0.0
+	var pid: int = settlement_province_map.get(int(actor.physical_location), -1)
+	if pid < 0:
+		return 0.0
+	var tier: int = int((province_minor_tiers.get(pid, {}) as Dictionary).get(
+		Enums.MinorFortune.GOEMON, Enums.MinorBlessingTier.NONE))
+	return _GOEMON_GLORY_BONUS[tier]
+
+
 static func _apply_glory(
 	effects: Dictionary,
 	actor: L5RCharacterData,
 	applied: Dictionary,
+	goemon_bonus: float = 0.0,
 ) -> void:
 	var glory_change: float = effects.get("glory_change", 0.0)
+	# Goemon addend applies only to Glory-generating (positive) actions.
+	if glory_change > 0.0 and goemon_bonus > 0.0:
+		glory_change += goemon_bonus
 	if absf(glory_change) < 0.001:
 		return
 
@@ -634,9 +670,14 @@ static func apply_day_results(
 	provinces: Dictionary,
 	action_log: Array,
 	settlements: Array = [],
+	province_minor_tiers: Dictionary = {},
+	settlement_province_map: Dictionary = {},
 ) -> Array:
 	var all_applied: Array = []
 	for result: Dictionary in results:
-		var applied: Dictionary = apply(result, characters, provinces, action_log, settlements)
+		var applied: Dictionary = apply(
+			result, characters, provinces, action_log, settlements,
+			province_minor_tiers, settlement_province_map,
+		)
 		all_applied.append(applied)
 	return all_applied
