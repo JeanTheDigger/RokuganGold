@@ -683,6 +683,14 @@ static func advance_day(
 		day_result.get("results", []), settlements, characters_by_id
 	)
 
+	# s4.3 peace-bonus: accumulate this day's combat events (battles / successful raids /
+	# sieges / hostile transit) into the season's combat-province set.
+	_stamp_season_combat(
+		world_states, military_daily, day_result.get("results", []),
+		active_sieges, active_armies, provinces,
+		world_states.get("_settlement_province_map", {}), active_wars,
+	)
+
 	# s2.4.14 D6: mark Crab lords who committed troops during a Wall emergency.
 	_process_wall_emergency_contributions(
 		day_result.get("results", []), characters_by_id
@@ -1702,6 +1710,9 @@ static func advance_day(
 			world_states, characters_by_id,
 		)
 		_populate_tax_modifiers(characters, characters_by_id, provinces, season_meta)
+		# s4.3 peace-bonus: fold this season's combat stamps into the per-province peace
+		# counter BEFORE the resource tick reads it for growth, then reset the stamp set.
+		_update_peace_counters(season_meta, provinces, world_states)
 		# s11.11:505 pirate merchant-avoidance: per-province active PIRATE_FLEET strength,
 		# consumed by the trade-route computation (Strength 4+ −10% naval income, 6+ closed).
 		var pirate_strength_by_province: Dictionary = {}
@@ -14361,6 +14372,85 @@ static func _has_active_dishonor_escalation_topic(active_topics: Array, perp_id:
 	return false
 
 
+# -- Peace-Bonus Combat Stamping (s4.3 Combat Event Definition, LOCKED) --------
+# Records, per season, every province that experienced a combat event, so the
+# population peace bonus (+3% growth after 4 combat-free seasons) can apply. The
+# LOCKED definition: a battle in the province, a successful raid on it, a siege in it,
+# or a hostile (non-allied) army present in it. Accumulates daily into
+# world_states._combat_provinces_this_season; consumed + reset at the seasonal tick by
+# _update_peace_counters. Allied passage / failed raids / adjacent battles are excluded.
+static func _stamp_season_combat(
+	world_states: Dictionary,
+	military_daily: Dictionary,
+	day_results: Array,
+	active_sieges: Array,
+	active_armies: Array,
+	provinces: Dictionary,
+	settlement_province_map: Dictionary,
+	active_wars: Array,
+) -> void:
+	var combat: Dictionary = world_states.get("_combat_provinces_this_season", {})
+	# 1. Battles fought in a province.
+	for br: Variant in military_daily.get("battle_results", []):
+		if br is Dictionary:
+			var bpid: int = int((br as Dictionary).get("province_id", -1))
+			if bpid >= 0:
+				combat[bpid] = true
+	# 2. Successful raids on a province (a repelled/failed raid does not count).
+	for r: Variant in day_results:
+		if r is Dictionary:
+			var aid: String = (r as Dictionary).get("action_id", "")
+			if (aid == "CONDUCT_RAID" or aid == "RAID_HARVEST") \
+					and bool((r as Dictionary).get("success", false)):
+				var rpid: int = int((r as Dictionary).get("target_province_id", -1))
+				if rpid >= 0:
+					combat[rpid] = true
+	# 3. Sieges within a province.
+	for s: Variant in active_sieges:
+		if s is Dictionary:
+			var spid: int = int((s as Dictionary).get("province_id", -1))
+			if spid < 0:
+				var sid: Variant = (s as Dictionary).get("settlement_id", -1)
+				if sid is int and sid >= 0:
+					spid = int(settlement_province_map.get(sid, -1))
+			if spid >= 0:
+				combat[spid] = true
+	# 4. Hostile transit: an enemy army present in a province not held by its own clan
+	#    (allied passage through a friendly province does not count).
+	for army: Variant in active_armies:
+		if army is Dictionary:
+			var apid: int = int((army as Dictionary).get("province_id", -1))
+			if apid < 0:
+				continue
+			var prov: ProvinceData = provinces.get(apid) as ProvinceData
+			var oc: String = (army as Dictionary).get(
+				"owning_clan", (army as Dictionary).get("clan_name", ""))
+			# Hostile = the army's clan is at war with the province's clan (allied and
+			# neutral passage do NOT count, per the LOCKED exclusion).
+			if prov != null and prov.clan != "" and oc != "" and prov.clan != oc \
+					and WarSystem.are_clans_at_war(active_wars, oc, prov.clan):
+				combat[apid] = true
+	world_states["_combat_provinces_this_season"] = combat
+
+
+# Seasonal: update each province's peace counter (_peace_seasons, read by ResourceTick
+# for the +3% peace growth bonus) from this season's combat stamps, then reset the stamp
+# set. A province with a combat event resets to 0; a peaceful one increments.
+static func _update_peace_counters(
+	season_meta: Dictionary, provinces: Dictionary, world_states: Dictionary,
+) -> void:
+	var combat: Dictionary = world_states.get("_combat_provinces_this_season", {})
+	var peace: Dictionary = season_meta.get("_peace_seasons", {})
+	for pid: Variant in provinces:
+		var p: int = int(pid)
+		if combat.has(p):
+			peace[p] = 0
+		else:
+			peace[p] = int(peace.get(p, 0)) + 1
+	season_meta["_peace_seasons"] = peace
+	world_states["_combat_provinces_this_season"] = {}
+
+
 # -- Office-Holder Conviction Cascade (s11.3.17e, LOCKED) ----------------------
 # Effects encoded in MagistrateAllocationSystem.get_conviction_cascade (previously
 # dead code). Governor/Provincial Daimyo -> province succession + Stability −5 in that
@@ -17845,6 +17935,7 @@ static func _resolve_army_battles(
 		battle_result["defender_army_ids"] = enemy_army_ids
 		battle_result["attacker_clan"] = attacker_clan
 		battle_result["defender_clan"] = defender_clan
+		battle_result["province_id"] = battle_province_id  # s4.3 peace-bonus combat stamp
 		mr["battle_resolved"] = true
 		mr["company_count"] = atk_company_dicts.size() + def_company_dicts.size()
 		results.append(battle_result)
