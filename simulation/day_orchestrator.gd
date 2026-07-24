@@ -797,6 +797,7 @@ static func advance_day(
 		ic_day,
 		ships,
 		dice_engine,
+		world_states.get("_vacant_office_provinces", {}),
 	)
 
 	# Refresh vacancy intelligence after daily construction creates new settlements
@@ -1393,6 +1394,11 @@ static func advance_day(
 	)
 
 	_remove_resolved_successions(active_successions, ic_day)
+	# s11.3.17e: an office-vacancy freeze (tax/construction/levy) lasts only until the
+	# succession is confirmed. Once no active succession still covers a frozen province,
+	# clear its vacancy — the new office-holder resumes provincial decisions.
+	_clear_resolved_office_vacancies(
+		world_states, active_successions, world_states.get("_settlement_province_map", {}))
 
 	var conversation_results: Array = _process_daily_conversations(
 		characters, dice_engine, current_season, active_topics
@@ -14429,6 +14435,30 @@ static func _apply_office_holder_conviction_cascade(
 			convicted.role_position = ""
 
 
+# Clear office-vacancy freezes for provinces whose succession has resolved (no active
+# succession still maps to them). Self-correcting: runs after resolved successions are
+# removed, so a refilled seat unfreezes on the next tick.
+static func _clear_resolved_office_vacancies(
+	world_states: Dictionary,
+	active_successions: Array,
+	settlement_province_map: Dictionary,
+) -> void:
+	var vacant: Dictionary = world_states.get("_vacant_office_provinces", {})
+	if vacant.is_empty():
+		return
+	var still_pending: Dictionary = {}
+	for s: SuccessionData in active_successions:
+		var loc: String = s.settlement_id
+		if not loc.is_empty() and loc.is_valid_int():
+			var pid: int = int(settlement_province_map.get(loc.to_int(), -1))
+			if pid >= 0:
+				still_pending[pid] = true
+	for pid2: Variant in vacant.keys():
+		if not still_pending.has(int(pid2)):
+			vacant.erase(pid2)
+	world_states["_vacant_office_provinces"] = vacant
+
+
 # Map a role_position string to its ConvictedPosition + succession LordRank tier.
 # Empty for magistrate / non-cascade offices (handled elsewhere or not covered).
 static func _convicted_office_position(role_position: String) -> Dictionary:
@@ -19110,6 +19140,7 @@ static func _process_military_effects(
 			var r: Dictionary = _apply_levy_pu_effect(
 				applied, settlements, companies, next_company_id,
 				characters_by_id, clans, season_count,
+				world_states.get("_vacant_office_provinces", {}),
 			)
 			if not r.is_empty():
 				results.append(r)
@@ -20464,10 +20495,15 @@ static func _apply_levy_pu_effect(
 	characters_by_id: Dictionary = {},
 	clans: Dictionary = {},
 	season_count: int = 0,
+	vacant_office_provinces: Dictionary = {},
 ) -> Dictionary:
 	var province_id: int = applied.get("target_province_id", -1)
 	if province_id < 0:
 		return {}
+	# s11.3.17e: no levy orders may be issued in a province whose governor seat is vacant
+	# (between an office-holder's conviction and the succession being confirmed).
+	if vacant_office_provinces.has(province_id):
+		return {"blocked_reason": "governor_seat_vacant"}
 
 	var target_settlement: SettlementData = null
 	for s: SettlementData in settlements:
@@ -27196,6 +27232,7 @@ static func _process_construction_effects(
 	ic_day: int,
 	ships: Array,
 	dice_engine: DiceEngine,
+	vacant_office_provinces: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 
@@ -27211,6 +27248,10 @@ static func _process_construction_effects(
 
 		var action_id: String = effects.get("construction_action", "")
 		var province_id: int = int(effects.get("province_id", -1))
+		# s11.3.17e: no new construction may begin in a province whose governor seat is
+		# vacant (between an office-holder's conviction and the succession being confirmed).
+		if vacant_office_provinces.has(province_id):
+			continue
 		var settlement_id: int = int(effects.get("settlement_id", -1))
 		var is_dedicated: bool = effects.get("is_dedicated", false)
 		var dedicated_fortune: int = int(effects.get("dedicated_fortune", -1))
