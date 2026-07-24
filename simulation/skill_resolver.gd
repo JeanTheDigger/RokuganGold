@@ -229,11 +229,15 @@ static func _yoritomo_intimidation_bonus(
 
 
 ## Bayushi Courtier R1a (s29.15.13): Free Raises from an opponent's weakness — 1 per 3
-## points of their Mental+Social Disadvantage point values, capped at 5. Only fires for a
-## Bayushi Courtier. (The GDD also adds the severity of secrets the Bayushi holds about the
-## target; that term needs the secret pool and is applied wherever that pool is available.)
+## points of their combined weakness, capped at 5. Only fires for a Bayushi Courtier.
+## Points sum two sources (s29.15.13): (1) the target's Mental+Social Disadvantage point
+## values, and (2) the severity of any secrets the Bayushi holds about the target. Secret
+## weakness-points = 5 − severity_tier (owner decision 2026-07-24: aligns the inverted
+## SecretData.Severity enum — TIER_1 existential=1 … TIER_4 minor=4 — with the 1–4
+## disadvantage-point scale, so a more-severe secret contributes more). A secret is "held
+## about the target" when its subject_id is the target and the actor is in its known_by_ids.
 static func _bayushi_weakness_free_raises(
-	actor: L5RCharacterData, target: L5RCharacterData) -> int:
+	actor: L5RCharacterData, target: L5RCharacterData, active_secrets: Array = []) -> int:
 	if target == null or not actor.school.begins_with("Bayushi Courtier"):
 		return 0
 	var pts: int = 0
@@ -241,6 +245,11 @@ static func _bayushi_weakness_free_raises(
 		var cat: String = AdvantageSystem.get_disadvantage_category(dis.disadvantage_type)
 		if cat == "Mental" or cat == "Social":
 			pts += AdvantageSystem.get_disadvantage_points(dis)
+	for sv: Variant in active_secrets:
+		if sv is SecretData \
+				and (sv as SecretData).subject_id == target.character_id \
+				and actor.character_id in (sv as SecretData).known_by_ids:
+			pts += 5 - int((sv as SecretData).severity)
 	return mini(5, pts / 3)
 
 
@@ -944,6 +953,7 @@ static func resolve_contested_check(
 	ic_day: int = -1,
 	context_a: Dictionary = {},
 	context_b: Dictionary = {},
+	active_secrets: Array = [],
 ) -> Dictionary:
 	# Character A
 	var trait_a: Enums.Trait = trait_override_a if trait_override_a != Enums.Trait.NONE else get_trait_for_skill(skill_a)
@@ -985,13 +995,13 @@ static func resolve_contested_check(
 	var is_social_a: bool = context_a.get("is_social", false)
 	var is_social_b: bool = context_b.get("is_social", false)
 	# Bayushi Courtier R1a "Weakness is My Strength" (s29.15.13): on a Contested Social
-	# Roll, +1 Free Raise per 3 points of the OPPONENT's Mental+Social Disadvantage points
-	# (max 5). The held-secret-severity addend needs the secret pool (not passed to this
-	# resolver), so only the always-available Disadvantage-points term is applied here.
+	# Roll, +1 Free Raise per 3 points of the OPPONENT's combined weakness (max 5) —
+	# Mental+Social Disadvantage points plus held-secret severity. active_secrets (when
+	# supplied) enables the secret term; empty falls back to Disadvantage-points only.
 	if is_social_a:
-		tfr_a += _bayushi_weakness_free_raises(char_a, char_b)
+		tfr_a += _bayushi_weakness_free_raises(char_a, char_b, active_secrets)
 	if is_social_b:
-		tfr_b += _bayushi_weakness_free_raises(char_b, char_a)
+		tfr_b += _bayushi_weakness_free_raises(char_b, char_a, active_secrets)
 	var imb_a: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(char_a, is_social_a, ic_day)
 	var imb_b: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(char_b, is_social_b, ic_day)
 
