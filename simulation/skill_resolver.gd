@@ -204,6 +204,22 @@ const DOJI_HONOR_THRESHOLD: float = 6.0
 const DOJI_FREE_RAISE_SKILLS: Array[String] = ["Courtier", "Sincerity", "Etiquette"]
 const FREE_RAISE_VALUE: int = 5
 
+## Bayushi Courtier R1a (s29.15.13): Free Raises from an opponent's weakness — 1 per 3
+## points of their Mental+Social Disadvantage point values, capped at 5. Only fires for a
+## Bayushi Courtier. (The GDD also adds the severity of secrets the Bayushi holds about the
+## target; that term needs the secret pool and is applied wherever that pool is available.)
+static func _bayushi_weakness_free_raises(
+	actor: L5RCharacterData, target: L5RCharacterData) -> int:
+	if target == null or not actor.school.begins_with("Bayushi Courtier"):
+		return 0
+	var pts: int = 0
+	for dis: DisadvantageData in target.disadvantages:
+		var cat: String = AdvantageSystem.get_disadvantage_category(dis.disadvantage_type)
+		if cat == "Mental" or cat == "Social":
+			pts += AdvantageSystem.get_disadvantage_points(dis)
+	return mini(5, pts / 3)
+
+
 static func get_technique_free_raises(character: L5RCharacterData, skill_name: String) -> int:
 	var free_raises: int = 0
 	var base_skill: String = skill_name
@@ -940,6 +956,14 @@ static func resolve_contested_check(
 	# Elemental Imbalance overflow penalties (s45 lines 537-545)
 	var is_social_a: bool = context_a.get("is_social", false)
 	var is_social_b: bool = context_b.get("is_social", false)
+	# Bayushi Courtier R1a "Weakness is My Strength" (s29.15.13): on a Contested Social
+	# Roll, +1 Free Raise per 3 points of the OPPONENT's Mental+Social Disadvantage points
+	# (max 5). The held-secret-severity addend needs the secret pool (not passed to this
+	# resolver), so only the always-available Disadvantage-points term is applied here.
+	if is_social_a:
+		tfr_a += _bayushi_weakness_free_raises(char_a, char_b)
+	if is_social_b:
+		tfr_b += _bayushi_weakness_free_raises(char_b, char_a)
 	var imb_a: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(char_a, is_social_a, ic_day)
 	var imb_b: Dictionary = AdvantageSystem.get_imbalance_skill_penalty(char_b, is_social_b, ic_day)
 
