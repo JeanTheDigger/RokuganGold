@@ -14,6 +14,28 @@ const SUBSISTENCE_FLOOR_PER_PU: float = 1.00
 const KOKU_PER_TOWN_PU_PER_SEASON: float = 0.25
 const IRON_PER_MINING_PU_PER_SEASON: float = 0.50
 
+# -- s4.3 Minor Fortune agriculture blessings (LOCKED) ------------------------
+# All indexed by Enums.MinorBlessingTier: [NONE, NOTICED(T1), FAVORED(T2), BELOVED(T3)].
+# Province-only; applied in _process_harvest from the _province_minor_tiers map.
+# Inari (Rice harvest yield): +5/10/15% production; T3 floor 75% of base.
+const _INARI_PRODUCTION_BONUS: Array = [0.0, 0.05, 0.10, 0.15]
+const _INARI_FLOOR_FRAC: Array = [0.0, 0.0, 0.0, 0.75]
+# Kenro-ji-jin (soil fertility): base terrain Rice modifier +0.05/0.10/0.15.
+# (T3 "terrain degradation suspended" — no over-farming degradation system exists
+# yet; the numeric addend is the whole effect today.)
+const _KENRO_TERRAIN_ADDEND: Array = [0.0, 0.05, 0.10, 0.15]
+# Kuroshin (long-term farm productivity): +3/6/10% production.
+# (T3 "levy does not reduce Rice production this season" — harvest is already
+# spring-locked, so mid-season levy never cuts the locked yield; no-op today.)
+const _KUROSHIN_PRODUCTION_BONUS: Array = [0.0, 0.03, 0.06, 0.10]
+# Toyouke-omikama (grain): harvest yield floor 60/70/80% of base.
+# (T3 "bad harvest events reduced one severity tier" — forward-note; no harvest-
+# event severity pipeline to hook yet.)
+const _TOYOUKE_FLOOR_FRAC: Array = [0.0, 0.60, 0.70, 0.80]
+# Haruhiko (fishermen — coastal only): +0.25/0.5/0.75 Rice/season from fishing.
+# (T2 raised shortage threshold / T3 storm immunity — forward-notes.)
+const _HARUHIKO_FLAT_RICE: Array = [0.0, 0.25, 0.50, 0.75]
+
 # -- Tax Cascade Rates per GDD s4.3.7 -----------------------------------------
 
 const TAX_RATES: Dictionary = {
@@ -656,12 +678,20 @@ static func _process_harvest(
 	settlement_meta: Dictionary,
 ) -> Dictionary:
 	var harvest_results: Dictionary = {}
+	var minor_tiers: Dictionary = settlement_meta.get("_province_minor_tiers", {})
 	for prov: ProvinceData in provinces:
 		var meta: Dictionary = settlement_meta.get(prov.province_id, {})
 		var farming: int = sum_farming_pu(prov, settlements)
 		var locked_farming: float = float(meta.get("locked_farming_pu", farming))
 		var terrain_mult: float = prov.get_rice_multiplier()
-		var yield_amount: float = locked_farming * RICE_YIELD_PER_FARMING_PU_PER_YEAR * terrain_mult
+		# s4.3 Kenro-ji-jin (soil fertility): base terrain Rice modifier addend
+		# by blessing tier. Applied to terrain_mult BEFORE base yield is computed,
+		# since it is a permanent-for-the-season change to soil productivity.
+		var prov_minor: Dictionary = minor_tiers.get(prov.province_id, {})
+		var kenro_tier: int = int(prov_minor.get(Enums.MinorFortune.KENRO_JI_JIN, Enums.MinorBlessingTier.NONE))
+		terrain_mult += _KENRO_TERRAIN_ADDEND[kenro_tier]
+		var base_yield: float = locked_farming * RICE_YIELD_PER_FARMING_PU_PER_YEAR * terrain_mult
+		var yield_amount: float = base_yield
 		var harvest_destroyed: bool = meta.get("harvest_destroyed", false)
 		if harvest_destroyed:
 			yield_amount = 0.0
@@ -670,13 +700,34 @@ static func _process_harvest(
 		var rice_mod: float = (worship_m.get(prov.province_id, {}) as Dictionary).get("rice_modifier", 0.0)
 		if rice_mod < 0.0 and yield_amount > 0.0:
 			yield_amount = maxf(0.0, yield_amount * (1.0 + rice_mod))
+		# s4.3 Inari + Kuroshin: percentage Rice-production bonuses, applied
+		# multiplicatively to the (possibly malused) yield.
+		var inari_tier: int = int(prov_minor.get(Enums.MinorFortune.INARI, Enums.MinorBlessingTier.NONE))
+		var kuroshin_tier: int = int(prov_minor.get(Enums.MinorFortune.KUROSHIN, Enums.MinorBlessingTier.NONE))
+		var prod_bonus: float = _INARI_PRODUCTION_BONUS[inari_tier] + _KUROSHIN_PRODUCTION_BONUS[kuroshin_tier]
+		if prod_bonus > 0.0 and yield_amount > 0.0:
+			yield_amount *= (1.0 + prod_bonus)
+		# s4.3 Harvest yield floors — cannot fall below a fraction of base yield.
+		# Inari T3 = 75%; Toyouke-omikama tiers = 60/70/80%. Take the strongest floor.
+		var toyouke_tier: int = int(prov_minor.get(Enums.MinorFortune.TOYOUKE_OMIKAMA, Enums.MinorBlessingTier.NONE))
+		var floor_frac: float = maxf(_INARI_FLOOR_FRAC[inari_tier], _TOYOUKE_FLOOR_FRAC[toyouke_tier])
+		if floor_frac > 0.0:
+			yield_amount = maxf(yield_amount, base_yield * floor_frac)
+		# s4.3 Haruhiko (fishermen — coastal provinces only): flat Rice supplementation
+		# per season from fishing. Additive on top of the floor.
+		var haruhiko_tier: int = int(prov_minor.get(Enums.MinorFortune.HARUHIKO, Enums.MinorBlessingTier.NONE))
+		if prov.is_coastal and haruhiko_tier > Enums.MinorBlessingTier.NONE:
+			yield_amount += _HARUHIKO_FLAT_RICE[haruhiko_tier]
 		_distribute_rice_to_settlements(prov, settlements, yield_amount)
 		harvest_results[prov.province_id] = {
 			"farming_pu": locked_farming,
 			"terrain_mult": terrain_mult,
 			"yield": yield_amount,
+			"base_yield": base_yield,
 			"destroyed": harvest_destroyed,
 			"worship_rice_modifier": rice_mod,
+			"minor_production_bonus": prod_bonus,
+			"minor_floor_frac": floor_frac,
 		}
 	return harvest_results
 

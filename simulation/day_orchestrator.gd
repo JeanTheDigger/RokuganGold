@@ -1702,6 +1702,12 @@ static func advance_day(
 		worship_seasonal_results = _process_seasonal_worship(
 			worship_state, settlements, provinces,
 		)
+		# s4.3 Minor Fortune blessings: per-province, per-Fortune tier map freshly
+		# computed by _process_seasonal_worship. Stash it into season_meta (the
+		# settlement_meta that flows into the resource tick) so _process_harvest and
+		# other effect clusters can read the province-only bonuses this season. Same
+		# channel as _worship_maluses / _pirate_strength.
+		season_meta["_province_minor_tiers"] = worship_state.get("province_minor_tiers", {})
 		var worship_maluses: Dictionary = WorshipSystem.compute_all_province_maluses(
 			worship_state, provinces,
 		)
