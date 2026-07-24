@@ -991,9 +991,17 @@ static func resolve_contested_check(
 	if wp_b < 0:
 		wp_b = mini(0, wp_b + adv_wound_b)
 
-	# Elemental Imbalance overflow penalties (s45 lines 537-545)
-	var is_social_a: bool = context_a.get("is_social", false)
-	var is_social_b: bool = context_b.get("is_social", false)
+	# Elemental Imbalance overflow penalties (s45 lines 537-545) + Bayushi R1a gate.
+	# is_social is honoured from context when a caller sets it explicitly, and otherwise
+	# derived from the rolled skill via the canonical SOCIAL_SKILLS set — a contested
+	# roll on Etiquette/Courtier/Sincerity/Temptation/Acting/Intimidation IS a Contested
+	# Social Roll. This activates the GDD-specified social-roll effects (ELEMENTAL_IMBALANCE
+	# penalty s45; Bayushi Courtier R1a s29.15.13) that were otherwise dormant because no
+	# caller set the flag. Scoped by the effects themselves to imbalanced / Bayushi actors.
+	var base_skill_a: String = skill_a.split(":")[0].strip_edges()
+	var base_skill_b: String = skill_b.split(":")[0].strip_edges()
+	var is_social_a: bool = context_a.get("is_social", false) or base_skill_a in SOCIAL_SKILLS
+	var is_social_b: bool = context_b.get("is_social", false) or base_skill_b in SOCIAL_SKILLS
 	# Bayushi Courtier R1a "Weakness is My Strength" (s29.15.13): on a Contested Social
 	# Roll, +1 Free Raise per 3 points of the OPPONENT's combined weakness (max 5) —
 	# Mental+Social Disadvantage points plus held-secret severity. active_secrets (when
