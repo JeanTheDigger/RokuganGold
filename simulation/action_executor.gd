@@ -622,15 +622,15 @@ static func execute(
 	var tn: int = _get_tn_for_action(action_id, action, ctx, worship_province_malus, character)
 	var wc_bonus: int = _get_winter_court_skill_bonus(character, primary_skill, ctx)
 	var doshin_flat: int = _get_doshin_bonus(action_id, doshin_bonus)
-	# s4.3 Tengen (writing & literature, Minor Fortune): a character acting in a
-	# Tengen-blessed province gains +3/5/8 to WRITE_LETTER rolls. Flat roll bonus,
-	# same channel as the winter-court / doshin bonuses. ("intelligence communication
-	# actions" — the GDD's other Tengen category — is an undefined ActionID set and
-	# is forward-noted; only the concrete WRITE_LETTER action is wired.)
-	var tengen_flat: int = _get_tengen_roll_bonus(action_id, province_minor_tiers)
+	# s4.3 Tengen (writing) + Muzaka (enigmas) Minor Fortune roll bonuses: a character
+	# acting in a blessed province gains +3/5/8 to communication (Tengen: WRITE_LETTER)
+	# and intelligence-gathering (Muzaka: INVESTIGATE_PROVINCE/INVESTIGATE_RUMOR) rolls.
+	# Flat roll bonus, same channel as the winter-court / doshin bonuses. Owner-approved
+	# action classification 2026-07-24; dedicated-handler intel actions are forward-noted.
+	var minor_fortune_flat: int = _get_minor_fortune_roll_bonus(action_id, province_minor_tiers)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0,
-		wc_bonus + doshin_flat + tengen_flat
+		wc_bonus + doshin_flat + minor_fortune_flat
 	)
 
 	var result: Dictionary = {
@@ -1778,19 +1778,34 @@ static func _get_co_located_ids(
 	return ids
 
 
-# s4.3 Tengen roll bonus by MinorBlessingTier [NONE, T1, T2, T3].
-const _TENGEN_ROLL_BONUS: Array = [0, 3, 5, 8]
+# s4.3 Tengen/Muzaka roll bonus by MinorBlessingTier [NONE, T1, T2, T3].
+const _MINOR_FORTUNE_ROLL_BONUS: Array = [0, 3, 5, 8]
+# Tengen (writing & literature) "WRITE_LETTER and intelligence communication actions".
+# Owner-approved classification (2026-07-24): WRITE_LETTER is the concrete generic-path
+# communication action. Kolat-routed comms (DELIVER_SEALED_LETTER, RUN_COURIER_ROUTE,
+# DISTRIBUTE_INTELLIGENCE, ROUTE_ANONYMOUS_INTELLIGENCE, ...) resolve through
+# KolatExecutor, not this generic roll path — forward-noted.
+const _TENGEN_COMM_ACTIONS: Array[String] = ["WRITE_LETTER"]
+# Muzaka (enigmas) "intelligence gathering in province". Owner-approved classification
+# (2026-07-24): the generic-path investigation actions. SCOUT_ENEMY and the COVERT
+# gathering actions (EAVESDROP, SEARCH_QUARTERS, ...) use dedicated handlers off this
+# path — forward-noted, along with Muzaka's "opposing extraction rolls -X" (a contested-
+# roll penalty, a separate injection).
+const _MUZAKA_GATHER_ACTIONS: Array[String] = ["INVESTIGATE_PROVINCE", "INVESTIGATE_RUMOR"]
 
-## Flat Tengen roll bonus for the acting character, based on the Minor Fortune tier
-## held by the province they are in. Applies only to WRITE_LETTER (the one concrete
-## action in Tengen's LOCKED "WRITE_LETTER and intelligence communication actions"
-## clause; the latter category is an undefined ActionID set, forward-noted).
-## province_minor_tiers here is the actor's-province tier dict {MinorFortune -> tier}.
-static func _get_tengen_roll_bonus(action_id: String, province_minor_tiers: Dictionary) -> int:
-	if action_id != "WRITE_LETTER" or province_minor_tiers.is_empty():
+## Flat Tengen/Muzaka roll bonus for the acting character, from the Minor Fortune tier
+## held by the province they are in. province_minor_tiers here is the actor's-province
+## tier dict {MinorFortune -> tier}. Covers the generic-roll-path actions only.
+static func _get_minor_fortune_roll_bonus(action_id: String, province_minor_tiers: Dictionary) -> int:
+	if province_minor_tiers.is_empty():
 		return 0
-	var tier: int = int(province_minor_tiers.get(Enums.MinorFortune.TENGEN, Enums.MinorBlessingTier.NONE))
-	return _TENGEN_ROLL_BONUS[tier]
+	if action_id in _TENGEN_COMM_ACTIONS:
+		var t_tier: int = int(province_minor_tiers.get(Enums.MinorFortune.TENGEN, Enums.MinorBlessingTier.NONE))
+		return _MINOR_FORTUNE_ROLL_BONUS[t_tier]
+	if action_id in _MUZAKA_GATHER_ACTIONS:
+		var m_tier: int = int(province_minor_tiers.get(Enums.MinorFortune.MUZAKA, Enums.MinorBlessingTier.NONE))
+		return _MINOR_FORTUNE_ROLL_BONUS[m_tier]
+	return 0
 
 
 # -- TN Calculation -----------------------------------------------------------
