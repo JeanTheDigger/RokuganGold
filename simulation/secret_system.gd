@@ -474,12 +474,17 @@ static func resolve_eavesdrop(
 	eavesdropper: L5RCharacterData,
 	target: L5RCharacterData,
 	dice_engine: DiceEngine,
+	initiator_flat_bonus: int = 0,
 ) -> Dictionary:
 	apply_eavesdrop_costs(eavesdropper)
 
+	# initiator_flat_bonus lets callers apply a location-based modifier to the
+	# eavesdropper's side (e.g. s4.3 Muzaka "opposing extraction rolls -X" in a
+	# Muzaka-blessed province — passed as a negative value).
 	var contested: Dictionary = SkillResolver.resolve_contested_check(
 		eavesdropper, target, dice_engine,
 		EAVESDROP_SKILL, EAVESDROP_DETECT_SKILL,
+		"", "", Enums.Trait.NONE, Enums.Trait.NONE, 0, 0, initiator_flat_bonus,
 	)
 
 	var success: bool = contested.get("winner") == "a"

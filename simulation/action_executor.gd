@@ -548,7 +548,7 @@ static func execute(
 
 	if action_id in COVERT_ACTIONS:
 		var covert_result: Dictionary = _try_execute_covert(
-			action, character, ctx, dice_engine, characters_by_id
+			action, character, ctx, dice_engine, characters_by_id, province_minor_tiers
 		)
 		if not covert_result.is_empty():
 			return covert_result
@@ -1358,6 +1358,7 @@ static func _try_execute_covert(
 	ctx: NPCDataStructures.ContextSnapshot,
 	dice_engine: DiceEngine,
 	characters_by_id: Dictionary,
+	province_minor_tiers: Dictionary = {},
 ) -> Dictionary:
 	var action_id: String = action.action_id
 	var target: L5RCharacterData = characters_by_id.get(action.target_npc_id)
@@ -1366,7 +1367,9 @@ static func _try_execute_covert(
 		"EAVESDROP":
 			if target == null:
 				return {}
-			var r: Dictionary = SecretSystem.resolve_eavesdrop(character, target, dice_engine)
+			# s4.3 Muzaka: -3/5/8 to the eavesdropper's roll in a Muzaka-blessed province.
+			var muzaka_pen: int = _get_muzaka_extraction_penalty("EAVESDROP", province_minor_tiers)
+			var r: Dictionary = SecretSystem.resolve_eavesdrop(character, target, dice_engine, muzaka_pen)
 			return _build_covert_result(action, ctx, "Stealth", r)
 
 		"COMMUNE_KAMI":
@@ -1808,6 +1811,24 @@ static func _get_minor_fortune_roll_bonus(action_id: String, province_minor_tier
 		var m_tier: int = int(province_minor_tiers.get(Enums.MinorFortune.MUZAKA, Enums.MinorBlessingTier.NONE))
 		return _MINOR_FORTUNE_ROLL_BONUS[m_tier]
 	return 0
+
+
+# s4.3 Muzaka (enigmas) "opposing extraction rolls -3/5/8": targeted secret-extraction
+# actions performed in a Muzaka-blessed province are penalised (Muzaka hides the
+# province's secrets). Owner-approved classification (2026-07-24) example set. EAVESDROP
+# is wired (its resolver exposes a clean initiator flat-bonus slot); BRIBE_FOR_INFO and
+# SEDUCE_FOR_INFO use heterogeneous resolvers (_resolve_bribe_attempt / SeductionSystem)
+# and are forward-noted. Deliberately disjoint from _MUZAKA_GATHER_ACTIONS (no sign clash).
+const _MUZAKA_EXTRACTION_ACTIONS: Array[String] = ["EAVESDROP"]
+
+## Negative flat modifier for the extractor's roll when a targeted extraction action is
+## performed in a Muzaka-blessed province. 0 (no penalty) otherwise. Returned negative so
+## callers can pass it straight into a flat-bonus slot.
+static func _get_muzaka_extraction_penalty(action_id: String, province_minor_tiers: Dictionary) -> int:
+	if province_minor_tiers.is_empty() or action_id not in _MUZAKA_EXTRACTION_ACTIONS:
+		return 0
+	var tier: int = int(province_minor_tiers.get(Enums.MinorFortune.MUZAKA, Enums.MinorBlessingTier.NONE))
+	return -_MINOR_FORTUNE_ROLL_BONUS[tier]
 
 
 # -- TN Calculation -----------------------------------------------------------
