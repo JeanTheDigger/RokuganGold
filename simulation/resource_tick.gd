@@ -35,6 +35,18 @@ const _TOYOUKE_FLOOR_FRAC: Array = [0.0, 0.60, 0.70, 0.80]
 # Haruhiko (fishermen — coastal only): +0.25/0.5/0.75 Rice/season from fishing.
 # (T2 raised shortage threshold / T3 storm immunity — forward-notes.)
 const _HARUHIKO_FLAT_RICE: Array = [0.0, 0.25, 0.50, 0.75]
+# Hujokuko (fertility): PU growth rate +5/10/15%.
+# (T3 "infant mortality events suppressed" — no such event system; forward-note.)
+const _HUJOKUKO_GROWTH_BONUS: Array = [0.0, 0.05, 0.10, 0.15]
+# Koshin (roads): Town PU Koku generation +5/10/15%.
+# (T3 "market prices +5% favorable" — forward-note, market pipeline unhooked here.)
+const _KOSHIN_KOKU_BONUS: Array = [0.0, 0.05, 0.10, 0.15]
+# Sadahako (geisha & artists): Koku generation from town PU +3/5/8%.
+# (T2/T3 court-host bonuses — separate court-action channel, forward-note.)
+const _SADAHAKO_KOKU_BONUS: Array = [0.0, 0.03, 0.05, 0.08]
+# Suitengu (sea — port commerce, coastal only): Port settlement Koku +5/10/15%.
+# (T3 ship +1k0 first Navigation roll — sailing channel, forward-note.)
+const _SUITENGU_PORT_KOKU_BONUS: Array = [0.0, 0.05, 0.10, 0.15]
 
 # -- Tax Cascade Rates per GDD s4.3.7 -----------------------------------------
 
@@ -1050,6 +1062,7 @@ static func _process_population_adjustment(
 	# province_id and added to the computed rate for blessed provinces.
 	var miya_growth_bonus: Dictionary = settlement_meta.get("_miya_growth_bonus", {})
 	var worship_m: Dictionary = settlement_meta.get("_worship_maluses", {})
+	var minor_tiers: Dictionary = settlement_meta.get("_province_minor_tiers", {})
 	for prov: ProvinceData in provinces:
 		var starv: Dictionary = starvation_data.get(prov.province_id, {})
 		var stage: StarvationStage = starv.get("stage", StarvationStage.CLEAR)
@@ -1063,6 +1076,13 @@ static func _process_population_adjustment(
 			var pop_mod: float = (worship_m.get(prov.province_id, {}) as Dictionary).get("pop_growth_modifier", 0.0)
 			if pop_mod < 0.0:
 				rate = maxf(0.0, rate * (1.0 + pop_mod))
+		# s4.3 Hujokuko (fertility): PU growth rate +5/10/15% by blessing tier.
+		# A pure growth-rate multiplier; applies whenever growth occurs (rate > 0),
+		# so starving provinces (rate 0) are unaffected.
+		if rate > 0.0:
+			var huj_tier: int = int((minor_tiers.get(prov.province_id, {}) as Dictionary).get(
+				Enums.MinorFortune.HUJOKUKO, Enums.MinorBlessingTier.NONE))
+			rate *= (1.0 + _HUJOKUKO_GROWTH_BONUS[huj_tier])
 		var growth: Dictionary = apply_population_growth_settlements(prov, settlements, rate)
 		results[prov.province_id] = growth
 	return results
@@ -1225,6 +1245,12 @@ static func _process_koku_generation(
 	var location_mods: Dictionary = settlement_meta.get("_koku_modifiers", {})
 	var worship_m: Dictionary = settlement_meta.get("_worship_maluses", {})
 	var garrison_data: Dictionary = settlement_meta.get("_garrison", {})
+	var minor_tiers: Dictionary = settlement_meta.get("_province_minor_tiers", {})
+	# s4.3 Suitengu is coastal-only; build a coastal-province lookup once.
+	var coastal_ids: Dictionary = {}
+	for prov_c: Variant in settlement_meta.get("_provinces", []):
+		if prov_c is ProvinceData and (prov_c as ProvinceData).is_coastal:
+			coastal_ids[(prov_c as ProvinceData).province_id] = true
 	for s: SettlementData in settlements:
 		if s.town_pu <= 0:
 			continue
@@ -1240,6 +1266,17 @@ static func _process_koku_generation(
 		var koku_mod: float = (worship_m.get(s.province_id, {}) as Dictionary).get("koku_modifier", 0.0)
 		if koku_mod < 0.0:
 			koku = maxf(0.0, koku * (1.0 + koku_mod))
+		# s4.3 Minor Fortune town-Koku blessings (province-only, tiered):
+		# Koshin + Sadahako boost all town-PU Koku; Suitengu adds only for port
+		# settlements in coastal provinces. Additive fractions, applied multiplicatively.
+		if koku > 0.0:
+			var pm: Dictionary = minor_tiers.get(s.province_id, {})
+			var koku_bonus: float = _KOSHIN_KOKU_BONUS[int(pm.get(Enums.MinorFortune.KOSHIN, Enums.MinorBlessingTier.NONE))]
+			koku_bonus += _SADAHAKO_KOKU_BONUS[int(pm.get(Enums.MinorFortune.SADAHAKO, Enums.MinorBlessingTier.NONE))]
+			if coastal_ids.has(s.province_id) and "port" in s.infrastructure:
+				koku_bonus += _SUITENGU_PORT_KOKU_BONUS[int(pm.get(Enums.MinorFortune.SUITENGU, Enums.MinorBlessingTier.NONE))]
+			if koku_bonus > 0.0:
+				koku *= (1.0 + koku_bonus)
 		s.koku_stockpile += koku
 		var pid: int = s.province_id
 		if not results.has(pid):
