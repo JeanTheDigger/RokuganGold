@@ -281,6 +281,10 @@ static func advance_day(
 		active_courts, characters, characters_by_id, objectives_map,
 	)
 	_apply_well_connected_court_bonus(court_attendance, active_courts, characters_by_id)
+	# s4.3 Ko-no-hama (flowers, Minor Fortune): "+disposition with visiting courtiers".
+	# Interpreted (2026-07-24, following the WELL_CONNECTED court precedent) as mutual
+	# +2/3/5 disposition among attendees of a court held in a Ko-no-hama-blessed province.
+	_apply_konohama_court_disposition(court_attendance, active_courts, characters_by_id, world_states)
 	var court_results: Array = _process_active_courts(
 		active_courts, active_topics, next_topic_id, ic_day,
 		active_edicts, next_edict_id, active_wars,
@@ -22876,6 +22880,64 @@ static func _apply_well_connected_court_bonus(
 			character.disposition_values[attendee_id] = clampi(cur_wc + 10, -100, 100)
 			var cur_att: int = attendee.disposition_values.get(char_id, 0)
 			attendee.disposition_values[char_id] = clampi(cur_att + 10, -100, 100)
+
+
+# s4.3 Ko-no-hama court disposition by MinorBlessingTier [NONE, T1, T2, T3].
+const _KONOHAMA_COURT_DISPOSITION: Array = [0, 2, 3, 5]
+
+## Ko-no-hama (flowers): attendees arriving at a court held in a Ko-no-hama-blessed
+## province gain +2/3/5 mutual disposition with every other attendee — the pleasant,
+## flowered setting warms relations. Mirrors _apply_well_connected_court_bonus (mutual
+## attendee disposition), but province-triggered and tiered. Deduped once per attendee
+## per court session via CourtSessionData.session_state.
+static func _apply_konohama_court_disposition(
+	court_attendance: Array,
+	active_courts: Array,
+	characters_by_id: Dictionary,
+	world_states: Dictionary,
+) -> void:
+	var minor_tiers: Dictionary = world_states.get("_province_minor_tiers", {})
+	if minor_tiers.is_empty():
+		return
+	var spm: Dictionary = world_states.get("_settlement_province_map", {})
+	for entry: Dictionary in court_attendance:
+		if entry.get("action", "") != "arrived":
+			continue
+		var char_id: int = entry.get("character_id", -1)
+		var court_id: int = entry.get("court_id", -1)
+		if char_id < 0 or court_id < 0:
+			continue
+		var character: L5RCharacterData = characters_by_id.get(char_id) as L5RCharacterData
+		if character == null or CharacterStats.is_dead(character):
+			continue
+		var court_session: CourtSessionData = null
+		for c_entry: Variant in active_courts:
+			if c_entry is CourtSessionData and (c_entry as CourtSessionData).court_id == court_id:
+				court_session = c_entry as CourtSessionData
+				break
+		if court_session == null:
+			continue
+		var prov_id: int = spm.get(court_session.host_settlement_id, -1)
+		var tier: int = int((minor_tiers.get(prov_id, {}) as Dictionary).get(
+			Enums.MinorFortune.KO_NO_HAMA, Enums.MinorBlessingTier.NONE))
+		if tier <= Enums.MinorBlessingTier.NONE:
+			continue
+		var applied: Array = court_session.session_state.get("konohama_applied_ids", [])
+		if char_id in applied:
+			continue
+		applied.append(char_id)
+		court_session.session_state["konohama_applied_ids"] = applied
+		var delta: int = _KONOHAMA_COURT_DISPOSITION[tier]
+		for attendee_id: int in court_session.attendee_ids:
+			if attendee_id == char_id:
+				continue
+			var attendee: L5RCharacterData = characters_by_id.get(attendee_id) as L5RCharacterData
+			if attendee == null or CharacterStats.is_dead(attendee):
+				continue
+			var cur: int = int(character.disposition_values.get(attendee_id, 0))
+			character.disposition_values[attendee_id] = clampi(cur + delta, -100, 100)
+			var cur2: int = int(attendee.disposition_values.get(char_id, 0))
+			attendee.disposition_values[char_id] = clampi(cur2 + delta, -100, 100)
 
 
 static func _apply_early_departure(
