@@ -1521,6 +1521,16 @@ static func advance_day(
 		conviction_results, crime_records, objectives_map,
 	)
 
+	# s11.3.17e: a convicted NON-magistrate office-holder (governor / provincial daimyo /
+	# family daimyo / clan champion) fires the succession system, drops province Stability
+	# during the transition, generates a topic, and (governor) freezes the vacant seat's
+	# tax/construction/levy decisions. Magistrates are handled just above.
+	_apply_office_holder_conviction_cascade(
+		conviction_results, characters_by_id, provinces,
+		world_states.get("_settlement_province_map", {}),
+		active_topics, next_topic_id, active_successions, next_succession_id, world_states, ic_day,
+	)
+
 	_process_magistrate_conviction_cascade(
 		conviction_results, crime_records, characters_by_id, objectives_map,
 	)
@@ -14343,6 +14353,126 @@ static func _has_active_dishonor_escalation_topic(active_topics: Array, perp_id:
 				and t.subject_character_id == perp_id:
 			return true
 	return false
+
+
+# -- Office-Holder Conviction Cascade (s11.3.17e, LOCKED) ----------------------
+# Effects encoded in MagistrateAllocationSystem.get_conviction_cascade (previously
+# dead code). Governor/Provincial Daimyo -> province succession + Stability −5 in that
+# province. Family Daimyo -> clan succession + Tier 2 topic + Stability −5 across family
+# provinces. Clan Champion -> as family, across clan provinces. An executed convict is
+# handled by the death-keyed succession path; an exiled/removed (living) convict fires
+# the vacate succession here and the seat is marked vacant (admin freezes read that).
+static func _apply_office_holder_conviction_cascade(
+	conviction_results: Array,
+	characters_by_id: Dictionary,
+	provinces: Dictionary,
+	settlement_province_map: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	active_successions: Array,
+	next_succession_id: Array,
+	world_states: Dictionary,
+	ic_day: int,
+) -> void:
+	for conv: Dictionary in conviction_results:
+		if conv.get("outcome", "") != "convicted":
+			continue
+		var convicted: L5RCharacterData = characters_by_id.get(conv.get("accused_id", -1))
+		if convicted == null:
+			continue
+		var pos_map: Dictionary = _convicted_office_position(convicted.role_position)
+		if pos_map.is_empty():
+			continue  # magistrate / non-cascade office
+		var cascade: Dictionary = MagistrateAllocationSystem.get_conviction_cascade(
+			pos_map["position"])
+
+		# Stability −5 across the scoped provinces (s11.3.17e transition disruption).
+		var stab: int = int(cascade.get("stability_hit", 0))
+		if stab != 0:
+			for p: ProvinceData in _cascade_scoped_provinces(
+					convicted, String(cascade.get("stability_scope", "province")),
+					provinces, settlement_province_map):
+				p.stability = clampf(p.stability + float(stab), 0.0, 100.0)
+
+		# Conviction topic (TIER_2 for family/clan, TIER_3 for governor per the encoding).
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] = topic_id + 1
+		var t_tier: TopicData.Tier = int(cascade.get(
+			"topic_tier", TopicData.Tier.TIER_3)) as TopicData.Tier
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			topic_id, "%s convicted and removed from office" % convicted.character_name,
+			t_tier, TopicData.Category.POLITICAL, ic_day,
+			TopicMomentumSystem.initial_momentum_for_tier(t_tier),
+			[], convicted.clan, convicted.family, convicted.character_id,
+			"office_holder_conviction", "")
+		topic.subject_role = "PERPETRATOR"
+		active_topics.append(topic)
+
+		# Succession: execution is handled by the death path; a living (exiled/removed)
+		# convict fires the vacate succession now, then the seat is vacated + frozen.
+		if bool(cascade.get("succession_fires", false)) and not CharacterStats.is_dead(convicted):
+			var succ: SuccessionData = SuccessionSystem.trigger_succession(
+				convicted, SuccessionData.VacancyCause.EXILE,
+				pos_map["tier"] as Enums.LordRank, ic_day)
+			succ.succession_id = next_succession_id[0]
+			next_succession_id[0] += 1
+			active_successions.append(succ)
+			# s11.3.17e: only a vacant GOVERNOR position freezes provincial decisions
+			# (tax rates / new construction / levy orders). Family-daimyo and clan-champion
+			# vacancies disrupt Stability but do NOT freeze every province's administration.
+			if int(pos_map["position"]) == MagistrateAllocationSystem.ConvictedPosition.GOVERNOR:
+				var vacant: Dictionary = world_states.get("_vacant_office_provinces", {})
+				for p2: ProvinceData in _cascade_scoped_provinces(
+						convicted, "province", provinces, settlement_province_map):
+					vacant[p2.province_id] = ic_day
+				world_states["_vacant_office_provinces"] = vacant
+			convicted.role_position = ""
+
+
+# Map a role_position string to its ConvictedPosition + succession LordRank tier.
+# Empty for magistrate / non-cascade offices (handled elsewhere or not covered).
+static func _convicted_office_position(role_position: String) -> Dictionary:
+	if role_position == RoleRegistry.GOVERNOR_OTOSAN_UCHI:
+		return {"position": MagistrateAllocationSystem.ConvictedPosition.GOVERNOR,
+			"tier": Enums.LordRank.CITY_DAIMYO}
+	if role_position == RoleRegistry.PROVINCIAL_DAIMYO:
+		return {"position": MagistrateAllocationSystem.ConvictedPosition.GOVERNOR,
+			"tier": Enums.LordRank.PROVINCIAL_DAIMYO}
+	if role_position == RoleRegistry.FAMILY_DAIMYO \
+			or role_position == RoleRegistry.IMPERIAL_FAMILY_DAIMYO:
+		return {"position": MagistrateAllocationSystem.ConvictedPosition.FAMILY_DAIMYO,
+			"tier": Enums.LordRank.FAMILY_DAIMYO}
+	if role_position == RoleRegistry.CLAN_CHAMPION:
+		return {"position": MagistrateAllocationSystem.ConvictedPosition.CLAN_CHAMPION,
+			"tier": Enums.LordRank.CLAN_CHAMPION}
+	return {}
+
+
+# Provinces the cascade's stability/vacancy scope covers.
+static func _cascade_scoped_provinces(
+	convicted: L5RCharacterData, scope: String, provinces: Dictionary,
+	settlement_province_map: Dictionary,
+) -> Array:
+	var out: Array = []
+	if scope == "family_provinces":
+		for pid: Variant in provinces:
+			var p: ProvinceData = provinces[pid] as ProvinceData
+			if p != null and p.family == convicted.family and convicted.family != "":
+				out.append(p)
+	elif scope == "all_clan_provinces":
+		for pid2: Variant in provinces:
+			var p2: ProvinceData = provinces[pid2] as ProvinceData
+			if p2 != null and p2.clan == convicted.clan and convicted.clan != "":
+				out.append(p2)
+	else:
+		# "province": the province the office-holder administers (their seat's province).
+		var loc: String = convicted.physical_location
+		if not loc.is_empty() and loc.is_valid_int():
+			var prov_id: int = int(settlement_province_map.get(loc.to_int(), -1))
+			var sp: ProvinceData = provinces.get(prov_id) as ProvinceData
+			if sp != null:
+				out.append(sp)
+	return out
 
 
 # -- Auto-Conceal on Arrival (s12.8 CONCEAL_ITEM NPC Behavior) ----------------
