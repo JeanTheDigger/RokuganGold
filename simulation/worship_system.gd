@@ -138,6 +138,7 @@ static func make_initial_worship_state() -> Dictionary:
 		"clan_tiers": {},
 		"empire_tiers": make_initial_province_worship(),
 		"minor_fortune_wp": {},
+		"province_minor_tiers": {},
 	}
 
 
@@ -146,6 +147,9 @@ static func make_initial_worship_state() -> Dictionary:
 static func compute_passive_wp(worship_locations: Array) -> Dictionary:
 	var wp: Dictionary = make_initial_province_worship()
 	for loc: Dictionary in worship_locations:
+		# Minor-fortune shrines feed compute_passive_minor_wp, never the Great Fortunes.
+		if bool(loc.get("is_minor", false)):
+			continue
 		var loc_type: String = loc.get("type", "")
 		var is_dedicated: bool = loc.get("dedicated", false)
 		var dedicated_fortune: int = loc.get("fortune", -1)
@@ -162,6 +166,21 @@ static func compute_passive_wp(worship_locations: Array) -> Dictionary:
 			var per_fortune: float = base_wp / float(GREAT_FORTUNE_COUNT)
 			for f: int in range(GREAT_FORTUNE_COUNT):
 				wp[f] = wp.get(f, 0.0) + per_fortune
+	return wp
+
+
+## Passive WP per Minor Fortune from that province's minor-fortune-dedicated shrines
+## (s4.3 Minor Fortunes). Minor Fortunes benefit ONLY from DEDICATED worship — a general
+## shrine's devotion goes to the Seven Great Fortunes. Returns {minor_fortune_id -> wp}.
+static func compute_passive_minor_wp(worship_locations: Array) -> Dictionary:
+	var wp: Dictionary = {}
+	for loc: Dictionary in worship_locations:
+		if not bool(loc.get("is_minor", false)) or not bool(loc.get("dedicated", false)):
+			continue
+		var mf: int = int(loc.get("fortune", -1))
+		if mf < 0:
+			continue
+		wp[mf] = float(wp.get(mf, 0.0)) + float(DEDICATED_PASSIVE_WP.get(loc.get("type", ""), 0.0))
 	return wp
 
 
@@ -395,6 +414,27 @@ static func process_seasonal_worship(
 		for f: int in range(GREAT_FORTUNE_COUNT):
 			current[f] = current.get(f, 0.0) + passive.get(f, 0.0)
 
+	# Minor Fortunes (s4.3): per-province, per-Fortune passive WP from dedicated minor
+	# shrines, and the resulting blessing tier. Province-only, no aggregation.
+	var minor_wp: Dictionary = worship_state.get("minor_fortune_wp", {})
+	for pid_m: Variant in province_worship_locations:
+		var passive_minor: Dictionary = compute_passive_minor_wp(province_worship_locations[pid_m])
+		if passive_minor.is_empty():
+			continue
+		if not minor_wp.has(pid_m):
+			minor_wp[pid_m] = {}
+		var cur_minor: Dictionary = minor_wp[pid_m]
+		for mf: Variant in passive_minor:
+			cur_minor[mf] = float(cur_minor.get(mf, 0.0)) + float(passive_minor[mf])
+	var province_minor_tiers: Dictionary = {}
+	for pid_t: Variant in minor_wp:
+		var tiers: Dictionary = {}
+		for mf2: Variant in minor_wp[pid_t]:
+			tiers[mf2] = get_minor_blessing_tier(float(minor_wp[pid_t][mf2]))
+		province_minor_tiers[pid_t] = tiers
+	worship_state["minor_fortune_wp"] = minor_wp
+	worship_state["province_minor_tiers"] = province_minor_tiers
+
 	var province_tiers: Dictionary = {}
 	for pid: Variant in province_wp:
 		province_tiers[pid] = evaluate_province_thresholds(province_wp[pid])
@@ -432,7 +472,19 @@ static func process_seasonal_worship(
 		"family_tiers": family_tiers,
 		"clan_tiers": clan_tiers,
 		"empire_tiers": empire_tiers,
+		"province_minor_tiers": province_minor_tiers,
 	}
+
+
+## Minor Fortune blessing tier a province currently holds for `minor_fortune` (an
+## Enums.MinorFortune value). NONE if the province does not worship it enough. The
+## effect systems read this to apply the province-only s4.3 Minor Fortune bonuses.
+static func get_province_minor_tier(
+	worship_state: Dictionary, province_id: int, minor_fortune: int,
+) -> Enums.MinorBlessingTier:
+	var pmt: Dictionary = worship_state.get("province_minor_tiers", {})
+	var prov: Dictionary = pmt.get(province_id, {})
+	return prov.get(minor_fortune, Enums.MinorBlessingTier.NONE)
 
 
 static func reset_seasonal_wp(worship_state: Dictionary) -> void:
