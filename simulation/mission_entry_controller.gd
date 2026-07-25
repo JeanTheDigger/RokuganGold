@@ -171,3 +171,40 @@ static func apply_mission_outcome(
 		"defeated": insurgency.strength <= 0,
 		"relocation_triggered": bool(reloc.get("triggers", false)),
 	}
+
+
+## Capstone headless entry the session/runtime layer calls when a PC mission ends:
+## resolve the seed's insurgency (via source_insurgency_id), classify the outcome from
+## the reported combat facts, and apply the world writeback — one call, all sim-side.
+## The caller supplies the world insurgency array (session state), the combat facts,
+## the kill count, and the template used. Returns the apply_mission_outcome result dict
+## augmented with the classified "outcome". Road-encounter seeds (source_insurgency_id
+## -1) resolve to a null insurgency → world writeback is a no-op (PC rewards deferred).
+static func resolve_and_apply_outcome(
+	seed_dict: Dictionary,
+	insurgencies: Array,
+	all_enemies_defeated: bool,
+	player_died: bool,
+	reached_objective_space: bool,
+	spotted_inside_objective: bool,
+	kills: int,
+	template_used: String,
+) -> Dictionary:
+	var insurgency: InsurgencyData = _find_insurgency(
+		insurgencies, int(seed_dict.get("source_insurgency_id", -1)),
+	)
+	var outcome: int = classify_mission_outcome(
+		all_enemies_defeated, player_died, reached_objective_space, spotted_inside_objective,
+	)
+	var applied: Dictionary = apply_mission_outcome(seed_dict, insurgency, outcome, kills, template_used)
+	applied["outcome"] = outcome
+	return applied
+
+
+static func _find_insurgency(insurgencies: Array, insurgency_id: int) -> InsurgencyData:
+	if insurgency_id < 0:
+		return null
+	for iv: Variant in insurgencies:
+		if iv is InsurgencyData and (iv as InsurgencyData).insurgency_id == insurgency_id:
+			return iv as InsurgencyData
+	return null
