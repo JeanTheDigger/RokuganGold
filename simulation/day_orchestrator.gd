@@ -1714,6 +1714,14 @@ static func advance_day(
 		# other effect clusters can read the province-only bonuses this season. Same
 		# channel as _worship_maluses / _pirate_strength.
 		season_meta["_province_minor_tiers"] = worship_state.get("province_minor_tiers", {})
+		# Expose the clan registry to the resource tick. THREE ResourceTick consumers read
+		# settlement_meta["_clan_data"] — _process_iron_production (banks province iron into
+		# the owning clan's stockpile), _process_forge_conversion (the Iron→Arms conversion),
+		# and apply_warlike_arms_redirect (Imperial arms) — but no production code ever wrote
+		# the key, so it was always {}: clan iron was computed and discarded, and Arms were
+		# NEVER produced anywhere in the live simulation. advance_day already receives `clans`
+		# and uses it elsewhere; this forwards it to the tick that needs it.
+		season_meta["_clan_data"] = clans
 		# Mirror into world_states so the daily military/battle path (which runs
 		# earlier in advance_day, not just at season transition) can read the
 		# current-season territorial battle blessings — same channel as _worship_maluses.
