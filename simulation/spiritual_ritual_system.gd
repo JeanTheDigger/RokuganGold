@@ -205,6 +205,54 @@ static func apply_resolution(
 	}
 
 
+# -- PC-side resolution rewards / consequences (s56.10:607) --------------------
+# s56.10 specifies the Gaki-do realm-overlap encounter's PC-facing outcome:
+#   Success: "the overlap dissipates. Gaki-do influence in the province drops.
+#            +0.2 Honor, +0.1 Glory for the party leader."
+#   Failure ("party retreats or is driven out"): "the overlap persists and may
+#            intensify next season. Province suffers -5 Stability."
+# Scope: GAKI_DO REALM_OVERLAPs only. s56.10 gives no reward numbers for the other
+# realms, and s56.16 (LOCKED, line 191) describes their Full Success reward as the
+# visual restoration itself — so nothing is extrapolated across realms.
+# Outcome mapping: RETREAT and FAILURE are the two "party retreats or is driven out"
+# cases (apply_resolution already treats them identically, both setting the intensity
+# spike). PARTIAL banks progress without a spike, so it carries neither reward nor
+# penalty. All s56.10 values are PROVISIONAL per that section.
+const GAKI_DO_SUCCESS_HONOR: float = 0.2
+const GAKI_DO_SUCCESS_GLORY: float = 0.1
+const GAKI_DO_FAILURE_STABILITY: float = -5.0
+
+
+## Applies the s56.10:607 PC-facing rewards / province consequence for a resolved
+## Gaki-do overlap. `outcome` is an Outcome from apply_resolution/classify_outcome.
+## `party_leader` may be null (no living PC leader -> no reward); `province` may be
+## null (no stability writeback). No-op for non-Gaki-do or non-overlap events.
+## Returns {honor: float, glory: float, stability: float} — the deltas applied.
+static func apply_pc_resolution_rewards(
+		event: SpiritualInsurgencyData,
+		outcome: Outcome,
+		party_leader: L5RCharacterData,
+		province: ProvinceData) -> Dictionary:
+	var applied: Dictionary = {"honor": 0.0, "glory": 0.0, "stability": 0.0}
+	if event == null:
+		return applied
+	if event.event_type != Enums.SpiritualEventType.REALM_OVERLAP \
+			or event.realm != Enums.SpiritRealm.GAKI_DO:
+		return applied
+	if outcome == Outcome.FULL_SUCCESS:
+		if party_leader != null and not CharacterStats.is_dead(party_leader):
+			HonorGlorySystem.apply_honor_change(party_leader, GAKI_DO_SUCCESS_HONOR)
+			HonorGlorySystem.apply_glory_change(party_leader, GAKI_DO_SUCCESS_GLORY)
+			applied["honor"] = GAKI_DO_SUCCESS_HONOR
+			applied["glory"] = GAKI_DO_SUCCESS_GLORY
+	elif outcome == Outcome.RETREAT or outcome == Outcome.FAILURE:
+		if province != null:
+			province.stability = clampf(
+				province.stability + GAKI_DO_FAILURE_STABILITY, 0.0, 100.0)
+			applied["stability"] = GAKI_DO_FAILURE_STABILITY
+	return applied
+
+
 ## Post-resolution spiritual affliction check (s56.16.5f). Only Catastrophic
 ## severity forces it: Willpower vs TN 20, failure → a minor one-season affliction.
 ## Returns true when the character is afflicted (failed the roll). Pure — the

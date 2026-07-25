@@ -198,13 +198,43 @@ static func process_round(es: EncounterState, dice: DiceEngine) -> Dictionary:
 
 ## Resolves the encounter outcome (s56.16.5f) and applies it to the event + map
 ## overlay. current_season feeds the retreat/failure intensity spike. Idempotent.
-static func resolve(es: EncounterState, current_season: int = -1) -> Dictionary:
+## `province` (optional) enables the s56.10:607 PC-facing outcome for a Gaki-do
+## overlap: +0.2 Honor / +0.1 Glory to the party leader on Full Success, or -5
+## province Stability when the party retreats or is driven out. Returned under
+## "pc_rewards".
+static func resolve(
+		es: EncounterState,
+		current_season: int = -1,
+		province: ProvinceData = null) -> Dictionary:
 	if es.resolved:
 		return {"outcome": es.event.resolution_type}
 	es.resolved = true
 	var alive: bool = _any_shugenja_alive(es)
 	var map: AsciiMapData = es.mcs.map if es.mcs != null else null
-	return SpiritualRitualSystem.apply_resolution(es.event, es.ritual_progress, alive, map, current_season)
+	var res: Dictionary = SpiritualRitualSystem.apply_resolution(
+		es.event, es.ritual_progress, alive, map, current_season)
+	var oc: SpiritualRitualSystem.Outcome = res.get(
+		"outcome", SpiritualRitualSystem.Outcome.FAILURE)
+	res["pc_rewards"] = SpiritualRitualSystem.apply_pc_resolution_rewards(
+		es.event, oc, _party_leader(es), province)
+	return res
+
+
+## The encounter's party leader: the highest-Status living PC present. INTERPRETATION
+## (s56.10:607 says "party leader" without defining selection) — Rokugani command
+## follows Status, and this mirrors the existing highest-Status selection precedent in
+## ObjectiveDecomposer._find_highest_status_present. Ties break on the lower
+## character_id for determinism. Returns null when no living PC remains.
+static func _party_leader(es: EncounterState) -> L5RCharacterData:
+	var best: L5RCharacterData = null
+	for pid: int in es.pc_ids:
+		var pc: L5RCharacterData = es.chars_by_id.get(pid, null)
+		if pc == null or CharacterStats.is_dead(pc):
+			continue
+		if best == null or pc.status > best.status \
+				or (is_equal_approx(pc.status, best.status) and pc.character_id < best.character_id):
+			best = pc
+	return best
 
 
 ## Drive one creature's turn. A wail-capable creature (Haraigaki) spends its Complex
