@@ -12,6 +12,13 @@ const STABILITY_STABLE_MIN: float = 76.0
 const STABILITY_RESTLESS_MIN: float = 51.0
 const STABILITY_VOLATILE_MIN: float = 26.0
 
+# s4.3 Saibankan (Magistrates) bandit-spawn reduction, indexed by
+# Enums.MinorBlessingTier [NONE, T1, T2, T3]: -10% / -20% / -30%. Province-only.
+# (Saibankan's "criminality events -15/25/35%" has no rate to modify — crime is
+# generated deterministically by NPC actions, not by a per-season event chance — and
+# T3's "spy operations +5 to detection rolls" is a separate channel; both forward-noted.)
+const SAIBANKAN_BANDIT_SPAWN_REDUCTION: Array = [0.0, 0.10, 0.20, 0.30]
+
 const SPAWN_CHANCE_RESTLESS: float = 0.10
 const SPAWN_CHANCE_VOLATILE: float = 0.25
 const SPAWN_CHANCE_BROKEN: float = 0.50
@@ -229,6 +236,16 @@ static func get_spawn_chance(
 				base += world_state.get("adjacent_pirate_count", 0) * 0.05
 			if province.clan == "Mantis":
 				base -= 0.10
+
+	# s4.3 Saibankan (Magistrates), province-only: "bandit spawn -10/20/30%". A
+	# multiplicative reduction of the RONIN_BANDIT spawn chance — the province's
+	# magistrates deter banditry before it takes root. The tier arrives via world_state
+	# (same per-province modifier channel as under_garrisoned / recent_maho_in_province
+	# above). Applied after the type modifiers so it scales the final chance.
+	if insurgency_type == Enums.InsurgencyType.RONIN_BANDIT and base > 0.0:
+		var saibankan_tier: int = clampi(
+			int(world_state.get("saibankan_tier", Enums.MinorBlessingTier.NONE)), 0, 3)
+		base *= (1.0 - float(SAIBANKAN_BANDIT_SPAWN_REDUCTION[saibankan_tier]))
 
 	return maxf(base, 0.0)
 

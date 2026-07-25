@@ -16045,6 +16045,13 @@ static func _process_insurgencies(
 			var _lord: L5RCharacterData = _find_province_lord(prov2, characters_by_id)
 			if _lord != null:
 				ws["lord_bushido_virtue"] = _lord.bushido_virtue
+		# s4.3 Saibankan (Magistrates): the province's blessing tier reduces bandit
+		# spawn chance (-10/20/30%), consumed by InsurgencySystem.get_spawn_chance.
+		var _mft: Dictionary = world_states.get("_province_minor_tiers", {})
+		var _saib: int = int((_mft.get(pid, {}) as Dictionary).get(
+			Enums.MinorFortune.SAIBANKAN, Enums.MinorBlessingTier.NONE))
+		if _saib > Enums.MinorBlessingTier.NONE:
+			ws["saibankan_tier"] = _saib
 		per_province_ws[pid] = ws
 
 	var next_ins_id: int = next_insurgency_id[0] if not next_insurgency_id.is_empty() else 1
