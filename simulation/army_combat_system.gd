@@ -1480,10 +1480,19 @@ static func _check_battle_end(states: Array) -> bool:
 
 # -- Rout Resolution (GDD s11.7) -------------------------------------------------
 
+# GDD s11.7 line 365 (LOCKED): a routing army reduced to <= 20% of its starting Health
+# is dissolved entirely. Named so blessings can shift it (s4.3 Hachiman T3).
+const ROUT_DISSOLVE_FRACTION: float = 0.20
+
+
+## `rout_threshold_reduction` lowers the dissolution fraction (s4.3 Hachiman T3
+## "rout threshold reduced by 5%" -> 0.05, i.e. 20% -> 15%), making the routing army
+## harder to destroy outright. Clamped so the fraction never goes negative.
 static func resolve_rout(
 	routed_states: Array,
 	victor_has_cavalry: bool,
 	dice_engine: DiceEngine,
+	rout_threshold_reduction: float = 0.0,
 ) -> Dictionary:
 	var total_remaining: int = 0
 	var total_starting: int = 0
@@ -1502,7 +1511,8 @@ static func resolve_rout(
 	var pursuit_casualties: int = ceili(float(total_remaining) * pursuit_pct)
 	var health_after_pursuit: int = maxi(total_remaining - pursuit_casualties, 0)
 
-	var dissolved: bool = health_after_pursuit <= ceili(float(total_starting) * 0.20)
+	var dissolve_frac: float = maxf(0.0, ROUT_DISSOLVE_FRACTION - rout_threshold_reduction)
+	var dissolved: bool = health_after_pursuit <= ceili(float(total_starting) * dissolve_frac)
 
 	return {
 		"total_starting_health": total_starting,

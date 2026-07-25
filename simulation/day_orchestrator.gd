@@ -3306,6 +3306,7 @@ static func _process_storm_assault_results(
 			atk_states, def_states, Enums.BattleTerrainType.URBAN,
 			dice_engine, settlements, false, fort_bonus, {}, ef_atk, ef_def,
 			int(mf_siege["attack"]), int(mf_siege["morale"]),
+			float(mf_siege.get("rout_reduction", 0.0)),
 		)
 
 		# s11.7a battle_record producer (storm-assault path — same as the field battle, incl. Stage 2
@@ -17952,6 +17953,7 @@ static func _resolve_army_battles(
 			atk_states, def_states, battle_terrain,
 			dice_engine, settlements, false, fort_bonus, worship_maluses, ef_atk, ef_def,
 			int(mf_battle["attack"]), int(mf_battle["morale"]),
+			float(mf_battle.get("rout_reduction", 0.0)),
 		)
 
 		# s11.7a battle_record producer: every participating living commander records this engagement
@@ -21301,6 +21303,7 @@ static func resolve_and_reconcile_battle(
 	earth_flows_defender: int = 0,
 	minor_fortune_attack: int = 0,
 	minor_fortune_morale: int = 0,
+	minor_fortune_rout_reduction: float = 0.0,
 ) -> Dictionary:
 	_inject_worship_battle_maluses(attacker_states, worship_maluses)
 	_inject_worship_battle_maluses(defender_states, worship_maluses)
@@ -21345,7 +21348,7 @@ static func resolve_and_reconcile_battle(
 				break
 
 		rout_result = ArmyCombatSystem.resolve_rout(
-			loser_states, has_cavalry, dice_engine,
+			loser_states, has_cavalry, dice_engine, minor_fortune_rout_reduction,
 		)
 
 		var recovery: Dictionary = ArmyCombatSystem.compute_post_battle_recovery(
@@ -27450,6 +27453,10 @@ const _HACHIMAN_ATTACK: Array = [0, 0, 1, 2]
 const _HACHIMAN_MORALE: Array = [0, 1, 2, 3]
 const _OSANOWO_ATTACK: Array = [0, 1, 1, 2]
 const _OSANOWO_MORALE: Array = [0, 0, 2, 3]
+# Hachiman T3 only: rout threshold reduced by 5 percentage points (20% -> 15%).
+# (Osano-Wo T3's "storm assault success chance +10%" has no probability knob — the
+# storm assault resolves as a battle, not a success roll — and stays forward-noted.)
+const _HACHIMAN_ROUT_REDUCTION: Array = [0.0, 0.0, 0.0, 0.05]
 # s4.3 Kisada (persistence): Garrison defense +1/2/3 by tier. Folded into the
 # defender-side fortification bonus in a storm assault (defenders = the garrison).
 # T2/T3 "extra seasons before forced surrender" and T3 "siege morale loss halved"
@@ -27475,12 +27482,16 @@ static func _minor_fortune_battle_bonus(
 ) -> Dictionary:
 	var tiers: Dictionary = province_minor_tiers.get(battle_province_id, {})
 	if tiers.is_empty():
-		return {"attack": 0, "morale": 0}
+		return {"attack": 0, "morale": 0, "rout_reduction": 0.0}
 	var hach: int = int(tiers.get(Enums.MinorFortune.HACHIMAN, Enums.MinorBlessingTier.NONE))
 	var osan: int = int(tiers.get(Enums.MinorFortune.OSANO_WO, Enums.MinorBlessingTier.NONE))
 	return {
 		"attack": _HACHIMAN_ATTACK[hach] + _OSANOWO_ATTACK[osan],
 		"morale": _HACHIMAN_MORALE[hach] + _OSANOWO_MORALE[osan],
+		# s4.3 Hachiman T3: "rout threshold reduced by 5%" — 20% dissolution becomes 15%,
+		# so an army routing in a Hachiman-Beloved province is harder to destroy outright.
+		# Territorial like the rest of Hachiman, so it protects whichever side routs.
+		"rout_reduction": _HACHIMAN_ROUT_REDUCTION[hach],
 	}
 
 
