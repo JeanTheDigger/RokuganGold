@@ -69,17 +69,25 @@ func on_pc_arrived(
 ## The s56.19 "known, located" gate on PLAYER_INITIATED seeds is already enforced upstream
 ## (QuestSeedSelector surfaces insurgency seeds only when `ins.detected`), so the engageable
 ## list here is the set of world-known threats located in the PC's province.
+## Session/UI entry: a PC has arrived somewhere with pending missions (persisted on
+## the PC by DayOrchestrator._process_pc_mission_arrivals). Reads the headless launch
+## decision (MissionEntryController.resolve_arrival_launch), auto-launches the AUTO
+## seed, consumes the pending state, and returns the engageable PLAYER_INITIATED list
+## for the caller to present (ENGAGE_MISSION). ⚠ Unverified under Godot (class header).
 func on_pc_mission_arrival(
 		pc: L5RCharacterData,
 		province: ProvinceData,
 		province_history: Array,
-		arrival: Dictionary,
 		seed_str: String,
 ) -> Array:
-	var auto: Array = arrival.get("auto_seeds", [])
-	if not auto.is_empty():
-		_launch(auto[0], province, province_history, pc, seed_str)
-	return arrival.get("engageable_seeds", [])
+	var decision: Dictionary = MissionEntryController.resolve_arrival_launch(pc)
+	if not decision.get("has_mission", false):
+		return []
+	var auto_launch: Dictionary = decision.get("auto_launch", {})
+	if not auto_launch.is_empty():
+		_launch(auto_launch, province, province_history, pc, seed_str)
+	MissionEntryController.consume_pending_arrival(pc)
+	return decision.get("engageable", [])
 
 
 ## Player fires ENGAGE_MISSION (1 AP) against a located player-initiated seed.
