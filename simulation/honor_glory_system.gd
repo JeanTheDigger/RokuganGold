@@ -88,6 +88,29 @@ static func get_recognition_rank(character: L5RCharacterData) -> int:
 
 
 # -- Court Event Table Constants -----------------------------------------------
+#
+# ⚠ AUDIT 2026-07-25: every GLORY_* constant in this block is UNREFERENCED — nothing
+# reads them. Do not assume the awards below are therefore missing; most are live
+# elsewhere with their own values, so wiring these would double-apply. Verified owners:
+#   * Public performance → `PerformativeArtsSystem` (SUCCESS_GLORY 0.3, +MASTERFUL_GLORY
+#     0.2 = 0.5 total, CRITICAL_FAILURE_GLORY -0.3). Values agree with the three
+#     performance constants here, so those three are a duplicate copy — a drift hazard.
+#     ActionExecutor deliberately returns glory_change 0.0 for PUBLIC_PERFORMANCE
+#     ("Already applied by PerformativeArtsSystem").
+#   * PUBLIC_DEBATE decisive win → hardcoded 0.3 at 3+ Raises in ActionExecutor's
+#     broadcast path (agrees with GLORY_PUBLIC_DEBATE_DECISIVE_WIN).
+#   * PUBLIC_DECLARATION → hardcoded 0.1 in the same path, which does NOT match
+#     GLORY_PUBLIC_DECLARATION_HONORED (0.2); the constant's name suggests it is the
+#     "honored" (promise-kept) case rather than the plain success case, so the two are
+#     probably different events, not a contradiction.
+#
+# DO NOT WIRE GLORY_DEBATE_DECISIVE_LOSS without an owner ruling: the LOCKED public
+# debate spec (s15.4:255-291) defines only per-witness DISPOSITION and TOPIC-POSITION
+# consequences for winning/losing — including for critical failure — and specifies no
+# Glory change at all. The same applies to the remaining unsourced entries
+# (GLORY_PUBLICLY_PRAISE_*, which has no corresponding ActionID; GLORY_DUEL_WON_HONORABLY,
+# GLORY_INSULT_BACKFIRED, GLORY_EXPOSE_SECRET_FAIL). Applying them would be inventing
+# values the GDD does not specify.
 
 const GLORY_PUBLIC_PERFORMANCE_SUCCESS: float = 0.3
 const GLORY_PUBLIC_PERFORMANCE_MASTERFUL: float = 0.5
