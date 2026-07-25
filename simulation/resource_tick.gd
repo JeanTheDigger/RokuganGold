@@ -826,6 +826,7 @@ static func _process_starvation_check(
 	var deficit_seasons: Dictionary = settlement_meta.get("_deficit_seasons", {})
 	var relief_seasons: Dictionary = settlement_meta.get("_relief_seasons", {})
 	var prev_starvation: Dictionary = settlement_meta.get("_starvation", {})
+	var minor_tiers: Dictionary = settlement_meta.get("_province_minor_tiers", {})
 	for prov: ProvinceData in provinces:
 		var pid: int = prov.province_id
 		var cons: Dictionary = consumption.get(pid, {})
@@ -837,8 +838,11 @@ static func _process_starvation_check(
 		var consecutive: int = deficit_seasons.get(pid, 0)
 		var relief: int = relief_seasons.get(pid, 0)
 		var prov_rice: float = get_province_rice(prov, settlements)
+		# s4.3 Jizo (Mercy): slows the starvation cascade and speeds famine recovery.
+		var jizo_tier: int = int((minor_tiers.get(pid, {}) as Dictionary).get(
+			Enums.MinorFortune.JIZO, Enums.MinorBlessingTier.NONE))
 		var starv: Dictionary = resolve_starvation_transition(
-			deficit, consecutive, relief, prev_stage, prov_rice,
+			deficit, consecutive, relief, prev_stage, prov_rice, jizo_tier,
 		)
 		deficit_seasons[pid] = starv["deficit_seasons"]
 		relief_seasons[pid] = starv["relief_seasons"]
@@ -853,19 +857,48 @@ static func _process_starvation_check(
 	return results
 
 
+# -- s4.3 Jizo (Mercy) starvation blessing (LOCKED) ----------------------------
+# T1: Famine recovery rate +25%
+# T2: +50%, starvation cascade progression -1 tier per season
+# T3: +75%, cascade progression -1 tier per season, province cannot skip directly
+#     from Shortage to Famine
+# Indexed by Enums.MinorBlessingTier [NONE, T1, T2, T3].
+const _JIZO_RECOVERY_RATE: Array = [0.0, 0.25, 0.50, 0.75]
+
+
+## Relief seasons needed to step down one starvation tier, with Jizo's recovery-rate
+## bonus applied: base / (1 + rate), rounded to the nearest season, floored at 1.
+## NOTE: with the LOCKED integer thresholds (Shortage 2, others 1) T1's +25% rounds to
+## no change and the non-Shortage threshold is already at the 1-season floor, so the
+## bonus bites at T2+ on the Shortage tier. That is a faithful consequence of integer
+## season thresholds, not a tuning choice.
+static func jizo_relief_threshold(base_threshold: int, jizo_tier: int) -> int:
+	var rate: float = _JIZO_RECOVERY_RATE[clampi(jizo_tier, 0, 3)]
+	if rate <= 0.0:
+		return base_threshold
+	return maxi(1, roundi(float(base_threshold) / (1.0 + rate)))
+
+
 static func resolve_starvation_transition(
 	deficit: float,
 	consecutive_deficit_seasons: int,
 	consecutive_relief_seasons: int,
 	previous_stage: StarvationStage,
 	province_rice: float = 0.0,
+	jizo_tier: int = 0,
 ) -> Dictionary:
 	if deficit > 0.0:
 		consecutive_relief_seasons = 0
 		consecutive_deficit_seasons += 1
 		var stage: StarvationStage
 		if province_rice <= 0.0:
-			stage = StarvationStage.FAMINE
+			# s4.3 Jizo T3: "province cannot skip directly from Shortage to Famine" —
+			# a zero-rice province sitting at Shortage steps to Hunger instead.
+			if jizo_tier >= Enums.MinorBlessingTier.BELOVED \
+					and previous_stage == StarvationStage.SHORTAGE:
+				stage = StarvationStage.HUNGER
+			else:
+				stage = StarvationStage.FAMINE
 		elif previous_stage > StarvationStage.CLEAR and previous_stage < StarvationStage.FAMINE:
 			stage = (previous_stage + 1) as StarvationStage
 		elif consecutive_deficit_seasons >= 3:
@@ -874,6 +907,14 @@ static func resolve_starvation_transition(
 			stage = StarvationStage.HUNGER
 		else:
 			stage = StarvationStage.SHORTAGE
+		# s4.3 Jizo T2+: "starvation cascade progression -1 tier per season".
+		# INTERPRETATION: the season's escalation step is one tier smaller, so a
+		# province already inside the cascade holds its stage instead of worsening.
+		# Entering the cascade from CLEAR still happens (Jizo slows the cascade; it
+		# does not prevent hunger). Never drops below the previous stage.
+		if jizo_tier >= Enums.MinorBlessingTier.FAVORED \
+				and previous_stage > StarvationStage.CLEAR and stage > previous_stage:
+			stage = maxi(int(previous_stage), int(stage) - 1) as StarvationStage
 		return {
 			"stage": stage,
 			"pu_loss_rate": STARVATION_PU_LOSS[stage],
@@ -895,7 +936,9 @@ static func resolve_starvation_transition(
 
 	consecutive_deficit_seasons = 0
 	consecutive_relief_seasons += 1
-	var threshold: int = RELIEF_THRESHOLD_SHORTAGE if previous_stage == StarvationStage.SHORTAGE else RELIEF_THRESHOLD_OTHER
+	var base_threshold: int = RELIEF_THRESHOLD_SHORTAGE if previous_stage == StarvationStage.SHORTAGE else RELIEF_THRESHOLD_OTHER
+	# s4.3 Jizo: famine recovery rate +25/50/75% shortens the relief countdown.
+	var threshold: int = jizo_relief_threshold(base_threshold, jizo_tier)
 	var new_stage: StarvationStage
 	if consecutive_relief_seasons >= threshold:
 		new_stage = (previous_stage - 1) as StarvationStage
