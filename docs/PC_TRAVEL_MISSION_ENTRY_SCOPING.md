@@ -110,11 +110,15 @@ side (`request_zone_move_to`, zone descriptions) partly exists.
    built while networking was out of scope. Before building navigation on it, confirm
    the intended stack (ENet? WebSocket? single-player-first?) — CLAUDE.md's networking
    constraint is only just lifted and the target architecture is unspecified.
-5. **PC-side mission rewards (NEW, 2026-07-25).** `apply_mission_outcome` writes the
-   mission result back to the *world* (insurgency strength/relocation) but applies no
-   reward to the *PC*. The GDD does not specify a Glory/Honor/XP schedule for clearing
-   an ASCII-map mission (by outcome tier / seed type / enemies killed). Owner spec
-   needed before PC rewards can be wired — do not invent the values.
+5. **PC-side mission rewards (NEW, 2026-07-25; PARTIALLY RESOLVED).** Correction:
+   s56.10 *does* specify per-seed-type rewards/consequences (all PROVISIONAL). Wired:
+   **Wall Sortie** (`apply_wall_sortie_outcome`) — SS −1/−2/−3 by size + PC commander
+   +0.2 Glory on success, SS −1 on partial, nothing on failure (s56.10:521). Still
+   unspecified (no number): the insurgency-backed seeds (Ronin Bandit / Maho Cult /
+   etc.) say only "the lord gains Glory" — `apply_mission_outcome` writes the world
+   effect but awards no PC Glory pending an owner number. The spiritual encounters
+   (haunting fulfilled/banished +Honor/+Glory, Gaki-do) are s56.16 with their own
+   resolution semantics (fulfilled ≠ a MissionOutcome value) — a separate wiring.
 
 ## Recommendation
 

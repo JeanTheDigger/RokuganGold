@@ -208,3 +208,40 @@ static func _find_insurgency(insurgencies: Array, insurgency_id: int) -> Insurge
 		if iv is InsurgencyData and (iv as InsurgencyData).insurgency_id == insurgency_id:
 			return iv as InsurgencyData
 	return null
+
+
+# -- Wall Sortie outcome (s56.10, PROVISIONAL values) -------------------------
+# A Wall Sortie is not insurgency-backed (source_insurgency_id -1); its outcome
+# writes back to the province's Shadowlands Strength and rewards the PC commander,
+# per s56.10:521. All values there are PROVISIONAL pending playtest.
+#   Successful sortie: SS -1/-2/-3 by size; +0.2 Glory commander (+0.1/participant).
+#   Partial (retreat after progress): SS -1 regardless of size; no Glory.
+#   Failure: nothing.
+const _SORTIE_SS_REDUCTION_FULL: Dictionary = {"SMALL": 1, "MEDIUM": 2, "LARGE": 3}
+const _SORTIE_SS_REDUCTION_PARTIAL: int = 1
+const SORTIE_COMMANDER_GLORY: float = 0.2
+
+## Apply a completed Wall Sortie's outcome (s56.10). The PC is the sortie commander.
+## outcome is a classify_mission_outcome() result. province is the sortie's province
+## (its shadowlands_strength is reduced). Returns {ss_reduction:int, commander_glory:float}.
+static func apply_wall_sortie_outcome(
+	pc: L5RCharacterData,
+	province: ProvinceData,
+	seed_dict: Dictionary,
+	outcome: int,
+) -> Dictionary:
+	var size: String = str((seed_dict.get("options", {}) as Dictionary).get("sortie_size", "SMALL"))
+	var mo := InsurgencyRelocationSystem.MissionOutcome
+	var ss_reduction: int = 0
+	var glory: float = 0.0
+	if outcome == mo.FULL_SUCCESS:
+		ss_reduction = int(_SORTIE_SS_REDUCTION_FULL.get(size, 1))
+		glory = SORTIE_COMMANDER_GLORY
+	elif outcome == mo.PARTIAL_SUCCESS or outcome == mo.RETREAT_INSIDE:
+		ss_reduction = _SORTIE_SS_REDUCTION_PARTIAL
+	# FAILURE / RETREAT_OUTSIDE: no reduction, no glory.
+	if ss_reduction > 0 and province != null:
+		province.shadowlands_strength = maxi(0, province.shadowlands_strength - ss_reduction)
+	if glory > 0.0 and pc != null:
+		HonorGlorySystem.apply_glory_change(pc, glory)
+	return {"ss_reduction": ss_reduction, "commander_glory": glory}
