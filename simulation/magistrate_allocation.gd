@@ -2,6 +2,23 @@ class_name MagistrateAllocation
 ## Magistrate count, doshin allocation, and investigation bonuses per GDD s11.3.17/s11.3.19e.
 ## Doshin counts scale with settlement PU. Bonuses apply to investigation
 ## and suppression rolls.
+##
+## ⚠ SUPERSEDED — DO NOT WIRE (audited 2026-07-25). This class has ZERO references
+## anywhere in production. The doshin mechanics it describes are LIVE elsewhere:
+##   * baseline / availability / recovery → `CrimeSuppressionSystem.get_doshin_baseline`,
+##     `get_available_doshin`, `get_max_recruitable`, `process_doshin_recovery`
+##   * investigation / suppression bonuses → `CrimeSuppressionSystem.get_doshin_investigation_bonus`,
+##     `get_doshin_suppression_bonus`, `get_doshin_samurai_investigation_bonus`
+##   * PU → settlement-size classification → `DayOrchestrator._classify_settlement_size`
+##   * the live driver is `DayOrchestrator._process_doshin_allocation` /
+##     `_process_doshin_seasonal_recovery`
+## The duplicated values were verified IDENTICAL to the live path at audit time
+## (bonuses 3/5/8/3; PU thresholds 0.5 / 1 / 2 / 5 / 10 / 20), so this is a drift
+## hazard rather than a live bug — two copies of one table, only one of them wired.
+## Kept (not deleted) because it additionally models `has_headman` and the
+## MAGISTRATE_PER_* counts, which the live path does not yet cover; if those are
+## needed, port them INTO CrimeSuppressionSystem rather than wiring this class, so a
+## single source of truth remains.
 
 
 enum DoshinTier {
