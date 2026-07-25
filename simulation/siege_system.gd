@@ -59,8 +59,12 @@ const MUTUAL_EVENTS: Array[String] = [
 ]
 
 const EVENT_DEFINITIONS: Dictionary = {
+	# NOTE: skill/trait were transposed here relative to every other entry
+	# ("skill": "Perception" is a Trait, "trait": "Stealth" is a Skill). Corrected so
+	# a caller resolving def["skill"] as a skill rank and def["trait"] as a trait value
+	# reads the right pair.
 	"A1_SMUGGLING_RING": {
-		"skill": "Perception", "trait": "Stealth", "tn": 20,
+		"skill": "Stealth", "trait": "Perception", "tn": 20,
 		"success_ticks": -10, "failure_ticks": 0,
 		"side": "attacker",
 	},
@@ -325,6 +329,82 @@ static func resolve_siege_event(
 		"effects": effects,
 		"honor_cost": honor_cost,
 	}
+
+
+## Applies the named success/failure effects a siege event produced (s11.7 siege
+## events). Every effect string used to be returned by resolve_siege_event and then
+## dropped, leaving the whole siege-event effect layer inert — `concealment_bonus` and
+## `food_stores_revealed` already existed on the siege state as the intended
+## destinations with no writer. Magnitudes are taken from the effect names themselves
+## ("..._0_5" = 0.5, "..._plus_5" = +5), so no value is invented here.
+## Garrison morale has no absolute scale in siege_state, so the +5/-10 deltas
+## accumulate in `garrison_morale_modifier` for the battle layer to consume.
+## Returns the deltas applied, keyed by effect name, for logging.
+static func apply_event_effects(siege_state: Dictionary, effects: Array) -> Dictionary:
+	var applied: Dictionary = {}
+	for effect_v: Variant in effects:
+		var effect: String = str(effect_v)
+		match effect:
+			"concealment_plus_1":
+				siege_state["concealment_bonus"] = int(siege_state.get("concealment_bonus", 0)) + 1
+				applied[effect] = 1
+			"reveal_food_stores", "attacker_learns_food_stores":
+				# Both sides' versions reveal the same fact: the garrison's food stores.
+				siege_state["food_stores_revealed"] = true
+				applied[effect] = true
+			"garrison_gains_rice_0_5":
+				siege_state["rice_stockpile"] = float(siege_state.get("rice_stockpile", 0.0)) + 0.5
+				applied[effect] = 0.5
+			"attacker_loses_rice_0_5":
+				# The besieging army's supply is not tracked in siege_state (it lives on the
+				# attacker's tether/army); record the loss for the army layer to consume.
+				siege_state["attacker_rice_lost"] = \
+					float(siege_state.get("attacker_rice_lost", 0.0)) + 0.5
+				applied[effect] = 0.5
+			"garrison_loses_pu_0_1":
+				siege_state["garrison_pu"] = maxf(
+					0.0, float(siege_state.get("garrison_pu", 0.0)) - 0.1)
+				applied[effect] = -0.1
+			"garrison_morale_plus_5":
+				siege_state["garrison_morale_modifier"] = \
+					int(siege_state.get("garrison_morale_modifier", 0)) + 5
+				applied[effect] = 5
+			"garrison_morale_minus_10":
+				siege_state["garrison_morale_modifier"] = \
+					int(siege_state.get("garrison_morale_modifier", 0)) - 10
+				applied[effect] = -10
+			"trigger_relief_force":
+				siege_state["relief_force_triggered"] = true
+				applied[effect] = true
+			"attacker_loses_arms_and_debuff":
+				# The name carries no magnitude for the Arms loss, so only the flags are set
+				# (no invented number); the debuff flag is what the battle layer reads.
+				siege_state["attacker_debuffed"] = true
+				siege_state["attacker_arms_loss_pending"] = true
+				applied[effect] = true
+			_:
+				applied[effect] = "unhandled"
+	return applied
+
+
+## Resolve a scheduled siege event and apply BOTH its tick change and its named
+## effects in one call — the contract the siege driver needs. `trait_value` /
+## `skill_rank` are the acting character's values for this event's def["trait"] /
+## def["skill"]. Strategic-decision (A4) and special (M1) events resolve to no roll
+## and are returned untouched for the caller's decision channel.
+static func resolve_and_apply_event(
+	siege_state: Dictionary,
+	dice: DiceEngine,
+	event_id: String,
+	trait_value: int,
+	skill_rank: int,
+	bonus: int = 0,
+) -> Dictionary:
+	var result: Dictionary = resolve_siege_event(dice, event_id, trait_value, skill_rank, bonus)
+	apply_event_tick_change(siege_state, int(result.get("tick_change", 0)))
+	result["applied_effects"] = apply_event_effects(
+		siege_state, result.get("effects", []))
+	return result
 
 
 static func apply_event_tick_change(
