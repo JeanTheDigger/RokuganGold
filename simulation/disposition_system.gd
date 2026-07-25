@@ -71,22 +71,16 @@ static func get_authenticity_modifier(your_disposition: int, action_is_hostile: 
 
 # -- Tier Queries -------------------------------------------------------------
 
+## Tier for a disposition value. Reads TIER_THRESHOLDS so the band table is the single
+## source of truth — this previously duplicated the bands inline while TIER_THRESHOLDS
+## sat unreferenced (a drift hazard; the two were verified identical when collapsed).
 static func get_tier(disposition: int) -> Tier:
-	if disposition <= -61:
-		return Tier.BLOOD_ENEMY
-	elif disposition <= -31:
-		return Tier.ENEMY
-	elif disposition <= -11:
-		return Tier.RIVAL
-	elif disposition <= 10:
-		return Tier.STRANGER
-	elif disposition <= 30:
-		return Tier.ACQUAINTANCE
-	elif disposition <= 60:
-		return Tier.FRIEND
-	elif disposition <= 90:
-		return Tier.TRUSTED_ALLY
-	return Tier.DEVOTED
+	for band: Array in TIER_THRESHOLDS:
+		if disposition >= int(band[0]) and disposition <= int(band[1]):
+			return band[2] as Tier
+	# Outside -100..100 (disposition is always clamped, so this is defensive only):
+	# saturate to the nearest extreme rather than falling through to a middle tier.
+	return Tier.DEVOTED if disposition > 0 else Tier.BLOOD_ENEMY
 
 
 static func get_tier_name(disposition: int) -> String:
@@ -239,11 +233,12 @@ static func decay_historical_modifier(modifier: Dictionary, days_elapsed: int) -
 		return
 	var start_val: int = modifier["current_value"]
 	var floor_val: int = modifier["floor"]
+	# DECAY_RATE (0.1/day) is the source of truth; this previously hardcoded `/ 10`
+	# inline while DECAY_RATE sat unreferenced. Identical for non-negative days.
+	var decay_amount: int = int(float(days_elapsed) * DECAY_RATE)
 	if start_val > floor_val:
-		var decay_amount: int = int(days_elapsed / 10)
 		modifier["current_value"] = max(floor_val, start_val - decay_amount)
 	elif start_val < floor_val:
-		var decay_amount: int = int(days_elapsed / 10)
 		modifier["current_value"] = min(floor_val, start_val + decay_amount)
 
 
