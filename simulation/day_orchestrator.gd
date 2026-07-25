@@ -25794,7 +25794,12 @@ static func _process_phoenix_council_gating(
 		had_any_major = true
 		had_any_proposal = true
 
-		var directive_season: int = int(d.get("_season_count", 0))
+		# Resubmission bans are measured in ABSOLUTE seasons. This previously read
+		# d["_season_count"], a key nothing ever wrote, so the check always compared
+		# against season 0 and any ban ("banned_until > 0") lasted forever. The setter
+		# below was likewise passing the Season ENUM (0-3) rather than a monotonic count,
+		# so both sides now use TimeSystem.get_absolute_season(ic_day).
+		var directive_season: int = TimeSystem.get_absolute_season(ic_day)
 		if PhoenixCouncil.is_proposal_banned(phoenix_state, decision_type as PhoenixCouncil.DecisionType, directive_season):
 			directives_to_remove.append(idx)
 			vetoed.append({"directive": d, "reason": "banned_resubmission"})
@@ -25832,7 +25837,11 @@ static func _process_phoenix_council_gating(
 			vetoed.append({"directive": d, "vote": vote_result})
 			if d.get("crisis_response", false):
 				PhoenixCouncil.track_consecutive_crisis_veto(phoenix_state)
-			PhoenixCouncil.record_failed_proposal(phoenix_state, decision_type as PhoenixCouncil.DecisionType, current_season)
+			# Absolute season (not the 0-3 Season enum) so banned_until_season is
+			# comparable with the is_proposal_banned check above.
+			PhoenixCouncil.record_failed_proposal(
+				phoenix_state, decision_type as PhoenixCouncil.DecisionType,
+				TimeSystem.get_absolute_season(ic_day))
 
 	directives_to_remove.sort()
 	directives_to_remove.reverse()

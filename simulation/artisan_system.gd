@@ -455,6 +455,10 @@ static func _is_kaiu_or_tsi(character: L5RCharacterData) -> bool:
 
 
 static func _get_insight_rank(character: L5RCharacterData) -> int:
-	return character.skills.get("_insight_rank", 1)
+	# Was `character.skills.get("_insight_rank", 1)` — Insight Rank is not a skill and
+	# nothing ever wrote that key, so this always returned 1 and every crafted item was
+	# stamped creator_insight_rank = 1 regardless of the crafter. Use the canonical
+	# accessor every other system uses.
+	return CharacterStats.get_insight_rank(character)
 
 
