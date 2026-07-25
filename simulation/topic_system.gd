@@ -41,15 +41,15 @@ const TIER_INITIAL_MOMENTUM: Dictionary = {
 static func initial_momentum_for_tier(tier: TopicData.Tier) -> float:
 	return TIER_INITIAL_MOMENTUM.get(tier, MOMENTUM_MINOR_FLOOR)
 
+## Momentum band for a momentum value. Reads MOMENTUM_THRESHOLDS (indexed by
+## MomentumLevel) so the band table is the single source of truth — this previously
+## duplicated the bands inline while MOMENTUM_THRESHOLDS sat unreferenced (a drift
+## hazard; the two were verified identical when collapsed). Values above the last band
+## saturate to UNAVOIDABLE_CRISIS.
 static func get_momentum_level(momentum: float) -> MomentumLevel:
-	if momentum <= 10:
-		return MomentumLevel.RUMOR
-	if momentum <= 25:
-		return MomentumLevel.MINOR_TOPIC
-	if momentum <= 50:
-		return MomentumLevel.SECONDARY_TOPIC
-	if momentum <= 75:
-		return MomentumLevel.MAJOR_TOPIC
+	for level: int in range(MOMENTUM_THRESHOLDS.size()):
+		if momentum <= float(MOMENTUM_THRESHOLDS[level][1]):
+			return level as MomentumLevel
 	return MomentumLevel.UNAVOIDABLE_CRISIS
 
 
