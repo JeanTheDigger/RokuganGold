@@ -145,6 +145,22 @@ const TERRAIN_RICE_MULTIPLIER: Dictionary = {
 	TerrainType.COASTAL: 1.0,
 }
 
+# s4.3:461-471 Mine Quality Modifiers — LOCKED IN PRINCIPLE, multiplier values
+# PROVISIONAL pending playtest (the structural relationship rich > standard > marginal
+# is fixed). Iron per season = mining PU × 0.50 × mine quality modifier. Quality never
+# degrades (s4.3:473 — mines are permanent strategic resources).
+enum MineQuality {
+	STANDARD,   # most mountain/hill provinces with known deposits
+	RICH,       # deep mountain deposits, Kaiu territories, exceptional northern ranges
+	MARGINAL,   # shallow or partially exhausted deposits
+}
+
+const MINE_QUALITY_MULTIPLIER: Dictionary = {
+	MineQuality.STANDARD: 1.0,
+	MineQuality.RICH: 1.5,
+	MineQuality.MARGINAL: 0.5,
+}
+
 const MILITARY_SETTLEMENT_TYPES: Array[SettlementType] = [
 	SettlementType.FORTIFICATION,
 	SettlementType.KEEP,

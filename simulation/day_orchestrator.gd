@@ -1722,6 +1722,17 @@ static func advance_day(
 		# NEVER produced anywhere in the live simulation. advance_day already receives `clans`
 		# and uses it elsewhere; this forwards it to the tick that needs it.
 		season_meta["_clan_data"] = clans
+		# s4.3:455 mine quality modifier (Iron = mining PU x 0.50 x modifier).
+		# _process_iron_production read settlement_meta["_mine_quality"] with no producer,
+		# so every mine was silently STANDARD; publish each province's designation so the
+		# LOCKED rich/standard/marginal tiers are reachable. Undesignated provinces stay
+		# STANDARD (x1.0), so this changes no existing output on its own.
+		var _mine_q: Dictionary = {}
+		for _mq_pid: Variant in provinces:
+			var _mq_prov: ProvinceData = provinces[_mq_pid] as ProvinceData
+			if _mq_prov != null:
+				_mine_q[_mq_prov.province_id] = _mq_prov.get_mine_quality_multiplier()
+		season_meta["_mine_quality"] = _mine_q
 		# Mirror into world_states so the daily military/battle path (which runs
 		# earlier in advance_day, not just at season transition) can read the
 		# current-season territorial battle blessings — same channel as _worship_maluses.

@@ -16,6 +16,10 @@ extends Resource
 @export var rivers: Array = []
 @export var roads: Array = []
 @export var terrain_type: Enums.TerrainType = Enums.TerrainType.PLAINS
+## s4.3:461 mine quality designation (LOCKED in principle, multipliers PROVISIONAL).
+## STANDARD (x1.0) is the baseline; RICH (x1.5) / MARGINAL (x0.5) are world-gen
+## designations. Never degrades (s4.3:473).
+@export var mine_quality: Enums.MineQuality = Enums.MineQuality.STANDARD
 
 # -- Settlements ---------------------------------------------------------------
 
@@ -58,4 +62,14 @@ extends Resource
 func get_rice_multiplier() -> float:
 	if Enums.TERRAIN_RICE_MULTIPLIER.has(terrain_type):
 		return Enums.TERRAIN_RICE_MULTIPLIER[terrain_type]
+	return 1.0
+
+
+## s4.3:455-471 mine quality modifier for the Iron formula
+## (mining PU x 0.50 x modifier). Defaults to STANDARD (x1.0), so an
+## undesignated province behaves exactly as before; world-gen designates
+## RICH / MARGINAL provinces as a data edit.
+func get_mine_quality_multiplier() -> float:
+	if Enums.MINE_QUALITY_MULTIPLIER.has(mine_quality):
+		return Enums.MINE_QUALITY_MULTIPLIER[mine_quality]
 	return 1.0
