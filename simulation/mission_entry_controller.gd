@@ -101,6 +101,33 @@ static func consume_pending_arrival(pc: L5RCharacterData) -> void:
 		pc.pending_arrival_mission = {}
 
 
+## Classify a finished mission into a MissionOutcome (s56.13.1, LOCKED) from the
+## combat facts the runtime observed. Pure simulation — no combat state of its own.
+## Precedence follows the LOCKED enum semantics:
+##   all enemies defeated                       -> FULL_SUCCESS
+##   else player died (defenders held)          -> FAILURE
+##   else spotted inside the objective space     -> RETREAT_INSIDE
+##   else reached the objective space (and left) -> PARTIAL_SUCCESS
+##   else (never reached it)                     -> RETREAT_OUTSIDE
+## Returns an InsurgencyRelocationSystem.MissionOutcome int, ready for
+## apply_mission_outcome().
+static func classify_mission_outcome(
+	all_enemies_defeated: bool,
+	player_died: bool,
+	reached_objective_space: bool,
+	spotted_inside_objective: bool,
+) -> int:
+	if all_enemies_defeated:
+		return InsurgencyRelocationSystem.MissionOutcome.FULL_SUCCESS
+	if player_died:
+		return InsurgencyRelocationSystem.MissionOutcome.FAILURE
+	if spotted_inside_objective:
+		return InsurgencyRelocationSystem.MissionOutcome.RETREAT_INSIDE
+	if reached_objective_space:
+		return InsurgencyRelocationSystem.MissionOutcome.PARTIAL_SUCCESS
+	return InsurgencyRelocationSystem.MissionOutcome.RETREAT_OUTSIDE
+
+
 ## Apply a completed PC mission's outcome back to the persistent world (s56.13
 ## Relocation, LOCKED). Pure simulation — the session/runtime supplies the combat
 ## result (outcome + kills + template used); this is the sim-side writeback that was
