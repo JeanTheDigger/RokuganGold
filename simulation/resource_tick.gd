@@ -1223,15 +1223,31 @@ static func produce_iron_settlement(settlement: SettlementData, mine_quality: fl
 
 const ARMS_PER_FORGE_PER_SEASON: float = 3.0
 
+# -- s4.3 Tsi Xing Guo (Smiths) forge blessing (LOCKED) ------------------------
+# T1: Arms production +5%
+# T2: Arms production +10%, Iron-to-Arms conversion efficiency +1 unit per season
+# T3: Arms production +15%, Iron-to-Arms +2 units per season, Arms quality upgrade
+#     chance +10% (forward-note: forge conversion carries no Arms quality tier, so
+#     the quality clause has no consumer yet).
+# Indexed by Enums.MinorBlessingTier [NONE, T1, T2, T3]. Province-only.
+const _TSI_ARMS_PRODUCTION_BONUS: Array = [0.0, 0.05, 0.10, 0.15]
+const _TSI_CONVERSION_EFFICIENCY: Array = [0.0, 0.0, 1.0, 2.0]
+
 static func _process_forge_conversion(
 	settlements: Array,
 	settlement_meta: Dictionary,
 ) -> Dictionary:
 	var clan_data: Dictionary = settlement_meta.get("_clan_data", {})
+	var minor_tiers: Dictionary = settlement_meta.get("_province_minor_tiers", {})
 	var results: Dictionary = {}
 
-	# Build forge count per clan by summing forges in each settlement
+	# Build forge count per clan by summing forges in each settlement. Capacity is
+	# accumulated per forge (not forge_count × flat) so the s4.3 Tsi Xing Guo
+	# province-only Arms bonus can apply to just the forges standing in a blessed
+	# province.
 	var clan_forge_count: Dictionary = {}
+	var clan_capacity: Dictionary = {}
+	var efficiency_claimed: Dictionary = {}  # "clan#province" → flat efficiency already added
 	for s: SettlementData in settlements:
 		var forge_count: int = 0
 		for tag: String in s.infrastructure:
@@ -1244,11 +1260,24 @@ static func _process_forge_conversion(
 			var cd: ClanData = clan_data[clan_name]
 			if s.province_id in cd.province_ids:
 				clan_forge_count[clan_name] = clan_forge_count.get(clan_name, 0) + forge_count
+				# s4.3 Tsi Xing Guo (Smiths), province-only: Arms production +5/10/15%.
+				var tier: int = int((minor_tiers.get(s.province_id, {}) as Dictionary).get(
+					Enums.MinorFortune.TSI_XING_GUO, Enums.MinorBlessingTier.NONE))
+				var cap: float = float(forge_count) * ARMS_PER_FORGE_PER_SEASON \
+					* (1.0 + float(_TSI_ARMS_PRODUCTION_BONUS[tier]))
+				# "Iron-to-Arms conversion efficiency +1/+2 unit(s) per season" (T2/T3).
+				# INTERPRETATION: the blessing is province-scoped and stated per season, so
+				# the flat bonus is granted once per blessed province per season, not per forge.
+				var eff_key: String = "%s#%d" % [clan_name, s.province_id]
+				if tier > Enums.MinorBlessingTier.NONE and not efficiency_claimed.has(eff_key):
+					efficiency_claimed[eff_key] = true
+					cap += float(_TSI_CONVERSION_EFFICIENCY[tier])
+				clan_capacity[clan_name] = float(clan_capacity.get(clan_name, 0.0)) + cap
 				break
 
 	for clan_name: String in clan_forge_count:
 		var cd: ClanData = clan_data[clan_name]
-		var capacity: float = float(clan_forge_count[clan_name]) * ARMS_PER_FORGE_PER_SEASON
+		var capacity: float = float(clan_capacity.get(clan_name, 0.0))
 		var converted: float = minf(capacity, cd.iron_stockpile)
 		cd.iron_stockpile -= converted
 		cd.arms_stockpile += converted
