@@ -1408,19 +1408,28 @@ static func get_die_explosion_cap(character: L5RCharacterData, context: Dictiona
 
 
 # ---------------------------------------------------------------------------
-# TOUCH_OF_THE_VOID: +2k1 instead of +1k1 when spending Void on a roll.
-# Returns the extra kept dice (on top of the normal +1k1 = 1 kept).
-# The roll also requires Willpower TN 30 or Dazed — checked separately.
-# NOTE: dead/forward-wired (no callers). TOUCH_OF_THE_VOID is a Disadvantage per
-# GDD s45/s29.12; the +2k1 Void doubling is actually the Phoenix Rank-5 *technique*
-# of the same name (s29.5). These functions conflate the two — left referencing the
-# real Disadvantage enum so the module compiles, pending owner clarification.
+# TOUCH_OF_THE_VOID (Disadvantage, s45 line 705): "When spending a Void Point to
+# augment a roll, gain +2k1 instead of +1k1. Each time a Void Point is spent, must
+# roll Willpower (TN 30) or be Dazed for one Round."
+#
+# The prior NOTE here claimed this conflated the Disadvantage with the Phoenix Rank-5
+# technique of the same name; it does not. s45's Disadvantage text IS the +2k1 / TN-30
+# clause implemented here. The Phoenix R5 technique (s29.5 line 113) is a different
+# effect entirely — "for every Void Point you spend, gain the effects of spending two,
+# and you may spend Void Points on enhancements twice in one Turn" — and is not
+# implemented by these functions.
+#
+# In XkY notation +2k1 vs +1k1 differs by one ROLLED die (both keep 1), so the delta
+# this returns is extra_rolled, not extra_kept. (The prior dead version returned
+# {"extra_kept": 1}, which would have granted the wrong die.)
+# The Willpower TN 30 / Dazed clause is a combat-round effect; needs_void_dazed_check
+# exposes it for the combat layer (Dazed has no meaning on an out-of-combat skill roll).
 # ---------------------------------------------------------------------------
 
 static func get_void_spend_bonus(character: L5RCharacterData) -> Dictionary:
 	if has_disadvantage(character, Enums.Disadvantage.TOUCH_OF_THE_VOID):
-		return {"extra_kept": 1}  # +2k1 total vs normal +1k1
-	return {"extra_kept": 0}
+		return {"extra_rolled": 1}  # +2k1 total vs the normal +1k1
+	return {"extra_rolled": 0}
 
 
 static func needs_void_dazed_check(character: L5RCharacterData) -> bool:

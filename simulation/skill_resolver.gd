@@ -433,7 +433,16 @@ static func _get_void_spend_bonus(
 	if n < 1:
 		return {"rolled": 0, "kept": 0}
 	var r: Dictionary = VoidSystem.spend_n_for_roll(character, n)
-	return {"rolled": int(r["rolled_bonus"]), "kept": int(r["kept_bonus"])}
+	var rolled: int = int(r["rolled_bonus"])
+	# s45 TOUCH_OF_THE_VOID: each Void Point spent grants +2k1 instead of +1k1 — one
+	# extra ROLLED die per point spent (both variants keep 1). Previously dead code.
+	# Scaled by the points ACTUALLY spent (spend_n_for_roll stops early when the pool
+	# runs dry), so an empty pool grants nothing.
+	var spent: int = int(r.get("spent", 0))
+	if spent > 0:
+		rolled += spent * int(
+			AdvantageSystem.get_void_spend_bonus(character).get("extra_rolled", 0))
+	return {"rolled": rolled, "kept": int(r["kept_bonus"])}
 
 
 # -- Voice of the Wind (s33 Air 1) — spoken social buff -----------------------
