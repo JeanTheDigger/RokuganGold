@@ -14329,13 +14329,22 @@ static func _process_pc_mission_arrivals(
 					auto.append(re)
 
 		if auto.is_empty() and engageable.is_empty():
-			continue  # arrived, but this province has nothing to enter
-		out.append({
+			c.pending_arrival_mission = {}  # arrived, but this province has nothing to enter
+			continue
+		var entry: Dictionary = {
 			"pc_id": c.character_id,
 			"province_id": province_id,
 			"auto_seeds": auto,
 			"engageable_seeds": engageable,
-		})
+		}
+		# Persist on the PC so the session/UI layer can consume pending missions
+		# independently of the advance_day return dict (s56.19 Phase 1 storage step).
+		c.pending_arrival_mission = {
+			"province_id": province_id,
+			"auto_seeds": auto,
+			"engageable_seeds": engageable,
+		}
+		out.append(entry)
 	return out
 
 

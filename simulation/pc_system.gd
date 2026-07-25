@@ -80,6 +80,10 @@ static func logout(character: L5RCharacterData) -> void:
 	if character.home_settlement_id < 0 and not character.physical_location.is_empty():
 		character.home_settlement_id = character.physical_location.to_int()
 	character.physical_location = ""
+	# A logged-out PC holds no pending arrival missions (s56.19); also reset the
+	# arrival marker so a fresh login re-triggers arrival detection at home.
+	character.pending_arrival_mission = {}
+	character.last_arrival_province_id = -1
 
 
 # -- Offline Policy Helpers (s60.6) -------------------------------------------

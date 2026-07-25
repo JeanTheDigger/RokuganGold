@@ -614,6 +614,13 @@ var taint_benefits_suppressed: bool = false
 # province change (travel completion / boundary crossing / login) so AUTO missions
 # fire on arrival. Never a design value.
 @export var last_arrival_province_id: int = -1
+# Pending ASCII-map missions surfaced by the last PC arrival (s56.19 entry
+# mechanism). {province_id:int, auto_seeds:Array, engageable_seeds:Array} — the
+# session/UI layer consumes this to auto-launch AUTO seeds and list engageable
+# PLAYER_INITIATED seeds. Empty {} = nothing pending. Cleared on consume / logout
+# / an arrival into a province with nothing to enter. Engine bookkeeping, not a
+# design value.
+@export var pending_arrival_mission: Dictionary = {}
 
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------

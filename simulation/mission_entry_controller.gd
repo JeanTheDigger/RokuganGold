@@ -63,3 +63,39 @@ static func engage_mission(pc: L5RCharacterData, seed: Dictionary) -> Dictionary
 	if not spend.get("success", false):
 		return {"ok": false, "reason": spend.get("reason", "insufficient_ap")}
 	return {"ok": true, "seed": seed}
+
+
+## Headless launch DECISION for a PC's pending arrival (persisted by the daily
+## _process_pc_mission_arrivals pass). Pure simulation — decides WHAT the session
+## layer should do, without instantiating any scene. Returns:
+##   {has_mission: false}                              — nothing pending
+##   {has_mission: true, province_id: int,
+##    auto_launch: <seed dict or {}>,                  — first AUTO seed to launch on arrival
+##    engageable: Array}                               — PLAYER_INITIATED seeds the PC may assault
+## The UI layer instantiates the mission for `auto_launch` (if non-empty) and lists
+## `engageable` for ENGAGE_MISSION. Call consume_pending_arrival() once handled.
+static func resolve_arrival_launch(pc: L5RCharacterData) -> Dictionary:
+	if pc == null or not pc.is_pc:
+		return {"has_mission": false}
+	var pending: Dictionary = pc.pending_arrival_mission
+	if pending.is_empty():
+		return {"has_mission": false}
+	var auto_seeds: Array = pending.get("auto_seeds", [])
+	var engageable: Array = pending.get("engageable_seeds", [])
+	# AUTO seeds are already policy-classified by the producer; the first is the one
+	# that launches on arrival (a province surfaces at most one AUTO seed in practice,
+	# but guard for order determinism by taking the first).
+	var auto_launch: Dictionary = auto_seeds[0] if not auto_seeds.is_empty() else {}
+	return {
+		"has_mission": true,
+		"province_id": int(pending.get("province_id", -1)),
+		"auto_launch": auto_launch,
+		"engageable": engageable,
+	}
+
+
+## Clear the PC's pending arrival mission once the session/UI layer has consumed it
+## (launched the AUTO mission / presented the engageable list). Idempotent.
+static func consume_pending_arrival(pc: L5RCharacterData) -> void:
+	if pc != null:
+		pc.pending_arrival_mission = {}
