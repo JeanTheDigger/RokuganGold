@@ -4,6 +4,20 @@ Status: scoping draft, 2026-07-21. Not a design change — this catalogues what
 exists, what remains, and the design decisions still owed to the owner before the
 remaining pieces can be built. No mechanic/value is invented here.
 
+**PROGRESS 2026-07-25 (HOLD lifted by owner):** the headless half of the pipeline
+is now complete end-to-end.
+- Phase-1 storage step finished: `_process_pc_mission_arrivals` now PERSISTS each
+  PC's surfaced missions on `L5RCharacterData.pending_arrival_mission` (not just the
+  advance_day return dict); `PcSystem.logout` clears it + resets the arrival marker.
+- Headless launch DECISION added: `MissionEntryController.resolve_arrival_launch(pc)`
+  (which AUTO seed launches + engageable list) + `consume_pending_arrival(pc)` —
+  moves that logic out of the Node/UI `MissionFlow` into tested simulation.
+- Headless outcome WRITEBACK added: `MissionEntryController.apply_mission_outcome(...)`
+  gives `InsurgencyRelocationSystem` (s56.13, LOCKED, previously zero callers) a
+  caller — a completed mission now writes strength/relocation back to the world.
+- Remaining is genuinely the Godot combat UI + the sim<->UI wiring (runtime, not
+  headless-validatable) and networking (out of scope). New owed decision below (#5).
+
 ## Goal
 
 Make an ASCII-map mission actually reachable by a live player character: a PC
@@ -96,6 +110,11 @@ side (`request_zone_move_to`, zone descriptions) partly exists.
    built while networking was out of scope. Before building navigation on it, confirm
    the intended stack (ENet? WebSocket? single-player-first?) — CLAUDE.md's networking
    constraint is only just lifted and the target architecture is unspecified.
+5. **PC-side mission rewards (NEW, 2026-07-25).** `apply_mission_outcome` writes the
+   mission result back to the *world* (insurgency strength/relocation) but applies no
+   reward to the *PC*. The GDD does not specify a Glory/Honor/XP schedule for clearing
+   an ASCII-map mission (by outcome tier / seed type / enemies killed). Owner spec
+   needed before PC rewards can be wired — do not invent the values.
 
 ## Recommendation
 
