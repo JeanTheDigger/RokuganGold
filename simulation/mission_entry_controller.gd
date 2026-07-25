@@ -99,3 +99,48 @@ static func resolve_arrival_launch(pc: L5RCharacterData) -> Dictionary:
 static func consume_pending_arrival(pc: L5RCharacterData) -> void:
 	if pc != null:
 		pc.pending_arrival_mission = {}
+
+
+## Apply a completed PC mission's outcome back to the persistent world (s56.13
+## Relocation, LOCKED). Pure simulation — the session/runtime supplies the combat
+## result (outcome + kills + template used); this is the sim-side writeback that was
+## built (InsurgencyRelocationSystem) but had no caller. Mutates the insurgency's
+## strength + relocation bookkeeping via the LOCKED evaluate_relocation; a defeated
+## insurgency (strength <= 0) is removed by the existing daily purge.
+##
+## same_province is fixed true because adjacent_relocation_chance is a PROVISIONAL
+## 0.0 (s56.13.2, pending playtest) — no adjacent relocation occurs yet; when that
+## value lands, the caller rolls it and passes the result. PC-side rewards
+## (Glory/Honor for clearing a mission) are NOT applied here — that reward schedule
+## is not specified in the GDD and is deferred to an owner decision.
+##
+## insurgency may be null (road-encounter / non-insurgency seeds) → no-op writeback.
+## Returns {applied: bool, strength_after: int, defeated: bool,
+##          relocation_triggered: bool, reason?: String}.
+static func apply_mission_outcome(
+	seed: Dictionary,
+	insurgency: InsurgencyData,
+	outcome: int,
+	kills: int,
+	template_used: String,
+) -> Dictionary:
+	if insurgency == null:
+		return {"applied": false, "reason": "no_insurgency_backing",
+			"strength_after": 0, "defeated": false, "relocation_triggered": false}
+	insurgency.missions_conducted += 1
+	var reloc: Dictionary = InsurgencyRelocationSystem.evaluate_relocation(
+		insurgency, outcome, kills, template_used, true, [],
+	)
+	insurgency.strength = int(reloc.get("strength_after", insurgency.strength))
+	insurgency.template_type = template_used
+	var delay: int = int(reloc.get("delay_seasons", 0))
+	if delay > 0:
+		insurgency.relocation_delay_remaining = delay
+	if reloc.get("reset_province", false):
+		insurgency.missions_conducted = 0
+	return {
+		"applied": true,
+		"strength_after": insurgency.strength,
+		"defeated": insurgency.strength <= 0,
+		"relocation_triggered": bool(reloc.get("triggers", false)),
+	}
