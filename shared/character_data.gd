@@ -621,6 +621,9 @@ var taint_benefits_suppressed: bool = false
 # / an arrival into a province with nothing to enter. Engine bookkeeping, not a
 # design value.
 @export var pending_arrival_mission: Dictionary = {}
+# s4.3 Sadahako host bonus dedup: court_id whose "first court action" bonus this
+# character has already consumed. -1 = none consumed. Engine bookkeeping.
+@export var sadahako_court_bonus_court_id: int = -1
 
 
 # -- Trait Access Helpers (used by CharacterStats) -----------------------------

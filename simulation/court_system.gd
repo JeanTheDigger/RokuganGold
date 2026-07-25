@@ -306,6 +306,9 @@ static func to_context_dict(court: CourtSessionData) -> Dictionary:
 		"court_id": court.court_id,
 		"settlement_id": court.host_settlement_id,
 		"host_clan": court.host_clan,
+		# Exposed so an attendee can tell whether THEY are the host (consumed by the
+		# s4.3 Sadahako host bonus). Structural exposure of existing data only.
+		"host_lord_id": court.host_lord_id,
 		"prestige": court.prestige,
 		"court_type": court.court_type,
 		"topics": court.agenda_topic_ids.duplicate(),

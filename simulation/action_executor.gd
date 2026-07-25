@@ -628,6 +628,9 @@ static func execute(
 	# Flat roll bonus, same channel as the winter-court / doshin bonuses. Owner-approved
 	# action classification 2026-07-24; dedicated-handler intel actions are forward-noted.
 	var minor_fortune_flat: int = _get_minor_fortune_roll_bonus(action_id, province_minor_tiers)
+	# s4.3 Sadahako: the court HOST's first court action in a blessed province (+5/+10).
+	minor_fortune_flat += _get_sadahako_host_bonus(
+		action_id, character, ctx, province_minor_tiers)
 	var roll_result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, primary_skill, tn, 0, "", Enums.Trait.NONE, 0, 0,
 		wc_bonus + doshin_flat + minor_fortune_flat
@@ -1822,6 +1825,44 @@ static func _get_minor_fortune_roll_bonus(action_id: String, province_minor_tier
 		var m_tier: int = int(province_minor_tiers.get(Enums.MinorFortune.MUZAKA, Enums.MinorBlessingTier.NONE))
 		return _MINOR_FORTUNE_ROLL_BONUS[m_tier]
 	return 0
+
+
+# s4.3 Sadahako (geisha & artists): "hosting a court in this province grants host +5 to
+# first court action" (T2), "host bonus +10" (T3). T1 grants no host bonus (Koku only).
+# Indexed by Enums.MinorBlessingTier [NONE, T1, T2, T3].
+const _SADAHAKO_HOST_BONUS: Array = [0, 0, 5, 10]
+
+## Flat Sadahako bonus on the HOST's first court action at a court held in a
+## Sadahako-blessed province. Consumes the once-per-court-session grant by stamping
+## `sadahako_court_bonus_court_id` (just-in-time activation, same pattern as the kiho
+## buffs). Returns 0 unless: the action is a court/social action, the actor is the
+## court's host, the actor's province holds Sadahako at T2+, and the bonus has not
+## already been consumed for this court session.
+static func _get_sadahako_host_bonus(
+	action_id: String,
+	character: L5RCharacterData,
+	ctx: NPCDataStructures.ContextSnapshot,
+	province_minor_tiers: Dictionary,
+) -> int:
+	if character == null or province_minor_tiers.is_empty():
+		return 0
+	if action_id not in SOCIAL_ACTIONS:
+		return 0
+	var court: Dictionary = ctx.active_court_at_location
+	if court.is_empty():
+		return 0
+	if int(court.get("host_lord_id", -1)) != character.character_id:
+		return 0
+	var court_id: int = int(court.get("court_id", -1))
+	if court_id < 0 or character.sadahako_court_bonus_court_id == court_id:
+		return 0  # already consumed for this session
+	var tier: int = int(province_minor_tiers.get(
+		Enums.MinorFortune.SADAHAKO, Enums.MinorBlessingTier.NONE))
+	var bonus: int = _SADAHAKO_HOST_BONUS[tier]
+	if bonus <= 0:
+		return 0
+	character.sadahako_court_bonus_court_id = court_id  # consume the grant
+	return bonus
 
 
 # s4.3 Muzaka (enigmas) "opposing extraction rolls -3/5/8": targeted secret-extraction
