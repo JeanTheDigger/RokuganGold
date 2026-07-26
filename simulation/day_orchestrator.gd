@@ -17817,6 +17817,7 @@ static func _process_military_daily(
 	)
 	var siege_results: Array = _process_siege_ticks(
 		active_sieges, dice_engine, settlements, province_minor_tiers,
+		companies, characters_by_id,
 	)
 	var tether_results: Array = _process_tether_ticks(
 		active_tethers, dice_engine, companies,
@@ -18409,11 +18410,56 @@ static func _find_settlement_for_province(
 	return null
 
 
+## Resolve the siege event scheduled for this tick, if any (s11.7 siege events).
+## process_siege_tick only reports that an event SHOULD fire; nothing ever selected or
+## resolved one, so the whole event layer was dormant. Side selection is a coin flip
+## (INTERPRETATION: the GDD does not say whose event fires on a given tick, and
+## select_event already folds MUTUAL_EVENTS into either side's pool). The acting
+## character is that side's first living company commander; with no commander available
+## the event is skipped rather than rolled with invented stats.
+static func _resolve_scheduled_siege_event(
+	siege: Dictionary,
+	dice_engine: DiceEngine,
+	companies: Array,
+	characters_by_id: Dictionary,
+) -> Dictionary:
+	var side: String = "attacker" if dice_engine.rand_int_range(0, 1) == 0 else "defender"
+	var army_id: int = int(siege.get(
+		"attacker_army_id" if side == "attacker" else "defender_army_id", -1))
+	var actor: L5RCharacterData = null
+	for comp: Dictionary in _get_army_companies(army_id, companies):
+		var cid: int = int(comp.get("commander_id", -1))
+		var cand: Variant = characters_by_id.get(cid)
+		if cand is L5RCharacterData and not CharacterStats.is_dead(cand):
+			actor = cand as L5RCharacterData
+			break
+	if actor == null:
+		return {"fired": false, "reason": "no_commander", "side": side}
+	var event_id: String = SiegeSystem.select_event(dice_engine, side)
+	var def: Dictionary = SiegeSystem.EVENT_DEFINITIONS.get(event_id, {})
+	var skill_name: String = str(def.get("skill", ""))
+	var trait_name: String = str(def.get("trait", ""))
+	var skill_rank: int = SkillResolver.get_skill_rank(actor, skill_name) if skill_name != "" else 0
+	var trait_value: int = 2
+	if trait_name != "":
+		var tv: Variant = actor.get(trait_name.to_lower())
+		if tv != null:
+			trait_value = int(tv)
+	var res: Dictionary = SiegeSystem.resolve_and_apply_event(
+		siege, dice_engine, event_id, trait_value, skill_rank)
+	res["fired"] = true
+	res["side"] = side
+	res["actor_id"] = actor.character_id
+	return res
+
+
 static func _process_siege_ticks(
 	active_sieges: Array,
 	dice_engine: DiceEngine,
 	settlements: Array = [],
 	province_minor_tiers: Dictionary = {},
+	companies: Array = [],
+	characters_by_id: Dictionary = {},
 ) -> Array:
 	var results: Array = []
 	for siege: Dictionary in active_sieges:
@@ -18429,6 +18475,21 @@ static func _process_siege_ticks(
 		var r: Dictionary = SiegeSystem.process_siege_tick(
 			siege, dice_engine, personality, grace_ticks,
 		)
+		# s11.7 siege events: process_siege_tick only SCHEDULES one ("should_fire").
+		# Nothing selected or resolved it, so the event layer never ran. Drive it here,
+		# skipping already-ended sieges and strategic/special events (A4 relief force,
+		# M1 treachery), which resolve roll-free through their own decision channel.
+		var ev: Dictionary = r.get("event", {})
+		if ev.get("should_fire", false) and not siege.get("siege_ended", false):
+			var ev_result: Dictionary = _resolve_scheduled_siege_event(
+				siege, dice_engine, companies, characters_by_id)
+			r["event_resolved"] = ev_result
+			if ev_result.get("fired", false):
+				var fired_id: String = str(ev_result.get("event_id", ""))
+				if fired_id != "" and fired_id not in siege.get("events_fired", []):
+					var fired_list: Array = siege.get("events_fired", [])
+					fired_list.append(fired_id)
+					siege["events_fired"] = fired_list
 		results.append(r)
 	return results
 
