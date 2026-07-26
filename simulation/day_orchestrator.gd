@@ -27589,7 +27589,17 @@ static func _process_rice_market(
 				"koku_budget": koku,
 			})
 
-	if rice_postings.is_empty() or buy_orders.is_empty():
+	if rice_postings.is_empty():
+		return []
+	if buy_orders.is_empty():
+		# No buyers this season. resolve_purchases (which normally performs the
+		# per-season price adjustment) does not run, so age every posting here instead —
+		# otherwise an unsold posting would never drop toward the price floor and could
+		# never be withdrawn, and the market would silently stall with stale listings.
+		for pv0: Variant in rice_postings:
+			if pv0 is RicePostingData:
+				RiceMarketSystem.adjust_price_after_season(pv0 as RicePostingData, false)
+		_withdraw_floored_postings(rice_postings)
 		return []
 
 	var disposition_lookup: Callable = func(seller_id: int, buyer_id: int) -> int:
@@ -27614,16 +27624,20 @@ static func _process_rice_market(
 		_move_province_koku(provinces.get(b_pid), settlements, -cost)
 		_move_province_koku(provinces.get(s_pid), settlements, cost)
 
-	# Withdraw postings that bottomed out unsold (s4.3.18).
+	_withdraw_floored_postings(rice_postings)
+	return sales
+
+
+## Drop postings that hit the price floor while unsold (s4.3.18 withdrawal).
+static func _withdraw_floored_postings(rice_postings: Array) -> void:
 	var keep: Array = []
-	for pv2: Variant in rice_postings:
-		if pv2 is RicePostingData and RiceMarketSystem.should_withdraw(pv2 as RicePostingData):
+	for pv: Variant in rice_postings:
+		if pv is RicePostingData and RiceMarketSystem.should_withdraw(pv as RicePostingData):
 			continue
-		keep.append(pv2)
+		keep.append(pv)
 	if keep.size() != rice_postings.size():
 		rice_postings.clear()
 		rice_postings.append_array(keep)
-	return sales
 
 
 ## Add (or remove, when negative) rice across a province's settlements, largest
