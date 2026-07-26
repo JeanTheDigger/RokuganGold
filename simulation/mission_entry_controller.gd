@@ -201,6 +201,63 @@ static func resolve_and_apply_outcome(
 	return applied
 
 
+## Apply the world consequences of companions who died on the map (s57.46.14).
+## CompanionSystem.death_consequences produced these flags but had NO caller, and
+## world_states["_doshin_losses"] had readers (the doshin allocation pass and the
+## seasonal recovery pass) but NO writer — so a doshin dying on a mission never reduced
+## the settlement's available doshin, and a named companion's death never reached the
+## world. This is the applier for both.
+##
+## Doshin losses are applied here (this is their only owner). Named companions are NOT
+## killed here — they are real characters, so they are routed into the EXISTING death
+## pipeline by appending to `death_events` (same entry shape as the other producers) and
+## letting succession/vacancy handle the rest, rather than duplicating that machinery.
+## `characters_by_id` (optional) lets the named companion's wounds be set so the standard
+## is_dead() checks agree with the death event.
+##
+## Returns {doshin_losses_applied: int, named_deaths: Array[int]}.
+static func apply_companion_losses(
+	dead_companions: Array,
+	world_states: Dictionary,
+	death_events: Array = [],
+	characters_by_id: Dictionary = {},
+	ic_day: int = 0,
+) -> Dictionary:
+	var losses_map: Dictionary = world_states.get("_doshin_losses", {})
+	var doshin_applied: int = 0
+	var named_deaths: Array = []
+	for comp_v: Variant in dead_companions:
+		if not (comp_v is CompanionData):
+			continue
+		var comp: CompanionData = comp_v as CompanionData
+		var cons: Dictionary = CompanionSystem.death_consequences(comp)
+		if cons.get("doshin_loss", false):
+			var sid: int = int(cons.get("settlement_id", -1))
+			if sid >= 0:
+				losses_map[sid] = int(losses_map.get(sid, 0)) + 1
+				doshin_applied += 1
+		if cons.get("named_vacancy", false):
+			var cid: int = int(cons.get("character_id", -1))
+			if cid < 0:
+				continue
+			named_deaths.append(cid)
+			var named: Variant = characters_by_id.get(cid)
+			if named is L5RCharacterData and not CharacterStats.is_dead(named):
+				(named as L5RCharacterData).wounds_taken = \
+					CharacterStats.get_total_wound_capacity(named as L5RCharacterData) + 1
+			death_events.append({
+				"character_id": cid,
+				"is_lord": false,
+				"cause": "companion_killed_on_mission",
+				"suspicious_death": false,
+				"ic_day": ic_day,
+				"killer_id": -1,
+			})
+	if not losses_map.is_empty():
+		world_states["_doshin_losses"] = losses_map
+	return {"doshin_losses_applied": doshin_applied, "named_deaths": named_deaths}
+
+
 static func _find_insurgency(insurgencies: Array, insurgency_id: int) -> InsurgencyData:
 	if insurgency_id < 0:
 		return null
