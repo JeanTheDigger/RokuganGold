@@ -15,6 +15,52 @@ compact pointers here for the reference tables listed above.
 
 ## What's Been Built So Far
 
+### Dormancy Audit + Activation 2026-07-25 (systems that existed but NEVER RAN)
+
+A reachability audit ("what is implemented but has no caller / no producer?") found
+several subsystems that were fully coded yet inert in the live simulation. Activated,
+each validated by a temporary headless driver (deleted after) and the whole session
+A/B-verified twice against a pre-session baseline worktree — 642 state lines, exactly
+ONE intended difference (clan arms 0.000 -> 9.000).
+
+- **Arms were never produced anywhere.** `settlement_meta["_clan_data"]` had three
+  ResourceTick readers (iron banking, forge conversion, Imperial arms redirect) and NO
+  production writer — only a test wrote it. `advance_day` already received `clans`; it
+  now forwards them. This is the single most consequential find: any prior balance
+  impression of the military economy was formed with zero Arms output.
+- **Sieges could not exist.** `SiegeSystem.create_siege_state` had zero callers and
+  nothing appended to `active_sieges`, so the whole siege stack (starvation, events,
+  storm assault, Kisada grace) was unreachable and MAINTAIN_SIEGE was a silent no-op.
+  MAINTAIN_SIEGE now creates the siege from the target settlement's real Rice/PU,
+  gated on a real `attacker_army_id` (the NPC engine fills siege_settlement_id with the
+  ACTOR'S OWN LOCATION, so without that gate a lord would besiege his own castle).
+- **Siege events never fired.** `process_siege_tick` only scheduled one; nothing
+  selected or resolved it. Now driven, with the 10 named effect strings applied
+  (`apply_event_effects`) — previously every effect was returned and dropped.
+- **The s4.3.18 rice market never ran.** Postings/matching/pricing were complete with
+  no driver. `_process_rice_market` now posts surplus, places buy orders, moves rice and
+  koku, and ages unsold postings toward withdrawal.
+- **Order states were never created**, so the daily order pass iterated nothing.
+- **BATTLE_HEALING did nothing** (and required a medicine kit it should not).
+- **Companion deaths never reached the world** (`_doshin_losses` had readers, no writer).
+- Mine quality (s4.3:455-473) was unreachable; TOUCH_OF_THE_VOID returned the wrong die
+  (extra_kept vs extra_rolled); Phoenix resubmission bans lasted forever; artisan items
+  were all stamped creator Insight Rank 1; duplicated disposition/momentum band tables
+  collapsed to a single source of truth.
+
+Also recorded, deliberately NOT wired: MilitaryServiceSystem's request cascade (s11.7:299
+routes it through ASSIGN_VASSAL_OBJECTIVE), MagistrateAllocation (superseded duplicate of
+CrimeSuppressionSystem's doshin logic, values verified identical), RegionalPriceModifiers
+(needs an item-level economy), the Akutenshi powers (correctly excluded from taint pools),
+and GLORY_DEBATE_DECISIVE_LOSS (s15.4 specifies no Glory for debate).
+
+**Reachability caveat:** `active_armies` / `active_tethers` are still never populated —
+`create_army_state` needs a `current_sub_tile` and `begin_march` a `sub_tile_path`, the
+Section C map-data blocker — so armies cannot form and battles/sieges do not begin
+organically. Order budgets and siege creation were wireable precisely because they need
+no sub-tile data.
+
+
 ### Systems Added 2026-07-20 (s54.5 Akuma no Oni Spawn "Multiple Tongues" WIRED — the declared-but-unconsumed three-tongue Free-action volley on the sole akuma spawn; the first FREE-ACTION multi-strike volley IN ADDITION to the primary attack, runtime-verified 10/10)
 Greenfield content wire (owner directive "keep on wiring stuff ... it's all in the GDD" + "blaze through these, you don't need my ok"), the first **Free-action multi-strike volley layered ON TOP of the primary attack** — every prior multi-strike wire was either a paired second attack (`multi_attack`/`_with2`, which REPLACES the turn's economy) or a stance-forced single strike; Multiple Tongues is a **special-exception** volley (the GDD's own words) of three Free-action tongue lashes the akuma makes IN ADDITION to its Simple-action Claws in the same Round. The s54.5 **Akuma no Oni Spawn** (`oni_bestiary`, BOSS, realm JIGOKU — the spawn of the Demon Lord Akuma no Oni) carried the descriptive `multiple_tongues` tag but had **NO consumer** (grep-confirmed: 0 `has_tag("multiple_tongues")` reads, sole bearer) — so the three-tongued horror lashed with only its Claws, its signature volley inert. The ability is **fully numeric in the GDD** (s54.5:359 stat line "Attack: Claws 8k4 (Simple), **Burning Tongues 8k4 (Free)** | Damage: 7k3 (Claws), **2k2 (Burning Tongues)**"; s54.5:369 verbatim: "Multiple Tongues – Can attack with **all three tongues in the same Round, once with each tongue**. This is a **special exception to the rule that each type of Free Action can only be taken once per Round**"), a faithful **zero-invention** add reusing the established **bonus-attack** pattern (the same `execute_melee_attack(..., bonus_attack=true)` free-extra-strike vehicle the off-hand attack + `multi_attack` second strike use — no action gate, no action consumed, since the tongues ARE Free Actions). FIX (one gated melee-block hook + 3 GDD-numeric consts, **no retag** — the tag was already on the spawn): (1) three consts (`MULTIPLE_TONGUES_COUNT = 3` — "all three tongues"; `MULTIPLE_TONGUES_DMG_ROLLED = 2` / `MULTIPLE_TONGUES_DMG_KEPT = 2` — the Burning Tongues 2k2 damage); (2) a new hook in `execute_npc_turn`'s melee block, **immediately after the `multi_attack` block** (so the primary Claws attack + any multi_attack second strike resolve first, then the tongues) — gated on `has_tag("multiple_tongues")` + a living in-melee target, it **field-swaps** the creature's damage profile to the tongue **2k2** (`mcr.damage_rolled`/`damage_kept` 7/3 → 2/2), makes **three** `execute_melee_attack(bonus_attack=true)` free strikes against `best_target` (breaking early if the target dies mid-volley), then **restores** the Claws 7k3 profile (no leak). **Faithful mapping (no invention):** "all three tongues in the same Round" → the 3-strike loop; "each type of Free Action can only be taken once per Round — special exception" → the bonus-attack vehicle (no action gate/consume, so the tongues never contend with the turn's Simple/Complex economy, and the exception is inherent since a bonus attack is never rate-limited); "Burning Tongues 8k4 to-hit" → the **creature's own attack profile** is kept for the to-hit (the GDD gives Claws AND Burning Tongues an **identical 8k4** to-hit, so ONLY the damage differs — swapping the to-hit would misrepresent the ability); "2k2 (Burning Tongues)" → the damage-only field-swap; the **`burning_saliva` DoT** (already wired at `_apply_hit`) auto-applies on every landed tongue hit (each routes through `_apply_hit`, whose burning_saliva arm sets `on_fire` → the 1k1/round Reactions-Stage saliva DoT), so a tongue-lashed foe catches fire, faithful to the spawn's flaming-tongue flavor. Runtime-verified 10/10 (Godot 4.6.2, headless `mintest` driver, POSITIVE ids, ×3 stability): tag membership (the akuma spawn bears `multiple_tongues`; the bear control does not) + the base damage (Claws 7k3) + the consts (3 tongues / 2k2); **end-to-end through `execute_npc_turn`** an akuma spawn adjacent to a fresh mortal fires **ALL THREE tongues in one Round** AND its **primary Claws attack the same Round** (the volley is additive, not a replacement), the target ends **`on_fire`** (the burning_saliva DoT via the tongue hits), and the damage profile is **restored to Claws 7k3** after the volley (never left at 2k2 — no leak); and the **control** — a bear (no `multiple_tongues`) through the real `execute_npc_turn` never produces a `multiple_tongues` action (the tag gate). Full-project `--import` parse-clean; the `has_tag("multiple_tongues")` gate (borne by the akuma spawn alone — grep-confirmed sole bearer + sole consumer) + the field-swap-and-restore (no shared primitive mutated, no leak) mean **zero regression** — every other creature is untouched, and the sibling `burning_saliva` DoT (a separate pre-existing broad wire that also fires on the spawn's Claws — out of scope, not touched) is unchanged. NOTE the DELIBERATE distinction from `multi_attack`: `multi_attack`/`_with2` is a **paired second attack** that shares the turn economy (a second stat-block attack), whereas Multiple Tongues is a **Free-action volley of three** layered ON TOP of the primary — the akuma spawn carries NO `multi_attack` tag, so the two paths never collide. The akuma spawn's other tags (`oni`, `huge`, `partial_invuln` [mundane weapons do nothing], `oni_lord_spawn`, `burning_saliva` [the on-fire DoT]) are separate abilities; `multiple_tongues` is its one signature volley, now live. The live PC-facing spawn is on the PC-travel HOLD like the whole ASCII stack.
 
