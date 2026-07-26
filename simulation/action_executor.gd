@@ -3439,6 +3439,45 @@ static func _execute_treat_wound(
 			},
 		}
 
+	# s45 BATTLE_HEALING (line 21): "Once per day per person, expend one Water spell slot
+	# or two spell slots in any other element(s) to heal one Wound Rank of a Rokugani you
+	# are touching." No roll — the Advantage simply spends slots. Tried after the explicit
+	# healing-spell branch (a deliberately-selected spell wins) and before the Medicine
+	# roll, since it is a guaranteed heal where a Medicine roll can fail. Prefers a Water
+	# slot (1) and falls back to two non-Water slots. AdvantageSystem.can_use_battle_healing
+	# / consume_battle_healing_slot were a documented caller-applies contract with no caller
+	# until now; the daily per-person gate is reset by
+	# DayOrchestrator._reset_battle_healing_daily_state, which already ran but had no consumer.
+	if AdvantageSystem.has_advantage(character, Enums.Advantage.BATTLE_HEALING):
+		var bh: Dictionary = AdvantageSystem.can_use_battle_healing(
+			character, Enums.Ring.WATER, target)
+		if not bh.get("can_use", false):
+			bh = AdvantageSystem.can_use_battle_healing(character, Enums.Ring.NONE, target)
+		if bh.get("can_use", false):
+			var bh_result: Dictionary = AdvantageSystem.consume_battle_healing_slot(
+				character, target, int(bh.get("cost_element", Enums.Ring.NONE)))
+			if bh_result.get("healed", false):
+				return {
+					"success": true,
+					"action_id": "TREAT_WOUND",
+					"character_id": character.character_id,
+					"target_npc_id": target_id,
+					"target_province_id": action.target_province_id,
+					"ic_day": ctx.ic_day,
+					"season": ctx.season,
+					"skill_used": "battle_healing",
+					"roll_total": 0,
+					"tn": 0,
+					"raises": raises,
+					"effects": {
+						"wounds_healed": int(bh_result.get("wounds_removed", 0)),
+						"kit_charge_consumed": false,
+						"target_id": target_id,
+						"wound_level_after": -1,
+						"battle_healing_slots": int(bh_result.get("slots_consumed", 0)),
+					},
+				}
+
 	var treat_result: Dictionary = MedicineSystem.treat_wound(
 		character, target, dice_engine, ctx.ic_day, raises
 	)
