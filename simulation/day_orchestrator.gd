@@ -746,6 +746,7 @@ static func advance_day(
 		day_result.get("results", []),
 		active_sieges,
 		ic_day,
+		settlements,
 	)
 
 	var drill_results: Array = _process_drill_effects(
@@ -3556,6 +3557,7 @@ static func _process_siege_maintenance(
 	applied_list: Array,
 	active_sieges: Array,
 	ic_day: int,
+	settlements: Array = [],
 ) -> void:
 	for applied: Dictionary in applied_list:
 		var effects: Dictionary = applied.get("effects", {})
@@ -3563,8 +3565,32 @@ static func _process_siege_maintenance(
 			continue
 		var sid: int = effects.get("siege_settlement_id", -1)
 		var siege: Dictionary = _find_siege_by_settlement(sid, active_sieges)
-		if not siege.is_empty():
-			siege["last_maintained_ic_day"] = ic_day
+		if siege.is_empty():
+			# BEGIN the siege. SiegeSystem.create_siege_state had ZERO callers and nothing
+			# ever appended to active_sieges, so no siege could exist in the live sim —
+			# which left the entire siege stack (starvation ticks, the event pool, storm
+			# assault, the Kisada grace) unreachable, and made MAINTAIN_SIEGE a silent
+			# no-op. s11.7 describes investment as the attacker surrounding the settlement
+			# and waiting, with duration derived from that settlement's own Rice storage
+			# and PU — so the state is built from the real settlement, inventing nothing.
+			var target: Variant = _find_settlement_by_id(settlements, sid)
+			if not (target is SettlementData):
+				continue
+			var ts: SettlementData = target as SettlementData
+			var new_siege: Dictionary = SiegeSystem.create_siege_state(
+				sid,
+				int(effects.get("attacker_army_id", -1)),
+				int(effects.get("defender_army_id", -1)),
+				ts.rice_stockpile,
+				float(ts.population_pu),
+				float(ts.garrison_pu),
+			)
+			new_siege["personality_tag"] = str(effects.get("personality_tag", "default"))
+			new_siege["began_ic_day"] = ic_day
+			new_siege["last_maintained_ic_day"] = ic_day
+			active_sieges.append(new_siege)
+			continue
+		siege["last_maintained_ic_day"] = ic_day
 
 
 # -- Horde Assault SI Processing (s2.4.5 — LOCKED) ----------------------------
