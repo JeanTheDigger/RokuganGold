@@ -17859,6 +17859,12 @@ static func _process_military_daily(
 	var tether_results: Array = _process_tether_ticks(
 		active_tethers, dice_engine, companies,
 	)
+	# s11.6/s57.21 order budgets: nothing ever called OrderSystem.create_order_state, so
+	# order_states was permanently empty and the whole daily order pass (budget reset +
+	# pending-order delivery) iterated nothing. Materialise one state per eligible
+	# commander before the tick. Unlike army movement this needs no sub-tile data — the
+	# budget is purely a function of military rank / feudal-lord status.
+	_ensure_order_states(characters_by_id.values(), order_states)
 	var order_results: Dictionary = _process_order_ticks(order_states)
 	var tether_by_army: Dictionary = _build_tether_result_by_army(
 		active_tethers, tether_results,
@@ -18752,6 +18758,32 @@ static func _process_field_deprivation(
 		})
 
 	return results
+
+
+## Ensure every eligible commander has an OrderSystem order state (s11.6 order budgets).
+## Eligible = a living character holding a military rank, or a feudal lord (role_position
+## set). Budgets come from OrderSystem's own LORD_ORDER_BUDGET / RANK_ORDER_BUDGET, so no
+## value is invented here. Idempotent: existing states are left untouched, and a state is
+## never created twice for the same commander.
+static func _ensure_order_states(characters: Array, order_states: Array) -> void:
+	var have: Dictionary = {}
+	for os_v: Variant in order_states:
+		if os_v is Dictionary:
+			have[int((os_v as Dictionary).get("commander_id", -1))] = true
+	for c: L5RCharacterData in characters:
+		if c == null or CharacterStats.is_dead(c):
+			continue
+		if have.has(c.character_id):
+			continue
+		var is_lord: bool = c.role_position != ""
+		if c.military_rank == Enums.MilitaryRank.NONE and not is_lord:
+			continue
+		var st: Dictionary = OrderSystem.create_order_state(
+			c.character_id, c.military_rank, is_lord)
+		if int(st.get("budget", 0)) <= 0:
+			continue  # rank carries no order budget — do not track an inert state
+		order_states.append(st)
+		have[c.character_id] = true
 
 
 static func _process_order_ticks(
