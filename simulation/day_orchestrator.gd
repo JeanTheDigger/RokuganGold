@@ -3587,10 +3587,21 @@ static func _process_siege_maintenance(
 			var target: Variant = _find_settlement_by_id(settlements, sid)
 			if not (target is SettlementData):
 				continue
+			# REQUIRED precondition: a real besieging army. The NPC decision engine fills
+			# MAINTAIN_SIEGE's siege_settlement_id with the ACTOR'S OWN LOCATION
+			# (npc_decision_engine.gd:3908), which was harmless while this was a no-op but
+			# would otherwise let a lord sitting at home besiege his own castle. A siege
+			# without a besieging army is meaningless, so creation requires an explicit
+			# attacker_army_id; the NPC path supplies none and therefore cannot self-besiege.
+			# (Armies themselves remain blocked on the Section C sub-tile data, so in
+			# practice this fires only for an explicitly-supplied besieging force.)
+			var attacker_army: int = int(effects.get("attacker_army_id", -1))
+			if attacker_army < 0:
+				continue
 			var ts: SettlementData = target as SettlementData
 			var new_siege: Dictionary = SiegeSystem.create_siege_state(
 				sid,
-				int(effects.get("attacker_army_id", -1)),
+				attacker_army,
 				int(effects.get("defender_army_id", -1)),
 				ts.rice_stockpile,
 				float(ts.population_pu),
