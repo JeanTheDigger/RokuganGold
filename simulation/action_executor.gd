@@ -3371,7 +3371,16 @@ static func _execute_treat_wound(
 		}
 
 	var can_check: Dictionary = MedicineSystem.can_treat(character, target, ctx.ic_day)
-	if not can_check["valid"]:
+	# s45 BATTLE_HEALING is mystical — it expends spell slots to heal by touch and needs
+	# NO medicine kit. can_treat's kit requirement is a Medicine-roll precondition, so a
+	# kit-less holder of the Advantage must not be turned away here; every other can_treat
+	# gate (dead, self-treatment, unwounded target, daily limit) still applies.
+	var battle_healing_only: bool = (
+		not can_check["valid"]
+		and str(can_check.get("reason", "")) == "no_medicine_kit"
+		and AdvantageSystem.has_advantage(character, Enums.Advantage.BATTLE_HEALING)
+	)
+	if not can_check["valid"] and not battle_healing_only:
 		return {
 			"success": false,
 			"action_id": "TREAT_WOUND",
@@ -3477,6 +3486,22 @@ static func _execute_treat_wound(
 						"battle_healing_slots": int(bh_result.get("slots_consumed", 0)),
 					},
 				}
+
+	if battle_healing_only:
+		# Reached only when the healer has no medicine kit and Battle Healing could not
+		# pay (no slots, or already healed this target today). The Medicine roll below
+		# requires a kit, so fail here rather than rolling it without one.
+		return {
+			"success": false,
+			"action_id": "TREAT_WOUND",
+			"character_id": character.character_id,
+			"target_npc_id": target_id,
+			"target_province_id": action.target_province_id,
+			"ic_day": ctx.ic_day,
+			"season": ctx.season,
+			"reason": "no_medicine_kit",
+			"effects": {},
+		}
 
 	var treat_result: Dictionary = MedicineSystem.treat_wound(
 		character, target, dice_engine, ctx.ic_day, raises
