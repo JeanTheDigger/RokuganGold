@@ -5,6 +5,20 @@ class_name MilitaryServiceSystem
 ## operational_superior_id changes; lord_id stays unchanged.
 ## Commitment protection scores shared with LevySystem.
 ## Pure static functions. Caller owns all state.
+##
+## ⚠ AUDIT 2026-07-25 — which half of this module is live:
+## LIVE: assign_to_military_service (the ASSIGN_TO_MILITARY_SERVICE writeback) and the
+## helpers it uses. That is the half the GDD puts in a lord's hands.
+## NOT WIRED, and deliberately so: create_service_request / cascade_request_to_vassals /
+## evaluate_candidates / select_candidates_for_service / apply_service_assignments.
+## s11.7:299 (LOCKED) specifies that the downward request does NOT travel through a
+## bespoke call — "The Family Daimyo uses ASSIGN_VASSAL_OBJECTIVE to tell each
+## Provincial and City Daimyo: 'provide X bushi for military service'". So the cascade
+## belongs in the existing ASSIGN_VASSAL_OBJECTIVE channel (per the CLAUDE.md
+## "check existing channels before wiring any ActionID" constraint), and wiring these
+## functions would create a second, competing execution path for the same mechanic.
+## The remaining gap is the TRIGGER — "when the Go-hatamoto requires officers and
+## troops" — which is a Strategic Review condition the GDD does not quantify.
 
 
 # -- Request Flow ----------------------------------------------------------------
