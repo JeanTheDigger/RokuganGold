@@ -115,6 +115,7 @@ static func advance_day(
 	kolat_secrecy: Dictionary = {},
 	military_legions: Array = [],
 	military_sections: Array = [],
+	rice_postings: Array = [],
 ) -> Dictionary:
 	var prev_season: int = time_system.get_season()
 	# s54.7i Kolat endgame bundle — heal a partial/empty bundle so every pass can
@@ -1655,6 +1656,7 @@ static func advance_day(
 	var seiyaku_results: Dictionary = {}
 	var commitment_seasonal_result: Dictionary = {}
 	var worship_seasonal_results: Dictionary = {}
+	var rice_market_results: Array = []
 	var civil_war_results_seasonal: Dictionary = {}
 	var extradition_results: Array = []
 	var togashi_results: Dictionary = {}
@@ -1762,6 +1764,14 @@ static func advance_day(
 			emperor_tax_cfg, trade_routes, pirate_strength_by_province,
 		)
 		_apply_worship_stability_maluses(worship_maluses, provinces)
+		# s4.3.18 decentralized rice market. The engine (postings, disposition-priority
+		# matching, price adjustment, withdrawal) was fully implemented but had NO driver —
+		# nothing ever created a posting or a buy order, so the market never ran and only
+		# intra-clan share_rice was live. Runs after the resource tick so surpluses and
+		# deficits reflect this season's harvest and consumption.
+		rice_market_results = _process_rice_market(
+			provinces, settlements, characters_by_id, rice_postings, worship_maluses,
+		)
 		# s4.3 Minor Fortune stability blessings (Hamanri, Ko-no-hama): positive
 		# per-season Stability additions for provinces that worship them, parallel
 		# to the Great Fortune maluses above. Province-only.
@@ -2317,6 +2327,7 @@ static func advance_day(
 		"worship_accumulation_results": worship_accumulation_results,
 		"letter_examination_results": letter_examination_results,
 		"worship_seasonal_results": worship_seasonal_results,
+		"rice_market_results": rice_market_results,
 		"construction_results": construction_results,
 		"commitment_seasonal_result": commitment_seasonal_result,
 		"purification_results": purification_results,
@@ -27474,6 +27485,153 @@ static func _is_benten_marriage_blocked(
 		if malus.get("marriage_auto_fail", false):
 			return true
 	return false
+
+
+# -- s4.3.18 Decentralized Rice Market ----------------------------------------
+# RiceMarketSystem implemented postings, disposition-priority matching, price
+# adjustment and withdrawal, but nothing ever called create_posting / resolve_purchases,
+# so the market never ran: a surplus province never sold and a starving province never
+# bought. This is the seasonal driver.
+#
+# Each province's lord posts its settlements' combined surplus (compute_surplus keeps a
+# 4-season reserve, so only genuine surplus is listed) at BASELINE_PRICE on first
+# listing; an existing posting keeps its adjusted price (adjust_price_after_season is
+# applied inside resolve_purchases). Provinces short of their seasonal need place a buy
+# order for the shortfall, budgeted by the koku they actually hold. Matching is
+# disposition-priority per s4.3.18, and rice/koku move on each resolved sale.
+# Postings that hit the price floor unsold are withdrawn.
+static func _process_rice_market(
+	provinces: Dictionary,
+	settlements: Array,
+	characters_by_id: Dictionary,
+	rice_postings: Array,
+	worship_maluses: Dictionary,
+) -> Array:
+	if provinces.is_empty() or settlements.is_empty():
+		return []
+	var lord_by_province: Dictionary = {}
+	var province_by_lord: Dictionary = {}
+	for pid: Variant in provinces:
+		var prov: ProvinceData = provinces[pid] as ProvinceData
+		if prov == null:
+			continue
+		var lord: L5RCharacterData = _find_province_lord(prov, characters_by_id)
+		if lord == null or CharacterStats.is_dead(lord):
+			continue
+		lord_by_province[prov.province_id] = lord
+		province_by_lord[lord.character_id] = prov.province_id
+
+	var buy_orders: Array = []
+	for pid2: Variant in lord_by_province:
+		var prov2: ProvinceData = provinces[pid2] as ProvinceData
+		var lord2: L5RCharacterData = lord_by_province[pid2]
+		var prov_setts: Array = ResourceTick.get_province_settlements(prov2, settlements)
+		var surplus: float = 0.0
+		var need: float = 0.0
+		var have: float = 0.0
+		var koku: float = 0.0
+		for sv: Variant in prov_setts:
+			var st: SettlementData = sv as SettlementData
+			if st == null:
+				continue
+			surplus += RiceMarketSystem.compute_surplus(st)
+			need += float(st.population_pu) * ResourceTick.RICE_CONSUMPTION_PER_PU_PER_SEASON
+			have += st.rice_stockpile
+			koku += st.koku_stockpile
+		if surplus > 0.0:
+			var existing: RicePostingData = null
+			for pv: Variant in rice_postings:
+				if pv is RicePostingData and (pv as RicePostingData).province_id == int(pid2):
+					existing = pv as RicePostingData
+					break
+			if existing == null:
+				rice_postings.append(RiceMarketSystem.create_posting(
+					lord2.character_id, int(pid2), surplus, RiceMarketSystem.BASELINE_PRICE))
+			else:
+				existing.quantity = surplus  # relist this season's surplus at its current price
+		elif have < need and koku > 0.0:
+			buy_orders.append({
+				"lord_id": lord2.character_id,
+				"province_id": int(pid2),
+				"quantity": need - have,
+				"koku_budget": koku,
+			})
+
+	if rice_postings.is_empty() or buy_orders.is_empty():
+		return []
+
+	var disposition_lookup: Callable = func(seller_id: int, buyer_id: int) -> int:
+		var seller: Variant = characters_by_id.get(seller_id)
+		if seller is L5RCharacterData:
+			return int((seller as L5RCharacterData).disposition_values.get(buyer_id, 0))
+		return 0
+
+	var sales: Array = RiceMarketSystem.resolve_purchases(
+		rice_postings, buy_orders, disposition_lookup, worship_maluses)
+
+	# Move the goods: rice leaves the seller's province, koku leaves the buyer's.
+	for sale: Dictionary in sales:
+		var s_pid: int = int(province_by_lord.get(int(sale.get("seller_id", -1)), -1))
+		var b_pid: int = int(province_by_lord.get(int(sale.get("buyer_id", -1)), -1))
+		var qty: float = float(sale.get("quantity", 0.0))
+		var cost: float = float(sale.get("total_cost", 0.0))
+		if s_pid < 0 or b_pid < 0 or qty <= 0.0:
+			continue
+		_move_province_rice(provinces.get(s_pid), settlements, -qty)
+		_move_province_rice(provinces.get(b_pid), settlements, qty)
+		_move_province_koku(provinces.get(b_pid), settlements, -cost)
+		_move_province_koku(provinces.get(s_pid), settlements, cost)
+
+	# Withdraw postings that bottomed out unsold (s4.3.18).
+	var keep: Array = []
+	for pv2: Variant in rice_postings:
+		if pv2 is RicePostingData and RiceMarketSystem.should_withdraw(pv2 as RicePostingData):
+			continue
+		keep.append(pv2)
+	if keep.size() != rice_postings.size():
+		rice_postings.clear()
+		rice_postings.append_array(keep)
+	return sales
+
+
+## Add (or remove, when negative) rice across a province's settlements, largest
+## stockpile first when removing so no settlement is driven negative.
+static func _move_province_rice(prov: Variant, settlements: Array, amount: float) -> void:
+	if not (prov is ProvinceData) or is_zero_approx(amount):
+		return
+	var prov_setts: Array = ResourceTick.get_province_settlements(prov as ProvinceData, settlements)
+	if prov_setts.is_empty():
+		return
+	if amount > 0.0:
+		(prov_setts[0] as SettlementData).rice_stockpile += amount
+		return
+	var remaining: float = -amount
+	for sv: Variant in prov_setts:
+		if remaining <= 0.0:
+			break
+		var st: SettlementData = sv as SettlementData
+		var take: float = minf(st.rice_stockpile, remaining)
+		st.rice_stockpile -= take
+		remaining -= take
+
+
+static func _move_province_koku(prov: Variant, settlements: Array, amount: float) -> void:
+	if not (prov is ProvinceData) or is_zero_approx(amount):
+		return
+	var prov_setts: Array = ResourceTick.get_province_settlements(prov as ProvinceData, settlements)
+	if prov_setts.is_empty():
+		return
+	if amount > 0.0:
+		(prov_setts[0] as SettlementData).koku_stockpile += amount
+		return
+	var remaining: float = -amount
+	for sv: Variant in prov_setts:
+		if remaining <= 0.0:
+			break
+		var st: SettlementData = sv as SettlementData
+		var take: float = minf(st.koku_stockpile, remaining)
+		st.koku_stockpile -= take
+		remaining -= take
 
 
 static func _apply_worship_stability_maluses(
