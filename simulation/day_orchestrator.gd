@@ -18777,6 +18777,21 @@ static func _process_field_deprivation(
 ## value is invented here. Idempotent: existing states are left untouched, and a state is
 ## never created twice for the same commander.
 static func _ensure_order_states(characters: Array, order_states: Array) -> void:
+	# Prune states whose commander is dead or gone. Without this a dead commander's state
+	# lingers forever, taking a daily budget reset every tick and leaving order capacity
+	# attached to a corpse.
+	var living: Dictionary = {}
+	for lc: Variant in characters:
+		if lc is L5RCharacterData and not CharacterStats.is_dead(lc as L5RCharacterData):
+			living[(lc as L5RCharacterData).character_id] = true
+	var alive_states: Array = []
+	for os_p: Variant in order_states:
+		if os_p is Dictionary and living.has(int((os_p as Dictionary).get("commander_id", -1))):
+			alive_states.append(os_p)
+	if alive_states.size() != order_states.size():
+		order_states.clear()
+		order_states.append_array(alive_states)
+
 	var have: Dictionary = {}
 	for os_v: Variant in order_states:
 		if os_v is Dictionary:
