@@ -584,6 +584,8 @@ static func generate_options(
 		available_actions = ["EXTORT_ACCUSED"]
 
 	for action_id: String in available_actions:
+		if action_id in NO_EXECUTOR_ACTIONS:
+			continue
 		if _is_zone_blocked(action_id, ctx.zone_flags):
 			continue
 		if _is_military_blocked(action_id, ctx):
@@ -3206,6 +3208,33 @@ static func _compute_stale_intel_bonus(
 	if best == Enums.KnowledgeConfidence.STALE:
 		return STALE_INTEL_GATHER_BONUS
 	return 0.0
+
+
+# -- Actions with no executor (audit 2026-07-25) --------------------------------
+# These ActionIDs appear in objective_alignment.json — several as the TOP-scored option
+# for their NeedType — but ActionExecutor has no handler for any of them, so choosing
+# one fell through to the generic `{"effect": "self_action_completed"}` no-op: the NPC
+# burned AP and nothing happened. Worse, because they outscore the implemented
+# alternative they starved it, e.g. ELIMINATE_CHARACTER always picked
+# EXECUTE_ASSASSINATION (100) so the working COMMISSION_ASSASSINATION (95) never ran.
+#
+# They are FILTERED rather than implemented because the mechanics already exist and are
+# driven elsewhere; adding executor handlers would double-drive them:
+#   EXECUTE_ASSASSINATION / ABORT_OPERATION — DayOrchestrator._process_assassination_daily_tick
+#     already runs the whole operation lifecycle (access -> equipment -> execution),
+#     advancing and resolving it automatically once COMMISSION_ASSASSINATION creates it.
+#   FORCE_MARCH — army movement is blocked on Section C sub-tile data (armies never form).
+#   EVALUATE_CLAN_STRENGTH — no executor and no separate driver; PROBE (60) is the live
+#     fallback for ASSESS_POWER_BALANCE.
+# Every affected NeedType retains an implemented alternative, so filtering changes which
+# action is chosen, never whether the objective can be pursued. This is routing, not a
+# scoring change: the JSON tables are untouched.
+const NO_EXECUTOR_ACTIONS: Array[String] = [
+	"EXECUTE_ASSASSINATION",
+	"ABORT_OPERATION",
+	"FORCE_MARCH",
+	"EVALUATE_CLAN_STRENGTH",
+]
 
 
 # -- Zone Flag Blocking (s57.36) -----------------------------------------------
