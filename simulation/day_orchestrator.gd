@@ -1358,6 +1358,10 @@ static func advance_day(
 		death_events, characters,
 	)
 
+	# s54.7g: keep each Kolat Master's ranked heir line current before resolving any
+	# death this tick, so a Master who dies today is succeeded from the line as it
+	# stood while they lived (not a line mutated by their own death).
+	_maintain_kolat_heir_designations(characters, crime_records)
 	_process_kolat_master_succession(death_events, characters, characters_by_id, crime_records, dice_engine)
 	_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
 	# s54.7i: a Kolat-commissioned assassination that silenced a magistrate lowers
@@ -9507,15 +9511,16 @@ static func _assign_kolat_standing_objectives(
 # When a Kolat Master dies, the LOCKED succession cascade seats a new Master from
 # the Sect's conscious agents (KolatMasterSelector.evaluate_succession: three
 # ranked heirs, then the Tiger discretionary draw, then chain re-point). The
-# encrypted heir-designation record is not yet populated, so the cascade always
-# falls to the discretionary draw — which seats a living non-Master Sect agent if
-# one exists, else leaves the Sect vacant (s54.7g: the network cannot always
-# refill). The new Master inherits the Sect standing mandate (already wired). The
-# dead Master's seat flag is left set (dead-guarded everywhere, and the resolver
-# excludes it via is_dead) so the field-agent recall below still finds its
-# network. Runs BEFORE the recall so a freshly-seated Tiger can route that recall.
-# under_investigation_ids is left empty (the heir-investigation gate is unused
-# while heir_designations is empty — discretionary draw does not consult it).
+# encrypted heir-designation record is populated and kept current by
+# _maintain_kolat_heir_designations (run earlier this tick), so the cascade first
+# consults the dead Master's ranked line and only falls to the discretionary draw
+# when all three heirs are unavailable (s54.7g). The new Master inherits the Sect
+# standing mandate (already wired). The dead Master's seat flag is left set
+# (dead-guarded everywhere, and the resolver excludes it via is_dead) so the
+# field-agent recall below still finds its network. Runs BEFORE the recall so a
+# freshly-seated Tiger can route that recall. under_investigation_ids is computed
+# from UNDER_INVESTIGATION crime records and gates both the ranked-heir cascade
+# and the discretionary draw (a compromised agent is never seated).
 static func _process_kolat_master_succession(
 	death_events: Array,
 	characters: Array,
@@ -9526,7 +9531,44 @@ static func _process_kolat_master_succession(
 	var seated: Array = []
 	# s54.7g: an agent under active investigation is compromised and must not be
 	# seated. Gather the perpetrators + known suspects of all UNDER_INVESTIGATION
-	# cases once; the discretionary draw (`_discretionary_select`) excludes them.
+	# cases once; the cascade (`_heir_valid`) and the discretionary draw
+	# (`_discretionary_select`) both exclude them.
+	var under_investigation: Array = _gather_kolat_under_investigation(crime_records)
+	for ev: Variant in death_events:
+		if not ev is Dictionary:
+			continue
+		var did: int = int((ev as Dictionary).get("character_id", -1))
+		var dead: L5RCharacterData = characters_by_id.get(did, null)
+		if dead == null or not KolatSystem.is_master(dead):
+			continue
+		# The dead Master's ranked heir line (s54.7g): non-Tiger Sects read from
+		# Tiger's cipher record; the Tiger seat reads its sealed line off the Cloud
+		# Master. Empty when no holder exists → evaluate_succession falls to the
+		# discretionary draw, exactly as before this record was populated.
+		var heir_list: Array = _kolat_heir_list_for_sect(dead.kolat_sect, characters)
+		var new_id: int = KolatMasterSelector.evaluate_succession(
+			dead.kolat_sect, characters, {dead.kolat_sect: heir_list}, dice, under_investigation)
+		if new_id >= 0:
+			# On a Tiger reseat, carry the non-Tiger cipher record to the new Tiger
+			# (s54.7g: the new Tiger inherits Tiger's records) so same-day and future
+			# successions still find it on a living holder.
+			if dead.kolat_sect == Enums.KolatSect.TIGER:
+				var new_tiger: L5RCharacterData = characters_by_id.get(new_id, null)
+				if new_tiger != null:
+					new_tiger.special_data["heir_designations"] = \
+						(dead.special_data.get("heir_designations", {}) as Dictionary).duplicate(true)
+			seated.append({
+				"sect": dead.kolat_sect,
+				"former_master_id": did,
+				"new_master_id": new_id,
+			})
+	return seated
+
+
+## Perpetrators + known suspects of all UNDER_INVESTIGATION crime records — the
+## agents s54.7g bars from Master seating/designation. Shared by the succession
+## trigger and the daily heir-designation maintenance pass.
+static func _gather_kolat_under_investigation(crime_records: Array) -> Array:
 	var under_investigation: Array = []
 	for rv: Variant in crime_records:
 		if not rv is CrimeRecord:
@@ -9540,22 +9582,88 @@ static func _process_kolat_master_succession(
 			var sid: int = int(sv)
 			if sid >= 0 and sid not in under_investigation:
 				under_investigation.append(sid)
-	for ev: Variant in death_events:
-		if not ev is Dictionary:
+	return under_investigation
+
+
+## Locate the Kolat Master holding `sect`. Prefers a living Master; when
+## `require_living` is false, falls back to a just-died Master still in the roster
+## (dead objects persist within a death batch, so a record stored on them is still
+## readable this tick).
+static func _find_kolat_master(characters: Array, sect: int, require_living: bool) -> L5RCharacterData:
+	var dead_fallback: L5RCharacterData = null
+	for c: L5RCharacterData in characters:
+		if c == null or not c.is_kolat_master or c.kolat_sect != sect:
 			continue
-		var did: int = int((ev as Dictionary).get("character_id", -1))
-		var dead: L5RCharacterData = characters_by_id.get(did, null)
-		if dead == null or not KolatSystem.is_master(dead):
+		if not CharacterStats.is_dead(c):
+			return c
+		dead_fallback = c
+	return null if require_living else dead_fallback
+
+
+## The ranked heir line for a vacant `sect` (s54.7g). Tiger's own succession is a
+## sealed record held by the living Cloud Master; every other Sect's line is held
+## by Tiger (living preferred, else the Tiger who just died this batch). Returns
+## an empty Array when no holder exists.
+static func _kolat_heir_list_for_sect(sect: int, characters: Array) -> Array:
+	if sect == Enums.KolatSect.TIGER:
+		var cloud: L5RCharacterData = _find_kolat_master(characters, Enums.KolatSect.CLOUD, true)
+		if cloud != null:
+			return cloud.special_data.get("tiger_succession", [])
+		return []
+	var tiger: L5RCharacterData = _find_kolat_master(characters, Enums.KolatSect.TIGER, false)
+	if tiger != null:
+		return (tiger.special_data.get("heir_designations", {}) as Dictionary).get(sect, [])
+	return []
+
+
+## Daily maintenance of the Kolat heir-designation record (s54.7g; owner cadence
+## 2026-09-04: world-gen + on-invalidation). Idempotent and cheap: it rebuilds any
+## line that differs from the freshly-derived top-three, which covers all three
+## cases in one pass — the empty world-start record filling as agents are
+## recruited, a designated heir going invalid (dead/Broken/investigated/left
+## Sect), and the pool growing. A stable line is left untouched (no write, no
+## churn). The non-Tiger record is stored on the living Tiger; Tiger's own sealed
+## line is stored on the living Cloud Master so it survives Tiger's death.
+static func _maintain_kolat_heir_designations(characters: Array, crime_records: Array) -> void:
+	var tiger: L5RCharacterData = _find_kolat_master(characters, Enums.KolatSect.TIGER, true)
+	if tiger == null:
+		return  # no living Tiger holds the cipher record
+	var cloud: L5RCharacterData = _find_kolat_master(characters, Enums.KolatSect.CLOUD, true)
+	var under_investigation: Array = _gather_kolat_under_investigation(crime_records)
+	# Bucket every designable agent by Sect and note which Sects have a living
+	# Master (only a seated Master designates a line), in a single O(N) pass.
+	var agents_by_sect: Dictionary = {}
+	var sect_has_master: Dictionary = {}
+	for c: L5RCharacterData in characters:
+		if c == null:
 			continue
-		var new_id: int = KolatMasterSelector.evaluate_succession(
-			dead.kolat_sect, characters, {}, dice, under_investigation)
-		if new_id >= 0:
-			seated.append({
-				"sect": dead.kolat_sect,
-				"former_master_id": did,
-				"new_master_id": new_id,
-			})
-	return seated
+		if c.is_kolat_master and not CharacterStats.is_dead(c):
+			sect_has_master[c.kolat_sect] = true
+			continue
+		var s: int = c.kolat_sect
+		if s == Enums.KolatSect.NONE:
+			continue
+		if not KolatMasterSelector.is_designable_agent(s, c, under_investigation):
+			continue
+		if not agents_by_sect.has(s):
+			agents_by_sect[s] = []
+		(agents_by_sect[s] as Array).append(c)
+	# Non-Tiger Sects with a living Master → Tiger's record.
+	var record: Dictionary = tiger.special_data.get("heir_designations", {})
+	for sect: Variant in sect_has_master.keys():
+		if sect == Enums.KolatSect.TIGER:
+			continue
+		var desired: Array = KolatMasterSelector.designate_heirs(
+			sect, agents_by_sect.get(sect, []))
+		if desired != record.get(sect, []):
+			record[sect] = desired
+	tiger.special_data["heir_designations"] = record
+	# Tiger's own sealed line → the Cloud Master (survives Tiger's death, s54.7g).
+	if cloud != null and sect_has_master.has(Enums.KolatSect.TIGER):
+		var t_desired: Array = KolatMasterSelector.designate_heirs(
+			Enums.KolatSect.TIGER, agents_by_sect.get(Enums.KolatSect.TIGER, []))
+		if t_desired != cloud.special_data.get("tiger_succession", []):
+			cloud.special_data["tiger_succession"] = t_desired
 
 
 static func _process_kolat_master_death_recall(

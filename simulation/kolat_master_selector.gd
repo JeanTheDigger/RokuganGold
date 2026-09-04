@@ -181,15 +181,7 @@ static func _discretionary_select(
 ) -> L5RCharacterData:
 	var pool: Array = []
 	for npc: L5RCharacterData in npcs:
-		if npc == null or CharacterStats.is_dead(npc) or npc.is_kolat_master:
-			continue
-		if npc.kolat_sect != sect:
-			continue
-		if bool(npc.special_data.get("kolat_broken", false)):
-			continue
-		if npc.character_id in under_investigation_ids:
-			continue
-		if not _meets_minimums(sect, npc):
+		if not is_designable_agent(sect, npc, under_investigation_ids):
 			continue
 		var tier: int = _classify_tier(sect, npc)
 		for _w: int in range(TIER_WEIGHTS.get(tier, 1)):
@@ -197,6 +189,65 @@ static func _discretionary_select(
 	if pool.is_empty():
 		return null
 	return _find(npcs, pool[dice.rand_int_range(0, pool.size() - 1)])
+
+
+# === HEIR DESIGNATION (s54.7g, owner-authorized 2026-09-04) ==================
+# A Master privately designates exactly three ranked heirs (s54.7g "Designation").
+# The GDD locks the eligible pool + heir conditions but leaves the actual pick as
+# "the Master's judgment expressed in the ordering." Owner ruling (2026-09-04):
+# select the top three eligible same-Sect conscious agents by s54.7a tier weight,
+# deterministically. Tiebreak within a tier: higher Insight, then higher Status,
+# then lower character_id (a stable, reproducible structural order). PROVISIONAL
+# — the ranking rule is a structural selection choice, not a GDD-locked value.
+
+## True if `npc` may be designated an heir of (or discretionarily seated into)
+## `sect`: alive, conscious, a same-Sect Kolat agent, not already a Master, not
+## Broken, not under active investigation, and meeting the Sect minimums (s54.7g
+## heir conditions + s54.7a floor). This is the single eligibility predicate
+## shared by heir designation and Tiger's discretionary fallback.
+static func is_designable_agent(sect: int, npc: L5RCharacterData, under_investigation_ids: Array) -> bool:
+	if npc == null or CharacterStats.is_dead(npc) or npc.is_kolat_master:
+		return false
+	if npc.kolat_sect != sect:
+		return false
+	if bool(npc.special_data.get("kolat_broken", false)):
+		return false
+	if npc.character_id in under_investigation_ids:
+		return false
+	if not _meets_minimums(sect, npc):
+		return false
+	return true
+
+
+## Rank the pre-filtered `eligible_agents` and return the top three as an ordered
+## Array of npc_ids (fewer than three when the pool is short; the ranked-heir
+## cascade + Tiger's discretionary fallback cover a short or empty list). Callers
+## pass a list already filtered by is_designable_agent().
+static func designate_heirs(sect: int, eligible_agents: Array) -> Array:
+	var ranked: Array = eligible_agents.duplicate()
+	ranked.sort_custom(func(a: L5RCharacterData, b: L5RCharacterData) -> bool:
+		return _heir_rank_less(sect, a, b))
+	var out: Array = []
+	for i: int in range(mini(3, ranked.size())):
+		out.append(ranked[i].character_id)
+	return out
+
+
+## Deterministic "a ranks ahead of b" comparator for heir designation. Lower
+## s54.7a tier wins (Tier 1 Ideal ahead of Tier 3 Last Resort); ties break by
+## higher Insight rank, then higher Status, then lower character_id.
+static func _heir_rank_less(sect: int, a: L5RCharacterData, b: L5RCharacterData) -> bool:
+	var ta: int = _classify_tier(sect, a)
+	var tb: int = _classify_tier(sect, b)
+	if ta != tb:
+		return ta < tb
+	var ia: int = CharacterStats.get_insight_rank(a)
+	var ib: int = CharacterStats.get_insight_rank(b)
+	if ia != ib:
+		return ia > ib
+	if a.status != b.status:
+		return a.status > b.status
+	return a.character_id < b.character_id
 
 
 ## Re-point the Kolat chain after a succession. A new non-Tiger Master reports to
