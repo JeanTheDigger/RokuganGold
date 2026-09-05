@@ -4968,7 +4968,7 @@ static func _process_kolat_network_seasonal(
 			var naming: Dictionary = naming_index.get(npc_id, {})
 			if not naming.is_empty():
 				_handle_kolat_compromise(
-					e, npc_id, naming,
+					master, e, npc_id, naming, active_topics,
 					characters, characters_by_id, objectives_map, ic_day,
 				)
 				continue  # a compromised agent is not also silence-flagged this tick
@@ -5053,8 +5053,8 @@ static func _build_kolat_naming_index(crime_records: Array, characters_by_id: Di
 ## lifecycle. Idempotent: re-applies only when the threat escalates to a higher
 ## tier than already handled for this entry.
 static func _handle_kolat_compromise(
-	entry: Dictionary, npc_id: int,
-	naming: Dictionary, characters: Array, characters_by_id: Dictionary,
+	master: L5RCharacterData, entry: Dictionary, npc_id: int,
+	naming: Dictionary, active_topics: Array, characters: Array, characters_by_id: Dictionary,
 	objectives_map: Dictionary, ic_day: int,
 ) -> void:
 	var rec: CrimeRecord = naming.get("record", null)
@@ -5095,6 +5095,54 @@ static func _handle_kolat_compromise(
 				objectives_map, lotus.character_id,
 				"ELIMINATE_CHARACTER", 3, npc_id, "kolat_compromise_deep",
 			)
+		# s54.7f Channel 1: the same Tiger→Lotus routing pushes a −100 (existential)
+		# kolat_positions stance on the investigating magistrate to the exposed cell.
+		_seed_kolat_investigator_stance(
+			master, npc_id, rec.investigating_magistrate_id,
+			active_topics, characters_by_id,
+		)
+
+
+## s54.7f Channel 1 seeding: on a DEEP compromise (Tiger → Lotus contract), the
+## investigating magistrate becomes an existential (−100) threat in the
+## kolat_positions of the operationally exposed cell — the caught agent plus the
+## Master's other living, non-burned network agents (owner decision 2026-09-04).
+## The "investigator topic" is any active, unresolved topic whose subject is that
+## magistrate; when none exists the routing seeds nothing (no topic is invented).
+## −100 is the GDD-explicit value (KolatNetwork.EXPOSED_INVESTIGATOR_STANCE).
+static func _seed_kolat_investigator_stance(
+	master: L5RCharacterData, compromised_npc_id: int, magistrate_id: int,
+	active_topics: Array, characters_by_id: Dictionary,
+) -> void:
+	if magistrate_id < 0:
+		return
+	var topic_ids: Array[int] = []
+	for tv: Variant in active_topics:
+		if tv is TopicData and not (tv as TopicData).resolved \
+				and (tv as TopicData).subject_character_id == magistrate_id:
+			topic_ids.append((tv as TopicData).topic_id)
+	if topic_ids.is_empty():
+		return
+	# Exposed cell: the caught agent + the Master's other living, non-burned agents.
+	var exposed: Array[int] = []
+	if compromised_npc_id >= 0:
+		exposed.append(compromised_npc_id)
+	var record: Dictionary = KolatNetwork.get_network(master, master.kolat_sect)
+	for cn: Variant in record:
+		var en: Variant = record[cn]
+		if not en is Dictionary:
+			continue
+		if KolatNetwork.status_of(en) == "burned":
+			continue
+		var aid: int = int((en as Dictionary).get("npc_id", -1))
+		if aid >= 0 and aid not in exposed:
+			exposed.append(aid)
+	for aid: int in exposed:
+		var agent: L5RCharacterData = characters_by_id.get(aid, null)
+		if agent == null or CharacterStats.is_dead(agent) or agent.kolat_sect == Enums.KolatSect.NONE:
+			continue
+		for tid: int in topic_ids:
+			agent.kolat_positions[tid] = KolatNetwork.EXPOSED_INVESTIGATOR_STANCE
 
 
 ## True when the crime's investigating magistrate holds Emerald or Imperial

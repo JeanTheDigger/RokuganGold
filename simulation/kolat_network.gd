@@ -37,6 +37,11 @@ const THREAT_LOW: String = "low"
 const THREAT_MODERATE: String = "moderate"
 const THREAT_DEEP: String = "deep"
 
+# s54.7f Channel 1: when Tiger routes a Lotus contract on a DEEP compromise, the
+# investigator topic acquires a kolat_positions entry of −100 (maximum opposition)
+# for every operationally exposed agent. The value is GDD-explicit (s54.7f).
+const EXPOSED_INVESTIGATOR_STANCE: int = -100
+
 # agent_status values that mean "silence is expected / agent gone" — the seasonal
 # silence-detection pass skips these (s54.7h: dark = "silence expected").
 const SILENCE_EXEMPT_STATUS: Array[String] = ["dark", "suspended", "burned"]
