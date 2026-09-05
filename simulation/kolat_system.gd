@@ -23,6 +23,22 @@ const WORLD_IS_TRUTH_MASTERY: int = 6
 # Koku pipeline (s54.7c/h).
 const LAUNDER_PER_AP: int = 5
 const VAULT_MIN_RESERVE: int = 50
+# UNDERREPORT_KOKU diverts this fraction of the domain's nominal seasonal koku
+# output into dirty_koku per use (s54.7c: "dozens of small adjustments ...
+# explainable as rounding or estimation error"). The GDD gives no number;
+# owner-approved PROVISIONAL value (2026-09-04).
+const UNDERREPORT_SKIM_FRACTION: float = 0.10
+
+
+## Koku diverted by one UNDERREPORT_KOKU on the Master's own domain (s54.7c). Base
+## is the settlement's nominal seasonal koku output (town_pu × the per-PU seasonal
+## rate), before regional/garrison/worship modifiers — the "stated output" the
+## lord adjusts. Returns 0 for a null settlement or one with no town economy.
+static func underreport_skim_amount(settlement: SettlementData) -> int:
+	if settlement == null or settlement.town_pu <= 0:
+		return 0
+	var base: float = float(settlement.town_pu) * ResourceTick.KOKU_PER_TOWN_PU_PER_SEASON
+	return int(floor(base * UNDERREPORT_SKIM_FRACTION))
 
 # Dead-drop concealment (s54.7c).
 const DEAD_DROP_FREE_VISITS_PER_SEASON: int = 3

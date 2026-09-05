@@ -115,6 +115,23 @@ const PURCHASE_KOKU_COST: float = 1.0
 const CONDUCT_COMMERCE_YIELD_MULT: float = 2.0
 
 
+# A settlement the character lords, preferring the one they are physically at
+# (their AT_OWN_HOLDINGS domain). Returns null when they lord none in the list.
+static func _find_lorded_settlement(settlements: Array, character: L5RCharacterData) -> SettlementData:
+	var fallback: SettlementData = null
+	for sv: Variant in settlements:
+		if not sv is SettlementData:
+			continue
+		var s: SettlementData = sv
+		if s.lord_character_id != character.character_id:
+			continue
+		if str(s.settlement_id) == character.physical_location:
+			return s
+		if fallback == null:
+			fallback = s
+	return fallback
+
+
 # -- Main Entry Point ---------------------------------------------------------
 
 static func execute(
@@ -185,6 +202,16 @@ static func execute(
 			var hidden_temple: SettlementData = KolatNetwork.find_hidden_temple(settlements)
 			if hidden_temple != null and KolatNetwork.is_at_hidden_temple(character, hidden_temple):
 				kmeta["temple"] = hidden_temple
+		# UNDERREPORT_KOKU skim amount (s54.7c): a fraction of the Master's own
+		# domain's nominal seasonal koku output. AT_OWN_HOLDINGS, so the domain is the
+		# settlement they lord (preferring the one they are physically at). Without a
+		# populated amount the executor no-ops ("no_amount").
+		if action_id == "UNDERREPORT_KOKU" and not kmeta.has("amount") and not settlements.is_empty():
+			var domain: SettlementData = _find_lorded_settlement(settlements, character)
+			if domain != null:
+				var skim: int = KolatSystem.underreport_skim_amount(domain)
+				if skim > 0:
+					kmeta["amount"] = skim
 		var keff: Dictionary = KolatExecutor.execute(action_id, character, kmeta, dice_engine)
 		return {
 			"success": keff.get("ok", false),
