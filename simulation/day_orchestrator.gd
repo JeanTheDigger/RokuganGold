@@ -4982,8 +4982,10 @@ static func _process_kolat_network_seasonal(
 				e.erase("compromise_tier")
 				e.erase("compromise_case_id")
 				e.erase("deep_routed")
-				# Do not silence-flag the agent the same tick it recovers from a
-				# deliberate go-dark; a genuine lapse is caught next season.
+				# Reset the contact clock so the recovered agent is not immediately
+				# flagged silent for the go-dark gap it was expected to have, and skip
+				# silence detection this tick; a genuine future lapse is caught normally.
+				KolatNetwork.set_last_contact(e, ic_day)
 				e["silence_flagged"] = false
 				continue
 
@@ -29463,6 +29465,12 @@ static func _inject_base_character_context(
 			ws["active_armies"] = active_armies
 			ws["active_insurgencies"] = insurgencies
 			ws["has_active_contracts"] = g_lords_with_contracts.get(c.character_id, false)
+		elif KolatSystem.is_master(c):
+			# A Kolat Master who is not lord-classified (a low-status secret agent)
+			# still needs the settlements list for the koku executors — the Hidden
+			# Temple vault (TRANSFER/SPONSOR/BRIBE) and the UNDERREPORT domain skim
+			# both resolve settlements in ActionExecutor (s54.7c). Reference, not copy.
+			ws["settlements"] = settlements
 
 		if has_champion_authority and c.character_id == phoenix_champion_id:
 			ws["phoenix_champion_authority"] = true

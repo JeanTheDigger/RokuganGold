@@ -108,6 +108,20 @@ static func set_entry_status(entry: Dictionary, status: String, ic_day: int) -> 
 		entry["burned_ic_day"] = ic_day
 
 
+## Refresh an entry's last-contact timestamp into whichever contact key its Sect
+## schema uses, matching silence_overdue's read precedence (last_contact →
+## last_contact_ic_day → last_report_ic_day). Used when a compromised agent
+## recovers, so it is not immediately flagged silent for the go-dark gap it was
+## expected to have.
+static func set_last_contact(entry: Dictionary, ic_day: int) -> void:
+	if entry.has("last_contact"):
+		entry["last_contact"] = ic_day
+	elif entry.has("last_contact_ic_day"):
+		entry["last_contact_ic_day"] = ic_day
+	elif entry.has("last_report_ic_day"):
+		entry["last_report_ic_day"] = ic_day
+
+
 ## True when a burned entry has survived at least one seasonal tick since it was
 ## burned and may now be deleted (s54.7h: "retained for 1 season then deleted").
 ## Because the purge runs only at the Seasonal Tick, a burned_ic_day strictly
