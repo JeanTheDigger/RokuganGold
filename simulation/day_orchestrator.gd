@@ -1704,7 +1704,10 @@ static func advance_day(
 			provinces,
 		)
 		_process_kolat_bribes_seasonal(characters, provinces)
-		_process_kolat_network_seasonal(characters, active_topics, next_topic_id, ic_day)
+		_process_kolat_network_seasonal(
+			characters, active_topics, next_topic_id, ic_day,
+			crime_records, characters_by_id, objectives_map,
+		)
 		# s54.7i Kolat endgame: exposure decay, Tiger's candidate pipeline, Imperial
 		# counter-response tiers, and the win-condition check.
 		kolat_endgame_result = _process_kolat_endgame(
@@ -4908,16 +4911,28 @@ static func _process_kolat_bribes_seasonal(characters: Array, provinces: Diction
 
 
 # -- Kolat Network Maintenance (s54.7d) ---------------------------------------
-# Seasonal silence detection across every Master's agent-network record. When an
-# agent's gap since last contact exceeds its threshold, a Tier 4 personal concern
-# topic fires in the Master's known_topics (s54.7d). A per-entry silence_flagged
-# guard prevents re-firing every season for the same lapse. (The accompanying
-# LOCATE_CHARACTER priority-2 objective and the MANAGE_COMPROMISED_AGENT response
-# route through the engine's NeedType pipeline and are not generated here.)
+# Seasonal lifecycle pass across every Master's agent-network record:
+#   1. Purge burned entries retained one season (s54.7h).
+#   2. Silence detection (s54.7d): a gap past threshold fires a Tier 4 concern
+#      topic AND assigns LOCATE_CHARACTER priority 2 on the Master to go find the
+#      silent agent. dark/suspended/burned entries are exempt (silence expected).
+#   3. Compromise handling (s54.7d MANAGE_COMPROMISED_AGENT): an agent named in an
+#      active investigation/arrest/accusation crime record goes dark (Kolat
+#      objective cleared, s54.7h) and is classified LOW→dark / MODERATE→suspended /
+#      DEEP→burned by the owner-approved rule (KolatNetwork.classify_compromise);
+#      DEEP routes Tiger → Lotus for silencing (ELIMINATE_CHARACTER on the Lotus
+#      Master). A resolved case restores a dark/suspended agent to active.
+# Modeled as direct maintenance writebacks (like the Master-death recall), a known
+# simplification: the go-dark/classification are free rather than AP-budgeted
+# directives. under_investigation escalators read the naming crime record.
 
 static func _process_kolat_network_seasonal(
-	characters: Array, active_topics: Array, next_topic_id: Array, ic_day: int
+	characters: Array, active_topics: Array, next_topic_id: Array, ic_day: int,
+	crime_records: Array = [], characters_by_id: Dictionary = {}, objectives_map: Dictionary = {},
 ) -> void:
+	# npc_id → the most-threatening crime record actively naming that character.
+	# Built once so each network entry is an O(1) lookup (s54.7d compromise trigger).
+	var naming_index: Dictionary = _build_kolat_naming_index(crime_records, characters_by_id)
 	for master: L5RCharacterData in characters:
 		if master == null or CharacterStats.is_dead(master):
 			continue
@@ -4927,12 +4942,40 @@ static func _process_kolat_network_seasonal(
 		if field == "":
 			continue
 		var record: Dictionary = master.special_data.get(field, {})
+		# 1) Purge burned entries retained one full season (s54.7h). Runs first so a
+		# entry burned this very tick (burned_ic_day == ic_day) is not deleted now.
+		for cn: String in record.keys():
+			if KolatNetwork.is_burned_purgeable(record[cn], ic_day):
+				record.erase(cn)
 		for code_name: String in record:
 			var entry: Variant = record[code_name]
 			if not entry is Dictionary:
 				continue
 			var e: Dictionary = entry
-			if KolatNetwork.status_of(e) == "burned":
+			var npc_id: int = int(e.get("npc_id", -1))
+			var status: String = KolatNetwork.status_of(e)
+			if status == "burned":
+				continue
+
+			# 2) Compromise handling (MANAGE_COMPROMISED_AGENT, s54.7d).
+			var naming: Dictionary = naming_index.get(npc_id, {})
+			if not naming.is_empty():
+				_handle_kolat_compromise(
+					e, npc_id, naming,
+					characters, characters_by_id, objectives_map, ic_day,
+				)
+				continue  # a compromised agent is not also silence-flagged this tick
+			elif e.get("compromise_tier", -1) >= 0:
+				# No active naming case remains → the threat has passed. A dark or
+				# suspended agent recovers to active (s54.7b low-threat resolution).
+				KolatNetwork.set_entry_status(e, "active", ic_day)
+				e.erase("compromise_tier")
+				e.erase("compromise_case_id")
+				e.erase("deep_routed")
+
+			# 3) Silence detection (s54.7d). dark/suspended agents are silent by
+			# design (go-dark sent) and are exempt.
+			if KolatNetwork.status_of(e) in KolatNetwork.SILENCE_EXEMPT_STATUS:
 				continue
 			if KolatNetwork.silence_overdue(e, ic_day):
 				if e.get("silence_flagged", false):
@@ -4944,16 +4987,147 @@ static func _process_kolat_network_seasonal(
 					tid, "%s has not reported in some time" % code_name,
 					TopicData.Tier.TIER_4, TopicData.Category.PERSONAL,
 					ic_day, TopicMomentumSystem.initial_momentum_for_tier(TopicData.Tier.TIER_4),
-					[], "", "", int(e.get("npc_id", -1)),
+					[], "", "", npc_id,
 					"kolat_silence", "kolat_agent_silence",
 				)
 				active_topics.append(topic)
 				if not master.topic_pool.has(tid):
 					master.topic_pool.append(tid)
+				# The Master goes looking for the silent agent (s54.7d): LOCATE_CHARACTER
+				# priority 2 in the Kolat slot, unless a Tiger directive owns it.
+				if npc_id >= 0:
+					_assign_kolat_network_objective(
+						objectives_map, master.character_id,
+						"LOCATE_CHARACTER", 2, npc_id, "kolat_network_silence",
+					)
 			else:
 				# Contact within threshold — clear any stale silence flag.
 				if e.get("silence_flagged", false):
 					e["silence_flagged"] = false
+
+
+## npc_id → the most-threatening crime record actively naming that character
+## (perpetrator or known suspect). "Most threatening" = highest FINAL classified
+## tier (base legal status + Emerald/Imperial and CAPITAL escalators, s54.7d), so a
+## less-advanced but more severe case outranks a further-along mild one. Only
+## records whose legal status actively names the subject are indexed.
+static func _build_kolat_naming_index(crime_records: Array, characters_by_id: Dictionary) -> Dictionary:
+	var index: Dictionary = {}
+	for rv: Variant in crime_records:
+		if not rv is CrimeRecord:
+			continue
+		var rec: CrimeRecord = rv
+		if not KolatNetwork.is_active_naming_status(rec.legal_status):
+			continue
+		var emerald: bool = _is_emerald_or_imperial_investigator(rec.investigating_magistrate_id, characters_by_id)
+		var capital: bool = rec.severity == Enums.CrimeSeverity.CAPITAL
+		var level: String = KolatNetwork.classify_compromise(rec.legal_status, emerald, capital)
+		var tier: int = [
+			KolatNetwork.THREAT_LOW, KolatNetwork.THREAT_MODERATE, KolatNetwork.THREAT_DEEP,
+		].find(level)
+		if tier < 0:
+			continue
+		var named: Array = []
+		if rec.perpetrator_id >= 0:
+			named.append(rec.perpetrator_id)
+		for sv: Variant in rec.known_suspects:
+			var sid: int = int(sv)
+			if sid >= 0 and sid not in named:
+				named.append(sid)
+		for nid: int in named:
+			var prior: Dictionary = index.get(nid, {})
+			if prior.is_empty() or tier > int(prior.get("tier", -1)):
+				index[nid] = {"record": rec, "tier": tier}
+	return index
+
+
+## Apply the MANAGE_COMPROMISED_AGENT response to one compromised network entry
+## (s54.7d). Classifies via the owner-approved rule and drives the LOCKED status
+## lifecycle. Idempotent: re-applies only when the threat escalates to a higher
+## tier than already handled for this entry.
+static func _handle_kolat_compromise(
+	entry: Dictionary, npc_id: int,
+	naming: Dictionary, characters: Array, characters_by_id: Dictionary,
+	objectives_map: Dictionary, ic_day: int,
+) -> void:
+	var rec: CrimeRecord = naming.get("record", null)
+	if rec == null:
+		return
+	var emerald: bool = _is_emerald_or_imperial_investigator(rec.investigating_magistrate_id, characters_by_id)
+	var capital: bool = rec.severity == Enums.CrimeSeverity.CAPITAL
+	var level: String = KolatNetwork.classify_compromise(rec.legal_status, emerald, capital)
+	if level == "":
+		return
+	var new_tier: int = [KolatNetwork.THREAT_LOW, KolatNetwork.THREAT_MODERATE, KolatNetwork.THREAT_DEEP].find(level)
+	# Only (re)act when this is a new compromise or an escalation (s54.7b: the
+	# threat worsening moves the agent further along the response chain).
+	if new_tier <= int(entry.get("compromise_tier", -1)):
+		return
+	entry["compromise_tier"] = new_tier
+	entry["compromise_case_id"] = rec.case_id
+	# Stage 1 (unconditional, s54.7d): go dark — the agent's Kolat objective is
+	# cleared. Then classification sets the resting status.
+	if npc_id >= 0 and objectives_map.has(npc_id):
+		(objectives_map[npc_id] as Dictionary).erase("kolat")
+	var status: String = "dark"
+	if level == KolatNetwork.THREAT_MODERATE:
+		status = "suspended"
+	elif level == KolatNetwork.THREAT_DEEP:
+		status = "burned"
+	KolatNetwork.set_entry_status(entry, status, ic_day)
+	# Stage 3 DEEP: route Tiger → Lotus to silence the agent before capture
+	# (s54.7d/b). The Master never eliminates their own agent — a living Lotus
+	# Master takes the contract (Tiger fallback). Assigned once per burn.
+	if level == KolatNetwork.THREAT_DEEP and not entry.get("deep_routed", false):
+		entry["deep_routed"] = true
+		var lotus: L5RCharacterData = _find_kolat_master(characters, Enums.KolatSect.LOTUS, true)
+		if lotus == null:
+			lotus = _find_kolat_master(characters, Enums.KolatSect.TIGER, true)
+		if lotus != null and npc_id >= 0 and lotus.character_id != npc_id:
+			_assign_kolat_network_objective(
+				objectives_map, lotus.character_id,
+				"ELIMINATE_CHARACTER", 3, npc_id, "kolat_compromise_deep",
+			)
+
+
+## True when the crime's investigating magistrate holds Emerald or Imperial
+## authority (s54.7b "Emerald Magistrate with Imperial backing" escalator).
+static func _is_emerald_or_imperial_investigator(magistrate_id: int, characters_by_id: Dictionary) -> bool:
+	if magistrate_id < 0:
+		return false
+	var m: L5RCharacterData = characters_by_id.get(magistrate_id, null)
+	if m == null:
+		return false
+	var role: String = m.role_position
+	return role.contains("Emerald") or role.contains("Imperial") or m.clan == "Imperial"
+
+
+## Assign a Kolat network-management objective into a Master's Kolat slot, unless
+## a Tiger directive (a different source) or an equal/higher-priority objective
+## already owns it. Keeps its own source so the opportunistic scanner leaves it be.
+static func _assign_kolat_network_objective(
+	objectives_map: Dictionary, master_id: int,
+	need_type: String, priority: int, target_npc_id: int, source: String,
+) -> void:
+	var objectives: Dictionary = objectives_map.get(master_id, {})
+	var slot: Dictionary = objectives.get("kolat", {})
+	if not slot.is_empty():
+		# A Tiger directive is authoritative — never displace it.
+		if String(slot.get("source", "")) not in [
+			KolatOpportunityScanner.SOURCE, "kolat_network_silence", "kolat_compromise_deep",
+		]:
+			return
+		# Do not downgrade an equal/higher-priority network objective already set.
+		if int(slot.get("priority", 0)) >= priority and String(slot.get("source", "")) == source:
+			return
+	objectives["kolat"] = {
+		"need_type": need_type,
+		"priority": priority,
+		"target_npc_id": target_npc_id,
+		"source": source,
+		"auto_assigned": true,
+	}
+	objectives_map[master_id] = objectives
 
 
 # -- Scene Examination Writebacks (s11.3.13) -----------------------------------

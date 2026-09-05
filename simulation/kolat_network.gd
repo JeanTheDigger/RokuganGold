@@ -23,6 +23,120 @@ const SILENCE_THRESHOLD_REMOTE: int = 60  # IC days
 # agent_status values that count toward the capacity cap (s54.7d).
 const CAP_COUNTING_STATUS: Array[String] = ["active", "dark", "suspended"]
 
+# -- Compromise threat classification (s54.7d MANAGE_COMPROMISED_AGENT) --------
+# The GDD locks the four agent_status values and their meanings (s54.7h) and the
+# unconditional Stage-1 go-dark, but leaves the Stage-2 threat classification only
+# qualitatively described (s54.7b: "two axes — how much the investigator has, and
+# how capable they are"). Owner-approved numeric rule (2026-09-04, PROVISIONAL):
+# base tier from the legal status of the most-advanced crime record naming the
+# agent, +1 tier for an Emerald/Imperial investigator, +1 tier for a CAPITAL
+# crime, capped at DEEP. Tier → outcome: LOW = stay dark and lie low (recovers to
+# active when the case resolves); MODERATE = suspended (awaiting Tiger); DEEP =
+# burned (routed Tiger → Lotus for silencing; entry purged after one season).
+const THREAT_LOW: String = "low"
+const THREAT_MODERATE: String = "moderate"
+const THREAT_DEEP: String = "deep"
+
+# agent_status values that mean "silence is expected / agent gone" — the seasonal
+# silence-detection pass skips these (s54.7h: dark = "silence expected").
+const SILENCE_EXEMPT_STATUS: Array[String] = ["dark", "suspended", "burned"]
+
+
+## True when a crime record's legal status actively names its subject (an open
+## investigation, accusation, or standing guilt/fugitive state) — the s54.7d
+## "investigation, arrest, or accusation" trigger. Cleared/closed states
+## (NONE/CLEAR/PARDONED/ACQUITTED) do not name the agent.
+static func is_active_naming_status(legal_status: int) -> bool:
+	return legal_status in [
+		Enums.LegalStatus.SUSPECTED, Enums.LegalStatus.UNDER_INVESTIGATION,
+		Enums.LegalStatus.ACCUSED, Enums.LegalStatus.DECREED_GUILTY,
+		Enums.LegalStatus.FUGITIVE,
+	]
+
+
+## Base threat tier (0 low / 1 moderate / 2 deep) from a naming legal status, or
+## -1 for a non-naming status. Owner-approved mapping (s54.7d, PROVISIONAL).
+static func compromise_base_tier(legal_status: int) -> int:
+	match legal_status:
+		Enums.LegalStatus.SUSPECTED, Enums.LegalStatus.UNDER_INVESTIGATION:
+			return 0
+		Enums.LegalStatus.ACCUSED:
+			return 1
+		Enums.LegalStatus.DECREED_GUILTY, Enums.LegalStatus.FUGITIVE:
+			return 2
+	return -1
+
+
+## Classify a compromise given the most-advanced naming legal status and the two
+## escalators. Returns THREAT_LOW / THREAT_MODERATE / THREAT_DEEP, or "" when the
+## status does not name the agent. Owner-approved rule (s54.7d, PROVISIONAL).
+static func classify_compromise(
+	legal_status: int, is_emerald_or_imperial: bool, is_capital: bool
+) -> String:
+	var tier: int = compromise_base_tier(legal_status)
+	if tier < 0:
+		return ""
+	if is_emerald_or_imperial:
+		tier += 1
+	if is_capital:
+		tier += 1
+	tier = clampi(tier, 0, 2)
+	return [THREAT_LOW, THREAT_MODERATE, THREAT_DEEP][tier]
+
+
+## Write an entry's lifecycle status into whichever status key its Sect schema
+## uses (agent_status / operative_status / asset_status), defaulting to
+## agent_status. Stamps burned_ic_day when burning so the seasonal purge can
+## retain a burned entry for one season before deleting it (s54.7h).
+static func set_entry_status(entry: Dictionary, status: String, ic_day: int) -> void:
+	var key: String = "agent_status"
+	if entry.has("operative_status"):
+		key = "operative_status"
+	elif entry.has("asset_status"):
+		key = "asset_status"
+	elif not entry.has("agent_status"):
+		key = "agent_status"
+	entry[key] = status
+	if status == "burned":
+		entry["burned_ic_day"] = ic_day
+
+
+## True when a burned entry has survived at least one seasonal tick since it was
+## burned and may now be deleted (s54.7h: "retained for 1 season then deleted").
+## Because the purge runs only at the Seasonal Tick, a burned_ic_day strictly
+## before the current tick's day means the entry was burned in a prior season.
+static func is_burned_purgeable(entry: Variant, ic_day: int) -> bool:
+	if not entry is Dictionary:
+		return false
+	var d: Dictionary = entry
+	if status_of(d) != "burned":
+		return false
+	var burned_day: int = int(d.get("burned_ic_day", -1))
+	return burned_day >= 0 and burned_day < ic_day
+
+
+## Count of the Master's own registered agents currently carrying an active Kolat
+## objective (s54.7d ≤3 sub-cap). Reads the live objectives_map so it reflects
+## assignments made this tick. Forward-wired: the live agent-directive channel
+## (Tiger SEND_KOLAT_DIRECTIVE executor) is deferred, so no over-assignment path
+## exists to gate yet — this makes the cap enforceable once it lands.
+static func active_kolat_objective_count(
+	master: L5RCharacterData, objectives_map: Dictionary
+) -> int:
+	var n: int = 0
+	var record: Dictionary = get_network(master, master.kolat_sect)
+	for code_name: Variant in record:
+		var e: Variant = record[code_name]
+		if not e is Dictionary:
+			continue
+		var nid: int = int((e as Dictionary).get("npc_id", -1))
+		if nid < 0:
+			continue
+		var objs: Dictionary = objectives_map.get(nid, {})
+		if not (objs.get("kolat", {}) as Dictionary).is_empty():
+			n += 1
+	return n
+
 # Sect → special_data field holding that Sect's network record (s54.7h).
 # kolat_sect is an Enums.KolatSect on the character sheet (the codebase truth),
 # not the Enums.KolatSect.SILK string the GDD prose uses — these helpers key by the enum.
