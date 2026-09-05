@@ -1362,6 +1362,9 @@ static func advance_day(
 	# death this tick, so a Master who dies today is succeeded from the line as it
 	# stood while they lived (not a line mutated by their own death).
 	_maintain_kolat_heir_designations(characters, crime_records)
+	# s54.7f Channel 3: conscious Kolat agents co-located with the magistrate
+	# investigating them self-generate a −100 stance on the investigator topic.
+	_process_kolat_direct_observation(characters, crime_records, active_topics, characters_by_id)
 	_process_kolat_master_succession(death_events, characters, characters_by_id, crime_records, dice_engine)
 	_process_kolat_master_death_recall(death_events, characters_by_id, objectives_map)
 	# s54.7i: a Kolat-commissioned assassination that silenced a magistrate lowers
@@ -5122,13 +5125,7 @@ static func _seed_kolat_investigator_stance(
 	master: L5RCharacterData, compromised_npc_id: int, magistrate_id: int,
 	active_topics: Array, characters_by_id: Dictionary,
 ) -> void:
-	if magistrate_id < 0:
-		return
-	var topic_ids: Array[int] = []
-	for tv: Variant in active_topics:
-		if tv is TopicData and not (tv as TopicData).resolved \
-				and (tv as TopicData).subject_character_id == magistrate_id:
-			topic_ids.append((tv as TopicData).topic_id)
+	var topic_ids: Array[int] = _investigator_topic_ids(active_topics, magistrate_id)
 	if topic_ids.is_empty():
 		return
 	# Exposed cell: the caught agent + the Master's other living, non-burned agents.
@@ -5151,6 +5148,63 @@ static func _seed_kolat_investigator_stance(
 			continue
 		for tid: int in topic_ids:
 			agent.kolat_positions[tid] = KolatNetwork.EXPOSED_INVESTIGATOR_STANCE
+
+
+## The active, unresolved topic ids whose subject is `magistrate_id` — the
+## "investigator topic(s)" a Kolat stance attaches to (s54.7f). Empty for an
+## invalid magistrate or when the investigator is not yet a topic.
+static func _investigator_topic_ids(active_topics: Array, magistrate_id: int) -> Array[int]:
+	var ids: Array[int] = []
+	if magistrate_id < 0:
+		return ids
+	for tv: Variant in active_topics:
+		if tv is TopicData and not (tv as TopicData).resolved \
+				and (tv as TopicData).subject_character_id == magistrate_id:
+			ids.append((tv as TopicData).topic_id)
+	return ids
+
+
+## s54.7f Channel 3 (direct observation): a conscious Kolat agent who is named in
+## an active investigation AND is co-located with that case's investigating
+## magistrate self-generates a −100 stance on the investigator topic — no Tiger
+## direction needed. Owner decision (2026-09-04): the co-location gate is the sim
+## proxy for "personally witnesses the investigator examining their operations".
+## −100 is the GDD-explicit "maximum urgency" value. Runs daily so a transient
+## co-location is caught; the Channel 4 cleanup clears the stance when the topic
+## resolves. Complements Channel 1 (the org-level response) with the same value.
+static func _process_kolat_direct_observation(
+	characters: Array, crime_records: Array, active_topics: Array,
+	characters_by_id: Dictionary,
+) -> void:
+	for rv: Variant in crime_records:
+		if not rv is CrimeRecord:
+			continue
+		var rec: CrimeRecord = rv
+		if not KolatNetwork.is_active_naming_status(rec.legal_status):
+			continue
+		var mag: L5RCharacterData = characters_by_id.get(rec.investigating_magistrate_id, null)
+		if mag == null or CharacterStats.is_dead(mag) or mag.physical_location.is_empty():
+			continue
+		var topic_ids: Array[int] = _investigator_topic_ids(active_topics, rec.investigating_magistrate_id)
+		if topic_ids.is_empty():
+			continue
+		var named: Array = []
+		if rec.perpetrator_id >= 0:
+			named.append(rec.perpetrator_id)
+		for sv: Variant in rec.known_suspects:
+			var sid: int = int(sv)
+			if sid >= 0 and sid not in named:
+				named.append(sid)
+		for nid: int in named:
+			var agent: L5RCharacterData = characters_by_id.get(nid, null)
+			if agent == null or CharacterStats.is_dead(agent):
+				continue
+			if agent.kolat_sect == Enums.KolatSect.NONE:
+				continue  # only conscious Kolat agents hold kolat_positions
+			if agent.physical_location != mag.physical_location:
+				continue  # must be co-located to personally witness the investigator
+			for tid: int in topic_ids:
+				agent.kolat_positions[tid] = KolatNetwork.EXPOSED_INVESTIGATOR_STANCE
 
 
 ## True when the crime's investigating magistrate holds Emerald or Imperial
