@@ -604,7 +604,7 @@ static func _execute_decision(
 	var exec_result: Dictionary = ActionExecutor.execute(
 		action, character, ctx, dice_engine, action_skill_map,
 		military_data, characters_by_id, wpm, doshin_bonus_override,
-		crime_records,
+		crime_records, world_state.get("settlements", []),
 	)
 	_apply_intimate_visit_bonus(exec_result, action, ctx)
 	return exec_result

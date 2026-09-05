@@ -128,6 +128,7 @@ static func execute(
 	worship_province_malus: Dictionary = {},
 	doshin_bonus: int = 0,
 	crime_records: Array = [],
+	settlements: Array = [],
 ) -> Dictionary:
 	var action_id: String = action.action_id
 
@@ -176,6 +177,14 @@ static func execute(
 			if kt != null:
 				kmeta["target"] = kt
 				kmeta["sleeper"] = kt
+		# s54.7c/h funding source: koku actions draw from the temple vault when the
+		# Master is physically at the Hidden Temple, else from their local reserve.
+		# Populate the temple object only when at-temple (TRANSFER_KOLAT_FUNDS
+		# otherwise fails with "no_temple"; SPONSOR/BRIBE fall back to kolat_koku).
+		if not kmeta.has("temple") and not settlements.is_empty():
+			var hidden_temple: SettlementData = KolatNetwork.find_hidden_temple(settlements)
+			if hidden_temple != null and KolatNetwork.is_at_hidden_temple(character, hidden_temple):
+				kmeta["temple"] = hidden_temple
 		var keff: Dictionary = KolatExecutor.execute(action_id, character, kmeta, dice_engine)
 		return {
 			"success": keff.get("ok", false),
