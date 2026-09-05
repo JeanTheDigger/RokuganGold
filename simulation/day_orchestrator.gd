@@ -1437,7 +1437,8 @@ static func advance_day(
 
 	var topic_results: Dictionary = TopicMomentumSystem.process_daily_tick(active_topics)
 
-	_remove_resolved_topics(active_topics)
+	var removed_topic_ids: Array[int] = _remove_resolved_topics(active_topics)
+	_cleanup_kolat_positions(characters, removed_topic_ids)
 	TheaterSystem.purge_stale_topic_ids(theater_pieces, active_topics)
 
 	_process_stale_champion_priorities(
@@ -4731,6 +4732,12 @@ static func _process_kolat_writebacks(
 				# silence-detection pass sees them as freshly contacted (s54.7d).
 				var di_silk: L5RCharacterData = characters_by_id.get(r.get("character_id", -1), null)
 				if di_silk != null and not CharacterStats.is_dead(di_silk):
+					# s54.7f Channel 2: the Kolat's assessed stance travels with the
+					# intelligence. If the distributing Master holds a kolat_positions
+					# entry for this topic, the agent receives it alongside the intel —
+					# the value is the Master's own stance, never invented here.
+					if di_topic >= 0 and di_silk.kolat_positions.has(di_topic):
+						di_agent.kolat_positions[di_topic] = di_silk.kolat_positions[di_topic]
 					var di_cn: String = KolatNetwork.find_code_name_by_npc_id(
 						di_silk, di_silk.kolat_sect, di_agent.character_id)
 					if di_cn != "":
@@ -33250,13 +33257,31 @@ static func _remove_resolved_favors(favors: Array) -> void:
 		i -= 1
 
 
-static func _remove_resolved_topics(active_topics: Array) -> void:
+static func _remove_resolved_topics(active_topics: Array) -> Array[int]:
+	var removed: Array[int] = []
 	var i: int = active_topics.size() - 1
 	while i >= 0:
 		var topic: Variant = active_topics[i]
 		if topic is TopicData and (topic as TopicData).resolved:
+			removed.append((topic as TopicData).topic_id)
 			active_topics.remove_at(i)
 		i -= 1
+	return removed
+
+
+## s54.7f cleanup: when a topic is resolved and leaves the active pool, clear any
+## conscious Kolat agent's kolat_positions entry for it, so stale Kolat stances do
+## not persist on closed topics ("Stale Kolat stances on closed topics do not
+## persist"). Scoped to kolat_positions only — the broader known_positions cleanup
+## is a separate pre-existing concern outside the Kolat dual-stance field.
+static func _cleanup_kolat_positions(characters: Array, removed_topic_ids: Array) -> void:
+	if removed_topic_ids.is_empty():
+		return
+	for c: L5RCharacterData in characters:
+		if c == null or c.kolat_positions.is_empty():
+			continue
+		for tid: int in removed_topic_ids:
+			c.kolat_positions.erase(tid)
 
 
 static func _remove_terminal_commitments(commitments: Array) -> void:
