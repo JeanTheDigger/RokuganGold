@@ -4979,6 +4979,10 @@ static func _process_kolat_network_seasonal(
 				e.erase("compromise_tier")
 				e.erase("compromise_case_id")
 				e.erase("deep_routed")
+				# Do not silence-flag the agent the same tick it recovers from a
+				# deliberate go-dark; a genuine lapse is caught next season.
+				e["silence_flagged"] = false
+				continue
 
 			# 3) Silence detection (s54.7d). dark/suspended agents are silent by
 			# design (go-dark sent) and are exempt.
@@ -5066,9 +5070,13 @@ static func _handle_kolat_compromise(
 	if level == "":
 		return
 	var new_tier: int = [KolatNetwork.THREAT_LOW, KolatNetwork.THREAT_MODERATE, KolatNetwork.THREAT_DEEP].find(level)
-	# Only (re)act when this is a new compromise or an escalation (s54.7b: the
-	# threat worsening moves the agent further along the response chain).
-	if new_tier <= int(entry.get("compromise_tier", -1)):
+	# Re-apply whenever the current threat tier differs from the one already
+	# handled — an escalation moves the agent further along the response chain
+	# (s54.7b), and a de-escalation (the severe case resolved, only a milder one
+	# still names them) walks it back so a suspended agent is not stranded there
+	# once its MODERATE/DEEP case is gone. Equal tier = no change (idempotent).
+	# (Burned entries never reach here — the caller skips them — so DEEP is terminal.)
+	if new_tier == int(entry.get("compromise_tier", -1)):
 		return
 	entry["compromise_tier"] = new_tier
 	entry["compromise_case_id"] = rec.case_id
@@ -5172,8 +5180,11 @@ static func _assign_kolat_network_objective(
 			KolatOpportunityScanner.SOURCE, "kolat_network_silence", "kolat_compromise_deep",
 		]:
 			return
-		# Do not downgrade an equal/higher-priority network objective already set.
-		if int(slot.get("priority", 0)) >= priority and String(slot.get("source", "")) == source:
+		# Do not downgrade (or churn) an equal/higher-priority network objective
+		# already set — regardless of source. This protects a priority-3 deep-
+		# compromise ELIMINATE from being clobbered by a priority-2 silence LOCATE
+		# later in the same pass; only a strictly higher priority replaces it.
+		if int(slot.get("priority", 0)) >= priority:
 			return
 	objectives["kolat"] = {
 		"need_type": need_type,

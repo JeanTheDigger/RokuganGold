@@ -94,13 +94,15 @@ static func classify_compromise(
 ## agent_status. Stamps burned_ic_day when burning so the seasonal purge can
 ## retain a burned entry for one season before deleting it (s54.7h).
 static func set_entry_status(entry: Dictionary, status: String, ic_day: int) -> void:
+	# Key precedence MUST match _status_of's read order (operative → agent → asset)
+	# so a write and a subsequent read never land on different keys.
 	var key: String = "agent_status"
 	if entry.has("operative_status"):
 		key = "operative_status"
+	elif entry.has("agent_status"):
+		key = "agent_status"
 	elif entry.has("asset_status"):
 		key = "asset_status"
-	elif not entry.has("agent_status"):
-		key = "agent_status"
 	entry[key] = status
 	if status == "burned":
 		entry["burned_ic_day"] = ic_day
