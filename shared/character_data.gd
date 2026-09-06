@@ -452,6 +452,10 @@ var taint_benefits_suppressed: bool = false
 @export var dirty_koku: int = 0
 ## Tiger-allocated operational budget for this Master's Sect.
 @export var operational_koku: int = 0
+## World-state field on Master Tiger's sheet (Section 54.7h): the IC day of the
+## next scheduled annual Kolat Conclave. −1 = not yet scheduled (lazy-initialised
+## to one IC year out on the living Tiger); advances one IC year each Conclave.
+@export var kolat_conclave_ic_day: int = -1
 ## Hidden dual-stance topic positions for conscious Kolat agents (Section 54.7f):
 ## topic_id → position (−100..+100). Substituted for topic_positions in Phase 5
 ## scoring when an entry exists. Empty for non-Kolat characters.

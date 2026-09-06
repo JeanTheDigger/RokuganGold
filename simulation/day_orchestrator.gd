@@ -192,6 +192,9 @@ static func advance_day(
 	# s54.7b/d Phase 3b: a Lotus Master hands a DEEP-compromise ELIMINATE_CHARACTER
 	# contract off to an idle registered operative (co-located preferred, else any).
 	_process_kolat_lotus_delegation(characters, characters_by_id, objectives_map, kolat_secrecy)
+	# s55.27/s54.7h Phase 3c: Tiger's annual Conclave — the headless spine
+	# (schedule + Step-4 vault → operational-koku allocation + reschedule/contingency).
+	_process_kolat_annual_conclave(characters, settlements, provinces, active_wars, ic_day, kolat_secrecy)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 	# s57.54.10d: operational superiors spend their CO budget directing idle
 	# subordinates (propagating the superior's own active objective down the
@@ -10425,6 +10428,92 @@ static func _process_kolat_lotus_delegation(
 		}
 		objectives_map[pick] = objs
 		(objectives_map[master.character_id] as Dictionary).erase("kolat")
+
+
+# -- Kolat Annual Conclave (s55.27 CONVENE_KOLAT_CONCLAVE, s54.7h, Phase 3c) ----
+# Tiger's annual in-person gathering at the Hidden Temple. The physical
+# choreography (Tear notification 28 days out, all-Master travel + co-location,
+# Steel `conclave_mode`, Cloud archiving, staggered departure) is DEFERRED — it
+# depends on the Steel garrison behavioral layer and travel timing not yet built,
+# and Step-5 strategic directives are already issued continuously by Phase 2
+# (`_process_kolat_tiger_directives`), so re-issuing them here would duplicate
+# that channel. This wires the headless spine only: the schedule, the Step-4
+# vault → operational-koku allocation, and the Step-5 annual reschedule, with the
+# s55.27 contingency. Co-location is abstracted, as the rest of the Kolat headless
+# layer abstracts it (cf. the network-lifecycle "direct maintenance writeback").
+# owner-approved 2026-09-06 (recommended defaults auto-approved):
+#   A. `kolat_conclave_ic_day` lazy-inits to `ic_day + IC_DAYS_PER_YEAR` (360,
+#      LOCKED) on the living Tiger; −1 sentinel = not yet scheduled.
+#   B. Step 4: distribute all `temple_vault_koku` above VAULT_MIN_RESERVE (50,
+#      LOCKED) equally among the living non-Tiger Masters (int share; the
+#      remainder stays in the vault). PROVISIONAL: the equal split (GDD gives no
+#      formula). NOTE: `operational_koku` currently has no consumer — this is
+#      faithful forward-wiring (the vault→budget half of the Kolat economy).
+#   C. Contingency (s55.27 "Conclave cannot be held"): if the Tiger is identified
+#      during the Imperial go-dark endgame, or the Hidden Temple's province clan
+#      is in an active war, defer the allocation and do NOT advance the date — it
+#      retries each tick until the threat clears (s55.27 "operational_koku
+#      allocations deferred until the next safe Conclave / reschedules once the
+#      threat has cleared").
+static func _process_kolat_annual_conclave(
+	characters: Array, settlements: Array, provinces: Dictionary,
+	active_wars: Array, ic_day: int, kolat_secrecy: Dictionary = {},
+) -> void:
+	var tiger: L5RCharacterData = _find_kolat_master(characters, Enums.KolatSect.TIGER, true)
+	if tiger == null:
+		return
+	# A. Lazy-init the schedule (s54.7h: set at world generation; a Tiger seated by
+	# succession without the field also initialises here). One IC year out.
+	if tiger.kolat_conclave_ic_day < 0:
+		tiger.kolat_conclave_ic_day = ic_day + TimeSystem.IC_DAYS_PER_YEAR
+		return
+	# Fire on/after the scheduled day (>= so a skipped exact day still resolves).
+	if ic_day < tiger.kolat_conclave_ic_day:
+		return
+	var temple: SettlementData = KolatNetwork.find_hidden_temple(settlements)
+	if temple == null:
+		# No temple to convene at / no vault to read — reschedule a year out.
+		tiger.kolat_conclave_ic_day = ic_day + TimeSystem.IC_DAYS_PER_YEAR
+		return
+	# C. Contingency — Temple compromised/unreachable: defer, do NOT advance.
+	if _kolat_conclave_blocked(tiger, temple, provinces, active_wars, kolat_secrecy):
+		return
+	# Step 4 — resource allocation: split vault koku above the reserve floor
+	# equally among the living non-Tiger Masters (Tiger reads the vault in person).
+	var masters: Array[L5RCharacterData] = []
+	for c: L5RCharacterData in characters:
+		if c == null or c.is_pc or CharacterStats.is_dead(c):
+			continue
+		if not c.is_kolat_master or c.kolat_sect == Enums.KolatSect.TIGER:
+			continue
+		masters.append(c)
+	var surplus: int = temple.temple_vault_koku - KolatSystem.VAULT_MIN_RESERVE
+	if surplus > 0 and not masters.is_empty():
+		var share: int = surplus / masters.size()
+		if share > 0:
+			for m: L5RCharacterData in masters:
+				KolatSystem.allocate_from_vault(temple, m, share)
+	# Step 5 — designate next year's Conclave date.
+	tiger.kolat_conclave_ic_day = ic_day + TimeSystem.IC_DAYS_PER_YEAR
+
+
+## s55.27 contingency: the Conclave cannot be held in person when the Hidden
+## Temple region is compromised or unreachable. Modelled headlessly as either the
+## Tiger's cover being under investigation during the Imperial go-dark endgame, or
+## an active military conflict in the Temple's province. Returns true to defer.
+static func _kolat_conclave_blocked(
+	tiger: L5RCharacterData, temple: SettlementData, provinces: Dictionary,
+	active_wars: Array, kolat_secrecy: Dictionary,
+) -> bool:
+	if kolat_secrecy.get("go_dark", false) \
+			and tiger.character_id in kolat_secrecy.get("identified_ids", []):
+		return true
+	var prov: ProvinceData = provinces.get(temple.province_id, null)
+	if prov != null and prov.clan != "":
+		for w: Variant in active_wars:
+			if w is WarData and WarSystem.is_clan_involved(w as WarData, prov.clan):
+				return true
+	return false
 
 
 # -- FIND_NEW_LORD Standing Objective Assignment (s52.5 Part F) ----------------
