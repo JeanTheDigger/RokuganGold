@@ -191,7 +191,7 @@ static func advance_day(
 	_process_kolat_coin_delegation(characters, characters_by_id, objectives_map, insurgencies, _spm, settlements, kolat_secrecy)
 	# s54.7b/d Phase 3b: a Lotus Master hands a DEEP-compromise ELIMINATE_CHARACTER
 	# contract off to an idle registered operative (co-located preferred, else any).
-	_process_kolat_lotus_delegation(characters, characters_by_id, objectives_map, kolat_secrecy)
+	_process_kolat_lotus_delegation(characters, characters_by_id, objectives_map, kolat_secrecy, ic_day)
 	# s55.27/s54.7h Phase 3c: Tiger's annual Conclave — the headless spine
 	# (schedule + Step-4 vault → operational-koku allocation + reschedule/contingency).
 	_process_kolat_annual_conclave(characters, settlements, provinces, active_wars, ic_day, kolat_secrecy)
@@ -10366,7 +10366,7 @@ static func _install_kolat_directive(
 # (the fallback executor). One handoff per Lotus Master per tick.
 static func _process_kolat_lotus_delegation(
 	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
-	kolat_secrecy: Dictionary = {},
+	kolat_secrecy: Dictionary = {}, ic_day: int = 0,
 ) -> void:
 	var go_dark: bool = kolat_secrecy.get("go_dark", false)
 	var identified: Array = kolat_secrecy.get("identified_ids", [])
@@ -10384,10 +10384,11 @@ static func _process_kolat_lotus_delegation(
 		var target_id: int = int(slot.get("target_npc_id", -1))
 		if target_id < 0:
 			continue
-		# A dead mark needs no assassin — leave the moot contract for the Master's
-		# own decomposition to age out; never delegate the killing of a corpse.
+		# A dead or vanished mark needs no assassin — leave the moot contract for the
+		# Master's own decomposition to age out; never delegate the killing of a
+		# corpse, nor of a target that has left the world (absent from characters_by_id).
 		var target: L5RCharacterData = characters_by_id.get(target_id, null)
-		if target != null and CharacterStats.is_dead(target):
+		if target == null or CharacterStats.is_dead(target):
 			continue
 		# ≤3 cap on the Master's own registered operatives (s54.7d): the handoff adds
 		# one more agent-held Kolat objective, so it must fit under the cap.
@@ -10409,7 +10410,7 @@ static func _process_kolat_lotus_delegation(
 				continue
 			if fallback < 0 or aid < fallback:
 				fallback = aid
-			if target != null and not agent.physical_location.is_empty() \
+			if not agent.physical_location.is_empty() \
 					and agent.physical_location == target.physical_location:
 				if co_located < 0 or aid < co_located:
 					co_located = aid
@@ -10428,6 +10429,17 @@ static func _process_kolat_lotus_delegation(
 		}
 		objectives_map[pick] = objs
 		(objectives_map[master.character_id] as Dictionary).erase("kolat")
+		# Advance the operative's network status idle → executing so idle_operative_ids
+		# stops returning it and the record reflects the live contract (the objectives
+		# slot alone was the only busy signal, leaving the entry stale). "executing"
+		# has no other consumer yet (forward-wired Lotus assignment vocabulary).
+		var cn: String = KolatNetwork.find_code_name_by_npc_id(master, master.kolat_sect, pick)
+		if cn != "":
+			var entry: Variant = KolatNetwork.get_network(master, master.kolat_sect).get(cn, null)
+			if entry is Dictionary:
+				KolatNetwork.set_entry_status(entry as Dictionary, "executing", ic_day)
+				(entry as Dictionary)["assignment_target_npc_id"] = target_id
+				(entry as Dictionary)["assignment_dispatched_ic_day"] = ic_day
 
 
 # -- Kolat Annual Conclave (s55.27 CONVENE_KOLAT_CONCLAVE, s54.7h, Phase 3c) ----
@@ -10450,22 +10462,31 @@ static func _process_kolat_lotus_delegation(
 #      formula). NOTE: `operational_koku` currently has no consumer — this is
 #      faithful forward-wiring (the vault→budget half of the Kolat economy).
 #   C. Contingency (s55.27 "Conclave cannot be held"): if the Tiger is identified
-#      during the Imperial go-dark endgame, or the Hidden Temple's province clan
-#      is in an active war, defer the allocation and do NOT advance the date — it
-#      retries each tick until the threat clears (s55.27 "operational_koku
-#      allocations deferred until the next safe Conclave / reschedules once the
-#      threat has cleared").
+#      during the Imperial go-dark endgame, or the Hidden Temple's OWN province is
+#      an active war front (a captured/contested province in an active war — not
+#      merely the province clan fighting on some distant front, which would starve
+#      the allocation for a great clan's every war), defer the allocation and do
+#      NOT advance the date — it retries each tick until the threat clears (s55.27
+#      "deferred until the next safe Conclave / reschedules once the threat has
+#      cleared").
 static func _process_kolat_annual_conclave(
 	characters: Array, settlements: Array, provinces: Dictionary,
 	active_wars: Array, ic_day: int, kolat_secrecy: Dictionary = {},
 ) -> void:
 	var tiger: L5RCharacterData = _find_kolat_master(characters, Enums.KolatSect.TIGER, true)
-	if tiger == null:
+	if tiger == null or tiger.is_pc:
+		# No living Tiger, or a PC holds the seat — the sim never drives a PC's
+		# Kolat schedule (consistent with every other Kolat master pass).
 		return
-	# A. Lazy-init the schedule (s54.7h: set at world generation; a Tiger seated by
-	# succession without the field also initialises here). One IC year out.
+	# A. Initialise the schedule on a Tiger that lacks it (s54.7h: set at world
+	# generation). A succession-seated Tiger starts at the −1 sentinel; rather than
+	# resetting the countdown a full year out on every Tiger death (which, with a
+	# frequently-assassinated Tiger, could postpone the Conclave indefinitely),
+	# inherit the standing schedule carried on a prior Tiger's still-retained sheet
+	# (dead ex-Tigers persist in `characters`). Only a world with no scheduled
+	# Conclave at all falls back to one IC year out.
 	if tiger.kolat_conclave_ic_day < 0:
-		tiger.kolat_conclave_ic_day = ic_day + TimeSystem.IC_DAYS_PER_YEAR
+		tiger.kolat_conclave_ic_day = _inherited_kolat_conclave_day(characters, ic_day)
 		return
 	# Fire on/after the scheduled day (>= so a skipped exact day still resolves).
 	if ic_day < tiger.kolat_conclave_ic_day:
@@ -10497,21 +10518,39 @@ static func _process_kolat_annual_conclave(
 	tiger.kolat_conclave_ic_day = ic_day + TimeSystem.IC_DAYS_PER_YEAR
 
 
+## The standing Conclave schedule to adopt when the current Tiger lacks one: the
+## latest (max) `kolat_conclave_ic_day` carried on any character (only past/present
+## Tigers ever hold it, and dead ex-Tigers persist in `characters`), so a Tiger
+## succession does not reset the annual clock. Falls back to one IC year out when
+## no Conclave has ever been scheduled (true world start).
+static func _inherited_kolat_conclave_day(characters: Array, ic_day: int) -> int:
+	var best: int = -1
+	for c: L5RCharacterData in characters:
+		if c != null and c.kolat_conclave_ic_day > best:
+			best = c.kolat_conclave_ic_day
+	return best if best >= 0 else ic_day + TimeSystem.IC_DAYS_PER_YEAR
+
+
 ## s55.27 contingency: the Conclave cannot be held in person when the Hidden
 ## Temple region is compromised or unreachable. Modelled headlessly as either the
 ## Tiger's cover being under investigation during the Imperial go-dark endgame, or
-## an active military conflict in the Temple's province. Returns true to defer.
+## the Temple's OWN province being an active war front. Returns true to defer.
 static func _kolat_conclave_blocked(
-	tiger: L5RCharacterData, temple: SettlementData, provinces: Dictionary,
+	tiger: L5RCharacterData, temple: SettlementData, _provinces: Dictionary,
 	active_wars: Array, kolat_secrecy: Dictionary,
 ) -> bool:
 	if kolat_secrecy.get("go_dark", false) \
 			and tiger.character_id in kolat_secrecy.get("identified_ids", []):
 		return true
-	var prov: ProvinceData = provinces.get(temple.province_id, null)
-	if prov != null and prov.clan != "":
+	# Active military conflict in the Temple's own province (a contested/captured
+	# front in an active war), not merely the province clan being at war elsewhere.
+	var pid: int = temple.province_id
+	if pid >= 0:
 		for w: Variant in active_wars:
-			if w is WarData and WarSystem.is_clan_involved(w as WarData, prov.clan):
+			if not w is WarData or not (w as WarData).is_active:
+				continue
+			var war: WarData = w as WarData
+			if pid in war.provinces_captured_by_a or pid in war.provinces_captured_by_b:
 				return true
 	return false
 
