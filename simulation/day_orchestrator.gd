@@ -189,6 +189,9 @@ static func advance_day(
 	# s54.7c/d Phase 3a: Master Coin delegates covert economics (UNDERREPORT fund
 	# generation / SPONSOR_INSURGENCY disruption) to positioned operatives.
 	_process_kolat_coin_delegation(characters, characters_by_id, objectives_map, insurgencies, _spm, settlements, kolat_secrecy)
+	# s54.7b/d Phase 3b: a Lotus Master hands a DEEP-compromise ELIMINATE_CHARACTER
+	# contract off to an idle registered operative (co-located preferred, else any).
+	_process_kolat_lotus_delegation(characters, characters_by_id, objectives_map, kolat_secrecy)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 	# s57.54.10d: operational superiors spend their CO budget directing idle
 	# subordinates (propagating the superior's own active objective down the
@@ -10344,6 +10347,84 @@ static func _install_kolat_directive(
 	var objs: Dictionary = objectives_map.get(aid, {})
 	objs["kolat"] = obj
 	objectives_map[aid] = objs
+
+
+# -- Kolat Lotus Elimination Delegation (s54.7b/d, Phase 3b, owner-approved 2026-09-04) --
+# When a DEEP compromise routes Tiger → Lotus (s54.7d), the compromise pipeline
+# installs an ELIMINATE_CHARACTER contract as the Lotus Master's own kolat
+# objective (day_orchestrator ~5115). The Master directs; it never wields the
+# blade itself. This pass hands that contract off to one of the Master's idle
+# registered operatives (the assassins in lotus_network_record), preferring an
+# operative co-located with the target and otherwise tasking any idle one (who
+# then travels via the operative's own LOCATE → BEGIN_TRAVEL). The target and
+# priority transfer verbatim; the Master's slot is cleared on handoff, under the
+# ≤3 active-Kolat-objective sub-cap (s54.7d). If the Master has no idle operative,
+# nothing is delegated and the Master's own ELIMINATE_CHARACTER objective stands
+# (the fallback executor). One handoff per Lotus Master per tick.
+static func _process_kolat_lotus_delegation(
+	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
+	kolat_secrecy: Dictionary = {},
+) -> void:
+	var go_dark: bool = kolat_secrecy.get("go_dark", false)
+	var identified: Array = kolat_secrecy.get("identified_ids", [])
+	for master: L5RCharacterData in characters:
+		if master == null or master.is_pc or CharacterStats.is_dead(master):
+			continue
+		if not master.is_kolat_master or master.kolat_sect != Enums.KolatSect.LOTUS:
+			continue
+		if go_dark and master.character_id in identified:
+			continue
+		# Only a live ELIMINATE_CHARACTER contract the Master itself holds is delegable.
+		var slot: Dictionary = (objectives_map.get(master.character_id, {}) as Dictionary).get("kolat", {})
+		if slot.is_empty() or String(slot.get("need_type", "")) != "ELIMINATE_CHARACTER":
+			continue
+		var target_id: int = int(slot.get("target_npc_id", -1))
+		if target_id < 0:
+			continue
+		# A dead mark needs no assassin — leave the moot contract for the Master's
+		# own decomposition to age out; never delegate the killing of a corpse.
+		var target: L5RCharacterData = characters_by_id.get(target_id, null)
+		if target != null and CharacterStats.is_dead(target):
+			continue
+		# ≤3 cap on the Master's own registered operatives (s54.7d): the handoff adds
+		# one more agent-held Kolat objective, so it must fit under the cap.
+		if KolatNetwork.active_kolat_objective_count(master, objectives_map) \
+				>= KolatNetwork.MAX_ACTIVE_KOLAT_OBJECTIVES:
+			continue
+		var idle_ids: Array = KolatNetwork.idle_operative_ids(master)
+		if idle_ids.is_empty():
+			continue  # no assassin available — the Master's own contract stands (fallback executor)
+		# Prefer an idle operative co-located with the target; else the lowest-id idle
+		# operative (who travels to the mark via its own LOCATE → BEGIN_TRAVEL).
+		var co_located: int = -1
+		var fallback: int = -1
+		for aid_v: Variant in idle_ids:
+			var aid: int = int(aid_v)
+			var agent: L5RCharacterData = _kolat_agent_delegatable(
+				aid, characters_by_id, objectives_map, go_dark, identified)
+			if agent == null:
+				continue
+			if fallback < 0 or aid < fallback:
+				fallback = aid
+			if target != null and not agent.physical_location.is_empty() \
+					and agent.physical_location == target.physical_location:
+				if co_located < 0 or aid < co_located:
+					co_located = aid
+		var pick: int = co_located if co_located >= 0 else fallback
+		if pick < 0:
+			continue  # every idle operative is already tasked / ineligible — Master keeps it
+		# Handoff: install the contract on the operative (target + priority verbatim),
+		# then clear the Master's slot. The Master directed; the operative kills.
+		var objs: Dictionary = objectives_map.get(pick, {})
+		objs["kolat"] = {
+			"need_type": "ELIMINATE_CHARACTER",
+			"priority": int(slot.get("priority", 3)),
+			"target_npc_id": target_id,
+			"source": "master_directive",
+			"kolat_objective": true,
+		}
+		objectives_map[pick] = objs
+		(objectives_map[master.character_id] as Dictionary).erase("kolat")
 
 
 # -- FIND_NEW_LORD Standing Objective Assignment (s52.5 Part F) ----------------

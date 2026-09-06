@@ -150,6 +150,21 @@ static func active_agent_ids(master: L5RCharacterData) -> Array[int]:
 	return ids
 
 
+## npc_ids of the Master's registered operatives in "idle" status — the available
+## assassins in a lotus_network_record (Lotus operatives use idle/executing/…, not
+## the active/dark vocabulary, so active_agent_ids does not see them).
+static func idle_operative_ids(master: L5RCharacterData) -> Array[int]:
+	var ids: Array[int] = []
+	var record: Dictionary = get_network(master, master.kolat_sect)
+	for cn: Variant in record:
+		var e: Variant = record[cn]
+		if e is Dictionary and _status_of(e) == "idle":
+			var nid: int = int((e as Dictionary).get("npc_id", -1))
+			if nid >= 0 and nid not in ids:
+				ids.append(nid)
+	return ids
+
+
 ## Count of the Master's own registered agents currently carrying an active Kolat
 ## objective (s54.7d ≤3 sub-cap). Reads the live objectives_map so it reflects
 ## assignments made this tick. Forward-wired: the live agent-directive channel
