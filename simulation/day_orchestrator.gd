@@ -181,6 +181,9 @@ static func advance_day(
 	_assign_animal_companion_standing_objectives(characters, objectives_map, ic_day)
 	_assign_kolat_standing_objectives(characters, objectives_map, kolat_secrecy)
 	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id, kolat_secrecy)
+	# s54.7d: agent-network Masters delegate GATHER_INTELLIGENCE to co-located field
+	# agents (the Master→agent tasking channel; ≤3 active-Kolat-objective cap).
+	_process_kolat_agent_delegation(characters, characters_by_id, objectives_map, active_topics, kolat_secrecy)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 	# s57.54.10d: operational superiors spend their CO budget directing idle
 	# subordinates (propagating the superior's own active objective down the
@@ -10039,6 +10042,100 @@ static func _assign_kolat_opportunistic_objectives(
 			if not opp.is_empty():
 				objectives["kolat"] = opp
 				objectives_map[char_id] = objectives
+
+
+# -- Kolat Master→Agent Delegation (s54.7d, Phase 1, owner-approved 2026-09-04) --
+# The Master→agent tasking channel: an agent-network Master (Chrysanthemum / Silk
+# / Coin / Jade) who holds a topic naming an NPC on whom their OWN intel is shallow
+# (< 2 known topics about that NPC — the s54.7d Chrysanthemum-scanner definition,
+# LOCKED) delegates a GATHER_INTELLIGENCE Kolat objective to a registered, active
+# field agent co-located with that NPC. This is what makes field agents (not only
+# Masters) run Kolat work, and it enforces the ≤3 active-Kolat-objective sub-cap
+# (KolatNetwork.active_kolat_objective_count). One delegation per Master per tick.
+# PROVISIONAL choices: priority 2, co-location = same physical_location; the < 2
+# depth threshold is LOCKED.
+const _KOLAT_DELEGATION_SECTS: Array = [
+	Enums.KolatSect.CHRYSANTHEMUM, Enums.KolatSect.SILK,
+	Enums.KolatSect.COIN, Enums.KolatSect.JADE,
+]
+
+
+static func _process_kolat_agent_delegation(
+	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
+	active_topics: Array, kolat_secrecy: Dictionary = {},
+) -> void:
+	var go_dark: bool = kolat_secrecy.get("go_dark", false)
+	var identified: Array = kolat_secrecy.get("identified_ids", [])
+	# Local topic index (topics_by_id is not built this early in advance_day).
+	var topics_by_id: Dictionary = {}
+	for tv: Variant in active_topics:
+		if tv is TopicData:
+			topics_by_id[(tv as TopicData).topic_id] = tv
+	for master: L5RCharacterData in characters:
+		if master == null or master.is_pc or CharacterStats.is_dead(master):
+			continue
+		if not master.is_kolat_master or master.kolat_sect not in _KOLAT_DELEGATION_SECTS:
+			continue
+		if go_dark and master.character_id in identified:
+			continue
+		if KolatNetwork.active_kolat_objective_count(master, objectives_map) \
+				>= KolatNetwork.MAX_ACTIVE_KOLAT_OBJECTIVES:
+			continue
+		var agent_ids: Array = KolatNetwork.active_agent_ids(master)
+		if agent_ids.is_empty():
+			continue
+		# The Master's IntelDB depth per subject NPC = count of their own topics about them.
+		var intel_depth: Dictionary = {}
+		for tid: Variant in master.topic_pool:
+			var t: Variant = topics_by_id.get(int(tid), null)
+			if t is TopicData:
+				var sub: int = (t as TopicData).subject_character_id
+				if sub >= 0:
+					intel_depth[sub] = int(intel_depth.get(sub, 0)) + 1
+		# Delegate on the first shallow-intel NPC with an available co-located agent.
+		for sub_v: Variant in intel_depth:
+			var sub: int = int(sub_v)
+			if int(intel_depth[sub]) >= 2:
+				continue  # not shallow — the Master already knows enough
+			if sub == master.character_id:
+				continue
+			var target: L5RCharacterData = characters_by_id.get(sub, null)
+			if target == null or CharacterStats.is_dead(target) or target.is_pc:
+				continue
+			var agent_id: int = _pick_kolat_delegation_agent(
+				agent_ids, target, characters_by_id, objectives_map)
+			if agent_id < 0:
+				continue
+			var objs: Dictionary = objectives_map.get(agent_id, {})
+			objs["kolat"] = {
+				"need_type": "GATHER_INTELLIGENCE", "priority": 2,
+				"target_npc_id": sub, "source": "master_directive",
+				"kolat_objective": true,
+			}
+			objectives_map[agent_id] = objs
+			break  # one delegation per Master per tick
+
+
+## A registered active agent co-located with `target` who does not already hold a
+## Kolat objective (spreading work, and never overwriting a live task). Lowest id
+## wins for determinism. Returns -1 if none qualify.
+static func _pick_kolat_delegation_agent(
+	agent_ids: Array, target: L5RCharacterData, characters_by_id: Dictionary,
+	objectives_map: Dictionary,
+) -> int:
+	var best: int = -1
+	for aid_v: Variant in agent_ids:
+		var aid: int = int(aid_v)
+		var agent: L5RCharacterData = characters_by_id.get(aid, null)
+		if agent == null or CharacterStats.is_dead(agent) or agent.is_pc:
+			continue
+		if agent.physical_location.is_empty() or agent.physical_location != target.physical_location:
+			continue
+		if not (objectives_map.get(aid, {}).get("kolat", {}) as Dictionary).is_empty():
+			continue  # already tasked
+		if best < 0 or aid < best:
+			best = aid
+	return best
 
 
 # -- FIND_NEW_LORD Standing Objective Assignment (s52.5 Part F) ----------------

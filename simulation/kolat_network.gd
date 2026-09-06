@@ -136,6 +136,20 @@ static func is_burned_purgeable(entry: Variant, ic_day: int) -> bool:
 	return burned_day >= 0 and burned_day < ic_day
 
 
+## npc_ids of the Master's registered field agents in "active" status (not dark /
+## suspended / burned) — the candidates a Master may task with a Kolat objective.
+static func active_agent_ids(master: L5RCharacterData) -> Array[int]:
+	var ids: Array[int] = []
+	var record: Dictionary = get_network(master, master.kolat_sect)
+	for cn: Variant in record:
+		var e: Variant = record[cn]
+		if e is Dictionary and _status_of(e) == "active":
+			var nid: int = int((e as Dictionary).get("npc_id", -1))
+			if nid >= 0 and nid not in ids:
+				ids.append(nid)
+	return ids
+
+
 ## Count of the Master's own registered agents currently carrying an active Kolat
 ## objective (s54.7d ≤3 sub-cap). Reads the live objectives_map so it reflects
 ## assignments made this tick. Forward-wired: the live agent-directive channel
