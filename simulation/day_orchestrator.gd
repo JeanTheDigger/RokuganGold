@@ -181,8 +181,10 @@ static func advance_day(
 	_assign_animal_companion_standing_objectives(characters, objectives_map, ic_day)
 	_assign_kolat_standing_objectives(characters, objectives_map, kolat_secrecy)
 	_assign_kolat_opportunistic_objectives(characters, objectives_map, characters_by_id, kolat_secrecy)
-	# s54.7d: agent-network Masters delegate GATHER_INTELLIGENCE to co-located field
-	# agents (the Master→agent tasking channel; ≤3 active-Kolat-objective cap).
+	# s54.7d/b: Tiger routes directives to Sect Masters from Kolat-relevant threat
+	# topics (Phase 2), then agent-network Masters delegate GATHER_INTELLIGENCE to
+	# co-located field agents (Phase 1; ≤3 active-Kolat-objective cap).
+	_process_kolat_tiger_directives(characters, characters_by_id, objectives_map, active_topics)
 	_process_kolat_agent_delegation(characters, characters_by_id, objectives_map, active_topics, kolat_secrecy)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 	# s57.54.10d: operational superiors spend their CO budget directing idle
@@ -10136,6 +10138,73 @@ static func _pick_kolat_delegation_agent(
 		if best < 0 or aid < best:
 			best = aid
 	return best
+
+
+# -- Kolat Tiger Directive Generation (s54.7d/b, Phase 2, owner-approved 2026-09-04) --
+# Tiger's mandate ("maintain the secrecy of the organisation and the safety of its
+# members") drives it to scan its OWN known_topics for Kolat-relevant threats and
+# route a directive to the Sect Master whose mandate covers each — installing a
+# Kolat objective on that Master (the Tiger-directive override, s54.7d). Routes
+# (owner-approved, PROVISIONAL):
+#   SUPERNATURAL threat, Tier 1–3 → Jade → ASSESS_SUPERNATURAL_THREAT
+#   POLITICAL threat,    Tier 1–2 → Chrysanthemum → GATHER_INTELLIGENCE
+# (Investigation/accusation topics naming a Kolat member are already handled by
+# the compromise pipeline, so Tiger issues no separate directive for them.)
+# Priority 3 for a Tier-1 crisis, else 2. One directive per topic, deduped on
+# Tiger's `directed_topic_ids` record (pruned to still-active topics each tick).
+static func _process_kolat_tiger_directives(
+	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
+	active_topics: Array,
+) -> void:
+	var tiger: L5RCharacterData = _find_kolat_master(characters, Enums.KolatSect.TIGER, true)
+	if tiger == null:
+		return
+	var topics_by_id: Dictionary = {}
+	for tv: Variant in active_topics:
+		if tv is TopicData:
+			topics_by_id[(tv as TopicData).topic_id] = tv
+	# Bound the dedup set to still-active topics (resolved topics never recur).
+	var directed: Array = []
+	for d_v: Variant in tiger.special_data.get("directed_topic_ids", []):
+		if topics_by_id.has(int(d_v)):
+			directed.append(int(d_v))
+	for tid_v: Variant in tiger.topic_pool:
+		var tid: int = int(tid_v)
+		if tid in directed:
+			continue
+		var t: Variant = topics_by_id.get(tid, null)
+		if not t is TopicData:
+			continue
+		var topic: TopicData = t
+		if topic.tier == TopicData.Tier.TIER_4:
+			continue  # only Tier 1–3 threats
+		var sect: int = -1
+		var need_type: String = ""
+		if topic.category == TopicData.Category.SUPERNATURAL:
+			sect = Enums.KolatSect.JADE
+			need_type = "ASSESS_SUPERNATURAL_THREAT"
+		elif topic.category == TopicData.Category.POLITICAL and topic.tier <= TopicData.Tier.TIER_2:
+			sect = Enums.KolatSect.CHRYSANTHEMUM
+			need_type = "GATHER_INTELLIGENCE"
+		else:
+			continue
+		directed.append(tid)  # recorded whether or not a live Master receives it
+		var master: L5RCharacterData = _find_kolat_master(characters, sect, true)
+		if master == null or master.is_pc:
+			continue
+		var obj: Dictionary = {
+			"need_type": need_type,
+			"priority": (3 if topic.tier == TopicData.Tier.TIER_1 else 2),
+			"target_npc_id": topic.subject_character_id,
+			"source": "tiger_directive", "kolat_objective": true,
+		}
+		if not topic.provinces_affected.is_empty():
+			obj["target_province_id"] = int(topic.provinces_affected[0])
+		# Tiger directive overrides any existing Kolat objective (s54.7d).
+		var objs: Dictionary = objectives_map.get(master.character_id, {})
+		objs["kolat"] = obj
+		objectives_map[master.character_id] = objs
+	tiger.special_data["directed_topic_ids"] = directed
 
 
 # -- FIND_NEW_LORD Standing Objective Assignment (s52.5 Part F) ----------------
