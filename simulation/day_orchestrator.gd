@@ -186,6 +186,9 @@ static func advance_day(
 	# co-located field agents (Phase 1; ≤3 active-Kolat-objective cap).
 	_process_kolat_tiger_directives(characters, characters_by_id, objectives_map, active_topics, kolat_secrecy)
 	_process_kolat_agent_delegation(characters, characters_by_id, objectives_map, active_topics, kolat_secrecy)
+	# s54.7c/d Phase 3a: Master Coin delegates covert economics (UNDERREPORT fund
+	# generation / SPONSOR_INSURGENCY disruption) to positioned operatives.
+	_process_kolat_coin_delegation(characters, characters_by_id, objectives_map, insurgencies, _spm, kolat_secrecy)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 	# s57.54.10d: operational superiors spend their CO budget directing idle
 	# subordinates (propagating the superior's own active objective down the
@@ -10236,6 +10239,109 @@ static func _process_kolat_tiger_directives(
 		objectives_map[mid] = objs
 		directed.append(int(best["tid"]))
 	tiger.special_data["directed_topic_ids"] = directed
+
+
+# -- Kolat Coin Operative Delegation (s54.7c/d, Phase 3a, owner-approved 2026-09-04) --
+# Master Coin's mandate ("ensure the Kolat always has sufficient untraceable
+# operational funds") delegates covert economics to its registered field
+# operatives, under the ≤3 active-Kolat-objective cap:
+#   Fund-generation — when the Master's working reserve (kolat_koku) is below
+#     VAULT_MIN_RESERVE, task a lord operative with MANAGE_KOLAT_FUNDS; they skim
+#     their own domain (UNDERREPORT_KOKU → dirty_koku → launder). This is what
+#     makes operatives (not only the Master) run covert economics.
+#   Disruption — task an operative co-located in a province that ALREADY has a
+#     Ronin Bandit insurgency with DISRUPT_ECONOMIC_TARGET; they strengthen the
+#     existing uprising (SPONSOR_INSURGENCY). No invented "where to seed new
+#     disruption" rule. A broke operative's SPONSOR fails the funding check until
+#     the fund-generation loop supplies koku — the two compose over time.
+# One delegation per Coin Master per tick (fund-generation preferred when low).
+static func _process_kolat_coin_delegation(
+	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
+	insurgencies: Array, settlement_province_map: Dictionary, kolat_secrecy: Dictionary = {},
+) -> void:
+	var go_dark: bool = kolat_secrecy.get("go_dark", false)
+	var identified: Array = kolat_secrecy.get("identified_ids", [])
+	# Provinces with an active Ronin Bandit uprising to strengthen.
+	var bandit_provinces: Dictionary = {}
+	for iv: Variant in insurgencies:
+		if iv is InsurgencyData and (iv as InsurgencyData).insurgency_type == Enums.InsurgencyType.RONIN_BANDIT:
+			bandit_provinces[(iv as InsurgencyData).province_id] = true
+	for master: L5RCharacterData in characters:
+		if master == null or master.is_pc or CharacterStats.is_dead(master):
+			continue
+		if not master.is_kolat_master or master.kolat_sect != Enums.KolatSect.COIN:
+			continue
+		if go_dark and master.character_id in identified:
+			continue
+		if KolatNetwork.active_kolat_objective_count(master, objectives_map) \
+				>= KolatNetwork.MAX_ACTIVE_KOLAT_OBJECTIVES:
+			continue
+		var agent_ids: Array = KolatNetwork.active_agent_ids(master)
+		if agent_ids.is_empty():
+			continue
+		# Fund-generation (preferred when the working reserve is low).
+		if master.kolat_koku < KolatSystem.VAULT_MIN_RESERVE:
+			var funded: bool = _delegate_kolat_coin_task(
+				agent_ids, characters_by_id, objectives_map,
+				"MANAGE_KOLAT_FUNDS", -1, true)
+			if funded:
+				continue
+		# Disruption: strengthen an existing Ronin Bandit uprising where an operative sits.
+		for aid_v: Variant in agent_ids:
+			var aid: int = int(aid_v)
+			var agent: L5RCharacterData = characters_by_id.get(aid, null)
+			if agent == null or CharacterStats.is_dead(agent) or agent.is_pc:
+				continue
+			if not (objectives_map.get(aid, {}).get("kolat", {}) as Dictionary).is_empty():
+				continue
+			var loc_sid: int = int(agent.physical_location) if agent.physical_location.is_valid_int() else -1
+			var prov: int = int(settlement_province_map.get(loc_sid, -1))
+			if prov < 0 or not bandit_provinces.has(prov):
+				continue
+			var objs: Dictionary = objectives_map.get(aid, {})
+			objs["kolat"] = {
+				"need_type": "DISRUPT_ECONOMIC_TARGET", "priority": 2,
+				"target_province_id": prov, "source": "master_directive",
+				"kolat_objective": true,
+			}
+			objectives_map[aid] = objs
+			break  # one delegation per Coin Master per tick
+
+
+## Task the first eligible operative with `need_type`. `require_lord` gates on a
+## lordship role (UNDERREPORT_KOKU is AT_OWN_HOLDINGS lord-only). Returns true if a
+## delegation was made. Skips operatives that already hold a Kolat objective.
+static func _delegate_kolat_coin_task(
+	agent_ids: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
+	need_type: String, target_province_id: int, require_lord: bool,
+) -> bool:
+	for aid_v: Variant in agent_ids:
+		var aid: int = int(aid_v)
+		var agent: L5RCharacterData = characters_by_id.get(aid, null)
+		if agent == null or CharacterStats.is_dead(agent) or agent.is_pc:
+			continue
+		if not (objectives_map.get(aid, {}).get("kolat", {}) as Dictionary).is_empty():
+			continue
+		if require_lord and not _is_lord_role(agent):
+			continue
+		var obj: Dictionary = {
+			"need_type": need_type, "priority": 2,
+			"source": "master_directive", "kolat_objective": true,
+		}
+		if target_province_id >= 0:
+			obj["target_province_id"] = target_province_id
+		var objs: Dictionary = objectives_map.get(aid, {})
+		objs["kolat"] = obj
+		objectives_map[aid] = objs
+		return true
+	return false
+
+
+## True when the character holds a lordship role — the domain-holding gate for
+## UNDERREPORT_KOKU (AT_OWN_HOLDINGS, lord-only).
+static func _is_lord_role(character: L5RCharacterData) -> bool:
+	var r: String = character.role_position
+	return r.contains("Daimyo") or r.contains("Champion") or r == "Village Headman"
 
 
 # -- FIND_NEW_LORD Standing Objective Assignment (s52.5 Part F) ----------------
