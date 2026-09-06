@@ -184,7 +184,7 @@ static func advance_day(
 	# s54.7d/b: Tiger routes directives to Sect Masters from Kolat-relevant threat
 	# topics (Phase 2), then agent-network Masters delegate GATHER_INTELLIGENCE to
 	# co-located field agents (Phase 1; ≤3 active-Kolat-objective cap).
-	_process_kolat_tiger_directives(characters, characters_by_id, objectives_map, active_topics)
+	_process_kolat_tiger_directives(characters, characters_by_id, objectives_map, active_topics, kolat_secrecy)
 	_process_kolat_agent_delegation(characters, characters_by_id, objectives_map, active_topics, kolat_secrecy)
 	_sync_spy_network_focus(characters, objectives_map, companies, ic_day)
 	# s57.54.10d: operational superiors spend their CO budget directing idle
@@ -10154,10 +10154,18 @@ static func _pick_kolat_delegation_agent(
 # Tiger's `directed_topic_ids` record (pruned to still-active topics each tick).
 static func _process_kolat_tiger_directives(
 	characters: Array, characters_by_id: Dictionary, objectives_map: Dictionary,
-	active_topics: Array,
+	active_topics: Array, kolat_secrecy: Dictionary = {},
 ) -> void:
 	var tiger: L5RCharacterData = _find_kolat_master(characters, Enums.KolatSect.TIGER, true)
 	if tiger == null:
+		return
+	# s54.7i: while the Empire's counter-response has Masters going dark, Tiger
+	# issues no directives if it is itself identified, and never re-tasks an
+	# identified Master (whose slot the endgame just cleared). Mirrors the
+	# standing / opportunistic passes.
+	var go_dark: bool = kolat_secrecy.get("go_dark", false)
+	var identified: Array = kolat_secrecy.get("identified_ids", [])
+	if go_dark and tiger.character_id in identified:
 		return
 	var topics_by_id: Dictionary = {}
 	for tv: Variant in active_topics:
@@ -10168,6 +10176,9 @@ static func _process_kolat_tiger_directives(
 	for d_v: Variant in tiger.special_data.get("directed_topic_ids", []):
 		if topics_by_id.has(int(d_v)):
 			directed.append(int(d_v))
+	# Phase A — for each undirected, routable threat topic, keep the single most
+	# urgent directive per target Master (highest priority, then highest tier).
+	var best_per_master: Dictionary = {}   # master_id → {tid, obj, priority, tier}
 	for tid_v: Variant in tiger.topic_pool:
 		var tid: int = int(tid_v)
 		if tid in directed:
@@ -10188,22 +10199,42 @@ static func _process_kolat_tiger_directives(
 			need_type = "GATHER_INTELLIGENCE"
 		else:
 			continue
-		directed.append(tid)  # recorded whether or not a live Master receives it
 		var master: L5RCharacterData = _find_kolat_master(characters, sect, true)
+		# No live Master (vacant seat): leave the topic undirected so it is routed
+		# once the seat is refilled — never mark it directed here.
 		if master == null or master.is_pc:
 			continue
-		var obj: Dictionary = {
-			"need_type": need_type,
-			"priority": (3 if topic.tier == TopicData.Tier.TIER_1 else 2),
-			"target_npc_id": topic.subject_character_id,
-			"source": "tiger_directive", "kolat_objective": true,
-		}
-		if not topic.provinces_affected.is_empty():
-			obj["target_province_id"] = int(topic.provinces_affected[0])
-		# Tiger directive overrides any existing Kolat objective (s54.7d).
-		var objs: Dictionary = objectives_map.get(master.character_id, {})
-		objs["kolat"] = obj
-		objectives_map[master.character_id] = objs
+		if go_dark and master.character_id in identified:
+			continue
+		var priority: int = (3 if topic.tier == TopicData.Tier.TIER_1 else 2)
+		var cur: Dictionary = best_per_master.get(master.character_id, {})
+		if cur.is_empty() or priority > int(cur.get("priority", 0)) \
+				or (priority == int(cur.get("priority", 0)) and int(topic.tier) < int(cur.get("tier", 99))):
+			var obj: Dictionary = {
+				"need_type": need_type, "priority": priority,
+				"target_npc_id": topic.subject_character_id,
+				"source": "tiger_directive", "kolat_objective": true,
+			}
+			if not topic.provinces_affected.is_empty():
+				obj["target_province_id"] = int(topic.provinces_affected[0])
+			best_per_master[master.character_id] = {
+				"tid": tid, "obj": obj, "priority": priority, "tier": int(topic.tier),
+			}
+	# Phase B — install the winning directive per Master (Tiger-directive override,
+	# s54.7d) unless a strictly higher-priority non-Tiger objective already holds
+	# the slot; only a topic actually installed is recorded as directed.
+	for mid_v: Variant in best_per_master:
+		var mid: int = int(mid_v)
+		var best: Dictionary = best_per_master[mid]
+		var objs: Dictionary = objectives_map.get(mid, {})
+		var existing: Dictionary = objs.get("kolat", {})
+		if not existing.is_empty() \
+				and int(existing.get("priority", 0)) > int(best["priority"]) \
+				and String(existing.get("source", "")) != "tiger_directive":
+			continue  # do not downgrade a higher-priority network/compromise task; retry later
+		objs["kolat"] = best["obj"]
+		objectives_map[mid] = objs
+		directed.append(int(best["tid"]))
 	tiger.special_data["directed_topic_ids"] = directed
 
 
