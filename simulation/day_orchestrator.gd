@@ -14577,7 +14577,11 @@ static func _get_family_daimyo_ids(clan_name: String, characters: Array) -> Arra
 
 
 static func _is_lord_tier(character: L5RCharacterData) -> bool:
-	return character.status >= 5.0 or character.lord_id == -1
+	# status >= 5.0 covers Clan Champions (always >= 7) and family daimyo. The
+	# lordless clause captures an *independent* lord (no superior), but a masterless
+	# RONIN also has lord_id == -1 and is NOT lord-tier — exclude them explicitly so
+	# a ronin is never processed as a lord by the six _is_lord_tier gates.
+	return character.status >= 5.0 or (character.lord_id == -1 and not RoninSystem.is_ronin(character))
 
 
 ## s57.54 §9 — fires on non-seasonal days when a champion has Tier 1/2 topics
