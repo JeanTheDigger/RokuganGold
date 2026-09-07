@@ -205,27 +205,32 @@ static func evaluate_intervention(
 # -- Co-Conspirator Naming (s11.3.8e) -----
 
 static func should_name_co_conspirators(
-	primary_virtue: int,
+	bushido_virtue: int = Enums.BushidoVirtue.NONE,
+	shourido_virtue: int = Enums.ShouridoVirtue.NONE,
 ) -> Dictionary:
 	var names_publicly: bool = false
 	var reason: String = ""
 
-	match primary_virtue:
-		Enums.BushidoVirtue.GI:
-			names_publicly = true
-			reason = "honesty_demands_it"
-		Enums.BushidoVirtue.MEIYO:
-			names_publicly = true
-			reason = "honor_requires_transparency"
-		Enums.BushidoVirtue.CHUGI:
-			names_publicly = false
-			reason = "continued_surveillance"
-		Enums.ShouridoVirtue.SEIGYO:
-			names_publicly = false
-			reason = "quiet_investigation_continues"
-		_:
-			names_publicly = false
-			reason = "strategic_default"
+	# BushidoVirtue and ShouridoVirtue share the same underlying int values
+	# (JIN==SEIGYO==0, GI==KANPEKI==4, ...), so they must be checked against their
+	# own typed parameter, never merged into one raw int matched against both
+	# enums at once (that silently let a JIN lord's virtue collide with SEIGYO's
+	# case here).
+	if bushido_virtue == Enums.BushidoVirtue.GI:
+		names_publicly = true
+		reason = "honesty_demands_it"
+	elif bushido_virtue == Enums.BushidoVirtue.MEIYO:
+		names_publicly = true
+		reason = "honor_requires_transparency"
+	elif bushido_virtue == Enums.BushidoVirtue.CHUGI:
+		names_publicly = false
+		reason = "continued_surveillance"
+	elif shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+		names_publicly = false
+		reason = "quiet_investigation_continues"
+	else:
+		names_publicly = false
+		reason = "strategic_default"
 
 	return {
 		"names_publicly": names_publicly,
@@ -277,13 +282,13 @@ enum SuspicionResponse {
 	WAIT_FOR_PROOF,
 }
 
-static var BUSHIDO_RESPONSE_PREFERENCE: Dictionary = {
+const BUSHIDO_RESPONSE_PREFERENCE: Dictionary = {
 	Enums.BushidoVirtue.YU: SuspicionResponse.CONFRONT_DIRECTLY,
 	Enums.BushidoVirtue.JIN: SuspicionResponse.TEST_LOYALTY,
 	Enums.BushidoVirtue.GI: SuspicionResponse.CONFRONT_DIRECTLY,
 }
 
-static var SHOURIDO_RESPONSE_PREFERENCE: Dictionary = {
+const SHOURIDO_RESPONSE_PREFERENCE: Dictionary = {
 	Enums.ShouridoVirtue.SEIGYO: SuspicionResponse.WAIT_FOR_PROOF,
 	Enums.ShouridoVirtue.DOSATSU: SuspicionResponse.INCREASE_SURVEILLANCE,
 	Enums.ShouridoVirtue.KANPEKI: SuspicionResponse.WAIT_FOR_PROOF,

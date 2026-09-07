@@ -195,7 +195,7 @@ static func process_treason_conviction(
 	)
 	crime_record.ic_day_conviction = ic_day
 
-	var naming := TreasonSystem.should_name_co_conspirators(lord.bushido_virtue)
+	var naming := TreasonSystem.should_name_co_conspirators(lord.bushido_virtue, lord.shourido_virtue)
 
 	var topic_tier: int = conviction.get("topic_tier", TopicData.Tier.TIER_2)
 	var conviction_topic: TopicData = InvestigationSystem.generate_conviction_topic(

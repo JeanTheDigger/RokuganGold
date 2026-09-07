@@ -159,7 +159,7 @@ static func _process_single_case(
 		for sid: int in record.known_suspects:
 			if sid != accused.character_id:
 				co_ids.append(sid)
-		var naming := TreasonSystem.should_name_co_conspirators(lord.bushido_virtue)
+		var naming := TreasonSystem.should_name_co_conspirators(lord.bushido_virtue, lord.shourido_virtue)
 		result["co_conspirators_named"] = naming["names_publicly"]
 		result["co_conspirator_ids"] = co_ids
 
@@ -272,7 +272,11 @@ static func resolve_seppuku(
 
 	var treason_exile := {}
 	if record.crime_type == Enums.CrimeType.TREASON:
-		treason_exile = TreasonSystem.apply_refused_seppuku()
+		# `convicted` is in scope -- pass it so the honor penalty is rank-scaled
+		# (CrimeSystem.scale_honor_by_rank) instead of silently falling back to the
+		# flat, unscaled REFUSED_SEPPUKU_HONOR_LOSS, the same pattern already used
+		# correctly at line 242 and treason_system.gd:195/245.
+		treason_exile = TreasonSystem.apply_refused_seppuku(convicted)
 
 	return {
 		"applicable": true,
