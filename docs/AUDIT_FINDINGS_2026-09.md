@@ -11,8 +11,10 @@ EdictData crash + dead logic + Ishi lock + mid-season id, the trial-by-combat
 `LegalCaseEntry` desync, the bribe/extortion suppression race (same class,
 `legal_status_system.gd`/`day_orchestrator.gd`), the `transition()` ic_day
 sentinel hardening, and `investigation_system.gd`'s duplicate-lead generation +
-alibi `evidence_change` mismatch. See git log
-(`claude/project-overview-planning-bb3lmo`).
+alibi `evidence_change` mismatch, and `treason_system.gd`'s
+BushidoVirtue/ShouridoVirtue int collision in `should_name_co_conspirators` +
+the `apply_refused_seppuku` rank-scaling call-site bug + `static var`→`const`
+hardening. See git log (`claude/project-overview-planning-bb3lmo`).
 
 The items below are **real defects I did NOT auto-fix** because the correct
 behavior depends on a game-design value or rule the GDD does not pin down, or
@@ -125,3 +127,49 @@ s11.3, could be read either way) or should evidence be capped per witness per
 case? The governing section is explicitly flagged **"PARTIALLY DESIGNED"** in
 its own filename, so this needs an owner ruling rather than an invented cap.
 *Not fixed.*
+
+---
+
+## D. `simulation/treason_system.gd`
+
+### D1 — `apply_refused_seppuku`'s consequences are computed but never applied anywhere — MEDIUM
+The function returns a fully-specified payload (`new_legal_status: "ronin"`,
+`honor_change`, `infamy_gain: 3.0`, `status_set_to: 0.0`, `exile: true`) using
+constants already defined in this same file (`REFUSED_SEPPUKU_HONOR_LOSS`,
+`REFUSED_SEPPUKU_INFAMY_GAIN`) — no new number would need inventing. But its
+only caller (`conviction_processor.resolve_seppuku`) stores the result under
+`treason_exile` in a day-report dict (`seppuku_results`) that nothing
+downstream reads. **A convicted traitor who refuses seppuku never actually
+becomes ronin, is never exiled, and keeps their prior status/honor/infamy
+forever** — the s11.3.8d Refused Seppuku Path is a pure wiring gap.
+*Decision needed is HOW to apply it, not what values to use:* `RoninSystem`
+has a `make_ronin(character, cause: RoninCause)` entry point, but its
+`RoninCause` enum (`LORD_DEATH_NO_HEIR`, `DISMISSAL`, `DISMISSAL_DISGRACE`,
+`CLAN_DESTROYED`, `VOLUNTARY_DEPARTURE`) has no case for this, and
+`make_ronin`'s own consequences (relative `-1.0` status decrement + a
+cause-keyed glory loss) don't match this path's already-defined absolute
+`status_set_to: 0.0` and honor/infamy figures — so wiring this either means
+adding a new `RoninCause` (a new enum value, which needs owner sign-off per
+CLAUDE.md) or writing a bespoke apply-path that bypasses `make_ronin` entirely
+and applies the exact fields this function already returns. Also note: the
+code's own comment cites "s11.3.8d" for this path, but the current GDD's
+actual §11.3.8d is titled "Authority Chain" — worth confirming the section
+number hasn't drifted since this was written. *Not fixed.*
+
+### D2 — `get_preferred_response` has the identical Bushido/Shourido int collision, left unfixed — LOW (currently unreachable in production)
+Same root cause as the `should_name_co_conspirators` fix applied this round
+(`BushidoVirtue`/`ShouridoVirtue` share their underlying int values), but here
+it lives in two module-level lookup dicts checked in sequence
+(`BUSHIDO_RESPONSE_PREFERENCE` before `SHOURIDO_RESPONSE_PREFERENCE`) rather
+than a `match`. **This function has zero production callers today** (grep
+confirms it's only ever invoked from `tests/test_treason_system.gd`), so the
+bug has no live effect. It was left unfixed — unlike the sibling function —
+because `tests/test_treason_system.gd:271-276`
+(`test_seigyo_lord_prefers_patience`) explicitly asserts the *buggy* result
+(`TEST_LOYALTY`) as the expected value, with a comment documenting the
+collision as known. Correcting the function would require updating that
+test's expected value to `WAIT_FOR_PROOF`, and GUT is non-functional headless
+in this environment, so I cannot execute the suite to verify a test edit is
+even syntactically sound. *Decision:* is editing an existing (non-functional-
+to-run) test file in scope for a correctness fix, or should this wait until
+GUT is usable again / the function gains a real caller? *Not fixed.*
