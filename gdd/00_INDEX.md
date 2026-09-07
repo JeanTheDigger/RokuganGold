@@ -723,3 +723,64 @@ Key: **DONE** = simulation code written and tested | **PARTIAL** = code exists, 
 | s57.54 Clan Champion Strategic Evaluation | **DONE** | `simulation/strategic_review.gd` (s57.54 section) + `shared/strategic_conclusion_data.gd`. Quarterly 6-step evaluation: Threat Scan (forced conclusions from Tier 1/2 topics, active wars, edicts), Opportunity Scan (Tier 3/4 topics, war/edict conditions, standing objectives), Scoring (standing match, personality preference matrix, topic urgency, momentum, convergent topics, continuation bonus), Selection (2–4 slots by personality; Ishi locks; Ketsui immediate-refill). 16 ConclusionTypes × 5 domains. 3 re-evaluation triggers (quarterly, mid-season crisis, priority resolved). Family Daimyo combined pool (get_champion_conclusion_needtypes, re-weighted by FD personality). Operational superior CO budget (2/day for 1–3 subordinates, 3/day for 4+). Conclusion-to-NeedType translation table (16 conclusion types → 4 NeedTypes each). PATRONIZE_ARTS added as 82nd NeedType. Personality preference matrix: 14 virtues × 16 conclusions. Letter dispatch for absent Family Daimyo. Wired in DayOrchestrator seasonal block. Context injection: champion_conclusion_candidates and local_tier3_candidates for Family Daimyo+ in per-character world_states. 22 tests in test_strategic_evaluation.gd. |
 | s60 PC Integration | **DONE** | `simulation/pc_system.gd`. PC identity fields (`is_pc`, `player_id`, `is_logged_in`, `home_settlement_id`, `banked_ap`, `offline_policies`, `bubble_scene_id`) on L5RCharacterData. AP banking system: `bank_ap()`, `spend_banked_ap()`, `get_spendable_ap()` with daily reset hooks. Offline reactive policies: configurable response strategies for received events (DUEL_CHALLENGE, COURT_INVITATION, FAVOR_REQUESTED) when PC is offline. Bubble Time integration: `active_bubble_scenes` and `next_bubble_scene_id` on WorldState; simulation pauses NPC processing in Bubble Time zones while PC resolves encounter. PC exclusion from NPC-only decision paths (PCs do not enter `_get_active_characters()` for NPC wave resolution). Constants A1–A5 locked in s60. ~40 tests in `tests/test_pc_system.gd`. |
 | s57.57 Topic Detection Mechanics | **DONE** | `simulation/day_orchestrator.gd` + `shared/character_data.gd`. Four passive detection triggers per s57.57. `last_social_ic_day: int = -1` added to L5RCharacterData; updated in `_process_daily_conversations()` and letter send/receipt path. FUGITIVE_SIGHTING: `STATUS_VISIBILITY_TOPIC_THRESHOLD` corrected 3.0→5.0; Path A daily co-location check (`_process_fugitive_sighting_colocation`); Paths B+C folded into existing `_process_fugitive_extradition_seasonal()` (Path B reads `patrolled_provinces` from season_meta, Path C uses updated 5.0 threshold). DISAPPEARANCE: `_process_disappearance_check()` seasonal — 5 conditions, lord + Friend-tier associates notified, perpetrator exclusion rule, dedup by active topic. JUSTICE_REFUSAL: `_process_justice_refusal_check()` seasonal — 5 conditions including 90-day extradition window, Tier 3 topic, dedup. BEHAVIORAL_ANOMALY Path B: `_process_behavioral_anomaly_check()` seasonal — correspondence gap detection (≥3 prior letters then 90-day silence), lord + associates notified, dedup. 16 tests in test_topic_detection.gd. |
+
+---
+
+## s54.7 Kolat — Readiness Ledger (2026-09-06)
+
+Durable record of what is live, forward-wired, and blocked in the Kolat conspiracy
+subsystem, so its state is tracked rather than re-derived from chat. This is an
+implementation-status record (no design content); the authoritative design remains
+the LOCKED s54.7 sections. The full per-tranche history is in the `s54.7 (a–i)`
+status-table row above and `docs/CLAUDE_CHANGELOG_ARCHIVE.md`.
+
+### LIVE — complete and headless-verified
+- **Tiger→Master→operative tasking chain**, all channels: Tiger directive generation
+  (Phase 2), agent intel delegation (Phase 1), Coin covert-economics delegation
+  (Phase 3a), Lotus elimination delegation (Phase 3b), annual Conclave allocation
+  spine (Phase 3c). The ≤3 active-Kolat-objective sub-cap is enforced across every
+  delegation pass; cross-pass slot precedence audited (opportunistic pass never
+  displaces a directive/compromise/silence slot; no operative double-tasked).
+- **Lifecycle**: heir designation + Master succession (s54.7g), agent-network
+  compromise classification & handling (dark/suspended/burned, Tiger→Lotus silencing),
+  silence detection→LOCATE, burned-entry purge, recovery-on-acquittal.
+- **`kolat_positions` dual-stance** — all four population channels (s54.7f).
+- **Koku pipeline**: UNDERREPORT→dirty→launder→kolat_koku→vault→operational_koku
+  (allocation half), plus the Conclave vault read/split. Temple-vault metadata wired.
+- **All 29 KOLAT_ACTION_POOL ActionIDs have working executor handlers**
+  (`simulation/kolat_executor.gd`) — the `deferred_system` fallthrough catches only
+  non-Kolat actions the engine never generates for a Kolat agent. (Supersedes the
+  earlier "topic/spell/network actions deferred" note, true only of the June tranche.)
+- **Secrecy endgame** (s54.7i): exposure/awareness deltas, Imperial response tiers,
+  go-dark, one-shot purge, win condition.
+
+### FORWARD-WIRED — code exists, effect inert until a dependency lands
+- **`operational_koku` has no consumer.** The Conclave credits each Master's budget,
+  but nothing spends it. GDD s54.7h names *what* it funds (Lotus operative travel /
+  proxy-duelist fees, Chrysanthemum court trips) but gives **no koku cost values** →
+  BLOCKED on an owner numeric decision. This is the only owner-actionable gap.
+- **Conclave physical choreography** (s55.27 Steps 1–3, 6): Steel `conclave_mode`,
+  all-Master travel + co-location at the Hidden Temple, Cloud archiving, staggered
+  departure. BLOCKED on an unbuilt Steel-garrison behavioral layer; co-location is
+  abstracted, as elsewhere in the Kolat headless layer. (Step-5 strategic directives
+  are deliberately NOT re-issued here — Phase 2 already issues them continuously; a
+  second path would duplicate the channel.)
+
+### BLOCKED — waiting on other GDD sections becoming LOCKED
+- **`CAST_MAHO` as a deliberate NPC ActionID** — no LOCKED spec (s43/s55).
+- **Kuni Witch-Hunters / Asako Inquisitors / Kuroiban as named UPHOLD_LAW characters**
+  — waits on s11.3.5 (currently partially designed). Detection *channels* are wired;
+  the specialised *hunters* are not seatable.
+
+### PROVISIONAL — owner-approved, tunable, unvalidated by live play
+Compromise-classification tiers (investigation→LOW / accused→MODERATE / guilty|fugitive→DEEP,
++1 Emerald/Imperial, +1 CAPITAL); UNDERREPORT skim fraction 0.10; Conclave equal-split
+vault allocation; co-location = same `physical_location`; Conclave schedule = +1 IC year.
+
+### VERIFICATION POSTURE
+Headless only — SceneTree drivers, `godot --headless --import` parse-checks,
+hand-tracing, and `/code-review`. **No live-game playtest** (GUT non-functional here;
+the PC-facing stack is on the 2026-06-06 travel HOLD). A caught example this session:
+an 8/8 driver passed while two Conclave "never-fires" defects (great-clan war /
+Tiger succession) sat underneath until review — green drivers prove only the cases
+they simulate.
