@@ -70,9 +70,13 @@ const SHOURIDO_COOPERATION: Dictionary = {
 const COOPERATE_DISPOSITION_MIN: int = 5
 const COOPERATE_DISPOSITION_MAX: int = 10
 
-# Refusal disposition penalties (s11.3.16d)
-const REFUSE_DISPOSITION_MIN: int = -10
-const REFUSE_DISPOSITION_MAX: int = -20
+# Refusal disposition penalties (s11.3.16d). Named by severity rather than
+# MIN/MAX -- unlike the COOPERATE pair above (where MIN=5 < MAX=10 numerically),
+# these are negative penalties where the more severe one is the more negative
+# (smaller) number, so a MIN/MAX pair reads backwards relative to magnitude and
+# invites a swapped-value mistake on a future edit.
+const REFUSE_DISPOSITION_MILD: int = -10
+const REFUSE_DISPOSITION_SEVERE: int = -20
 
 # Deny knowledge additional penalty (s11.3.16d)
 const DENY_INSULT_PENALTY: int = -5
@@ -128,8 +132,8 @@ static func get_cooperation_disposition_reward(crime_topic_tier: int) -> int:
 
 static func get_refusal_disposition_penalty(crime_topic_tier: int) -> int:
 	if crime_topic_tier <= TopicData.Tier.TIER_2:
-		return REFUSE_DISPOSITION_MAX
-	return REFUSE_DISPOSITION_MIN
+		return REFUSE_DISPOSITION_SEVERE
+	return REFUSE_DISPOSITION_MILD
 
 
 static func _disposition_factor(disposition: int) -> int:

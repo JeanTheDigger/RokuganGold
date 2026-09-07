@@ -5941,10 +5941,20 @@ static func _process_fugitive_extradition_seasonal(
 
 		match response:
 			ExtraditionSystem.Response.COOPERATE:
-				var consequences: Dictionary = ExtraditionSystem.apply_cooperation(
-					harboring_lord, requesting_champ_id, crime_tier
-				)
-				result["consequences"] = consequences
+				# The read above (line 5895) is guarded on requesting_champ_id >= 0
+				# (no living clan champion is a real transient state -- e.g. one just
+				# died with no successor assigned yet); apply_cooperation's write must
+				# be guarded the same way, or it permanently writes a bogus
+				# disposition_values[-1] entry that downstream disposition scans
+				# (npc_decision_engine.gd, day_orchestrator._build_bitter_rivals, ...)
+				# can pick up as if -1 were a real character id.
+				if requesting_champ_id >= 0:
+					var consequences: Dictionary = ExtraditionSystem.apply_cooperation(
+						harboring_lord, requesting_champ_id, crime_tier
+					)
+					result["consequences"] = consequences
+				else:
+					result["consequences"] = {}
 				# Fugitive returned: revert to ACCUSED for trial
 				record.legal_status = Enums.LegalStatus.ACCUSED
 				var case_entry: LegalCaseEntry = LegalStatusSystem.get_case(
@@ -5956,10 +5966,14 @@ static func _process_fugitive_extradition_seasonal(
 
 			ExtraditionSystem.Response.REFUSE, ExtraditionSystem.Response.DENY_KNOWLEDGE:
 				var is_denial: bool = response == ExtraditionSystem.Response.DENY_KNOWLEDGE
-				var consequences_2: Dictionary = ExtraditionSystem.apply_refusal(
-					harboring_lord, requesting_champ_id, crime_tier, is_denial
-				)
-				result["consequences"] = consequences_2
+				# Same -1-sentinel guard as the COOPERATE branch above.
+				if requesting_champ_id >= 0:
+					var consequences_2: Dictionary = ExtraditionSystem.apply_refusal(
+						harboring_lord, requesting_champ_id, crime_tier, is_denial
+					)
+					result["consequences"] = consequences_2
+				else:
+					result["consequences"] = {}
 				# Escalation for Tier 2+ crimes (s11.3.16e)
 				if FugitiveExtraditionSystem.can_request_imperial_warrant(crime_tier):
 					var compliance: Dictionary = FugitiveExtraditionSystem.evaluate_imperial_warrant_compliance(
