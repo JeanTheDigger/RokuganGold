@@ -141,6 +141,18 @@ const PUNISHMENT_RANGES: Dictionary = {
 		Punishment.EXECUTION_WITHOUT_SEPPUKU,
 		Punishment.EXECUTION_WITHOUT_SEPPUKU,
 	],
+	# CAPITAL (v624, s57.47 / s55.10 Winter Court Emperor's Peace enforcement):
+	# "execution without seppuku... No clan lord may shield the offender" --
+	# unconditional regardless of leniency, matching MAHO's fixed-sentence
+	# pattern. Was never added when the enum value was introduced, so this fell
+	# through to CrimeType.OTHER's lenient default (VERBAL_REPRIMAND possible).
+	Enums.CrimeType.VIOLATION_EMPERORS_PEACE: [
+		Punishment.EXECUTION_WITHOUT_SEPPUKU,
+		Punishment.EXECUTION_WITHOUT_SEPPUKU,
+		Punishment.EXECUTION_WITHOUT_SEPPUKU,
+		Punishment.EXECUTION_WITHOUT_SEPPUKU,
+		Punishment.EXECUTION_WITHOUT_SEPPUKU,
+	],
 	Enums.CrimeType.OTHER: [
 		Punishment.VERBAL_REPRIMAND,
 		Punishment.PUBLIC_APOLOGY,
