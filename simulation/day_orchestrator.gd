@@ -14534,7 +14534,9 @@ static func _run_strategic_reviews(
 			if t is TopicData:
 				topics_by_id[(t as TopicData).topic_id] = t
 		for champion: L5RCharacterData in characters:
-			if CharacterStats.is_dead(champion):
+			if CharacterStats.is_dead(champion) or champion.is_pc:
+				# Never drive a PC's strategic evaluation server-side (consistent with
+				# the lord-tier seasonal-review loop above, which guards is_pc).
 				continue
 			if champion.status < 7.0 or champion.lord_id != -1:
 				continue
