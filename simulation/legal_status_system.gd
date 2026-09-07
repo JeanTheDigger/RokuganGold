@@ -61,7 +61,7 @@ static func open_case(
 static func transition(
 	entry: LegalCaseEntry,
 	new_state: Enums.LegalStatus,
-	ic_day: int = -1,
+	ic_day: int,
 ) -> Dictionary:
 	if not is_valid_transition(entry.state, new_state):
 		return {

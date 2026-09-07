@@ -6416,6 +6416,17 @@ static func _process_successful_bribe_writebacks(
 				continue
 			if record.legal_status == Enums.LegalStatus.ACQUITTED:
 				continue
+			# BRIBE_FOR_INFO's bribery_eval trigger fires only pre-ACCUSED (evidence
+			# 25-39; InvestigationSystem.check_thresholds returns "accusation" instead
+			# once evidence hits 40) — bribery is designed to bury a case before it goes
+			# ACCUSED, never to reverse one. But this is a queued pending_event resolved
+			# on a later tick, so evidence (or a fugitive flight) can legitimately push
+			# the case past ACCUSED/FUGITIVE before the bribe resolves. Respect the
+			# authoritative state machine rather than force-writing CLEAR regardless:
+			# only apply suppression when CLEAR is still a valid transition from the
+			# record's CURRENT status (mirrors the trial-by-combat fix, commit c697781).
+			if not LegalStatusSystem.is_valid_transition(record.legal_status, Enums.LegalStatus.CLEAR):
+				continue
 			record.legal_status = Enums.LegalStatus.CLEAR
 			if briber != null:
 				var entry: LegalCaseEntry = LegalStatusSystem.get_case(briber, record.case_id)
@@ -6586,6 +6597,14 @@ static func _process_extortion_writebacks(
 			if record.legal_status == Enums.LegalStatus.DECREED_GUILTY:
 				continue
 			if record.legal_status == Enums.LegalStatus.ACQUITTED:
+				continue
+			# See the identical BRIBE_FOR_INFO guard above: extortion_opportunity is
+			# injected at the same pre-ACCUSED bribery_eval evidence threshold (and one
+			# injection path, _inject_extortion_opportunity_from_probe, gates on no
+			# legal_status at all), so evidence can legitimately push the case past
+			# ACCUSED/FUGITIVE before this queued action resolves. Respect the
+			# authoritative state machine instead of force-writing CLEAR regardless.
+			if not LegalStatusSystem.is_valid_transition(record.legal_status, Enums.LegalStatus.CLEAR):
 				continue
 			record.legal_status = Enums.LegalStatus.CLEAR
 			if suspect != null:
