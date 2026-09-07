@@ -1010,6 +1010,12 @@ static func run_midseason_crisis_update(
 	)
 	if new_conclusion == null:
 		return []
+	# Assign a real conclusion_id (Step 4 does this for the seasonal path; the
+	# mid-season insert bypassed it, leaving id = -1 so run_priority_resolved could
+	# not match — and two mid-season crises both at -1 would collide).
+	if new_conclusion.conclusion_id < 0:
+		new_conclusion.conclusion_id = clan.next_conclusion_id
+		clan.next_conclusion_id += 1
 
 	# Find lowest-scored non-forced entry to displace (s57.54.3 Step 6).
 	var priorities: Array[StrategicConclusionData] = clan.clan_strategic_priorities
@@ -1091,19 +1097,20 @@ static func _step1_threat_scan(
 		if sc != null:
 			forced.append(sc)
 	# COMPLY_EDICT: forced whenever binding Edict applies to clan (Trigger 5).
-	for edict in active_edicts:
-		if edict == null:
+	for edict_v: Variant in active_edicts:
+		if not edict_v is EdictData:
 			continue
+		var edict: EdictData = edict_v as EdictData
 		var applies_to_clan: bool = (
-			edict.get("target_clan", "") == champion.clan
-			or edict.get("target_clan", "") == "ALL"
+			edict.target_clan == champion.clan
+			or edict.target_clan == "ALL"
 		)
 		if applies_to_clan:
 			var sc := _make_conclusion(
 				clan, StrategicConclusionData.ConclusionType.COMPLY_EDICT,
 				current_season,
 			)
-			sc.edict_id = edict.get("edict_id", -1) if edict is Dictionary else -1
+			sc.edict_id = edict.edict_id
 			sc.score = 140  # Treat as Tier 2 forced (compelling but overridable by Tier 1).
 			sc.is_forced = true
 			sc.source_topic_ids = []
@@ -1295,19 +1302,16 @@ static func _scan_edict_conditions(
 	forced_types: Dictionary,
 	current_season: int,
 ) -> void:
-	for edict in active_edicts:
-		if edict == null:
+	for edict_v: Variant in active_edicts:
+		if not edict_v is EdictData:
 			continue
-		var applies: bool
-		if edict is Dictionary:
-			applies = (edict.get("target_clan", "") == champion.clan
-				or edict.get("target_clan", "") == "ALL")
-		else:
-			applies = false
+		var edict: EdictData = edict_v as EdictData
+		var applies: bool = (edict.target_clan == champion.clan
+			or edict.target_clan == "ALL")
 		if applies and not (StrategicConclusionData.ConclusionType.COMPLY_EDICT in forced_types):
 			var sc := _make_with_source(clan,
 				StrategicConclusionData.ConclusionType.COMPLY_EDICT, current_season, [])
-			sc.edict_id = edict.get("edict_id", -1) if edict is Dictionary else -1
+			sc.edict_id = edict.edict_id
 			_add_candidate_if_new(candidates, forced_types, sc)
 
 
@@ -1415,7 +1419,7 @@ static func _step4_select(
 	# Ishi locks previous conclusions (s57.54.6): re-add any Ishi-locked entries
 	# from last season that still have valid triggers (source_topic_ids not empty or
 	# are standing-objective-driven). Forced crisis conclusions override Ishi lock.
-	if virtue_key == Enums.ShouridoVirtue.ISHI:
+	if virtue_key == _SHOURIDO_KEY_OFFSET + Enums.ShouridoVirtue.ISHI:
 		for prev_sc: StrategicConclusionData in clan.clan_strategic_priorities:
 			if prev_sc.is_forced:
 				continue  # Already handled in forced array.
@@ -1726,9 +1730,8 @@ static func is_conclusion_stale(
 		return true  # No active war with the target clan.
 
 	if sc.conclusion_type == StrategicConclusionData.ConclusionType.COMPLY_EDICT and sc.edict_id >= 0:
-		for edict: Variant in active_edicts:
-			var eid: int = edict.get("edict_id", -1) if edict is Dictionary else -1
-			if eid == sc.edict_id:
+		for edict_v: Variant in active_edicts:
+			if edict_v is EdictData and (edict_v as EdictData).edict_id == sc.edict_id:
 				return false  # Edict still active.
 		return true  # Edict no longer in active list.
 
