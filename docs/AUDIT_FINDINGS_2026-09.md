@@ -7,8 +7,11 @@ Dictionary-style access on typed `Resource` objects).
 
 **Fixed already (structural correctness, no design decision):** champion-eval
 `is_pc` guard, `_is_lord_tier` ronin misclassification, `strategic_review`
-EdictData crash + dead logic + Ishi lock + mid-season id, and the
-trial-by-combat `LegalCaseEntry` desync. See git log
+EdictData crash + dead logic + Ishi lock + mid-season id, the trial-by-combat
+`LegalCaseEntry` desync, the bribe/extortion suppression race (same class,
+`legal_status_system.gd`/`day_orchestrator.gd`), the `transition()` ic_day
+sentinel hardening, and `investigation_system.gd`'s duplicate-lead generation +
+alibi `evidence_change` mismatch. See git log
 (`claude/project-overview-planning-bb3lmo`).
 
 The items below are **real defects I did NOT auto-fix** because the correct
@@ -102,3 +105,23 @@ it warrants owner sign-off before altering court cadence.
 `champion.strategic_evaluation_log = [log_entry]` replaces the log each season
 rather than appending, capping debug history at one season. Benign if single-
 season is intended; flagged only so the intent is on record.
+
+---
+
+## C. `simulation/investigation_system.gd`
+
+### C1 — Repeat witness interviews may allow unbounded evidence stacking (line 426) — MEDIUM
+`process_witness_interview` tracks `interviewed_witnesses`/`interviewed_suspects`
+in the objective dict, but never checks that tracking before adding evidence —
+every call adds `PROBE_WITNESS_EVIDENCE_MIN..MAX` (10–20) regardless of whether
+the target was already interviewed. An NPC-driven investigation is naturally
+protected because the decomposer's own target selection
+(`investigation_decomposer.gd:_get_uninterviewed`) skips already-interviewed
+targets, but a **PC-issued PROBE bypasses that filter** and can re-probe the
+same witness repeatedly for repeat evidence, potentially forcing an
+`ACCUSATION_THRESHOLD` crossing on stale information.
+*Decision:* is this intentional (the GDD's "10-20 per successful interview,"
+s11.3, could be read either way) or should evidence be capped per witness per
+case? The governing section is explicitly flagged **"PARTIALLY DESIGNED"** in
+its own filename, so this needs an owner ruling rather than an invented cap.
+*Not fixed.*
