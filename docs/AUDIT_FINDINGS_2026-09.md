@@ -173,3 +173,62 @@ in this environment, so I cannot execute the suite to verify a test edit is
 even syntactically sound. *Decision:* is editing an existing (non-functional-
 to-run) test file in scope for a correctness fix, or should this wait until
 GUT is usable again / the function gains a real caller? *Not fixed.*
+
+---
+
+## E. `simulation/fugitive_extradition_system.gd` — MOST SIGNIFICANT FINDING THIS AUDIT (governance, not a line-bug)
+
+### E1 — An entire file duplicates `simulation/extradition_system.gd` (both s11.3.16c/d), and the two copies have already drifted apart — HIGH, needs an explicit owner decision
+Both files were added in the same commit (`459451d`) and both implement the
+GDD's extradition-decision logic (`evaluate_extradition`,
+`get_cooperation_consequences` / `apply_cooperation`, a refusal path, etc.)
+independently. This is a direct violation of CLAUDE.md's own evergreen rule:
+*"Before writing any new `/simulation/` or `/shared/` file, search both dirs
+to confirm the system doesn't already exist."* Verified by grep (not just the
+reviewer's claim):
+- Of `FugitiveExtraditionSystem`'s 14 functions, **only 4 are called from
+  production** (`day_orchestrator.gd`): `generates_sighting_topic`,
+  `can_request_imperial_warrant`, `evaluate_imperial_warrant_compliance`,
+  `get_standing_warrant_consequences`. The other 10 — including the file's
+  main decision logic, `evaluate_extradition` and `select_response` — have
+  **zero production callers**, confirmed transitively (e.g.
+  `_get_personality_score` is only ever called from the also-dead
+  `evaluate_extradition`).
+- `day_orchestrator.gd` wires `ExtraditionSystem` (the sibling file) for the
+  actual extradition decision flow, not this file's parallel copy.
+- The two implementations have **already behaviorally diverged**:
+  `FugitiveExtraditionSystem.select_response()` has no REI-virtue branch and
+  uses a hard `fugitive_status < 3.0` cutoff for `DENY_KNOWLEDGE`, while
+  `ExtraditionSystem._determine_response()` adds a REI/`score >= -10`
+  `NEGOTIATE` branch and gates `DENY_KNOWLEDGE` on `score > -30` as well as
+  status. Neither is obviously "the" correct one without the owner's original
+  intent.
+- Within the dead code, `evaluate_extradition()` looks up disposition via
+  `harboring_lord.disposition_values.get(clan_name.hash(), 0)` — but
+  `disposition_values` is keyed by `character_id: int` everywhere else in the
+  codebase (day_orchestrator.gd, commitment_registry.gd, advantage_system.gd,
+  ...), so this lookup can never hit and silently treats every relationship as
+  neutral. Currently inert since the function is unreachable, but a landmine
+  if anyone ever revives this file.
+
+*Why I did not touch this file:* the correct fix isn't a line-level bug patch
+— it's an architectural decision (delete the duplicate and repoint
+`day_orchestrator.gd`'s 4 live calls to `ExtraditionSystem` if it has
+equivalents; keep this file but strip the 10 dead functions; or reconcile the
+two diverged decision-logic implementations into one). Any of these touches
+`tests/test_fugitive_extradition_system.gd`, which currently exercises **all
+14 functions** including the 10 dead ones — and GUT is non-functional
+headless in this environment, so I cannot verify a structural edit to that
+test doesn't break it. This needs the owner to say which file (or which
+logic) is canonical before any code moves. *Not fixed — flagged only.*
+
+### E2 — `get_concealment_tn()` unconditionally returns 0, ignoring both its arguments — INFO/BENIGN (likely intentional forward-wiring)
+GDD s11.3.16a: "The higher the fugitive's Status and Glory, the harder
+concealment becomes," but the function discards `fugitive_status`/
+`fugitive_glory` and always returns 0; `STATUS_CONCEALMENT_BONUS_PER_RANK` is
+also hardcoded to 0. Zero production callers (only the dead test references
+it) — this reads as intentional forward-wiring (the CLAUDE.md Section F
+pattern), not a live bug, so no numeric TN formula is invented here. Mentioned
+only because it sits in the same file as E1 and could be mistaken for working
+logic by a future reader. *Not fixed — no action needed unless this file is
+revived per E1's decision.*
