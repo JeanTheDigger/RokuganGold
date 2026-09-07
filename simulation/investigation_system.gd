@@ -519,11 +519,16 @@ static func check_alibi(
 	objective["checked_alibis"] = checked
 
 	if is_genuine:
+		var before: int = crime_record.evidence_total
 		crime_record.evidence_total = maxi(0, crime_record.evidence_total - ALIBI_GENUINE_WEIGHT)
 		objective["evidence_total"] = crime_record.evidence_total
 		return {
 			"genuine": true,
-			"evidence_change": -ALIBI_GENUINE_WEIGHT,
+			# The actual applied delta, not the raw weight -- the floor-at-0 clamp
+			# above can reduce evidence_total by less than ALIBI_GENUINE_WEIGHT when
+			# there wasn't that much evidence to remove. No current caller reads this
+			# field, but a future one should see the true change, not the nominal one.
+			"evidence_change": crime_record.evidence_total - before,
 			"suspect_cleared": suspect_id,
 		}
 
@@ -617,10 +622,20 @@ static func generate_leads_from_probe(
 			if present_id in crime_record.known_suspects:
 				continue
 			var already_known: bool = false
+			# Check both the pre-call snapshot AND leads already queued earlier in
+			# THIS call (e.g. the perpetrator-as-witness lead above) -- checking only
+			# `unresolved` let the same NPC get a second, duplicate lead appended when
+			# they qualified for both blocks in one call (both are appended to
+			# unresolved_leads together below).
 			for lead: Variant in unresolved:
 				if lead is Dictionary and (lead as Dictionary).get("target_npc_id", -1) == present_id:
 					already_known = true
 					break
+			if not already_known:
+				for lead: Dictionary in leads:
+					if lead.get("target_npc_id", -1) == present_id:
+						already_known = true
+						break
 			if not already_known:
 				var lead: Dictionary = {
 					"type": "witness",
