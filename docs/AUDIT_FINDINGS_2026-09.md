@@ -258,3 +258,36 @@ punishment" nor "the convicted's political usefulness" has any existing
 detection/scoring logic anywhere else in the codebase to wire up — computing
 either correctly means designing a new mechanic (what makes a clan "push"; how
 usefulness is scored), which needs an owner call, not an invented formula.
+
+---
+
+## G. `simulation/extradition_system.gd`
+
+**Fixed:** the `-1` champion-id sentinel could be written into
+`disposition_values` unguarded (day_orchestrator.gd's COOPERATE/REFUSE
+branches lacked the read-side's existing `>= 0` guard), and the backwards-named
+`REFUSE_DISPOSITION_MIN/MAX` constants were renamed to `MILD/SEVERE` (pure
+rename, no behavior change). See git log.
+
+### G1 — Two pieces of pre-existing live logic have no GDD citation — HIGH policy flag, deliberately NOT removed
+`_determine_response()` (line 157) contains two branches that CLAUDE.md's hard
+constraint ("every mechanic... must trace back to a specific LOCKED GDD
+section... do not invent mechanics") would forbid if introduced today, but
+both are **pre-existing** — unmodified since the file's introducing commit
+(`123dfae`), not written this session:
+- A `BushidoVirtue.REI` → `NEGOTIATE` branch (gated on `score >= -10`). GDD
+  s11.3.16d's only virtue-specific negotiate rule is "Seigyo lords strongly
+  favor this option" — no REI clause exists anywhere in s11.3.16c/d.
+- A `score > -30` gate on the `DENY_KNOWLEDGE` branch. The GDD conditions Deny
+  Knowledge only on "the fugitive has low Status and is genuinely hard to
+  find" — no severity-score cutoff is specified.
+Both currently produce real, observable game behavior (routing some
+below-threshold REI lords to Negotiate instead of Refuse; blocking some
+low-status fugitives from Deny Knowledge based on crime severity) that traces
+to no LOCKED section I can find. *Why I did not remove them:* CLAUDE.md's rule
+constrains *me* from inventing new mechanics going forward — it is not
+license for me to unilaterally strip existing, possibly owner-approved
+behavior that simply lacks an in-code citation (removal is just as much an
+uninstructed design decision as invention would be). *Decision needed:*
+retroactively bless these as intended s11.3.16d behavior (and note it in the
+GDD), or strip them to the letter of the LOCKED text. *Not fixed.*
