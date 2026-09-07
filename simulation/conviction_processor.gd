@@ -323,12 +323,21 @@ static func resolve_trial_by_combat(
 	)
 
 	if trial_result.get("case_cleared", false):
+		# Keep the LegalCaseEntry state machine in lockstep with the CrimeRecord —
+		# the acquittal and conviction paths both transition the case_entry, but the
+		# trial-by-combat path historically mutated only the record, stranding the
+		# case at ACCUSED for every LegalStatusSystem.get_case() reader (s11.3.9f).
+		var case_entry: LegalCaseEntry = LegalStatusSystem.get_case(accused, record.case_id)
 		if outcome == DefenseHearingSystem.TrialByCombatOutcome.ACCUSED_WINS:
 			record.legal_status = Enums.LegalStatus.ACQUITTED
 			record.evidence_total = 0
+			if case_entry != null:
+				LegalStatusSystem.acquit(case_entry, ic_day)
 		else:
 			record.legal_status = Enums.LegalStatus.DECREED_GUILTY
 			record.ic_day_conviction = ic_day
+			if case_entry != null:
+				LegalStatusSystem.transition(case_entry, Enums.LegalStatus.DECREED_GUILTY, ic_day)
 
 	return {
 		"resolved": true,
