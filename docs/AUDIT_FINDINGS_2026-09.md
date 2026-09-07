@@ -232,3 +232,29 @@ pattern), not a live bug, so no numeric TN formula is invented here. Mentioned
 only because it sits in the same file as E1 and could be mistaken for working
 logic by a future reader. *Not fixed — no action needed unless this file is
 revived per E1's decision.*
+
+---
+
+## F. `simulation/sentencing_system.gd`
+
+**Fixed:** `PUNISHMENT_RANGES` was missing `CrimeType.VIOLATION_EMPERORS_PEACE`
+entirely, silently falling back to `OTHER`'s lenient range instead of the
+GDD-mandated fixed capital sentence — a high-leniency lord could sentence a
+CAPITAL crime to a `VERBAL_REPRIMAND`. Fixed using the exact same
+all-`EXECUTION_WITHOUT_SEPPUKU` fixed-sentence pattern the table already uses
+for `MAHO`. See git log.
+
+### F1 — Two GDD-specified leniency inputs are permanently defeated at the call site — MEDIUM
+`SentencingSystem.select_punishment()`'s only production caller
+(`conviction_processor.gd:113`) hardcodes `victim_clan_pushing=false` and never
+passes `seigyo_usefulness` (defaults to `0`). Per GDD s11.3.15c, "victim's clan
+actively pushing for harsh punishment: −15 additional" pressure can never fire
+regardless of real diplomatic circumstances. Per s11.3.15a, a Seigyo-virtue
+daimyo's `personality_base` is supposed to swing ±20 based on the convicted's
+political usefulness — with the parameter always `0`, every Seigyo daimyo's
+base is silently pinned to the DOSATSU/CHISHIKI "neutral" value for every
+conviction. *Not fixed:* neither "is the victim's clan pushing for harsh
+punishment" nor "the convicted's political usefulness" has any existing
+detection/scoring logic anywhere else in the codebase to wire up — computing
+either correctly means designing a new mechanic (what makes a clan "push"; how
+usefulness is scored), which needs an owner call, not an invented formula.
