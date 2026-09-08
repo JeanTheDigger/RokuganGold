@@ -15,12 +15,15 @@ func before_each() -> void:
 	_seducer.skills = {"Temptation": 4}
 	_seducer.honor = 5.0
 	_seducer.infamy = 0.0
+	_seducer.gender = "male"
 
 	_target = L5RCharacterData.new()
 	_target.character_id = 2
 	_target.willpower = 3
 	_target.skills = {"Etiquette": 2}
 	_target.honor = 3.0
+	_target.gender = "female"
+	_target.orientation = "straight"
 
 
 # ==============================================================================
@@ -121,9 +124,12 @@ func test_maintenance_needed_after_window() -> void:
 
 
 func test_entanglement_breaks_after_3_missed() -> void:
+	# s12.8 line 273 (LOCKED): "three consecutive [16-day] windows pass without contact" is
+	# 48 IC days elapsed since last_maintained_ic_day with no intervening contact -- missed_windows
+	# is derived bookkeeping the caller writes back after each check, not a value a caller
+	# pre-seeds to fast-forward state.
 	var ent: Dictionary = SeductionSystem.create_entanglement(1, 2, 100)
-	ent["missed_windows"] = 2
-	var r: Dictionary = SeductionSystem.check_maintenance(ent, 120)
+	var r: Dictionary = SeductionSystem.check_maintenance(ent, 100 + 3 * SeductionSystem.MAINTENANCE_WINDOW_IC_DAYS)
 	assert_eq(r["state"], SeductionSystem.EntanglementState.BROKEN)
 
 

@@ -81,15 +81,16 @@ func _test_break_applies_loss() -> void:
 
 
 func _test_neglected_no_loss() -> void:
-	print("[3] a NEGLECTED (not-yet-broken) entanglement applies no break loss")
-	# 1 window missed (ic_day 16) -> NEGLECTED, not BROKEN. The -2/window decay is deferred, so
-	# disposition must be UNCHANGED here (proving the -10 break fires only on the actual break).
+	print("[3] a NEGLECTED (not-yet-broken) entanglement applies the -2/window decay, not the -10 break loss")
+	# 1 window missed (ic_day 16) -> NEGLECTED, not BROKEN. s12.8:273 (LOCKED) -2/window decay
+	# now wired (was previously deferred/unimplemented): disposition drops -2, proving the -10
+	# break value fires only on the actual break, not on ordinary neglect.
 	var target := _char(2, {1: 20})
 	var chars: Dictionary = {1: _char(1), 2: target}
 	var ents: Array = [_ent(1, 2, 0)]
 	var results: Array = _DO._process_entanglements(ents, _SD.MAINTENANCE_WINDOW_IC_DAYS, chars)
 	_ok(not ents.is_empty(), "neglected entanglement NOT removed (still active)")
-	_ok(target.disposition_values.get(1, 999) == 20, "neglected: disposition unchanged (no premature -10)")
+	_ok(target.disposition_values.get(1, 999) == 18, "neglected: -2 decay applied (20 -> 18), not the -10 break loss")
 	var is_neglected: bool = false
 	for r: Dictionary in results:
 		if r.get("event", "") == "neglected":

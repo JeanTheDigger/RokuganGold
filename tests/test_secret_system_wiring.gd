@@ -187,10 +187,14 @@ func test_scored_action_metadata_default_empty() -> void:
 # ==============================================================================
 
 func test_entanglement_broken_after_3_missed() -> void:
+	# s12.8:273 (LOCKED): "three consecutive [16-day] windows" without contact = 48 IC days
+	# elapsed since last_maintained_ic_day. missed_windows is derived bookkeeping the caller
+	# writes back after each check, not a value to pre-seed to fast-forward state.
 	var ent: Dictionary = SeductionSystem.create_entanglement(1, 2, 10)
-	ent["missed_windows"] = 2
 	var entanglements: Array = [ent]
-	var results: Array = DayOrchestrator._process_entanglements(entanglements, 30)
+	var results: Array = DayOrchestrator._process_entanglements(
+		entanglements, 10 + 3 * SeductionSystem.MAINTENANCE_WINDOW_IC_DAYS,
+	)
 	assert_true(results.size() > 0)
 	assert_eq(results[0]["event"], "broken")
 

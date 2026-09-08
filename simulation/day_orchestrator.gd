@@ -17767,6 +17767,12 @@ static func _process_entanglements(
 		elif check.get("needs_maintenance", false):
 			ent["state"] = check.get("state", SeductionSystem.EntanglementState.NEGLECTED)
 			ent["missed_windows"] = check.get("missed_windows", 0)
+			# s12.8 line 273 (LOCKED): "the target's disposition toward the actor decays at
+			# -2 per missed window" -- applied only for windows newly crossed since the last
+			# check, so a window already decayed on an earlier day is never re-applied.
+			var newly_missed: int = check.get("newly_missed_windows", 0)
+			if newly_missed > 0:
+				_apply_entanglement_neglect_disposition(ent, newly_missed, characters_by_id)
 			results.append({
 				"entanglement": ent,
 				"event": "neglected",
@@ -17793,6 +17799,27 @@ static func _apply_entanglement_break_disposition(
 	if target == null or CharacterStats.is_dead(target):
 		return 0
 	var loss: int = SeductionSystem.NEGLECT_BREAK_DISPOSITION_LOSS
+	var cur: int = target.disposition_values.get(seducer_id, 0)
+	target.disposition_values[seducer_id] = clampi(cur + loss, -100, 100)
+	return loss
+
+
+static func _apply_entanglement_neglect_disposition(
+	ent: Dictionary,
+	newly_missed_windows: int,
+	characters_by_id: Dictionary,
+) -> int:
+	## Apply the s12.8:273 per-window neglect decay: the TARGET's disposition toward the
+	## SEDUCER drops NEGLECT_WINDOW_DISPOSITION_LOSS (-2) for each newly missed maintenance
+	## window. Returns the applied delta (0 if skipped).
+	var seducer_id: int = int(ent.get("seducer_id", -1))
+	var target_id: int = int(ent.get("target_id", -1))
+	if seducer_id < 0 or target_id < 0 or seducer_id == target_id:
+		return 0
+	var target: L5RCharacterData = characters_by_id.get(target_id)
+	if target == null or CharacterStats.is_dead(target):
+		return 0
+	var loss: int = SeductionSystem.NEGLECT_WINDOW_DISPOSITION_LOSS * newly_missed_windows
 	var cur: int = target.disposition_values.get(seducer_id, 0)
 	target.disposition_values[seducer_id] = clampi(cur + loss, -100, 100)
 	return loss
@@ -31271,9 +31298,21 @@ static func _process_seduction_entanglements(
 		var action_id: String = r.get("action_id", "")
 		if action_id not in _SEDUCTION_ACTION_IDS:
 			continue
-		if not r.get("success", false):
-			continue
 		var effects: Dictionary = r.get("effects", {})
+		if not r.get("success", false):
+			# s12.8 line 271 (LOCKED): failure -3 disposition toward the actor, critical
+			# failure -10 -- resolve_seduction() reports the value, this applies it. (Both
+			# an incompatible-orientation auto-fail and a no-Temptation-skill early return
+			# carry no disposition_change key, so this is a no-op for those.)
+			var disp_loss: int = int(effects.get("disposition_change", 0))
+			if disp_loss != 0:
+				var target_id_f: int = int(r.get("target_npc_id", -1))
+				var seducer_id_f: int = int(r.get("character_id", -1))
+				var target_f: L5RCharacterData = characters_by_id.get(target_id_f)
+				if target_f != null and not CharacterStats.is_dead(target_f) and target_id_f != seducer_id_f:
+					var cur_f: int = target_f.disposition_values.get(seducer_id_f, 0)
+					target_f.disposition_values[seducer_id_f] = clampi(cur_f + disp_loss, -100, 100)
+			continue
 		if not effects.get("creates_entanglement", false):
 			continue
 		var seducer_id: int = int(r.get("character_id", -1))
