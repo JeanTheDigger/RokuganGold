@@ -291,3 +291,37 @@ behavior that simply lacks an in-code citation (removal is just as much an
 uninstructed design decision as invention would be). *Decision needed:*
 retroactively bless these as intended s11.3.16d behavior (and note it in the
 GDD), or strip them to the letter of the LOCKED text. *Not fixed.*
+
+---
+
+## H. `simulation/bribery_system.gd`
+
+**Fixed:** two fully-dead constants removed (`ACCEPTANCE_HONOR_LOSS`,
+`CONDITIONAL_BUSHIDO` — zero references anywhere), and
+`BRIBERY_EVAL_EVIDENCE_THRESHOLD` was made to read
+`InvestigationSystem.BRIBERY_EVAL_TRIGGER` directly instead of carrying an
+independent duplicate literal that could silently drift. See git log.
+
+### H1 — The GDD's conditional bushido bribery exceptions are structurally unreachable — MEDIUM, needs a new call path
+`can_attempt_bribe(character, is_protecting_other, lord_assigned,
+has_intermediary)` correctly implements GDD s11.3.11g's four conditional
+exceptions (JIN/YU permitted when "protecting someone else," REI when acting
+"through an intermediary," CHUGI when "lord-assigned"). But
+`attempt_bribe()` — the only function that calls it — has exactly one
+production call site (`action_executor.gd`'s `_resolve_bribe_attempt`,
+reached only from the `bribery_eval` self-preservation scenario, i.e. the
+briber IS the accused bribing to bury their own case) and always passes
+`(false, false, false)`. In that specific scenario `is_protecting_other` is
+definitionally false — the briber isn't protecting someone else, they're
+protecting themselves — so this isn't simply an unthreaded-parameter bug like
+the sentencing_system.gd case; it's that **the GDD's exceptions describe
+bribery contexts (a vassal bribing on a lord's orders, or to shield someone
+else, or through a go-between) that the pipeline has no distinct call path
+for yet.** A lord-assigned CHUGI vassal, or a JIN/YU character bribing to
+protect a third party, can never access their GDD-specified exception no
+matter the in-fiction circumstances.
+*Decision:* is a second bribery-attempt call path worth building for these
+scenarios (need to define how "lord-assigned"/"protecting someone else"/
+"has an intermediary" would be detected — none of the three currently has
+any signal anywhere in the codebase), or is bribery intentionally scoped to
+self-preservation only for now? *Not fixed.*
