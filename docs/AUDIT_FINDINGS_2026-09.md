@@ -1220,3 +1220,107 @@ checks whether the declared commitment was actually honored or reneged.
 persisting across the court session, similar in shape to the Commitment
 Registry, Section 55.31) plus a resolution check at court close — a real
 feature build, not a bounded wiring fix. *Not fixed.*
+
+---
+
+## AE. `simulation/favor_system.gd` / `day_orchestrator.gd` (s12.10)
+
+**Fixed:** `_apply_favor_breach()`'s disposition-floor clamp no longer
+*repairs* an already-worse-than-floor relationship back up toward the
+tier's floor (it now only caps how much damage a *new* breach can do when
+the prior value was at/above the floor); `process_deadline_breaches()` now
+threads witnesses through an optional `witness_resolver: Callable`
+parameter, wired at the `_process_favors()` call site via the same
+`_get_witnesses_at_location` lookup the `DECLINE_FAVOR` reactive path
+already used — Moderate/Major deadline-lapse breaches (a favor invoked but
+never explicitly declined) now correctly apply `witness_disposition_loss`
+like every other break path. See git log (`91e1a3f`).
+
+Also fixed in a follow-up pass: `_apply_favor_breach()` never consumed the
+`topic_tier`/`topic_type`/`topic_category` keys `break_favor()` already
+returned, so **no Betrayal topic was ever generated on a broken favor** at
+any tier, despite GDD s12.10 (LOCKED) requiring one on every break. Wired
+topic creation at both `_apply_favor_breach()` call sites via
+`TopicMomentumSystem.create_topic()` (the existing `next_topic_id[0]`
+counter pattern, matching the reneged-commitment and crime-conviction topic
+precedents exactly: `subject_character_id`/`clan_involved`/`family_involved`
+from the debtor, `subject_role = "PERPETRATOR"`). Also corrected
+`break_favor()`'s `topic_type` from an invented `"favor_breach"` string
+to the canonical `"betrayal"` used by every other betrayal-naming topic in
+the codebase (`assassination_system.gd`, `intimidation_system.gd`,
+`topic_system.gd`'s Bushido-tenet valence tables, `succession_system.gd`'s
+`BETRAYAL_TYPES`) — `"favor_breach"` matched none of those tables, so even
+once wired, a broken-favor topic would have silently missed any
+tenet-alignment or classification logic keyed on `"betrayal"`. See git log
+(`1fd4402`).
+
+### AE1 — Favor-breach disposition still bypasses the Historical Modifier system GDD names, and that system's read side is entirely dead code project-wide — HIGH, architecture gap (not favor-specific)
+GDD s12.10 line 51 (LOCKED): breaking a favor's consequences "replace the
+existing historical modifier entry for 'offered a favor not honored' in
+Section 12.2" — i.e. the creditor's disposition penalty should be a
+`disposition_system.gd` Historical Modifier entry (the `HISTORICAL_EVENTS`
+dict + `create_historical_modifier()`/`decay_historical_modifier()`
+machinery this pass already touched for `families_married`), not a direct
+`disposition_values[debtor_id]` mutation.
+
+Investigated wiring this properly and found a structural blocker that goes
+well beyond `favor_system.gd`: `DispositionSystem.compute_total_disposition
+(permanent, historical_modifiers, temporary_modifiers, cohabitation_bonus)`
+— the **only** function anywhere in the codebase that sums a character's
+`historical_modifiers` array into an effective disposition number — has
+**zero callers**, confirmed via grep across `simulation/`. Every disposition
+read in the game (NPC decision scoring, `get_supply_share_ratio`/
+`will_share_supplies`, court, social-action resolution, everything) reads
+`character.disposition_values[other_id]` directly as the sole source of
+truth. The `historical_modifiers` dict *is* written to today — by
+`reneged_commitment` (day_orchestrator.gd:~29278, the closest existing
+precedent, applied to witnesses) and decayed daily
+(`_decay_all_historical_modifiers`) — but nothing ever reads it back into
+anything a player or NPC decision can observe. It is a write-only,
+already-dead data structure for every existing user, not just the gap this
+pass found.
+
+*Why not fixed:* migrating favor-breach's creditor penalty into
+`historical_modifiers` today would make that penalty **invisible** to every
+system that currently reads `disposition_values` directly — a functional
+regression relative to the current (now floor-repair-fixed) direct-write
+behavior, not a correctness improvement. The values GDD specifies (−20/−15,
+−35/−30, −50/−50, "No decay" per tier) are not in question and would not
+need to be invented — confirmed a `decay: false` `HISTORICAL_EVENTS` entry
+with `start != floor` is a valid, already-used shape in the dict (e.g.
+`killed_family_member`, `harmed_hostage` — those happen to have `start ==
+floor`, but nothing in `create_historical_modifier()`/
+`decay_historical_modifier()` requires that; a `decay: false` entry simply
+never changes from `start`, making `floor` inert for it, exactly matching
+GDD's "No decay" phrasing). The blocking question is architectural, not
+numeric: does every disposition *read* site in the codebase migrate to a
+`compute_total_disposition()`-style getter (a sizeable, cross-cutting
+change touching NPC decisioning, supply sharing, and more), does
+`compute_total_disposition()` get wired in as a read-time wrapper at a
+narrower set of call sites, or does something else entirely own composing
+"permanent" vs. "historical" vs. "temporary" disposition? That decision
+affects `reneged_commitment`'s existing (also currently-inert)
+`historical_modifiers` writes too, not just favor-breach. *Not fixed —
+owner decision needed on the Historical Modifier system's read-side
+architecture; the current direct `disposition_values` write (with the
+floor-repair fix already applied) remains the functionally correct
+behavior until that's resolved.*
+
+### AE2 — Four `FavorSystem` functions have zero production callers — LOW, blocked on unbuilt consumers
+`can_dispute()`/`resolve_dispute()` (General Favor disputes — s12.10's
+dispute-resolution rules have no NPC-decision or player-action path that
+invokes them), `forgive_favor()` (heir forgiveness on inheritance — no
+caller wires it into `process_creditor_death()`'s inheritance path or
+anywhere else), and `is_blackmail_exposure_risk()` (s12.10's blackmail-
+extracted-favor public-invocation exposure check — no caller reads
+`is_blackmail_extracted` against `invocation_is_public` anywhere) are all
+confirmed zero-caller via grep, re-verified this pass. `can_unlock_supply_sharing()`
+is likewise uncalled; the one related caller in the codebase
+(`_process_supply_sharing`) has an existing comment noting it's blocked on
+an "unbuilt REQUEST-response auto-resolution model," which this function
+would presumably gate once that model exists. None of the four is a single
+missing call site — each needs new NPC-decision logic (when does an NPC
+choose to dispute, forgive, or expose a blackmailer?) or depends on an
+explicitly-unbuilt system. *Not fixed — no GDD-specified trigger condition
+exists for any of the four; inventing one would be exactly the kind of
+NPC-decision design CLAUDE.md reserves for owner authorization.*
