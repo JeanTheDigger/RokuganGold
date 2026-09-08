@@ -557,7 +557,13 @@ static func compute_glory_rewards(
 ) -> Array:
 	var rewards: Array = []
 
-	var host_daimyo_id: int = court.host_lord_id
+	# court.host_lord_id holds the Emperor (or regent Chancellor) for
+	# IMPERIAL_WINTER_COURT -- the only CourtType this function is ever called
+	# for (day_orchestrator.gd gates the call on court_type ==
+	# IMPERIAL_WINTER_COURT) -- while the actual castle-owning host family
+	# daimyo GDD s55.10's "+0.5 Glory" reward is meant for is recorded
+	# separately in host_family_daimyo_id.
+	var host_daimyo_id: int = court.host_family_daimyo_id
 	if host_daimyo_id >= 0:
 		var host_daimyo: L5RCharacterData = characters_by_id.get(host_daimyo_id) as L5RCharacterData
 		if host_daimyo != null and not CharacterStats.is_dead(host_daimyo):
@@ -625,14 +631,22 @@ static func order_agenda_for_host(
 	var topic_map: Dictionary = {}
 	for t: TopicData in active_topics:
 		topic_map[t.topic_id] = t
-	# Build a map of clan → champion character_id (for disposition check).
+	# Build a map of clan → champion character_id (for disposition check). Mirrors
+	# _find_clan_champion's highest-status-wins comparison (a few hundred lines
+	# below) instead of an unconditional overwrite -- if a clan transiently has
+	# more than one lord_id==-1/status>=7.0 character (a vacant/just-succeeded
+	# Champion slot, e.g.), the prior code kept whichever was last in
+	# characters_by_id iteration order rather than the actual Champion.
 	var clan_champion_id: Dictionary = {}
+	var clan_champion_status: Dictionary = {}
 	for cid: int in characters_by_id:
 		var c: L5RCharacterData = characters_by_id[cid] as L5RCharacterData
 		if c == null or CharacterStats.is_dead(c):
 			continue
 		if c.lord_id == -1 and c.status >= 7.0:
-			clan_champion_id[c.clan] = c.character_id
+			if c.status > float(clan_champion_status.get(c.clan, -1.0)):
+				clan_champion_status[c.clan] = c.status
+				clan_champion_id[c.clan] = c.character_id
 	# Score each topic: 2 = own clan, 0 = rival clan, 1 = other.
 	var scored: Array = []
 	for tid: int in topic_ids:
@@ -803,7 +817,15 @@ static func run_invitation_pipeline(
 				personal_candidates.append(c)
 
 	var personal_invites: Array = []
-	if not host_result.get("is_regent_court", false) and emperor != null:
+	# GDD s55.10 "Winter Court Without an Emperor — Regent Substitution" (LOCKED):
+	# "All other mechanics — delegation allocation, personal invitations, host
+	# advantage, Emperor's Peace, agenda ordering — function normally." By the
+	# time this function is called, `emperor` already resolves to whichever
+	# character is actually convening the court (the caller bails out earlier
+	# if that character lookup fails), so during a regent court `emperor` IS
+	# the regent Chancellor -- no separate is_regent_court gate is needed or
+	# correct here.
+	if emperor != null:
 		personal_invites = select_personal_invitations(
 			emperor, archetype, personal_pool, personal_candidates,
 			agenda_topic_ids, topic_pool_map, all_invited
@@ -965,11 +987,25 @@ static func _select_host_with_weights(
 			+ prestige_score * weights.get("family_prestige", 0)
 		)
 
-		if total > best_score:
+		# s55.10 (LOCKED): "Ties are broken first by Family Prestige (higher
+		# wins), then by Clan Recency (longer gap wins)." Both are already
+		# computed above as prestige_score/recency_score (both scaled so a
+		# higher value is the win condition each rule wants), so the tie-break
+		# needs no new data or invented magnitude -- just comparing them.
+		var is_better: bool = total > best_score
+		if not is_better and total == best_score and not best_result.is_empty():
+			var best_prestige: float = float(best_result.get("prestige_score", -1.0))
+			if prestige_score > best_prestige:
+				is_better = true
+			elif prestige_score == best_prestige:
+				is_better = recency_score > float(best_result.get("recency_score", -1.0))
+		if is_better:
 			best_score = total
 			best_result = {
 				"settlement_id": settlement.settlement_id,
 				"province_id": province.province_id,
+				"prestige_score": prestige_score,
+				"recency_score": recency_score,
 				"host_daimyo_id": host_daimyo.character_id,
 				"host_clan": clan,
 				"score": total,
