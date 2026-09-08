@@ -257,7 +257,7 @@ static func advance_day(
 	# when the ally rolls. Trigger/ally/expiry mappings PROVISIONAL (see the function).
 	_process_inspiration_grants(characters, active_wars, ic_day, dice_engine)
 
-	var favor_results: Dictionary = _process_favors(favors, ic_day, characters_by_id)
+	var favor_results: Dictionary = _process_favors(favors, ic_day, characters_by_id, active_topics, next_topic_id)
 
 	_remove_resolved_favors(favors)
 
@@ -1088,6 +1088,7 @@ static func advance_day(
 
 	_process_favor_response_writebacks(
 		day_result.get("results", []), favors, characters_by_id, world_states,
+		active_topics, next_topic_id, ic_day,
 	)
 
 	_process_court_invitation_response_writebacks(
@@ -8117,6 +8118,9 @@ static func _process_favor_response_writebacks(
 	favors: Array,
 	characters_by_id: Dictionary,
 	world_states: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
 ) -> void:
 	for r: Variant in results:
 		if not r is Dictionary:
@@ -8151,7 +8155,7 @@ static func _process_favor_response_writebacks(
 				debtor_id, location, characters_by_id, world_states,
 			)
 			var breach: Dictionary = FavorSystem.break_favor(favor, witnesses)
-			_apply_favor_breach(breach, characters_by_id)
+			_apply_favor_breach(breach, characters_by_id, active_topics, next_topic_id, ic_day)
 
 
 static func _inject_court_invitation_event(
@@ -14892,6 +14896,8 @@ static func _process_favors(
 	favors: Array,
 	ic_day: int,
 	characters_by_id: Dictionary = {},
+	active_topics: Array = [],
+	next_topic_id: Array = [],
 ) -> Dictionary:
 	var expired_ids: Array = FavorSystem.process_expirations(favors, ic_day)
 
@@ -14909,7 +14915,7 @@ static func _process_favors(
 	var breach_results: Array = FavorSystem.process_deadline_breaches(favors, ic_day, witness_resolver)
 
 	for breach: Dictionary in breach_results:
-		_apply_favor_breach(breach, characters_by_id)
+		_apply_favor_breach(breach, characters_by_id, active_topics, next_topic_id, ic_day)
 
 	return {
 		"expired_favor_ids": expired_ids,
@@ -14920,6 +14926,9 @@ static func _process_favors(
 static func _apply_favor_breach(
 	breach: Dictionary,
 	characters_by_id: Dictionary,
+	active_topics: Array,
+	next_topic_id: Array,
+	ic_day: int,
 ) -> void:
 	var debtor_id: int = breach.get("debtor_id", -1)
 	var creditor_id: int = breach.get("creditor_id", -1)
@@ -14960,6 +14969,34 @@ static func _apply_favor_breach(
 			var old_val_2: int = witness.disposition_values.get(debtor_id, 0)
 			var new_val_2: int = clampi(old_val_2 + witness_loss, -100, 100)
 			witness.disposition_values[debtor_id] = new_val_2
+
+	# GDD s12.10 (LOCKED): every tier of favor break generates a Betrayal
+	# topic ("Topic generated: Betrayal (Tier 4 Political)" for Minor/
+	# Moderate, Tier 2 for Major). Mirrors the conviction/reneged-commitment
+	# topic-creation pattern: TopicMomentumSystem.create_topic() + the
+	# PERPETRATOR subject_role convention (investigation_system.gd,
+	# day_orchestrator.gd's Imperial-decree topics) for a topic naming a
+	# specific wrongdoer.
+	var topic_tier: int = breach.get("topic_tier", TopicData.Tier.TIER_4)
+	if topic_tier >= 0 and next_topic_id.size() > 0:
+		var topic_id: int = next_topic_id[0]
+		next_topic_id[0] += 1
+		var topic: TopicData = TopicMomentumSystem.create_topic(
+			topic_id,
+			"Broken Favor by %d" % debtor_id,
+			topic_tier,
+			breach.get("topic_category", TopicData.Category.POLITICAL),
+			ic_day,
+			TopicMomentumSystem.initial_momentum_for_tier(topic_tier),
+			[],
+			debtor.clan,
+			debtor.family,
+			debtor_id,
+			breach.get("topic_type", "betrayal"),
+			"favor_broken",
+		)
+		topic.subject_role = "PERPETRATOR"
+		active_topics.append(topic)
 
 
 # -- Travel Processing (s55.29) -----------------------------------------------

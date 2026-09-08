@@ -164,7 +164,7 @@ static func break_favor(favor: FavorData, witnesses: Array = []) -> Dictionary:
 		"witness_disposition_loss": BREAK_WITNESS_DISPOSITION.get(tier, 0),
 		"witnesses": witnesses,
 		"topic_tier": BREAK_TOPIC_TIER.get(tier, TopicData.Tier.TIER_4),
-		"topic_type": "favor_breach",
+		"topic_type": "betrayal",
 		"topic_category": TopicData.Category.POLITICAL,
 		"resolved": true,
 	}
