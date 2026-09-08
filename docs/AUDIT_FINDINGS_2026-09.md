@@ -1153,3 +1153,41 @@ production callers. *Decision needed:* should Masterwork sit between
 Exceptional (20) and Legendary (15) at its own TN, or intentionally share
 Exceptional's bracket? Not fixed — either answer invents a rule the GDD
 doesn't state.
+
+---
+
+## AC. `simulation/gempukku_system.gd` (s52)
+
+**Fixed:** `get_replenishment_needed()` now checks all 5 population tiers,
+not just rank_1 (Trigger 3 firing on any tier's shortfall, per LOCKED
+text); `roll_child_gender()`/`create_child_at_birth()` and
+`generate_replenishment_character()` now correctly apply s52 Part 7's
+family-specific gender weights instead of the flat 55% default; removed a
+dead duplicate `GEMPUKKU_AGE_DAYS` constant. See git log (`e4e2036`).
+
+### AC1 — `_get_fallback_school()` invents "Shinjo Bushi" for a male Utaku — MEDIUM, invented value with a live consequence
+s52 Part 7 (LOCKED) states only "Utaku Battle Maidens: 100% female.
+Restricted by school rules" — it never says what school (or clan/family
+membership) applies to a male child in the Utaku family; `FAMILY_DEFAULT_SCHOOL`
+has no other Utaku entry. `_get_fallback_school("Utaku")` returns "Shinjo
+Bushi" with no traceable GDD or CLAUDE.md authorization — a specific
+game-design choice (Utaku's family is Unicorn-clan cavalry; Shinjo Bushi is
+a different Unicorn family's default school) that determines a real
+character's stats/skills/Ring focus.
+
+*Live consequence, confirmed during this pass's own verification:* because
+the fallback path resolves to a school ("Shinjo Bushi") that isn't a
+recognized `GENDER_WEIGHTS` key, the AC-fix's re-roll-after-school-
+resolution falls back to the generic 55% weight for that specific case —
+so a `family: "Utaku", gender: "male"` character combination (something
+s52's "100% female" framing appears to rule out entirely) can still occur
+roughly as often as before this pass's fix, unchanged by it. This isn't a
+regression introduced here; it was already possible under the pre-existing
+`_get_fallback_school()` behavior, just not previously covered by a
+regression check.
+
+*Decision needed:* what should actually happen for a male child born into
+or generated for the Utaku family — a different real school, exclusion
+from the family/clan pairing entirely (no male Utaku ever generated), or
+something else? Not fixed — "Shinjo Bushi" nor any other guess is
+GDD-traceable.
