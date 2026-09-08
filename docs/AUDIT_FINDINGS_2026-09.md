@@ -897,3 +897,36 @@ staging for that future work. Left as-is; whoever builds the map-system
 terrain wiring should either consolidate onto `ArmyMovementSystem.get_terrain_cost()`
 or delete the duplicate. Not a design decision, just flagged so it isn't
 mistaken for load-bearing code. *Not fixed.*
+
+---
+
+## V. `simulation/war_termination.gd` (s53)
+
+**Fixed:** `resolve_negotiate_surrender()`'s dead `"willingness"` key (a stale
+name from before `evaluate_peace_acceptance()` was changed to return
+`"factors"` instead — the field was always the literal default `0`,
+consumed by nothing else in the codebase). See git log (`76ec020`).
+
+### V1 — `conclude_peace_court()`'s willingness-modifier combination rule is unspecified — LOW, design-decision gap (currently unwired)
+GDD s53 (LOCKED) is explicit: "Peace willingness is not determined by a
+single threshold... there is no score at which peace is automatic." That's
+exactly why a prior audit pass correctly removed this function's old
+`boosted_willingness >= PEACE_ACCEPTANCE_THRESHOLD` comparison (an invented
+magic number). What replaced it — `base_accepted or receiving_modifier > 0`
+— has its own two problems: any positive `willingness_modifier`, however
+small, unconditionally forces acceptance regardless of how badly the
+qualitative `factors` evaluation opposed peace (itself still "a single
+threshold," just moved to zero), and a negative modifier can never undo an
+acceptance the base factors already favored. No LOCKED text specifies how
+a peace court's accumulated `willingness_modifier` (from
+`apply_willingness_modifier()`, itself not GDD-sourced beyond "a skilled
+courtier... affect[s] what the losing side is willing to accept," s53 line
+257) should combine with the qualitative accept/reject decision — reusing
+s15.5's unrelated +50 topic-commitment threshold would be extrapolating
+from a different system. *Currently no live-gameplay impact*:
+`apply_willingness_modifier()` and `conclude_peace_court()` both have zero
+production callers today (tests only). *Decision needed:* how should a
+peace court's accumulated willingness_modifier weigh against the base
+qualitative factors (a magnitude-sensitive comparison, a modifier-based
+factor added to the increases/decreases count, something else)? Not
+fixed.
