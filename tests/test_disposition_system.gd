@@ -318,32 +318,6 @@ func test_supply_sharing_stranger_refuses():
 	assert_eq(DispositionSystem.get_supply_share_ratio(20), 0.0)
 
 
-# -- Action disposition values tests ------------------------------------------
-
-func test_charm_disposition_values():
-	var charm: Dictionary = DispositionSystem.ACTION_DISPOSITION["CHARM"]
-	assert_eq(charm["success"], 8)
-	assert_eq(charm["per_raise"], 3)
-	assert_eq(charm["critical_failure"], -5)
-
-
-func test_persuade_disposition_values():
-	var persuade: Dictionary = DispositionSystem.ACTION_DISPOSITION["PERSUADE"]
-	assert_eq(persuade["success"], 11)
-	assert_eq(persuade["critical_failure"], -7)
-
-
-func test_listen_reflect_matches_persuade():
-	var lr: Dictionary = DispositionSystem.ACTION_DISPOSITION["LISTEN_REFLECT"]
-	assert_eq(lr["success"], 11)
-
-
-func test_perform_for_disposition():
-	var pf: Dictionary = DispositionSystem.ACTION_DISPOSITION["PERFORM_FOR"]
-	assert_eq(pf["success"], 10)
-	assert_eq(pf["critical_failure"], -4)
-
-
 # -- Family bond tests --------------------------------------------------------
 
 func test_family_bond_sibling():

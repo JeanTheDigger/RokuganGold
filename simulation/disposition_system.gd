@@ -189,7 +189,12 @@ const HISTORICAL_EVENTS: Dictionary = {
 	"witnessed_performance": {"start": 3, "floor": 1, "decay": true},
 	"shared_victory": {"start": 12, "floor": 6, "decay": true},
 	"shared_defeat": {"start": 8, "floor": 4, "decay": true},
-	"families_married": {"start": 8, "floor": 4, "decay": false},
+	# GDD s12.2 (LOCKED): "Start +8, Floor +4. Permanent -- the modifier
+	# stays at its floor..." -- "permanent" describes sticking at the floor
+	# once reached (same as every other decayed modifier), not "never
+	# decays from start." decay:false here (start != floor) was the odd
+	# one out -- every other decay:false entry has start == floor.
+	"families_married": {"start": 8, "floor": 4, "decay": true},
 	"publicly_praised": {"start": 8, "floor": 4, "decay": true},
 	"praised_by_you": {"start": 6, "floor": 3, "decay": true},
 	"publicly_humiliated": {"start": -15, "floor": -8, "decay": true},
@@ -237,13 +242,19 @@ static func create_historical_modifier(event_type: String, created_ic_day: int) 
 static func decay_historical_modifier(modifier: Dictionary, days_elapsed: int) -> void:
 	if not modifier.get("decays", true):
 		return
-	var start_val: int = modifier["current_value"]
+	# GDD s12.2 (LOCKED): decays 1 point per 10 IC days FROM CREATION, reaching
+	# the floor after 100 IC days. days_elapsed is always the full cumulative
+	# span since created_ic_day (day_orchestrator.gd recomputes it fresh each
+	# call, never resets created_ic_day), so this must recompute from the
+	# ORIGINAL start value every time -- not from current_value, which is
+	# already-decayed and would double-decay on every subsequent call.
+	var template: Dictionary = HISTORICAL_EVENTS.get(modifier.get("event_type", ""), {})
+	var start_val: int = template.get("start", modifier["current_value"])
 	var floor_val: int = modifier["floor"]
+	var decay_amount: int = int(float(days_elapsed) * DECAY_RATE)
 	if start_val > floor_val:
-		var decay_amount: int = int(days_elapsed / 10)
 		modifier["current_value"] = max(floor_val, start_val - decay_amount)
 	elif start_val < floor_val:
-		var decay_amount: int = int(days_elapsed / 10)
 		modifier["current_value"] = min(floor_val, start_val + decay_amount)
 
 
@@ -321,22 +332,10 @@ static func compute_cohabitation_bonus(days_cohabiting: int) -> float:
 
 
 # -- Disposition Change Values (Court Actions) --------------------------------
-
-const ACTION_DISPOSITION: Dictionary = {
-	"CHARM": {"success": 8, "per_raise": 3, "critical_failure": -5},
-	"NEGOTIATE": {"success": 9, "per_raise": 3, "critical_failure": -6},
-	"IMPRESS": {"success": 9, "per_raise": 3, "critical_failure": -6},
-	"PERSUADE": {"success": 11, "per_raise": 3, "critical_failure": -7},
-	"LISTEN_REFLECT": {"success": 11, "per_raise": 3, "critical_failure": -7},
-	"INTIMIDATE": {"success": 0, "per_raise": 3, "critical_failure": -8},
-	"PERFORM_FOR": {"success": 10, "per_raise": 3, "critical_failure": -4},
-}
-
-const BROADCAST_DISPOSITION: Dictionary = {
-	"per_witness_success": 2,
-	"per_raise_per_witness": 1,
-	"per_witness_critical_failure": -2,
-}
+# Court-action disposition values live in CourtActionSystem (GDD s15.4a, the
+# LOCKED numeric addendum that supersedes this file's earlier s12.2 table --
+# e.g. CHARM_FULL_GAIN=5 vs. this file's old CHARM.success=8). No constants
+# here; do not reintroduce the superseded values.
 
 const GIFT_DISPOSITION: Dictionary = {
 	"normal": 3,
