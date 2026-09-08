@@ -140,12 +140,15 @@ static func process_geisha_visit(
 		if CharacterStats.is_dead(okaasan):
 			okaasan = null
 
-	result["okaasan_received"] = true
-	if okaasan != null and not okaasan.topic_pool.has(topic_id):
-		okaasan.topic_pool.append(topic_id)
+	if okaasan != null:
+		result["okaasan_received"] = true
+		if not okaasan.topic_pool.has(topic_id):
+			okaasan.topic_pool.append(topic_id)
 
-	# -- Kolat eavesdrop (parallel — fires regardless of okaasan routing) ------
-	if okiya.kolat_agent_id >= 0 and characters_by_id.has(okiya.kolat_agent_id):
+	# -- Kolat eavesdrop (parallel — fires regardless of okaasan routing, but
+	# only when there is an okaasan present to eavesdrop ON; with no okaasan
+	# there is no conversation to overhear) -------------------------------
+	if okaasan != null and okiya.kolat_agent_id >= 0 and characters_by_id.has(okiya.kolat_agent_id):
 		var kolat: L5RCharacterData = characters_by_id[okiya.kolat_agent_id] as L5RCharacterData
 		if not CharacterStats.is_dead(kolat):
 			var kolat_success: bool = _kolat_eavesdrop_roll(okaasan, kolat, dice)
@@ -153,6 +156,16 @@ static func process_geisha_visit(
 				result["kolat_received"] = true
 				if not kolat.topic_pool.has(topic_id):
 					kolat.topic_pool.append(topic_id)
+				# s57.45a A23-A24 (LOCKED): "topic enters agent's topic_pool
+				# tagged with KnowledgeEntry (entry_type = 'kolat_intelligence',
+				# data = {'topic_id': id, 'kolat_sourced': true})" -- previously
+				# only the bare topic_id was appended, indistinguishable from a
+				# topic learned through any ordinary channel.
+				var kolat_entry := KnowledgeEntry.new()
+				kolat_entry.entry_type = "kolat_intelligence"
+				kolat_entry.data["topic_id"] = topic_id
+				kolat_entry.data["kolat_sourced"] = true
+				kolat.knowledge_pool.append(kolat_entry)
 
 	# -- Okaasan routing roll --------------------------------------------------
 	if okiya.handler_id < 0:
@@ -195,8 +208,9 @@ static func generate_initial_okiya(
 		# clans_by_settlement is keyed by str(settlement_id) (see WorldBootstrap).
 		var clan: String = clans_by_settlement.get(str(s.settlement_id), "")
 		var okiya_entries: Array = _okiya_entries_for_settlement(s, clan, dice, next_okiya_id)
-		for entry: OkiyaData in okiya_entries:
+		if not okiya_entries.is_empty() and "okiya" not in s.infrastructure:
 			s.infrastructure.append("okiya")
+		for entry: OkiyaData in okiya_entries:
 			result.append(entry)
 
 	return result
@@ -318,7 +332,12 @@ static func _kolat_eavesdrop_roll(
 	var perception: int = kolat_agent.perception
 	var wound_pen: int = CharacterStats.get_wound_penalty(kolat_agent)
 	var inv_mut: Dictionary = MutationSystem.get_skill_modifiers(kolat_agent, "Investigation")
-	var inv_rolled: int = maxi(1, investigation + 1 + inv_mut["rolled"])
+	# Standard L5R roll-and-keep for Investigation (Notice)/Perception: roll
+	# Investigation + Perception dice, keep Perception (matches the identical
+	# pattern at combat_controller.gd:1789-1790, `rolled = perc + invest + ...`,
+	# `kept = perc + ...`). The literal `1` here was omitting Perception from
+	# the rolled count entirely (it was only used for kept dice below).
+	var inv_rolled: int = maxi(1, investigation + perception + inv_mut["rolled"])
 	var inv_kept: int = maxi(1, perception + inv_mut["kept"])
 	var roll_result: DiceResult = dice.roll_and_keep(inv_rolled, inv_kept, true, false)
 	return (roll_result.total + wound_pen + inv_mut["tn"]) >= tn
@@ -338,10 +357,12 @@ static func _okiya_entries_for_settlement(
 
 	match s.settlement_type:
 		Enums.SettlementType.IMPERIAL_CAPITAL:
-			# Three okiya: tiers 1, 2, 3 (A33).
-			for t: int in [1, 2, 3]:
+			# One okiya per tier 1..IMPERIAL_CAPITAL_OKIYA_COUNT (A33). Previously
+			# hardcoded [1, 2, 3] independent of the constant, so editing the
+			# constant alone silently had no effect on the actual generated count.
+			for t: int in range(1, IMPERIAL_CAPITAL_OKIYA_COUNT + 1):
 				entries.append(_make_okiya(next_okiya_id, str(s.settlement_id), t, clan, dice))
-			s.okiya_tier = 3
+			s.okiya_tier = IMPERIAL_CAPITAL_OKIYA_COUNT
 
 		Enums.SettlementType.CITY:
 			var tier: int = 3 if clan in CITY_UPGRADE_CLANS else 2
@@ -413,6 +434,14 @@ static func handle_character_death(
 			okiya.okaasan_id = -1
 		if okiya.handler_id == dead_id:
 			okiya.handler_id = -1
+		# kolat_agent_id was never cleared here, unlike okaasan_id/handler_id --
+		# a dead agent's id stayed in the field forever (runtime call sites guard
+		# with CharacterStats.is_dead(), so a dead agent can't act, but the okiya
+		# could never receive a fresh Kolat agent afterward). -1 (not the -2
+		# "present, not yet a character" sentinel) since the agent is confirmed
+		# dead, not merely un-instantiated.
+		if okiya.kolat_agent_id == dead_id:
+			okiya.kolat_agent_id = -1
 
 
 ## Returns the koku cost for a visit to an okiya of the given tier.
