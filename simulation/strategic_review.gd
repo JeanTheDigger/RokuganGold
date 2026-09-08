@@ -124,7 +124,7 @@ static func run_seasonal_review(
 		directives.append(self_select)
 
 	var orphan_directives: Array = _resolve_orphaned_vassals(
-		lord, vassals, objectives_map
+		lord, vassals, objectives_map, world_state
 	)
 	directives.append_array(orphan_directives)
 
@@ -159,6 +159,7 @@ static func _resolve_orphaned_vassals(
 	lord: L5RCharacterData,
 	vassals: Array,
 	objectives_map: Dictionary,
+	world_state: Dictionary,
 ) -> Array:
 	var results: Array = []
 
@@ -170,18 +171,39 @@ static func _resolve_orphaned_vassals(
 
 	var decision: String = _get_orphan_resolution_for_personality(lord)
 
+	# GDD s55.33.5 (LOCKED): this function is a pure planning pass -- like the
+	# sibling _evaluate_vassal_objectives below, it returns directives only.
+	# The actual objectives_map mutation happens once, in day_orchestrator.gd's
+	# writeback consumer (_process_vassal_reassignments), which already calls
+	# OrphanedObjectives.resolve_orphaned_objective(). It previously also ran
+	# here, applying MODIFY with an empty new_objective (the parameter was
+	# never supplied) before the writeback ran a second time -- destroying the
+	# vassal's objective_type/target fields.
+	var vassals_by_id: Dictionary = {}
+	for v: L5RCharacterData in vassals:
+		vassals_by_id[v.character_id] = v
+
+	var threats: Array = []
+	if decision == "MODIFY":
+		# "Modify" replaces the orphaned objective through standard
+		# ASSIGN_VASSAL_OBJECTIVE (s55.33.5) -- reuse the same
+		# threat-based selection _evaluate_vassal_objectives already uses
+		# for real vassal (re)assignment.
+		threats = _compute_current_threats(world_state)
+
 	for vassal_id: int in orphaned_ids:
-		var vassal_objectives: Dictionary = objectives_map.get(vassal_id, {})
-		var resolution: Dictionary = OrphanedObjectives.resolve_orphaned_objective(
-			vassal_objectives, decision
-		)
-		results.append({
+		var directive: Dictionary = {
 			"directive": Directive.REASSIGN_VASSAL_OBJECTIVE,
 			"lord_id": lord.character_id,
 			"vassal_id": vassal_id,
 			"decision": decision,
-			"resolution": resolution,
-		})
+		}
+		if decision == "MODIFY":
+			var vassal_char: L5RCharacterData = vassals_by_id.get(vassal_id)
+			directive["new_objective"] = _select_objective_for_vassal(
+				lord, vassal_char, threats, world_state
+			)
+		results.append(directive)
 
 	return results
 
@@ -227,14 +249,7 @@ static func _evaluate_call_court(
 	return {}
 
 
-static func _evaluate_vassal_objectives(
-	lord: L5RCharacterData,
-	vassals: Array,
-	objectives_map: Dictionary,
-	world_state: Dictionary,
-) -> Array:
-	var results: Array = []
-
+static func _compute_current_threats(world_state: Dictionary) -> Array:
 	var province_statuses: Array = world_state.get("province_statuses", [])
 	var triage_results: Array = ProvinceTriage.get_top_provinces(
 		province_statuses, 3
@@ -245,6 +260,18 @@ static func _evaluate_vassal_objectives(
 		for t: ProvinceTriage.TriageResult in triage_results:
 			if t.score >= ProvinceTriage.SCORE_VOLATILE_STABILITY:
 				threats.append({"type": "instability", "target_province_id": t.province_id})
+	return threats
+
+
+static func _evaluate_vassal_objectives(
+	lord: L5RCharacterData,
+	vassals: Array,
+	objectives_map: Dictionary,
+	world_state: Dictionary,
+) -> Array:
+	var results: Array = []
+
+	var threats: Array = _compute_current_threats(world_state)
 
 	var idle_vassals: Array = []
 	for vassal: L5RCharacterData in vassals:

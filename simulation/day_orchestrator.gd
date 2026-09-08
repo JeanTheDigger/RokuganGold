@@ -27247,7 +27247,7 @@ static func _process_vassal_reassignments(
 				objectives_map[vassal_id]["primary"] = new_obj_2
 		elif decision == "CONFIRM":
 			var objectives: Dictionary = objectives_map.get(vassal_id, {})
-			OrphanedObjectives.resolve_orphaned_objective(objectives, "CONFIRM")
+			OrphanedObjectives.resolve_orphaned_objective(objectives, "CONFIRM", {}, lord_id)
 		elif decision == "MODIFY":
 			var new_obj_3: Dictionary = directive.get("new_objective", {})
 			var objectives_2: Dictionary = objectives_map.get(vassal_id, {})

@@ -72,7 +72,7 @@ static func process_lord_death(
 				"vassal_id": vassal.character_id,
 				"objective_type": primary.get("objective_type", ""),
 				"status": STATUS_ORPHANED,
-				"report_target_id": successor_id if successor_id >= 0 else _find_next_authority(vassal),
+				"report_target_id": successor_id if successor_id >= 0 else _find_next_authority(vassal, vassals),
 			})
 
 	return results
@@ -98,11 +98,16 @@ static func resolve_orphaned_objective(
 	vassal_objectives: Dictionary,
 	decision: String,
 	new_objective: Dictionary = {},
+	new_lord_id: int = -1,
 ) -> Dictionary:
 	var primary: Dictionary = vassal_objectives.get("primary", {})
 	match decision:
 		"CONFIRM":
 			primary["status"] = STATUS_ACTIVE
+			# GDD s55.33.5 (LOCKED): "The objective's assigning_lord_id updates
+			# to the new lord."
+			if new_lord_id >= 0:
+				primary["assigning_lord_id"] = new_lord_id
 			return {"action": "CONFIRM", "objective": primary}
 		"MODIFY":
 			vassal_objectives["primary"] = new_objective
@@ -130,7 +135,41 @@ static func has_orphaned_vassals(
 	return orphaned_ids
 
 
-static func _find_next_authority(vassal: L5RCharacterData) -> int:
+static func _find_next_authority(
+	vassal: L5RCharacterData,
+	characters: Array = [],
+) -> int:
 	if vassal.operational_superior_id >= 0:
 		return vassal.operational_superior_id
+
+	# GDD s55.33.4 (LOCKED): "If the entire chain is broken... the vassal
+	# reports to the Clan Champion. If the Clan Champion is also dead, the
+	# report goes to the highest-Status surviving character in the clan.
+	# There is always someone." Family Daimyo / Clan Champion status
+	# thresholds match the established day_orchestrator.gd conventions
+	# (_get_family_daimyo_ids / _get_clan_champions).
+	var family_daimyo: L5RCharacterData = null
+	var clan_champion: L5RCharacterData = null
+	var highest_status: L5RCharacterData = null
+
+	for c: L5RCharacterData in characters:
+		if c.character_id == vassal.character_id:
+			continue
+		if CharacterStats.is_dead(c):
+			continue
+		if c.clan != vassal.clan:
+			continue
+		if highest_status == null or c.status > highest_status.status:
+			highest_status = c
+		if c.status >= 7.0 and c.lord_id == -1:
+			clan_champion = c
+		elif c.family == vassal.family and c.status >= 6.0 and c.status < 7.0:
+			family_daimyo = c
+
+	if family_daimyo != null:
+		return family_daimyo.character_id
+	if clan_champion != null:
+		return clan_champion.character_id
+	if highest_status != null:
+		return highest_status.character_id
 	return -1
