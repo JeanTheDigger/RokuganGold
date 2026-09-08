@@ -181,15 +181,17 @@ func test_probe_produces_info_gained() -> void:
 
 
 func test_public_debate_produces_glory_on_high_raises() -> void:
-	# Production: PUBLIC_DEBATE only emits glory_change on critical failure (margin <= -10)
-	# Success path does not produce glory_change
+	# GDD s4.6 (LOCKED): "Public Debate decisive win (3+ Raises): +0.3 Glory."
+	# No target character is provided (characters_by_id omitted), so the
+	# opponent's roll is always 0 and the margin/raises are always high --
+	# this reliably exercises the decisive-win bonus.
 	_dice_engine.set_seed(1)
 	var action := _make_action("PUBLIC_DEBATE", 10)
 	var result: Dictionary = ActionExecutor.execute(
 		action, _character, _ctx, _dice_engine, _action_skill_map
 	)
 	if result["success"]:
-		assert_eq(result["effects"].get("glory_change", 0.0), 0.0)
+		assert_eq(result["effects"].get("glory_change", 0.0), HonorGlorySystem.GLORY_PUBLIC_DEBATE_DECISIVE_WIN)
 
 
 func test_intimidate_falls_through_without_characters() -> void:

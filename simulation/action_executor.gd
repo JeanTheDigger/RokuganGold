@@ -1218,7 +1218,9 @@ static func _execute_public_insult(
 			"insult_type": insult_type,
 		}
 		if margin <= -10:
-			effects["glory_change"] = -0.05
+			# GDD s4.6 (LOCKED): "Publicly Insult Someone critical failure
+			# (backfired): -0.2 Glory."
+			effects["glory_change"] = HonorGlorySystem.GLORY_INSULT_BACKFIRED
 
 	return {
 		"success": success,
@@ -1263,15 +1265,16 @@ static func _execute_broadcast_social(
 	var effects: Dictionary = {}
 	if success:
 		var per_witness_disp: int = 2 + raises
-		var glory_change: float = 0.0
-		if action_id == "PUBLIC_DEBATE":
-			glory_change = 0.3 if raises >= 3 else 0.0
-		elif action_id == "PUBLIC_DECLARATION":
-			glory_change = 0.1
+		# GDD s4.6 (LOCKED) only grants Glory for a Public Declaration "made
+		# and later honored at court close" (+0.2, HonorGlorySystem.
+		# GLORY_PUBLIC_DECLARATION_HONORED) -- not for merely succeeding the
+		# initial declaration roll. No immediate glory_change here; see
+		# docs/AUDIT_FINDINGS_2026-09.md for the unwired completion/renege
+		# tracking (GLORY_PUBLIC_DECLARATION_HONORED / HONOR_PUBLIC_
+		# DECLARATION_KEPT / HONOR_RENEGE_DECLARATION) this would need.
 		effects = {
 			"witness_disposition_gain": per_witness_disp,
 			"witnesses": witness_ids,
-			"glory_change": glory_change,
 		}
 	else:
 		effects = {"failed": true}
@@ -1357,10 +1360,20 @@ static func _execute_public_debate(
 		"witnesses": witness_ids,
 	}
 
-	if not resolution.get("success", false):
+	if resolution.get("success", false):
+		# GDD s4.6 (LOCKED): "Public Debate decisive win (3+ Raises): +0.3
+		# Glory." raises is already computed above via the same margin/5
+		# formula used for the loss side's symmetric threshold below.
+		if raises >= 3:
+			effects["glory_change"] = HonorGlorySystem.GLORY_PUBLIC_DEBATE_DECISIVE_WIN
+	else:
 		effects["failed"] = true
-		if margin <= -10:
-			effects["glory_change"] = -0.1
+		# GDD s4.6 (LOCKED): "Public Debate decisive loss (opponent wins
+		# with 3+ Raises): -0.2 Glory." Opponent's raises over the character
+		# is (-margin)/5, so 3+ raises requires margin <= -15, matching the
+		# win-side threshold (raises >= 3, i.e. margin >= 15) symmetrically.
+		if margin <= -15:
+			effects["glory_change"] = HonorGlorySystem.GLORY_DEBATE_DECISIVE_LOSS
 
 	return {
 		"success": resolution.get("success", false),

@@ -930,9 +930,11 @@ func test_permanent_wound_false_without_disadvantage():
 
 
 func test_idealistic_honor_loss_increase():
+	# GDD s45 (LOCKED): "the loss is increased by 1 point" = 0.1, not 1.0
+	# (a full rank) per the Scale Convention.
 	var c := _make_character()
 	_add_disadvantage(c, Enums.Disadvantage.IDEALISTIC)
-	assert_almost_eq(AdvantageSystem.get_honor_loss_increase(c), 1.0, 0.01)
+	assert_almost_eq(AdvantageSystem.get_honor_loss_increase(c), 0.1, 0.01)
 
 
 func test_no_idealistic_zero_honor_increase():

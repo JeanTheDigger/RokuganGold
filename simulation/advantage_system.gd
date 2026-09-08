@@ -1156,8 +1156,11 @@ static func has_permanent_wound(character: L5RCharacterData) -> bool:
 # ---------------------------------------------------------------------------
 
 static func get_honor_loss_increase(character: L5RCharacterData) -> float:
+	# GDD s45 (LOCKED): "When losing Honor, the loss is increased by 1
+	# point" -- per the Scale Convention (s04.6/honor_glory_system.gd
+	# header), 1 point = 0.1, not a full rank (1.0).
 	if has_disadvantage(character, Enums.Disadvantage.IDEALISTIC):
-		return 1.0
+		return 0.1
 	return 0.0
 
 
