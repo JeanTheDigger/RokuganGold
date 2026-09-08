@@ -211,6 +211,7 @@ static func compute_visibility(
 	lower_garment_removed: bool,
 	is_bald: bool,
 	wearing_hood: bool,
+	in_martial_context: bool = false,
 ) -> bool:
 	if location in ALWAYS_VISIBLE_LOCATIONS:
 		return not wearing_formal_sleeves
@@ -222,7 +223,9 @@ static func compute_visibility(
 		return upper_garment_removed
 
 	if location in VISIBLE_LOWER_REMOVED:
-		return lower_garment_removed
+		# s57.25.2 (LOCKED): "visible only when lower garments removed OR in
+		# martial contexts (training, combat, bathing)."
+		return lower_garment_removed or in_martial_context
 
 	if location == Enums.TattooBodyLocation.HEAD:
 		return is_bald and not wearing_hood
@@ -513,6 +516,10 @@ static func get_provenance_tn(quality: Enums.TattooQualityTier) -> int:
 		Enums.TattooQualityTier.LEGENDARY:
 			return PROVENANCE_TN_LEGENDARY
 		Enums.TattooQualityTier.MASTERWORK:
+			# s57.25.9 (LOCKED) only defines this TN table for Legendary/
+			# Exceptional/Fine/Normal -- Masterwork is not mentioned. PROVISIONAL:
+			# reuses the Exceptional TN pending an owner ruling on the correct
+			# value. See docs/AUDIT_FINDINGS_2026-09.md.
 			return PROVENANCE_TN_EXCEPTIONAL
 		Enums.TattooQualityTier.EXCEPTIONAL:
 			return PROVENANCE_TN_EXCEPTIONAL
@@ -596,10 +603,7 @@ const DECORATIVE_BODY_LOCATIONS: Array[int] = [
 	Enums.TattooBodyLocation.RIGHT_LEG_THIGH,
 ]
 
-const DAIDOJI_WRIST_LOCATIONS: Array[int] = [
-	Enums.TattooBodyLocation.LEFT_WRIST_FOREARM,
-	Enums.TattooBodyLocation.RIGHT_WRIST_FOREARM,
-]
+const DAIDOJI_WRIST_LOCATIONS: Array[int] = WRIST_FOREARM_LOCATIONS
 
 # s57.25.6 canonical ability list (Enums.TattooAbility minus NONE). Togashi ability-tattoo
 # ASSIGNMENT is drawn from this set at world-gen. The per-rank COUNT is LOCKED (SCHOOL_ALLOTMENTS);
