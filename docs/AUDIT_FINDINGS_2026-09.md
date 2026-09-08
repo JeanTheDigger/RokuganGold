@@ -601,3 +601,64 @@ to resume. All three are genuine bugs, none touched:
 
 *Not fixed — flagged together as within the existing HOLD, for whenever
 that HOLD lifts or the owner asks for this specific slice ahead of it.*
+
+---
+
+## P. `simulation/insurgency_system.gd` (s11.11)
+
+**Fixed:** Pirate Fleet's Strength cap enforced at the LOCKED 8 (was
+unclamped, sharing the universal 10 with every other type; the resulting
+Strength-10 "blockade" consequence was itself an invented value, now removed
+as unreachable); PTL natural decay no longer silently cancels a Wall-breach
+or lost-character PTL gain that has no other gain source. See git log
+(`aa7a567`).
+
+### P1 — Crisis-topic generation is entirely unwired from the seasonal insurgency pass — HIGH, real feature gap
+`process_season()` computes a rich `events` array every season — auto-
+detection, detection hints, spawns, spread, and all four types' Strength-10
+consequences (Oni Manifestation, province seizure, army-scale threat,
+permanent Nezumi colony) — but its **only production caller**
+(`day_orchestrator._process_insurgencies`) reads only `new_insurgencies` and
+`next_id` from the returned dict; nothing anywhere reads `result["events"]`
+(grep-confirmed: no match for `"strength_10"`, `auto_detected`/
+`detection_hint` events, or an `insurgency_results` consumer). Per GDD
+s11.11 line 91, "Detection generates a crisis topic at the tier appropriate
+to the insurgency type... public knowledge within the topic system" — but no
+`TopicData` is ever created from an insurgency detection or Strength-10
+event. This is a substantial, GDD-mandated player-visibility gap: insurgency
+crises simply never surface as topics through this pass. *Why not attempted
+as a quick fix:* wiring this correctly means mapping each event type to the
+right topic tier/category/audience (using `get_crisis_tier()`, which is
+itself currently uncalled — see P2) and threading `next_topic_id`/
+`active_topics` into `_process_insurgencies`' call chain — a real feature
+build, not a bug patch, and the tier-mapping specifics deserve their own
+verification pass rather than a rushed addition at the end of an already
+large file's audit. *Not fixed.*
+
+### P2 — The proactive, player-initiated detection path is unreachable — MEDIUM, real feature gap
+GDD s11.11 line 82: "A lord who suspects a problem may commit a magistrate
+or shugenja... to investigate the province... an Investigation roll against
+the insurgency's current Concealment value." `attempt_detection()` (this
+deliberate detection action) and `get_crisis_tier()` both have **zero
+production callers** (grep-confirmed: only `tests/test_insurgency_system.gd`
+references either). Detection today only ever happens passively — hidden
+growth's concealment reaching 0, or `PATROL_PROVINCE` attrition
+(`day_orchestrator.gd:16432-16436`, the only other place `.detected = true`
+is set) — a lord can never proactively commit an investigator to detect an
+insurgency early. Fixing this needs an ActionID/executor wire-up (a
+magistrate or shugenja investigation action targeting a province's
+insurgency), which is new plumbing, not a correctness fix to existing
+wiring. *Not fixed.*
+
+### P3 — `resolve_suppression` duplicates the live `resolve_coordinated_suppression` path, unreachable — LOW, dead-code hygiene
+`resolve_suppression` (single-actor suppression) has zero production callers
+— `day_orchestrator._process_insurgency_suppression` always routes through
+`resolve_coordinated_suppression` even for one participant. The maho-cult/
+taint-manifestation "max −1 reduction without shugenja" rule and the
+critical/success/partial branching are implemented twice; only the
+coordinated copy is live. A future rule change updating only one copy would
+silently diverge. *Not fixed* — this is a legitimate simplification/dedup
+candidate, not a correctness bug, and (per the pattern established
+throughout this audit) deleting or consolidating a function that has its own
+existing tests risks a GUT-unverifiable test-file edit; flagged rather than
+acted on.
