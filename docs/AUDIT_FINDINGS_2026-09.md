@@ -1366,3 +1366,59 @@ mechanics would carry it). *Not fixed -- no GDD-specified probability or
 tier exists to implement either reading; the resolved `critical_failure`
 flag is available on `resolve_seduction()`'s return dict for whichever
 wiring the owner chooses.*
+
+
+---
+
+## AG. `simulation/intimidation_system.gd` / `action_executor.gd` (s12.9 / s12.9a)
+
+**Fixed:** the LOCKED witness-virtue filter for public intimidation (only
+Rei/Gi/Meiyo witnesses react, not everyone co-located); an invented
+actor-disposition-change formula on intimidation success with no GDD
+basis; `generate_betrayal_topic()`'s stale `subject_id` key (the codebase's
+actual field is `subject_character_id`); dead `defender_total` computation
+on the by-letter branch. See git log (`932d9aa`).
+
+### AG1 -- Raise-scaled TN increase is computed but discarded; a flat, context-blind constant is applied instead -- MEDIUM, unspecified raise-declaration source
+GDD s12.9/s12.9a (LOCKED): a successful intimidation raises the target's
+effective TN for their next relevant action -- +10 base for in-person
+private, +5 for by-letter, +10 base for public court -- "Each Raise adds
++5 to that TN." `resolve_private_intimidation()`/`resolve_public_intimidation()`
+correctly compute this scaled `tn_increase` and return it. But their only
+caller, `_execute_intimidation()` (action_executor.gd), hardcodes
+`raises=0` at both call sites and never copies the returned `tn_increase`
+into the `effects` dict it builds at all -- it is computed and then
+silently dropped. Separately, `_execute_court_action()`
+(action_executor.gd:4699-4700) applies a completely independent flat
+constant, `COMPLIANCE_COURT_TN_PENALTY = 10`, to any court action a
+character takes toward anyone in `ctx.compliance_intimidators` (a plain
+`Array` of intimidator ids the character is complying with, populated by
+`day_orchestrator.gd`). This flat +10 happens to match the in-person and
+public *base* values by coincidence, but it is wrong for two reasons: (1)
+it never scales with declared Raises regardless of context, and (2) it is
+applied identically to a by-letter intimidation, which the GDD specifies
+should only add +5 -- by-letter compliance currently gets double the
+correct TN penalty.
+
+*Why not fixed:* two separate, real gaps, neither a simple value swap.
+First, nothing in the codebase currently supplies a "Raises declared" input
+for an Intimidation attempt -- unlike the `margin/5`-derived post-roll
+"raises" used elsewhere in `action_executor.gd` (e.g. NEGOTIATE/PERSUADE),
+Intimidation's `raises` parameter is a pre-roll declaration that raises the
+attacker's *own* required TN in exchange for a bigger effect on success
+(the standard L5R Raise mechanic) -- GDD does not say whether/how an NPC
+ever chooses to declare Raises on an Intimidation roll, and there is no PC
+UI input observed flowing into `action.metadata` for this action either.
+Second, even with Raises fixed at 0, correctly threading the *base*
+`tn_increase` (10/5/10 by context) through to the compliance penalty would
+require migrating `ctx.compliance_intimidators` from a plain `Array` of
+ids to a structure that also carries which context (in-person/letter/
+public) produced the compliance, since the by-letter case needs a
+different penalty than the other two -- touching
+`npc_data_structures.gd`'s field type, its two `day_orchestrator.gd`
+population/consumption sites, and both `npc_decision_engine.gd` consumers,
+not just `action_executor.gd`. *Not fixed -- the raise-declaration source
+is a genuine design gap (owner input needed on whether/how NPCs declare
+Intimidation Raises), and the compliance-tracking migration is a
+multi-file structural change that should follow that decision rather than
+precede it with a guessed default.*
