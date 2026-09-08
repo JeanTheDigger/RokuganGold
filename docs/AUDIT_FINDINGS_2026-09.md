@@ -1110,3 +1110,46 @@ several `ISSUE_DUEL_CHALLENGE` sites) before adding a new SEARCH_PERSON
 trigger to it — not a bounded, isolated fix. The GDD's exact disposition
 magnitude for the with-authority case ("−3 to −5") is also a range with no
 stated scaling rule. *Not fixed.*
+
+---
+
+## AB. `simulation/tattoo_system.gd` (s57.25)
+
+**Fixed:** `compute_visibility()`'s missing martial-context alternate for
+leg-location visibility (new `in_martial_context` parameter, default-safe
+for all existing callers); `DAIDOJI_WRIST_LOCATIONS` deduplicated to derive
+from `WRIST_FOREARM_LOCATIONS` instead of a hand-maintained copy; a
+PROVISIONAL comment added (no behavior change) to `get_provenance_tn()`'s
+unmarked Masterwork assumption. See git log (`d7f0423`).
+
+### AB1 — `get_cultural_reluctance()`'s fallback silently invents a tier for unlisted (minor) clans — MEDIUM, live-wired gap
+s57.25.3 (LOCKED) classifies exactly: No Reluctance — Dragon, Crab, Mantis
+(plus Daidoji-wrist). Reluctant — Lion, Unicorn, Phoenix, Scorpion, all
+non-Daidoji Crane. Very Reluctant — Otomo/Seppun/Miya. It says nothing
+about any other clan. `world_bootstrap.gd` seeds six real, playable minor
+clans this text never mentions — Fox, Wasp, Sparrow, Tortoise, Centipede,
+Badger — and `get_cultural_reluctance()`'s final fallback silently returns
+`RELUCTANT` for all of them, identical to a clan the GDD actually places in
+that tier. This is live-wired: `check_consent()` (called from
+`npc_decision_engine.gd`'s Phase 4c filter) gates APPLY_TATTOO consent on
+this value today. *Decision needed:* what reluctance tier (if any) applies
+to Fox/Wasp/Sparrow/Tortoise/Centipede/Badger? Any answer is an invented
+value without an owner ruling — not fixed, since the function must keep
+returning *something* for these clans to avoid breaking live consent
+checks, and no tier is more justified than another from the LOCKED text
+alone.
+
+### AB2 — `get_provenance_tn()` has no LOCKED Masterwork value — LOW, unwired
+s57.25.9 (LOCKED) gives an Investigation (Search)/Perception TN by artist
+distinctiveness for exactly four quality tiers (Legendary 15, Exceptional
+20, Fine 25, Normal 30) and never mentions Masterwork. The code reuses
+Exceptional's TN (20), now marked PROVISIONAL per this file's own
+convention for unlocked assumptions (it previously carried no such
+marker, unlike every other assumption in this file, including
+`tests/test_tattoo_system.gd:437`'s `test_provenance_tn_masterwork`, which
+bakes in the same unlocked value as if it were GDD-specified).
+*Currently no live-gameplay impact* — `get_provenance_tn()` has zero
+production callers. *Decision needed:* should Masterwork sit between
+Exceptional (20) and Legendary (15) at its own TN, or intentionally share
+Exceptional's bracket? Not fixed — either answer invents a rule the GDD
+doesn't state.
