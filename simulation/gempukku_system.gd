@@ -5,9 +5,6 @@ class_name GempukkuSystem
 ## procedural name generation, gender/orientation assignment, and natural
 ## death checks.
 
-const GEMPUKKU_AGE_DAYS: int = 6480  # 18 IC years × 360 days/year
-
-
 # -- Orientation Distribution (s52 Trigger 2) ---------------------------------
 
 const ORIENTATION_STRAIGHT: int = 85
@@ -43,8 +40,15 @@ static func roll_gender(dice_engine: DiceEngine, school: String = "") -> String:
 	return "female"
 
 
-static func roll_child_gender(dice_engine: DiceEngine) -> String:
-	return roll_gender(dice_engine)
+static func roll_child_gender(dice_engine: DiceEngine, family: String = "") -> String:
+	# s52 Part 7 (LOCKED): family cultural tendency determines the gender
+	# distribution (e.g. Matsu 80% female, Daidoji Iron Warrior 70% male).
+	# GENDER_WEIGHTS is keyed by school, but each family has exactly one
+	# default school (FAMILY_DEFAULT_SCHOOL), so it doubles as the family's
+	# cultural weight -- no chicken-and-egg gender-restricted-school problem
+	# at birth (that only matters for assign_school() at gempukku).
+	var school: String = FAMILY_DEFAULT_SCHOOL.get(family, "")
+	return roll_gender(dice_engine, school)
 
 
 # -- School Assignment (s52 Trigger 2) ----------------------------------------
@@ -261,11 +265,17 @@ static func get_replenishment_needed(
 	var thresholds: Dictionary = CLAN_POPULATION_THRESHOLDS.get(clan, {})
 	if thresholds.is_empty():
 		return 0
-	var rank_1_min: int = thresholds.get("rank_1", 0)
-	var rank_1_current: int = current_counts.get("rank_1", 0)
-	if rank_1_current < rank_1_min:
-		return rank_1_min - rank_1_current
-	return 0
+	# GDD s52 Part 2 Trigger 3 (LOCKED): "When any tier falls below its
+	# minimum, Trigger 3 fires" -- not just rank_1. Every tier's shortfall
+	# contributes Rank 1 recruits (s52: "They enter at Rank 1 regardless of
+	# how high the gap is... The gap takes years to close organically").
+	var total_needed: int = 0
+	for tier: String in thresholds:
+		var tier_min: int = thresholds.get(tier, 0)
+		var tier_current: int = current_counts.get(tier, 0)
+		if tier_current < tier_min:
+			total_needed += tier_min - tier_current
+	return total_needed
 
 
 # -- Natural Death (s52 Part 4) -----------------------------------------------
@@ -357,7 +367,7 @@ static func create_child_at_birth(
 	child.clan = clan
 	child.family = family
 	child.ic_day_born = ic_day
-	child.gender = roll_child_gender(dice_engine)
+	child.gender = roll_child_gender(dice_engine, family)
 	child.orientation = roll_orientation(dice_engine)
 	child.child_name = generate_name(clan, child.gender, dice_engine)
 	return child
@@ -382,6 +392,12 @@ static func generate_replenishment_character(
 		school = assign_school(family, gender)
 	if school.is_empty():
 		return null
+	# Re-roll gender using the now-resolved school's real weighted
+	# distribution (s52 Part 7) -- the roll above only existed to resolve
+	# which school a gender-restricted family assigns. Mirrors
+	# world_population_generator.gd's _generate_rank_filling, which uses
+	# the identical two-pass pattern for the same reason.
+	gender = roll_gender(dice_engine, school)
 
 	var name: String = generate_name(clan, gender, dice_engine)
 	var character: L5RCharacterData = WorldGenerator.generate_character(
