@@ -529,3 +529,37 @@ for what counts as "struggling" — unlike its siblings' exact criteria
 reading (`koku_offered == 0.0`) is my interpretation, not a GDD-specified
 number. *Decision:* what marks a requester as "struggling" — an offered-koku
 threshold, a status threshold, or something else? *Not fixed.*
+
+---
+
+## N. `simulation/army_upkeep_system.gd` (s4.3/s11.7)
+
+**Fixed (3 bugs, all decision-free):** Ronin Koku upkeep hardcoded a 3-month
+multiplier regardless of actual season length (over/undercharging every
+Autumn/Winter); Garrison Iron upkeep (0.10) was an invented cost the LOCKED
+spec's own enumerated Garrison cost list explicitly excludes (Arms/Rice/Koku
+only), now 0.00; a malformed company dict's Iron cost and stats-penalty
+computations silently assumed two different unit types. See git log
+(`da6be8a`).
+
+### N1 — Deprivation recovery resets instantly instead of gradually — MEDIUM, real bug but currently dead code
+GDD s11.7 (LOCKED): "the deprivation cascade does not reset instantly...
+recovers one deprivation stage per tick... maluses recover at 1 deprivation
+tier per tick while stationary and Arms-supplied." `process_deprivation_tick`
+instead sets `arms_tick` straight to `1` the moment supply is restored, then
+immediately calls `apply_arms_deprivation(c, 1)`, giving a company at Tick 4
+(Attack/Defense −6/−6) **full recovery in one tick** instead of the LOCKED
+gradual step-down. This also makes the file's own `apply_recovery_tick()` —
+which correctly implements the gradual 1-tier-per-tick decrement — dead code
+when composed with `process_deprivation_tick`, since the latter already
+zeroes the malus instantly. *Why not fixed:* `process_deprivation_tick` (and
+`apply_recovery_tick`) have **zero production callers** — confirmed by grep,
+only exercised by `tests/test_army_upkeep_system.gd` — so this is currently
+inert. Fixing the recovery logic would change what
+`process_deprivation_tick` returns/mutates in ways the existing tests
+(`tests/test_army_upkeep_system.gd:440,455`) assert against, and unlike the
+Garrison-Iron test correction above (a single trivial numeric-literal fix),
+this would require reworking the function's actual recovery algorithm and
+therefore its test's assertions in a less mechanical, less obviously-safe
+way. *Not fixed — flagged for whoever wires this dead code up, or an
+explicit go-ahead to rework it now.*
