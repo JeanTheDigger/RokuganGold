@@ -323,7 +323,12 @@ static func decay_confidence(
 ) -> int:
 	var decayed_count: int = 0
 	for entry: KnowledgeEntry in character.knowledge_pool:
-		if entry.entry_type == "disposition":
+		# GDD s55.12 (LOCKED): "Disposition values never go stale." The real,
+		# canonical entry_type produced everywhere in production (this file's
+		# own _DEDUP_ENTRY_TYPES, day_orchestrator.gd's creation site) is
+		# "disposition_toward" -- "disposition" was never actually produced by
+		# any caller, so this exemption never fired in practice.
+		if entry.entry_type == "disposition_toward":
 			continue
 
 		var age: int = current_season - entry.season_acquired

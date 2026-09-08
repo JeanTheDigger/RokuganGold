@@ -237,8 +237,12 @@ func test_decay_to_stale_after_three_seasons() -> void:
 
 
 func test_decay_skips_disposition_entries() -> void:
+	# "disposition_toward" is the canonical entry_type production actually
+	# uses (day_orchestrator.gd's creation site, _DEDUP_ENTRY_TYPES); the
+	# exemption check in decay_confidence() previously read the never-
+	# produced "disposition" instead.
 	InformationSystem.add_knowledge(_char_a, InformationSystem.make_entry(
-		Enums.KnowledgeSource.INTELLIGENCE, "disposition", {}, 1
+		Enums.KnowledgeSource.INTELLIGENCE, "disposition_toward", {}, 1
 	))
 	var decayed: int = InformationSystem.decay_confidence(_char_a, 10)
 	assert_eq(decayed, 0)
