@@ -563,3 +563,41 @@ this would require reworking the function's actual recovery algorithm and
 therefore its test's assertions in a less mechanical, less obviously-safe
 way. *Not fixed — flagged for whoever wires this dead code up, or an
 explicit go-ahead to rework it now.*
+
+---
+
+## O. `simulation/companion_system.gd` (s57.46) — HOLD-scoped, none touched
+
+The pure logic in `companion_system.gd` itself faithfully matches its LOCKED
+GDD values (slots, command gating, morale formula, noise table, teamwork
+bonus, avoidance gates, death-consequence shape) — no bugs found in the file
+in isolation. All three findings are cross-file, inside
+`simulation/ascii_map_combat_orchestrator.gd` — the ASCII-map / tile-combat
+stack CLAUDE.md's own status explicitly marks **on the owner's PC-travel
+HOLD (2026-06-06)**: "built and headless-verified, but NOT live-reachable...
+validated by headless drivers, not a live session, until the HOLD lifts."
+This is a *system-scope* pause the owner set deliberately, distinct from the
+per-value ambiguity in every other deferred finding above — so unlike those,
+I did not fix even the most mechanically-obvious one of these three, to
+avoid unilaterally deciding which parts of a HOLD-status system are "safe"
+to resume. All three are genuine bugs, none touched:
+
+- **`CompanionSystem.death_consequences()` is never called from any
+  production path** (only tests) — a companion's death on the ASCII map
+  produces no world-state consequences (settlement `doshin_losses` never
+  increments; no `FILL_VACANCY`/Tier-4 death topic for a named ally),
+  contradicting s57.46.14 (LOCKED) and the s57.46a lock's own claim that this
+  is implemented.
+- **The only live call to `will_engage_samurai()` hardcodes
+  `arrest_authorized=false, headman_present=false`** — the s57.46.11
+  arrest-warrant exception (doshin fight a warranted samurai, reluctant −5)
+  can never fire regardless of real `CrimeRecord.arrest_authorized` state; no
+  plumbing exists to pass it in.
+- **GUARD_EXIT's contested grapple-on-flee check is unimplemented** — a
+  companion on GUARD_EXIT only moves to the tile and holds; nothing checks
+  whether a fleeing enemy passes through a guarded exit tile at all. The
+  orchestrator's own code groups this with its explicitly-deferred non-combat
+  resolutions (IDENTIFY/SEARCH_AREA/INVESTIGATE).
+
+*Not fixed — flagged together as within the existing HOLD, for whenever
+that HOLD lifts or the owner asks for this specific slice ahead of it.*
