@@ -26,7 +26,6 @@ enum TamperingMethod {
 
 const WITNESS_BRIBE_EVIDENCE_ON_FAIL: int = 10
 const WITNESS_INTIMIDATE_EVIDENCE_ON_FAIL: int = 10
-const FALSE_ALIBI_EVIDENCE_ON_FAIL: int = 10
 
 
 static func get_tampering_success_result(method: TamperingMethod) -> Dictionary:
