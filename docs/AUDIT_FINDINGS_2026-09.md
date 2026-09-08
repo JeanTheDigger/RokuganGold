@@ -364,3 +364,68 @@ the smaller single-file duplications fixed this round, consolidating four
 files' call sites onto one source of truth is a larger architectural change
 than this audit should make unprompted. Currently harmless (all four agree),
 but worth a deliberate consolidation pass if the value is ever retuned.
+
+---
+
+## J. `simulation/investigation_loop_system.gd`
+
+**Fixed:** `FALSE_ALIBI_EVIDENCE_ON_FAIL` (dead, zero references anywhere,
+duplicate of the real `InvestigationSystem.check_alibi()` path) removed. See
+git log (`cba0570`).
+
+### J1 — A failed KILL_WITNESS attempt uses an invented, GDD-unspecified evidence value — MEDIUM-HIGH, genuine "do not invent mechanics" gap
+GDD s11.3.13c gives an explicit "+10 evidence" failure consequence for BRIBE
+WITNESS, INTIMIDATE WITNESS, and a false alibi falling apart — all three are
+correctly named constants in this file (`WITNESS_BRIBE_EVIDENCE_ON_FAIL`,
+`WITNESS_INTIMIDATE_EVIDENCE_ON_FAIL`, both `10`). **But the GDD's own KILL
+WITNESS entry has no "Failure:" line at all** — it only describes the success
+consequence ("eliminates testimony permanently... creates a second murder
+investigation"). `get_tampering_failure_result()` in this file correspondingly
+has no `KILL_WITNESS` case (falls to the `_` default,
+`{"witness_silenced": false}`, no evidence key). Yet
+`day_orchestrator.gd:7177` still needs *some* value for a failed KILL_WITNESS
+roll and falls back to a bare, un-cited `effects.get("evidence_on_fail", 10)`
+— reusing the bribe/intimidate figure by coincidence, not GDD citation. A
+failed murder attempt witnessed is intuitively a much stronger evidentiary
+event than a failed bribe (the witness now has direct testimony of an
+attempted killing, not just suspicion), so `10` is plausibly too low, but I
+won't guess a replacement number. *Decision:* what evidence weight (or other
+consequence — e.g. immediate escalation to a hostile-action/attempted-murder
+crime record rather than a flat evidence bump) should a failed KILL_WITNESS
+attempt carry? *Not fixed — the existing magic number stands untouched
+pending a ruling, since removing it without a replacement would break the
+call site.*
+
+### J2 — `get_initial_legal_status(IMMEDIATE)` sets `UNDER_INVESTIGATION` before any magistrate is assigned — LOW-MEDIUM, ambiguous by design or gap
+GDD s11.3.13h: immediate-discovery crimes get a magistrate assigned "within
+1-3 IC days." This file declares `MAGISTRATE_ASSIGNMENT_MIN_DAYS`/`MAX_DAYS`
+(1/3) but never applies them anywhere (grep confirms zero other references).
+`get_initial_legal_status()` — which IS live (`day_orchestrator.gd:5730`) —
+sets `legal_status = UNDER_INVESTIGATION` at crime-record creation, while
+`investigating_magistrate_id` defaults to `-1` until a separate
+allocation step (`magistrate_allocation_system.gd`, `investigation_system.gd`,
+etc.) actually assigns one — which happens through the ordinary NPC decision
+cadence, not a hard-coded delay gate. *Whether this is a bug is genuinely
+ambiguous:* a case administratively reading "under investigation" before an
+investigator has physically picked it up is a normal real-world pattern (and
+may be exactly what "within 1-3 days" describes — the NATURAL assignment
+cadence, not a hard requirement that `legal_status` itself stay gated). I
+could not determine from the GDD text alone whether `legal_status` should be
+withheld until `investigating_magistrate_id >= 0`, or whether the two
+declared-but-unused constants are just descriptive documentation of an
+expected (and already roughly-true) natural delay. *Decision:* should
+`UNDER_INVESTIGATION` be gated on actual magistrate assignment, and if so,
+should the unused MIN/MAX constants become an enforced window or stay
+descriptive? *Not fixed.*
+
+### J3 — `ZONE_LOG_PURGE_SEASONS` unused multiplier — INFO/BENIGN, zero live impact today
+`is_zone_log_available()` has no production caller (grep: only its own test,
+`tests/test_investigation_loop_system.gd`), and its declared
+`ZONE_LOG_PURGE_SEASONS` constant is never multiplied into the retention-
+window check (`days_since_crime <= DAYS_PER_SEASON` instead of `<=
+DAYS_PER_SEASON * ZONE_LOG_PURGE_SEASONS`). Confirmed harmless today:
+`ZONE_LOG_PURGE_SEASONS == 1`, so applying the missing multiplier would be a
+numeric no-op even if fixed. Also notes a small duplicate of
+`InvestigationSystem.DAYS_PER_SEASON` (both `90`, unlinked). Not touched —
+zero production impact, and the only consumer is a test file I can't verify
+via GUT if a fix changed its asserted values.
