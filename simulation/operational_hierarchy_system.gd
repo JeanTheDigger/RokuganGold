@@ -185,12 +185,15 @@ static func get_refusal_disposition_hit(severity: RefusalSeverity) -> int:
 static func will_escalate_refusal(
 	subordinate: L5RCharacterData,
 ) -> bool:
-	if subordinate.shourido_virtue != Enums.ShouridoVirtue.NONE:
-		match subordinate.shourido_virtue:
-			Enums.ShouridoVirtue.SEIGYO:
-				return false
-			_:
-				return false
+	# Mirrors get_escalation_outcome's correct pattern below: a single ==
+	# SEIGYO check, not a `!= NONE` wrapper. world_generator.gd always
+	# assigns a real (non-NONE) shourido_virtue to every generated character,
+	# so the previous `!= NONE` guard trapped every real subordinate into a
+	# match whose only two branches (SEIGYO, default) both returned false --
+	# the bushido_virtue check below (GI/MAKOTO -> true, per the LOCKED "Gi
+	# always escalates -- honesty demands it") was permanently unreachable.
+	if subordinate.shourido_virtue == Enums.ShouridoVirtue.SEIGYO:
+		return false
 
 	match subordinate.bushido_virtue:
 		Enums.BushidoVirtue.GI:
