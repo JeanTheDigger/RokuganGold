@@ -852,3 +852,48 @@ future ticks it takes for that topic to reach them — `process_lord_death()`
 is currently a one-shot call, not a per-tick recheck. That's a real
 feature-build (new topic correlation + new pending-state tracking across
 ticks), not a decision-free fix. *Not fixed.*
+
+---
+
+## U. `simulation/travel_system.gd` (s55.29)
+
+**Fixed:** `change_destination()`'s missing not-traveling guard (matching
+`cancel_travel()`'s existing pattern, closing a latent state-corruption path
+not currently reachable through the AI decision pipeline but reachable by
+any future direct caller); a stale header comment referencing a
+`set_distance_provider()` function and `DISTANCES` symbol that don't exist.
+See git log (`42d1a52`).
+
+### U1 — `_distances` is a mutable `static var` global singleton — LOW-MEDIUM, architecture/refactor-scope gap
+CLAUDE.md's GDScript Conventions are explicit: "Autoloads are the only
+global singletons — do not use static variables as a substitute for proper
+singleton registration." `_distances` (line 33) plus `set_distance()` /
+`clear_distances()` is exactly that pattern — visible today in
+`tests/test_travel_system.gd` and `tests/test_day_orchestrator.gd`, both of
+which must call `clear_distances()` before/after nearly every test to avoid
+cross-test leakage. The same leakage risk applies to any two simulation runs
+sharing process memory. *Why not fixed:* migrating this to a proper Autoload
+directly conflicts with this file's own directory-level constraint
+(`simulation/` classes must NOT extend Node — `TravelSystem` is a plain
+`class_name`), so the correct destination for this state (an existing
+Autoload like `WorldState`, with `TravelSystem`'s functions taking the
+distances dict as a parameter instead) plus the full caller-migration
+footprint across the codebase is a real architectural decision, not a
+bounded fix — and the file's own header already flags this whole subsystem
+as a placeholder "when the map is built." *Not fixed.*
+
+### U2 — `TERRAIN_COST`/`RIVER_CROSSING_COST`/`SPRING_RIVER_CROSSING_COST` are dead, duplicate their `army_movement_system.gd` counterparts — LOW, hygiene / future-wiring gap
+These three constants (lines 13–24) are never read anywhere in
+`travel_system.gd` — `get_travel_time()` only consults `_distances` or a
+flat `_default_travel_time()` fallback. They exactly duplicate
+`army_movement_system.gd`'s `BASE_TERRAIN_COST` / `RIVER_CROSSING_COST` /
+`SPRING_RIVER_CROSSING_COST` (same values), which already has a fully-wired,
+season/river-aware `get_terrain_cost()`. *Why not fixed:* wiring
+`get_travel_time()` to actually use terrain costs would need real terrain/
+river-adjacency data between settlements that isn't currently passed to this
+file, and — like U1 — is gated on the same not-yet-built map system this
+file's header already defers to. Deleting them risks discarding intentional
+staging for that future work. Left as-is; whoever builds the map-system
+terrain wiring should either consolidate onto `ArmyMovementSystem.get_terrain_cost()`
+or delete the duplicate. Not a design decision, just flagged so it isn't
+mistaken for load-bearing code. *Not fixed.*
