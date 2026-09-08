@@ -999,3 +999,31 @@ plausible but unauthorized value fill-in. *Currently no live-gameplay
 impact* — `get_yoriki_range()` has zero production callers (see X1). *Not
 fixed* — any replacement floor would be an equally invented number; left as
 the reviewer found it since it's part of the same larger unwired area.
+
+---
+
+## Y. `simulation/succession_system.gd` (s22.5)
+
+**Fixed:** `get_designation_urgency()`'s Blood Enemy off-by-one (`-60` vs.
+the canonical `-61`); `should_reevaluate_heir()`'s `heir_dead` trigger now
+wired at its call site; `compute_personality_weights()`'s truncation-order
+bug (both virtue-axis multipliers now apply to the original base weight
+before a single truncation, matching "Both apply simultaneously — they
+stack"). See git log (`1d4113d`).
+
+### Y1 — `contest_succession()` / `contesting_ids` is never invoked in production — MEDIUM, feature-build gap
+`is_clean_succession()` correctly checks `succession.contesting_ids.size() >
+0` to reject a clean succession per s22.5's Succession Dispute condition "a
+named character with a claim (Priorities 1–5) formally contests the
+succession (contesting costs 1 AP and generates a Succession Dispute topic
+immediately)." But `contest_succession()` — the only function that appends
+to `contesting_ids` — has zero production callers; only
+`tests/test_succession_system.gd` calls it. In a live game,
+`contesting_ids` is always empty, so a succession that a rival candidate
+would want to formally contest instead always resolves as if uncontested.
+*Why not fixed:* this needs real NPC decision logic (which candidates, with
+what priority/personality, decide to spend 1 AP contesting a given
+succession, and when) plus a new ActionID for it — not a bounded wiring
+fix, and exactly the kind of decision CLAUDE.md's "Check existing channels
+before wiring any ActionID" / "do not invent mechanics" rules require
+owner sign-off on. *Not fixed.*
