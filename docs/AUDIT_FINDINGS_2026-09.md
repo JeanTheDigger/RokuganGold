@@ -501,3 +501,31 @@ current one), or (b) threading actual okiya selection through the wind-down
 call chain so a character can choose a specific tier — a real feature, not a
 bug patch. *Decision:* which of the two directions (or another) is intended?
 *Not fixed.*
+
+---
+
+## M. `simulation/sailing_system.gd` (s57.42/s57.42a)
+
+Tightly matches its LOCKED numeric spec elsewhere (constants, formulas,
+null-safety, cross-file call signatures all checked clean) — one finding.
+
+### M1 — Jin/Compassion's passage lean is unconditional, unlike its two siblings — LOW-MEDIUM, invented threshold needed
+GDD s57.42/s57.42a (LOCKED) specifies three captain-personality leans on
+`evaluate_passage_request`: "Jin/Compassion +5 lean on accepting **struggling
+travelers**; Seigyo/Control +3 lean when **proper koku is offered**;
+Rei/Courtesy +2 lean on accepting **high-Status or polite** requests." The
+code (`_personality_lean`) correctly gates Seigyo on `koku_offered > 0.0` and
+Rei on `requester_status >= HIGH_STATUS_THRESHOLD or polite` — both reuse
+already-available parameters — but **Jin's `LEAN_JIN` bonus applies
+unconditionally**, with no check on the requester's means or need at all. A
+high-Status requester offering full compensation to a Jin-virtue captain
+still gets the "struggling traveler" bonus, which can flip a marginal
+decision toward acceptance the LOCKED design didn't intend to be lenient
+about. *Why not fixed:* the two existing parameters (`koku_offered`,
+`requester_status`) could plausibly serve as a "struggling" proxy (e.g. low
+or zero `koku_offered`), but the LOCKED text gives **no numeric threshold**
+for what counts as "struggling" — unlike its siblings' exact criteria
+("`koku_offered > 0.0`," "`>= HIGH_STATUS_THRESHOLD`"). Even the most minimal
+reading (`koku_offered == 0.0`) is my interpretation, not a GDD-specified
+number. *Decision:* what marks a requester as "struggling" — an offered-koku
+threshold, a status threshold, or something else? *Not fixed.*
