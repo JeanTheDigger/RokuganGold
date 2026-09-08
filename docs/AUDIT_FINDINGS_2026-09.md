@@ -930,3 +930,31 @@ peace court's accumulated willingness_modifier weigh against the base
 qualitative factors (a magnitude-sensitive comparison, a modifier-based
 factor added to the increases/decreases count, something else)? Not
 fixed.
+
+---
+
+## W. `simulation/crime_suppression_system.gd` (s11.3.19)
+
+**Fixed:** `get_suppression_priority()`'s and `get_mission_type()`'s wildcard
+match arms leaking a severity bonus / mission type onto insurgency types
+outside this bridge's LOCKED scope (added a `NONE` sentinel to
+`SuppressionMissionType`); `day_orchestrator.gd`'s `_classify_settlement_size()`
+never checking `settlement_type`, so Otosan Uchi fell into `MAJOR_CITY` and
+got the wrong (13 vs. the LOCKED 18) doshin baseline. See git log (`3937284`).
+
+### W1 — The entire daimyo-override doshin recruitment pathway is unwired — LOW-MEDIUM, feature-build gap
+`get_max_recruitable(available_doshin, daimyo_override: bool = false)`'s
+`daimyo_override` parameter is never passed `true` by any production
+caller (`day_orchestrator.gd`'s one call site always uses the default
+`false`) — only a test exercises it. s11.3.19e.viii (LOCKED) describes a
+real mechanic here: "if the daimyo explicitly authorizes, the full
+available force can be committed... Stability drops -2 per season the
+settlement has no doshin on regular duty" — and `STABILITY_PENALTY_NO_DOSHIN`
+(the constant for that penalty) is declared but never read anywhere,
+because nothing ever tracks "this settlement has had zero doshin on regular
+duty for N seasons" in the first place. *Why not fixed:* there is no
+decision point anywhere in the codebase for a daimyo to actually authorize
+an override — no ActionID, no Strategic Review directive, no trigger of any
+kind — so wiring this needs a real feature build (the authorization
+decision point, plus new persistent per-settlement state to track duty-free
+seasons for the stability penalty), not a bounded fix. *Not fixed.*
