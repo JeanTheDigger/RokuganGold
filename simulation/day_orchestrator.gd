@@ -30331,6 +30331,8 @@ static func _process_doshin_seasonal_recovery(world_states: Dictionary) -> void:
 
 
 static func _classify_settlement_size(s: SettlementData) -> CrimeSuppressionSystem.SettlementSize:
+	if s.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+		return CrimeSuppressionSystem.SettlementSize.OTOSAN_UCHI
 	var pu: int = s.population_pu
 	if pu >= 20:
 		return CrimeSuppressionSystem.SettlementSize.MAJOR_CITY

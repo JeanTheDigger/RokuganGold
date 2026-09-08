@@ -39,7 +39,12 @@ static func get_suppression_priority(
 		Enums.InsurgencyType.URBAN_CRIMINAL_NETWORK:
 			priority += SEVERITY_BONUS_SMUGGLING_GANG
 		_:
-			priority += SEVERITY_BONUS_SMUGGLING_GANG
+			# GDD s11.3.19/s11.3.19c (LOCKED): this bridge, and its severity
+			# bonuses, cover only Ronin Bandit Uprisings, Urban Criminal
+			# Networks/smuggling, and Pirate Fleets. MAHO_CULT, PEASANT_REVOLT,
+			# TAINT_MANIFESTATION, and NEZUMI_INFESTATION have no severity
+			# bonus defined here -- no bonus applies.
+			pass
 
 	if province_stability < 25:
 		priority += STABILITY_URGENCY_BELOW_25
@@ -227,6 +232,7 @@ static func get_suppression_success_consequences(
 # -- ASCII Map Mission Types (s11.3.19b) -----
 
 enum SuppressionMissionType {
+	NONE,
 	RAID_BANDIT_CAMP,
 	RAID_SMUGGLING_OPERATION,
 	RAID_GANG_HIDEOUT,
@@ -244,4 +250,10 @@ static func get_mission_type(insurgency_type: Enums.InsurgencyType) -> Suppressi
 		Enums.InsurgencyType.PIRATE_FLEET:
 			return SuppressionMissionType.INTERCEPT_PIRATE_VESSEL
 		_:
-			return SuppressionMissionType.RAID_SMUGGLING_OPERATION
+			# GDD s11.3.19/s11.3.19b (LOCKED): this bridge's ASCII map mission
+			# types cover only Ronin Bandit Uprisings, Urban Criminal
+			# Networks, and Pirate Fleets. No mission type is defined for
+			# MAHO_CULT, PEASANT_REVOLT, TAINT_MANIFESTATION, or
+			# NEZUMI_INFESTATION -- returning RAID_SMUGGLING_OPERATION for
+			# them (an unrelated, unauthorized mission) was wrong.
+			return SuppressionMissionType.NONE
