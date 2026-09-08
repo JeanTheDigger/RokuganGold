@@ -1191,3 +1191,32 @@ or generated for the Utaku family — a different real school, exclusion
 from the family/clan pairing entirely (no male Utaku ever generated), or
 something else? Not fixed — "Shinjo Bushi" nor any other guess is
 GDD-traceable.
+
+---
+
+## AD. `simulation/honor_glory_system.gd` / `action_executor.gd` (s4.6, s45)
+
+**Fixed:** IDEALISTIC's honor-loss increase was 10x too harsh (1.0 instead
+of 0.1); PUBLIC_INSULT backfire and PUBLIC_DEBATE decisive-loss Glory
+values were hardcoded wrong (and the loss-side trigger threshold didn't
+match the win side's "3+ Raises" bar); PUBLIC_DEBATE's entire decisive-win
+Glory bonus was dead code, routed to a function that action_id never
+reaches, and is now wired into the function that actually runs;
+PUBLIC_DECLARATION's invented +0.1 immediate Glory reward on a successful
+roll was removed. See git log (`ecea547`).
+
+### AD1 — Public Declaration completion/renege tracking is entirely unwired — MEDIUM, feature-build gap
+GDD s4.6 (LOCKED) ties Public Declaration's real Honor/Glory consequences
+to what happens *after* the declaration: "Keeping a Public Declaration
+through to completion: +0.2 Honor" (`HONOR_PUBLIC_DECLARATION_KEPT`),
+"Public Declaration made and later honored at court close: +0.2 Glory"
+(`GLORY_PUBLIC_DECLARATION_HONORED`), and "Reneging on a Public
+Declaration: -1.0 Honor" (`HONOR_RENEGE_DECLARATION`). All three constants
+are correctly declared in `honor_glory_system.gd` but — confirmed via
+grep — referenced nowhere else in the codebase. Nothing tracks that a
+PUBLIC_DECLARATION was made, watches for the court session to close, or
+checks whether the declared commitment was actually honored or reneged.
+*Why not fixed:* this needs new state (a pending-declaration record
+persisting across the court session, similar in shape to the Commitment
+Registry, Section 55.31) plus a resolution check at court close — a real
+feature build, not a bounded wiring fix. *Not fixed.*
