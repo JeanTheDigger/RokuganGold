@@ -429,3 +429,40 @@ numeric no-op even if fixed. Also notes a small duplicate of
 `InvestigationSystem.DAYS_PER_SEASON` (both `90`, unlinked). Not touched —
 zero production impact, and the only consumer is a test file I can't verify
 via GUT if a fix changed its asserted values.
+
+---
+
+## K. `simulation/winter_court_system.gd` (s55.10)
+
+**Fixed (4 bugs, all with unambiguous LOCKED-spec citations, no invented
+values):** `compute_glory_rewards` awarded the host-family-daimyo Glory to the
+Emperor instead of the real host; `run_invitation_pipeline` illegally skipped
+Personal Imperial Invitations during every regent-hosted court, contradicting
+the LOCKED "function normally" text; `order_agenda_for_host`'s clan→champion
+map used last-write-wins instead of highest-status (mirrored the file's own
+already-correct `_find_clan_champion` helper); `_select_host_with_weights` had
+no tie-break at all despite the LOCKED "Family Prestige then Clan Recency"
+rule, using scores already computed in scope. See git log (`691c54d`).
+
+### K1 — School Type scoring always contributes 0.0 in two functions — MEDIUM, genuine invented-value gap
+`_score_school_type_for_invitation` (Personal Invitations, Factor 4) and
+`_score_delegate_candidate`'s `school_score` term (Champion Delegation,
+"School Type weight 5") both always return/contribute `0.0` regardless of
+`school_type` or archetype — every `match` arm is `return 0.0`. GDD s55.10
+is explicit that this should matter: *"Courtier schools score highest,
+shugenja moderate, bushi lowest. The Warlike archetype inverts this ranking —
+bushi score highest, courtiers lowest."* (Factor 4) and *"School Type (weight
+5): courtier schools score highest, shugenja moderate, bushi lowest"*
+(delegate scoring). **But the LOCKED text gives only the ordinal ranking, never
+the exact 0–10 magnitude per school** (unlike Prestige, explicitly "mapped to
+0–10," or Crisis Relevance's explicit momentum formula) — and no equivalent
+courtier>shugenja>bushi numeric scoring pattern exists anywhere else in the
+codebase to copy (grep confirmed). Every other factor in both scoring systems
+uses a self-evident 0–10 scale, so `courtier=10, shugenja=5, bushi=0` (and the
+Warlike-inverted counterpart, plus wherever MONK falls — not mentioned in the
+3-tier ranking at all) is the *obvious* reading, but it is still a numeric
+choice the GDD does not make for me, so I did not invent it.
+*Decision:* confirm (or set) the exact per-school scores for both functions —
+courtier/shugenja/bushi/monk, standard and Warlike-inverted — and I'll wire
+both in immediately; this is otherwise a one-line-per-branch change. *Not
+fixed.*
