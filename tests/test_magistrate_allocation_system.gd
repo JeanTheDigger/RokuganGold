@@ -231,10 +231,6 @@ func test_vacancy_effects_higher_positions():
 
 # -- Emerald Magistrate (s11.3.17c) ----
 
-func test_emerald_magistrate_total():
-	assert_eq(MagistrateAllocationSystem.EMERALD_MAGISTRATE_TOTAL, 6)
-
-
 func test_emerald_jurisdiction_cross_clan():
 	assert_true(MagistrateAllocationSystem.is_emerald_jurisdiction(
 		MagistrateAllocationSystem.EmeraldJurisdictionTrigger.CROSS_CLAN_CRIME

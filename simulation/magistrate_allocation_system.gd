@@ -199,8 +199,8 @@ static func get_vacancy_effects(position: ConvictedPosition) -> Dictionary:
 
 
 # -- Emerald Magistrate (s11.3.17c) -----
-
-const EMERALD_MAGISTRATE_TOTAL: int = 6
+# GDD s11.3.17c: "a handful serve the entire Empire" -- no exact count is
+# LOCKED. No EMERALD_MAGISTRATE_TOTAL constant here; do not invent one.
 
 enum EmeraldJurisdictionTrigger {
 	CROSS_CLAN_CRIME,
