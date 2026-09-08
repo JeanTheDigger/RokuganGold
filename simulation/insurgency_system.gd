@@ -12,6 +12,14 @@ const STABILITY_STABLE_MIN: float = 76.0
 const STABILITY_RESTLESS_MIN: float = 51.0
 const STABILITY_VOLATILE_MIN: float = 26.0
 
+## GDD s11.11 LOCKS Pirate (Wako) Fleet's growth ceiling at "Maximum Strength
+## 8" ("A Strength 8 fleet is 16-24 ships -- a serious regional naval
+## threat"), unlike the universal 10 used by every other insurgency type.
+static func _max_strength(insurgency_type: Enums.InsurgencyType) -> int:
+	if insurgency_type == Enums.InsurgencyType.PIRATE_FLEET:
+		return 8
+	return 10
+
 const SPAWN_CHANCE_RESTLESS: float = 0.10
 const SPAWN_CHANCE_VOLATILE: float = 0.25
 const SPAWN_CHANCE_BROKEN: float = 0.50
@@ -265,7 +273,7 @@ static func process_hidden_growth(ins: InsurgencyData) -> Dictionary:
 	if ins.detected:
 		return result
 
-	ins.strength = mini(ins.strength + 1, 10)
+	ins.strength = mini(ins.strength + 1, _max_strength(ins.insurgency_type))
 	ins.concealment = maxi(ins.concealment - 1, 0)
 	ins.seasons_active += 1
 
@@ -312,7 +320,7 @@ static func attempt_detection(
 static func process_active_growth(ins: InsurgencyData) -> void:
 	if not ins.detected:
 		return
-	ins.strength = mini(ins.strength + 1, 10)
+	ins.strength = mini(ins.strength + 1, _max_strength(ins.insurgency_type))
 	ins.seasons_active += 1
 
 
@@ -434,7 +442,7 @@ static func resolve_suppression(
 		result["strength_change"] = -reduction
 		result["outcome"] = "partial"
 	elif margin <= -CRITICAL_FAIL_MARGIN:
-		ins.strength = mini(ins.strength + CRITICAL_FAIL_STRENGTH_INCREASE, 10)
+		ins.strength = mini(ins.strength + CRITICAL_FAIL_STRENGTH_INCREASE, _max_strength(ins.insurgency_type))
 		result["strength_change"] = CRITICAL_FAIL_STRENGTH_INCREASE
 		result["outcome"] = "critical_failure"
 	else:
@@ -483,7 +491,7 @@ static func resolve_coordinated_suppression(
 			outcomes.append("failure")
 
 	var net_change: int = -total_reduction
-	ins.strength = clampi(ins.strength + net_change, 0, 10)
+	ins.strength = clampi(ins.strength + net_change, 0, _max_strength(ins.insurgency_type))
 
 	return {
 		"strength_change": net_change,
@@ -515,16 +523,25 @@ static func compute_ptl_change(
 	suppressed_taint_this_season: bool,
 ) -> float:
 	var delta: float = 0.0
+	# Tracks whether ANY PTL gain event fired this season, independent of
+	# losses -- the LOCKED decay rule ("Natural decay: -0.5 PTL per season if
+	# no PTL gain events fire") gates on gain events occurring at all, not on
+	# whether the net delta happens to be non-negative after losses.
+	var gain_event_fired: bool = false
 
-	delta += maho_events_this_season
+	if maho_events_this_season > 0:
+		delta += maho_events_this_season
+		gain_event_fired = true
 
 	for ins: InsurgencyData in active_insurgencies:
 		if ins.province_id != province.province_id:
 			continue
 		if ins.insurgency_type == Enums.InsurgencyType.MAHO_CULT:
 			delta += 1.0
+			gain_event_fired = true
 		if ins.insurgency_type == Enums.InsurgencyType.TAINT_MANIFESTATION:
 			delta += 1.0
+			gain_event_fired = true
 
 	# Maho cult + taint manifestation doubles PTL gain
 	var has_maho: bool = false
@@ -541,8 +558,11 @@ static func compute_ptl_change(
 
 	if is_shadowlands_adjacent and wall_degraded:
 		delta += 0.5
+		gain_event_fired = true
 
-	delta += lost_characters_present * 0.5
+	if lost_characters_present > 0:
+		delta += lost_characters_present * 0.5
+		gain_event_fired = true
 
 	# Adjacent bleed
 	for adj_id: int in adjacent_ptls:
@@ -552,19 +572,24 @@ static func compute_ptl_change(
 			if has_jade_stockpile:
 				bleed *= 0.5
 			delta += bleed
+			gain_event_fired = true
 		elif adj_ptl >= 6.0:
 			var bleed: float = 0.25
 			if has_jade_stockpile:
 				bleed *= 0.5
 			delta += bleed
+			gain_event_fired = true
 
 	# Losses
 	delta -= shugenja_purifications
 	if suppressed_taint_this_season:
 		delta -= 1.0
 
-	# Natural decay if no gains
-	if delta >= 0.0 and maho_events_this_season == 0 and not has_maho and not has_taint:
+	# Natural decay only when NO PTL gain event fired this season at all --
+	# previously this only checked maho/taint sources, so a Wall breach
+	# (shadowlands-adjacency) or a lost character alone had its +PTL silently
+	# cancelled by decay every season it was the sole gain source.
+	if not gain_event_fired:
 		delta -= 0.5
 
 	return delta
@@ -645,8 +670,12 @@ static func get_strength_10_consequence(ins: InsurgencyData) -> String:
 			return "permanent_colony"
 		Enums.InsurgencyType.URBAN_CRIMINAL_NETWORK:
 			return "economy_captured"
-		Enums.InsurgencyType.PIRATE_FLEET:
-			return "blockade"
+		# PIRATE_FLEET has no Strength-10 case: its growth is capped at 8
+		# (_max_strength), so it can never reach this function's `strength <
+		# 10` gate. GDD s11.11's only Pirate Fleet milestone is "a Strength 8
+		# fleet ... may escalate to Tier 2" crisis tier, not a hard Strength-10
+		# consequence like the other six types -- the removed "blockade"
+		# string here was an invented value with no LOCKED source.
 	return ""
 
 
