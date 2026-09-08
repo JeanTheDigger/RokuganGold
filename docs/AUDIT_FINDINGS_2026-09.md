@@ -712,3 +712,43 @@ missing just one function call):
 
 *Not fixed — all three are real, GDD-mandated gaps, but each is a feature
 build (new detection/state), not a bounded correctness fix.*
+
+---
+
+## R. `simulation/operational_hierarchy_system.gd` (s11.3.18)
+
+**Fixed:** `will_escalate_refusal()`'s `shourido_virtue != NONE` gating bug
+(a copy/paste inversion of the correct sibling pattern) that made the LOCKED
+"Gi always escalates" rule permanently unreachable for any real character.
+See git log (`b04fc61`).
+
+### R1 — The entire operational-hierarchy pipeline is unwired from production — HIGH, large feature-build gap
+`assign_operational_superior()` (and with it `get_starting_baseline()`'s
+LOCKED s11.3.18i +5/+5/+10 first-meeting disposition floor,
+`execute_feudal_override()`, `can_higher_superior_override()`,
+`can_feudal_lord_override()`, `get_objective_priority()`,
+`is_on_operational_assignment()`) is called only from
+`tests/test_operational_hierarchy_system.gd` — `day_orchestrator.gd` calls
+only `clear_subordinates_on_death()` from this file. Grep confirms
+`operational_superior_id` is instead set by **direct field assignment at
+~10 scattered sites** (`day_orchestrator.gd` ~19564/26645/29104,
+`world_population_generator.gd`, `ronin_system.gd`), every one of them
+bypassing `assign_operational_superior()` and therefore never applying the
+starting-baseline floor, and never gaining access to the
+objective-priority/escalation pipeline this file implements and tests. *Why
+not fixed:* this isn't a single missing call site (like `death_consequences`
+in companion_system.gd) — it's ~10 independent assignment sites, each
+needing individual judgement on whether it represents a genuine "first
+meeting" the LOCKED baseline should apply to, or an internal bookkeeping
+re-assignment that shouldn't re-trigger it. That's a real audit-and-wire
+project in its own right, not a bounded fix. *Not fixed.*
+
+### R2 — Vindication disposition gain is pinned to the range floor, never scales — LOW-MEDIUM, invented-formula gap
+`get_escalation_consequences()`'s `DAIMYO_BELIEVES_SUBORDINATE` outcome
+always returns `VINDICATION_DISPOSITION_GAIN_MIN` (5);
+`VINDICATION_DISPOSITION_GAIN_MAX` (10) is declared but never referenced
+anywhere. GDD 11.3.18h: "the daimyo's disposition toward the subordinate
+increases (+5 to +10 for loyalty in reporting wrongdoing)" — a range with no
+stated scaling factor (severity, honor rank, or otherwise) anywhere in the
+passage. *Decision:* what should determine where in the 5–10 range a given
+vindication lands? *Not fixed.*
