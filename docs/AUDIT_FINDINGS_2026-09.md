@@ -1324,3 +1324,45 @@ choose to dispute, forgive, or expose a blackmailer?) or depends on an
 explicitly-unbuilt system. *Not fixed — no GDD-specified trigger condition
 exists for any of the four; inventing one would be exactly the kind of
 NPC-decision design CLAUDE.md reserves for owner authorization.*
+
+
+---
+
+## AF. `simulation/seduction_system.gd` / `day_orchestrator.gd` (s12.8)
+
+**Fixed:** the orientation-compatibility precondition ("Targeting an
+incompatible orientation auto-fails with no roll") was entirely
+unimplemented; failure and critical-failure disposition consequences
+(-3/-10) were specified but never applied; Rank 5 Temptation mastery
+(+5) and Rank 5 Etiquette mastery (+1k0) never fired because the contested
+roll didn't route through `SkillMasterySystem.contested_bonus()`; the
+Lechery disadvantage's +1k0 attacker bonus was dead code
+(`AdvantageSystem.get_attacker_bonus_from_target` had zero callers); the
+reported `honor_cost` metadata was a hardcoded stale constant instead of
+the actual applied (Honor-bracket- and school-exemption-dependent) cost;
+`check_maintenance()` compounded a freshly recomputed missed-window count
+on top of the already-cumulative stored value every IC day, breaking
+entanglements roughly 3x sooner than the LOCKED 48-day (three 16-day
+window) threshold; and the LOCKED "-2 disposition per missed window"
+ongoing neglect decay (distinct from the -10 break penalty) was entirely
+unwired. See git log (`15b3bea`).
+
+### AF1 -- Critical-failure "the target may spread a topic about the attempt" is not wired -- LOW, unspecified trigger/tier
+GDD s12.8 line 271 (LOCKED): "Critical failure (miss TN by 10+): the target
+recognizes the seduction as calculated manipulation, disposition -10, the
+target may spread a topic about the attempt." The disposition penalty is
+now applied (this pass); the topic half is not. Unlike every other
+topic-generation rule this audit has wired (favor-breach's Betrayal topic,
+Section AE; the conviction/reneged-commitment topics), this clause uses
+"may" rather than a firm "generates," and specifies no tier, no topic_type,
+and no trigger probability -- the ambiguity is the "may": does it mean a
+flat chance per critical failure (and if so, what chance -- GDD gives no
+number, unlike the organic-romance check's explicit "5% per season" a few
+paragraphs later in the same section), or does it mean the target merely
+*gains the option* to spread it through ordinary conversation/gossip
+channels (in which case no new topic-generation code is needed at all --
+the target already knows the attempt happened, and existing gossip
+mechanics would carry it). *Not fixed -- no GDD-specified probability or
+tier exists to implement either reading; the resolved `critical_failure`
+flag is available on `resolve_seduction()`'s return dict for whichever
+wiring the owner chooses.*
