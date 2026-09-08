@@ -752,3 +752,64 @@ increases (+5 to +10 for loyalty in reporting wrongdoing)" — a range with no
 stated scaling factor (severity, honor rank, or otherwise) anywhere in the
 passage. *Decision:* what should determine where in the 5–10 range a given
 vindication lands? *Not fixed.*
+
+---
+
+## S. `simulation/commitment_registry.gd` (s55.31)
+
+**Fixed:** `register_proxy()`'s blanket SUPPORT_PLEDGE rejection (plus the
+matching early-return in `day_orchestrator.gd`'s `_attempt_proxy_dispatch()`)
+that made the LOCKED "proxy sent for SUPPORT_PLEDGE → BROKEN_WITH_NOTICE"
+downgrade unreachable; `apply_forgiveness()`'s `int()` truncation and
+recovery-vs-reported mismatch (now `roundi()`, matching the codebase's
+existing float-rate-to-int-delta convention, with the reported total equal
+to what was actually applied); `get_at_risk_penalty()`'s
+`creditor_in_loyalty_chain` Callable, never supplied at its sole call site
+(`npc_decision_engine.gd` `score_all()`), now wired from the existing
+`chars_by_id` parameter and `character.lord_id` per s55.31.7's literal
+"their lord or a character in their lord's direct service" definition. See
+git log (`7fc6206`). Two other code-review findings on this file were
+investigated and rejected as false positives (see that commit message):
+the Bushido-modifier Seigyo/Kyoryoku skip in `get_at_risk_penalty()` exactly
+reproduces both of s55.31.7's own worked examples; `link_crisis()`'s
+blanket per-debtor linking matches s55.31.11.4's Yasuki Taka worked example
+exactly (all four of his unrelated commitments, including a
+travel-independent RESOURCE_PROMISE, are linked to one crisis as the
+correct outcome).
+
+### S1 — `get_forgiveness_rate()`'s Bushido-vs-Shourido axis priority is unspecified and currently backwards — MEDIUM, design-decision gap
+s55.31.11.3 (LOCKED) states the retroactive-forgiveness rate "varies by the
+receiving NPC's personality primary" and lists nine virtues as flat
+alternatives — six from the Bushido axis (Jin 100%, Gi 75%, Chugi 75%/25%,
+Rei 50%, Meiyo 50%, Yu 50%) and three from the Shourido axis (Dosatsu 50%,
+Seigyo 25%, Kyoryoku 25%) — as if each character has exactly one
+"personality primary" drawn from the combined set. But every real character
+has **both** a non-`NONE` `bushido_virtue` and a non-`NONE` `shourido_virtue`
+(confirmed via `world_generator.gd`'s mandatory assignment and this file's
+own `operational_hierarchy_system.gd` precedent from finding R). The current
+code checks `shourido_virtue != NONE` first and returns from
+`FORGIVENESS_RATES_SHOURIDO` unconditionally whenever it's set — which for a
+real character is always — making the six-entry
+`FORGIVENESS_RATES_BUSHIDO` table (Jin/Gi/Chugi/Rei/Meiyo/Yu) permanently
+dead code. This directly contradicts s55.31.11.4's own worked example: Isawa
+Kaede is described as "Jin primary... Forgiveness rate: 100% (Jin full
+compassion)" — but no `ShouridoVirtue` value maps to 1.0 in
+`FORGIVENESS_RATES_SHOURIDO`, so the current Shourido-first order can never
+actually produce 100% for her, regardless of what her (unstated) Shourido
+virtue happens to be.
+
+Simply reversing the check order (Bushido-first) does not fix this — it
+just makes the *Shourido* table (Dosatsu/Seigyo/Kyoryoku) permanently dead
+instead, since `bushido_virtue` is equally always non-`NONE`. Either order
+leaves one of the two LOCKED-specified tables unreachable for any real
+character. There is no existing field or documented rule establishing which
+of a character's two virtue axes is their "personality primary" for this
+specific purpose — that concept exists only in a different, unimplemented
+GDD section's pseudocode (`s55.28`'s `personality_primary`/
+`personality_secondary`, part of the still-PARTIALLY-DESIGNED political
+decomposition tree), not as a field on `L5RCharacterData`.
+
+*Decision needed:* which axis should `get_forgiveness_rate()` check first
+(or does forgiveness rate need its own tie-break rule, e.g. Bushido always
+wins, or a new "dominant virtue axis" concept)? Not fixed — inventing a
+priority order here would be inventing an unspecified mechanic.
