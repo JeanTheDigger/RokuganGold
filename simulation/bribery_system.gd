@@ -31,24 +31,18 @@ const ALWAYS_BLOCKED_BUSHIDO: Array[int] = [
 	Enums.BushidoVirtue.MEIYO,
 ]
 
-const CONDITIONAL_BUSHIDO: Array[int] = [
-	Enums.BushidoVirtue.JIN,
-	Enums.BushidoVirtue.YU,
-	Enums.BushidoVirtue.REI,
-	Enums.BushidoVirtue.CHUGI,
-]
-
 # Honor multiplier for magistrate resistance (s11.3.11f Step 6)
 const HONOR_RESISTANCE_MULTIPLIER: int = 5
 
 # Evidence weight on failed bribe (s11.3.11f Step 7a)
 const FAILED_BRIBE_EVIDENCE: int = 15
 
-# Hidden honor loss on acceptance (s11.3.11f Step 7b)
-const ACCEPTANCE_HONOR_LOSS: float = -0.5
-
-# Bribery evaluation trigger threshold (s11.3.11g)
-const BRIBERY_EVAL_EVIDENCE_THRESHOLD: int = 25
+# Bribery evaluation trigger threshold (s11.3.11g) -- deliberately NOT a second
+# literal 25: InvestigationSystem.BRIBERY_EVAL_TRIGGER is the trigger actually
+# consumed by the live path (InvestigationSystem.check_thresholds); this file's
+# own should_evaluate_bribery() has no production caller (only its test), so it
+# must defer to that constant rather than carry a copy that can silently drift.
+const BRIBERY_EVAL_EVIDENCE_THRESHOLD: int = InvestigationSystem.BRIBERY_EVAL_TRIGGER
 
 
 static func can_attempt_bribe(
