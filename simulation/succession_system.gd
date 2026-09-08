@@ -267,23 +267,34 @@ static func compute_personality_weights(
 	bushido: Enums.BushidoVirtue,
 	shourido: Enums.ShouridoVirtue,
 ) -> Dictionary:
-	var weights: Dictionary = BASE_WEIGHTS.duplicate()
+	# GDD s22.5 (LOCKED): "Both apply simultaneously -- they stack." Both
+	# multipliers must apply to the original base weight before truncating,
+	# not sequentially (weights[key] = int(...) then multiplying that
+	# already-truncated int again), which compounded rounding error whenever
+	# a lord's Bushido and Shourido virtues both modified the same factor.
+	var float_weights: Dictionary = {}
+	for key: String in BASE_WEIGHTS:
+		float_weights[key] = float(BASE_WEIGHTS[key])
 
 	if bushido != Enums.BushidoVirtue.NONE and BUSHIDO_WEIGHT_MODS.has(bushido):
 		var mods: Dictionary = BUSHIDO_WEIGHT_MODS[bushido]
 		for key: String in mods:
-			if weights.has(key):
-				weights[key] = int(float(weights[key]) * mods[key])
+			if float_weights.has(key):
+				float_weights[key] *= mods[key]
 
 	if shourido != Enums.ShouridoVirtue.NONE and SHOURIDO_WEIGHT_MODS.has(shourido):
 		var mods: Dictionary = SHOURIDO_WEIGHT_MODS[shourido]
 		for key: String in mods:
-			if weights.has(key):
-				weights[key] = int(float(weights[key]) * mods[key])
+			if float_weights.has(key):
+				float_weights[key] *= mods[key]
 		if shourido == Enums.ShouridoVirtue.ISHI:
-			for key: String in weights:
+			for key: String in float_weights:
 				if not mods.has(key):
-					weights[key] = int(float(weights[key]) * ISHI_OTHER_FACTOR_MOD)
+					float_weights[key] *= ISHI_OTHER_FACTOR_MOD
+
+	var weights: Dictionary = {}
+	for key: String in float_weights:
+		weights[key] = int(float_weights[key])
 
 	return weights
 
@@ -484,8 +495,10 @@ static func get_designation_urgency(lord: L5RCharacterData) -> int:
 	if lord.age >= 40:
 		return 2
 	var has_blood_enemy: bool = false
+	# Canonical Blood Enemy threshold is <= -61 (disposition_tiers.json,
+	# DispositionSystem.Tier.BLOOD_ENEMY: [-100, -61]) -- -60 is still Enemy.
 	for disp: int in lord.disposition_values.values():
-		if disp <= -60:
+		if disp <= -61:
 			has_blood_enemy = true
 			break
 	if has_blood_enemy:

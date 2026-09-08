@@ -17534,7 +17534,19 @@ static func _evaluate_heir_designations(
 		if not _is_lord_tier(lord):
 			continue
 
-		if not SuccessionSystem.should_reevaluate_heir(lord):
+		# GDD s22.5 (LOCKED): re-evaluate when "the current designated heir has
+		# been... killed." Directly computable from already-available
+		# characters_by_id -- no new tracking state needed, unlike this
+		# function's other trigger_changes flags (disgraced/captured/gempuku/
+		# honor-glory-insight/disposition-threshold/achievement-topic/
+		# marriage-new-child), which need season-over-season delta tracking or
+		# data plumbing this pass doesn't have.
+		var heir_trigger_changes: Dictionary = {}
+		if lord.designated_heir_id >= 0:
+			var current_heir: L5RCharacterData = characters_by_id.get(lord.designated_heir_id)
+			if current_heir == null or CharacterStats.is_dead(current_heir):
+				heir_trigger_changes["heir_dead"] = true
+		if not SuccessionSystem.should_reevaluate_heir(lord, heir_trigger_changes):
 			continue
 
 		# Adoption fallback (s22.5:33) — runs before ordinary candidate evaluation. When the lord is
