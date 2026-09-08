@@ -167,8 +167,13 @@ static func send_advance_notice(
 static func register_proxy(commitment: CommitmentData) -> bool:
 	if commitment.status != Enums.CommitmentStatus.PENDING:
 		return false
-	if commitment.commitment_type == Enums.CommitmentType.SUPPORT_PLEDGE:
-		return false
+	# GDD s55.31.5 note: a proxy CAN be sent for a SUPPORT_PLEDGE (via the same
+	# lord-vassal ASSIGN_VASSAL_OBJECTIVE dispatch as other types) -- it just
+	# resolves to BROKEN_WITH_NOTICE rather than BROKEN_WITH_PROXY at deadline
+	# (see check_deadline below), since a representative cannot credibly pledge
+	# political support. Rejecting registration outright made that downgrade
+	# unreachable and left SUPPORT_PLEDGE debtors with full BROKEN_NO_NOTICE
+	# consequences even after successfully dispatching a proxy.
 	commitment.proxy_sent = true
 	return true
 
@@ -377,7 +382,7 @@ static func apply_forgiveness(
 		return 0.0
 
 	var rate: float = get_forgiveness_rate(receiving_npc, is_same_loyalty_chain)
-	var total_recovery: float = 0.0
+	var total_recovery: int = 0
 
 	for record: Dictionary in commitment.penalty_records:
 		if record.get("npc_id", -1) != receiving_npc.character_id:
@@ -385,14 +390,21 @@ static func apply_forgiveness(
 		if record.get("forgiveness_applied", false):
 			continue
 		var penalty: int = record.get("disposition_change", 0)
-		var recovery: float = absf(float(penalty)) * rate
+		# roundi(), not int() truncation -- matches the codebase's established
+		# float-rate-to-int-delta convention (levy_system.gd, oni_generator.gd,
+		# supply_tether_system.gd) and keeps disposition_values strictly int,
+		# consistent with every other consequence table in this file. The
+		# reported total now equals what was actually applied below, instead
+		# of the pre-rounding float (s55.31.11.4's worked example, e.g. a -3
+		# penalty at 50% forgiveness, recovers the nearest int to +1.5).
+		var recovery: int = roundi(absf(float(penalty)) * rate)
 		var old_disp: int = receiving_npc.disposition_values.get(debtor_id, 0)
-		var new_disp: int = clampi(old_disp + int(recovery), -100, 100)
+		var new_disp: int = clampi(old_disp + recovery, -100, 100)
 		receiving_npc.disposition_values[debtor_id] = new_disp
 		record["forgiveness_applied"] = true
 		total_recovery += recovery
 
-	return total_recovery
+	return float(total_recovery)
 
 
 # =============================================================================

@@ -1280,9 +1280,18 @@ static func score_all(
 		))
 
 		if character != null and not commitments.is_empty():
+			# GDD s55.31.7 (LOCKED): Chugi's -5 stacks when "the commitment is
+			# to their lord or a character in their lord's direct service."
+			# Without this Callable the parameter defaults to an invalid
+			# Callable and every creditor is treated as outside the chain.
+			var loyalty_check: Callable = func(creditor_id: int) -> bool:
+				if creditor_id == character.lord_id:
+					return true
+				var creditor_char: Variant = chars_by_id.get(creditor_id)
+				return creditor_char is L5RCharacterData and creditor_char.lord_id == character.lord_id
 			option.commitment_at_risk = float(CommitmentRegistry.get_action_commitment_modifier(
 				option.action_id, option.target_settlement_id,
-				commitments, ctx.character_id, character
+				commitments, ctx.character_id, character, loyalty_check
 			))
 		else:
 			option.commitment_at_risk = 0.0

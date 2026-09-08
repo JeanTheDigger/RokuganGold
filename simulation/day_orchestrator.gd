@@ -32218,8 +32218,12 @@ static func _attempt_proxy_dispatch(
 	objectives_map: Dictionary,
 	days_remaining: int,
 ) -> void:
-	if c.commitment_type == Enums.CommitmentType.SUPPORT_PLEDGE:
-		return
+	# GDD s55.31.5 note: a vassal CAN be dispatched as proxy for a SUPPORT_PLEDGE
+	# (same lord-vassal ASSIGN_VASSAL_OBJECTIVE mechanism as other types) -- it
+	# just resolves to BROKEN_WITH_NOTICE rather than BROKEN_WITH_PROXY at
+	# deadline (check_deadline in commitment_registry.gd already handles that
+	# downgrade correctly). Blocking dispatch entirely left SUPPORT_PLEDGE
+	# debtors with no mitigation option at all.
 	var target_str: String = _get_commitment_destination(c, characters_by_id)
 	if target_str.is_empty():
 		return
