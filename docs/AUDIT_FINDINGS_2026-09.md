@@ -1079,3 +1079,34 @@ discarding the harder-to-capture Ishi trait. This function IS live-wired
 (`day_orchestrator.gd:17916` and `24740`). *Decision needed:* which axis
 wins, or should the lower (more resistant) of the two apply when both are
 set? Not fixed — no LOCKED tie-break rule to implement.
+
+---
+
+## AA. `simulation/secret_system.gd` (s12.8)
+
+**Fixed:** `resolve_search_person()` applying Glory loss to the wrong
+character (searcher instead of target-on-find) and never applying Honor
+loss to the searcher on an unauthorized non-find; the four covert
+acquisition methods (Bribe/Eavesdrop/Intercept/Search) using a generic
+Honor-rank-bracket table instead of their LOCKED flat per-method costs,
+which sat declared-but-unused right above the bug. See git log (`b92ee1b`).
+
+### AA1 — SEARCH_PERSON's disposition drop and "provocation flag" are unimplemented — MEDIUM, cross-cutting gap
+GDD s12.8 "Search a Person": without magistrate authority and nothing
+found, "the target gains a provocation flag — grounds for
+ISSUE_DUEL_CHALLENGE. Disposition from the target toward the searcher
+drops −10." With magistrate authority and nothing found, "the target may
+resent it (disposition hit −3 to −5 toward the searcher)." Neither is
+implemented in `resolve_search_person()`. *Why not fixed:* "provocation
+flag" is one of CLAUDE.md's explicitly named cross-cutting constraints
+("read their authoritative sections before writing any code that reads or
+writes these fields") — and tracing it (s12.2's "Duel Provocation — LOCKED"
+section) shows duel eligibility is actually driven by a disposition
+threshold (Enemy/Blood Enemy) plus a "pretext" concept, not a simple
+boolean flag stored on the character. Wiring this correctly requires
+understanding how "pretext" is represented elsewhere in the already-built
+duel-decision pipeline (`reactive_decisions.gd`, `npc_decision_engine.gd`'s
+several `ISSUE_DUEL_CHALLENGE` sites) before adding a new SEARCH_PERSON
+trigger to it — not a bounded, isolated fix. The GDD's exact disposition
+magnitude for the with-authority case ("−3 to −5") is also a range with no
+stated scaling rule. *Not fixed.*
