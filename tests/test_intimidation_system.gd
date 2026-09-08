@@ -199,20 +199,20 @@ func test_compliance_ends_friend_disposition():
 # -- Witness virtue reaction tests --------------------------------------------
 
 func test_witness_rei_reacts():
-	assert_eq(IntimidationSystem.get_witness_reaction("Rei"), -2)
+	assert_eq(IntimidationSystem.get_witness_reaction(Enums.BushidoVirtue.REI), -2)
 
 
 func test_witness_gi_reacts():
-	assert_eq(IntimidationSystem.get_witness_reaction("Gi"), -2)
+	assert_eq(IntimidationSystem.get_witness_reaction(Enums.BushidoVirtue.GI), -2)
 
 
 func test_witness_meiyo_reacts():
-	assert_eq(IntimidationSystem.get_witness_reaction("Meiyo"), -2)
+	assert_eq(IntimidationSystem.get_witness_reaction(Enums.BushidoVirtue.MEIYO), -2)
 
 
 func test_witness_no_reaction():
-	assert_eq(IntimidationSystem.get_witness_reaction("Jin"), 0)
-	assert_eq(IntimidationSystem.get_witness_reaction("Yu"), 0)
+	assert_eq(IntimidationSystem.get_witness_reaction(Enums.BushidoVirtue.JIN), 0)
+	assert_eq(IntimidationSystem.get_witness_reaction(Enums.BushidoVirtue.YU), 0)
 
 
 # -- Betrayal topic tests -----------------------------------------------------
@@ -220,6 +220,6 @@ func test_witness_no_reaction():
 func test_betrayal_topic_generation():
 	var topic := IntimidationSystem.generate_betrayal_topic(42)
 	assert_eq(topic["topic_type"], "betrayal")
-	assert_eq(topic["subject_id"], 42)
+	assert_eq(topic["subject_character_id"], 42)
 	assert_eq(topic["tier"], TopicData.Tier.TIER_4)
 	assert_eq(topic["category"], TopicData.Category.PERSONAL)

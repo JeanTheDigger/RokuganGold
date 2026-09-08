@@ -81,9 +81,9 @@ static func resolve_private_intimidation(
 	raises: int = 0,
 	disposition_tier: String = "neutral",
 ) -> Dictionary:
-	var defender_total: int = defender_roll + int(defender_honor)
-	defender_total += _disposition_defense_bonus(disposition_tier)
-
+	# By-letter TN is a flat 15 + Honor (s12.9: "vs TN 15 + target's Honor Rank"), not a
+	# contested roll -- it does NOT take the disposition-tier defense bonus the in-person
+	# contested TN below uses, so defender_total is computed only on the in-person path.
 	if by_letter:
 		var tn: int = 15 + int(defender_honor)
 		var success: bool = attacker_roll >= tn
@@ -95,6 +95,8 @@ static func resolve_private_intimidation(
 			"compliance_active": success,
 		}
 
+	var defender_total: int = defender_roll + int(defender_honor)
+	defender_total += _disposition_defense_bonus(disposition_tier)
 	var tn: int = defender_total + (raises * 5)
 	var success: bool = attacker_roll >= tn
 	var tn_increase: int = 0
@@ -180,10 +182,15 @@ static func check_compliance_status(
 	return true
 
 
-const WITNESS_VIRTUE_REACTIONS: Array[String] = ["REI", "GI", "MEIYO"]
+const WITNESS_VIRTUE_REACTIONS: Array[Enums.BushidoVirtue] = [
+	Enums.BushidoVirtue.REI, Enums.BushidoVirtue.GI, Enums.BushidoVirtue.MEIYO,
+]
 
-static func get_witness_reaction(witness_virtue: String) -> int:
-	if witness_virtue.to_upper() in WITNESS_VIRTUE_REACTIONS:
+## s12.9 (LOCKED): "every character present with Rei (Courtesy), Gi (Honesty), or Meiyo
+## (Honor) virtue applies their negative reaction to the actor" -- other witnesses (or no
+## virtue) have no reaction.
+static func get_witness_reaction(witness_virtue: Enums.BushidoVirtue) -> int:
+	if witness_virtue in WITNESS_VIRTUE_REACTIONS:
 		return PUBLIC_WITNESS_DISPOSITION_LOSS
 	return 0
 
@@ -191,7 +198,7 @@ static func get_witness_reaction(witness_virtue: String) -> int:
 static func generate_betrayal_topic(actor_id: int) -> Dictionary:
 	return {
 		"topic_type": "betrayal",
-		"subject_id": actor_id,
+		"subject_character_id": actor_id,
 		"tier": TopicData.Tier.TIER_4,
 		"category": TopicData.Category.PERSONAL,
 		"slug": "intimidation_bluff_failure_%d" % actor_id,

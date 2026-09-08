@@ -998,7 +998,15 @@ static func _execute_intimidation(
 			attacker_roll, defender_roll, effective_defender_honor, secret_tier, disp_tier
 		)
 	elif is_public:
-		var witness_ids: Array = _get_co_located_ids(character, characters_by_id)
+		# s12.9 (LOCKED): "Witnesses react: every character present with Rei (Courtesy), Gi
+		# (Honesty), or Meiyo (Honor) virtue applies their negative reaction to the actor" --
+		# only virtue-holding witnesses react, not everyone co-located.
+		var co_located_ids: Array = _get_co_located_ids(character, characters_by_id)
+		var witness_ids: Array = []
+		for wid: Variant in co_located_ids:
+			var w: L5RCharacterData = characters_by_id.get(wid)
+			if w != null and IntimidationSystem.get_witness_reaction(w.bushido_virtue) != 0:
+				witness_ids.append(wid)
 		r = IntimidationSystem.resolve_public_intimidation(
 			attacker_roll, defender_roll, effective_defender_honor, 0, witness_ids, disp_tier
 		)
@@ -1008,9 +1016,11 @@ static func _execute_intimidation(
 		)
 
 	var effects: Dictionary = {
-		"disposition_change": -(3 + int(clampi(attacker_roll - defender_roll, 0, 25) / 5)) if r["success"] else 0,
 		# GDD s12.9 specifies exact honor costs per type (blackmail=-0.3, private=-0.2, public=-0.3),
-		# applied regardless of success. Use the value returned by the resolve function.
+		# applied regardless of success. Use the value returned by the resolve function. s12.9 does
+		# NOT specify any disposition change on the actor's or target's side from intimidation
+		# itself (only Honor/Infamy, plus witness disposition loss for the public context) -- an
+		# invented -(3 + margin/5) formula previously sat here with no GDD basis; removed.
 		"honor_change": r.get("honor_loss", 0.0),
 		"infamy_gain": r.get("infamy_gain", 0.0),
 		"compliance_active": r.get("compliance_active", false),
