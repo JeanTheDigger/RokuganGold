@@ -958,3 +958,44 @@ an override — no ActionID, no Strategic Review directive, no trigger of any
 kind — so wiring this needs a real feature build (the authorization
 decision point, plus new persistent per-settlement state to track duty-free
 seasons for the stability penalty), not a bounded fix. *Not fixed.*
+
+---
+
+## X. `simulation/magistrate_allocation_system.gd` (s11.3.17)
+
+**Fixed:** removed `EMERALD_MAGISTRATE_TOTAL: int = 6`, an invented value
+with no LOCKED source ("a handful serve the entire Empire" is the only GDD
+text), zero production callers, and only a self-referential test. See git
+log (`fe5ba3c`).
+
+### X1 — Most of this file's functions have no production caller — MEDIUM, sprawling wiring gap
+Only `is_magistrate_available()` and `resolve_magistrate_conviction()` are
+called from `day_orchestrator.gd`. `get_vacancy_effects()`,
+`assign_replacement_magistrate()`, `get_conviction_cascade()`,
+`get_magistrate_count()`, `get_yoriki_range()`, `get_investigation_capacity()`,
+`get_case_queue_status()`, `is_emerald_jurisdiction()`,
+`can_override_clan_magistrate()`, and `get_emerald_assignment_topic_tier()`
+all have zero production callers. Concretely: s11.3.17e's "Appointment gap"
+consequences (frozen tax rates, blocked construction, administrative
+paralysis while a magistrate/governor position sits vacant) never apply,
+and s11.3.17e's explicit replacement-appointment step ("the daimyo must
+appoint a replacement magistrate... the replacement receives all suspended
+case files") has no code path that actually assigns a new magistrate to the
+suspended cases `resolve_magistrate_conviction()` already identifies —
+`00_INDEX.md` lists this system's "conviction cascade on office vacancy" as
+DONE, but only the case-suspension half runs. *Why not fixed:* this spans
+several independent, undecided sub-features (when/how vacancy effects get
+applied and cleared, what triggers an actual replacement appointment —
+Strategic Review? A new directive?, how `get_magistrate_count`/
+`get_yoriki_range` feed into world-gen or a later assignment pass, how
+Emerald jurisdiction triggers get detected), not a single bounded fix. *Not
+fixed.*
+
+### X2 — `get_yoriki_range(MAJOR)`'s floor reuses the City tier's minimum with no LOCKED basis — LOW, currently unwired
+GDD s11.3.17b gives Rural (1-2) and City (4-5) as explicit ranges, and only
+an upper bound for Major jurisdictions ("up to a dozen") — no stated floor.
+The code fills that gap with `YORIKI_MIN_CITY` (4) as MAJOR's minimum too, a
+plausible but unauthorized value fill-in. *Currently no live-gameplay
+impact* — `get_yoriki_range()` has zero production callers (see X1). *Not
+fixed* — any replacement floor would be an equally invented number; left as
+the reviewer found it since it's part of the same larger unwired area.
