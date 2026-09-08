@@ -115,19 +115,21 @@ func test_exactly_1_5x_is_tight() -> void:
 
 
 # =============================================================================
-# Gift Actions (koku-based, GDD says variable)
+# Gift Actions (inventory-item-based -- DELIVER_GIFT consumes a gift item via
+# consume_item_id, never koku; see action_executor.gd's
+# _try_execute_deliver_gift / gift_giving_system.gd's resolve_deliver_gift)
 # =============================================================================
 
-func test_deliver_gift_no_koku_broke() -> void:
-	_char.koku = 0.0
+func test_deliver_gift_no_items_broke() -> void:
+	_char.items = []
 	var mod: float = ResourceAvailability.compute_resource_modifier(
 		"DELIVER_GIFT", _char
 	)
 	assert_eq(mod, -40.0)
 
 
-func test_deliver_gift_with_koku() -> void:
-	_char.koku = 10.0
+func test_deliver_gift_with_items() -> void:
+	_char.items = [{}, {}, {}, {}, {}]
 	var mod: float = ResourceAvailability.compute_resource_modifier(
 		"DELIVER_GIFT", _char
 	)
@@ -234,13 +236,13 @@ func test_cannot_afford_insufficient_koku() -> void:
 	assert_false(ResourceAvailability.can_afford("BRIBE_FOR_INFO", _char))
 
 
-func test_can_afford_deliver_gift_with_koku() -> void:
-	_char.koku = 1.0
+func test_can_afford_deliver_gift_with_item() -> void:
+	_char.items = [{}]
 	assert_true(ResourceAvailability.can_afford("DELIVER_GIFT", _char))
 
 
-func test_cannot_afford_deliver_gift_no_koku() -> void:
-	_char.koku = 0.0
+func test_cannot_afford_deliver_gift_no_items() -> void:
+	_char.items = []
 	assert_false(ResourceAvailability.can_afford("DELIVER_GIFT", _char))
 
 

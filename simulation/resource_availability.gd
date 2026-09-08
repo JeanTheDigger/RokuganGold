@@ -9,7 +9,7 @@ class_name ResourceAvailability
 
 const ACTION_RESOURCE_COSTS: Dictionary = {
 	"BRIBE_FOR_INFO": {"resource_type": "koku", "amount": 5},
-	"DELIVER_GIFT": {"resource_type": "koku", "amount": 1},
+	"DELIVER_GIFT": {"resource_type": "inventory_item", "amount": 1},
 	"PURCHASE_MARKET": {"resource_type": "koku", "amount": 1},
 	"OFFER_FAVOR": {"resource_type": "koku", "amount": 1},
 	"ORDER_LEVY": {"resource_type": "troop_pu", "amount": 1},
