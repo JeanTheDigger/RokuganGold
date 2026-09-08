@@ -813,3 +813,42 @@ decomposition tree), not as a field on `L5RCharacterData`.
 (or does forgiveness rate need its own tie-break rule, e.g. Bushido always
 wins, or a new "dominant virtue axis" concept)? Not fixed — inventing a
 priority order here would be inventing an unspecified mechanic.
+
+---
+
+## T. `simulation/orphaned_objectives.gd` (s55.33)
+
+**Fixed:** the MODIFY branch's empty-stub bug (real `new_objective` now
+generated via `_select_objective_for_vassal()`, and `_resolve_orphaned_vassals`
+converted to a pure planning pass matching its sibling
+`_evaluate_vassal_objectives`); CONFIRM's missing `assigning_lord_id` update to
+the new lord; `_find_next_authority()`'s missing "there is always someone"
+escalation ladder (Family Daimyo → Clan Champion → highest-Status clan
+survivor). See git log (`51bc70e`). `is_target_dependent()` being unreferenced
+outside tests was investigated and is not a bug — `check_objective_validity()`
+already defaults correctly to ACTIVE for anything not lord-dependent.
+
+### T1 — Orphan status changes fire instantly at lord death, with no Knowledge Delay gate — MEDIUM-HIGH, feature-build gap
+s55.33.1 (LOCKED, "Knowledge Delay — Section 20 Compliance") is explicit:
+"Until the death topic enters the vassal's knowledge pool, their objective
+remains ACTIVE... A vassal on campaign two provinces away may not learn for
+1-2 seasons." The worked example (s55.33.8) has Akodo Kenji conquer an
+entire province *during* the delay, precisely because his objective was
+still ACTIVE while the death topic hadn't reached him yet. But
+`process_lord_death()` (called from `day_orchestrator.gd`'s
+`_process_lord_deaths`, same tick as the death event) runs
+`check_objective_validity()` for every vassal of the dead lord immediately —
+there is no check anywhere in the call chain for whether the death topic has
+actually entered the vassal's `known_topics`/`topic_pool`. Every vassal,
+regardless of distance or information channel, orphans instantly.
+
+Fixing this properly requires more than a bounded edit: a "Lord X has died"
+topic must exist and propagate through the normal topic system (the current
+death-handling code builds a *succession* topic via `_build_succession_topic`,
+not clearly the same "[Lord Name] has died" Tier 2 topic s55.33.1 describes),
+and the engine needs new persistent state to track "vassal V's orphan check
+for lord L's death is still pending topic delivery" across however many
+future ticks it takes for that topic to reach them — `process_lord_death()`
+is currently a one-shot call, not a per-tick recheck. That's a real
+feature-build (new topic correlation + new pending-state tracking across
+ticks), not a decision-free fix. *Not fixed.*
