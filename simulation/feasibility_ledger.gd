@@ -453,6 +453,14 @@ static func try_market_purchase(
 
 	var bonus_rice: float = purchasable_rice
 	modified["market_rice_bonus"] = bonus_rice
+	# The full available_koku pool was just spent on rice above -- carry that
+	# forward so the recomputed koku/arms budgets below don't still see it as
+	# available. koku_spent was previously reported in the return dict but
+	# never actually deducted from modified["current_koku"], so
+	# evaluate_feasibility(modified) recomputed the koku (and arms, via its
+	# available_koku_for_market parameter) budgets against the full
+	# pre-purchase koku -- a double-spend.
+	modified["current_koku"] = 0.0
 
 	var ledger: Dictionary = evaluate_feasibility(modified)
 	return {
