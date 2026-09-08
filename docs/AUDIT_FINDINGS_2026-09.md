@@ -1422,3 +1422,44 @@ is a genuine design gap (owner input needed on whether/how NPCs declare
 Intimidation Raises), and the compliance-tracking migration is a
 multi-file structural change that should follow that decision rather than
 precede it with a guessed default.*
+
+
+---
+
+## AH. `simulation/seppuku_decision.gd` (s57.47.4 / s18-19)
+
+**Fixed:** the Shourido branch of `will_accept_seppuku()` reported the
+character's `bushido_virtue` (copy-pasted from the Bushido branch below
+it) instead of the `shourido_virtue` that actually drove the decision --
+every generated character carries both virtues independently, so the
+reported virtue could be entirely unrelated to the verdict; removed a
+dead `honor_rank >= threshold` recompute for DOSATSU/CHISHIKI whose
+thresholds were both 0 and therefore unreachable as anything but true,
+given the honor_rank <= 0 guard a few lines above already guarantees
+honor_rank >= 1 by that point (confirmed a true no-op via the existing
+tests, whose own comment already says "no GDD honor gate"). See git log
+(`59b195b`).
+
+### AH1 -- Enums.ShouridoVirtue.KYORYOKU has no seppuku-acceptance entry -- LOW, unspecified virtue behavior
+`SHOURIDO_ACCEPTANCE` covers 6 of the 7 real Shourido virtues (KETSUI,
+KANPEKI, SEIGYO, DOSATSU, ISHI, CHISHIKI); KYORYOKU is absent. GDD s19
+describes Kyōryōku ("Strength"): "raw power -- physical, political, or
+military -- is the only reliable currency... little patience for finesse
+or the careful maneuvering of court... everything resolves through the
+application of force" -- but never states whether a Kyōryōku character
+accepts or refuses seppuku, unlike Meiyo ("seppuku before dishonor"), Gi
+("acts on evidence of wrongdoing"), or Chugi ("follows lord's command"),
+each of which gets an explicit seppuku-relevant characterization
+elsewhere. `world_generator.gd`'s `_assign_personality` assigns
+`shourido_virtue` to every generated character (clan weights or a random
+roll spanning all 7 values), so this is not a rare edge case -- any
+KYORYOKU character offered seppuku currently falls through
+`SHOURIDO_ACCEPTANCE.get(virtue, false)` to refuse, purely as a side
+effect of the dict lookup's default, not a resolved design choice, and
+untested (`tests/test_seppuku_decision.gd` covers all six of the other
+Shourido virtues but never KYORYOKU). *Not fixed -- a plausible narrative
+argument exists for either answer (force-over-ritual-suicide-as-weakness
+would refuse; using death itself as a final display of control/strength
+would accept), and nothing in the LOCKED text resolves it either way. A
+comment in the code now flags the gap explicitly rather than leaving it
+silently absorbed by the dict default.*
