@@ -5,7 +5,7 @@ class_name TravelSystem
 ## TRAVELING and only limited actions are available.
 ##
 ## Distance lookup is a placeholder dictionary — when the map is built,
-## it plugs in here via set_distance_provider or by populating DISTANCES.
+## it plugs in here via set_distance().
 
 
 # -- Terrain Travel Costs (days per sub-tile) ---------------------------------
@@ -96,9 +96,10 @@ static func change_destination(
 	if new_destination == character.travel_destination:
 		return {"changed": false, "reason": "same_destination"}
 
-	var current_location: String = character.travel_origin
-	if is_traveling(character):
-		current_location = _estimate_current_position(character)
+	if not is_traveling(character):
+		return {"changed": false, "reason": "not_traveling"}
+
+	var current_location: String = _estimate_current_position(character)
 
 	var new_days: int = get_travel_time(current_location, new_destination)
 	new_days = maxi(new_days, MINIMUM_TRAVEL_DAYS)
