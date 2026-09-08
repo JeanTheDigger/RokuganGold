@@ -1027,3 +1027,55 @@ succession, and when) plus a new ActionID for it — not a bounded wiring
 fix, and exactly the kind of decision CLAUDE.md's "Check existing channels
 before wiring any ActionID" / "do not invent mechanics" rules require
 owner sign-off on. *Not fixed.*
+
+---
+
+## Z. `simulation/hostage_system.gd` (s22.9 / s22.9a)
+
+**Fixed:** nothing — all three findings below are genuine ambiguities or a
+feature-build gap, not decision-free fixes. The constants
+(`HARMED_HOSTAGE_HONOR_LOSS`, `ESCAPE_FAMILY_HONOR_LOSS`,
+`ESCAPE_CRITICAL_FAMILY_HONOR_LOSS`, `YU_CAPTURE_LIKELIHOOD`,
+`ISHI_CAPTURE_LIKELIHOOD`, `ESCAPE_TN_BY_SETTLEMENT`, `LEVERAGE_RANK*`) all
+trace cleanly to s22.9a's LOCKED calibration table and were not touched.
+
+### Z1 — `can_attempt_escape()`'s `committed_to_endure` gate is permanently dead — MEDIUM, feature-build gap
+GDD s22.9 (LOCKED): "Will (Shourido) characters who committed to enduring
+captivity will not attempt escape at all" — connecting to siege end
+condition per-virtue behavior (s19.3, e.g. Ishi: "once they declare their
+intention... will not reverse course"). No field anywhere in
+`shared/`/`simulation/` tracks a character's declared siege end-condition
+commitment, and the sole call site (`day_orchestrator.gd:17780`) never
+passes `committed_to_endure`, so it is always `false` — an Ishi character
+who declared "endure captivity" during the siege can still attempt escape
+once captured. *Why not fixed:* needs new persistent state (the declared
+commitment) plus the siege-end-condition decision logic that would set it
+in the first place — a real feature build, not a bounded wiring fix. *Not
+fixed.*
+
+### Z2 — `is_action_blocked_for_hostage()`'s hardcoded ActionID blocklist isn't verbatim-sourced — LOW-MEDIUM, live-wired but unverified
+s22.9 only locks two restriction categories: "confined to that location"
+(movement) and "cannot work against their captor" (the `targets_captor`
+parameter already handles this generically). `TRAVEL_TO` in the hardcoded
+list clearly matches "confined to settlement," but `ORDER_BATTLE`,
+`CONDUCT_RAID`, `LEVY_TROOPS`, and `DECLARE_WAR` are a plausible but
+unquoted inference from "all bonuses and authority associated with their
+position are on hold" — which sits in tension with the GDD's own "they can
+still issue orders and communicate through the Game of Letters system."
+This function IS live-wired (`action_executor.gd:157`), so the ambiguity
+has real gameplay effect today. *Decision needed:* should a hostage be able
+to issue military-command orders by letter (per "can still issue orders"),
+or does "authority... on hold" block them specifically (the current
+behavior)? Not confident enough either way to change it. *Not fixed.*
+
+### Z3 — `get_capture_likelihood_modifier()`'s Bushido-vs-Shourido priority is unspecified — LOW-MEDIUM, live-wired axis-priority ambiguity
+The same axis-priority pattern as `commitment_registry.gd`'s
+`get_forgiveness_rate()` (Section S): a character can have `bushido_virtue
+== YU` and `shourido_virtue == ISHI` simultaneously, and s22.9a only ever
+specifies ONE virtue's modifier per axis (Yu on Bushido: 0.5, Ishi on
+Shourido: 0.3) with no combined-case rule. The code checks Bushido first,
+so a Yu+Ishi character gets 0.5 instead of the more capture-resistant 0.3 —
+discarding the harder-to-capture Ishi trait. This function IS live-wired
+(`day_orchestrator.gd:17916` and `24740`). *Decision needed:* which axis
+wins, or should the lower (more resistant) of the two apply when both are
+set? Not fixed — no LOCKED tie-break rule to implement.
