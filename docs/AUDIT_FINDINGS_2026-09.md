@@ -662,3 +662,53 @@ candidate, not a correctness bug, and (per the pattern established
 throughout this audit) deleting or consolidating a function that has its own
 existing tests risks a GUT-unverifiable test-file edit; flagged rather than
 acted on.
+
+---
+
+## Q. `simulation/war_system.gd` (s53) — plus `simulation/maho_system.gd` clean
+
+`maho_system.gd` was audited this round with **zero findings** — its core
+mechanics (skill checks, wound-penalty signs, mutation modifiers, the sole
+production call site) all check out against GDD and each other. Worth
+recording given CLAUDE.md's hard constraints specifically single out maho.
+
+`war_system.gd`: **Fixed** a genuine regression — an earlier "remove
+invented content" audit pass (commit `d1b5311`) deleted the
+`condemn_clan`/`authorize_war` `SCORE_SHIFTS` entries without checking that
+`imperial_edict_system.gd` still had live callers keying off them, silently
+zeroing the mechanical effect of two Imperial edict types since that commit.
+Restored using 00_INDEX.md's own documented record as the (non-invented)
+source value. See git log (`04aa717`).
+
+### Q1 — Three GDD s53 mechanics have zero production callers — MEDIUM-HIGH, real feature-build gaps
+All three need new detection/state-tracking this audit did not have grounds
+to build (unlike the SCORE_SHIFTS regression, none has an existing call site
+missing just one function call):
+- **`add_ally()`** (the allied-clan-joins-war pathway) is called only from
+  tests. `allied_clans_a`/`allied_clans_b` are *read* in
+  `otomo_seiyaku_system.gd` and `day_orchestrator.gd`, and an
+  `"allied_clan_joins"` `SCORE_SHIFTS` entry exists purely to reward a join
+  event nothing ever triggers — an allied clan can never mechanically join a
+  war in the running simulation.
+- **GDD s53 "The Honor Stakes of Refusing"** (a fully-specified mechanic:
+  −2.0/−3.0 Honor for a Family Daimyo/Clan Champion refusing a vassal's
+  formal aid request, −15/−20/−5/−10 disposition to
+  vassals/family/neighbors/court) has no trigger point *at all* — there is
+  no existing "vassal formally requests aid from their superior" flow
+  anywhere in the codebase to hook these already-correct consequence
+  functions (`get_refusal_honor_cost`, `get_aid_request_honor_cost`,
+  `get_refusal_disposition_effects`, `get_territory_fall_honor_cost`) into.
+  This is distinct from the existing `REQUEST_ALLIED_AID` ActionID pipeline,
+  which handles cross-clan ally requests, not vertical superior/vassal
+  requests within the same hierarchy.
+- **`check_auto_escalation()`/`escalate()`** are never called each season, so
+  a war's `authority_level` never advances past whatever `declare_war()` set
+  it to, even when the LOCKED auto-escalation triggers (requesting lord's
+  score < 25, castle fallen, seasons_active > 3, enemy spread to another
+  family, enemy allied with another clan) are met. Wiring this needs new
+  per-war state this session doesn't have grounds to build (castle-fallen
+  tracking against the war's territory, family-spread tracking, and #Q1's
+  own alliance system for the "enemy allied" trigger).
+
+*Not fixed — all three are real, GDD-mandated gaps, but each is a feature
+build (new detection/state), not a bounded correctness fix.*
