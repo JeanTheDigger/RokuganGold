@@ -9,7 +9,6 @@ class_name InvestigationDecomposer
 ## time, and proximity of targets.
 
 const ACCUSATION_THRESHOLD: int = 40
-const BRIBERY_EVAL_THRESHOLD: int = 25
 
 
 # -- Main Decomposition Entry --------------------------------------------------
@@ -249,6 +248,16 @@ static func _get_unchecked_alibis(objective: Dictionary, checked: Array) -> Arra
 static func _get_npc_location(npc_id: int, objective: Dictionary, ctx: NPCDataStructures.ContextSnapshot = null) -> String:
 	if ctx != null and not ctx.known_npc_locations.is_empty():
 		var ctx_loc: Variant = ctx.known_npc_locations.get(npc_id, null)
+		# day_orchestrator._populate_infrastructure_intelligence (the sole production
+		# writer) stores settlement_id as an int (from a KnowledgeEntry's data dict),
+		# never a String -- the `is String` check below was therefore always false in
+		# production, so every witness/suspect/alibi target silently fell through to
+		# `crime_location` regardless of their real location, and NPCs never issued a
+		# TRAVEL_TO need to actually reach them. ContextSnapshot.location_id (compared
+		# against this function's return value) and _make_travel_need() both expect a
+		# String, so convert rather than change this function's contract.
+		if ctx_loc is int and (ctx_loc as int) >= 0:
+			return str(ctx_loc)
 		if ctx_loc is String and not (ctx_loc as String).is_empty():
 			return ctx_loc as String
 	var locations: Dictionary = objective.get("npc_locations", {})
