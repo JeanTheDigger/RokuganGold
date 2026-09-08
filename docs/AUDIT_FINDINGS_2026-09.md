@@ -325,3 +325,42 @@ scenarios (need to define how "lord-assigned"/"protecting someone else"/
 "has an intermediary" would be detected — none of the three currently has
 any signal anywhere in the codebase), or is bribery intentionally scoped to
 self-preservation only for now? *Not fixed.*
+
+---
+
+## I. `simulation/investigation_decomposer.gd`
+
+**Fixed:** `_get_npc_location`'s ctx-based lookup checked `is String` against a
+value production always stores as `int` (day_orchestrator's sole writer), so
+it was always dead — every witness/suspect/alibi target silently used
+`crime_location` instead of their real settlement, and magistrates never
+issued `TRAVEL_TO` to reach anyone. This was live, observable, and probably
+the highest-impact fix of this audit round. Also removed a fully-dead
+duplicate `BRIBERY_EVAL_THRESHOLD` constant. See git log (`5117834`).
+
+### I1 — Two low-priority dead-code notes, not touched
+- `_prioritize_witness` is only ever called from tests; the live path
+  (`_select_best_next_action`) calls `_pick_present_first` instead. The dead
+  function's own comment frames it as an incomplete stand-in for the real
+  GDD s57.16.4 priority order (awareness → lowest honor → proximity), which
+  could mislead a future maintainer into "completing" logic that has no
+  runtime effect. Not touched — deleting a test-only function or overhauling
+  witness prioritization is out of this audit's decision-free scope.
+- Two unreachable `match`/`if` branches in `_action_from_candidate`
+  ("reexamine_scene") and `_decompose_lead` ("location" lead type) — the
+  former per an existing test comment ("Reexamination scoring removed
+  (invented caps)"), the latter because the only production lead generator
+  (`InvestigationSystem.generate_leads_from_probe`) never emits a `location`-
+  type lead. Both compile and look wired but never fire. Flagged only, since
+  removing them is a structural cleanup call, not a bug fix, and the
+  "reexamine_scene" removal history suggests deliberate prior intent I
+  shouldn't second-guess without confirmation.
+
+**Also noted, not fixed:** `ACCUSATION_THRESHOLD = 40` is independently
+duplicated (as a literal, not a shared reference) across FOUR files —
+`investigation_decomposer.gd`, `investigation_system.gd`,
+`legal_status_system.gd`, `treason_system.gd` — all currently in sync. Unlike
+the smaller single-file duplications fixed this round, consolidating four
+files' call sites onto one source of truth is a larger architectural change
+than this audit should make unprompted. Currently harmless (all four agree),
+but worth a deliberate consolidation pass if the value is ever retuned.
