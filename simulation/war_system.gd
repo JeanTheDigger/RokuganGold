@@ -25,6 +25,16 @@ const SCORE_SHIFTS: Dictionary = {
 	"family_daimyo_commits": [5, 0],
 	"clan_champion_commits": [10, 0],
 	"allied_clan_joins": [8, 0],
+	# Restored (regression from commit d1b5311's invented-content sweep, which
+	# removed these without checking imperial_edict_system.gd's live callers):
+	# 00_INDEX.md's own documented implementation record confirms "+10 war
+	# score vs. clan" (CONDEMN_CLAN) / "+10 war score for authorized clan"
+	# (AUTHORIZE_WAR) -- both one-sided, matching CONDEMN_WAR_SCORE_SHIFT=10
+	# already used by both apply_condemn_clan/apply_authorize_war callers,
+	# whose result dicts were reporting a +10 shift that silently never
+	# applied once these keys were removed.
+	"condemn_clan": [10, 0],
+	"authorize_war": [10, 0],
 }
 
 

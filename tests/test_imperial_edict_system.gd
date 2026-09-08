@@ -341,8 +341,11 @@ func test_apply_authorize_war_with_active_war():
 	assert_eq(result["authorized_clan"], "Lion")
 	assert_eq(result["war_id"], 10)
 	assert_eq(result["score_shift"], ImperialEdictSystem.CONDEMN_WAR_SCORE_SHIFT)
-	# authorize_war removed from SCORE_SHIFTS — no actual war score change applied
-	assert_eq(war.war_score_a, 50)
+	# "condemn_clan"/"authorize_war" restored to WarSystem.SCORE_SHIFTS (were
+	# a regression from an earlier invented-content sweep that missed this
+	# live caller) -- the authorized clan (Lion = clan_a) now actually gains
+	# the reported +10 war score.
+	assert_eq(war.war_score_a, 60)
 
 
 func test_apply_authorize_war_no_active_war():
