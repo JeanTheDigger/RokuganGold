@@ -355,23 +355,31 @@ static func detect_fabrication(
 # Covert Acquisition Cost Helpers
 # ==============================================================================
 
+## GDD s12.8 (LOCKED) gives each covert acquisition method a literal flat
+## Honor cost ("Actor Honor loss: -0.2", etc.) -- unlike CONCEAL_ITEM/
+## SHADOW_TARGET, whose GDD text explicitly delegates to "the Honor table
+## (Section 4.6)" and says school exemptions apply. These four don't use
+## that phrasing or mention exemptions, so the flat constants apply
+## unconditionally rather than through CrimeSystem's generic Honor-rank-
+## bracket "Using a Low Skill" table (which collapsed all four methods to
+## the same rank-dependent value, discarding the GDD's distinct numbers).
 static func apply_bribe_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor, "Temptation"))
+	HonorGlorySystem.apply_honor_change(actor, BRIBE_HONOR_COST)
 	HonorGlorySystem.apply_infamy_change(actor, BRIBE_INFAMY)
 
 
 static func apply_eavesdrop_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor, "Stealth"))
+	HonorGlorySystem.apply_honor_change(actor, EAVESDROP_HONOR_COST)
 	HonorGlorySystem.apply_infamy_change(actor, EAVESDROP_INFAMY)
 
 
 static func apply_intercept_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor, "Stealth"))
+	HonorGlorySystem.apply_honor_change(actor, INTERCEPT_HONOR_COST)
 	HonorGlorySystem.apply_infamy_change(actor, INTERCEPT_INFAMY)
 
 
 static func apply_search_costs(actor: L5RCharacterData) -> void:
-	HonorGlorySystem.apply_honor_change(actor, CrimeSystem.get_low_skill_honor_cost(actor, "Sleight of Hand"))
+	HonorGlorySystem.apply_honor_change(actor, SEARCH_HONOR_COST)
 	HonorGlorySystem.apply_infamy_change(actor, SEARCH_INFAMY)
 
 
@@ -674,8 +682,35 @@ static func resolve_conceal_item(
 # Search Person
 # ==============================================================================
 
-const SEARCH_PERSON_GLORY_COST: float = -0.3
+const SEARCH_PERSON_GLORY_COST: float = -0.3  # target: "Caught using a Low Skill" when found
+const SEARCH_PERSON_HONOR_COST: float = -0.3  # searcher: "Accusing a samurai without evidence"
 const CLOAK_OF_NIGHT_ML: int = 1
+
+
+## GDD s12.8 (LOCKED) "Search a Person": item found is a justified search --
+## no consequence for the searcher, but the target suffers the "Caught using
+## a Low Skill" Glory loss for having concealed it. Nothing found WITHOUT
+## magistrate authority is an insult -- the searcher loses Honor. Nothing
+## found WITH magistrate authority is a lawful exercise of duty -- no cost
+## either way. (Disposition -3/-5/-10 and the target's provocation flag are
+## not applied here -- see docs/AUDIT_FINDINGS_2026-09.md.)
+static func _apply_search_person_consequences(
+	searcher: L5RCharacterData,
+	target: L5RCharacterData,
+	found: bool,
+	has_magistrate_authority: bool,
+) -> Dictionary:
+	var honor_cost: float = 0.0
+	var glory_cost: float = 0.0
+	if found:
+		glory_cost = SEARCH_PERSON_GLORY_COST
+		if target != null:
+			HonorGlorySystem.apply_glory_change(target, glory_cost)
+	elif not has_magistrate_authority:
+		honor_cost = SEARCH_PERSON_HONOR_COST
+		HonorGlorySystem.apply_honor_change(searcher, honor_cost)
+	return {"honor_cost": honor_cost, "glory_cost": glory_cost}
+
 
 static func resolve_search_person(
 	searcher: L5RCharacterData,
@@ -706,13 +741,13 @@ static func resolve_search_person(
 			)
 			found = contest.get("success", false)
 			detail = "magic_contested"
-		var gc: float = 0.0
-		if not has_magistrate_authority and not found:
-			gc = SEARCH_PERSON_GLORY_COST
-			HonorGlorySystem.apply_glory_change(searcher, gc)
+		var consequences: Dictionary = _apply_search_person_consequences(
+			searcher, target, found, has_magistrate_authority,
+		)
 		return {
 			"success": found, "roll_total": 0, "concealment_tn": concealment_tn,
-			"glory_cost": gc, "cloak_of_night": true, "cloak_detail": detail,
+			"glory_cost": consequences["glory_cost"], "honor_cost": consequences["honor_cost"],
+			"cloak_of_night": true, "cloak_detail": detail,
 		}
 
 	var result: Dictionary = SkillResolver.resolve_skill_check(
@@ -720,16 +755,16 @@ static func resolve_search_person(
 	)
 	var success: bool = result.get("success", false)
 
-	var glory_cost: float = 0.0
-	if not has_magistrate_authority and not success:
-		glory_cost = SEARCH_PERSON_GLORY_COST
-		HonorGlorySystem.apply_glory_change(searcher, glory_cost)
+	var consequences: Dictionary = _apply_search_person_consequences(
+		searcher, target, success, has_magistrate_authority,
+	)
 
 	return {
 		"success": success,
 		"roll_total": result.get("total", 0),
 		"concealment_tn": concealment_tn,
-		"glory_cost": glory_cost,
+		"glory_cost": consequences["glory_cost"],
+		"honor_cost": consequences["honor_cost"],
 	}
 
 
@@ -743,13 +778,18 @@ const FORGE_LETTER_TN: Dictionary = {
 	"major": 25,
 }
 
-static func resolve_forge_impersonation_letter(
+## Shared resolution for both forgery document types (impersonation letter and
+## order) -- identical Forgery-skill gate, roll, detection-TN, and Honor/Infamy
+## cost logic; only the TN table (and its default) differs between the two.
+static func _resolve_forgery_document(
 	forger: L5RCharacterData,
+	tn_table: Dictionary,
+	default_tn: int,
 	authority_level: String,
 	dice_engine: DiceEngine,
-	raises_called: int = 0,
+	raises_called: int,
 ) -> Dictionary:
-	var tn: int = FORGE_LETTER_TN.get(authority_level, 20)
+	var tn: int = tn_table.get(authority_level, default_tn)
 
 	var forgery_rank: int = forger.skills.get("Forgery", 0)
 	if forgery_rank == 0:
@@ -775,6 +815,17 @@ static func resolve_forge_impersonation_letter(
 		"detection_tn": detection_tn,
 		"detection_risk": not success,
 	}
+
+
+static func resolve_forge_impersonation_letter(
+	forger: L5RCharacterData,
+	authority_level: String,
+	dice_engine: DiceEngine,
+	raises_called: int = 0,
+) -> Dictionary:
+	return _resolve_forgery_document(
+		forger, FORGE_LETTER_TN, 20, authority_level, dice_engine, raises_called,
+	)
 
 
 # ==============================================================================
@@ -793,29 +844,8 @@ static func resolve_forge_order(
 	dice_engine: DiceEngine,
 	raises_called: int = 0,
 ) -> Dictionary:
-	var tn: int = FORGE_ORDER_TN.get(authority_level, 25)
-
-	var forgery_rank: int = forger.skills.get("Forgery", 0)
-	if forgery_rank == 0:
-		return {"success": false, "reason": "no_forgery_skill"}
-
-	var needed: int = tn + (raises_called * 5)
-	# Forgery R3 (+1k0) / R7 (+0k1) — the roll TOTAL becomes the detection TN (owner ruling).
-	var m_rolled: int = SkillMasterySystem.forgery_tn_rolled_bonus(forger)
-	var m_kept: int = SkillMasterySystem.forgery_tn_kept_bonus(forger)
-	var result: Dictionary = SkillResolver.resolve_skill_check(
-		forger, dice_engine, "Forgery", needed, 0, "", Enums.Trait.NONE, m_rolled, m_kept,
+	return _resolve_forgery_document(
+		forger, FORGE_ORDER_TN, 25, authority_level, dice_engine, raises_called,
 	)
-	var success: bool = result.get("success", false)
-	var detection_tn: int = int(result.get("total", 0)) if success else 0
 
-	HonorGlorySystem.apply_honor_change(forger, CrimeSystem.scale_honor_by_rank(-0.3, forger))
-	HonorGlorySystem.apply_infamy_change(forger, 0.1)
 
-	return {
-		"success": success,
-		"roll_total": result.get("total", 0),
-		"tn": needed,
-		"detection_tn": detection_tn,
-		"detection_risk": not success,
-	}

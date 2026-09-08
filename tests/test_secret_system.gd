@@ -369,24 +369,28 @@ func test_detect_fabricated_secret_checked() -> void:
 # ==============================================================================
 
 func test_bribe_costs() -> void:
+	# GDD s12.8 (LOCKED): Bribe a Servant is a flat -0.2 Honor, not the
+	# generic Honor-rank-bracket "Using a Low Skill" table.
 	var actor: L5RCharacterData = L5RCharacterData.new()
 	actor.honor = 5.0
 	actor.infamy = 0.0
 	SecretSystem.apply_bribe_costs(actor)
-	assert_almost_eq(actor.honor, 4.7, 0.01)
+	assert_almost_eq(actor.honor, 4.8, 0.01)
 	assert_almost_eq(actor.infamy, 0.1, 0.01)
 
 
 func test_eavesdrop_costs() -> void:
+	# GDD s12.8 (LOCKED): Eavesdrop is a flat -0.1 Honor.
 	var actor: L5RCharacterData = L5RCharacterData.new()
 	actor.honor = 5.0
 	actor.infamy = 0.0
 	SecretSystem.apply_eavesdrop_costs(actor)
-	assert_almost_eq(actor.honor, 4.7, 0.01)
+	assert_almost_eq(actor.honor, 4.9, 0.01)
 	assert_almost_eq(actor.infamy, 0.05, 0.01)
 
 
 func test_intercept_costs() -> void:
+	# GDD s12.8 (LOCKED): Intercept a Letter is a flat -0.3 Honor.
 	var actor: L5RCharacterData = L5RCharacterData.new()
 	actor.honor = 5.0
 	actor.infamy = 0.0
@@ -396,6 +400,7 @@ func test_intercept_costs() -> void:
 
 
 func test_search_costs() -> void:
+	# GDD s12.8 (LOCKED): Search Quarters/Pickpocket is a flat -0.3 Honor.
 	var actor: L5RCharacterData = L5RCharacterData.new()
 	actor.honor = 5.0
 	actor.infamy = 0.0
@@ -405,12 +410,14 @@ func test_search_costs() -> void:
 
 
 func test_covert_costs_clamp_honor_at_zero() -> void:
+	# The flat -0.3 Honor cost applies unconditionally (no Honor-rank-bracket
+	# exemption for these four methods, per GDD's literal flat-number
+	# phrasing) -- clamped at the 0.0 Honor floor.
 	var actor: L5RCharacterData = L5RCharacterData.new()
 	actor.honor = 0.1
 	actor.infamy = 0.0
 	SecretSystem.apply_intercept_costs(actor)
-	# Honor rank 0 → bracket 0 → cost 0.0 (Table 2.3), so honor stays at 0.1
-	assert_almost_eq(actor.honor, 0.1, 0.01)
+	assert_almost_eq(actor.honor, 0.0, 0.01)
 
 
 func test_covert_costs_clamp_infamy_at_ten() -> void:
@@ -783,29 +790,31 @@ func test_conceal_non_weapon_no_gate() -> void:
 # Search Person
 # ==============================================================================
 
-func test_search_person_glory_cost_without_authority() -> void:
+func test_search_person_honor_cost_without_authority() -> void:
+	# GDD s12.8 (LOCKED): nothing found without magistrate authority costs
+	# the searcher Honor ("accusing a samurai without evidence"), not Glory.
 	var searcher: L5RCharacterData = L5RCharacterData.new()
 	searcher.character_id = 90
 	searcher.perception = 2
 	searcher.skills = {"Investigation": 1}
-	searcher.glory = 5.0
+	searcher.honor = 5.0
 	var tgt: L5RCharacterData = L5RCharacterData.new()
 	var e: DiceEngine = DiceEngine.new(1)
 	var r: Dictionary = SecretSystem.resolve_search_person(searcher, tgt, 99, e, false)
 	if not r["success"]:
-		assert_almost_eq(searcher.glory, 4.7, 0.01)
+		assert_almost_eq(searcher.honor, 4.7, 0.01)
 
 
-func test_search_person_no_glory_cost_with_authority() -> void:
+func test_search_person_no_honor_cost_with_authority() -> void:
 	var searcher: L5RCharacterData = L5RCharacterData.new()
 	searcher.character_id = 91
 	searcher.perception = 2
 	searcher.skills = {"Investigation": 1}
-	searcher.glory = 5.0
+	searcher.honor = 5.0
 	var tgt: L5RCharacterData = L5RCharacterData.new()
 	var e: DiceEngine = DiceEngine.new(1)
 	SecretSystem.resolve_search_person(searcher, tgt, 99, e, true)
-	assert_almost_eq(searcher.glory, 5.0, 0.01)
+	assert_almost_eq(searcher.honor, 5.0, 0.01)
 
 
 # ==============================================================================
