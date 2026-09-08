@@ -466,3 +466,38 @@ choice the GDD does not make for me, so I did not invent it.
 courtier/shugenja/bushi/monk, standard and Warlike-inverted — and I'll wire
 both in immediately; this is otherwise a one-line-per-branch change. *Not
 fixed.*
+
+---
+
+## L. `simulation/geisha_system.gd` (s57.45a)
+
+**Fixed (6 bugs, all decision-free):** Kolat eavesdrop roll silently dropped
+Perception from its rolled dice entirely (used a literal `1`); eavesdrop
+fired at best-case odds even with no okaasan to eavesdrop on, and
+`okaasan_received` was reported true even then; a successful eavesdrop
+recorded only a bare topic_id instead of the LOCKED-specified provenance
+KnowledgeEntry; `handle_character_death` never cleared a dead
+`kolat_agent_id`, permanently blocking okiya reassignment; Imperial Capital
+world-gen appended 3 duplicate "okiya" infrastructure tags and ignored its
+own `IMPERIAL_CAPITAL_OKIYA_COUNT` constant. See git log (`ac05098`).
+
+### L1 — Imperial Capital's 3-tier okiya collapse into one settlement-level price — MEDIUM, needs a design decision, not a one-line fix
+`_okiya_entries_for_settlement` correctly generates three distinct `OkiyaData`
+entries for Imperial Capital (tiers 1/2/3, per GDD A33), but the koku-cost
+lookup path (`wind_down_system.gd`'s `GEISHA_HOUSE` case, called from
+`day_orchestrator.gd` with `settlement.okiya_tier`) reads a single
+**settlement-level** `okiya_tier` field, which generation sets to the
+highest tier (3, the priciest "Famous House"). **Every visit to an Imperial
+Capital geisha house is billed at Tier 3, regardless of which of the three
+actual okiya exists at cheaper tiers** — a budget-conscious samurai wanting
+the cheap Tier-1 house per A33/A34 has no way to reach that price. This is
+not a simple wiring bug: the wind-down pipeline (`apply_wind_down`) has **no
+concept of choosing among multiple okiya at one settlement** at all — it
+takes a single `okiya_tier: int`, not a specific `OkiyaData`. Fixing this
+properly means either (a) redefining what the single settlement-level
+`okiya_tier` should represent for billing (e.g. cheapest-available instead of
+priciest — itself a policy choice, not obviously "more correct" than the
+current one), or (b) threading actual okiya selection through the wind-down
+call chain so a character can choose a specific tier — a real feature, not a
+bug patch. *Decision:* which of the two directions (or another) is intended?
+*Not fixed.*
