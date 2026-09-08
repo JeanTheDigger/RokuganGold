@@ -1757,7 +1757,7 @@ static func advance_day(
 		)
 		military_seasonal_result = _process_military_seasonal(
 			companies, settlements, clans, characters_by_id,
-			dice_engine, _season_to_name(current_season),
+			dice_engine, _season_to_name(current_season), current_season,
 		)
 		_apply_promotion_results(
 			military_seasonal_result.get("promotions", []),
@@ -1814,7 +1814,7 @@ static func advance_day(
 		)
 		military_seasonal_result["supply_status"] = _process_supply_status_checks(
 			characters, active_wars, settlements, provinces,
-			companies, clans, active_tethers,
+			companies, clans, active_tethers, current_season,
 		)
 		_consume_supply_status_results(
 			military_seasonal_result.get("supply_status", []),
@@ -18990,9 +18990,10 @@ static func _process_military_seasonal(
 	characters_by_id: Dictionary,
 	_dice_engine: DiceEngine,
 	_season_name: String,
+	current_season: int,
 ) -> Dictionary:
 	var upkeep_results: Dictionary = _process_army_upkeep(
-		companies, settlements, clans,
+		companies, settlements, clans, current_season,
 	)
 	var promotion_results: Array = _process_military_promotions(
 		companies, characters_by_id,
@@ -19121,6 +19122,7 @@ static func _process_army_upkeep(
 	companies: Array,
 	settlements: Array,
 	clans: Dictionary,
+	current_season: int,
 ) -> Dictionary:
 	var total_rice_cost: float = 0.0
 	var total_iron_cost: float = 0.0
@@ -19131,7 +19133,7 @@ static func _process_army_upkeep(
 	var koku_cost_by_clan: Dictionary = {}
 	for company: Dictionary in companies:
 		var unit_type: int = company.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
-		var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(unit_type)
+		var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(unit_type, current_season)
 		total_rice_cost += costs["rice"]
 		total_iron_cost += costs["iron"]
 		total_koku_cost += costs["koku"]
@@ -20335,6 +20337,7 @@ static func _process_supply_status_checks(
 	companies: Array,
 	clans: Dictionary,
 	active_tethers: Array,
+	current_season: int,
 ) -> Array:
 	if active_wars.is_empty():
 		return []
@@ -20369,7 +20372,7 @@ static func _process_supply_status_checks(
 		var total_iron_upkeep: float = 0.0
 		for comp: Dictionary in clan_companies:
 			var ut: int = comp.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
-			var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(ut)
+			var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(ut, current_season)
 			total_iron_upkeep += costs["iron"]
 
 		var side: String = WarSystem.get_clan_side(war, lord.clan)

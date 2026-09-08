@@ -49,9 +49,11 @@ func test_iron_upkeep_ronin_is_zero() -> void:
 
 
 func test_iron_upkeep_garrison() -> void:
+	# GDD s4.3.11 "Garrison Unit Costs -- LOCKED" enumerates exactly three cost
+	# categories (Arms/Rice/Koku); Garrison has no Iron upkeep.
 	assert_almost_eq(
 		ArmyUpkeepSystem.get_iron_upkeep(Enums.CompanyUnitType.GARRISON),
-		0.10, 0.001,
+		0.00, 0.001,
 	)
 
 
@@ -202,7 +204,7 @@ func test_ronin_monthly_upkeep() -> void:
 
 func test_compute_company_costs_bushi() -> void:
 	var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(
-		Enums.CompanyUnitType.BUSHI_RETAINER,
+		Enums.CompanyUnitType.BUSHI_RETAINER, TimeSystem.Season.SPRING,
 	)
 	assert_almost_eq(costs["rice"], 0.35, 0.001)
 	assert_almost_eq(costs["iron"], 0.20, 0.001)
@@ -211,14 +213,14 @@ func test_compute_company_costs_bushi() -> void:
 
 func test_compute_company_costs_garrison() -> void:
 	var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(
-		Enums.CompanyUnitType.GARRISON,
+		Enums.CompanyUnitType.GARRISON, TimeSystem.Season.SPRING,
 	)
 	assert_almost_eq(costs["koku"], 0.20, 0.001)
 
 
 func test_compute_company_costs_ronin() -> void:
 	var costs: Dictionary = ArmyUpkeepSystem.compute_company_seasonal_costs(
-		Enums.CompanyUnitType.RONIN,
+		Enums.CompanyUnitType.RONIN, TimeSystem.Season.SPRING,
 	)
 	assert_almost_eq(costs["iron"], 0.00, 0.001)
 	assert_almost_eq(costs["koku"], 1.50, 0.001)
@@ -230,7 +232,7 @@ func test_compute_army_costs() -> void:
 		_make_company(2, Enums.CompanyUnitType.ASHIGARU_SPEARMEN),
 		_make_company(3, Enums.CompanyUnitType.PEASANT_LEVY),
 	]
-	var costs: Dictionary = ArmyUpkeepSystem.compute_army_seasonal_costs(companies)
+	var costs: Dictionary = ArmyUpkeepSystem.compute_army_seasonal_costs(companies, TimeSystem.Season.SPRING)
 	assert_almost_eq(costs["rice"], 0.35 * 3.0, 0.001)
 	assert_almost_eq(costs["iron"], 0.20 + 0.10 + 0.03, 0.001)
 	assert_almost_eq(costs["koku"], 0.00, 0.001)

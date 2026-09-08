@@ -17,7 +17,13 @@ const UNIT_IRON_UPKEEP: Dictionary = {
 	Enums.CompanyUnitType.BUSHI_RETAINER: 0.20,
 	Enums.CompanyUnitType.LIGHT_CAVALRY: 0.20,
 	Enums.CompanyUnitType.RONIN: 0.00,
-	Enums.CompanyUnitType.GARRISON: 0.10,
+	# GDD s4.3.11 "Garrison Unit Costs — LOCKED" explicitly enumerates exactly
+	# three cost categories (Arms 0.75, Rice 0.35, Koku 0.2) with no Iron line
+	# at all -- 0.10 was an invented cost not in the LOCKED list. 0.00, not a
+	# deleted key: removing the key entirely would fall through to the
+	# tier-based TIER_IRON_UPKEEP default instead of zero. Matches RONIN's
+	# existing explicit-0.00 pattern above for a unit type with no Iron upkeep.
+	Enums.CompanyUnitType.GARRISON: 0.00,
 }
 
 const TIER_IRON_UPKEEP: Dictionary = {1: 0.25, 2: 0.35, 3: 0.50}
@@ -131,15 +137,38 @@ static func get_cost_tier(unit_type: Enums.CompanyUnitType) -> int:
 	return CLAN_ELITE_COST_TIER.get(unit_type, 0)
 
 
+## Months in the given season, derived from TimeSystem's own LOCKED day
+## constants (Spring/Summer=90 days=3mo, Autumn=60 days=2mo, Winter=120
+## days=4mo) rather than a second hardcoded table -- one source of truth.
+static func _months_in_season(season: int) -> float:
+	var days: int
+	match season:
+		TimeSystem.Season.SPRING:
+			days = TimeSystem.SPRING_DAYS
+		TimeSystem.Season.SUMMER:
+			days = TimeSystem.SUMMER_DAYS
+		TimeSystem.Season.AUTUMN:
+			days = TimeSystem.AUTUMN_DAYS
+		TimeSystem.Season.WINTER:
+			days = TimeSystem.WINTER_DAYS
+		_:
+			days = TimeSystem.IC_DAYS_PER_MONTH * 3  # unreachable; keeps prior 3-month behavior
+	return float(days) / float(TimeSystem.IC_DAYS_PER_MONTH)
+
+
 static func compute_company_seasonal_costs(
 	unit_type: Enums.CompanyUnitType,
+	current_season: int,
 ) -> Dictionary:
 	var iron: float = get_iron_upkeep(unit_type)
 	var koku: float = 0.0
 	if unit_type == Enums.CompanyUnitType.GARRISON:
 		koku = GARRISON_KOKU_PER_PU_PER_SEASON
 	elif unit_type == Enums.CompanyUnitType.RONIN:
-		koku = RONIN_UPKEEP_KOKU_PER_MONTH * 3.0
+		# GDD s4.3 locks season lengths at Spring=3/Summer=3/Autumn=2/Winter=4
+		# months; this hardcoded *3.0 regardless of season, over/undercharging
+		# Ronin Koku upkeep every Autumn and Winter.
+		koku = RONIN_UPKEEP_KOKU_PER_MONTH * _months_in_season(current_season)
 	return {
 		"rice": RICE_PER_MILITARY_PU_PER_SEASON,
 		"iron": iron,
@@ -149,12 +178,13 @@ static func compute_company_seasonal_costs(
 
 static func compute_army_seasonal_costs(
 	companies: Array,
+	current_season: int,
 ) -> Dictionary:
 	var total_rice: float = 0.0
 	var total_iron: float = 0.0
 	var total_koku: float = 0.0
 	for c: MilitaryUnitData.CompanyData in companies:
-		var costs: Dictionary = compute_company_seasonal_costs(c.unit_type)
+		var costs: Dictionary = compute_company_seasonal_costs(c.unit_type, current_season)
 		total_rice += costs["rice"]
 		total_iron += costs["iron"]
 		total_koku += costs["koku"]
@@ -225,7 +255,11 @@ static func apply_iron_failure_to_dict(
 	company: Dictionary,
 	seasons_without_iron: int,
 ) -> Dictionary:
-	var unit_type: int = company.get("unit_type", Enums.CompanyUnitType.ASHIGARU_SPEARMEN)
+	# Default must match process_iron_upkeep_dict's default (this function's
+	# only live caller) -- a missing "unit_type" key otherwise made the Iron
+	# COST computation and the stats PENALTY computation silently disagree on
+	# what unit a malformed company dict represents.
+	var unit_type: int = company.get("unit_type", Enums.CompanyUnitType.PEASANT_LEVY)
 	var base: Dictionary = ArmyCombatSystem.UNIT_STATS.get(unit_type, {})
 	if base.is_empty():
 		return {"attack": 0, "defense": 0, "morale": 0, "morale_defense": 0}
