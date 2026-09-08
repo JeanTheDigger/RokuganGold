@@ -26,6 +26,11 @@ const BUSHIDO_ACCEPTANCE: Dictionary = {
 	Enums.BushidoVirtue.REI: true,
 }
 
+## KYORYOKU is deliberately absent -- GDD s19 describes it ("raw power... force...
+## little patience for finesse") but never states whether it accepts or refuses seppuku,
+## unlike the six virtues below. A KYORYOKU character currently falls through to the
+## dict's `false` default (refuse) purely as a side effect of Dictionary.get(), not a
+## resolved design choice. See docs/AUDIT_FINDINGS_2026-09.md.
 const SHOURIDO_ACCEPTANCE: Dictionary = {
 	Enums.ShouridoVirtue.KETSUI: false,
 	Enums.ShouridoVirtue.KANPEKI: false,
@@ -34,9 +39,6 @@ const SHOURIDO_ACCEPTANCE: Dictionary = {
 	Enums.ShouridoVirtue.ISHI: false,
 	Enums.ShouridoVirtue.CHISHIKI: true,
 }
-
-const DOSATSU_HONOR_THRESHOLD: int = 0
-const CHISHIKI_HONOR_THRESHOLD: int = 0
 
 
 static func will_accept_seppuku(character: L5RCharacterData) -> Dictionary:
@@ -53,10 +55,6 @@ static func will_accept_seppuku(character: L5RCharacterData) -> Dictionary:
 		var accepts: bool = SHOURIDO_ACCEPTANCE.get(
 			character.shourido_virtue, false
 		)
-		if character.shourido_virtue == Enums.ShouridoVirtue.DOSATSU:
-			accepts = honor_rank >= DOSATSU_HONOR_THRESHOLD
-		elif character.shourido_virtue == Enums.ShouridoVirtue.CHISHIKI:
-			accepts = honor_rank >= CHISHIKI_HONOR_THRESHOLD
 
 		var reason: String = "shourido_self_preservation"
 		if accepts:
@@ -64,7 +62,7 @@ static func will_accept_seppuku(character: L5RCharacterData) -> Dictionary:
 		return {
 			"accepts": accepts,
 			"reason": reason,
-			"virtue": Enums.bushido_virtue_name(character.bushido_virtue),
+			"virtue": Enums.shourido_virtue_name(character.shourido_virtue),
 			"shourido": true,
 			"honor_rank": honor_rank,
 		}
