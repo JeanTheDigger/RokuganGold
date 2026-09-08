@@ -14895,7 +14895,18 @@ static func _process_favors(
 ) -> Dictionary:
 	var expired_ids: Array = FavorSystem.process_expirations(favors, ic_day)
 
-	var breach_results: Array = FavorSystem.process_deadline_breaches(favors, ic_day)
+	# GDD s12.10 (LOCKED): a favor that lapses past its deadline (e.g. a
+	# COURT invocation never explicitly declined) breaks it exactly like an
+	# explicit DECLINE_FAVOR -- including witness disposition loss for
+	# Moderate/Major tiers. Mirrors the DECLINE_FAVOR path's witness lookup
+	# above (_get_witnesses_at_location), which the batch deadline-breach
+	# pass previously skipped entirely.
+	var witness_resolver: Callable = func(debtor_id: int) -> Array:
+		var debtor: L5RCharacterData = characters_by_id.get(debtor_id)
+		if debtor == null:
+			return []
+		return _get_witnesses_at_location(debtor_id, debtor.physical_location, characters_by_id, {})
+	var breach_results: Array = FavorSystem.process_deadline_breaches(favors, ic_day, witness_resolver)
 
 	for breach: Dictionary in breach_results:
 		_apply_favor_breach(breach, characters_by_id)
@@ -14930,8 +14941,14 @@ static func _apply_favor_breach(
 		var disp_floor: int = breach.get("disposition_floor", -100)
 		if disp_change != 0:
 			var old_val: int = creditor.disposition_values.get(debtor_id, 0)
-			var new_val: int = clampi(old_val + disp_change, disp_floor, 100)
-			creditor.disposition_values[debtor_id] = new_val
+			var raw_val: int = old_val + disp_change
+			# GDD s12.10 (LOCKED): the floor caps how much damage THIS breach
+			# does when the relationship was at/above it beforehand -- it must
+			# never REPAIR a disposition that prior history already pushed
+			# below the floor (e.g. -70 from an earlier cause getting pulled
+			# up to a -15 floor because of ANOTHER betrayal).
+			var new_val: int = raw_val if old_val < disp_floor else maxi(raw_val, disp_floor)
+			creditor.disposition_values[debtor_id] = clampi(new_val, -100, 100)
 
 	var witness_loss: int = breach.get("witness_disposition_loss", 0)
 	var witness_ids: Array = breach.get("witnesses", [])

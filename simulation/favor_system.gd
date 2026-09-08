@@ -214,11 +214,23 @@ static func check_deadline_breach(favor: FavorData, current_ic_day: int) -> bool
 	return current_ic_day > favor.response_deadline_ic_day
 
 
-static func process_deadline_breaches(favors: Array, current_ic_day: int) -> Array:
+## witness_resolver (optional): Callable(debtor_id: int) -> Array, used to
+## compute who witnesses a deadline breach (GDD s12.10: "Disposition loss
+## with all who witness or learn of it" for Moderate/Major). Defaults to no
+## witnesses, matching the previous behavior, for callers that don't have
+## character/location context available (this class stays a plain,
+## character-context-free simulation object; the caller supplies location
+## lookups).
+static func process_deadline_breaches(
+	favors: Array,
+	current_ic_day: int,
+	witness_resolver: Callable = Callable(),
+) -> Array:
 	var breaches: Array = []
 	for favor: FavorData in favors:
 		if favor is FavorData and not favor.resolved and check_deadline_breach(favor, current_ic_day):
-			breaches.append(break_favor(favor))
+			var witnesses: Array = witness_resolver.call(favor.debtor_id) if witness_resolver.is_valid() else []
+			breaches.append(break_favor(favor, witnesses))
 	return breaches
 
 
