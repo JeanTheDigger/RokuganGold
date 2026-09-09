@@ -2107,3 +2107,49 @@ destruction -- implying placement is always PERSONAL regardless of quality.
 This pass kept placement as PERSONAL (matching the structured, exhaustive
 table over what reads as stale/superseded prose), but the contradiction
 itself was not resolved and is worth the owner's attention.
+
+---
+
+## AU. `simulation/sculpture_system.gd` (s57.28) -- 5 bugs fixed; 1 ambiguity noted, not fixed
+
+Fixed this pass (see commit "Fix sculpture_system.gd: degradation repeat, dead
+guardian-damage branch, Glory cap (s57.28)"): the same composition-degradation
+repeated-halving bug just fixed in painting_system.gd (GDD A6: "same pattern"
+as s57.27.5); day_orchestrator.gd's guardian-damage writeback guard made the
+LOCKED "Guardian pair damaged (Exceptional+) -> TIER_3" branch permanently
+unreachable in the live simulation; an invented TIER_4 fallback for Fine/
+Normal statue destruction where the LOCKED table (and its non-locked
+companion) only specify a TIER_3 row for Exceptional+, with none at all for
+lower quality; a sculpture-only Glory-tick season cap that diverged from the
+LOCKED "same as painting" (painting has no such cap) and also left its own
+visitor counter unreset once blocked; and a redundant double-scan of
+visitor_memory (efficiency, not correctness).
+
+### AU1 -- figurine collection topic: clan/court scoping is ambiguous between the LOCKED table and its companion narrative -- not fixed either way
+The LOCKED file's table row (section H, "Mantis Figurine Bonus"): "Figurine
+collection topic: 3+ figurines sharing creator_id OR same theme field ->
+TIER_4 topic," with no explicit clan or court-attendance qualifier in the
+sentence itself -- and the current code (`collect_figurine_topics`) fires
+unconditionally for any creator's cluster. The non-locked companion file's
+older narrative text is much more specific: "once per IC season during the
+standard court evaluation pass, the engine checks each **Mantis lord's**
+personal inventory while **AT_COURT**... a **Tier 5** cultural topic fires."
+
+*Why not fixed either way:* the two sources conflict, and neither is cleanly
+dismissible. The section heading ("H. Mantis Figurine Bonus") groups the
+collection-topic row together with the explicitly-Mantis-only gift bonus
+row, suggesting the collection topic may have been meant to inherit that
+scoping even though its own sentence doesn't restate "Mantis." But the base
+file's narrative also describes a "Tier 5" topic -- a tier that does not
+exist in this codebase's `TopicData.Tier` enum (TIER_1 through TIER_4 only)
+-- which is a concrete, verifiable error, and suggests that whole paragraph
+is stale draft text the LOCKED table's cleaner row was meant to supersede
+(dropping the AT_COURT/personal-inventory framing along with the invalid
+tier number). Implementing the reviewer-proposed Mantis+AT_COURT restriction
+would also require deciding how "personal inventory" scoping interacts with
+the current creator_id/theme clustering (which scans ALL active_sculptures
+globally, not per-owner), a design question with no clear answer in either
+source. *Not fixed -- current unconditional behavior left in place (it
+matches the LOCKED table's literal text), but flagged for the owner to
+confirm whether Mantis/AT_COURT scoping was intentionally dropped when the
+mechanic was locked, or should be restored.*
