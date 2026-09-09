@@ -18,7 +18,7 @@ import discord
 from discord import app_commands
 
 import storage
-from l5r_rules import enums, stats
+from l5r_rules import combat, enums, stats
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
 
@@ -288,6 +288,220 @@ async def roll(
         embed.set_footer(text=" · ".join(flags))
 
     await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
+# /attack — combat with DM-authorized damage
+# ===========================================================================
+_ATTACKER_STANCES = [
+    app_commands.Choice(name="Attack", value="attack"),
+    app_commands.Choice(name="Full Attack (+2k1 to hit, -10 own Armor TN)", value="full_attack"),
+    app_commands.Choice(name="Center", value="center"),
+]
+_DEFENDER_STANCES = [
+    app_commands.Choice(name="Attack", value="attack"),
+    app_commands.Choice(name="Full Attack (-10 Armor TN)", value="full_attack"),
+    app_commands.Choice(name="Defense (+Air + Defense skill to Armor TN)", value="defense"),
+]
+
+
+async def _weapon_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    names = [w for w in combat.WEAPON_CATALOG if cur in w]
+    return [app_commands.Choice(name=w, value=w) for w in sorted(names)[:25]]
+
+
+class DamageView(discord.ui.View):
+    """DM-only buttons attached to a landed attack: roll & apply damage, or waive it."""
+
+    def __init__(
+        self,
+        attacker_id: int,
+        target_id: int,
+        weapon: str,
+        increased_damage: int,
+        attacker_name: str,
+        target_name: str,
+    ) -> None:
+        super().__init__(timeout=1800)  # 30 min
+        self.attacker_id = attacker_id
+        self.target_id = target_id
+        self.weapon = weapon
+        self.increased_damage = increased_damage
+        self.attacker_name = attacker_name
+        self.target_name = target_name
+
+    def _disable(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+
+    @discord.ui.button(label="Roll & Apply Damage", style=discord.ButtonStyle.danger, emoji="⚔️")
+    async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message(
+                "Only a DM can authorize damage.", ephemeral=True
+            )
+            return
+        attacker_rec = store.get_by_id(self.attacker_id)
+        target_rec = store.get_by_id(self.target_id)
+        if target_rec is None:
+            await interaction.response.send_message(
+                "The target character no longer exists.", ephemeral=True
+            )
+            return
+        if attacker_rec is None:
+            await interaction.response.send_message(
+                "The attacker character no longer exists.", ephemeral=True
+            )
+            return
+
+        dmg = combat.resolve_damage(
+            attacker_rec.character, self.weapon, engine, self.increased_damage
+        )
+        applied = combat.apply_damage(
+            target_rec.character, dmg["raw_damage"], target_rec.character.armor_reduction
+        )
+        store.save(target_rec)
+
+        embed = discord.Embed(
+            title="⚔️ Damage applied",
+            color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
+        )
+        embed.add_field(
+            name="Damage",
+            value=(
+                f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+                f"{_format_dice(dmg['dice'])}\n"
+                f"Raw **{dmg['raw_damage']}** − reduction {applied['reduction']} = "
+                f"**{applied['final_damage']}** wounds"
+            ),
+            inline=False,
+        )
+        status = f"{self.target_name}: **{applied['new_wound_level']}** "
+        status += f"({target_rec.character.wounds_taken} wounds)"
+        if applied["level_changed"]:
+            status = (
+                f"{self.target_name}: {applied['old_wound_level']} → "
+                f"**{applied['new_wound_level']}** ({target_rec.character.wounds_taken} wounds)"
+            )
+        if applied["is_dead"]:
+            status += "  💀 **DEAD**"
+        embed.add_field(name="Result", value=status, inline=False)
+        embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
+
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(embed=embed)
+
+    @discord.ui.button(label="No Damage", style=discord.ButtonStyle.secondary, emoji="🛡️")
+    async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message(
+                "Only a DM can resolve this attack.", ephemeral=True
+            )
+            return
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            f"🛡️ {interaction.user.display_name} ruled **no damage** on "
+            f"{self.attacker_name}'s hit against {self.target_name}."
+        )
+
+
+@client.tree.command(
+    name="attack",
+    description="Attack another character. Rolls to hit; on a hit a DM authorizes the damage.",
+)
+@app_commands.describe(
+    target="The character to attack (that player's active character).",
+    weapon="Weapon (default katana). Start typing for suggestions.",
+    raises="Called Raises — each adds +5 to the target's Armor TN.",
+    increased_damage="Increased Damage raises — each adds +5 TN AND +1 damage die on a hit.",
+    attacker_stance="Your stance (Full Attack = +2k1 to hit).",
+    defender_stance="Target's stance (affects their Armor TN).",
+    bonus_tn="Situational +/- to the target's Armor TN (DM discretion).",
+)
+@app_commands.autocomplete(weapon=_weapon_autocomplete)
+@app_commands.choices(attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES)
+async def attack(
+    interaction: discord.Interaction,
+    target: discord.Member,
+    weapon: str = "katana",
+    raises: app_commands.Range[int, 0, 10] = 0,
+    increased_damage: app_commands.Range[int, 0, 10] = 0,
+    attacker_stance: app_commands.Choice[str] | None = None,
+    defender_stance: app_commands.Choice[str] | None = None,
+    bonus_tn: app_commands.Range[int, -50, 50] = 0,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+
+    attacker_rec = store.get_active(guild, str(interaction.user.id))
+    if attacker_rec is None:
+        await interaction.response.send_message(
+            "You have no active character. Use `/sheet create` first.", ephemeral=True
+        )
+        return
+    target_rec = store.get_active(guild, str(target.id))
+    if target_rec is None:
+        await interaction.response.send_message(
+            f"{target.display_name} has no active character.", ephemeral=True
+        )
+        return
+
+    a_stance = attacker_stance.value if attacker_stance else "attack"
+    d_stance = defender_stance.value if defender_stance else "attack"
+
+    tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn)
+    outcome = combat.resolve_attack(
+        attacker_rec.character, weapon, tn, raises, engine,
+        attacker_stance=a_stance, increased_damage=increased_damage,
+    )
+
+    a_name = attacker_rec.character.name
+    t_name = target_rec.character.name
+    hit = outcome["hit"]
+    embed = discord.Embed(
+        title=f"⚔️ {a_name} attacks {t_name}",
+        color=discord.Color.green() if hit else discord.Color.greyple(),
+    )
+    atk_desc = (
+        f"{outcome['skill_name']} {outcome['skill_rank']} / "
+        f"{outcome['trait_name'].capitalize()} with **{weapon}**"
+    )
+    if a_stance != "attack":
+        atk_desc += f"  ·  {a_stance.replace('_', ' ').title()}"
+    embed.add_field(name="Attacker", value=atk_desc, inline=False)
+    embed.add_field(name="Attack roll", value=_format_dice(outcome["dice"]), inline=False)
+
+    tn_note = f"Armor TN **{outcome['target_tn']}**"
+    if outcome["raises"]:
+        tn_note += f" ({outcome['raises']} raises)"
+    if d_stance != "attack":
+        tn_note += f"  ·  {d_stance.replace('_', ' ').title()}"
+    verdict = "✅ **HIT**" if hit else "❌ **MISS**"
+    embed.add_field(
+        name="Result",
+        value=f"Total **{outcome['roll']}** vs {tn_note} — {verdict} (margin {outcome['margin']:+d})",
+        inline=False,
+    )
+    if outcome["unskilled"]:
+        embed.set_footer(text=f"Unskilled in {outcome['skill_name']} — dice did not explode.")
+
+    if hit:
+        view = DamageView(
+            attacker_rec.id, target_rec.id, weapon, increased_damage, a_name, t_name
+        )
+        await interaction.response.send_message(
+            content="A DM can authorize the damage below.", embed=embed, view=view
+        )
+    else:
+        await interaction.response.send_message(embed=embed)
 
 
 # ===========================================================================

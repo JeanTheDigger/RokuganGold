@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 2 — dice + character sheets + accounts
+## Status: Phase 3 — dice + sheets + accounts + combat
 
 **Dice**
 
@@ -47,8 +47,33 @@ A **DM** — a server admin, anyone with *Manage Server*, or a member granted vi
 else can only manage their own. Sheets are scoped **per server**, so one bot can
 run many separate games without them mixing.
 
-Still to come in later phases: tables/rooms with invites, combat (`/attack` and
-the "player rolls → DM approves damage" flow), NPC templates, and Vultr hosting.
+**Combat — player rolls, DM approves damage**
+
+| Command | What it does |
+|---|---|
+| `/attack` | Your active character attacks another player's. Rolls **to hit** — `(Agility + weapon skill) keep Agility` (Reflexes for bows) vs the target's **Armor TN** (`Reflexes×5 + 5 + armor`), minus your wound penalty, with raises and stances. |
+
+On a **hit**, the message shows **DM-only buttons**:
+
+- **⚔️ Roll & Apply Damage** — rolls the weapon's damage (`weapon dice + Strength`
+  for melee, exploding), subtracts the target's armor **Reduction**, and adds the
+  wounds to the target's sheet, announcing any wound-level change (and death).
+- **🛡️ No Damage** — the DM rules the blow off.
+
+Only a DM can press them, so the flow is exactly *"a player submits an attack; if
+it lands, the DM authorizes the damage."* `/attack` options: `weapon` (with
+autocomplete), `raises` (+5 TN each), `increased_damage` (+5 TN and +1 damage die
+each), `attacker_stance`, `defender_stance`, and `bonus_tn` (DM situational
+modifier).
+
+*Faithful core only:* stances (Attack / Full Attack / Defense / Center), wound
+penalties, raises, and armor reduction are in. Kata, kiho, skill masteries
+(R3/R5/R7 damage bonuses and 9-explosions), void-point spends, dual-wielding,
+and thrown/charge/called-shot maneuvers are **not** modelled yet — the DM can
+express those with `raises`/`bonus_tn` for now.
+
+Still to come in later phases: tables/rooms with invites, NPC templates, more
+combat maneuvers, and Vultr hosting.
 
 ---
 
@@ -62,6 +87,7 @@ discord_bot/
 │   ├── dice.py            # Roll & Keep engine (ported from simulation/dice_engine.gd).
 │   ├── character.py       # The playable character sheet (subset of character_data.gd).
 │   ├── stats.py           # Derived values: rings, wound levels, Insight (character_stats.gd).
+│   ├── combat.py          # Attack/damage/armor-TN core (individual_combat.gd s40).
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).
 │   └── __init__.py
 ├── requirements.txt       # Python dependencies.
