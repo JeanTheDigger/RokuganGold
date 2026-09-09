@@ -1975,19 +1975,28 @@ successful arrangement into the settlement's `ikebana_slot`, displacing
 whatever was there, with no permission check of any kind.
 
 *Why not fixed:* the GDD text itself says to follow "the existing permission
-infrastructure" and "same pattern as painting permissions (Section 57.27.4a)"
--- but `grep -rn "display_permission"` across `painting_system.gd` and
-`day_orchestrator.gd` also returns zero hits. There is no existing
-infrastructure to reuse; painting's own permission gate (s57.27.4a) is
-equally unimplemented. Building this properly means inventing a new
-per-artisan-per-zone grant/revocation data model, a lordship-change grace
-period (1 IC season, per the GDD text), an implicit-permission rule for
-AT_COURT artisans at Friendly+ disposition, and the inventory-item fallback
--- then wiring it into (at minimum) both ikebana and painting. That is a
-foundational, cross-system feature, not a bounded fix to one file, and per
-CLAUDE.md's authorization policy needs the owner's explicit go-ahead before
-any of it is built. *Not fixed -- left for the owner to decide whether/when
-to authorize the shared permission-infrastructure system this depends on.*
+infrastructure" and "same pattern as painting permissions (Section 57.27.4a)."
+Building the per-artisan-per-zone grant/revocation model, the lordship-change
+grace period, and the implicit-permission/inventory-fallback rules from
+scratch would be a foundational, cross-system feature needing the owner's
+explicit authorization -- but that is not actually needed here: **correction
+(found auditing painting_system.gd, the very next file in this sweep):**
+painting's permission infrastructure DOES exist and is live -- it's just not
+named "display_permission" (the grep above only matched that literal
+string). It lives as `wall_art_permissions` / `displayed_art_permissions` /
+`fusuma_permissions` Dictionaries on `SettlementData`, with
+`PaintingSystem.grant_slot_permission()` / `revoke_slot_permission()` /
+`_has_slot_permission()` / `_is_zone_lord()`, all actively enforced inside
+`can_display()`. This is a real, reusable, already-LOCKED-matching pattern
+ikebana's display-permission gate could mirror (a new
+`ikebana_display_permission: Dictionary` field + the same grant/revoke/check
+helpers, adapted to the single `ikebana_slot`) -- a bounded, structural
+wiring task, not the from-scratch system this entry originally described.
+*Not fixed in this pass regardless -- implementing it for ikebana is still
+net-new functionality for that system (ikebana currently has zero permission
+enforcement of its own), so it still needs the owner's go-ahead per the
+authorization policy; the correction is that "no infrastructure to copy"
+was wrong, not that the fix is now free to make unauthorized.*
 
 ### AS2 -- "High Ambition" personality lean (s57.29.6a) has no corresponding virtue anywhere in the data model
 s57.29.6a step 2 lists four personality leans: "High Rei... High Jin
@@ -2032,3 +2041,69 @@ neighbour is chosen when both are eligible. *Not fixed -- left for the owner
 to decide the mechanic's exact shape, and whether day-of-season granularity
 should be threaded into this function to support the literal "early/late"
 framing.*
+
+---
+
+## AT. `simulation/painting_system.gd` (s57.27) -- 5 bugs fixed; 1 deferred
+
+Fixed this pass (see commit "Fix painting_system.gd: lifecycle topic tiers,
+discarded placement topics, degradation (s57.27)"): five separate
+`_topic_tier_for_event` mismatches against the s57.27.7 LOCKED table
+(placement wasn't quality-split, fusuma_completion/copy_completion/
+negative_placement/loot/destruction all used invented thresholds instead of
+their flat rows -- loot/destruction even silently generated NO topic below
+quality tier 2); the DISPLAY_PAINTING writeback's placement topic was both
+wrongly filtered AND its constructed TopicData was never appended to
+active_topics, so no painting placement has ever generated a lifecycle topic
+in the live simulation; a displaced painting's display fields were never
+cleared on a slot swap, so it kept generating visitor effects for a slot it
+no longer occupied; `apply_composition_degradation` never advanced its own
+reference timestamp, so a neglected WIP's progress halved again on every
+subsequent season check instead of once per 90-day neglect period; and the
+world-start kakemono quality-bonus roll used a 1-in-3 chance where s57.27.10
+specifies 1-in-6.
+
+### AT1 -- negative-framing subject-visit penalty applies to every visitor, not just the depicted clan/family -- needs a decision on subject_id's semantics
+`apply_negative_framing_on_subject_visit()`'s `is_target` check is
+`painting.subject_type in [SubjectType.CLAN, SubjectType.BATTLE]` with no
+comparison against `painting.subject_id` at all for either subject type
+(only PORTRAIT compares `subject_id == visitor_id`). s57.27.13 (LOCKED):
+"When subject of a negatively framed displayed painting visits, they
+accumulate disposition loss... Applies to PORTRAIT subjects and CLAN/BATTLE
+subject types" -- "the subject... visits" clearly means only the depicted
+party, not every visitor. As written, a negatively-framed CLAN painting
+displayed anywhere causes every single visitor -- any clan, any ronin -- to
+take the disposition hit, not just members of the depicted clan.
+
+*Why not fixed:* `shared/painting_data.gd`'s own field comment for
+`subject_id` is ambiguous for exactly these two subject types: "subject_id =
+character_id (portrait/battle), fortune_id (religious), clan_id (clan),
+family_id (clan), topic_id (battle topic link), or -1 (none)." For BATTLE,
+subject_id could mean either a specific character_id or a topic_id -- two
+different comparisons against a visitor. For CLAN, it could mean clan_id or
+family_id -- and no `family_id` field exists anywhere on `L5RCharacterData`
+to compare against (only `clan: String`, plus a private `_clan_name_to_id()`
+helper in `strategic_review.gd`, of uncertain applicability here). Guessing
+which interpretation applies for each subject type risks silently
+mismatching visitors against the wrong id space. *Not fixed -- flagged for
+the owner to specify which of subject_id's overloaded meanings applies to
+CLAN and BATTLE paintings, and (for CLAN) how "member of this clan/family"
+should be resolved against a visiting character.*
+
+Also noted, not reported as bugs (pre-existing, consistent with this
+session's treatment of similarly forward-wired features elsewhere): the
+emakimono copy pipeline (`declare_copy`, `can_copy_emakimono`,
+`copy_threshold`, `max_copy_quality`) and the painting-removal path
+(`resolve_remove_painting`, and its LOCKED "Removal of Fine or above
+paintings generates a Tier 4 lifecycle topic" rule) are both fully
+implemented in `painting_system.gd` but have no ActionID or writeback path
+anywhere that ever calls them -- both mechanics are currently unreachable in
+the live simulation. Separately, s57.27's own LOCKED text contains an
+internal contradiction on placement-topic category: the DISPLAY_PAINTING
+prose (line ~88-89) says a quality 4+ placement generates a "TIER_3
+POLITICAL" topic, while the s57.27.7 table's category rule (line ~173-174)
+states all topics are PERSONAL except negative_placement and loot/
+destruction -- implying placement is always PERSONAL regardless of quality.
+This pass kept placement as PERSONAL (matching the structured, exhaustive
+table over what reads as stale/superseded prose), but the contradiction
+itself was not resolved and is worth the owner's attention.
