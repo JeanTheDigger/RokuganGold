@@ -1814,3 +1814,32 @@ exclusion reads as a considered (if uncited) prior design choice rather
 than an obvious oversight, so this is left for the owner to confirm
 before wiring it in, rather than flipped unilaterally on a LOCKED-text
 reading alone.*
+
+
+---
+
+## AP. `simulation/marriage_system.gd` (s11.5 / s22.7 / s22.7a) -- GDD documentation drift, owner attention needed
+
+**Fixed:** `is_benten_festival()` independently hardcoded and reimplemented
+the Festival of the River of Stars date/calendar math instead of routing
+through `FestivalSystem.is_marriage_bonus_day()`, the single source of
+truth for that date (already fixed this same way in Section AM). See git
+log (`80418bf`).
+
+### AP1 -- gdd/s22.7a still documents the stale, already-fixed month value -- owner action needed (GDD edit, not code)
+`gdd/s22.7a_marriage_proposal_scoring_locked.md:70` reads: "`BENTEN_FESTIVAL_DAY
+= 9`, `BENTEN_FESTIVAL_MONTH = 11` are GDD-confirmed calendar data
+(unchanged)." The code's month value was already corrected from 11 to 9
+in a prior commit (matching s11.5's "9th day of the Boar" and s04.3's
+month ordering, Hare=1...Boar=9) -- but the GDD addendum's own text was
+never updated to match, and still asserts 11 is the confirmed, unchanged
+value. This is not a code defect (nothing in this pass touches it) but a
+real hazard: CLAUDE.md directs auditing against "the LOCKED section
+directly... not summaries," and a future pass following that instruction
+literally would read s22.7a, see month=11 asserted as confirmed, and
+"correct" the code back to the wrong value -- reintroducing the exact bug
+already fixed once. *Not fixed -- CLAUDE.md requires the owner's explicit,
+prior approval before editing any GDD design content, including a stale
+numeric value in a LOCKED addendum; this needs the owner to correct
+s22.7a's text (BENTEN_FESTIVAL_MONTH should read 9, not 11) rather than a
+code change.*
