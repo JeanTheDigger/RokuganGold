@@ -1946,3 +1946,89 @@ inventing one. *Not fixed -- flagged for the owner to specify what
 `disposition_values` lookup, a virtue/personality compatibility formula,
 or something else) before either the initial-assignment or
 death-replacement path can be brought in line with the LOCKED text.*
+
+---
+
+## AS. `simulation/ikebana_system.gd` (s57.29) -- 3 bugs fixed; 2 deferred
+
+Fixed this pass (see commit "Fix ikebana_system.gd: shochikubai reachability,
+Imperial Capital, quality floor (s57.29)"): the Winter shochikubai combination
+could never occur because "Take" was never reachable in Winter's candidate
+pool (fixed via its own GDD-stated "year-round" property, plus removal of an
+invented, unLOCKED 40%-forced-combo mechanic that was standing in for the
+LOCKED "note it after natural selection" step); `ELIGIBLE_DISPLAY_TYPES`
+omitted `IMPERIAL_CAPITAL`, so Otosan Uchi could never receive the LOCKED
+"Imperial Court: Masterwork" world-gen seed; and `_world_start_quality`'s
+provincial-court branch gave Normal quality to a rank-1 artisan, undershooting
+the LOCKED "Fine to Exceptional" floor for any provincial court with an
+artisan present.
+
+### AS1 -- ikebana_display_permission (s57.29.5) is entirely unimplemented -- LARGE, cross-cutting, shared with painting_system.gd
+s57.29.5 (LOCKED) specifies a permission gate: "If the performer lacks
+ikebana_display_permission for the zone: the performance fires normally...
+but the arrangement is NOT placed in the ikebana_slot. The performer takes
+the arrangement with them as an inventory item -- a giftable object worth 2
+bu." `grep -rn "ikebana_display_permission"` across `simulation/` and
+`shared/` returns zero hits -- `day_orchestrator.gd`'s
+`_process_ikebana_performance_writebacks` unconditionally places every
+successful arrangement into the settlement's `ikebana_slot`, displacing
+whatever was there, with no permission check of any kind.
+
+*Why not fixed:* the GDD text itself says to follow "the existing permission
+infrastructure" and "same pattern as painting permissions (Section 57.27.4a)"
+-- but `grep -rn "display_permission"` across `painting_system.gd` and
+`day_orchestrator.gd` also returns zero hits. There is no existing
+infrastructure to reuse; painting's own permission gate (s57.27.4a) is
+equally unimplemented. Building this properly means inventing a new
+per-artisan-per-zone grant/revocation data model, a lordship-change grace
+period (1 IC season, per the GDD text), an implicit-permission rule for
+AT_COURT artisans at Friendly+ disposition, and the inventory-item fallback
+-- then wiring it into (at minimum) both ikebana and painting. That is a
+foundational, cross-system feature, not a bounded fix to one file, and per
+CLAUDE.md's authorization policy needs the owner's explicit go-ahead before
+any of it is built. *Not fixed -- left for the owner to decide whether/when
+to authorize the shared permission-infrastructure system this depends on.*
+
+### AS2 -- "High Ambition" personality lean (s57.29.6a) has no corresponding virtue anywhere in the data model
+s57.29.6a step 2 lists four personality leans: "High Rei... High Jin
+(Compassion)... High Ketsui (Determination)... High Ambition: weight toward
+dramatic/showy materials (sakura, himawari, momiji)." The code's
+`PERSONALITY_LEAN_MATERIALS["Ishi"]` carries exactly that sakura/himawari/
+momiji list, triggered by `Enums.ShouridoVirtue.ISHI` -- but Ishi means
+"Will" (per `00_INDEX.md`'s own changelog: "Ishi (Will) named properly"),
+not Ambition. `Enums.BushidoVirtue` and `Enums.ShouridoVirtue` between them
+define exactly 14 named virtues (Gi/Chugi/Meiyo/Rei/Yu/Makoto/Jin +
+Seigyo/Ketsui/Dosatsu/Chishiki/Kanpeki/Kyoryoku/Ishi) -- none called
+Ambition, and no other field on `L5RCharacterData` represents it either.
+
+*Why not fixed:* this isn't a simple wrong-enum-value bug -- "Ambition" does
+not correspond to anything in this codebase's personality/virtue system at
+all, so there is no correct enum to substitute in. The existing `Ishi`
+mapping is itself an unlabelled guess (Will and Ambition are not obviously
+the same trait), and picking a different one of the 14 virtues instead would
+be an equally unfounded guess. *Not fixed -- flagged for the owner to specify
+which existing virtue (if any) "High Ambition" was meant to reference, or
+whether it should become a new trait/field not currently modelled.*
+
+### AS3 -- neighbouring-season material bleed (s57.29.6a, "10% probability") is entirely absent
+s57.29.6a (LOCKED): "Materials from neighbouring seasons (early spring
+materials available in late winter, late autumn materials in early winter)
+are valid at 10% probability -- seasonal boundaries are soft, not hard
+walls." `select_season_materials` builds `pool` solely from the current
+season's own const array (plus this pass's Take fix) with no cross-season
+sampling anywhere -- an artisan can never receive a material from an
+adjacent season, at any probability.
+
+*Why not fixed:* the LOCKED text frames the rule using within-season timing
+("early spring," "late winter") that `select_season_materials` has no way to
+evaluate -- it receives only a `season` enum (SPRING/SUMMER/AUTUMN/WINTER),
+never a day-of-season or day-of-year value, so "early" vs. "late" cannot be
+determined at all without new information threaded into the function.
+Implementing the general principle ("soft boundaries") without that
+granularity requires deciding things the GDD doesn't specify: whether the
+10% applies per composition or per material slot, whether both cyclically
+adjacent seasons are eligible or only the "approaching" one, and how a
+neighbour is chosen when both are eligible. *Not fixed -- left for the owner
+to decide the mechanic's exact shape, and whether day-of-season granularity
+should be threaded into this function to support the literal "early/late"
+framing.*
