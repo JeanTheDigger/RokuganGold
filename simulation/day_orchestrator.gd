@@ -1394,6 +1394,7 @@ static func advance_day(
 		theater_pieces, active_paintings, active_sculptures,
 		commission_records, settlements, active_bonsai,
 		active_okiyas, active_arrangements, active_senbazurus,
+		active_topics, next_topic_id, ic_day,
 	)
 	_apply_artist_grief_on_death(characters, characters_by_id, active_paintings, settlements, ic_day)
 
@@ -2027,6 +2028,7 @@ static func advance_day(
 				theater_pieces, active_paintings, active_sculptures,
 				commission_records, settlements, active_bonsai,
 				active_okiyas, active_arrangements, active_senbazurus,
+				active_topics, next_topic_id, ic_day,
 			)
 
 	var koku_flow_results: Dictionary = {}
@@ -13100,6 +13102,9 @@ static func _cleanup_dead_character_references(
 	active_okiyas: Array = [],
 	active_arrangements: Array = [],
 	active_senbazurus: Array = [],
+	active_topics: Array = [],
+	next_topic_id: Array = [],
+	ic_day: int = -1,
 ) -> void:
 	var dead_ids: Array = []
 	for c: L5RCharacterData in characters:
@@ -13175,7 +13180,7 @@ static func _cleanup_dead_character_references(
 
 	if not active_senbazurus.is_empty():
 		for did: int in dead_ids:
-			OrigamiSystem.handle_character_death(active_senbazurus, did)
+			OrigamiSystem.handle_character_death(active_senbazurus, did, active_topics, next_topic_id, ic_day)
 
 	for secret: Variant in active_secrets:
 		if not secret is SecretData:
@@ -36279,20 +36284,37 @@ static func _process_place_shide_writebacks(
 			continue
 		var loc_str: String = effects.get("shide_settlement_str_id", "")
 		var settlement: SettlementData = settlements_by_str_id.get(loc_str) as SettlementData
-		if settlement == null:
+		if settlement == null or not settlement.has_shrine_slot():
 			continue
+
+		# s57.26b A21 (LOCKED) precondition: "character holds shrine_shide_
+		# permission OR custodian is co-located with disposition >= 0 toward
+		# character AND character has Artisan: Origami rank >= 2 (auto-grant on
+		# placement attempt)". The executor cannot check this (it has no access
+		# to settlement/permission state), so it is enforced here, at the point
+		# settlement data is actually available -- the same point A12's "on
+		# PLACE_SHIDE attempt" auto-grant path is documented to fire.
+		if settlement.shrine_shide_permission != actor.character_id:
+			if not OrigamiSystem.try_auto_grant_permission(actor, settlement, characters_by_id):
+				continue
 
 		var place_result: Dictionary = OrigamiSystem.place_shide(actor, settlement, shide_item, ic_day)
 		if not place_result.get("success", false):
 			continue
 
-		# Generate lifecycle topic (s57.26b A25–A27).
+		# Generate lifecycle topic (s57.26b A8, A27, A28).
 		var new_tier: int = place_result.get("new_tier", 0)
+		var old_tier: int = place_result.get("old_tier", -1)
 		var is_upgrade: bool = place_result.get("is_replacement_upgrade", false)
-		var topic_tier: int = (
-			TopicData.Tier.TIER_3 if new_tier >= GiftGivingSystem.QualityTier.EXCEPTIONAL
-			else TopicData.Tier.TIER_4
-		)
+		# A8/A27/A28: placement and replacement topics are both flatly TIER_4 --
+		# there is no quality-based tier split (that pattern belongs to the
+		# unrelated senbazuru-completion rule, OrigamiSystem.completion_topic_tier,
+		# not shide placement). A27/A28 also state a replacement topic "fires only
+		# when new quality > old quality; ... no topic at equal/lower quality" --
+		# a first-time placement into an empty slot (old_tier == -1) always fires.
+		if old_tier >= 0 and new_tier <= old_tier:
+			continue
+		var topic_tier: int = TopicData.Tier.TIER_4
 		var title: String = (
 			settlement.settlement_name + " shrine shide upgraded"
 			if is_upgrade

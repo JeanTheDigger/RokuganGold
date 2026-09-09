@@ -224,7 +224,12 @@ static func place_shide(
 	)
 	settlement.shrine_shide_current_tier = new_tier
 	settlement.shrine_shide_quality_tier = new_tier
-	settlement.shrine_shide_crafter_id = actor.character_id
+	# shrine_shide_crafter_id is "for provenance investigation" (A11b) -- it must
+	# name whoever actually crafted the shide (shide_item's own crafter_id, set
+	# in craft_shide()), not whoever is placing it. A shide can change hands
+	# before placement; using the placer's id here would misattribute the
+	# provenance to the wrong character.
+	settlement.shrine_shide_crafter_id = shide_item.get("crafter_id", actor.character_id)
 	settlement.shrine_shide_ic_day_placed = ic_day
 	return {
 		"success": true,
@@ -235,18 +240,42 @@ static func place_shide(
 	}
 
 
-## Cleans dead character references from senbazurus. Marks senbazurus as
-## abandoned when the folder (creator) dies; retains recipient_id for topic text.
+## Cleans dead character references from senbazurus. s57.26 (LOCKED): "Creator
+## death: state -> 'creator_deceased'. Tier 4 topic." This is a safety-net
+## covering deaths _process_senbazuru_lifecycle_events's death_events-driven
+## pass (day_orchestrator.gd) missed within the same tick (that function only
+## sees deaths recorded before its own call point; this one is called later,
+## against a fresh is_dead() scan, so it also catches same-tick deaths that
+## occurred afterward) -- the "active" guard below means it never re-fires for
+## a death this same day's lifecycle-events pass already handled. Generates
+## the same Tier 4 topic so a death caught only here is not silently missed.
 static func handle_character_death(
 	active_senbazurus: Array,
 	dead_id: int,
+	active_topics: Array = [],
+	next_topic_id: Array = [],
+	ic_day: int = -1,
 ) -> void:
 	for s_v: Variant in active_senbazurus:
 		if not s_v is SenbazuruData:
 			continue
 		var s: SenbazuruData = s_v as SenbazuruData
 		if s.folder_id == dead_id and s.state == "active":
-			s.state = "abandoned"
+			s.state = "creator_deceased"
+			if next_topic_id.is_empty():
+				continue
+			var topic := TopicData.new()
+			topic.topic_id = next_topic_id[0]
+			next_topic_id[0] += 1
+			topic.tier = CREATOR_DECEASED_TOPIC_TIER
+			topic.category = TopicData.Category.PERSONAL
+			topic.topic_type = "senbazuru_creator_deceased"
+			topic.subject_character_id = dead_id
+			topic.subject_role = "NEUTRAL"
+			topic.ic_day_created = ic_day
+			topic.title = "Senbazuru — Creator Deceased"
+			topic.momentum = TopicMomentumSystem.initial_momentum_for_tier(topic.tier)
+			active_topics.append(topic)
 
 
 static func try_auto_grant_permission(
@@ -254,12 +283,17 @@ static func try_auto_grant_permission(
 	settlement: SettlementData,
 	characters_by_id: Dictionary,
 ) -> bool:
-	## Auto-grant shide permission when conditions from s57.26b A12 are met.
+	## Auto-grant shide permission when conditions from s57.26b A12/A21 are met.
 	## Returns true if permission was granted.
 	if settlement.shrine_custodian_id < 0:
 		return false
 	var custodian: L5RCharacterData = characters_by_id.get(settlement.shrine_custodian_id)
 	if custodian == null or CharacterStats.is_dead(custodian):
+		return false
+	# A21: "custodian is co-located with disposition >= 0 toward character" -- a
+	# custodian statically assigned to this settlement but physically elsewhere
+	# (e.g. travelling, at court in another province) cannot grant permission.
+	if custodian.physical_location != str(settlement.settlement_id):
 		return false
 	var disp: int = custodian.disposition_values.get(actor.character_id, 0)
 	var origami_rank: int = actor.skills.get("Artisan: Origami", 0)

@@ -1059,12 +1059,13 @@ func test_inject_poem_stale_scroll_cleared_after_consumption() -> void:
 	assert_eq(ws["known_objectives"].get("available_poem_raises"), 0)
 
 
-func test_handle_character_death_marks_active_senbazuru_abandoned() -> void:
+func test_handle_character_death_marks_active_senbazuru_creator_deceased() -> void:
+	# s57.26 (LOCKED): "Creator death: state -> 'creator_deceased'."
 	var sb := SenbazuruData.new()
 	sb.folder_id = 7
 	sb.state = "active"
 	OrigamiSystem.handle_character_death([sb], 7)
-	assert_eq(sb.state, "abandoned", "Active senbazuru abandoned when folder dies")
+	assert_eq(sb.state, "creator_deceased", "Active senbazuru marked creator_deceased when folder dies")
 
 
 func test_handle_character_death_ignores_already_complete_senbazuru() -> void:

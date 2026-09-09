@@ -713,14 +713,16 @@ static func _try_execute_deliver_gift(
 	# Noshi wrapping bonus (s57.26.6–57.26.8): scan for best noshi in inventory.
 	var noshi_item_id: int = -1
 	var noshi_is_mundane: bool = false
+	var best_noshi_tier: int = -1
 	for _noshi: Dictionary in character.items:
 		if _noshi.get("item_type", "") == "noshi":
 			var _nt: int = _noshi.get("quality_tier", 0)
-			if not noshi_is_mundane or _nt > 0:
-				history_bonus += maxi(0, _nt - 1)  # FR = quality_tier - 1 (0 for Mundane)
+			if _nt > best_noshi_tier:
+				best_noshi_tier = _nt
 				noshi_is_mundane = _noshi.get("is_mundane", false)
 				noshi_item_id = _noshi.get("item_id", -1)
-			break
+	if best_noshi_tier >= 0:
+		history_bonus += OrigamiSystem.free_raises_from_tier(best_noshi_tier)
 
 	# Mantis figurine bonus: +3 FR when recipient is Mantis Clan (GDD s57.28 section H).
 	if recipient.clan == "Mantis" and gift_item.get("item_type", "") == "figurine":
@@ -2520,7 +2522,7 @@ static func _execute_perform_worship(
 				best_gohei_tier = _gt
 				gohei_item_id = _g.get("item_id", -1)
 	if gohei_item_id >= 0:
-		gohei_fr = maxi(0, best_gohei_tier - 1)
+		gohei_fr = OrigamiSystem.free_raises_from_tier(best_gohei_tier)
 
 	# Aggregate all external artisan worship FRs with cap of 5 (s57.28 section C / s57.27.11 / s57.26.10,13 / s57.29.9).
 	# Only effective for shugenja (non-shugenja don't roll); injected per character by context builder.

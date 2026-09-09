@@ -265,6 +265,7 @@ func test_auto_grant_success() -> void:
 	var c: L5RCharacterData = _make_character(20, 2)  # minimum rank 2
 	var s: SettlementData = _make_settlement(Enums.SettlementType.TEMPLE)
 	s.shrine_custodian_id = 99
+	custodian.physical_location = str(s.settlement_id)  # A21: custodian must be co-located
 	var granted: bool = OrigamiSystem.try_auto_grant_permission(c, s, chars)
 	assert_true(granted)
 	assert_eq(s.shrine_shide_permission, 20)
