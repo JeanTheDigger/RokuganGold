@@ -195,6 +195,50 @@ static func evaluate_invitation_response(
 			return {"should_accept": accepts, "glory_change": 0.0, "disposition_change": 0}
 
 
+## Evaluate whether the HOST should accept a guest-initiated REQUEST_HUNT_INVITATION
+## (s57.38.4 "Guest-initiated request" -- the mirror of, and numerically distinct
+## from, evaluate_invitation_response's host-initiated rules above).
+## host_status/requester_status: for direction (requester relative to host).
+## host_disp_toward_requester: the HOST's disposition toward the requester -- "the
+## host evaluates against disposition" (s57.38.4).
+## is_rival: true when host_disp_toward_requester is Rival tier or worse (below -10,
+## per s57.38.4's Rival exception). The exception text is stated for the upward case
+## ("the host may decline even an upward request") -- for peer/downward it is already
+## implied by their own disposition thresholds, so it is applied here only where the
+## GDD text actually needs it to override a default: the upward branch.
+## Returns: {"should_accept": bool, "disposition_change": int} -- applied to the
+## REQUESTER's disposition toward the host on acceptance. No Glory is mentioned
+## anywhere in s57.38.4's guest-initiated subsection (unlike host-initiated, which
+## grants Glory in its downward/upward accept cases), so none is returned here.
+static func evaluate_guest_request_response(
+	host_status: float,
+	requester_status: float,
+	host_disp_toward_requester: int,
+	is_rival: bool,
+) -> Dictionary:
+	var direction: String = invitation_direction(host_status, requester_status)
+	match direction:
+		"downward":
+			# "Default accept if disposition is neutral or positive... Declining...
+			# generates no disposition benefit. Accepting generates +1 disposition
+			# toward the host from the requester."
+			var accepts: bool = host_disp_toward_requester >= 0
+			return {"should_accept": accepts, "disposition_change": (1 if accepts else 0)}
+		"upward":
+			# Rival exception overrides the default-accept: "the host may decline
+			# even an upward request... no penalty at the host's end."
+			if is_rival:
+				return {"should_accept": false, "disposition_change": 0}
+			# "Default accept regardless of disposition... Accepting generates +3
+			# disposition toward the host from the requester."
+			return {"should_accept": true, "disposition_change": 3}
+		_:  # peer
+			# "Default accept if disposition >= +11 (Acquaintance)... Declining...
+			# carries a small disposition cost (-1) from the requester's perspective."
+			var accepts: bool = (host_disp_toward_requester >= DISP_ACQUAINTANCE) and not is_rival
+			return {"should_accept": accepts, "disposition_change": (0 if accepts else -1)}
+
+
 # -- NPC-only hunt resolution (s57.38.6) ---------------------------------------
 
 ## Resolve an NPC-only hunt.
@@ -239,8 +283,30 @@ static func resolve_npc_hunt(
 	var best_hunter: L5RCharacterData = _find_best_hunter(combatants)
 	var beast_tn: int = beast.get("armor_tn", 20) + (beast.get("wound_threshold", 10) / 2)
 	var weapon_skill: String = _best_weapon_skill_name(best_hunter)
+	# s57.38.6: "If multiple participants share the top rank, the one designated
+	# as hunt leader adds their rank as a cooperative bonus per Section 41" --
+	# mirrors the Tracking roll's leader-rank cooperative bonus above. "Top rank"
+	# here must match how _find_best_hunter itself ranks combatants -- the higher
+	# of Kyujutsu/Spears per combatant, not just their rank in best_hunter's
+	# chosen weapon_skill (a Spears-5 combatant ties a Kyujutsu-5 best_hunter even
+	# though their Kyujutsu rank is 0).
+	var top_rank: int = SkillResolver.get_skill_rank(best_hunter, weapon_skill)
+	var tie_count: int = 0
+	for c_var: Variant in combatants:
+		var c: L5RCharacterData = c_var as L5RCharacterData
+		if c == null:
+			continue
+		var c_best_rank: int = maxi(
+			SkillResolver.get_skill_rank(c, "Kyujutsu"),
+			SkillResolver.get_skill_rank(c, "Spears")
+		)
+		if c_best_rank == top_rank:
+			tie_count += 1
+	var cooperative_bonus: int = SkillResolver.get_skill_rank(leader, weapon_skill) if tie_count > 1 else 0
+	# "added to ... rolls" (Section 41 cooperative rule, mirrored from the
+	# Tracking roll's identical phrasing) -> bonus_rolled, not raises or kept.
 	var kill_result: Dictionary = SkillResolver.resolve_skill_check(
-		best_hunter, dice_engine, weapon_skill, beast_tn, 0, "", Enums.Trait.AGILITY
+		best_hunter, dice_engine, weapon_skill, beast_tn, 0, "", Enums.Trait.AGILITY, cooperative_bonus
 	)
 	var beast_killed: bool = kill_result.get("success", false)
 	var killer_id: int = best_hunter.character_id if beast_killed else -1
@@ -254,7 +320,7 @@ static func resolve_npc_hunt(
 	var killed_id: int = -1
 	var casualty_level: String = ""
 	if threat_excess >= 1:
-		var victim: L5RCharacterData = _select_casualty_victim(combatants)
+		var victim: L5RCharacterData = _select_casualty_victim(combatants, dice_engine)
 		if victim != null:
 			if threat_excess >= CASUALTY_KILLED_MIN:
 				killed_id = victim.character_id
@@ -275,7 +341,12 @@ static func resolve_npc_hunt(
 	elif wounded_id >= 0 and beast_killed:
 		outcome = OUTCOME_COSTLY
 	elif wounded_id >= 0 and not beast_killed:
-		outcome = OUTCOME_DISASTROUS
+		# s57.38.6: "Failed hunt -- beast not found or beast escaped without killing
+		# any participants." By this point casualty_level can only be "hurt" (the
+		# "down" tier is already routed to DISASTROUS above) -- a mere Hurt wound on
+		# a failed kill is still "escaped without killing any participants," not the
+		# "serious casualties" the Disastrous definition requires.
+		outcome = OUTCOME_FAILED
 	elif beast_killed:
 		outcome = OUTCOME_SUCCESS
 	else:
@@ -390,6 +461,8 @@ static func compute_party_defence_tn(participants: Array) -> int:
 # -- Private helpers -----------------------------------------------------------
 
 static func _find_hunt_leader(participants: Array) -> L5RCharacterData:
+	# s57.38.6: "leader is the party member with the highest Hunting Skill;
+	# ties are broken by highest Perception."
 	var best: L5RCharacterData = null
 	var best_rank: int = -1
 	for p_var: Variant in participants:
@@ -397,7 +470,7 @@ static func _find_hunt_leader(participants: Array) -> L5RCharacterData:
 		if c == null:
 			continue
 		var rank: int = SkillResolver.get_skill_rank(c, "Hunting")
-		if rank > best_rank:
+		if rank > best_rank or (rank == best_rank and best != null and c.perception > best.perception):
 			best_rank = rank
 			best = c
 	return best
@@ -433,6 +506,8 @@ static func _find_best_hunter(combatants: Array) -> L5RCharacterData:
 
 
 static func _find_second_hunter_id(combatants: Array, exclude_id: int) -> int:
+	# s57.38.6: "Most-damage-dealt is assigned to the participant with the
+	# second-highest rank in Kyujutsu or Spears (tiebreak: highest Agility)."
 	var best: L5RCharacterData = null
 	var best_rank: int = -1
 	for c_var: Variant in combatants:
@@ -443,7 +518,7 @@ static func _find_second_hunter_id(combatants: Array, exclude_id: int) -> int:
 			SkillResolver.get_skill_rank(c, "Kyujutsu"),
 			SkillResolver.get_skill_rank(c, "Spears")
 		)
-		if rank > best_rank:
+		if rank > best_rank or (rank == best_rank and best != null and c.agility > best.agility):
 			best_rank = rank
 			best = c
 	return best.character_id if best != null else -1
@@ -464,10 +539,17 @@ static func _roll_beast_threat(beast: Dictionary, dice_engine: DiceEngine) -> in
 	return dr.total
 
 
-static func _select_casualty_victim(combatants: Array) -> L5RCharacterData:
-	# Lowest hunting-weapon rank is most likely to be caught (s57.38.6)
-	var worst: L5RCharacterData = null
-	var worst_rank: int = 999
+## s57.38.6: "Victim selection: weighted random from participants, with weight
+## inversely proportional to their best hunting weapon rank -- lower-skilled
+## hunters are more likely to be the one the beast catches." combatants are
+## already filtered to Kyujutsu/Spears >= 1 by _get_combatants, so rank is
+## always >= 1 and 1.0 / rank is well-defined.
+static func _select_casualty_victim(
+	combatants: Array,
+	dice_engine: DiceEngine,
+) -> L5RCharacterData:
+	var weights: Array = []
+	var total_weight: float = 0.0
 	for c_var: Variant in combatants:
 		var c: L5RCharacterData = c_var as L5RCharacterData
 		if c == null:
@@ -476,7 +558,22 @@ static func _select_casualty_victim(combatants: Array) -> L5RCharacterData:
 			SkillResolver.get_skill_rank(c, "Kyujutsu"),
 			SkillResolver.get_skill_rank(c, "Spears")
 		)
-		if rank < worst_rank:
-			worst_rank = rank
-			worst = c
-	return worst
+		var w: float = 1.0 / float(rank)
+		weights.append(w)
+		total_weight += w
+
+	if total_weight <= 0.0:
+		return null
+
+	var pick: float = dice_engine.randf() * total_weight
+	var cumulative: float = 0.0
+	var idx: int = 0
+	for c_var: Variant in combatants:
+		var c: L5RCharacterData = c_var as L5RCharacterData
+		if c == null:
+			continue
+		cumulative += weights[idx]
+		if pick < cumulative:
+			return c
+		idx += 1
+	return combatants[combatants.size() - 1] as L5RCharacterData

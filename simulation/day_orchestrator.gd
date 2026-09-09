@@ -33386,16 +33386,17 @@ static func _process_request_hunt_invitation_writebacks(
 		var host_disp: int = host.disposition_values.get(requester_id, 0)
 		var tier: DispositionSystem.Tier = DispositionSystem.get_tier(host_disp)
 		var is_rival: bool = tier <= DispositionSystem.Tier.RIVAL
-		var response: Dictionary = HuntSystem.evaluate_invitation_response(
+		# s57.38.4 "Guest-initiated request": this is the HOST deciding whether to
+		# accept the REQUESTER's request, a numerically distinct rule set from
+		# evaluate_invitation_response's host-initiated invitations (and one that
+		# grants no Glory in any branch -- see evaluate_guest_request_response).
+		var response: Dictionary = HuntSystem.evaluate_guest_request_response(
 			host.status, requester.status, host_disp, is_rival,
 		)
 
 		if response.get("should_accept", false):
 			accepted.append(requester_id)
 			target_hunt["accepted_invitee_ids"] = accepted
-			var glory_delta: float = response.get("glory_change", 0.0)
-			if glory_delta != 0.0:
-				HonorGlorySystem.apply_glory_change(requester, glory_delta)
 			var disp_delta: int = response.get("disposition_change", 0)
 			if disp_delta != 0:
 				var old_disp: int = requester.disposition_values.get(host_id, 0)
@@ -33820,7 +33821,15 @@ static func _resolve_scheduled_hunts(
 		next_topic_id[0] += 1
 		var outcome_str: String = outcome.get("outcome", "failed")
 		topic.slug = "hunt_result_%d_day%d_%s" % [host_id, ic_day, outcome_str]
-		topic.title = "Hunt %s — %s" % ["Successful" if outcome_str == "kill" else "Concluded", beast.get("beast_name", "Beast")]
+		# s57.38.10 aftermath topic variants: (1) Successful and (3) Costly both use the
+		# "successful" framing (Costly is "successful topic plus a linked Injury topic")
+		# -- both involve the beast actually being killed. outcome_str is one of
+		# HuntSystem's own "success"/"failed"/"costly"/"disastrous" strings; comparing
+		# against the literal "kill" (which resolve_npc_hunt never produces) always failed.
+		var hunt_was_successful: bool = (
+			outcome_str == HuntSystem.OUTCOME_SUCCESS or outcome_str == HuntSystem.OUTCOME_COSTLY
+		)
+		topic.title = "Hunt %s — %s" % ["Successful" if hunt_was_successful else "Concluded", beast.get("beast_name", "Beast")]
 		topic.topic_type = "hunt_result"
 		topic.variant = outcome_str
 		topic.tier = TopicData.Tier.TIER_3 if killed_id >= 0 else TopicData.Tier.TIER_4

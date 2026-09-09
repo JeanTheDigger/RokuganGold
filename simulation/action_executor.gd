@@ -573,7 +573,7 @@ static func execute(
 		return _execute_announce_hunt(action, character, ctx)
 
 	if action_id == "REQUEST_HUNT_INVITATION":
-		return _execute_request_hunt_invitation(action, character, ctx)
+		return _execute_request_hunt_invitation(action, character, ctx, characters_by_id)
 
 	if action_id == "CANCEL_HUNT":
 		return _execute_cancel_hunt(action, character, ctx)
@@ -6004,6 +6004,7 @@ static func _execute_request_hunt_invitation(
 	action: NPCDataStructures.ScoredAction,
 	character: L5RCharacterData,
 	ctx: NPCDataStructures.ContextSnapshot,
+	characters_by_id: Dictionary,
 ) -> Dictionary:
 	var host_id: int = action.metadata.get("host_id", action.target_npc_id)
 	var hunt_topic_id: int = action.metadata.get("hunt_topic_id", -1)
@@ -6014,6 +6015,18 @@ static func _execute_request_hunt_invitation(
 			"action_id": "REQUEST_HUNT_INVITATION",
 			"reason": "no_hunt_topic",
 		}
+
+	# s57.38.3 (LOCKED): "The host must be within Status ±2.0 of the requester --
+	# requests beyond this band are not delivered."
+	var host: L5RCharacterData = characters_by_id.get(host_id)
+	if host != null:
+		var precheck: Dictionary = HuntSystem.can_request_invitation(character, host.status, ctx)
+		if not precheck.get("valid", false):
+			return {
+				"success": false,
+				"action_id": "REQUEST_HUNT_INVITATION",
+				"reason": precheck.get("reason", "status_too_far"),
+			}
 
 	return {
 		"success": true,
