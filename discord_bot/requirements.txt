@@ -1,0 +1,4 @@
+# Rokugan L5R 4e Discord bot — Python dependencies.
+# Install with:  pip install -r requirements.txt
+discord.py>=2.3,<3
+python-dotenv>=1.0
