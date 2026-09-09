@@ -18,7 +18,11 @@ class_name VoidSystem
 # -- Core pool management ------------------------------------------------------
 
 static func can_spend(character: L5RCharacterData) -> bool:
-	return character.current_void_points > 0
+	# Must match spend()'s own threshold exactly (HOTEI'S BLESSING CURSE, s45: each spend
+	# costs 1 extra VP) -- a caller that gates on can_spend() and then ignores spend()'s
+	# boolean return would otherwise grant the paid effect for free whenever spend()
+	# silently fails this check.
+	return character.current_void_points > AdvantageSystem.get_extra_void_cost(character)
 
 
 static func spend(character: L5RCharacterData) -> bool:
