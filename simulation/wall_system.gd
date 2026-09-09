@@ -323,19 +323,23 @@ static func get_jade_per_warrior(force_size: String) -> int:
 # two sortie seasons of coverage = one Small + one Medium sortie (s2.4.11 D5,
 # "enough for one Small and one Medium sortie before running critically low").
 # Both thresholds derive from the LOCKED per-warrior finger allocations; the
-# int-floor mirrors the existing inline computation so behaviour is preserved.
+# committed-company count mirrors day_orchestrator.gd's actual sortie-commitment
+# floor (clampi(int(garrison_pu * force_pct), 1, garrison_pu)) so this threshold
+# never under-reports the jade a real sortie will need for a small garrison.
 
 ## Jade fingers at or below which a Tower is jade-critical and sorties are
 ## blocked (s2.4.11 D5 / s2.4.15). One Small sortie's allocation.
 static func jade_critical_threshold(garrison_pu: int) -> float:
-	return float(int(garrison_pu * SORTIE_SMALL_MAX_PCT) * SORTIE_SMALL_JADE_PER_WARRIOR)
+	var companies: int = clampi(int(garrison_pu * SORTIE_SMALL_MAX_PCT), 1, maxi(garrison_pu, 1))
+	return float(companies * SORTIE_SMALL_JADE_PER_WARRIOR)
 
 
 ## The routine jade coverage a Tower should hold: one Small + one Medium sortie
 ## (s2.4.11 D5 "two sortie seasons of coverage"). The resupply refill target.
 static func jade_routine_target(garrison_pu: int) -> float:
+	var medium_companies: int = clampi(int(garrison_pu * SORTIE_MEDIUM_MAX_PCT), 1, maxi(garrison_pu, 1))
 	return jade_critical_threshold(garrison_pu) \
-		+ float(int(garrison_pu * SORTIE_MEDIUM_MAX_PCT) * SORTIE_MEDIUM_JADE_PER_WARRIOR)
+		+ float(medium_companies * SORTIE_MEDIUM_JADE_PER_WARRIOR)
 
 
 ## True when a Tower's jade stockpile is at or below the critical threshold.
@@ -369,14 +373,6 @@ static func validate_sortie(
 			"force_size": "",
 		}
 
-	# SI gate: cannot sortie if SI < 6 and SS is High (double crisis, s2.4.11)
-	if si < 6 and get_ss_tier(ss) == "high":
-		return {
-			"can_sortie": false,
-			"blocked_reason": "si_critical_and_ss_high",
-			"force_size": "",
-		}
-
 	var size: String = force_size_override if not force_size_override.is_empty() \
 		else get_ai_sortie_size(ss)
 
@@ -384,6 +380,18 @@ static func validate_sortie(
 		return {
 			"can_sortie": false,
 			"blocked_reason": "ss_too_low",
+			"force_size": "",
+		}
+
+	# SI gate: s2.4.11 Decision 2 -- "Never commit to a MEDIUM sortie if SI is below 6
+	# simultaneously ... the tower cannot survive a horde hit while undermanned and
+	# degraded." Scoped to a Medium sortie specifically, not every sortie size -- a
+	# Shireikan-authorized Small (lower-risk) or Large (Shireikan already committed)
+	# sortie at SI<6+SS High is not the case this rule describes.
+	if size == "medium" and si < 6 and get_ss_tier(ss) == "high":
+		return {
+			"can_sortie": false,
+			"blocked_reason": "si_critical_and_ss_high",
 			"force_size": "",
 		}
 
