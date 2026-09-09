@@ -25502,6 +25502,10 @@ static func _process_musha_shugyo(
 		var result: Dictionary = MushaShugyo.end_pilgrimage(character)
 		var lord_dead: bool = MushaShugyo.is_lord_dead_or_missing(result["original_lord_id"], characters_by_id)
 		result["lord_dead"] = lord_dead
+		# end_pilgrimage() sets lord_restored=true provisionally (it has no characters_by_id
+		# of its own to check); correct it now that lord_dead is known.
+		if lord_dead:
+			result["lord_restored"] = false
 		if objectives_map.has(character.character_id):
 			objectives_map[character.character_id].erase("standing")
 

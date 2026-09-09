@@ -58,7 +58,11 @@ static func evaluate_at_gempukku(
 	var prob: float = compute_probability(character)
 	if prob <= 0.0:
 		return false
-	var roll: int = (dice_engine.roll_and_keep(1, 1, false).total % 100) + 1
+	# A single d10 roll (1-10ish) was being compared against a percentage threshold
+	# (0-100) -- for any prob >= ~11%, that comparison could never fail, inverting
+	# the intended low base chance into near-certain triggering. rand_int_range(1,100)
+	# is the correct percentile primitive (already used elsewhere in DiceEngine).
+	var roll: int = dice_engine.rand_int_range(1, 100)
 	if roll > int(prob * 100.0):
 		return false
 	begin_pilgrimage(character, ic_day)
@@ -87,6 +91,11 @@ static func end_pilgrimage(character: L5RCharacterData) -> Dictionary:
 	character.original_lord_id = -1
 	character.lord_id = lord_id
 	character.current_objective = ""
+	# Provisional -- this function has no characters_by_id to check whether the
+	# original lord is actually still alive. The caller (day_orchestrator.gd's
+	# _process_musha_shugyo) already runs that check right after calling this
+	# function and MUST correct result["lord_restored"] (and character.lord_id)
+	# to false/-1 when the lord turns out to be dead or missing.
 	result["lord_restored"] = true
 
 	return result
@@ -113,10 +122,7 @@ static func is_lord_dead_or_missing(
 	if not characters_by_id.has(lord_id):
 		return true
 	var lord: L5RCharacterData = characters_by_id[lord_id]
-	if lord.wounds_taken > 0:
-		if CharacterStats.is_dead(lord):
-			return true
-	return false
+	return CharacterStats.is_dead(lord)
 
 
 static func get_seek_experience_objective() -> Dictionary:
