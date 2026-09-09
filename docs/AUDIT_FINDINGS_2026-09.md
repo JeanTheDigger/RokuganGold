@@ -1895,3 +1895,54 @@ frames it as approximate) should be computed, not a bounded bug fix.
 practical effect today is that skilled Tea Ceremony hosts are
 systematically under-inviting guests relative to what a true 50%-success
 threshold would allow.*
+
+---
+
+## AR. `simulation/geisha_system.gd` (s57.45/s57.45a) -- 3 bugs fixed; 1 deferred
+
+Fixed this pass (see commit "Fix geisha_system.gd: kolat entry season/dedup,
+dead-geisha reassignment (s57.45)"): the kolat_intelligence KnowledgeEntry
+was hand-built instead of via `InformationSystem.make_entry()`, leaving
+`season_acquired` at the class default (-1) and causing immediate
+mis-staling on the next `decay_confidence()` pass; the same entry had no
+dedup guard against repeated eavesdrop of the same `topic_id` (topic_pool
+two lines above it was already dedup-guarded); and `_get_or_assign_geisha`
+never checked whether a patron's cached geisha assignment had since died,
+so a dead geisha kept driving the routing roll forever instead of "the
+okaasan assigns a replacement on the next visit. Disposition resets to
+baseline" (s57.45, LOCKED).
+
+### AR1 -- initial geisha assignment does not implement the GDD's "highest natural disposition affinity" selection -- MEDIUM, needs a decision on how affinity is computed
+s57.45 (LOCKED) specifies the *initial* assignment algorithm explicitly:
+"The okaasan selects based on compatibility: matching the patron's
+personality to a geisha whose temperament complements them. Mechanically,
+the okaasan picks the geisha with the highest natural disposition
+affinity with the patron." The actual code
+(`_get_or_assign_geisha`, both before this pass and after this pass's
+fix) has never implemented this -- it picks deterministically via
+`patron.character_id % okiya.geisha_ids.size()`, a pure hash-style
+selection with no reference to disposition, personality, or virtue
+compatibility at all. This predates this session's audit pass (present
+in the code since at least commit `ac05098`, the prior geisha_system.gd
+audit); this pass's fix reuses the same existing modulo selection for
+the *replacement* case (on a geisha's death) rather than introducing a
+second, inconsistent selection algorithm, since implementing "highest
+natural disposition affinity" correctly is a separate, larger decision,
+not a bounded extension of the death-reassignment bug fix.
+
+*Why not fixed:* "highest natural disposition affinity" is not a
+mechanically defined term anywhere else in the GDD or codebase. At
+world-gen / first-visit time, `geisha.disposition_values.get(patron_id,
+0)` is almost always simply absent (patron and geisha have typically
+never interacted), so a literal "highest existing disposition value"
+selection would in practice be a tie among zeroes for nearly every
+patron -- effectively no different from the current arbitrary selection,
+just reached by a more expensive scan. If "affinity" instead means a
+personality/virtue-compatibility score (matching temperaments per the
+GDD's own framing), that requires a scoring formula this session has no
+LOCKED source for and CLAUDE.md's "do not invent mechanics" bars
+inventing one. *Not fixed -- flagged for the owner to specify what
+"natural disposition affinity" should mechanically mean (a literal
+`disposition_values` lookup, a virtue/personality compatibility formula,
+or something else) before either the initial-assignment or
+death-replacement path can be brought in line with the LOCKED text.*
