@@ -1519,3 +1519,74 @@ same small critical-failure penalty, or some other value is a genuine gap
 neither s15.4 nor its s12.3a numeric-values addendum addresses; inventing
 a fraction here is exactly the kind of gap-filling CLAUDE.md reserves for
 the owner.*
+
+
+---
+
+## AJ. `simulation/void_system.gd` (L5R 4e core RAW / s45)
+
+**Fixed:** `can_spend()` only checked `current_void_points > 0`, ignoring
+the HOTEI'S BLESSING CURSE variant's extra-cost surcharge that `spend()`
+itself already enforces -- a caller that gates on `can_spend()` and then
+calls `spend()` without checking its own boolean return (several
+kata/kiho Void-activation call sites in `individual_combat.gd` and
+`ascii_map_combat_orchestrator.gd` do exactly this) could grant a
+Hotei-cursed character a paid effect for free at exactly 1 remaining VP.
+`can_spend()` now uses the same threshold `spend()` already enforces. See
+git log (`530c0b6`).
+
+### AJ1 -- AdvantageSystem.is_void_spend_blocked() is fully implemented but never called from production code -- MEDIUM, multi-file wiring gap
+`is_void_spend_blocked(character, context)` (advantage_system.gd:1172)
+correctly implements four s45-LOCKED Void-spend restrictions -- MOMOKU
+(blocks everything except `is_technique_void_spend`), CONSUMED/Determination
+(blocks `is_void_enhance`), FAILURE_OF_BUSHIDO/Honesty (blocks
+`is_honest_sincerity`) and /Duty (blocks `is_negate_wounds`), and
+SWORN_ENEMY (blocks when `context.opponent_id` matches the nemesis) -- but
+grep confirms it is referenced only from `tests/test_advantage_system.gd`,
+never from `void_system.gd` or any of its callers. None of these
+disadvantage-driven restrictions are enforced anywhere in the live game: a
+MOMOKU character can freely spend Void on an ordinary roll bonus via
+`spend_for_roll()` (called from `skill_resolver.gd:386`, which is NOT
+part of the s40 tile-combat PC-travel HOLD -- this has live, reachable
+consequence on ordinary world-map social/skill rolls today), and a
+FAILURE_OF_BUSHIDO(Duty) character can freely negate Wounds via
+`spend_for_wound_reduction()`.
+
+*Why not fixed:* correctly wiring this requires `spend()` (and every
+function that calls it: `spend_for_roll`, `spend_n_for_roll`,
+`spend_for_wound_reduction`, `spend_for_armor_tn`,
+`spend_for_initiative_bonus`, `try_spend_protected`) to accept and check a
+`context: Dictionary`, AND requires every production call site across
+`skill_resolver.gd`, `individual_combat.gd`, `ascii_map_combat_orchestrator.gd`,
+and the kiho/kata Void-activation paths to correctly classify which of the
+four context flags applies to that specific spend (is this a Technique
+activation? an ordinary roll enhance? wound negation? and for SWORN_ENEMY,
+who is the current opponent?). Misclassifying even one call site --
+e.g. marking a plain roll-bonus spend as `is_technique_void_spend` to
+dodge MOMOKU's gate -- would be a new bug, not a fix, and several call
+sites (kata/kiho Void-Point activation in the tile-combat stack) require
+judgment about whether "activating a Kata/Kiho via Void Point" counts as
+the LOCKED "Technique" exemption or not. This is real, mechanical,
+GDD-grounded structural wiring (no invented values), but it is large
+(4+ files, 6+ call sites) and each classification carries real risk of a
+wrong answer, so it's deferred as a scoped wiring project rather than
+attempted piecemeal here.
+
+### AJ2 -- Five of the six documented Void Point effects have zero production callers -- LOW (blocked on the s40 PC-travel HOLD), feature-completion gap
+`void_system.gd`'s own header lists six RAW Void effects; only effect #1
+(+1k1 roll bonus, `spend_for_roll`/`spend_n_for_roll`) has any production
+caller. `spend_for_wound_reduction()` (#3), `spend_for_armor_tn()` (#4),
+and `spend_for_initiative_bonus()` (#5) are implemented and correct but
+uncalled outside tests -- `Participant.void_armor_tn_bonus` is only ever
+reset to 0 and read, never set, because nothing calls
+`spend_for_armor_tn()`. Effect #6 (exchange Initiative Score with a
+willing target) has no implementation anywhere. *Why not fixed:* this is
+squarely inside the s40 individual-combat / ASCII-map stack, already
+tracked as **PARTIAL** in `00_INDEX.md` and covered by the existing
+PC-travel HOLD note in this file's evergreen section (built and
+headless-verified, not live-reachable). Wiring these in also isn't pure
+plumbing -- it requires deciding the NPC-AI trigger policy for each (when
+does an NPC choose Armor TN vs Initiative vs a roll bonus, absent an
+explicit GDD priority rule), which is exactly the kind of NPC-decision
+design CLAUDE.md reserves for owner authorization. Left as-is pending the
+HOLD lifting and, separately, owner input on the NPC trigger policy.
