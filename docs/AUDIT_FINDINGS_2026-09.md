@@ -1463,3 +1463,59 @@ would refuse; using death itself as a final display of control/strength
 would accept), and nothing in the LOCKED text resolves it either way. A
 comment in the code now flags the gap explicitly rather than leaving it
 silently absorbed by the dict default.*
+
+
+---
+
+## AI. `simulation/gift_giving_system.gd` (s12.3 / s12.3a / s15.4)
+
+**Fixed:** `APPROPRIATENESS_MATRIX`'s BUSHI row was missing POETRY_SCROLLS,
+so it silently defaulted to NEUTRAL (full Free Raises) -- directly
+contradicting the LOCKED text's own named worked example ("a Crab bushi
+will not appreciate a Crane poetry scroll"), cited twice across s12.3 and
+s12.3a specifically to establish that this pairing must reduce or remove
+Free Raises. See git log (`63f929c`).
+
+### AI1 -- Three more BUSHI categories are unlisted in the matrix with no equally explicit anchor -- LOW, unspecified tier assignment
+`ART`, `WRITING_IMPLEMENTS`, and `RITUAL_OBJECTS` are also absent from
+BUSHI's row and fall through to the sparse-matrix NEUTRAL default, same as
+POETRY_SCROLLS did. Unlike POETRY_SCROLLS, none of these three has a
+GDD-named worked example establishing that a bushi finds them
+inappropriate (vs. merely unremarkable-but-acceptable, which is what
+NEUTRAL already represents) -- s12.3's "a warrior values a fine weapon, a
+courtier values art or rare paper, a shugenja values ritual objects" only
+states what a bushi *does* prefer (arms, which are forbidden as gifts
+regardless), not what tier a bushi's *lack* of interest in art/writing/
+ritual objects should land at. This same sparse-matrix-defaults-to-NEUTRAL
+pattern likely also under-specifies other archetype rows (e.g. is
+COURTIER+RITUAL_OBJECTS correctly NEUTRAL, or should any archetype/
+category pair without an explicit GDD anchor default to REDUCED instead,
+given the framework's stated intent that appropriateness is graded rather
+than binary?) -- a broader question about the matrix's default-handling
+philosophy, not just these three cells. *Not fixed -- REDUCED vs
+INAPPROPRIATE (vs leaving NEUTRAL) is a real tier choice with no textual
+anchor for these three, and the broader default-philosophy question
+affects every archetype row, not just BUSHI's.*
+
+### AI2 -- Non-critical "failure" outcome applies an invented half-value disposition penalty with no GDD basis -- MEDIUM, unspecified third outcome
+`resolve_deliver_gift()` branches into three outcomes: `success` (roll
+meets TN), `critical_failure` (margin <= -10), and a third `failure`
+bucket (any other failed roll) that applies `int(quality_disp / 2)`
+disposition loss and a halved temporary modifier value. GDD s15.4 only
+describes two outcomes for Deliver Gift -- "Success: Full disposition
+gain..." and "Critical failure: ... Small disposition loss regardless of
+gift quality" -- with no mention of an intermediate, non-critical failure
+case at all. s12.3a, written specifically "to formalize two numeric values
+left unspecified by GDD s12.3 and s15.4," resolves exactly
+`CRITICAL_FAILURE_DISPOSITION_LOSS` and `FORBIDDEN_GIFT_DISPOSITION_LOSS`
+-- its own "Distinction between the two outcomes" section discusses only
+critical failure vs. the forbidden-gift path, never acknowledging an
+ordinary-failure case exists to resolve. The halving formula
+(`quality_disp / 2` for both the immediate disposition_change and the
+temporary modifier's stored value) has no citing comment and no traceable
+source, unlike every other numeric constant in this file. *Not fixed --
+whether an ordinary (non-critical) missed roll should apply nothing, the
+same small critical-failure penalty, or some other value is a genuine gap
+neither s15.4 nor its s12.3a numeric-values addendum addresses; inventing
+a fraction here is exactly the kind of gap-filling CLAUDE.md reserves for
+the owner.*
