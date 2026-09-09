@@ -845,12 +845,14 @@ static func resolve_skill_check(
 		var rr: Dictionary = RerollSystem.try_self_reroll(
 			character, dice_engine, skill_name, tn, result, raises,
 			emphasis_name, trait_override, bonus_rolled, bonus_kept, flat_bonus,
+			ic_day, context,
 		)
 		if rr.get("rerolled", false):
 			return rr
 		rr = RerollSystem.try_granted_reroll(
 			character, dice_engine, skill_name, tn, result, ic_day, raises,
 			emphasis_name, trait_override, bonus_rolled, bonus_kept, flat_bonus,
+			context,
 		)
 		if rr.get("rerolled", false):
 			return rr

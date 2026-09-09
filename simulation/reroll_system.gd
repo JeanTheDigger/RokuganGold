@@ -81,6 +81,8 @@ static func apply_self_reroll(
 	bonus_rolled: int = 0,
 	bonus_kept: int = 0,
 	flat_bonus: int = 0,
+	ic_day: int = -1,
+	context: Dictionary = {},
 ) -> Dictionary:
 	var entry: Dictionary = character.self_reroll[entry_index]
 	entry["charges_current"] = entry.get("charges_current", 1) - 1
@@ -89,11 +91,14 @@ static func apply_self_reroll(
 	var actual_skill: String = swap if not swap.is_empty() else skill_name
 
 	# allow_reroll=false: the re-roll itself must not trigger another reroll
-	# (single reroll per check). ic_day/context default to -1/{} as before.
+	# (single reroll per check). ic_day/context are threaded through from the original
+	# roll (not hardcoded to -1/{}) so live TN penalties gated on them -- SOFT_HEARTED,
+	# elemental-imbalance overflow, CANT_LIE, armor/mount context flags -- still apply
+	# on the reroll instead of silently vanishing.
 	var result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, actual_skill, tn, raises,
 		emphasis_name, trait_override, bonus_rolled, bonus_kept, flat_bonus,
-		-1, {}, false,
+		ic_day, context, false,
 	)
 	result["rerolled"] = true
 	result["reroll_source"] = entry.get("source", "")
@@ -114,6 +119,8 @@ static func try_self_reroll(
 	bonus_rolled: int = 0,
 	bonus_kept: int = 0,
 	flat_bonus: int = 0,
+	ic_day: int = -1,
+	context: Dictionary = {},
 ) -> Dictionary:
 	if original_result.get("success", false):
 		return original_result
@@ -125,6 +132,7 @@ static func try_self_reroll(
 	return apply_self_reroll(
 		character, idx, dice_engine, skill_name, tn, raises,
 		emphasis_name, trait_override, bonus_rolled, bonus_kept, flat_bonus,
+		ic_day, context,
 	)
 
 
@@ -157,6 +165,8 @@ static func apply_granted_reroll(
 	bonus_rolled: int = 0,
 	bonus_kept: int = 0,
 	flat_bonus: int = 0,
+	ic_day: int = -1,
+	context: Dictionary = {},
 ) -> Dictionary:
 	var entry: Dictionary = character.granted_reroll[entry_index]
 	entry["uses"] = entry.get("uses", 1) - 1
@@ -166,16 +176,25 @@ static func apply_granted_reroll(
 	var bd: int = entry.get("bonus_dice", 0)
 	if bd > 0:
 		if entry.get("bonus_type", "unkept") == "kept":
+			# A "kept" bonus die must also be rolled -- DiceEngine.roll_and_keep clamps
+			# kept down to rolled, so a kept-only add with no matching rolled increase
+			# would be silently discarded whenever the base rolled/kept were already
+			# equal (e.g. an unskilled roll).
 			extra_kept = bd
+			extra_rolled = bd
 		else:
 			extra_rolled = bd
 
-	# allow_reroll=false: the re-roll itself must not trigger another reroll.
+	# allow_reroll=false: the re-roll itself must not trigger another reroll. ic_day/
+	# context are threaded through from the original roll (not hardcoded to -1/{}) so
+	# live TN penalties gated on them -- SOFT_HEARTED, elemental-imbalance overflow,
+	# CANT_LIE, armor/mount context flags -- still apply on the reroll instead of
+	# silently vanishing.
 	var result: Dictionary = SkillResolver.resolve_skill_check(
 		character, dice_engine, skill_name, tn, raises,
 		emphasis_name, trait_override,
 		bonus_rolled + extra_rolled, bonus_kept + extra_kept, flat_bonus,
-		-1, {}, false,
+		ic_day, context, false,
 	)
 	result["rerolled"] = true
 	result["reroll_source"] = entry.get("source_technique", "")
@@ -203,6 +222,7 @@ static func try_granted_reroll(
 	bonus_rolled: int = 0,
 	bonus_kept: int = 0,
 	flat_bonus: int = 0,
+	context: Dictionary = {},
 ) -> Dictionary:
 	if original_result.get("success", false):
 		return original_result
@@ -214,6 +234,7 @@ static func try_granted_reroll(
 	return apply_granted_reroll(
 		character, idx, dice_engine, skill_name, tn, raises,
 		emphasis_name, trait_override, bonus_rolled, bonus_kept, flat_bonus,
+		ic_day, context,
 	)
 
 
