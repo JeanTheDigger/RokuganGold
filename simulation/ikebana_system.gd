@@ -70,6 +70,7 @@ const ELIGIBLE_DISPLAY_TYPES: Array = [
 	Enums.SettlementType.TEMPLE,
 	Enums.SettlementType.SHINDEN,
 	Enums.SettlementType.MONASTERY,
+	Enums.SettlementType.IMPERIAL_CAPITAL,  # s57.29.11 (LOCKED): "Imperial Court: Masterwork"
 ]
 
 # -- Seasonal flower material tables (s57.29.6a) --------------------------------
@@ -181,6 +182,22 @@ static func select_season_materials(
 		TimeSystem.Season.AUTUMN: pool = AUTUMN_MATERIALS
 		_:                        pool = WINTER_MATERIALS
 
+	# Take (bamboo) is explicitly "year-round" per its own GDD entry (s57.29.6a
+	# Summer materials: "Take (bamboo — year-round but evokes summer coolness,
+	# Common)"), so it belongs in every season's candidate pool, not just Summer's
+	# literal table. Without this, the Winter shochikubai combination (matsu/take/
+	# ume, below) can never be reached at all -- Take never appears in any Winter
+	# candidate list.
+	if season != TimeSystem.Season.SUMMER:
+		var has_take: bool = false
+		for entry: Variant in pool:
+			if (entry as Array)[0] == "Take":
+				has_take = true
+				break
+		if not has_take:
+			pool = pool.duplicate()
+			pool.append(["Take", "Common"])
+
 	# Determine personality lean (s57.29.6a step 2)
 	var preferred: Array[String] = []
 	var virtue: Enums.BushidoVirtue = artisan.bushido_virtue
@@ -205,17 +222,15 @@ static func select_season_materials(
 		if mat_name not in ordered:
 			ordered.append(mat_name)
 
-	# Check for canonical winter shōchikubai combination
-	if season == TimeSystem.Season.WINTER and quality_tier >= 3:
-		var can_do_shochikubai: bool = true
-		for m: String in CANONICAL_WINTER_SHOCHIKUBAI:
-			if m not in ordered:
-				can_do_shochikubai = false
-				break
-		if can_do_shochikubai and dice.rand_int_range(0, 99) < 40:
-			var result: Array[String] = []
-			result.assign(CANONICAL_WINTER_SHOCHIKUBAI)
-			return result
+	# s57.29.6a step 4 (LOCKED): "If the selected materials form a culturally
+	# significant combination..., note this in the composition_description for
+	# social recognition." This is a check on the OUTCOME of the personality-
+	# weighted selection (steps 1-3) that already happened above, not a separate
+	# mechanic that forces the combination via its own probability roll -- no
+	# LOCKED value exists for such a roll. generate_composition_description's
+	# has_all_three check already performs this "note it if it happened" step;
+	# a Ketsui-lean artisan (whose preferred set is exactly Matsu/Ume/Take) at
+	# Masterwork+ quality in Winter naturally lands all three via `chosen` below.
 
 	var chosen: Array[String] = []
 	var idx: int = 0
@@ -378,13 +393,18 @@ static func _world_start_quality(
 	## Imperial Court → Masterwork; Crane Family Castle → Exceptional/Masterwork;
 	## other major courts with artisans → Fine/Exceptional.
 	var rank: int = artisan.skills.get("Artisan: Ikebana", 0)
+	# s57.29.11 (LOCKED): "Imperial Court: Masterwork" -- stated flatly, with no
+	# rank-gated range (unlike the Crane and provincial-court cases below).
+	if settlement.settlement_type == Enums.SettlementType.IMPERIAL_CAPITAL:
+		return GiftGivingSystem.QualityTier.MASTERWORK
 	if settlement.settlement_type == Enums.SettlementType.FAMILY_CASTLE:
 		if artisan.clan == "Crane":
 			return GiftGivingSystem.QualityTier.MASTERWORK if rank >= 5 else GiftGivingSystem.QualityTier.EXCEPTIONAL
 		return GiftGivingSystem.QualityTier.EXCEPTIONAL if rank >= 4 else GiftGivingSystem.QualityTier.FINE
-	# Provincial/regional courts: Fine to Exceptional
+	# Provincial/regional courts: "Fine to Exceptional" (LOCKED) for any court
+	# with an ikebana artisan present -- the caller already gates on rank >= 1
+	# ("no artisan" is the only case that gets an empty slot / Normal is not a
+	# valid outcome in this category), so the floor here is FINE, not NORMAL.
 	if rank >= 4:
 		return GiftGivingSystem.QualityTier.EXCEPTIONAL
-	if rank >= 2:
-		return GiftGivingSystem.QualityTier.FINE
-	return GiftGivingSystem.QualityTier.NORMAL
+	return GiftGivingSystem.QualityTier.FINE
