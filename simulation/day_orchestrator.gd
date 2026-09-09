@@ -37374,12 +37374,34 @@ static func _process_display_painting_writebacks(
 		if not disp_result.get("success", false):
 			continue
 
-		# Generate placement topic for quality tier 3+
+		# GDD s57.27.3 (LOCKED): "Displaced painting returns to creator's
+		# inventory (display_settlement_id=-1)." resolve_display_painting only
+		# swaps the slot's occupant id; the displaced painting's own display
+		# fields were never cleared here (unlike the seasonal-rotation call
+		# site, which already does this), so it kept generating visitor
+		# effects for a slot it no longer occupies.
+		var displaced_id: int = disp_result.get("displaced_painting_id", -1)
+		if displaced_id >= 0:
+			var displaced: PaintingData = paintings_by_id.get(displaced_id)
+			if displaced != null:
+				displaced.display_settlement_id = -1
+				displaced.display_slot = -1
+				displaced.continuous_display_start_ic_day = -1
+
+		# Generate placement topic (s57.27.7: TIER_3 at quality >= 4, TIER_4
+		# otherwise -- both cases always fire, there is no "high tier only"
+		# qualifier in the LOCKED table). The previous `<= TIER_3` filter here
+		# suppressed every quality <= 3 placement's topic entirely, and even the
+		# quality >= 4 case that passed the filter had its constructed TopicData
+		# discarded (_topic_from_dict's return value was never appended to
+		# active_topics) -- placement topics never actually reached the world
+		# either way.
 		var topic_dict: Dictionary = PaintingSystem.generate_lifecycle_topic(
 			painting, "placement", "", "", ic_day,
 		)
-		if not topic_dict.is_empty() and topic_dict.get("tier", TopicData.Tier.TIER_4) <= TopicData.Tier.TIER_3:
-			_topic_from_dict(topic_dict, next_topic_id, ic_day)
+		if not topic_dict.is_empty():
+			var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
+			active_topics.append(t)
 
 
 static func _process_present_emakimono_writebacks(

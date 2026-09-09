@@ -329,6 +329,12 @@ static func apply_composition_degradation(painting: PaintingData, ic_day: int) -
 	var last_ap: int = painting.ic_day_last_composition_ap if painting.ic_day_last_composition_ap >= 0 else 0
 	if ic_day - last_ap >= COMPOSITION_DEGRADATION_DAYS:
 		painting.craft_progress = painting.craft_progress / 2
+		# Reset the reference point so a still-neglected WIP degrades again only
+		# after another FULL COMPOSITION_DEGRADATION_DAYS with no real composition
+		# AP -- without this, ic_day - last_ap stays >= threshold forever once
+		# crossed once, halving the same WIP again on every later season check
+		# (season+1: 1/4, season+2: 1/8, ...) instead of once per neglected period.
+		painting.ic_day_last_composition_ap = ic_day
 	return painting.craft_progress
 
 
@@ -684,28 +690,31 @@ static func generate_lifecycle_topic(
 
 
 static func _topic_tier_for_event(painting: PaintingData, event_type: String) -> int:
+	## s57.27.7 (LOCKED) table: completion/placement are quality-split (>=4 ->
+	## TIER_3, <=3 -> TIER_4); fusuma_completion, negative_placement, loot/
+	## destruction are each a FLAT tier with no quality qualifier at all --
+	## copy_completion is flat TIER_4, distinct from (and previously conflated
+	## with) the quality-split "completion" row. fusuma_repaint has no row in
+	## the LOCKED table; its quality-threshold split is grounded instead in
+	## gdd/s57.27_painting_system.md's explicit "Tier 3 for Exceptional and
+	## above, Tier 4 for Fine" text, which the LOCKED table does not contradict.
 	match event_type:
-		"completion", "copy_completion":
+		"completion", "placement":
 			return COMPLETION_TOPIC_TIER.get(painting.quality_tier, TopicData.Tier.TIER_4)
-		"placement":
-			return PLACEMENT_TOPIC_TIER
 		"fusuma_completion":
-			return COMPLETION_TOPIC_TIER.get(painting.quality_tier, TopicData.Tier.TIER_4)
+			return TopicData.Tier.TIER_3
 		"fusuma_repaint":
 			return TopicData.Tier.TIER_3 if painting.quality_tier >= FUSUMA_REPAINT_TIER_THRESHOLD else TopicData.Tier.TIER_4
 		"negative_placement":
-			return TopicData.Tier.TIER_3 if painting.quality_tier >= NEGATIVE_PLACEMENT_TIER_THRESHOLD else TopicData.Tier.TIER_4
+			return TopicData.Tier.TIER_3
 		"presentation":
+			return TopicData.Tier.TIER_4
+		"copy_completion":
 			return TopicData.Tier.TIER_4
 		"creator_deceased":
 			return TopicData.Tier.TIER_4
 		"loot", "destruction":
-			if painting.quality_tier >= 3:
-				return TopicData.Tier.TIER_3
-			elif painting.quality_tier >= 2:
-				return TopicData.Tier.TIER_4
-			else:
-				return -1
+			return TopicData.Tier.TIER_3
 	return -1
 
 
@@ -883,7 +892,9 @@ static func generate_world_start_paintings(
 		if tier_floor < 1:
 			continue
 		# Seed one kakemono per eligible settlement.
-		var quality: int = mini(5, tier_floor + (1 if dice.roll_die(6) >= 5 else 0))
+		# s57.27.10 (LOCKED): "Dice roll: 1/6 chance of +1 quality." A d6 result
+		# of exactly 6 is 1/6; ">= 5" (5 or 6) was 2/6, double the LOCKED rate.
+		var quality: int = mini(5, tier_floor + (1 if dice.roll_die(6) == 6 else 0))
 		var season: int = dice.roll_die(4) - 1  # 0=Spring..3=Winter
 		var p: PaintingData = PaintingData.new()
 		p.painting_id = next_painting_id[0]

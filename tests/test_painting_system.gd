@@ -538,16 +538,28 @@ func test_lifecycle_topic_completion_tier_exceptional() -> void:
 	assert_eq(t["tier"], 2, "Exceptional completion = TIER_3 (enum 2)")
 
 
-func test_lifecycle_topic_placement_is_tier4() -> void:
-	var p: PaintingData = _make_kakemono(1, 2, 10)
+func test_lifecycle_topic_placement_fine_quality_is_tier4() -> void:
+	# s57.27.7 (LOCKED): placement quality <= 3 -> TIER_4 (same quality-split
+	# table as completion; placement is not a flat tier regardless of quality).
+	var p: PaintingData = _make_kakemono(1, 2, 10)  # Fine
 	var t: Dictionary = PaintingSystem.generate_lifecycle_topic(p, "placement", "Doji", "Shiro Doji", 100)
-	assert_eq(t["tier"], PaintingSystem.PLACEMENT_TOPIC_TIER, "placement always TIER_4")
+	assert_eq(t["tier"], TopicData.Tier.TIER_4, "Fine placement = TIER_4")
 
 
-func test_lifecycle_topic_destruction_normal_quality_no_topic() -> void:
+func test_lifecycle_topic_placement_legendary_quality_is_tier3() -> void:
+	# s57.27.7 (LOCKED): placement quality >= 4 -> TIER_3.
+	var p: PaintingData = _make_kakemono(1, 5, 10)  # Legendary
+	var t: Dictionary = PaintingSystem.generate_lifecycle_topic(p, "placement", "Doji", "Shiro Doji", 100)
+	assert_eq(t["tier"], TopicData.Tier.TIER_3, "Legendary placement = TIER_3")
+
+
+func test_lifecycle_topic_destruction_normal_quality_is_tier3() -> void:
+	# s57.27.7 (LOCKED): "loot / destruction | TIER_3" is a flat row with no
+	# quality qualifier -- unlike completion/placement, it fires at every
+	# quality tier, including Normal.
 	var p: PaintingData = _make_kakemono(1, 1, 10)  # Normal
 	var t: Dictionary = PaintingSystem.generate_lifecycle_topic(p, "destruction", "Kakita", "Shiro", 100)
-	assert_true(t.is_empty(), "Normal painting destruction = no topic (tier -1)")
+	assert_eq(t["tier"], TopicData.Tier.TIER_3, "Normal painting destruction is still TIER_3")
 
 
 func test_lifecycle_topic_has_title() -> void:
