@@ -1843,3 +1843,55 @@ prior approval before editing any GDD design content, including a stale
 numeric value in a LOCKED addendum; this needs the owner to correct
 s22.7a's text (BENTEN_FESTIVAL_MONTH should read 9, not 11) rather than a
 code change.*
+
+
+---
+
+## AQ. `simulation/tea_ceremony_system.gd` (s57.37) -- no code changes this pass
+
+**Verified clean:** `BASE_TN`/`TN_PER_EXTRA_PARTICIPANT` match all five LOCKED
+worked examples (TN 15/15/20/25/30 for 1-5 participants) exactly;
+`PARTICIPANT_CAP`, `VP_BASE_RECOVERY`, `VP_MASTERY_RECOVERY`,
+`MASTERY_RANK5`, and `MIN_DISPOSITION` (11, matching
+`disposition_system.gd`'s own `ACQUAINTANCE` tier floor) all check out;
+`zone_allows_ceremony()` matches "tokonoma == true OR shrine_eligible ==
+true" exactly; `select_eligible_ids()`'s documented deferral of the VP-
+deficit check to execution time is confirmed actually enforced at
+`action_executor.gd:5898`. No fix needed on any of these.
+
+### AQ1 -- max_viable_count() silently ignores the host's Tea Ceremony rank -- MEDIUM, needs a statistical-approximation decision, not a value swap
+`max_viable_count(void_ring, _tea_rank)` names its second parameter with a
+leading underscore (GDScript's "deliberately unused" convention) and
+never references it in the function body -- it estimates the host's
+average roll as `void_ring * L5R_DIE_AVG` alone, i.e. treating the roll as
+if it were a `void_ring`-die pool with no bonus from the host's actual
+skill. But GDD s57.37.3's own worked example is built specifically around
+skill mattering: "A host with Tea Ceremony 3 + Void 3 = 6k3 should not
+attempt TN 30 (5 participants) -- the engine caps participant count at
+the level where the host has at least a 50% success chance." A real
+`6k3` roll (6 rolled, keep highest 3) averages meaningfully higher than a
+bare `3k3` roll, because keeping the best 3 of 6 dice is a materially
+different distribution than keeping 3 of 3 -- the function's estimate is
+identical for a Tea Ceremony 0 host and a Tea Ceremony 10 host at the
+same Void Ring, directly contradicting the point of the mechanic (a
+skilled tea master should be able to safely invite more guests). Traced
+to its one live caller, `npc_decision_engine.gd:3921-3923`, which already
+computes and passes the real `tea_rank` -- it's discarded inside this
+function, not missing at the call site.
+
+*Why not fixed:* correcting the estimate requires either (a) an accurate
+closed-form or empirical approximation for "average of the top K of N
+exploding d10s," for which no coefficient exists anywhere in this
+codebase and inventing one risks getting the math subtly wrong with no
+way to verify it against a reference value, or (b) a live Monte Carlo
+estimate using the real `DiceEngine.roll_and_keep()` mechanics, which
+would require threading a `DiceEngine` into this function's signature (a
+call-site-affecting change) and introduces a nondeterministic element
+into what is currently a pure, deterministic heuristic. Both are
+legitimate engineering choices but represent a real decision about how
+this "roughly >= 50%" estimate (the function's own docstring already
+frames it as approximate) should be computed, not a bounded bug fix.
+*Not fixed -- left for the owner to pick an approach; either way, the
+practical effect today is that skilled Tea Ceremony hosts are
+systematically under-inviting guests relative to what a true 50%-success
+threshold would allow.*
