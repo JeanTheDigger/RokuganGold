@@ -1630,3 +1630,83 @@ but the inconsistency with the sibling adjacent-bleed accumulator (solving
 the identical fractional-carry-over problem one function away) is a
 strong argument for revisiting it; recommend the owner decide whether
 seasonal SI decay should adopt the same accumulator pattern.*
+
+
+---
+
+## AL. `simulation/fire_system.gd` / `shared/ascii_map_data.gd` (s56.6.6)
+
+**Fixed:** `ignite()` never checked weather at all, so Rain/Storm/Snow/
+Blizzard's ignition-suppression rule was only enforced at round-end
+spread, not for direct ignition (spells, arson, hazards) -- fixed at all
+three production call sites plus `process_round_end()`'s internal
+re-ignition. `_BURN_MAP` had no entry for `FLOOR_GRASS`/`GROUNDCOVER`, so
+grass -- GDD's first-named "Highly Flammable" material -- could never
+ignite or spread anywhere in the game; added, burning into `FLOOR_ASH`
+like every other entry. See git log (`cca63e6`).
+
+### AL1 -- Grass flammability is not conditioned on season/biome -- MEDIUM, missing infrastructure
+GDD s56.6.6: "Tile Flammability: Each tile carries a flammability state
+determined by terrain type, biome, AND SEASON... Highly Flammable: dry
+grass (autumn WESTERN_STEPPE and CENTRAL_PLAINS)... Non-Flammable: ...
+green/wet vegetation (spring and summer grass)." The fix above makes
+`FLOOR_GRASS`/`GROUNDCOVER` unconditionally flammable, matching
+`fire_system.gd`'s own pre-existing `fuel_rounds()` table (which also has
+no season/biome awareness) -- but this is a simplification relative to
+the LOCKED-adjacent text: spring/summer grass should be Non-Flammable,
+and dry-autumn grass should be flammable only in specific biomes.
+*Why not fixed:* no season or biome parameter exists anywhere in the fire
+system (`is_flammable()`, `ignite()`, `fuel_rounds()`, the neighbor-spread
+check) or on `AsciiMapData`/`MapCombatState` themselves -- correctly
+modeling this requires deciding where that context comes from (stored per
+generated map at mission-entry time? read from the world-map's current IC
+season when the mission spawns?) and threading it through every
+flammability check. That's new infrastructure, not a value swap; the
+grass-can-never-burn-at-all bug this pass fixed was strictly worse (GDD's
+own canonical example, "a grass fire is not stealthy," was literally
+impossible), so the unconditional fix is a net improvement, but the
+season/biome nuance remains unmodeled.
+
+### AL2 -- Snow/Blizzard's effect on an ALREADY-burning fire is genuinely ambiguous in the LOCKED text -- LOW, GDD-silent
+The code groups BLIZZARD with STORM for immediate full extinguish
+(`process_round_end`'s early-return branch) and leaves SNOW ungrouped
+(existing fires burn out their normal fuel-based duration, only new
+spread is suppressed). GDD's "Suppressed" paragraph names only "Rain or
+Storm" for the Non-Flammable override and explicitly states "existing
+fires on Rain-affected tiles extinguish within 1 round; Storm extinguishes
+all fires immediately" -- Snow/Blizzard are not mentioned in that
+sentence at all. The separate Weather Interaction Summary lists
+"Snow/Blizzard: all tiles Non-Flammable, no ignition" as one paired
+entry, distinct from both Rain's and Storm's entries, and says nothing
+about what happens to a fire already burning when weather transitions to
+Snow or Blizzard. `ascii_map_environment.gd` separately describes Blizzard
+as "the biome variant of STORM in winter" (design-intent naming, not
+s56.6.6 itself), which could argue for Storm-equivalent treatment -- but
+s56.6.6's own fire-specific text pairs Blizzard with Snow instead,
+arguing against it. *Not fixed -- reasonable readings differ (does
+"Snow/Blizzard: ...no ignition" imply existing fires burn out naturally,
+matching Snow's current code treatment, or should Blizzard specifically
+extinguish immediately like Storm per its "biome variant" naming?); this
+is a genuine GDD-silent question, not something this pass should decide
+by picking a side.*
+
+### AL3 -- Fire noise integration (s56.6.6/s56.6.3) and passthrough damage (s56.6.6) are unwired -- LOW (blocked on the s40 PC-travel HOLD), feature-completion gaps
+GDD s56.6.6: "Ignition generates Loud noise (12 tiles). Ongoing burning
+generates Moderate noise (6 tiles) per burning tile per round" (integrated
+with the Enemy Alert system, s56.6.3) -- but `process_round_end()`'s
+returned `{ignited, burned_out}` is discarded by its only caller
+(`ascii_map_combat_orchestrator.gd`), so fire never raises a noise event.
+Separately, `passthrough_damage()` ("A character who moves through a
+burning tile without stopping takes 0k1 Wounds") has zero callers; only
+standing on a burning tile at turn-start is damaged today. *Why not
+fixed:* wiring noise requires integrating across two different combat
+modes -- `AsciiMapCombatOrchestrator` (turn-based, where fire lives) and
+`CombatController` (the separate real-time/stealth mode that actually
+implements the s56.6.3 Suspicious/Alert state machine via
+`NoiseSystem.compute_noise_reaches`) -- and deciding how a turn-based
+fire event reaches a real-time alert state that may not even be active
+during active combat. Passthrough damage requires the movement system to
+track full per-tile paths within a turn (not just start/end position) and
+a decision about where in that path-processing loop to apply it. Both are
+real feature-completion work inside the already-tracked s40 PC-travel HOLD
+stack, not quick wiring.
