@@ -90,6 +90,7 @@ static func process_geisha_visit(
 	topics_by_id: Dictionary,
 	characters_by_id: Dictionary,
 	dice: DiceEngine,
+	current_season: int = 0,
 ) -> Dictionary:
 	var result: Dictionary = {
 		"patron_id": patron.character_id,
@@ -113,7 +114,7 @@ static func process_geisha_visit(
 	result["visit_count"] = visits
 
 	# -- Assign geisha ---------------------------------------------------------
-	var geisha_id: int = _get_or_assign_geisha(patron, okiya)
+	var geisha_id: int = _get_or_assign_geisha(patron, okiya, characters_by_id)
 	var geisha: L5RCharacterData = null
 	if geisha_id >= 0 and characters_by_id.has(geisha_id):
 		geisha = characters_by_id[geisha_id] as L5RCharacterData
@@ -158,14 +159,30 @@ static func process_geisha_visit(
 					kolat.topic_pool.append(topic_id)
 				# s57.45a A23-A24 (LOCKED): "topic enters agent's topic_pool
 				# tagged with KnowledgeEntry (entry_type = 'kolat_intelligence',
-				# data = {'topic_id': id, 'kolat_sourced': true})" -- previously
-				# only the bare topic_id was appended, indistinguishable from a
-				# topic learned through any ordinary channel.
-				var kolat_entry := KnowledgeEntry.new()
-				kolat_entry.entry_type = "kolat_intelligence"
-				kolat_entry.data["topic_id"] = topic_id
-				kolat_entry.data["kolat_sourced"] = true
-				kolat.knowledge_pool.append(kolat_entry)
+				# data = {'topic_id': id, 'kolat_sourced': true})". Built via
+				# InformationSystem.make_entry() (the established helper every
+				# other call site uses) so season_acquired is actually stamped --
+				# a hand-built KnowledgeEntry left it at the class default (-1),
+				# which InformationSystem.decay_confidence() then read as "already
+				# STALE" on the very next season tick. Dedup-guarded on topic_id,
+				# mirroring the topic_pool guard immediately above: WindDownSystem
+				# does not remove a shared topic from a patron's topic_pool after
+				# it leaks, so a repeat visit can re-leak + re-eavesdrop the same
+				# topic_id and would otherwise pile up duplicate entries.
+				var already_known: bool = false
+				for existing: KnowledgeEntry in kolat.knowledge_pool:
+					if existing.entry_type == "kolat_intelligence" \
+							and existing.data.get("topic_id", -1) == topic_id:
+						already_known = true
+						break
+				if not already_known:
+					var kolat_entry: KnowledgeEntry = InformationSystem.make_entry(
+						Enums.KnowledgeSource.INTELLIGENCE,
+						"kolat_intelligence",
+						{"topic_id": topic_id, "kolat_sourced": true},
+						current_season,
+					)
+					InformationSystem.add_knowledge(kolat, kolat_entry)
 
 	# -- Okaasan routing roll --------------------------------------------------
 	if okiya.handler_id < 0:
@@ -220,16 +237,33 @@ static func generate_initial_okiya(
 # PRIVATE HELPERS — ROUTING
 # ============================================================================
 
-static func _get_or_assign_geisha(patron: L5RCharacterData, okiya: OkiyaData) -> int:
+static func _get_or_assign_geisha(
+	patron: L5RCharacterData,
+	okiya: OkiyaData,
+	characters_by_id: Dictionary,
+) -> int:
 	var okiya_key: int = okiya.okiya_id
 	if patron.assigned_geisha_ids.has(okiya_key):
-		return patron.assigned_geisha_ids[okiya_key]
+		var current_id: int = patron.assigned_geisha_ids[okiya_key]
+		var current_geisha: L5RCharacterData = characters_by_id.get(current_id) as L5RCharacterData
+		if current_geisha != null and not CharacterStats.is_dead(current_geisha):
+			return current_id
+		# s57.45 (LOCKED): "If the geisha dies, leaves, or is removed, the okaasan
+		# assigns a replacement on the next visit. Disposition resets to baseline
+		# with the new geisha -- the relationship must be rebuilt." The stale
+		# assignment lives on the PATRON's own sheet, so handle_character_death
+		# (which only scrubs okiya-scoped fields: geisha_ids/okaasan_id/handler_id/
+		# kolat_agent_id) can never clear it -- it has to be caught here, at the
+		# point the assignment is actually used.
+		patron.assigned_geisha_ids.erase(okiya_key)
 	if okiya.geisha_ids.is_empty():
 		return -1
-	# Assign deterministically from the list using patron ID as seed.
+	# Assign deterministically from the (already death-pruned via
+	# handle_character_death) list using patron ID as seed.
 	var idx: int = patron.character_id % okiya.geisha_ids.size()
 	var gid: int = okiya.geisha_ids[idx]
 	patron.assigned_geisha_ids[okiya_key] = gid
+	patron.disposition_values[gid] = 0  # baseline -- the relationship must be rebuilt
 	return gid
 
 

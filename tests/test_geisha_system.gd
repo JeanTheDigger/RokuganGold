@@ -225,9 +225,10 @@ func test_geisha_assign_deterministic() -> void:
 	var patron := _make_character(7)
 	var okiya := _make_okiya(10)
 	okiya.geisha_ids = [101, 102, 103]
-	var g1: int = GeishaSystem._get_or_assign_geisha(patron, okiya)
+	var chars: Dictionary = {101: _make_character(101), 102: _make_character(102), 103: _make_character(103)}
+	var g1: int = GeishaSystem._get_or_assign_geisha(patron, okiya, chars)
 	patron.assigned_geisha_ids.erase(10)
-	var g2: int = GeishaSystem._get_or_assign_geisha(patron, okiya)
+	var g2: int = GeishaSystem._get_or_assign_geisha(patron, okiya, chars)
 	assert_eq(g1, g2)
 
 
@@ -235,7 +236,8 @@ func test_geisha_assign_persists_in_dictionary() -> void:
 	var patron := _make_character(1)
 	var okiya := _make_okiya(5)
 	okiya.geisha_ids = [200]
-	GeishaSystem._get_or_assign_geisha(patron, okiya)
+	var chars: Dictionary = {200: _make_character(200)}
+	GeishaSystem._get_or_assign_geisha(patron, okiya, chars)
 	assert_true(patron.assigned_geisha_ids.has(5))
 
 

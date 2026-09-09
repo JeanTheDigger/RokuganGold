@@ -2461,6 +2461,7 @@ static func _process_ooc_day_tick(
 				if okiya != null:
 					var geisha_result: Dictionary = GeishaSystem.process_geisha_visit(
 						c, okiya, leaked_topic, ooc_topics_by_id, characters_by_id, dice_engine,
+						TimeSystem.get_absolute_season(ic_day),
 					)
 					wind_result["geisha_visit_result"] = geisha_result
 			# ROUTING_BROTHERHOOD: handled by Brotherhood network when implemented.
