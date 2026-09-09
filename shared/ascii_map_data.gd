@@ -290,6 +290,16 @@ const _BURN_MAP: Dictionary = {
 	Enums.TileType.TREE_DECIDUOUS:    Enums.TileType.FLOOR_ASH,
 	Enums.TileType.TREE_CHERRY:       Enums.TileType.FLOOR_ASH,
 	Enums.TileType.CROPS:             Enums.TileType.FLOOR_ASH,
+	# s56.6.6 (LOCKED-adjacent, PROVISIONAL) lists dry grass and fallen leaves as
+	# "Highly Flammable" -- simulation/fire_system.gd's own fuel_rounds() already
+	# groups FLOOR_GRASS/GROUNDCOVER under DURATION_GRASS_LEAVES, but this map (the
+	# sole backing for is_flammable()) never had a matching entry, so grass could
+	# never actually ignite. GDD also conditions grass flammability on season/biome
+	# ("Non-Flammable: ... green/wet vegetation (spring and summer grass)") -- that
+	# nuance is NOT modeled here (no season/biome parameter exists anywhere in the
+	# fire system yet); see docs/AUDIT_FINDINGS_2026-09.md for the deferred gap.
+	Enums.TileType.FLOOR_GRASS:       Enums.TileType.FLOOR_ASH,
+	Enums.TileType.GROUNDCOVER:       Enums.TileType.FLOOR_ASH,
 }
 
 

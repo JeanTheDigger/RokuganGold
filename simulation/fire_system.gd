@@ -53,11 +53,30 @@ static func fuel_rounds(tile: int) -> int:
 			return DURATION_DEFAULT
 
 
+## True when the given weather suppresses ALL new ignition (s56.6.6): "any tile
+## currently affected by Rain or Storm weather is treated as Non-Flammable
+## regardless of its base state" and "Snow/Blizzard: all tiles Non-Flammable,
+## no ignition."
+static func _ignition_suppressed(weather: int) -> bool:
+	return weather == AsciiMapEnvironment.WeatherState.RAIN \
+		or weather == AsciiMapEnvironment.WeatherState.STORM \
+		or weather == AsciiMapEnvironment.WeatherState.SNOW \
+		or weather == AsciiMapEnvironment.WeatherState.BLIZZARD
+
+
 ## Ignite a tile from a fire source (spell, arson, environmental). The tile ignites
-## only if it contains flammable material and is not already burning. Records the
-## fuel-based burn duration. Returns true if it caught.
-static func ignite(map: AsciiMapData, x: int, y: int) -> bool:
+## only if it contains flammable material, is not already burning, and the current
+## weather does not suppress ignition (s56.6.6). Records the fuel-based burn
+## duration. Returns true if it caught.
+static func ignite(
+	map: AsciiMapData,
+	x: int,
+	y: int,
+	weather: int = AsciiMapEnvironment.WeatherState.CLEAR,
+) -> bool:
 	if x < 0 or y < 0 or x >= map.width or y >= map.height:
+		return false
+	if _ignition_suppressed(weather):
 		return false
 	var tile: int = map.get_tile(x, y)
 	if tile == Enums.TileType.FIRE:
@@ -88,8 +107,8 @@ static func spread_chance(weather: int, wind_dir: Vector2i, offset: Vector2i) ->
 ## neighbours, then burn-duration decrement and Burned Out conversion. Returns
 ## {ignited: Array[Vector2i], burned_out: Array[Vector2i]} for logging.
 static func process_round_end(map: AsciiMapData, weather: int, dice: DiceEngine) -> Dictionary:
-	var ignited: Array = []
-	var burned_out: Array = []
+	var ignited: Array[Vector2i] = []
+	var burned_out: Array[Vector2i] = []
 
 	# Storm extinguishes all fires immediately (s56.6.6).
 	if weather == AsciiMapEnvironment.WeatherState.STORM \
@@ -103,8 +122,10 @@ static func process_round_end(map: AsciiMapData, weather: int, dice: DiceEngine)
 		return {"ignited": ignited, "burned_out": burned_out}
 
 	var rain: bool = weather == AsciiMapEnvironment.WeatherState.RAIN
-	# Spread is suppressed in Rain and Snow/Blizzard (Non-Flammable / no ignition).
-	var spread_ok: bool = not rain and weather != AsciiMapEnvironment.WeatherState.SNOW
+	# Spread is new ignition on a neighbour tile -- suppressed under the same
+	# weather states ignite() itself now refuses (Rain/Storm/Snow/Blizzard; Storm/
+	# Blizzard already returned above, leaving Rain/Snow here).
+	var spread_ok: bool = not _ignition_suppressed(weather)
 
 	# 1. Spread to flammable neighbours (collected, applied after the tick so a
 	#    fresh ignition does not cascade or get decremented this same round).
@@ -140,7 +161,7 @@ static func process_round_end(map: AsciiMapData, weather: int, dice: DiceEngine)
 
 	# 3. Apply the new ignitions (full fuel duration, fresh this round).
 	for pos: Vector2i in ignited:
-		ignite(map, pos.x, pos.y)
+		ignite(map, pos.x, pos.y, weather)
 
 	return {"ignited": ignited, "burned_out": burned_out}
 

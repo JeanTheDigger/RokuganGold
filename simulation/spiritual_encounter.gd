@@ -507,7 +507,7 @@ static func _apply_fire_trail(es: EncounterState, cid: int, dice: DiceEngine) ->
 		if not AsciiMapData.is_flammable(map.get_tile(fx, fy)):
 			continue
 		if dice.randf() < 0.5:  # s54.10 Fire Trail: 50% per flammable tile (LOCKED)
-			FireSystem.ignite(map, fx, fy)
+			FireSystem.ignite(map, fx, fy, es.mcs.weather)
 
 
 ## Seeds one ambient Phantom Battle hazard (s54.10): a 3×3 or 5×5 area near the

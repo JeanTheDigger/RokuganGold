@@ -5334,7 +5334,7 @@ static func _apply_spell_ignite_zone(
 	var count: int = 0
 	for dy in range(-radius, radius + 1):
 		for dx in range(-radius, radius + 1):
-			if FireSystem.ignite(state.map, center.x + dx, center.y + dy):
+			if FireSystem.ignite(state.map, center.x + dx, center.y + dy, state.weather):
 				count += 1
 	return {"center": center, "radius": radius, "count": count}
 
@@ -7686,7 +7686,7 @@ static func advance_round(
 					_cdmg = int(round(_cdmg * _cf.get("multiplier", 1.0)))
 				WoundSystem.apply_damage(_och, _cdmg, 0)
 			# Arsonist: ignite the flammable tile underfoot (FireSystem spreads it).
-			FireSystem.ignite(state.map, _curpos.x, _curpos.y)
+			FireSystem.ignite(state.map, _curpos.x, _curpos.y, state.weather)
 
 	# End-of-round fire spread/extinguish (s56.6.6) — no-op when nothing is burning.
 	if not state.map.burning_tiles.is_empty():
