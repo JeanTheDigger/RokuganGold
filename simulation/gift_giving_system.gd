@@ -75,6 +75,13 @@ const APPROPRIATENESS_MATRIX: Dictionary = {
 		GiftCategory.TEA_IMPLEMENTS: Appropriateness.APPROPRIATE,
 		GiftCategory.ACCESSORIES: Appropriateness.APPROPRIATE,
 		GiftCategory.FOOD_DRINK: Appropriateness.APPROPRIATE,
+		# s12.3 / s12.3a's own named worked example: "A Crab bushi will not appreciate a
+		# Crane poetry scroll the way a Crane courtier would" -- cited twice in LOCKED text
+		# as the canonical illustration of an inappropriate gift that must reduce/remove
+		# Free Raises, not the sparse-matrix NEUTRAL (full Free Raises) default. See
+		# docs/AUDIT_FINDINGS_2026-09.md for the remaining unlisted BUSHI categories
+		# (ART, WRITING_IMPLEMENTS, RITUAL_OBJECTS), which have no equally explicit anchor.
+		GiftCategory.POETRY_SCROLLS: Appropriateness.INAPPROPRIATE,
 	},
 	RecipientArchetype.COURTIER: {
 		GiftCategory.ART: Appropriateness.IDEAL,
