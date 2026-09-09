@@ -27,6 +27,15 @@ static func contract(victim: L5RCharacterData, type: int, source_id: int, ic_day
 	victim.disease_affliction = {
 		"type": type, "source_id": source_id, "last_tick": ic_day, "cures": 0, "onset": ic_day,
 	}
+	# s54.11 (LOCKED) Shikko-gaki Diseased Touch: "come down with a severe feverish
+	# infection causing Stamina and Strength to drop by 1 Rank" -- this loss happens at
+	# the moment of infection (failing the Stamina-vs-wounds resist roll the caller
+	# already made before calling contract()), separate from the weekly roll-or-drain
+	# cycle process_daily() runs afterward. Byoki Plague Bearer has no such onset drain
+	# (GDD: "the target must make an Earth Roll... [starting] every subsequent day" --
+	# no immediate loss on contraction), so this is scoped to DISEASED_TOUCH only.
+	if type == Type.DISEASED_TOUCH:
+		_drain(victim, ["stamina", "strength"], 1)
 
 
 static func is_diseased(victim: L5RCharacterData) -> bool:
@@ -54,8 +63,8 @@ static func process_daily(victim: L5RCharacterData, ic_day: int, dice: DiceEngin
 		Type.PLAGUE_BEARER:
 			# Daily Earth roll TN 15 or lose 1 Rank in ALL physical Traits; 3 consecutive
 			# successes cure it (Medicine has no effect — magic-only otherwise).
-			var earth: int = cursed_resist_pool(victim, maxi(1, mini(victim.stamina, victim.willpower)))
-			var roll: int = dice.roll_and_keep(earth, earth, true).total
+			var earth: int = cursed_resist_pool(victim, maxi(1, CharacterStats.get_earth_ring(victim)))
+			var roll: int = dice.roll_and_keep(earth + _jurojin_rolled_bonus(victim), earth, true).total
 			if roll >= PLAGUE_BEARER_TN:
 				a["cures"] = int(a.get("cures", 0)) + 1
 				if int(a["cures"]) >= CURE_CONSECUTIVE:
@@ -71,7 +80,7 @@ static func process_daily(victim: L5RCharacterData, ic_day: int, dice: DiceEngin
 				return {"type": t}
 			a["last_tick"] = ic_day
 			var sta_d: int = cursed_resist_pool(victim, maxi(1, victim.stamina + _earths_touch_stamina_bonus(victim)))
-			var roll2: int = dice.roll_and_keep(sta_d, sta_d, true).total
+			var roll2: int = dice.roll_and_keep(sta_d + _jurojin_rolled_bonus(victim), sta_d, true).total
 			if roll2 >= DISEASED_TOUCH_TN:
 				cure(victim)
 				return {"cured": true, "type": t}
@@ -128,11 +137,12 @@ static func is_poisoned(victim: L5RCharacterData) -> bool:
 ## Balm drives out poisons/toxins, not disease (which has its own Medicine cure path).
 static func resolve_poison_resist_roll(victim: L5RCharacterData, tn: int, dice: DiceEngine) -> bool:
 	var sta: int = cursed_resist_pool(victim, maxi(1, victim.stamina + _earths_touch_stamina_bonus(victim)))
-	if dice.roll_and_keep(sta, sta, true).total >= tn:
+	var jurojin: int = _jurojin_rolled_bonus(victim)
+	if dice.roll_and_keep(sta + jurojin, sta, true).total >= tn:
 		return true
 	if not victim.has_day_buff("jurojins_balm"):
 		return false
-	return dice.roll_and_keep(sta + 2, sta, true).total >= tn
+	return dice.roll_and_keep(sta + jurojin + 2, sta, true).total >= tn
 
 
 ## Jurojin's Curse (s34 Earth 2): the target's Earth reads 3 Ranks lower (min 1) for resisting
@@ -143,6 +153,17 @@ static func cursed_resist_pool(victim: L5RCharacterData, base: int) -> int:
 	if victim.has_day_buff("jurojins_curse"):
 		return maxi(1, base - JUROJINS_CURSE_PENALTY)
 	return base
+
+
+## SEVEN_FORTUNES_BLESSING/CURSE (Jurojin, s45 line 321): +2k0 / -2k0 to rolls resisting
+## disease or poison. Routes through the shared AdvantageSystem gate with an empty skill_name
+## -- Jurojin's branches key only on the is_resist_disease_or_poison context flag, so no other
+## advantage/disadvantage handled by that function can spuriously fire off this minimal context.
+static func _jurojin_rolled_bonus(victim: L5RCharacterData) -> int:
+	var bonus: Dictionary = AdvantageSystem.get_skill_bonus(
+		victim, "", {"is_resist_disease_or_poison": true},
+	)
+	return int(bonus.get("rolled", 0))
 
 
 ## s34 Earth's Touch (Earth 1, Stamina option) AND Stone's Endurance (Earth 1) both make
