@@ -719,10 +719,20 @@ func test_mind_of_darkness_lost_adds_taint_rank_to_perception_skill() -> void:
 	assert_eq(mod.get("tn", 0), 5)
 
 
-func test_mind_of_darkness_does_not_affect_non_mental_skill() -> void:
-	# Kenjutsu uses Agility — must not get the bonus.
+func test_mind_of_darkness_lost_adds_taint_rank_to_physical_skill() -> void:
+	# s44 line 125 (LOCKED): "If Lost, add Taint Rank to the total of all rolls with
+	# mental Traits as well as physical Traits." Kenjutsu uses Agility (physical) --
+	# must ALSO get the bonus, same as the mental Traits above.
 	var c := _char_with_mind_of_darkness(5.0, true)
 	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Kenjutsu")
+	assert_eq(mod.get("tn", 0), 5)
+
+
+func test_mind_of_darkness_does_not_affect_void_skill() -> void:
+	# Meditation uses Void, which is neither a mental nor physical Trait per s44:125's
+	# named list -- must not get the bonus.
+	var c := _char_with_mind_of_darkness(5.0, true)
+	var mod: Dictionary = MutationSystem.get_skill_modifiers(c, "Meditation")
 	assert_eq(mod.get("tn", 0), 0)
 
 

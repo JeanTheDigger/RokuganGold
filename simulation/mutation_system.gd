@@ -295,10 +295,7 @@ static func process_rank_up(
 
 		3:
 			# +1 power (Minor or Major), +1 mutation
-			var combined: Array[Enums.ShadowlandsPowerType] = []
-			combined.append_array(MINOR_POWERS)
-			combined.append_array(MAJOR_POWERS)
-			var pt: Enums.ShadowlandsPowerType = _pick_power_from_pool(character, combined, dice)
+			var pt: Enums.ShadowlandsPowerType = _pick_any_power(character, dice)
 			if pt != Enums.ShadowlandsPowerType.NONE:
 				var tier: Enums.ShadowlandsPowerTier = (
 					Enums.ShadowlandsPowerTier.MINOR
@@ -401,7 +398,12 @@ static func resolve_periodic_taint_roll(
 	var rank: int = get_taint_rank(character.taint)
 	var tn: int = get_roll_tn(rank)
 	var wound_pen: int = CharacterStats.get_wound_penalty(character)
-	var result: Dictionary = dice.roll_skill_check(earth_ring, 0, 0)
+	# s42: "make an Earth roll" -- a Ring roll, not an unskilled skill check. Ring rolls
+	# explode on 10s per RAW; roll_skill_check(earth_ring, 0, ...) forces explodes=false
+	# because it treats skill_rank==0 as "unskilled" (correct for skill checks, wrong
+	# here), matching the Earth Ring rolls elsewhere in the codebase
+	# (individual_combat.gd's explicit explodes=true Ring rolls).
+	var result: Dictionary = dice.roll_check(earth_ring, earth_ring, 0, 0, 0, true, false)
 	var adjusted_total: int = result["total"] + wound_pen
 	var success: bool = adjusted_total >= tn
 	if not success:
@@ -430,7 +432,9 @@ static func resolve_power_use_taint_roll(
 ) -> Dictionary:
 	var tn: int = get_power_use_tn(power_tier)
 	var wound_pen: int = CharacterStats.get_wound_penalty(character)
-	var result: Dictionary = dice.roll_skill_check(earth_ring, 0, 0)
+	# s42: "an Earth Taint roll" -- see resolve_periodic_taint_roll's comment above;
+	# a Ring roll explodes on 10s, unlike an unskilled skill check.
+	var result: Dictionary = dice.roll_check(earth_ring, earth_ring, 0, 0, 0, true, false)
 	var adjusted_total: int = result["total"] + wound_pen
 	var success: bool = adjusted_total >= tn
 	if not success:
@@ -489,9 +493,8 @@ static func get_skill_modifiers(
 	if has_mutation(character, Enums.MutationType.DISCOLORED_SKIN) and is_social:
 		dtn -= 5
 
-	# DISTORTED_LIMBS (arm): -3k0 to rolls made with that arm
-	if is_social:
-		pass  # arm rolls are physical actions (s40), not skill rolls
+	# DISTORTED_LIMBS (arm): -3k0 to rolls made with that arm (physical actions, s40 --
+	# not gated on is_social/skill rolls)
 	for m: MutationData in character.mutations:
 		if m.mutation_type == Enums.MutationType.DISTORTED_LIMBS and m.affected_limb == "arm":
 			if context.get("uses_distorted_arm", false):
@@ -538,14 +541,17 @@ static func get_skill_modifiers(
 		if is_temptation or is_intimidation or is_sincerity_deceit:
 			dk += taint_rank
 
-	# MIND_OF_DARKNESS (s44 line 123): if Lost, add Taint Rank (flat) to rolls with
-	# mental Traits (Intelligence, Willpower, Awareness, Perception).
+	# MIND_OF_DARKNESS (s44 line 125): "If Lost, add Taint Rank to the total of all
+	# rolls with mental Traits (Intelligence, Willpower, Awareness, Perception) AS
+	# WELL AS physical Traits (Strength, Stamina, Agility, Reflexes)."
 	# "Embrace" path for non-Lost characters is an active narrative choice — not wired
 	# for NPC simulation.
 	if benefits_on and has_power(character, Enums.ShadowlandsPowerType.MIND_OF_DARKNESS) and is_lost(character):
 		var used_trait: Enums.Trait = SkillResolver.get_trait_for_skill(skill_name)
 		if used_trait in [Enums.Trait.INTELLIGENCE, Enums.Trait.WILLPOWER,
-				Enums.Trait.AWARENESS, Enums.Trait.PERCEPTION]:
+				Enums.Trait.AWARENESS, Enums.Trait.PERCEPTION,
+				Enums.Trait.STRENGTH, Enums.Trait.STAMINA,
+				Enums.Trait.AGILITY, Enums.Trait.REFLEXES]:
 			# Positive dtn = benefit (adds to final_total via total_bonus chain).
 			# This matches the existing sign convention shared by all dtn entries here.
 			dtn += taint_rank
