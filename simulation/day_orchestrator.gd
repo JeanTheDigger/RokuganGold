@@ -38043,15 +38043,20 @@ static func _process_sculpture_seasonal_maintenance(
 			var tier_before: int = sculpture.quality_tier
 			SculptureSystem.apply_outdoor_degradation(sculpture, ic_day)
 			if sculpture.quality_tier < tier_before:
-				# Pair quality reduced; check if pair should be marked damaged.
-				if sculpture.quality_tier < SculptureSystem.GUARDIAN_DAMAGE_TIER_THRESHOLD:
-					var topic_dict: Dictionary = SculptureSystem.generate_lifecycle_topic(
-						sculpture, "guardian_damage", "", ic_day,
-					)
-					if not topic_dict.is_empty():
-						var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
-						if t != null:
-							active_topics.append(t)
+				# Pair quality reduced -- s57.28 (LOCKED): "Guardian pair damaged
+				# (Exceptional+) -> TIER_3" / "(Fine and below) -> TIER_4". Every
+				# degradation that actually drops quality generates a topic;
+				# generate_lifecycle_topic itself already picks TIER_3 vs TIER_4
+				# from the resulting quality_tier -- gating the call on
+				# quality_tier < GUARDIAN_DAMAGE_TIER_THRESHOLD here made the
+				# TIER_3 (Exceptional+) branch permanently unreachable.
+				var topic_dict: Dictionary = SculptureSystem.generate_lifecycle_topic(
+					sculpture, "guardian_damage", "", ic_day,
+				)
+				if not topic_dict.is_empty():
+					var t: TopicData = _topic_from_dict(topic_dict, next_topic_id, ic_day)
+					if t != null:
+						active_topics.append(t)
 
 	# --- 4. Mantis figurine collection topics (GDD section H) ---
 	# Fires once per season per qualifying cluster (3+ figurines, same creator or theme).

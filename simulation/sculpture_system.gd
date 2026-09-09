@@ -254,6 +254,12 @@ static func apply_composition_degradation(sculpture: SculptureData, ic_day: int)
 			sculpture.ic_day_last_composition_ap >= 0 else 0
 	if ic_day - last_ap >= COMPOSITION_DEGRADATION_DAYS:
 		sculpture.craft_progress = sculpture.craft_progress / 2
+		# Reset the reference point (same pattern as PaintingSystem.
+		# apply_composition_degradation, GDD A6 "same pattern" as s57.27.5):
+		# without this, ic_day - last_ap stays >= threshold forever once
+		# crossed once, halving the same WIP again on every later season
+		# check instead of once per neglected COMPOSITION_DEGRADATION_DAYS span.
+		sculpture.ic_day_last_composition_ap = ic_day
 	return sculpture.craft_progress
 
 
@@ -386,24 +392,18 @@ static func apply_visitor_effect(
 	if sculpture.creator_id < 0:
 		return {}  # Ancient / unknown creator
 
-	# Check visitor memory — 120-day immunity window.
-	for entry_v: Variant in sculpture.visitor_memory:
-		var entry: Dictionary = entry_v as Dictionary
-		if entry.get("char_id", -1) == visitor_id:
-			if ic_day - entry.get("last_visit_ic_day", 0) < VISITOR_BONUS_DURATION_DAYS:
-				return {"immune": true}
-			# Expired entry — will be updated below.
-			break
-
-	# Update visitor memory.
-	var found_entry: bool = false
+	# Check visitor memory — 120-day immunity window — and update it in the same pass.
+	var found_index: int = -1
 	for i: int in range(sculpture.visitor_memory.size()):
 		var entry: Dictionary = sculpture.visitor_memory[i]
 		if entry.get("char_id", -1) == visitor_id:
-			sculpture.visitor_memory[i] = {"char_id": visitor_id, "last_visit_ic_day": ic_day}
-			found_entry = true
+			if ic_day - entry.get("last_visit_ic_day", 0) < VISITOR_BONUS_DURATION_DAYS:
+				return {"immune": true}
+			found_index = i
 			break
-	if not found_entry:
+	if found_index >= 0:
+		sculpture.visitor_memory[found_index] = {"char_id": visitor_id, "last_visit_ic_day": ic_day}
+	else:
 		sculpture.visitor_memory.append({"char_id": visitor_id, "last_visit_ic_day": ic_day})
 
 	# Cap visitor memory.
@@ -411,14 +411,16 @@ static func apply_visitor_effect(
 		sculpture.visitor_memory = sculpture.visitor_memory.slice(
 				sculpture.visitor_memory.size() - VISITOR_MEMORY_CAP)
 
-	# Check for glory tick.
+	# Check for glory tick. s57.28 (LOCKED): "Glory tick: every 5 visitors ...
+	# (same as painting)" -- PaintingSystem.apply_visitor_effect has no
+	# per-season cap, purely counting visitors since the last tick; the
+	# season gate previously here was a sculpture-only invention that both
+	# capped ticks to one per season AND left visitor_count_since_last_tick
+	# unreset once blocked, understating Glory for high-traffic sculptures.
 	sculpture.visitor_count_since_last_tick += 1
-	var glory_tick: bool = false
-	if sculpture.visitor_count_since_last_tick >= GLORY_TICK_THRESHOLD and \
-			sculpture.last_glory_tick_ic_season != current_ic_season:
-		glory_tick = true
+	var glory_tick: bool = sculpture.visitor_count_since_last_tick >= GLORY_TICK_THRESHOLD
+	if glory_tick:
 		sculpture.visitor_count_since_last_tick = 0
-		sculpture.last_glory_tick_ic_season = current_ic_season
 
 	var disp: int = VISITOR_DISPOSITION_BY_TIER.get(sculpture.quality_tier, 1)
 	return {
@@ -509,9 +511,14 @@ static func generate_lifecycle_topic(
 		}
 
 	elif event == "destruction":
-		tier = 2 if sculpture.quality_tier >= GUARDIAN_DAMAGE_TIER_THRESHOLD else 3
+		# s57.28 (LOCKED): "Statue destruction (Exceptional+) -> TIER_3" -- unlike
+		# guardian_damage, there is no locked (or base-file) row for Fine/Normal
+		# destruction at all; a TIER_4 fallback for that case would be an
+		# invented value. Below Exceptional, destruction generates no topic.
+		if sculpture.quality_tier < GUARDIAN_DAMAGE_TIER_THRESHOLD:
+			return {}
 		return {
-			"tier": tier,
+			"tier": TopicData.Tier.TIER_3,
 			"category": "SOCIAL",
 			"topic_type": "sculpture_destroyed",
 			"title": "A %s statue of %s at %s has been destroyed." % [
