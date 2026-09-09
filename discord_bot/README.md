@@ -11,18 +11,44 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 1 — the bot is alive and can roll dice
+## Status: Phase 2 — dice + character sheets + accounts
 
-What works right now:
+**Dice**
 
 | Command | What it does |
 |---|---|
 | `/ping` | Confirms the bot is online (shows gateway latency). |
 | `/roll` | Full L5R 4e **Roll & Keep**: `rolled` (X) and `kept` (Y), with optional Target Number, Called Raises (+5 each), flat bonus, Emphasis (reroll 1s once), and an Unskilled flag (dice don't explode). |
 
-Everything else from the plan — character sheets, tables/rooms, combat, the
-"player rolls an attack → DM approves the damage" flow, and NPC templates —
-comes in later phases and builds on this foundation.
+**Character sheets** (each sheet is linked to your Discord account, per server)
+
+| Command | What it does |
+|---|---|
+| `/sheet create` | Make a character (name, optional clan/family/school/type/age) and set it active. Traits start at 2 (the L5R 4e baseline). |
+| `/sheet view` | Show a sheet — rings (derived as min of two traits), wounds & wound level, Insight & Rank, standing, gear, skills. `member:` shows another player's (DM only). |
+| `/sheet list` | List your characters (active one marked). |
+| `/sheet activate` | Choose which of your characters is active. |
+| `/sheet trait` | Set a Trait or Void (0–10). |
+| `/sheet skill` | Set a skill rank (0 removes it). |
+| `/sheet set` | Set a numeric field: honor, glory, status, infamy, taint, koku, age, school rank, void points, armor TN/reduction. |
+| `/sheet wound` / `/sheet heal` | Apply or heal wounds; shows the wound-level change. |
+| `/sheet delete` | Delete a character. |
+
+**DM (game master) accounts**
+
+| Command | What it does |
+|---|---|
+| `/dm grant` / `/dm revoke` | Server admins make/unmake a member a DM. |
+| `/dm list` | Show this server's DMs. |
+
+A **DM** — a server admin, anyone with *Manage Server*, or a member granted via
+`/dm grant` — can `view`, edit (`trait`/`skill`/`set`/`wound`/`heal`), and
+`delete` **any** player's active character by adding `member:@player`. Everyone
+else can only manage their own. Sheets are scoped **per server**, so one bot can
+run many separate games without them mixing.
+
+Still to come in later phases: tables/rooms with invites, combat (`/attack` and
+the "player rolls → DM approves damage" flow), NPC templates, and Vultr hosting.
 
 ---
 
@@ -31,14 +57,21 @@ comes in later phases and builds on this foundation.
 ```
 discord_bot/
 ├── bot.py                 # Discord plumbing only (slash commands). No game math here.
+├── storage.py             # SQLite persistence: characters, active-links, DM roles.
 ├── l5r_rules/             # Pure-Python L5R 4e rules. No Discord, no Godot. Testable alone.
 │   ├── dice.py            # Roll & Keep engine (ported from simulation/dice_engine.gd).
+│   ├── character.py       # The playable character sheet (subset of character_data.gd).
+│   ├── stats.py           # Derived values: rings, wound levels, Insight (character_stats.gd).
+│   ├── enums.py           # Traits/rings/wound tables (enums.gd).
 │   └── __init__.py
 ├── requirements.txt       # Python dependencies.
 ├── .env.example           # Template for your secret token. Copy to .env.
 ├── .gitignore             # Keeps .env and the database out of git.
 └── README.md              # This file.
 ```
+
+The database is a single file (`rokugan.db` by default, or set `DB_PATH`). It is
+git-ignored and safe to back up by simply copying it.
 
 The split is deliberate: **rules never depend on Discord.** You can run and
 check the rules engine on their own with no bot and no internet:
@@ -125,8 +158,6 @@ Try:
 
 ## What's next (later phases — not built yet)
 
-- **Character sheets** — create/store sheets, link one to your Discord account,
-  a DM role.
 - **Tables / rooms** — private threads or channels as "rooms," with invites.
 - **Combat** — `/attack` against a TN, damage, wounds, armor, and the
   **DM-authorizes-damage** button flow.
