@@ -1742,3 +1742,37 @@ settlement creation? seasonally, regenerated?), where results persist (a
 new `SettlementData` field), and how Daily Conversation / player queries
 would read it back. That's new data-model and generation-pipeline
 infrastructure, not a call-the-existing-function fix.*
+
+
+---
+
+## AN. `simulation/musha_shugyo_system.gd` (s57.48)
+
+**Fixed:** `evaluate_at_gempukku()` compared a single d10 roll against a
+0-100 percentage threshold, making the gempukku pilgrimage trigger
+~90%+ of the time instead of the intended ~10-25% base rate -- switched
+to `DiceEngine.rand_int_range(1, 100)`. `is_lord_dead_or_missing()`'s
+unnecessary `wounds_taken > 0` guard could miss a lord dead via 0 wound
+capacity and diverged from an unguarded duplicate check at its own call
+site -- removed. `end_pilgrimage()`'s `lord_restored` result field stayed
+stale-true when the caller later determined the lord was dead -- the
+caller now corrects it. See git log (`e3e8ca0`).
+
+### AN1 -- School-type destination weighting has zero production callers -- MEDIUM, feature-completion gap
+GDD s57.48.3 (LOCKED): "The destination weighting determines where the NPC
+travels," and this file's own header comment claims "School-type
+destination weighting" is implemented. `score_settlement_for_pilgrimage()`,
+`get_preferred_settlement_types()`, and the three `*_SETTLEMENT_TYPES`
+tables correctly implement the scoring logic, but grep across the whole
+codebase finds no caller outside this file -- no travel/movement selection
+code (the `TRAVEL_TO`/`BEGIN_TRAVEL` need generation in
+`day_orchestrator.gd`, or the `_decompose_*` functions in this same file,
+none of which ever set a `target_settlement_id`) ever consults them. An
+NPC on musha shugyo picks its actual travel destination with no
+school-type weighting applied at all, contradicting the LOCKED spec
+despite the scoring code existing and appearing correct. *Not fixed --
+wiring this requires understanding and hooking into the broader NPC
+travel-decision pipeline (where does the candidate settlement list come
+from? at what point does a SEEK_EXPERIENCE-driven need actually pick a
+destination and fire TRAVEL_TO?), which is real cross-system integration
+work, not a quick fix.*
