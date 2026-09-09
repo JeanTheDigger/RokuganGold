@@ -1776,3 +1776,41 @@ travel-decision pipeline (where does the candidate settlement list come
 from? at what point does a SEEK_EXPERIENCE-driven need actually pick a
 destination and fire TRAVEL_TO?), which is real cross-system integration
 work, not a quick fix.*
+
+
+---
+
+## AO. `simulation/mutation_system.gd` / `day_orchestrator.gd` (s42 / s44)
+
+**Fixed:** both Taint-resistance roll functions called `roll_skill_check()`
+with `skill_rank=0`, which suppresses dice explosion under L5R4e's
+unskilled-skill-check rule -- but GDD explicitly frames these as Earth
+*Ring* rolls, which always explode; understated every periodic Taint roll
+and Shadowlands Power use in the simulation. MIND_OF_DARKNESS was missing
+the four physical Traits GDD explicitly requires alongside the mental
+ones. A duplicate combined-pool selection and a dead no-op branch were
+also cleaned up. See git log (`a01d481`).
+
+### AO1 -- Rank-0 (untainted) characters never make the periodic Taint roll GDD requires -- MEDIUM, sweeping rule with a plausible prior deliberate exclusion
+GDD s42 (LOCKED): "Monthly/Periodic rolls: Once per month (**Rank 0–1**),
+twice per month (Rank 2)... TN = 5 at Rank 0, +5 per Rank thereafter.
+Failure = 1 Point of Taint." This unambiguously includes Rank 0
+(completely untainted, 0 Taint points) in the periodic-roll cadence, at
+TN 5 -- meaning even a character with zero prior Shadowlands exposure is
+supposed to occasionally roll and, on failure, gain their first Taint
+point (representing ambient corruption in a Jigoku-touched world).
+`day_orchestrator.gd`'s `_process_periodic_taint_rolls()` skips every
+character with `taint < 1.0` before ever calling
+`MutationSystem.should_roll_today()`, with an inline comment asserting
+"taint gain requires rank 1+" that cites no GDD source. `should_roll_today()`
+/ `get_roll_period()` in this file already correctly model the Rank-0/1
+30-day period (`get_roll_period()`'s `0, 1: return 30` branch), so the
+Rank-0 half of that table is fully implemented and simply unreachable.
+*Not fixed -- this is not a narrow, isolated bug: flipping it means every
+character in the persistent world, tainted or not, starts making a
+monthly TN-5 Earth roll with a chance of spontaneously acquiring Taint,
+a simulation-wide behavioral and performance change. The existing
+exclusion reads as a considered (if uncited) prior design choice rather
+than an obvious oversight, so this is left for the owner to confirm
+before wiring it in, rather than flipped unilaterally on a LOCKED-text
+reading alone.*
