@@ -186,13 +186,13 @@ static func get_dissolution_topic_variant(pathway: int) -> String:
 
 # -- Benten Festival Bonus ----------------------------------------------------
 
-const BENTEN_FESTIVAL_DAY: int = 9
-const BENTEN_FESTIVAL_MONTH: int = 9  # Boar month per GDD s11.5 "9th day of the Boar"
-
 const BENTEN_FESTIVAL_BONUS: int = 15  # most auspicious marriage day — locked s22.7a
 
+## Benten's festival is the Festival of the River of Stars (GDD s11.5: "9th day of
+## the Boar"). Routes through FestivalSystem.is_marriage_bonus_day() -- the single
+## source of truth for this date (CANONICAL_FESTIVALS' "marriage_bonus"-tagged
+## entry) -- instead of a second, independently hardcoded copy of the month/day and
+## calendar math. The two copies already drifted out of sync once (a month=11 vs.
+## month=9 mismatch) before being fixed in lockstep by hand.
 static func is_benten_festival(ic_day: int) -> bool:
-	var day_of_year: int = (ic_day - 1) % 360
-	var month: int = int(day_of_year / 30) + 1
-	var day_of_month: int = (day_of_year % 30) + 1
-	return month == BENTEN_FESTIVAL_MONTH and day_of_month == BENTEN_FESTIVAL_DAY
+	return FestivalSystem.is_marriage_bonus_day(ic_day)
