@@ -33474,7 +33474,10 @@ static func _process_jeweled_championships(
 				break
 		if filled:
 			continue
-		var pref: int = FestivalSystem.CHAMPIONSHIP_SCHOOL_PREFERENCE.get(ctype, -1)
+		# s11.5 (LOCKED): only Jade's school type is a hard requirement; Emerald/
+		# Ruby/Turquoise are non-binding preferences that must not exclude a clan's
+		# best candidate outright.
+		var required: int = FestivalSystem.CHAMPIONSHIP_SCHOOL_REQUIRED.get(ctype, -1)
 		var stages: Array = FestivalSystem.CHAMPIONSHIP_STAGES.get(ctype, [])
 		# Build the nominee pool: best eligible candidate per nominating group.
 		var best_by_group: Dictionary = {}  # group key -> L5RCharacterData
@@ -33482,7 +33485,7 @@ static func _process_jeweled_championships(
 			var c: L5RCharacterData = characters_by_id[cid]
 			if c == null or CharacterStats.is_dead(c) or c.is_pc or c.clan == "":
 				continue
-			if pref != -1 and c.school_type != pref:
+			if required != -1 and c.school_type != required:
 				continue
 			var group: String
 			if ctype == FestivalSystem.ChampionshipType.AMETHYST:

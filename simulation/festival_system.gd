@@ -99,13 +99,26 @@ static func is_ceasefire_day(ic_day: int) -> bool:
 			return true
 	return false
 
+## s11.5 (LOCKED): "Chrysanthemum Festival ... All labor halted Empire-wide for 7 days."
+## Derives the halt window from CANONICAL_FESTIVALS' own "labor_halt"-tagged entry
+## instead of a second, driftable copy of its month/day.
+const LABOR_HALT_DURATION_DAYS: int = 7
+
 static func is_labor_halt_day(ic_day: int) -> bool:
 	var month: int = get_month(ic_day)
 	var day: int = get_day_of_month(ic_day)
-	return month == 4 and day >= 6 and day <= 12
+	for fest: Dictionary in CANONICAL_FESTIVALS:
+		if "labor_halt" in fest.get("effects", []):
+			var start_day: int = int(fest["day"])
+			return int(fest["month"]) == month and day >= start_day \
+				and day < start_day + LABOR_HALT_DURATION_DAYS
+	return false
 
 static func is_marriage_bonus_day(ic_day: int) -> bool:
-	return get_month(ic_day) == 9 and get_day_of_month(ic_day) == 9
+	for fest: Dictionary in get_active_festivals(ic_day):
+		if "marriage_bonus" in fest.get("effects", []):
+			return true
+	return false
 
 
 # -- Festival Effects ---------------------------------------------------------
@@ -177,11 +190,25 @@ const CHAMPIONSHIP_STAGES: Dictionary = {
 	],
 }
 
+## s11.5 (LOCKED) Candidate Selection: "Emerald — ... Bushi school type strongly
+## preferred. Jade — ... Shugenja school type required. ... Ruby — ... Bushi school
+## type preferred. Turquoise — ... Artisan school type preferred but not required."
+## Only Jade's is a hard requirement; the other three are non-binding preferences.
+## See CHAMPIONSHIP_SCHOOL_REQUIRED below for the subset a caller may hard-filter on.
 const CHAMPIONSHIP_SCHOOL_PREFERENCE: Dictionary = {
 	ChampionshipType.EMERALD: Enums.SchoolType.BUSHI,
 	ChampionshipType.JADE: Enums.SchoolType.SHUGENJA,
 	ChampionshipType.RUBY: Enums.SchoolType.BUSHI,
 	ChampionshipType.TURQUOISE: Enums.SchoolType.ARTISAN,
+}
+
+## The subset of CHAMPIONSHIP_SCHOOL_PREFERENCE that is a hard eligibility
+## requirement rather than a non-binding preference (s11.5: only Jade is
+## "required" -- Emerald/Ruby/Turquoise are "preferred"/"strongly preferred"/
+## "preferred but not required", none of which say a mismatched candidate is
+## ineligible).
+const CHAMPIONSHIP_SCHOOL_REQUIRED: Dictionary = {
+	ChampionshipType.JADE: Enums.SchoolType.SHUGENJA,
 }
 
 const ANNUAL_CHAMPIONSHIPS: Array[ChampionshipType] = [ChampionshipType.TOPAZ]
@@ -255,7 +282,12 @@ static func resolve_championship(
 				trait_val = candidate.get("traits", {}).get(stage.get("trait", ""), 0)
 
 			if dice != null:
-				var roll_k: int = mini(skill_rank + trait_val, 10)
+				# DiceEngine.roll_and_keep already implements the L5R4e 10-dice cap
+				# internally (excess rolled/kept dice convert to a +2 flat bonus each) --
+				# pre-clamping rolled to 10 here discarded that overflow bonus for any
+				# high-skill/high-Ring stage, unlike every other roll_and_keep call site
+				# in the codebase, which passes the raw uncapped value through.
+				var roll_k: int = skill_rank + trait_val
 				var keep: int = maxi(trait_val, 1)
 				total += dice.roll_and_keep(roll_k, keep).total
 
