@@ -1710,3 +1710,35 @@ track full per-tile paths within a turn (not just start/end position) and
 a decision about where in that path-processing loop to apply it. Both are
 real feature-completion work inside the already-tracked s40 PC-travel HOLD
 stack, not quick wiring.
+
+
+---
+
+## AM. `simulation/festival_system.gd` / `day_orchestrator.gd` (s11.5)
+
+**Fixed:** `resolve_championship()` pre-clamped rolled dice to 10 before
+calling the dice engine, discarding its own L5R4e overflow-to-+2-bonus
+rule for high-skill/high-Ring candidates; the Jeweled Championship
+nominee filter treated all four `CHAMPIONSHIP_SCHOOL_PREFERENCE` entries
+as hard requirements when GDD only makes Jade's a requirement (Emerald/
+Ruby/Turquoise are non-binding preferences); `is_labor_halt_day()`/
+`is_marriage_bonus_day()` hardcoded a second, driftable copy of two
+festival dates already present in `CANONICAL_FESTIVALS`. See git log
+(`24e519f`).
+
+### AM1 -- generate_local_festivals() has zero production callers -- MEDIUM, feature-completion gap
+The entire Tier 2 local-settlement festival generator (300-theme pool,
+name formula, settlement-count rules) is implemented but never invoked
+outside `tests/test_festival_system.gd`, confirmed via grep across
+`simulation/`/`shared/`/`scripts/`. No settlement or province data field
+exists to persist a generated local-festival calendar either. Since s11.5
+Tier 2 is marked DONE in `00_INDEX.md`, this means no settlement in a
+running world ever actually has local festivals: GDD's "NPCs reference
+upcoming and recent local festivals in Daily Conversation" and "a player
+who asks about local customs learns the settlement's festival calendar"
+can never fire -- there is no generated data anywhere for them to read.
+*Not fixed -- wiring this requires deciding when generation runs (at
+settlement creation? seasonally, regenerated?), where results persist (a
+new `SettlementData` field), and how Daily Conversation / player queries
+would read it back. That's new data-model and generation-pipeline
+infrastructure, not a call-the-existing-function fix.*
