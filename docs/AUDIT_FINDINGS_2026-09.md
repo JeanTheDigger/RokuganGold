@@ -1590,3 +1590,43 @@ does an NPC choose Armor TN vs Initiative vs a roll bonus, absent an
 explicit GDD priority rule), which is exactly the kind of NPC-decision
 design CLAUDE.md reserves for owner authorization. Left as-is pending the
 HOLD lifting and, separately, owner input on the NPC trigger policy.
+
+
+---
+
+## AK. `simulation/wall_system.gd` (s2.4.2 / s2.4.3 / s2.4.10 / s2.4.11 / s2.4.15)
+
+**Fixed:** `validate_sortie()`'s SI<6+SS-High gate blocked every sortie
+size, but GDD s2.4.11 Decision 2 scopes it specifically to a Medium
+sortie -- fixed to check after size resolution and only for
+`size == "medium"`. `jade_critical_threshold()`/`jade_routine_target()`
+under-counted the committed company count for a small garrison (no
+minimum-1 floor, while the actual sortie-commitment site elsewhere in the
+codebase already has one), under-reporting jade criticality. See git log
+(`4122e83`).
+
+### AK1 -- Seasonal SI decay floors every season with no carried-over remainder, unlike the adjacent-bleed mechanic in the same system -- MEDIUM, GDD-silent rounding convention
+`apply_seasonal_si_decay()` computes `new_si = old_si - int(decay)`,
+truncating the fractional part of `decay` (base seasonal decay + the s2.4.10
+SS-tier modifier, e.g. Summer(0) + Medium SS(+0.5) = 0.5) every single
+season with no accumulator. The code's own comment already flags this as
+a deliberate, GDD-silent choice: *"Fractional decay is floored
+(conservative). GDD is silent on rounding."* This audit is not overriding
+that documented decision unilaterally, but flags a real internal
+inconsistency worth the owner's attention: `compute_adjacent_bleed()`'s
+own 0.5-per-season fractional value is NOT handled this way -- the actual
+caller (`day_orchestrator.gd` around lines 2924-2945) explicitly banks it
+in `season_meta["_wall_bleed_accum"]` until it reaches 1.0 before applying
+it, so a Tower's neighbor genuinely accumulates bleed damage over
+consecutive seasons. The base seasonal SI decay has no equivalent
+accumulator, so a Tower sitting in a season+SS combination that always
+produces a fractional total (e.g. permanently at Summer+Medium SS = 0.5)
+never loses SI to the LOCKED s2.4.10 modifier at all, season after season
+-- not merely "rounded conservatively" but *functionally immune* to that
+specific modifier for as long as the combination holds. *Not fixed --
+this is a genuine GDD-silent rounding-convention question the code
+already flags rather than a bug this pass introduced or found unflagged,
+but the inconsistency with the sibling adjacent-bleed accumulator (solving
+the identical fractional-carry-over problem one function away) is a
+strong argument for revisiting it; recommend the owner decide whether
+seasonal SI decay should adopt the same accumulator pattern.*
