@@ -23,6 +23,7 @@ import time
 from dataclasses import dataclass
 
 from l5r_rules.character import Character
+from l5r_rules.creature import Creature
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS characters (
@@ -66,6 +67,16 @@ CREATE TABLE IF NOT EXISTS room_members (
     user_id TEXT NOT NULL,
     PRIMARY KEY (room_id, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS creatures (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_creature_unique
+    ON creatures (guild_id, name COLLATE NOCASE);
 """
 
 
@@ -90,6 +101,15 @@ class RoomRecord:
     name: str
     host_id: str
     closed: bool
+
+
+@dataclass
+class CreatureRecord:
+    """A spawned creature instance (mutable wounds) stored per guild."""
+
+    id: int
+    guild_id: str
+    creature: Creature
 
 
 class DuplicateNameError(Exception):
@@ -295,3 +315,58 @@ class Store:
                 "SELECT user_id FROM room_members WHERE room_id = ?", (room_id,)
             ).fetchall()
         return [r["user_id"] for r in rows]
+
+    # -- creatures -------------------------------------------------------------
+    def _row_to_creature(self, row: sqlite3.Row) -> CreatureRecord:
+        return CreatureRecord(
+            id=row["id"], guild_id=row["guild_id"],
+            creature=Creature.from_dict(json.loads(row["data"])),
+        )
+
+    def create_creature(self, guild_id: str, cr: Creature) -> CreatureRecord:
+        payload = json.dumps(cr.to_dict())
+        try:
+            with self._lock, self._conn:
+                cur = self._conn.execute(
+                    "INSERT INTO creatures (guild_id, name, data, created_at) VALUES (?, ?, ?, ?)",
+                    (guild_id, cr.name, payload, time.time()),
+                )
+                new_id = cur.lastrowid
+        except sqlite3.IntegrityError as exc:
+            raise DuplicateNameError(cr.name) from exc
+        return CreatureRecord(new_id, guild_id, cr)
+
+    def get_creature_by_name(self, guild_id: str, name: str) -> CreatureRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM creatures WHERE guild_id = ? AND name = ? COLLATE NOCASE",
+                (guild_id, name),
+            ).fetchone()
+        return self._row_to_creature(row) if row else None
+
+    def get_creature_by_id(self, creature_id: int) -> CreatureRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM creatures WHERE id = ?", (creature_id,)
+            ).fetchone()
+        return self._row_to_creature(row) if row else None
+
+    def list_creatures(self, guild_id: str) -> list[CreatureRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM creatures WHERE guild_id = ? ORDER BY name COLLATE NOCASE",
+                (guild_id,),
+            ).fetchall()
+        return [self._row_to_creature(r) for r in rows]
+
+    def save_creature(self, record: CreatureRecord) -> None:
+        payload = json.dumps(record.creature.to_dict())
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE creatures SET data = ?, name = ? WHERE id = ?",
+                (payload, record.creature.name, record.id),
+            )
+
+    def delete_creature(self, creature_id: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM creatures WHERE id = ?", (creature_id,))

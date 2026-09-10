@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 6 — + private play rooms with invites
+## Status: Phase 7 — + NPC editing & a monster bestiary
 
 **Dice**
 
@@ -115,6 +115,29 @@ NPCs can be tuned field-by-field with the `/npc` editors above.
 9-explosions), dual-wielding, and thrown/charge/called-shot maneuvers are **not**
 modelled — the DM can express those with `raises`/`bonus_tn`.
 
+**Creatures / monsters** (stat blocks transcribed **verbatim** from the bestiaries)
+
+Unlike samurai, a creature attacks and takes damage from a **fixed** stat block
+(fixed `XkY` attack/damage, explicit Armor TN and Reduction, and a wound track
+that dies at `wounds_dead`).
+
+| Command | What it does |
+|---|---|
+| `/creature catalog` | List the templates you can spawn. |
+| `/creature spawn` | DM spawns a creature instance (give it a `name:` to run several). |
+| `/creature list` · `/creature view` · `/creature delete` | Roster / sheet / remove. |
+| `/creature wound` · `/creature heal` | Adjust a creature's wounds directly. |
+| `/creature attack` | A creature attacks a player/NPC (fixed attack vs their Armor TN); on a hit, a **DM-only** button applies the creature's fixed damage. |
+
+Players fight creatures through the normal `/attack` with `target_creature:` — the
+attacker rolls their weapon as usual, and the DM-authorized damage goes onto the
+creature's wound track (plain hit or Feint; Disarm/Knockdown against creatures
+aren't wired). `/combat creature` drops a spawned creature into initiative.
+
+*Starter roster (verbatim from your bestiary):* Dog, Wolf, Boar, Crocodile,
+Eagle, Goblin Warmonger, Free Ogre, Common Troll, Plague Zombie, Morei no Oni,
+Quiet Death. More can be transcribed the same way on request.
+
 **Rooms** (private play rooms — each is a Discord **private thread**)
 
 | Command | What it does |
@@ -130,8 +153,7 @@ and each room's initiative tracker is naturally separate (initiative is
 per-channel). So a DM can run several games at once in one server, each in its
 own room.
 
-Still to come in later phases: per-field NPC editing, a monster bestiary, and
-Vultr hosting.
+Still to come: expanding the bestiary roster, and Vultr hosting.
 
 ---
 
@@ -148,6 +170,7 @@ discord_bot/
 │   ├── stats.py           # Derived values: rings, wound levels, Insight (character_stats.gd).
 │   ├── combat.py          # Attack/damage/armor-TN core (individual_combat.gd s40).
 │   ├── npc_gen.py         # Procedural NPC samurai generator (GDD s22.4, LOCKED).
+│   ├── creature.py        # Bestiary monster stat blocks + creature combat.
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).
 │   └── __init__.py
 ├── requirements.txt       # Python dependencies.

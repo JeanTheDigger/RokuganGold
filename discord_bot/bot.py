@@ -19,7 +19,7 @@ from discord import app_commands
 
 import encounter
 import storage
-from l5r_rules import combat, enums, npc_gen, stats
+from l5r_rules import combat, creature, enums, npc_gen, stats
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
 
@@ -186,6 +186,43 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     return embed
 
 
+def build_creature_embed(record: storage.CreatureRecord) -> discord.Embed:
+    cr = record.creature
+    lvl = creature.creature_wound_level(cr)
+    dead = creature.creature_is_dead(cr)
+    color = discord.Color.dark_red() if dead else (
+        discord.Color.green() if cr.wounds_taken == 0 else discord.Color.orange()
+    )
+    embed = discord.Embed(title=f"👹 {cr.name}", color=color)
+    tags = f" · {', '.join(cr.tags)}" if cr.tags else ""
+    embed.description = f"Creature — *{cr.template_id}*{tags}"
+    embed.add_field(
+        name="Rings",
+        value=f"Air **{cr.air}** · Earth **{cr.earth}** · Fire **{cr.fire}** · Water **{cr.water}**",
+        inline=False,
+    )
+    embed.add_field(
+        name="Combat",
+        value=(
+            f"Initiative {cr.initiative_rolled}k{cr.initiative_kept}\n"
+            f"{cr.attack_name}: attack **{cr.attack_rolled}k{cr.attack_kept}**, "
+            f"damage **{cr.damage_rolled}k{cr.damage_kept}**\n"
+            f"Armor TN **{cr.armor_tn}** · Reduction **{cr.reduction}**"
+            + (f" · Fear **{cr.fear}**" if cr.fear else "")
+        ),
+        inline=False,
+    )
+    thr = ", ".join(str(t) for t in cr.wound_thresholds) if cr.wound_thresholds else "—"
+    embed.add_field(
+        name="Wounds",
+        value=f"**{lvl}** — {cr.wounds_taken} / {cr.wounds_dead} (dead)\nthresholds: {thr}"
+        + ("  💀 **SLAIN**" if dead else ""),
+        inline=False,
+    )
+    embed.set_footer(text=f"creature #{record.id}")
+    return embed
+
+
 async def _resolve_active_for_edit(
     interaction: discord.Interaction, member: discord.Member | None
 ) -> tuple[storage.CharacterRecord | None, str | None]:
@@ -333,6 +370,28 @@ async def _npc_autocomplete(
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
 
+async def _creature_template_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    out = []
+    for tid, tmpl in creature.CREATURE_CATALOG.items():
+        if cur in tid or cur in tmpl.name.lower():
+            out.append(app_commands.Choice(name=tmpl.name, value=tid))
+    return out[:25]
+
+
+async def _creature_instance_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    if interaction.guild_id is None:
+        return []
+    cur = current.lower().strip()
+    recs = store.list_creatures(str(interaction.guild_id))
+    names = [r.creature.name for r in recs if cur in r.creature.name.lower()]
+    return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
+
+
 _MANEUVER_APPLY_LABEL = {
     "none": "Roll & Apply Damage",
     "feint": "Roll & Apply Damage (Feint)",
@@ -350,17 +409,19 @@ class DamageView(discord.ui.View):
     def __init__(
         self,
         attacker_id: int,
-        target_id: int,
+        target_id: int | None,
         weapon: str,
         increased_damage: int,
         attacker_name: str,
         target_name: str,
         maneuver: str = "none",
         attack_margin: int = 0,
+        target_creature_id: int | None = None,
     ) -> None:
         super().__init__(timeout=1800)  # 30 min
         self.attacker_id = attacker_id
         self.target_id = target_id
+        self.target_creature_id = target_creature_id
         self.weapon = weapon
         self.increased_damage = increased_damage
         self.attacker_name = attacker_name
@@ -395,6 +456,59 @@ class DamageView(discord.ui.View):
         if not _is_dm(interaction):
             await interaction.response.send_message("Only a DM can authorize this.", ephemeral=True)
             return
+
+        # Creature target: apply the attacker's weapon damage to the creature's
+        # own wound track (plain hit or Feint only; disarm/knockdown are blocked
+        # against creatures at /attack).
+        if self.target_creature_id is not None:
+            attacker_rec = store.get_by_id(self.attacker_id)
+            cre_rec = store.get_creature_by_id(self.target_creature_id)
+            if cre_rec is None:
+                await interaction.response.send_message("The creature no longer exists.", ephemeral=True)
+                return
+            if attacker_rec is None:
+                await interaction.response.send_message("The attacker no longer exists.", ephemeral=True)
+                return
+            dmg = combat.resolve_damage(attacker_rec.character, self.weapon, engine, self.increased_damage)
+            raw = dmg["raw_damage"]
+            feint_line = ""
+            if self.maneuver == "feint":
+                fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker_rec.character))
+                raw += fb
+                feint_line = f"\nFeint bonus **+{fb}**"
+            applied = creature.apply_damage_to_creature(cre_rec.creature, raw, cre_rec.creature.reduction)
+            store.save_creature(cre_rec)
+            cr = cre_rec.creature
+            embed = discord.Embed(
+                title="⚔️ Damage applied",
+                color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
+            )
+            embed.add_field(
+                name="Damage",
+                value=(
+                    f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+                    f"{_format_dice(dmg['dice'])}{feint_line}\n"
+                    f"Raw **{raw}** − reduction {applied['reduction']} = "
+                    f"**{applied['final_damage']}** wounds"
+                ),
+                inline=False,
+            )
+            if applied["level_changed"]:
+                status = (
+                    f"{self.target_name}: {applied['old_wound_level']} → "
+                    f"**{applied['new_wound_level']}** ({cr.wounds_taken}/{cr.wounds_dead})"
+                )
+            else:
+                status = f"{self.target_name}: **{applied['new_wound_level']}** ({cr.wounds_taken}/{cr.wounds_dead})"
+            if applied["is_dead"]:
+                status += "  💀 **SLAIN**"
+            embed.add_field(name="Result", value=status, inline=False)
+            embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(embed=embed)
+            return
+
         attacker_rec = store.get_by_id(self.attacker_id)
         target_rec = store.get_by_id(self.target_id)
         if target_rec is None:
@@ -519,8 +633,9 @@ _MANEUVER_CHOICES = [
     description="Attack another character. Rolls to hit; on a hit a DM authorizes the outcome.",
 )
 @app_commands.describe(
-    target="The player to attack (their active character). Or use target_npc.",
+    target="The player to attack (their active character). Or use target_npc / target_creature.",
     target_npc="Attack a stored NPC by name (instead of a player).",
+    target_creature="Attack a spawned creature by name (instead of a player).",
     attacker_npc="Attack WITH a stored NPC instead of your own character (DM only).",
     weapon="Weapon (default katana). Start typing for suggestions.",
     raises="Called Raises — each adds +5 to the target's Armor TN.",
@@ -532,7 +647,8 @@ _MANEUVER_CHOICES = [
     bonus_tn="Situational +/- to the target's Armor TN (DM discretion).",
 )
 @app_commands.autocomplete(
-    weapon=_weapon_autocomplete, target_npc=_npc_autocomplete, attacker_npc=_npc_autocomplete
+    weapon=_weapon_autocomplete, target_npc=_npc_autocomplete, attacker_npc=_npc_autocomplete,
+    target_creature=_creature_instance_autocomplete,
 )
 @app_commands.choices(
     attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES, maneuver=_MANEUVER_CHOICES
@@ -541,6 +657,7 @@ async def attack(
     interaction: discord.Interaction,
     target: discord.Member | None = None,
     target_npc: str | None = None,
+    target_creature: str | None = None,
     attacker_npc: str | None = None,
     weapon: str = "katana",
     raises: app_commands.Range[int, 0, 10] = 0,
@@ -577,13 +694,20 @@ async def attack(
             )
             return
 
-    # Resolve the target: a stored NPC, or a player's active character.
-    if target_npc:
+    # Resolve the target: a spawned creature, a stored NPC, or a player's character.
+    target_rec = None
+    target_creature_rec = None
+    if target_creature:
+        target_creature_rec = store.get_creature_by_name(guild, target_creature)
+        if target_creature_rec is None:
+            await interaction.response.send_message(
+                f"No creature named **{target_creature}**.", ephemeral=True
+            )
+            return
+    elif target_npc:
         target_rec = store.get_by_name(guild, NPC_OWNER, target_npc)
         if target_rec is None:
-            await interaction.response.send_message(
-                f"No NPC named **{target_npc}**.", ephemeral=True
-            )
+            await interaction.response.send_message(f"No NPC named **{target_npc}**.", ephemeral=True)
             return
     elif target is not None:
         target_rec = store.get_active(guild, str(target.id))
@@ -594,13 +718,20 @@ async def attack(
             return
     else:
         await interaction.response.send_message(
-            "Pick a target: a player with `target:` or an NPC with `target_npc:`.", ephemeral=True
+            "Pick a target: `target:` (player), `target_npc:`, or `target_creature:`.", ephemeral=True
         )
         return
 
     a_stance = attacker_stance.value if attacker_stance else "attack"
     d_stance = defender_stance.value if defender_stance else "attack"
     man = maneuver.value if maneuver else "none"
+
+    if target_creature_rec is not None and man in ("disarm", "knockdown"):
+        await interaction.response.send_message(
+            "Disarm/Knockdown aren't supported against creatures yet — use a plain attack or Feint.",
+            ephemeral=True,
+        )
+        return
     maneuver_raises = combat.MANEUVER_RAISES.get(man, 0)
 
     # Void Point spend: +1k1 on the attack roll (decrement the pool now).
@@ -616,7 +747,14 @@ async def attack(
         else:
             void_line = " · 🌀 no Void Points to spend"
 
-    tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn)
+    # Target name + Armor TN depend on the target kind.
+    if target_creature_rec is not None:
+        t_name = target_creature_rec.creature.name
+        tn = target_creature_rec.creature.armor_tn + bonus_tn
+    else:
+        t_name = target_rec.character.name
+        tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn)
+
     outcome = combat.resolve_attack(
         attacker_rec.character, weapon, tn, raises + maneuver_raises, engine,
         attacker_stance=a_stance, increased_damage=increased_damage,
@@ -624,7 +762,6 @@ async def attack(
     )
 
     a_name = attacker_rec.character.name
-    t_name = target_rec.character.name
     hit = outcome["hit"]
     embed = discord.Embed(
         title=f"⚔️ {a_name} attacks {t_name}",
@@ -645,7 +782,7 @@ async def attack(
     tn_note = f"Armor TN **{outcome['target_tn']}**"
     if outcome["raises"]:
         tn_note += f" ({outcome['raises']} raises)"
-    if d_stance != "attack":
+    if target_creature_rec is None and d_stance != "attack":
         tn_note += f"  ·  {d_stance.replace('_', ' ').title()}"
     verdict = "✅ **HIT**" if hit else "❌ **MISS**"
     embed.add_field(
@@ -657,10 +794,17 @@ async def attack(
         embed.set_footer(text=f"Unskilled in {outcome['skill_name']} — dice did not explode.")
 
     if hit:
-        view = DamageView(
-            attacker_rec.id, target_rec.id, weapon, increased_damage, a_name, t_name,
-            maneuver=man, attack_margin=outcome["margin"],
-        )
+        if target_creature_rec is not None:
+            view = DamageView(
+                attacker_rec.id, None, weapon, increased_damage, a_name, t_name,
+                maneuver=man, attack_margin=outcome["margin"],
+                target_creature_id=target_creature_rec.id,
+            )
+        else:
+            view = DamageView(
+                attacker_rec.id, target_rec.id, weapon, increased_damage, a_name, t_name,
+                maneuver=man, attack_margin=outcome["margin"],
+            )
         prompt = {
             "disarm": "A DM can resolve the disarm below.",
             "knockdown": "A DM can resolve the knockdown below.",
@@ -1679,11 +1823,326 @@ async def room_close(interaction: discord.Interaction) -> None:
         pass
 
 
+@combat_group.command(name="creature", description="Add a spawned creature to initiative (rolls its initiative). DM only.")
+@app_commands.describe(name="The creature to add.")
+@app_commands.autocomplete(name=_creature_instance_autocomplete)
+async def combat_creature(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can add creatures to initiative.", ephemeral=True)
+        return
+    rec = store.get_creature_by_name(str(interaction.guild_id), name)
+    if rec is None:
+        await interaction.response.send_message(f"No creature named **{name}**.", ephemeral=True)
+        return
+    result = creature.roll_creature_initiative(rec.creature, engine)
+    enc = _get_or_create(interaction.channel_id)
+    enc.remove(rec.creature.name)
+    enc.add(encounter.Combatant(
+        name=rec.creature.name,
+        initiative=result.total,
+        initiative_detail=f"kept {result.kept_dice} = {result.total}",
+        owner_id=None,
+        is_npc=True,
+    ))
+    await interaction.response.send_message(_render_encounter(enc))
+
+
+# ===========================================================================
+# /creature group — bestiary monsters and creature combat
+# ===========================================================================
+creature_group = app_commands.Group(name="creature", description="Spawn and run bestiary creatures.")
+
+
+class CreatureAttackView(discord.ui.View):
+    """DM-only button: apply a creature's fixed damage to a character it hit."""
+
+    def __init__(self, creature_id: int, target_char_id: int, creature_name: str, target_name: str) -> None:
+        super().__init__(timeout=1800)
+        self.creature_id = creature_id
+        self.target_char_id = target_char_id
+        self.creature_name = creature_name
+        self.target_name = target_name
+
+    def _disable(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+
+    @discord.ui.button(label="Apply Creature Damage", style=discord.ButtonStyle.danger, emoji="👹")
+    async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can authorize this.", ephemeral=True)
+            return
+        cre_rec = store.get_creature_by_id(self.creature_id)
+        target_rec = store.get_by_id(self.target_char_id)
+        if cre_rec is None:
+            await interaction.response.send_message("The creature no longer exists.", ephemeral=True)
+            return
+        if target_rec is None:
+            await interaction.response.send_message("The target no longer exists.", ephemeral=True)
+            return
+        dmg = creature.creature_damage(cre_rec.creature, engine)
+        applied = combat.apply_damage(target_rec.character, dmg["raw"], target_rec.character.armor_reduction)
+        store.save(target_rec)
+        c = target_rec.character
+        embed = discord.Embed(
+            title="👹 Creature damage applied",
+            color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
+        )
+        embed.add_field(
+            name="Damage",
+            value=(
+                f"{self.creature_name} → **{self.target_name}**\n{_format_dice(dmg['dice'])}\n"
+                f"Raw **{dmg['raw']}** − reduction {applied['reduction']} = "
+                f"**{applied['final_damage']}** wounds"
+            ),
+            inline=False,
+        )
+        if applied["level_changed"]:
+            status = (
+                f"{self.target_name}: {applied['old_wound_level']} → "
+                f"**{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+            )
+        else:
+            status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+        if applied["is_dead"]:
+            status += "  💀 **DEAD**"
+        embed.add_field(name="Result", value=status, inline=False)
+        embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(embed=embed)
+
+    @discord.ui.button(label="No Damage", style=discord.ButtonStyle.secondary, emoji="🛡️")
+    async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can resolve this.", ephemeral=True)
+            return
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            f"🛡️ {interaction.user.display_name} ruled no damage from {self.creature_name}."
+        )
+
+
+def _resolve_creature(
+    interaction: discord.Interaction, name: str, require_dm: bool = True
+) -> tuple[storage.CreatureRecord | None, str | None]:
+    if not _guild_ok(interaction):
+        return None, "Please use this in a server channel."
+    if require_dm and not _is_dm(interaction):
+        return None, "Only a DM can do that with creatures."
+    rec = store.get_creature_by_name(str(interaction.guild_id), name)
+    if rec is None:
+        return None, f"No creature named **{name}**."
+    return rec, None
+
+
+@creature_group.command(name="catalog", description="List the creature templates you can spawn.")
+async def creature_catalog(interaction: discord.Interaction) -> None:
+    lines = [
+        f"• `{tid}` — **{t.name}** (atk {t.attack_rolled}k{t.attack_kept}, dmg "
+        f"{t.damage_rolled}k{t.damage_kept}, TN {t.armor_tn}, red {t.reduction}, dead {t.wounds_dead})"
+        for tid, t in sorted(creature.CREATURE_CATALOG.items(), key=lambda kv: kv[1].name)
+    ]
+    await interaction.response.send_message("👹 **Bestiary templates:**\n" + "\n".join(lines), ephemeral=True)
+
+
+@creature_group.command(name="spawn", description="Spawn a creature instance from a template. DM only.")
+@app_commands.describe(template="Which creature template.", name="Instance name (default: the template's name).")
+@app_commands.autocomplete(template=_creature_template_autocomplete)
+async def creature_spawn(interaction: discord.Interaction, template: str, name: str | None = None) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can spawn creatures.", ephemeral=True)
+        return
+    tmpl = creature.CREATURE_CATALOG.get(template)
+    if tmpl is None:
+        await interaction.response.send_message(
+            f"Unknown template `{template}`. See `/creature catalog`.", ephemeral=True
+        )
+        return
+    inst_name = name or tmpl.name
+    cr = creature.spawn(template, inst_name)
+    try:
+        rec = store.create_creature(str(interaction.guild_id), cr)
+    except storage.DuplicateNameError:
+        await interaction.response.send_message(
+            f"A creature named **{inst_name}** already exists. Give this one a distinct `name:`.",
+            ephemeral=True,
+        )
+        return
+    await interaction.response.send_message(
+        content=f"👹 Spawned **{inst_name}**.", embed=build_creature_embed(rec)
+    )
+
+
+@creature_group.command(name="list", description="List spawned creatures on this server.")
+async def creature_list(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    recs = store.list_creatures(str(interaction.guild_id))
+    if not recs:
+        await interaction.response.send_message(
+            "No creatures spawned. Use `/creature spawn` (DM).", ephemeral=True
+        )
+        return
+    lines = [
+        f"• **{r.creature.name}** — {creature.creature_wound_level(r.creature)} "
+        f"({r.creature.wounds_taken}/{r.creature.wounds_dead})"
+        for r in recs
+    ]
+    await interaction.response.send_message("👹 **Creatures:**\n" + "\n".join(lines[:50]))
+
+
+@creature_group.command(name="view", description="View a spawned creature.")
+@app_commands.describe(name="The creature to view.")
+@app_commands.autocomplete(name=_creature_instance_autocomplete)
+async def creature_view(interaction: discord.Interaction, name: str) -> None:
+    rec, err = _resolve_creature(interaction, name, require_dm=False)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    await interaction.response.send_message(embed=build_creature_embed(rec))
+
+
+@creature_group.command(name="delete", description="Remove a spawned creature. DM only.")
+@app_commands.describe(name="The creature to remove.")
+@app_commands.autocomplete(name=_creature_instance_autocomplete)
+async def creature_delete(interaction: discord.Interaction, name: str) -> None:
+    rec, err = _resolve_creature(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    store.delete_creature(rec.id)
+    await interaction.response.send_message(f"Removed creature **{rec.creature.name}**.", ephemeral=True)
+
+
+@creature_group.command(name="wound", description="Apply wounds to a creature directly (no reduction). DM only.")
+@app_commands.describe(name="The creature.", amount="Wounds to apply.")
+@app_commands.autocomplete(name=_creature_instance_autocomplete)
+async def creature_wound(
+    interaction: discord.Interaction, name: str, amount: app_commands.Range[int, 1, 1000]
+) -> None:
+    rec, err = _resolve_creature(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    applied = creature.apply_damage_to_creature(rec.creature, amount, reduction=0)
+    store.save_creature(rec)
+    crossed = f"  ({applied['old_wound_level']} → **{applied['new_wound_level']}**)" if applied["level_changed"] else ""
+    dead = "  💀 **SLAIN**" if applied["is_dead"] else ""
+    await interaction.response.send_message(
+        f"**{rec.creature.name}** takes **{amount}** → {rec.creature.wounds_taken}/{rec.creature.wounds_dead}{crossed}{dead}",
+        embed=build_creature_embed(rec),
+    )
+
+
+@creature_group.command(name="heal", description="Heal a creature's wounds. DM only.")
+@app_commands.describe(name="The creature.", amount="Wounds to heal.")
+@app_commands.autocomplete(name=_creature_instance_autocomplete)
+async def creature_heal(
+    interaction: discord.Interaction, name: str, amount: app_commands.Range[int, 1, 1000]
+) -> None:
+    rec, err = _resolve_creature(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    rec.creature.wounds_taken = max(0, rec.creature.wounds_taken - amount)
+    store.save_creature(rec)
+    await interaction.response.send_message(
+        f"**{rec.creature.name}** healed **{amount}** → {rec.creature.wounds_taken}/{rec.creature.wounds_dead}",
+        embed=build_creature_embed(rec),
+    )
+
+
+@creature_group.command(name="attack", description="A creature attacks a player/NPC (fixed stat block). DM only.")
+@app_commands.describe(
+    creature_name="The attacking creature.",
+    target="The player to attack (their active character).",
+    target_npc="Attack a stored NPC instead of a player.",
+    raises="Called Raises — each adds +5 to the target's Armor TN.",
+    bonus_tn="Situational +/- to the target's Armor TN.",
+)
+@app_commands.autocomplete(creature_name=_creature_instance_autocomplete, target_npc=_npc_autocomplete)
+async def creature_attack_cmd(
+    interaction: discord.Interaction,
+    creature_name: str,
+    target: discord.Member | None = None,
+    target_npc: str | None = None,
+    raises: app_commands.Range[int, 0, 10] = 0,
+    bonus_tn: app_commands.Range[int, -50, 50] = 0,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can attack with a creature.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    cre_rec = store.get_creature_by_name(guild, creature_name)
+    if cre_rec is None:
+        await interaction.response.send_message(f"No creature named **{creature_name}**.", ephemeral=True)
+        return
+    if target_npc:
+        target_rec = store.get_by_name(guild, NPC_OWNER, target_npc)
+        if target_rec is None:
+            await interaction.response.send_message(f"No NPC named **{target_npc}**.", ephemeral=True)
+            return
+    elif target is not None:
+        target_rec = store.get_active(guild, str(target.id))
+        if target_rec is None:
+            await interaction.response.send_message(
+                f"{target.display_name} has no active character.", ephemeral=True
+            )
+            return
+    else:
+        await interaction.response.send_message(
+            "Pick a target: `target:` (player) or `target_npc:`.", ephemeral=True
+        )
+        return
+
+    cr = cre_rec.creature
+    tn = combat.armor_tn(target_rec.character, "attack", bonus_tn)
+    outcome = creature.creature_attack(cr, tn, engine, raises)
+    hit = outcome["success"]
+    t_name = target_rec.character.name
+    embed = discord.Embed(
+        title=f"👹 {cr.name} attacks {t_name}",
+        color=discord.Color.green() if hit else discord.Color.greyple(),
+    )
+    embed.add_field(
+        name="Attack", value=f"{cr.attack_name} **{cr.attack_rolled}k{cr.attack_kept}**", inline=False
+    )
+    embed.add_field(name="Attack roll", value=_format_dice(outcome["dice"]), inline=False)
+    verdict = "✅ **HIT**" if hit else "❌ **MISS**"
+    embed.add_field(
+        name="Result",
+        value=f"Total **{outcome['total']}** vs Armor TN **{outcome['tn']}** — {verdict} "
+        f"(margin {outcome['margin']:+d})",
+        inline=False,
+    )
+    if hit:
+        view = CreatureAttackView(cre_rec.id, target_rec.id, cr.name, t_name)
+        await interaction.response.send_message(
+            content="A DM can apply the creature's damage below.", embed=embed, view=view
+        )
+    else:
+        await interaction.response.send_message(embed=embed)
+
+
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
 client.tree.add_command(npc)
 client.tree.add_command(room)
+client.tree.add_command(creature_group)
 
 
 def main() -> None:
