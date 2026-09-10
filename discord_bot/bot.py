@@ -19,7 +19,7 @@ from discord import app_commands
 
 import encounter
 import storage
-from l5r_rules import advancement, combat, creature, enums, npc_gen, stats
+from l5r_rules import advancement, combat, creature, enums, npc_gen, schools, stats
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
 
@@ -2369,6 +2369,142 @@ async def xp_costs(interaction: discord.Interaction) -> None:
         "`/xp kata`, `/xp kiho`, `/xp spell`. Insight Rank follows automatically. Prerequisites and "
         "learning-a-Technique roleplay are DM-adjudicated.", ephemeral=True)
 
+# ===========================================================================
+# /school group — schools & techniques (GDD s29)
+# ===========================================================================
+school = app_commands.Group(name="school", description="Browse schools and their techniques (GDD s29).")
+
+
+async def _school_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    out = [app_commands.Choice(name=s["name"], value=s["name"]) for s in schools.ALL if cur in s["name"].lower()]
+    return out[:25]
+
+
+def build_school_embed(s: dict) -> discord.Embed:
+    kw = f" [{', '.join(s['keywords'])}]" if s["keywords"] else ""
+    embed = discord.Embed(title=f"🏯 {s['name']}{kw}", color=discord.Color.dark_teal())
+    embed.description = f"{s['clan']} school"
+    meta = []
+    if s["benefit"]:
+        meta.append(f"**Benefit:** {s['benefit']}")
+    if s["honor"]:
+        meta.append(f"**Honor:** {s['honor']}")
+    if meta:
+        embed.add_field(name="​", value="  ·  ".join(meta), inline=False)
+    if s["skills"]:
+        embed.add_field(name="Skills", value=s["skills"][:1024], inline=False)
+    if s["outfit"]:
+        embed.add_field(name="Outfit", value=s["outfit"][:1024], inline=False)
+    if s["affinity"]:
+        embed.add_field(name="Affinity/Deficiency", value=s["affinity"][:1024], inline=False)
+    if s["prereq"]:
+        embed.add_field(name="Prerequisites", value=s["prereq"][:1024], inline=False)
+    # Techniques (each its own field; effect truncated to stay within limits).
+    for t in s["techniques"][:12]:
+        rank_label = f"Rank {t['rank']}" if t["rank"] else "Technique"
+        embed.add_field(name=f"{rank_label} — {t['name']}"[:256], value=t["effect"][:1024], inline=False)
+    return embed
+
+
+@school.command(name="list", description="List schools (optionally by clan).")
+@app_commands.describe(clan="Filter by clan (Crab, Crane, …). Omit for a summary.")
+async def school_list(interaction: discord.Interaction, clan: str | None = None) -> None:
+    if clan:
+        matches = schools.by_clan(clan)
+        if not matches:
+            await interaction.response.send_message(
+                f"No schools for clan **{clan}**. Clans: {', '.join(schools.clans())}", ephemeral=True
+            )
+            return
+        names = ", ".join(s["name"] for s in matches)
+        await interaction.response.send_message(
+            f"🏯 **{clan} schools ({len(matches)}):** {names}", ephemeral=True
+        )
+        return
+    from collections import Counter
+    counts = Counter(s["clan"] for s in schools.ALL)
+    summary = " · ".join(f"{k} {v}" for k, v in sorted(counts.items()))
+    await interaction.response.send_message(
+        f"🏯 **{len(schools.ALL)} schools.** Browse with `/school list clan:<clan>`, "
+        f"`/school search`, or `/school view`.\n{summary}",
+        ephemeral=True,
+    )
+
+
+@school.command(name="search", description="Search schools by name or clan.")
+@app_commands.describe(query="Name or clan fragment.")
+async def school_search(interaction: discord.Interaction, query: str) -> None:
+    matches = schools.search(query)
+    if not matches:
+        await interaction.response.send_message(f"No schools match `{query}`.", ephemeral=True)
+        return
+    lines = [f"• **{s['name']}** ({s['clan']})" for s in matches[:40]]
+    extra = f"\n…and {len(matches) - 40} more." if len(matches) > 40 else ""
+    await interaction.response.send_message("🏯 " + "\n".join(lines) + extra, ephemeral=True)
+
+
+@school.command(name="view", description="Show a school's benefit, skills, outfit, and techniques.")
+@app_commands.describe(name="The school to view.")
+@app_commands.autocomplete(name=_school_autocomplete)
+async def school_view(interaction: discord.Interaction, name: str) -> None:
+    s = schools.get(name)
+    if s is None:
+        await interaction.response.send_message(
+            f"No school named **{name}**. Try `/school search`.", ephemeral=True
+        )
+        return
+    await interaction.response.send_message(embed=build_school_embed(s))
+
+
+@school.command(name="learn", description="Record the techniques your school grants up to your School Rank.")
+@app_commands.describe(
+    school_name="School to learn from (defaults to your sheet's school).",
+    member="Do this for another player (DM only).",
+)
+@app_commands.autocomplete(school_name=_school_autocomplete)
+async def school_learn(
+    interaction: discord.Interaction,
+    school_name: str | None = None,
+    member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    lookup = school_name or c.school
+    s = schools.get(lookup) if lookup else None
+    if s is None:
+        await interaction.response.send_message(
+            f"No school named **{lookup or '(unset)'}**. Set one with `school_name:` "
+            f"(or `/sheet set` isn't for this — pick from `/school search`).",
+            ephemeral=True,
+        )
+        return
+    entitled = schools.techniques_up_to(s["name"], c.school_rank)
+    if not entitled:
+        await interaction.response.send_message(
+            f"**{s['name']}** grants no ranked techniques at School Rank {c.school_rank}.", ephemeral=True
+        )
+        return
+    added = []
+    for t in entitled:
+        label = f"{s['name']} — {t['name']}"
+        if not any(label.lower() == x.lower() or t["name"].lower() == x.lower() for x in c.techniques):
+            c.techniques.append(label)
+            added.append(f"R{t['rank']} {t['name']}")
+    store.save(rec)
+    if added:
+        msg = f"📜 **{c.name}** learns from **{s['name']}** (up to Rank {c.school_rank}): " + ", ".join(added)
+    else:
+        msg = f"**{c.name}** already knows all **{s['name']}** techniques up to Rank {c.school_rank}."
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
@@ -2376,6 +2512,7 @@ client.tree.add_command(npc)
 client.tree.add_command(room)
 client.tree.add_command(creature_group)
 client.tree.add_command(xp)
+client.tree.add_command(school)
 
 
 def main() -> None:
