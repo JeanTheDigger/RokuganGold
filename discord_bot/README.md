@@ -93,7 +93,7 @@ Level**, so the RAW cost is computed for you.
 **Active-Kata combat effects** — the active Kata (⚑ on the sheet) feeds straight
 into `/attack`. The bot auto-applies the **deterministic subset** it can compute
 faithfully from the sheet, the chosen stance, the maneuver, and the weapon —
-**8 Kata**:
+**12 Kata**:
 
 | Kata | Auto-applied in `/attack` |
 |---|---|
@@ -101,10 +101,14 @@ faithfully from the sheet, the chosen stance, the maneuver, and the weapon —
 | Reckless Abandon Style | Full Attack Stance → Armor TN **+Fire Ring** |
 | Striking as Void | Center Stance → Armor TN **+Void Ring** |
 | Lee of the Stone | Defense Stance → Armor TN **+Earth Ring** |
+| Iron in the Mountains Style | Defense Stance uses **Earth Ring instead of Air** |
 | North Wind Style | Increased Damage maneuver → attack total **+Air Ring** |
 | South Wind Style | Knockdown maneuver → attack total **+Air Ring** |
+| Iron Forest Style | spear/polearm → attack roll uses **Air Ring, not Agility** |
 | Waves upon the Breakers | weapon with 3+ Skill Ranks → damage **+1k0** |
+| Strike as the Avalanche | Heavy Weapons skill → **Strength +1 rank** for damage (**+1k0**) |
 | Son of Storms | Small melee weapon → target Reduction **−1** |
+| Strength of the Crab | Attack Stance + wearing armor → **+2 Reduction** |
 
 Everything else stays **DM-adjudicated on purpose** and is surfaced as a reminder
 line on the attack, never silently applied or dropped: rate-limited effects

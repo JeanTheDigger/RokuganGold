@@ -504,6 +504,7 @@ class DamageView(discord.ui.View):
         maneuver: str = "none",
         attack_margin: int = 0,
         target_creature_id: int | None = None,
+        defender_stance: str = "attack",
     ) -> None:
         super().__init__(timeout=1800)  # 30 min
         self.attacker_id = attacker_id
@@ -515,6 +516,7 @@ class DamageView(discord.ui.View):
         self.target_name = target_name
         self.maneuver = maneuver
         self.attack_margin = attack_margin
+        self.defender_stance = defender_stance
         # Relabel the primary button to match the maneuver.
         for child in self.children:
             if isinstance(child, discord.ui.Button) and child.style == discord.ButtonStyle.danger:
@@ -678,8 +680,9 @@ class DamageView(discord.ui.View):
             fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
             raw += fb
             feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
-        kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note) if n)
-        reduction = max(0, target.armor_reduction - ignore)
+        crab_bonus, crab_note = kata_effects.defender_reduction_bonus(target, self.defender_stance)
+        kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note) if n)
+        reduction = max(0, target.armor_reduction - ignore + crab_bonus)
         applied = combat.apply_damage(target, raw, reduction)
         store.save(target_rec)
 
@@ -878,6 +881,13 @@ async def attack(
     )
     if atk_note:
         kata_notes.append(atk_note)
+    # Attacker's active kata: a Trait replaced by a Ring on the attack roll.
+    atk_weapon_profile = combat.get_weapon_profile(weapon)
+    trait_ovr, trait_ovr_note = kata_effects.attacker_trait_override(
+        attacker_rec.character, atk_weapon_profile
+    )
+    if trait_ovr_note:
+        kata_notes.append(trait_ovr_note)
 
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
@@ -891,6 +901,7 @@ async def attack(
         attacker_rec.character, weapon, tn, raises + maneuver_raises, engine,
         attacker_stance=a_stance, increased_damage=increased_damage,
         bonus_rolled=bonus_rolled, bonus_kept=bonus_kept, extra_flat=atk_flat,
+        trait_override=trait_ovr, trait_override_name=("Air" if trait_ovr is not None else ""),
     )
 
     a_name = attacker_rec.character.name
@@ -942,12 +953,12 @@ async def attack(
             view = DamageView(
                 attacker_rec.id, None, weapon, increased_damage, a_name, t_name,
                 maneuver=man, attack_margin=outcome["margin"],
-                target_creature_id=target_creature_rec.id,
+                target_creature_id=target_creature_rec.id, defender_stance=d_stance,
             )
         else:
             view = DamageView(
                 attacker_rec.id, target_rec.id, weapon, increased_damage, a_name, t_name,
-                maneuver=man, attack_margin=outcome["margin"],
+                maneuver=man, attack_margin=outcome["margin"], defender_stance=d_stance,
             )
         prompt = {
             "disarm": "A DM can resolve the disarm below.",

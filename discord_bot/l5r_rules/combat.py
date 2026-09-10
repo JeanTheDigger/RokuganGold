@@ -148,6 +148,8 @@ def resolve_attack(
     bonus_rolled: int = 0,
     bonus_kept: int = 0,
     extra_flat: int = 0,
+    trait_override: int | None = None,
+    trait_override_name: str = "",
 ) -> dict:
     """Resolve one attack roll vs a Target Number. `increased_damage` are raises
     spent on the Increased Damage maneuver: they raise the TN like any called
@@ -161,6 +163,11 @@ def resolve_attack(
 
     trait_name = "reflexes" if weapon.get("trait") == "reflexes" else "agility"
     trait_value = attacker.reflexes if trait_name == "reflexes" else attacker.agility
+    if trait_override is not None:
+        # An active kata replaces the normal Trait with a Ring (e.g. Iron Forest
+        # Style: Air Ring instead of Agility for spear/polearm attack rolls, s30).
+        trait_value = trait_override
+        trait_name = trait_override_name or trait_name
 
     rolled = trait_value + skill_rank
     kept = trait_value
