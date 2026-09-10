@@ -73,11 +73,41 @@ WEAPON_CATALOG: dict[str, dict] = {
     "yumi": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Large"},
     "dai_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
     "han_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
+    # Polearms (grappling)
+    "sasumata": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
+    "sadegarami": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
+    # More spears
+    "kumade": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large"},
+    "mai_chong": {"rolled": 0, "kept": 3, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large"},
+    # More staves
+    "machi_kanshisha": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Staves", "trait": "agility", "melee": True, "size": "Medium"},
+    "sang_kauw": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Staves", "trait": "agility", "melee": True, "size": "Medium"},
+    # Chain weapons
+    "kusarigama": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
+    "kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
+    "manrikikusari": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
     # Thrown / ninja (Ninjutsu; no Strength to damage)
     "shuriken": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small"},
+    "tsubute": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small"},
+    "blowgun": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Medium"},
     # Unarmed
     "unarmed": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Jiujutsu", "trait": "agility", "melee": True, "size": "Small"},
 }
+
+# Armor catalog (verbatim from simulation/armor_system.gd ARMOR_CATALOG).
+ARMOR_CATALOG: dict[str, dict] = {
+    "bogu": {"tn_bonus": 0, "reduction": 1, "is_heavy": False, "penalty_kind": "none"},
+    "ashigaru": {"tn_bonus": 3, "reduction": 1, "is_heavy": False, "penalty_kind": "none"},
+    "tatami": {"tn_bonus": 4, "reduction": 1, "is_heavy": False, "penalty_kind": "none"},
+    "light": {"tn_bonus": 5, "reduction": 3, "is_heavy": False, "penalty_kind": "athletics_stealth"},
+    "heavy": {"tn_bonus": 10, "reduction": 5, "is_heavy": True, "penalty_kind": "agi_ref"},
+    "tetsu_do": {"tn_bonus": 13, "reduction": 8, "is_heavy": True, "penalty_kind": "agi_ref_iron"},
+    "riding": {"tn_bonus": 4, "reduction": 4, "is_heavy": False, "penalty_kind": "agi_ref_not_mounted"},
+}
+
+
+def get_armor(armor_name: str) -> dict | None:
+    return ARMOR_CATALOG.get(armor_name.lower().strip())
 
 # individual_combat.gd DEFAULT_WEAPON — used for any unknown weapon name.
 DEFAULT_WEAPON: dict = {

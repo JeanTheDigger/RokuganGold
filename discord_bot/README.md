@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 12 — all 287 spells (GDD s32–s37)
+## Status: Phase 13 — full weapon & armor catalogs
 
 **Dice**
 
@@ -104,6 +104,19 @@ raises, and full effect text.
 
 `/xp spell` (memorise a spell) autocompletes real spell names and **auto-fills the
 Mastery Level** — so the RAW cost (1 × Mastery Level) is computed for you.
+
+**Equipment** (weapons & armor, verbatim from the game data)
+
+| Command | What it does |
+|---|---|
+| `/weapon list` · `/weapon view` | Browse all **44 weapons** (damage rating, skill, trait, size). |
+| `/armor list` | The **7 armor types** with Armor TN bonus and Reduction. |
+| `/sheet equip` | Add/remove a weapon on your character (autocomplete). |
+| `/sheet armor` | Equip an armor type — sets the sheet's **Armor TN bonus** and **Reduction** automatically (e.g. Light → +5 TN, Reduction 3; Heavy → +10, 5); `none` removes it. |
+
+Weapon damage (used by `/attack`) and armor Reduction/Armor-TN (used by combat)
+now come from the full catalogs — Ashigaru +3/1, Tatami +4/1, Light +5/3, Heavy
++10/5, Tetsu-do +13/8, Riding +4/4, Bogu +0/1.
 
 **Combat — player rolls, DM approves damage**
 
@@ -231,7 +244,7 @@ discord_bot/
 │   ├── character.py       # The playable character sheet (subset of character_data.gd).
 │   ├── stats.py           # Derived values: rings, wound levels, Insight (character_stats.gd).
 │   ├── advancement.py     # RAW XP costs: Traits/Void/Skills/Emphasis/Kata/Kiho/Spell.
-│   ├── combat.py          # Attack/damage/armor-TN core (individual_combat.gd s40).
+│   ├── combat.py          # Attack/damage/armor-TN core + full weapon & armor catalogs.
 │   ├── npc_gen.py         # Procedural NPC samurai generator (GDD s22.4, LOCKED).
 │   ├── creature.py        # Creature model + combat; loads the generated catalog.
 │   ├── creature_catalog.py# AUTO-GENERATED: 208 bestiary stat blocks (verbatim).

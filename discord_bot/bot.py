@@ -367,6 +367,14 @@ async def _weapon_autocomplete(
     return [app_commands.Choice(name=w, value=w) for w in sorted(names)[:25]]
 
 
+async def _armor_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    names = [a for a in combat.ARMOR_CATALOG if cur in a] + (["none"] if cur in "none" else [])
+    return [app_commands.Choice(name=a, value=a) for a in names][:25]
+
+
 async def _npc_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -1142,6 +1150,79 @@ async def sheet_set(
     await interaction.response.send_message(
         f"Updated **{field.value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
     )
+
+
+@sheet.command(name="equip", description="Add (or remove) a weapon on your character's gear.")
+@app_commands.describe(weapon="Weapon name.", remove="Remove it instead of adding.", member="Target player (DM only).")
+@app_commands.autocomplete(weapon=_weapon_autocomplete)
+async def sheet_equip(
+    interaction: discord.Interaction,
+    weapon: str,
+    remove: bool = False,
+    member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    w = weapon.lower().strip()
+    c = rec.character
+    if remove:
+        c.weapons = [x for x in c.weapons if x.lower() != w]
+        msg = f"Removed **{w}** from **{c.name}**."
+    else:
+        if w not in combat.WEAPON_CATALOG:
+            await interaction.response.send_message(
+                f"Unknown weapon **{weapon}** — see `/weapon list`.", ephemeral=True
+            )
+            return
+        if w not in [x.lower() for x in c.weapons]:
+            c.weapons.append(w)
+        prof = combat.WEAPON_CATALOG[w]
+        msg = f"**{c.name}** equips **{w}** (DR {prof['rolled']}k{prof['kept']}, {prof['skill']})."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+@sheet.command(name="armor", description="Equip armor (sets Armor TN bonus & Reduction), or 'none' to remove.")
+@app_commands.describe(armor="Armor type (bogu/ashigaru/tatami/light/heavy/tetsu_do/riding, or 'none').", member="Target player (DM only).")
+@app_commands.autocomplete(armor=_armor_autocomplete)
+async def sheet_armor(
+    interaction: discord.Interaction,
+    armor: str,
+    member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    a = armor.lower().strip()
+    if a in ("none", "", "remove"):
+        c.armor_name = ""
+        c.armor_tn_bonus = 0
+        c.armor_reduction = 0
+        msg = f"Removed armor from **{c.name}**."
+    else:
+        spec = combat.get_armor(a)
+        if spec is None:
+            await interaction.response.send_message(
+                f"Unknown armor **{armor}**. Options: {', '.join(combat.ARMOR_CATALOG)}.", ephemeral=True
+            )
+            return
+        c.armor_name = a
+        c.armor_tn_bonus = spec["tn_bonus"]
+        c.armor_reduction = spec["reduction"]
+        heavy = " (heavy)" if spec["is_heavy"] else ""
+        msg = f"**{c.name}** equips **{a}**{heavy}: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
 @sheet.command(name="wound", description="Apply wounds to the active character (raw, no armor reduction here).")
@@ -2656,6 +2737,58 @@ async def spell_view(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(embed=build_spell_embed(s))
 
 
+# ===========================================================================
+# /weapon and /armor groups — equipment reference (individual_combat.gd / armor_system.gd)
+# ===========================================================================
+weapon_group = app_commands.Group(name="weapon", description="Browse the weapon catalog (damage, skill, size).")
+
+
+@weapon_group.command(name="list", description="List all weapons, grouped by skill.")
+async def weapon_list(interaction: discord.Interaction) -> None:
+    by_skill: dict[str, list[str]] = {}
+    for wid, w in combat.WEAPON_CATALOG.items():
+        by_skill.setdefault(w["skill"], []).append(f"{wid} {w['rolled']}k{w['kept']}")
+    lines = [f"**{sk}:** " + ", ".join(sorted(v)) for sk, v in sorted(by_skill.items())]
+    await interaction.response.send_message(
+        f"⚔️ **{len(combat.WEAPON_CATALOG)} weapons** (name DR):\n" + "\n".join(lines), ephemeral=True
+    )
+
+
+@weapon_group.command(name="view", description="Show a weapon's details.")
+@app_commands.describe(name="Weapon name.")
+@app_commands.autocomplete(name=_weapon_autocomplete)
+async def weapon_view(interaction: discord.Interaction, name: str) -> None:
+    w = combat.WEAPON_CATALOG.get(name.lower().strip())
+    if w is None:
+        await interaction.response.send_message(f"No weapon named **{name}**. See `/weapon list`.", ephemeral=True)
+        return
+    dr = f"{w['rolled']}k{w['kept']}" + (" + Strength" if w.get("strength_adds") and w.get("melee") else "")
+    embed = discord.Embed(title=f"⚔️ {name.lower().strip()}", color=discord.Color.dark_grey())
+    embed.add_field(name="Damage (DR)", value=dr, inline=True)
+    embed.add_field(name="Skill", value=w["skill"], inline=True)
+    embed.add_field(name="Trait", value=w["trait"].capitalize(), inline=True)
+    embed.add_field(name="Size", value=w["size"], inline=True)
+    embed.add_field(name="Type", value="Melee" if w.get("melee") else "Ranged", inline=True)
+    if w.get("no_explode"):
+        embed.set_footer(text="Damage dice do not explode.")
+    await interaction.response.send_message(embed=embed)
+
+
+armor_group = app_commands.Group(name="armor", description="Browse the armor catalog (TN bonus, Reduction).")
+
+
+@armor_group.command(name="list", description="List all armor types.")
+async def armor_list(interaction: discord.Interaction) -> None:
+    lines = [
+        f"• **{a}** — Armor TN +{s['tn_bonus']}, Reduction {s['reduction']}"
+        + (" · heavy" if s["is_heavy"] else "")
+        for a, s in combat.ARMOR_CATALOG.items()
+    ]
+    await interaction.response.send_message(
+        "🛡️ **Armor** (equip with `/sheet armor`):\n" + "\n".join(lines), ephemeral=True
+    )
+
+
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
@@ -2665,6 +2798,8 @@ client.tree.add_command(creature_group)
 client.tree.add_command(xp)
 client.tree.add_command(school)
 client.tree.add_command(spell_group)
+client.tree.add_command(weapon_group)
+client.tree.add_command(armor_group)
 
 
 def main() -> None:
