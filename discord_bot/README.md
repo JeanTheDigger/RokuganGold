@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 4 — dice + sheets + accounts + combat + initiative
+## Status: Phase 5 — + NPC generation (s22.4 templates)
 
 **Dice**
 
@@ -92,12 +92,30 @@ it lands, the DM authorizes the outcome."*
 Initiative order is in-memory scratch state (a bot restart clears an in-progress
 fight; sheets and wounds are in the database and persist).
 
+**NPCs** (generated from **GDD s22.4** — Generation Templates, LOCKED)
+
+| Command | What it does |
+|---|---|
+| `/npc generate` | DM generates a samurai NPC by `insight_rank` (1–5): Traits/Rings, Honor, Glory, age, and koku all within the s22.4 bands, with random variance so two are never identical. Optional `clan`/`family`/`school` (flavor), `skills` (comma list → distributed per Rank, one specialty), `base_honor`. |
+| `/npc view` · `/npc list` · `/npc delete` | View / roster / remove NPCs (delete is DM-only). |
+
+NPCs plug into combat: `/combat npc name:` adds one to initiative, and `/attack`
+takes `target_npc:` (fight an NPC) and `attacker_npc:` (a DM runs a monster
+against a player). NPCs are stored per server and never mix with player sheets.
+
+*NPC fidelity & limits:* every value traces to s22.4 — nothing invented. Because
+s22.4 pulls school-specific skills and Trait bonuses from Sections 27/29 (not
+ported), you supply the school **skill names** (`skills:`) and the generator sets
+their ranks; Ranks are capped at **1–5** (s22.4 gives no 6+ ranges); koku is the
+`1d10 × Rank` savings term only (the role stipend needs role data). To tweak a
+generated NPC, delete and regenerate (per-field NPC editing isn't wired yet).
+
 *Still faithful-core:* kata, kiho, skill masteries (R3/R5/R7 damage bonuses and
 9-explosions), dual-wielding, and thrown/charge/called-shot maneuvers are **not**
 modelled — the DM can express those with `raises`/`bonus_tn`.
 
-Still to come in later phases: tables/rooms with invites, NPC templates, and
-Vultr hosting.
+Still to come in later phases: tables/rooms with invites, per-field NPC editing,
+and Vultr hosting.
 
 ---
 
@@ -113,6 +131,7 @@ discord_bot/
 │   ├── character.py       # The playable character sheet (subset of character_data.gd).
 │   ├── stats.py           # Derived values: rings, wound levels, Insight (character_stats.gd).
 │   ├── combat.py          # Attack/damage/armor-TN core (individual_combat.gd s40).
+│   ├── npc_gen.py         # Procedural NPC samurai generator (GDD s22.4, LOCKED).
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).
 │   └── __init__.py
 ├── requirements.txt       # Python dependencies.

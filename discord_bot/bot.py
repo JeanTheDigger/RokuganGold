@@ -19,9 +19,13 @@ from discord import app_commands
 
 import encounter
 import storage
-from l5r_rules import combat, enums, stats
+from l5r_rules import combat, enums, npc_gen, stats
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
+
+# NPCs are stored as characters owned by this reserved per-guild pseudo-user, so
+# they never collide with a real player's own sheets. Names are unique per guild.
+NPC_OWNER = "npc"
 
 try:
     from dotenv import load_dotenv
@@ -118,7 +122,8 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     subtitle_bits = [b for b in (c.clan, c.family, c.school) if b]
     school_line = f"{c.school_type} School" + (f" (Rank {c.school_rank})" if c.school_rank else "")
     header = " · ".join(subtitle_bits) if subtitle_bits else "—"
-    embed.description = f"{header}\n{school_line}"
+    npc_tag = "🎭 **NPC**\n" if c.is_npc else ""
+    embed.description = f"{npc_tag}{header}\n{school_line}"
 
     embed.add_field(
         name="Rings",
@@ -317,6 +322,17 @@ async def _weapon_autocomplete(
     return [app_commands.Choice(name=w, value=w) for w in sorted(names)[:25]]
 
 
+async def _npc_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    if interaction.guild_id is None:
+        return []
+    cur = current.lower().strip()
+    recs = store.list_by_owner(str(interaction.guild_id), NPC_OWNER)
+    names = [r.character.name for r in recs if cur in r.character.name.lower()]
+    return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
+
+
 _MANEUVER_APPLY_LABEL = {
     "none": "Roll & Apply Damage",
     "feint": "Roll & Apply Damage (Feint)",
@@ -503,7 +519,9 @@ _MANEUVER_CHOICES = [
     description="Attack another character. Rolls to hit; on a hit a DM authorizes the outcome.",
 )
 @app_commands.describe(
-    target="The character to attack (that player's active character).",
+    target="The player to attack (their active character). Or use target_npc.",
+    target_npc="Attack a stored NPC by name (instead of a player).",
+    attacker_npc="Attack WITH a stored NPC instead of your own character (DM only).",
     weapon="Weapon (default katana). Start typing for suggestions.",
     raises="Called Raises — each adds +5 to the target's Armor TN.",
     increased_damage="Increased Damage raises — each adds +5 TN AND +1 damage die on a hit.",
@@ -513,13 +531,17 @@ _MANEUVER_CHOICES = [
     defender_stance="Target's stance (affects their Armor TN).",
     bonus_tn="Situational +/- to the target's Armor TN (DM discretion).",
 )
-@app_commands.autocomplete(weapon=_weapon_autocomplete)
+@app_commands.autocomplete(
+    weapon=_weapon_autocomplete, target_npc=_npc_autocomplete, attacker_npc=_npc_autocomplete
+)
 @app_commands.choices(
     attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES, maneuver=_MANEUVER_CHOICES
 )
 async def attack(
     interaction: discord.Interaction,
-    target: discord.Member,
+    target: discord.Member | None = None,
+    target_npc: str | None = None,
+    attacker_npc: str | None = None,
     weapon: str = "katana",
     raises: app_commands.Range[int, 0, 10] = 0,
     increased_damage: app_commands.Range[int, 0, 10] = 0,
@@ -534,16 +556,45 @@ async def attack(
         return
     guild = str(interaction.guild_id)
 
-    attacker_rec = store.get_active(guild, str(interaction.user.id))
-    if attacker_rec is None:
+    # Resolve the attacker: a stored NPC (DM only) or the caller's active character.
+    if attacker_npc:
+        if not _is_dm(interaction):
+            await interaction.response.send_message(
+                "Only a DM can attack with an NPC.", ephemeral=True
+            )
+            return
+        attacker_rec = store.get_by_name(guild, NPC_OWNER, attacker_npc)
+        if attacker_rec is None:
+            await interaction.response.send_message(
+                f"No NPC named **{attacker_npc}**.", ephemeral=True
+            )
+            return
+    else:
+        attacker_rec = store.get_active(guild, str(interaction.user.id))
+        if attacker_rec is None:
+            await interaction.response.send_message(
+                "You have no active character. Use `/sheet create` first.", ephemeral=True
+            )
+            return
+
+    # Resolve the target: a stored NPC, or a player's active character.
+    if target_npc:
+        target_rec = store.get_by_name(guild, NPC_OWNER, target_npc)
+        if target_rec is None:
+            await interaction.response.send_message(
+                f"No NPC named **{target_npc}**.", ephemeral=True
+            )
+            return
+    elif target is not None:
+        target_rec = store.get_active(guild, str(target.id))
+        if target_rec is None:
+            await interaction.response.send_message(
+                f"{target.display_name} has no active character.", ephemeral=True
+            )
+            return
+    else:
         await interaction.response.send_message(
-            "You have no active character. Use `/sheet create` first.", ephemeral=True
-        )
-        return
-    target_rec = store.get_active(guild, str(target.id))
-    if target_rec is None:
-        await interaction.response.send_message(
-            f"{target.display_name} has no active character.", ephemeral=True
+            "Pick a target: a player with `target:` or an NPC with `target_npc:`.", ephemeral=True
         )
         return
 
@@ -1181,9 +1232,145 @@ async def combat_end(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("⚔️ Encounter ended.")
 
 
+@combat_group.command(name="npc", description="Add a stored NPC to initiative (rolls its initiative). DM only.")
+@app_commands.describe(name="The NPC to add.")
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def combat_npc(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can add NPCs to initiative.", ephemeral=True)
+        return
+    rec = store.get_by_name(str(interaction.guild_id), NPC_OWNER, name)
+    if rec is None:
+        await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
+        return
+    result = combat.roll_initiative(rec.character, engine)
+    enc = _get_or_create(interaction.channel_id)
+    enc.remove(rec.character.name)
+    enc.add(encounter.Combatant(
+        name=rec.character.name,
+        initiative=result.total,
+        initiative_detail=f"kept {result.kept_dice} = {result.total}",
+        owner_id=None,
+        is_npc=True,
+    ))
+    await interaction.response.send_message(_render_encounter(enc))
+
+
+# ===========================================================================
+# /npc group — generate and manage NPC characters (s22.4 templates)
+# ===========================================================================
+npc = app_commands.Group(name="npc", description="Generate and manage NPC characters (GDD s22.4 templates).")
+
+
+@npc.command(name="generate", description="Generate an NPC samurai from a Clan/Family/School/Rank template. DM only.")
+@app_commands.describe(
+    name="NPC name.",
+    insight_rank="Insight Rank 1–5 (power level; higher = stronger).",
+    clan="Clan (flavor).",
+    family="Family (flavor).",
+    school="School name (flavor).",
+    school_type="School type (default Bushi).",
+    skills="Comma-separated school skills, e.g. 'Kenjutsu, Iaijutsu, Defense'. One becomes the specialty.",
+    base_honor="Starting Honor before ±0.5 variance (default 3.5).",
+)
+@app_commands.choices(school_type=_SCHOOL_CHOICES)
+async def npc_generate(
+    interaction: discord.Interaction,
+    name: app_commands.Range[str, 1, 64],
+    insight_rank: app_commands.Range[int, 1, 5],
+    clan: str | None = None,
+    family: str | None = None,
+    school: str | None = None,
+    school_type: app_commands.Choice[str] | None = None,
+    skills: str | None = None,
+    base_honor: app_commands.Range[float, 0.0, 10.0] | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can generate NPCs.", ephemeral=True)
+        return
+    school_skills = [s for s in skills.split(",")] if skills else None
+    char = npc_gen.generate(
+        name, insight_rank, engine,
+        clan=clan or "", family=family or "", school=school or "",
+        school_type=(school_type.value if school_type else "Bushi"),
+        school_skills=school_skills,
+        base_honor=(base_honor if base_honor is not None else 3.5),
+    )
+    try:
+        rec = store.create_character(str(interaction.guild_id), NPC_OWNER, char)
+    except storage.DuplicateNameError:
+        await interaction.response.send_message(
+            f"An NPC named **{name}** already exists. Pick another name or delete it first.",
+            ephemeral=True,
+        )
+        return
+    note = f"🎭 Generated **{name}** — a Rank {insight_rank} {char.school_type} NPC (stats have random variance)."
+    if not school_skills:
+        note += " No skills set — regenerate with `skills:` to give it school skills."
+    await interaction.response.send_message(content=note, embed=build_sheet_embed(rec))
+
+
+@npc.command(name="view", description="View a stored NPC.")
+@app_commands.describe(name="The NPC to view.")
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_view(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec = store.get_by_name(str(interaction.guild_id), NPC_OWNER, name)
+    if rec is None:
+        await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
+        return
+    await interaction.response.send_message(embed=build_sheet_embed(rec))
+
+
+@npc.command(name="list", description="List the NPCs on this server.")
+async def npc_list(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    recs = store.list_by_owner(str(interaction.guild_id), NPC_OWNER)
+    if not recs:
+        await interaction.response.send_message(
+            "No NPCs yet. Create one with `/npc generate` (DM).", ephemeral=True
+        )
+        return
+    lines = [
+        f"• **{r.character.name}** — {r.character.clan or '—'} {r.character.school_type} "
+        f"(Rank {r.character.school_rank})"
+        for r in recs
+    ]
+    await interaction.response.send_message("🎭 **NPCs on this server:**\n" + "\n".join(lines[:50]))
+
+
+@npc.command(name="delete", description="Delete a stored NPC. DM only.")
+@app_commands.describe(name="The NPC to delete.")
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_delete(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can delete NPCs.", ephemeral=True)
+        return
+    rec = store.get_by_name(str(interaction.guild_id), NPC_OWNER, name)
+    if rec is None:
+        await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
+        return
+    store.delete(rec.id)
+    await interaction.response.send_message(f"Deleted NPC **{rec.character.name}**.", ephemeral=True)
+
+
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
+client.tree.add_command(npc)
 
 
 def main() -> None:

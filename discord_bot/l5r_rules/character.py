@@ -31,6 +31,7 @@ class Character:
     school_rank: int = 1
     age: int = 16
     gender: str = ""
+    is_npc: bool = False
 
     # -- Traits & Void (default 2 each, per GDScript) --
     stamina: int = 2
