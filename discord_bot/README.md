@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 8 — + XP / level-up (GDD s48)
+## Status: Phase 9 — automatic RAW leveling (no DM)
 
 **Dice**
 
@@ -47,25 +47,27 @@ A **DM** — a server admin, anyone with *Manage Server*, or a member granted vi
 else can only manage their own. Sheets are scoped **per server**, so one bot can
 run many separate games without them mixing.
 
-**Experience & advancement** (costs from **GDD s48**, LOCKED)
+**Experience & advancement** — automatic, no DM, tabletop **RAW**
 
-The DM controls the XP supply; players spend it to level up. Insight Rank follows
-automatically.
+XP is credited automatically (no DM grants it); players spend it themselves.
 
 | Command | What it does |
 |---|---|
-| `/xp grant` | DM grants (or corrects) a player's XP. |
-| `/xp balance` | Show a character's available/spent XP and Insight Rank. |
-| `/xp ring` | Spend XP to raise a Ring (Air/Earth/Fire/Water/Void). Cost = **new rank × 20** XP. |
-| `/xp skill` | Spend XP to raise or learn a Skill. Cost = **new rank × 5** XP. |
-| `/xp costs` | The s48 cost reference. |
+| `/xp balance` | Show your available/spent XP and Insight Rank (credits any XP due first). |
+| `/xp trait` | Spend XP to raise a Trait or Void. Cost = **new rank × 4** (Void **× 6**). |
+| `/xp skill` | Spend XP to raise or learn a Skill. Cost = **new rank × 2**. |
+| `/xp costs` | The RAW cost reference. |
 
-Rings and Skills cap at rank 5. Raising a Ring raises its underlying Trait(s) (the
-lower of the pair, or both when equal — the exact `npc_advancement.gd` rule), so
-the Ring's value rises by one; **Insight** (`Σrings×10 + skill ranks`) and **Insight
-Rank** (150 → Rank 2, then +25/rank, per s48) recompute automatically. Learning a
-new Rank *Technique* still needs a dojo/Sensei visit — the DM adjudicates that;
-the mechanical advancement is automatic. Every cost traces to s48 — nothing invented.
+**Costs are tabletop L5R 4e RAW:** Skill → N×2, Trait → N×4, Void → N×6. Traits/Void
+cap at rank 5, Skills at 10. Raising Traits (not Rings — that's the RAW way) means a
+Ring only rises once *both* of its Traits do; **Insight** (`Σrings×10 + skill ranks`)
+and **Insight Rank** (150 → Rank 2, then +25/rank) recompute automatically.
+
+**The XP faucet** is a weekly stipend: each active character auto-accrues
+`XP_PER_WEEK` XP per real week (default **3**, set the env var to tune or **0** to
+disable). Accrual is lazy — it's credited whenever the player runs an `/xp` command,
+so there's no background job. Learning a new Rank *Technique* on advancement is
+left to roleplay (a dojo/Sensei visit); the mechanical advancement is automatic.
 
 **Combat — player rolls, DM approves damage**
 
@@ -192,7 +194,7 @@ discord_bot/
 │   ├── dice.py            # Roll & Keep engine (ported from simulation/dice_engine.gd).
 │   ├── character.py       # The playable character sheet (subset of character_data.gd).
 │   ├── stats.py           # Derived values: rings, wound levels, Insight (character_stats.gd).
-│   ├── advancement.py     # XP costs + Ring/Skill raising (GDD s48).
+│   ├── advancement.py     # Auto XP accrual + Trait/Skill raising (L5R 4e RAW).
 │   ├── combat.py          # Attack/damage/armor-TN core (individual_combat.gd s40).
 │   ├── npc_gen.py         # Procedural NPC samurai generator (GDD s22.4, LOCKED).
 │   ├── creature.py        # Creature model + combat; loads the generated catalog.

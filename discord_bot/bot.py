@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 
 import discord
 from discord import app_commands
@@ -40,6 +41,9 @@ log = logging.getLogger("rokugan-bot")
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 GUILD_ID = os.environ.get("DISCORD_GUILD_ID")
 DB_PATH = os.environ.get("DB_PATH", "rokugan.db")
+# Automatic XP stipend: XP auto-credited to each active character per real week
+# (no DM grants it). Set XP_PER_WEEK to tune the pace, or 0 to disable the faucet.
+XP_PER_WEEK = float(os.environ.get("XP_PER_WEEK", "3"))
 
 intents = discord.Intents.default()
 
@@ -2166,47 +2170,19 @@ async def creature_attack_cmd(
 
 
 # ===========================================================================
-# /xp group — Experience: DMs grant, players spend to advance (GDD s48)
+# /xp group — Experience: auto-accrued weekly, players spend it (tabletop RAW)
 # ===========================================================================
-xp = app_commands.Group(name="xp", description="Grant and spend Experience to advance characters (GDD s48).")
-
-_RING_CHOICES = [
-    app_commands.Choice(name="Air", value="air"),
-    app_commands.Choice(name="Earth", value="earth"),
-    app_commands.Choice(name="Fire", value="fire"),
-    app_commands.Choice(name="Water", value="water"),
-    app_commands.Choice(name="Void", value="void"),
-]
+xp = app_commands.Group(name="xp", description="Spend auto-earned Experience to advance your character (L5R 4e RAW).")
 
 
-@xp.command(name="grant", description="Grant Experience to a player's active character. DM only.")
-@app_commands.describe(member="The player to grant XP to.", amount="XP to grant (may be negative to correct).", reason="Optional note.")
-async def xp_grant(
-    interaction: discord.Interaction,
-    member: discord.Member,
-    amount: app_commands.Range[float, -100000.0, 100000.0],
-    reason: str | None = None,
-) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
-        return
-    if not _is_dm(interaction):
-        await interaction.response.send_message("Only a DM can grant XP.", ephemeral=True)
-        return
-    rec = store.get_active(str(interaction.guild_id), str(member.id))
-    if rec is None:
-        await interaction.response.send_message(f"{member.display_name} has no active character.", ephemeral=True)
-        return
-    rec.character.xp = max(0.0, rec.character.xp + float(amount))
+def _accrue(rec: storage.CharacterRecord) -> float:
+    """Credit the automatic weekly XP stipend to this character and persist it."""
+    credited = advancement.accrue(rec.character, time.time(), XP_PER_WEEK)
     store.save(rec)
-    note = f" — *{reason}*" if reason else ""
-    await interaction.response.send_message(
-        f"✨ {member.mention}'s **{rec.character.name}** {'gains' if amount >= 0 else 'loses'} "
-        f"**{abs(amount):g}** XP → **{rec.character.xp:g}** available{note}"
-    )
+    return credited
 
 
-@xp.command(name="balance", description="Show a character's available Experience.")
+@xp.command(name="balance", description="Show your character's available Experience.")
 @app_commands.describe(member="Whose XP to show (DM only). Omit for your own.")
 async def xp_balance(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
     if not _guild_ok(interaction):
@@ -2221,22 +2197,24 @@ async def xp_balance(interaction: discord.Interaction, member: discord.Member | 
     else:
         rec = store.get_active(guild, str(interaction.user.id))
     if rec is None:
-        await interaction.response.send_message("No active character.", ephemeral=True)
+        await interaction.response.send_message("No active character. Use `/sheet create` first.", ephemeral=True)
         return
+    credited = _accrue(rec)
     c = rec.character
+    extra = f" (+{credited:g} just accrued)" if credited else ""
     await interaction.response.send_message(
-        f"**{c.name}** — XP available **{c.xp:g}**, spent {c.xp_spent:g}. "
+        f"**{c.name}** - XP available **{c.xp:g}**{extra}, spent {c.xp_spent:g}. "
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}).",
         ephemeral=True,
     )
 
 
-@xp.command(name="ring", description="Spend XP to raise a Ring on your active character.")
-@app_commands.describe(ring="Which Ring to raise.", member="Advance another player's character (DM only).")
-@app_commands.choices(ring=_RING_CHOICES)
-async def xp_ring(
+@xp.command(name="trait", description="Spend XP to raise a Trait or Void on your active character.")
+@app_commands.describe(trait="Which Trait (or Void) to raise.", member="Advance another player's character (DM only).")
+@app_commands.choices(trait=_TRAIT_CHOICES)
+async def xp_trait(
     interaction: discord.Interaction,
-    ring: app_commands.Choice[str],
+    trait: app_commands.Choice[str],
     member: discord.Member | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -2246,28 +2224,29 @@ async def xp_ring(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
+    _accrue(rec)
     c = rec.character
-    quote = advancement.ring_raise_quote(c, ring.value)
+    quote = advancement.trait_raise_quote(c, trait.value)
+    label = "Void" if trait.value == "void" else trait.value.capitalize()
     if quote is None:
-        await interaction.response.send_message(
-            f"{ring.name} Ring is already at rank {advancement.MAX_RING_RANK}.", ephemeral=True
-        )
+        cap = advancement.MAX_VOID_RANK if trait.value == "void" else advancement.MAX_TRAIT_RANK
+        await interaction.response.send_message(f"{label} is already at rank {cap}.", ephemeral=True)
         return
     new_rank, cost = quote
     if c.xp < cost:
         await interaction.response.send_message(
-            f"Not enough XP: raising {ring.name} to **{new_rank}** costs **{cost}**, "
+            f"Not enough XP: raising {label} to **{new_rank}** costs **{cost}**, "
             f"but **{c.name}** has only {c.xp:g}.",
             ephemeral=True,
         )
         return
-    advancement.apply_ring_raise(c, ring.value)
+    advancement.apply_trait_raise(c, trait.value)
     c.xp -= cost
     c.xp_spent += cost
     store.save(rec)
     await interaction.response.send_message(
-        f"🌀 **{c.name}** raises **{ring.name}** to rank **{new_rank}** for **{cost}** XP.\n"
-        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) · XP left {c.xp:g}",
+        f"\U0001F300 **{c.name}** raises **{label}** to rank **{new_rank}** for **{cost}** XP.\n"
+        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}",
         embed=build_sheet_embed(rec),
     )
 
@@ -2286,6 +2265,7 @@ async def xp_skill(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
+    _accrue(rec)
     c = rec.character
     skill_name = skill.strip().title()
     quote = advancement.skill_raise_quote(c, skill_name)
@@ -2307,21 +2287,22 @@ async def xp_skill(
     c.xp_spent += cost
     store.save(rec)
     await interaction.response.send_message(
-        f"📘 **{c.name}** raises **{skill_name}** to rank **{new_rank}** for **{cost}** XP.\n"
-        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) · XP left {c.xp:g}",
+        f"\U0001F4D8 **{c.name}** raises **{skill_name}** to rank **{new_rank}** for **{cost}** XP.\n"
+        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}",
         embed=build_sheet_embed(rec),
     )
 
 
-@xp.command(name="costs", description="Show the Experience cost reference (GDD s48).")
+@xp.command(name="costs", description="Show the Experience cost reference (L5R 4e RAW).")
 async def xp_costs(interaction: discord.Interaction) -> None:
+    faucet = (f"XP auto-accrues **{XP_PER_WEEK:g}/week** to every active character - no DM needed."
+              if XP_PER_WEEK > 0 else "The automatic XP stipend is currently disabled (XP_PER_WEEK=0).")
     await interaction.response.send_message(
-        "**Experience costs (GDD s48)**\n" + advancement.cost_table()
-        + "\n\nRings raise the underlying Trait(s); Insight Rank follows automatically. "
-        "Learning a new Rank Technique still needs a dojo/Sensei visit (DM adjudicates).",
+        "**Experience costs (L5R 4e RAW)**\n" + advancement.cost_table()
+        + f"\n\n{faucet} Spend it with `/xp trait` and `/xp skill`; Insight Rank follows "
+        "automatically. Learning a new Rank Technique still needs a dojo/Sensei visit (roleplay).",
         ephemeral=True,
     )
-
 
 client.tree.add_command(sheet)
 client.tree.add_command(dm)

@@ -83,9 +83,10 @@ class Character:
     # -- Money --
     koku: float = 0.0
 
-    # -- Experience (Section 48) — spendable XP and lifetime total spent --
+    # -- Experience — spendable XP, lifetime spent, and the last auto-accrual time --
     xp: float = 0.0
     xp_spent: float = 0.0
+    xp_last_accrual: float = 0.0  # unix ts of the last weekly-stipend credit (0 = not yet anchored)
 
     # -- Free-form DM/player notes (bot convenience, not a game mechanic) --
     notes: str = ""
