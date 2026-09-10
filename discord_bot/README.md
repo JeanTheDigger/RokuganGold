@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 5 — + NPC generation (s22.4 templates)
+## Status: Phase 6 — + private play rooms with invites
 
 **Dice**
 
@@ -114,8 +114,23 @@ generated NPC, delete and regenerate (per-field NPC editing isn't wired yet).
 9-explosions), dual-wielding, and thrown/charge/called-shot maneuvers are **not**
 modelled — the DM can express those with `raises`/`bonus_tn`.
 
-Still to come in later phases: tables/rooms with invites, per-field NPC editing,
-and Vultr hosting.
+**Rooms** (private play rooms — each is a Discord **private thread**)
+
+| Command | What it does |
+|---|---|
+| `/room create` | Opens a private thread as a play room and makes you its host. |
+| `/room invite` · `/room kick` | Add/remove a member (run **inside** the room; host or DM only). |
+| `/room members` · `/room list` | Who's in this room / all open rooms on the server. |
+| `/room close` | Archive the room (host or DM only). |
+
+Because a room *is* a channel, everything else works inside it with no extra
+steps — `/sheet`, `/roll`, `/attack`, and `/combat` all just work in the thread,
+and each room's initiative tracker is naturally separate (initiative is
+per-channel). So a DM can run several games at once in one server, each in its
+own room.
+
+Still to come in later phases: per-field NPC editing, a monster bestiary, and
+Vultr hosting.
 
 ---
 
@@ -165,8 +180,9 @@ You do this once, in a web browser. No Linux needed.
      uses slash commands, which don't require them.
 4. In the left sidebar, open **OAuth2 → URL Generator**:
    - Under **Scopes**, tick **`bot`** and **`applications.commands`**.
-   - Under **Bot Permissions**, tick **Send Messages** and **Embed Links**
-     (more permissions get added in later phases).
+   - Under **Bot Permissions**, tick **Send Messages**, **Embed Links**, and —
+     for play rooms — **Create Private Threads**, **Send Messages in Threads**,
+     and **Manage Threads**.
    - Copy the generated URL at the bottom, open it in your browser, and pick
      the server you want to add the bot to. (You must have "Manage Server" on
      that server.)

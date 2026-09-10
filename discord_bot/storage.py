@@ -49,6 +49,23 @@ CREATE TABLE IF NOT EXISTS dm_users (
     user_id  TEXT NOT NULL,
     PRIMARY KEY (guild_id, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS rooms (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id          TEXT NOT NULL,
+    parent_channel_id TEXT NOT NULL,
+    thread_id         TEXT NOT NULL UNIQUE,
+    name              TEXT NOT NULL,
+    host_id           TEXT NOT NULL,
+    created_at        REAL NOT NULL,
+    closed            INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS room_members (
+    room_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    PRIMARY KEY (room_id, user_id)
+);
 """
 
 
@@ -60,6 +77,19 @@ class CharacterRecord:
     guild_id: str
     owner_id: str
     character: Character
+
+
+@dataclass
+class RoomRecord:
+    """A play room backed by a Discord private thread."""
+
+    id: int
+    guild_id: str
+    parent_channel_id: str
+    thread_id: str
+    name: str
+    host_id: str
+    closed: bool
 
 
 class DuplicateNameError(Exception):
@@ -195,5 +225,73 @@ class Store:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT user_id FROM dm_users WHERE guild_id = ?", (guild_id,)
+            ).fetchall()
+        return [r["user_id"] for r in rows]
+
+    # -- rooms -----------------------------------------------------------------
+    def _row_to_room(self, row: sqlite3.Row) -> RoomRecord:
+        return RoomRecord(
+            id=row["id"],
+            guild_id=row["guild_id"],
+            parent_channel_id=row["parent_channel_id"],
+            thread_id=row["thread_id"],
+            name=row["name"],
+            host_id=row["host_id"],
+            closed=bool(row["closed"]),
+        )
+
+    def create_room(
+        self, guild_id: str, parent_channel_id: str, thread_id: str, name: str, host_id: str
+    ) -> RoomRecord:
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "INSERT INTO rooms (guild_id, parent_channel_id, thread_id, name, host_id, "
+                "created_at, closed) VALUES (?, ?, ?, ?, ?, ?, 0)",
+                (guild_id, parent_channel_id, thread_id, name, host_id, time.time()),
+            )
+            room_id = cur.lastrowid
+            self._conn.execute(
+                "INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)",
+                (room_id, host_id),
+            )
+        return RoomRecord(room_id, guild_id, parent_channel_id, thread_id, name, host_id, False)
+
+    def get_room_by_thread(self, thread_id: str) -> RoomRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM rooms WHERE thread_id = ?", (thread_id,)
+            ).fetchone()
+        return self._row_to_room(row) if row else None
+
+    def list_rooms(self, guild_id: str, include_closed: bool = False) -> list[RoomRecord]:
+        query = "SELECT * FROM rooms WHERE guild_id = ?"
+        if not include_closed:
+            query += " AND closed = 0"
+        query += " ORDER BY created_at DESC"
+        with self._lock:
+            rows = self._conn.execute(query, (guild_id,)).fetchall()
+        return [self._row_to_room(r) for r in rows]
+
+    def close_room(self, room_id: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("UPDATE rooms SET closed = 1 WHERE id = ?", (room_id,))
+
+    def add_room_member(self, room_id: int, user_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)",
+                (room_id, user_id),
+            )
+
+    def remove_room_member(self, room_id: int, user_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM room_members WHERE room_id = ? AND user_id = ?", (room_id, user_id)
+            )
+
+    def list_room_members(self, room_id: int) -> list[str]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT user_id FROM room_members WHERE room_id = ?", (room_id,)
             ).fetchall()
         return [r["user_id"] for r in rows]

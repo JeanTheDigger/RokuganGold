@@ -1367,10 +1367,172 @@ async def npc_delete(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(f"Deleted NPC **{rec.character.name}**.", ephemeral=True)
 
 
+# ===========================================================================
+# /room group — private-thread play rooms with invites
+# ===========================================================================
+room = app_commands.Group(name="room", description="Create private play rooms and invite people.")
+
+
+def _room_host_or_dm(interaction: discord.Interaction, rec: storage.RoomRecord) -> bool:
+    return str(interaction.user.id) == rec.host_id or _is_dm(interaction)
+
+
+async def _resolve_current_room(
+    interaction: discord.Interaction,
+) -> tuple[storage.RoomRecord | None, str | None]:
+    """Rooms context commands run INSIDE the room's thread."""
+    rec = store.get_room_by_thread(str(interaction.channel_id))
+    if rec is None:
+        return None, "Run this inside a room's thread (open one with `/room create`)."
+    return rec, None
+
+
+@room.command(name="create", description="Create a private play room (a thread) and become its host.")
+@app_commands.describe(name="Room name.")
+async def room_create(interaction: discord.Interaction, name: app_commands.Range[str, 1, 90]) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not isinstance(interaction.channel, discord.TextChannel):
+        await interaction.response.send_message(
+            "Create a room from a normal text channel (not inside a thread or DM).", ephemeral=True
+        )
+        return
+    try:
+        thread = await interaction.channel.create_thread(
+            name=name, type=discord.ChannelType.private_thread, invitable=False
+        )
+        await thread.add_user(interaction.user)
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "I need **Create Private Threads**, **Send Messages in Threads**, and **Manage Threads** "
+            "permissions here. Ask a server admin to grant them (see README).",
+            ephemeral=True,
+        )
+        return
+    rec = store.create_room(
+        str(interaction.guild_id), str(interaction.channel_id), str(thread.id), name, str(interaction.user.id)
+    )
+    await interaction.response.send_message(
+        f"🏮 Room **{name}** created: {thread.mention} (host {interaction.user.mention}). "
+        f"Invite people with `/room invite` inside the room."
+    )
+    await thread.send(
+        f"🏮 Welcome to **{name}**. {interaction.user.mention} is the host. "
+        f"Play happens here — `/sheet`, `/roll`, `/attack`, and `/combat` all work inside this room."
+    )
+
+
+@room.command(name="invite", description="Invite a member into this room (run inside the room's thread).")
+@app_commands.describe(member="Who to invite.")
+async def room_invite(interaction: discord.Interaction, member: discord.Member) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_current_room(interaction)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    if not _room_host_or_dm(interaction, rec):
+        await interaction.response.send_message(
+            "Only the room host or a DM can invite.", ephemeral=True
+        )
+        return
+    try:
+        await interaction.channel.add_user(member)
+    except discord.Forbidden:
+        await interaction.response.send_message("I can't add members to this thread.", ephemeral=True)
+        return
+    store.add_room_member(rec.id, str(member.id))
+    await interaction.response.send_message(f"➕ {member.mention} joined **{rec.name}**.")
+
+
+@room.command(name="kick", description="Remove a member from this room (run inside the room's thread).")
+@app_commands.describe(member="Who to remove.")
+async def room_kick(interaction: discord.Interaction, member: discord.Member) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_current_room(interaction)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    if not _room_host_or_dm(interaction, rec):
+        await interaction.response.send_message(
+            "Only the room host or a DM can remove members.", ephemeral=True
+        )
+        return
+    try:
+        await interaction.channel.remove_user(member)
+    except discord.Forbidden:
+        await interaction.response.send_message("I can't remove members from this thread.", ephemeral=True)
+        return
+    store.remove_room_member(rec.id, str(member.id))
+    await interaction.response.send_message(f"➖ Removed {member.mention} from **{rec.name}**.")
+
+
+@room.command(name="members", description="List who's in this room (run inside the room's thread).")
+async def room_members(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_current_room(interaction)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    ids = store.list_room_members(rec.id)
+    mentions = ", ".join(f"<@{uid}>" for uid in ids) if ids else "—"
+    await interaction.response.send_message(
+        f"🏮 **{rec.name}** — host <@{rec.host_id}>\nMembers: {mentions}", ephemeral=True
+    )
+
+
+@room.command(name="list", description="List the open rooms on this server.")
+async def room_list(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rooms = store.list_rooms(str(interaction.guild_id))
+    if not rooms:
+        await interaction.response.send_message(
+            "No open rooms. Create one with `/room create`.", ephemeral=True
+        )
+        return
+    lines = [
+        f"• <#{r.thread_id}> — **{r.name}** (host <@{r.host_id}>, "
+        f"{len(store.list_room_members(r.id))} members)"
+        for r in rooms
+    ]
+    await interaction.response.send_message("🏮 **Open rooms:**\n" + "\n".join(lines[:40]), ephemeral=True)
+
+
+@room.command(name="close", description="Close this room (archives the thread). Host or DM only.")
+async def room_close(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_current_room(interaction)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    if not _room_host_or_dm(interaction, rec):
+        await interaction.response.send_message(
+            "Only the room host or a DM can close it.", ephemeral=True
+        )
+        return
+    store.close_room(rec.id)
+    await interaction.response.send_message(f"🏮 Room **{rec.name}** closed. Archiving the thread.")
+    try:
+        await interaction.channel.edit(archived=True, locked=True)
+    except discord.Forbidden:
+        pass
+
+
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
 client.tree.add_command(npc)
+client.tree.add_command(room)
 
 
 def main() -> None:
