@@ -670,6 +670,29 @@ async def attack(
         await interaction.response.send_message(embed=embed)
 
 
+def _apply_numeric_field(c: Character, field: str, value: float) -> None:
+    """Set one numeric sheet field with clamping. Shared by /sheet set and /npc set."""
+    if field in ("honor", "glory", "status", "infamy"):
+        setattr(c, field, max(0.0, min(10.0, float(value))))
+    elif field == "taint":
+        c.taint = max(0.0, float(value))
+    elif field == "koku":
+        c.koku = float(value)
+    elif field == "age":
+        c.age = max(0, int(value))
+    elif field == "school_rank":
+        c.school_rank = max(1, min(10, int(value)))
+    elif field == "void_points_max":
+        c.max_void_points = max(0, int(value))
+        c.current_void_points = min(c.current_void_points, c.max_void_points)
+    elif field == "void_points_current":
+        c.current_void_points = max(0, min(int(value), c.max_void_points))
+    elif field == "armor_tn_bonus":
+        c.armor_tn_bonus = max(0, int(value))
+    elif field == "armor_reduction":
+        c.armor_reduction = max(0, int(value))
+
+
 # ===========================================================================
 # /sheet group
 # ===========================================================================
@@ -925,30 +948,10 @@ async def sheet_set(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
-    c = rec.character
-    f = field.value
-    if f in ("honor", "glory", "status", "infamy"):
-        setattr(c, f, max(0.0, min(10.0, float(value))))
-    elif f == "taint":
-        c.taint = max(0.0, float(value))
-    elif f == "koku":
-        c.koku = float(value)
-    elif f == "age":
-        c.age = max(0, int(value))
-    elif f == "school_rank":
-        c.school_rank = max(1, min(10, int(value)))
-    elif f == "void_points_max":
-        c.max_void_points = max(0, int(value))
-        c.current_void_points = min(c.current_void_points, c.max_void_points)
-    elif f == "void_points_current":
-        c.current_void_points = max(0, min(int(value), c.max_void_points))
-    elif f == "armor_tn_bonus":
-        c.armor_tn_bonus = max(0, int(value))
-    elif f == "armor_reduction":
-        c.armor_reduction = max(0, int(value))
+    _apply_numeric_field(rec.character, field.value, value)
     store.save(rec)
     await interaction.response.send_message(
-        f"Updated **{f}** on **{c.name}**.", embed=build_sheet_embed(rec)
+        f"Updated **{field.value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
     )
 
 
@@ -1365,6 +1368,154 @@ async def npc_delete(interaction: discord.Interaction, name: str) -> None:
         return
     store.delete(rec.id)
     await interaction.response.send_message(f"Deleted NPC **{rec.character.name}**.", ephemeral=True)
+
+
+def _resolve_npc(
+    interaction: discord.Interaction, name: str
+) -> tuple[storage.CharacterRecord | None, str | None]:
+    if not _guild_ok(interaction):
+        return None, "Please use this in a server channel."
+    if not _is_dm(interaction):
+        return None, "Only a DM can edit NPCs."
+    rec = store.get_by_name(str(interaction.guild_id), NPC_OWNER, name)
+    if rec is None:
+        return None, f"No NPC named **{name}**."
+    return rec, None
+
+
+@npc.command(name="trait", description="Set a Trait (or Void) on an NPC. DM only.")
+@app_commands.describe(name="NPC name.", trait="Which Trait.", value="New value (0-10).")
+@app_commands.choices(trait=_TRAIT_CHOICES)
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_trait(
+    interaction: discord.Interaction,
+    name: str,
+    trait: app_commands.Choice[str],
+    value: app_commands.Range[int, 0, 10],
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    rec.character.set_trait(trait.value, value)
+    store.save(rec)
+    label = "Void" if trait.value == "void" else trait.value.capitalize()
+    await interaction.response.send_message(
+        f"Set **{label}** to **{value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
+    )
+
+
+@npc.command(name="skill", description="Set a skill rank on an NPC (0 removes it). DM only.")
+@app_commands.describe(name="NPC name.", skill="Skill name.", rank="Rank 0-10 (0 removes).")
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_skill(
+    interaction: discord.Interaction,
+    name: str,
+    skill: app_commands.Range[str, 1, 40],
+    rank: app_commands.Range[int, 0, 10],
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    skill_name = skill.strip().title()
+    if rank == 0:
+        rec.character.skills.pop(skill_name, None)
+        msg = f"Removed **{skill_name}** from **{rec.character.name}**."
+    else:
+        rec.character.skills[skill_name] = rank
+        msg = f"Set **{skill_name}** to rank **{rank}** on **{rec.character.name}**."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+@npc.command(name="set", description="Set a numeric field on an NPC (honor, armor, void points, etc.). DM only.")
+@app_commands.describe(name="NPC name.", field="Which field.", value="New value.")
+@app_commands.choices(field=_SET_CHOICES)
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_set(
+    interaction: discord.Interaction,
+    name: str,
+    field: app_commands.Choice[str],
+    value: float,
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    _apply_numeric_field(rec.character, field.value, value)
+    store.save(rec)
+    await interaction.response.send_message(
+        f"Updated **{field.value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
+    )
+
+
+@npc.command(name="wound", description="Apply wounds to an NPC. DM only.")
+@app_commands.describe(name="NPC name.", amount="Wounds to apply.")
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_wound(
+    interaction: discord.Interaction, name: str, amount: app_commands.Range[int, 1, 1000]
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    old = stats.wound_level_name(c)
+    c.wounds_taken += amount
+    store.save(rec)
+    new = stats.wound_level_name(c)
+    crossed = f"  ({old} → **{new}**)" if new != old else ""
+    dead = "  💀 **DEAD**" if stats.is_dead(c) else ""
+    await interaction.response.send_message(
+        f"**{c.name}** takes **{amount}** wounds → {c.wounds_taken} total{crossed}{dead}",
+        embed=build_sheet_embed(rec),
+    )
+
+
+@npc.command(name="heal", description="Heal wounds on an NPC. DM only.")
+@app_commands.describe(name="NPC name.", amount="Wounds to heal.")
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_heal(
+    interaction: discord.Interaction, name: str, amount: app_commands.Range[int, 1, 1000]
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    old = stats.wound_level_name(c)
+    c.wounds_taken = max(0, c.wounds_taken - amount)
+    store.save(rec)
+    new = stats.wound_level_name(c)
+    crossed = f"  ({old} → **{new}**)" if new != old else ""
+    await interaction.response.send_message(
+        f"**{c.name}** heals **{amount}** wounds → {c.wounds_taken} total{crossed}",
+        embed=build_sheet_embed(rec),
+    )
+
+
+@npc.command(name="rename", description="Rename an NPC. DM only.")
+@app_commands.describe(name="Current NPC name.", new_name="New name.")
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_rename(
+    interaction: discord.Interaction, name: str, new_name: app_commands.Range[str, 1, 64]
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    if store.get_by_name(str(interaction.guild_id), NPC_OWNER, new_name) is not None:
+        await interaction.response.send_message(
+            f"An NPC named **{new_name}** already exists.", ephemeral=True
+        )
+        return
+    old_name = rec.character.name
+    rec.character.name = new_name
+    store.save(rec)
+    await interaction.response.send_message(
+        f"Renamed **{old_name}** → **{new_name}**.", embed=build_sheet_embed(rec)
+    )
 
 
 # ===========================================================================

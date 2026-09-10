@@ -98,6 +98,7 @@ fight; sheets and wounds are in the database and persist).
 |---|---|
 | `/npc generate` | DM generates a samurai NPC by `insight_rank` (1–5): Traits/Rings, Honor, Glory, age, and koku all within the s22.4 bands, with random variance so two are never identical. Optional `clan`/`family`/`school` (flavor), `skills` (comma list → distributed per Rank, one specialty), `base_honor`. |
 | `/npc view` · `/npc list` · `/npc delete` | View / roster / remove NPCs (delete is DM-only). |
+| `/npc trait` · `/npc skill` · `/npc set` · `/npc wound` · `/npc heal` · `/npc rename` | Edit a generated NPC field-by-field (DM only) — same fields as the `/sheet` editors. |
 
 NPCs plug into combat: `/combat npc name:` adds one to initiative, and `/attack`
 takes `target_npc:` (fight an NPC) and `attacker_npc:` (a DM runs a monster
@@ -107,8 +108,8 @@ against a player). NPCs are stored per server and never mix with player sheets.
 s22.4 pulls school-specific skills and Trait bonuses from Sections 27/29 (not
 ported), you supply the school **skill names** (`skills:`) and the generator sets
 their ranks; Ranks are capped at **1–5** (s22.4 gives no 6+ ranges); koku is the
-`1d10 × Rank` savings term only (the role stipend needs role data). To tweak a
-generated NPC, delete and regenerate (per-field NPC editing isn't wired yet).
+`1d10 × Rank` savings term only (the role stipend needs role data). Generated
+NPCs can be tuned field-by-field with the `/npc` editors above.
 
 *Still faithful-core:* kata, kiho, skill masteries (R3/R5/R7 damage bonuses and
 9-explosions), dual-wielding, and thrown/charge/called-shot maneuvers are **not**
