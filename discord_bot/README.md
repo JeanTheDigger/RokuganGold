@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 9 — automatic RAW leveling (no DM)
+## Status: Phase 9 — RAW leveling (DM grants XP, players spend)
 
 **Dice**
 
@@ -47,27 +47,31 @@ A **DM** — a server admin, anyone with *Manage Server*, or a member granted vi
 else can only manage their own. Sheets are scoped **per server**, so one bot can
 run many separate games without them mixing.
 
-**Experience & advancement** — automatic, no DM, tabletop **RAW**
+**Experience & advancement** — DMs grant, players spend, tabletop **RAW**
 
-XP is credited automatically (no DM grants it); players spend it themselves.
+A DM hands out XP; players spend it themselves through the bot. Insight Rank
+follows automatically.
 
 | Command | What it does |
 |---|---|
-| `/xp balance` | Show your available/spent XP and Insight Rank (credits any XP due first). |
-| `/xp trait` | Spend XP to raise a Trait or Void. Cost = **new rank × 4** (Void **× 6**). |
-| `/xp skill` | Spend XP to raise or learn a Skill. Cost = **new rank × 2**. |
+| `/xp grant` | **DM** gives (or corrects) a player's XP. |
+| `/xp balance` | Show a character's available/spent XP and Insight Rank. |
+| `/xp trait` | Raise a Trait or Void. Cost = **new rank × 4** (Void **× 6**). |
+| `/xp skill` | Raise or learn a Skill. Cost = **new rank × 1**. |
+| `/xp emphasis` | Add a Skill Emphasis. **Flat 2 XP**, max **⌈rank ÷ 2⌉** per skill. |
+| `/xp kata` · `/xp kiho` · `/xp spell` | Learn a Kata / Kiho / memorise a Spell. Cost = **1 × Mastery Level** (you give the ML). |
 | `/xp costs` | The RAW cost reference. |
 
-**Costs are tabletop L5R 4e RAW:** Skill → N×2, Trait → N×4, Void → N×6. Traits/Void
-cap at rank 5, Skills at 10. Raising Traits (not Rings — that's the RAW way) means a
-Ring only rises once *both* of its Traits do; **Insight** (`Σrings×10 + skill ranks`)
-and **Insight Rank** (150 → Rank 2, then +25/rank) recompute automatically.
+**Costs are tabletop L5R 4e RAW:** Skill → N×1, Trait → N×4, Void → N×6, Emphasis
+flat 2 (capped at ⌈rank÷2⌉), Kata/Kiho/memorised-Spell → 1×Mastery Level. Traits/Void
+cap at rank 5, Skills at 10. RAW raises **Traits** (not Rings), so a Ring only rises
+once *both* its Traits do; **Insight** (`Σrings×10 + skill ranks`) and **Insight Rank**
+(150 → Rank 2, then +25/rank) recompute automatically.
 
-**The XP faucet** is a weekly stipend: each active character auto-accrues
-`XP_PER_WEEK` XP per real week (default **3**, set the env var to tune or **0** to
-disable). Accrual is lazy — it's credited whenever the player runs an `/xp` command,
-so there's no background job. Learning a new Rank *Technique* on advancement is
-left to roleplay (a dojo/Sensei visit); the mechanical advancement is automatic.
+Kata/Kiho/spell prerequisites (school/ring gating) and the non-Brotherhood kiho
+modifiers (Core p.266) are DM-adjudicated — the bot handles the XP economy and
+records what was bought. Learning a new Rank *Technique* on advancement is
+roleplay (a dojo/Sensei visit).
 
 **Combat — player rolls, DM approves damage**
 
@@ -194,7 +198,7 @@ discord_bot/
 │   ├── dice.py            # Roll & Keep engine (ported from simulation/dice_engine.gd).
 │   ├── character.py       # The playable character sheet (subset of character_data.gd).
 │   ├── stats.py           # Derived values: rings, wound levels, Insight (character_stats.gd).
-│   ├── advancement.py     # Auto XP accrual + Trait/Skill raising (L5R 4e RAW).
+│   ├── advancement.py     # RAW XP costs: Traits/Void/Skills/Emphasis/Kata/Kiho/Spell.
 │   ├── combat.py          # Attack/damage/armor-TN core (individual_combat.gd s40).
 │   ├── npc_gen.py         # Procedural NPC samurai generator (GDD s22.4, LOCKED).
 │   ├── creature.py        # Creature model + combat; loads the generated catalog.

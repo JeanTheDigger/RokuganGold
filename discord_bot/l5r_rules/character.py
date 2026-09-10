@@ -52,8 +52,10 @@ class Character:
     skills: dict[str, int] = field(default_factory=dict)
     emphases: dict[str, list[str]] = field(default_factory=dict)
 
-    # -- Techniques / spells (names only at this phase) --
+    # -- Techniques / kata / kiho / spells (names only) --
     techniques: list[str] = field(default_factory=list)
+    katas: list[str] = field(default_factory=list)
+    kiho: list[str] = field(default_factory=list)
     spells_known: list[str] = field(default_factory=list)
     affinity_element: str = ""
     deficiency_element: str = ""
@@ -83,10 +85,9 @@ class Character:
     # -- Money --
     koku: float = 0.0
 
-    # -- Experience — spendable XP, lifetime spent, and the last auto-accrual time --
+    # -- Experience — spendable XP (DM-granted) and lifetime total spent --
     xp: float = 0.0
     xp_spent: float = 0.0
-    xp_last_accrual: float = 0.0  # unix ts of the last weekly-stipend credit (0 = not yet anchored)
 
     # -- Free-form DM/player notes (bot convenience, not a game mechanic) --
     notes: str = ""
