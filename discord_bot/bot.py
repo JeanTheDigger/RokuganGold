@@ -19,7 +19,7 @@ from discord import app_commands
 
 import encounter
 import storage
-from l5r_rules import advancement, combat, creature, enums, npc_gen, schools, spells, stats
+from l5r_rules import advancement, advantages, combat, creature, enums, npc_gen, schools, spells, stats
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
 
@@ -373,6 +373,29 @@ async def _armor_autocomplete(
     cur = current.lower().strip()
     names = [a for a in combat.ARMOR_CATALOG if cur in a] + (["none"] if cur in "none" else [])
     return [app_commands.Choice(name=a, value=a) for a in names][:25]
+
+
+def _adv_choices(current: str, kind: str | None) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    pool = advantages.by_kind(kind) if kind else advantages.ALL
+    out = []
+    for r in pool:
+        if cur in r["name"].lower():
+            label = f"{r['name']} ({r['cost_text']})"
+            out.append(app_commands.Choice(name=label[:100], value=r["name"]))
+    return out[:25]
+
+
+async def _advantage_autocomplete(interaction: discord.Interaction, current: str):
+    return _adv_choices(current, "advantage")
+
+
+async def _disadvantage_autocomplete(interaction: discord.Interaction, current: str):
+    return _adv_choices(current, "disadvantage")
+
+
+async def _anyadv_autocomplete(interaction: discord.Interaction, current: str):
+    return _adv_choices(current, None)
 
 
 async def _npc_autocomplete(
@@ -1221,6 +1244,61 @@ async def sheet_armor(
         c.armor_reduction = spec["reduction"]
         heavy = " (heavy)" if spec["is_heavy"] else ""
         msg = f"**{c.name}** equips **{a}**{heavy}: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+@sheet.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free — no XP).")
+@app_commands.describe(name="Advantage name.", remove="Remove it instead.", member="Target player (DM only).")
+@app_commands.autocomplete(name=_advantage_autocomplete)
+async def sheet_advantage(
+    interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    adv = advantages.get(name, "advantage")
+    canonical = adv["name"] if adv else name.strip()
+    c = rec.character
+    if remove:
+        c.advantages = [x for x in c.advantages if x.lower() != canonical.lower()]
+        msg = f"Removed advantage **{canonical}** from **{c.name}**."
+    else:
+        if canonical.lower() not in [x.lower() for x in c.advantages]:
+            c.advantages.append(canonical)
+        msg = f"**{c.name}** gains the advantage **{canonical}**."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+@sheet.command(name="disadvantage", description="Record (or remove) a Disadvantage on your sheet (grants XP — DM /xp grant).")
+@app_commands.describe(name="Disadvantage name.", remove="Remove it instead.", member="Target player (DM only).")
+@app_commands.autocomplete(name=_disadvantage_autocomplete)
+async def sheet_disadvantage(
+    interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    dis = advantages.get(name, "disadvantage")
+    canonical = dis["name"] if dis else name.strip()
+    c = rec.character
+    if remove:
+        c.disadvantages = [x for x in c.disadvantages if x.lower() != canonical.lower()]
+        msg = f"Removed disadvantage **{canonical}** from **{c.name}**."
+    else:
+        if canonical.lower() not in [x.lower() for x in c.disadvantages]:
+            c.disadvantages.append(canonical)
+        grant = f" (grants {dis['points']} XP — a DM applies it with `/xp grant`)" if dis and dis["points"] else ""
+        msg = f"**{c.name}** takes the disadvantage **{canonical}**{grant}."
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
@@ -2514,6 +2592,58 @@ async def xp_spell(
     await _buy_named(interaction, member, canonical, ml, "spells_known", "spell", "\U0001F4DC")
 
 
+@xp.command(name="advantage", description="Buy an Advantage with XP (cost = its point value).")
+@app_commands.describe(
+    name="Advantage name.",
+    points="Point cost — required only for 'Variable'-cost advantages.",
+    member="Advance another player's character (DM only).",
+)
+@app_commands.autocomplete(name=_advantage_autocomplete)
+async def xp_advantage(
+    interaction: discord.Interaction,
+    name: str,
+    points: app_commands.Range[int, 1, 20] | None = None,
+    member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    adv = advantages.get(name, "advantage")
+    if adv is None:
+        await interaction.response.send_message(
+            f"No advantage named **{name}** — see `/advantage search`.", ephemeral=True
+        )
+        return
+    cost = points if points is not None else adv["points"]
+    if cost is None:
+        await interaction.response.send_message(
+            f"**{adv['name']}** has a Variable cost ({adv['cost_text']}) — pass `points:` to set it.",
+            ephemeral=True,
+        )
+        return
+    c = rec.character
+    if adv["name"].lower() in [x.lower() for x in c.advantages]:
+        await interaction.response.send_message(f"**{c.name}** already has **{adv['name']}**.", ephemeral=True)
+        return
+    if c.xp < cost:
+        await interaction.response.send_message(
+            f"Not enough XP: **{adv['name']}** costs **{cost}**, but **{c.name}** has {c.xp:g}.", ephemeral=True
+        )
+        return
+    c.advantages.append(adv["name"])
+    c.xp -= cost
+    c.xp_spent += cost
+    store.save(rec)
+    await interaction.response.send_message(
+        f"🌸 **{c.name}** gains the advantage **{adv['name']}** for **{cost}** XP. XP left {c.xp:g}",
+        embed=build_sheet_embed(rec),
+    )
+
+
 @xp.command(name="costs", description="Show the Experience cost reference (L5R 4e RAW).")
 async def xp_costs(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
@@ -2789,6 +2919,78 @@ async def armor_list(interaction: discord.Interaction) -> None:
     )
 
 
+# ===========================================================================
+# /advantage group — Advantages & Disadvantages (GDD s45)
+# ===========================================================================
+advantage_group = app_commands.Group(name="advantage", description="Browse Advantages & Disadvantages (GDD s45).")
+
+
+def build_advantage_embed(r: dict) -> discord.Embed:
+    is_adv = r["kind"] == "advantage"
+    embed = discord.Embed(
+        title=f"{'🌸' if is_adv else '💢'} {r['name']}",
+        color=discord.Color.green() if is_adv else discord.Color.dark_red(),
+    )
+    meta = [r["kind"].capitalize()]
+    if r["category"]:
+        meta.append(r["category"])
+    meta.append(f"{r['cost_text']}" + (" pts" if r["points"] is not None else ""))
+    if r["tags"]:
+        meta.append(", ".join(r["tags"]))
+    embed.description = " · ".join(meta)
+    if r["effect"]:
+        embed.add_field(name="Effect", value=r["effect"][:1024], inline=False)
+    return embed
+
+
+@advantage_group.command(name="list", description="List Advantages or Disadvantages.")
+@app_commands.describe(kind="advantages or disadvantages (default a summary).")
+@app_commands.choices(kind=[
+    app_commands.Choice(name="advantages", value="advantage"),
+    app_commands.Choice(name="disadvantages", value="disadvantage"),
+])
+async def advantage_list(interaction: discord.Interaction, kind: app_commands.Choice[str] | None = None) -> None:
+    if kind is None:
+        n_adv = len(advantages.by_kind("advantage"))
+        n_dis = len(advantages.by_kind("disadvantage"))
+        await interaction.response.send_message(
+            f"🌸 **{n_adv} Advantages**, 💢 **{n_dis} Disadvantages**. "
+            f"Use `/advantage list kind:` or `/advantage search`, `/advantage view`.",
+            ephemeral=True,
+        )
+        return
+    pool = sorted(advantages.by_kind(kind.value), key=lambda r: r["name"])
+    lines = [f"**{r['name']}** ({r['cost_text']})" for r in pool]
+    text = f"{'🌸' if kind.value == 'advantage' else '💢'} **{kind.name} ({len(pool)}):** " + " · ".join(lines)
+    await interaction.response.send_message(text[:1990], ephemeral=True)
+
+
+@advantage_group.command(name="search", description="Search Advantages & Disadvantages by name or category.")
+@app_commands.describe(query="Name or category fragment.")
+async def advantage_search(interaction: discord.Interaction, query: str) -> None:
+    matches = advantages.search(query)
+    if not matches:
+        await interaction.response.send_message(f"No entries match `{query}`.", ephemeral=True)
+        return
+    lines = [
+        f"{'🌸' if r['kind'] == 'advantage' else '💢'} **{r['name']}** ({r['cost_text']})"
+        for r in matches[:40]
+    ]
+    extra = f"\n…and {len(matches) - 40} more." if len(matches) > 40 else ""
+    await interaction.response.send_message("\n".join(lines) + extra, ephemeral=True)
+
+
+@advantage_group.command(name="view", description="Show an Advantage or Disadvantage in full.")
+@app_commands.describe(name="The entry to view.")
+@app_commands.autocomplete(name=_anyadv_autocomplete)
+async def advantage_view(interaction: discord.Interaction, name: str) -> None:
+    r = advantages.get(name)
+    if r is None:
+        await interaction.response.send_message(f"No entry named **{name}**. Try `/advantage search`.", ephemeral=True)
+        return
+    await interaction.response.send_message(embed=build_advantage_embed(r))
+
+
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
@@ -2800,6 +3002,7 @@ client.tree.add_command(school)
 client.tree.add_command(spell_group)
 client.tree.add_command(weapon_group)
 client.tree.add_command(armor_group)
+client.tree.add_command(advantage_group)
 
 
 def main() -> None:

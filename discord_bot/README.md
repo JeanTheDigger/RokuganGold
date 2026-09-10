@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 13 — full weapon & armor catalogs
+## Status: Phase 14 — advantages & disadvantages (GDD s45)
 
 **Dice**
 
@@ -72,6 +72,17 @@ Kata/Kiho/spell prerequisites (school/ring gating) and the non-Brotherhood kiho
 modifiers (Core p.266) are DM-adjudicated — the bot handles the XP economy and
 records what was bought. Learning a new Rank *Technique* on advancement is
 roleplay (a dojo/Sensei visit).
+
+**Advantages & Disadvantages** (all of **GDD s45**, transcribed verbatim)
+
+**149 entries** — 86 Advantages, 63 Disadvantages — each with category, point cost,
+and full effect text.
+
+| Command | What it does |
+|---|---|
+| `/advantage list` · `/advantage search` · `/advantage view` | Browse both, with costs and effects. |
+| `/xp advantage` | Buy an Advantage with XP (cost = its point value; pass `points:` for Variable-cost ones). |
+| `/sheet advantage` · `/sheet disadvantage` | Record/remove on the sheet (free) — e.g. at creation. Taking a Disadvantage tells you the XP it grants; a DM applies that with `/xp grant`. |
 
 **Schools & Techniques** (all of **GDD s29**, transcribed verbatim)
 
@@ -252,12 +263,15 @@ discord_bot/
 │   ├── schools_catalog.py # AUTO-GENERATED: 106 schools + 345 techniques (verbatim).
 │   ├── spells.py          # Access helpers over the spell catalog (GDD s32-s37).
 │   ├── spells_catalog.py  # AUTO-GENERATED: 287 spells (verbatim).
+│   ├── advantages.py      # Access helpers over the advantage catalog (GDD s45).
+│   ├── advantages_catalog.py # AUTO-GENERATED: 149 advantages/disadvantages (verbatim).
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).
 │   └── __init__.py
 ├── tools/
 │   ├── extract_bestiary.py # Re-runnable transcriber: bestiary .gd → creature_catalog.py.
 │   ├── extract_schools.py  # Re-runnable transcriber: GDD s29 → schools_catalog.py.
-│   └── extract_spells.py   # Re-runnable transcriber: GDD s32-s37 → spells_catalog.py.
+│   ├── extract_spells.py   # Re-runnable transcriber: GDD s32-s37 → spells_catalog.py.
+│   └── extract_advantages.py # Re-runnable transcriber: GDD s45 → advantages_catalog.py.
 ├── requirements.txt       # Python dependencies.
 ├── .env.example           # Template for your secret token. Copy to .env.
 ├── .gitignore             # Keeps .env and the database out of git.
