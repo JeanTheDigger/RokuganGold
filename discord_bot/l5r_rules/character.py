@@ -83,6 +83,10 @@ class Character:
     # -- Money --
     koku: float = 0.0
 
+    # -- Experience (Section 48) — spendable XP and lifetime total spent --
+    xp: float = 0.0
+    xp_spent: float = 0.0
+
     # -- Free-form DM/player notes (bot convenience, not a game mechanic) --
     notes: str = ""
 

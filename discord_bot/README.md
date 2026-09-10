@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 7 — + NPC editing & a monster bestiary
+## Status: Phase 8 — + XP / level-up (GDD s48)
 
 **Dice**
 
@@ -46,6 +46,26 @@ A **DM** — a server admin, anyone with *Manage Server*, or a member granted vi
 `delete` **any** player's active character by adding `member:@player`. Everyone
 else can only manage their own. Sheets are scoped **per server**, so one bot can
 run many separate games without them mixing.
+
+**Experience & advancement** (costs from **GDD s48**, LOCKED)
+
+The DM controls the XP supply; players spend it to level up. Insight Rank follows
+automatically.
+
+| Command | What it does |
+|---|---|
+| `/xp grant` | DM grants (or corrects) a player's XP. |
+| `/xp balance` | Show a character's available/spent XP and Insight Rank. |
+| `/xp ring` | Spend XP to raise a Ring (Air/Earth/Fire/Water/Void). Cost = **new rank × 20** XP. |
+| `/xp skill` | Spend XP to raise or learn a Skill. Cost = **new rank × 5** XP. |
+| `/xp costs` | The s48 cost reference. |
+
+Rings and Skills cap at rank 5. Raising a Ring raises its underlying Trait(s) (the
+lower of the pair, or both when equal — the exact `npc_advancement.gd` rule), so
+the Ring's value rises by one; **Insight** (`Σrings×10 + skill ranks`) and **Insight
+Rank** (150 → Rank 2, then +25/rank, per s48) recompute automatically. Learning a
+new Rank *Technique* still needs a dojo/Sensei visit — the DM adjudicates that;
+the mechanical advancement is automatic. Every cost traces to s48 — nothing invented.
 
 **Combat — player rolls, DM approves damage**
 
@@ -172,6 +192,7 @@ discord_bot/
 │   ├── dice.py            # Roll & Keep engine (ported from simulation/dice_engine.gd).
 │   ├── character.py       # The playable character sheet (subset of character_data.gd).
 │   ├── stats.py           # Derived values: rings, wound levels, Insight (character_stats.gd).
+│   ├── advancement.py     # XP costs + Ring/Skill raising (GDD s48).
 │   ├── combat.py          # Attack/damage/armor-TN core (individual_combat.gd s40).
 │   ├── npc_gen.py         # Procedural NPC samurai generator (GDD s22.4, LOCKED).
 │   ├── creature.py        # Creature model + combat; loads the generated catalog.
