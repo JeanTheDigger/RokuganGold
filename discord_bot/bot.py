@@ -400,6 +400,14 @@ async def _creature_instance_autocomplete(
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
 
+async def _school_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    out = [app_commands.Choice(name=s["name"], value=s["name"]) for s in schools.ALL if cur in s["name"].lower()]
+    return out[:25]
+
+
 _MANEUVER_APPLY_LABEL = {
     "none": "Roll & Apply Damage",
     "feint": "Roll & Apply Damage (Feint)",
@@ -865,19 +873,20 @@ _SET_CHOICES = [app_commands.Choice(name=f, value=f) for f in _SET_FIELDS]
 @sheet.command(name="create", description="Create a new character and make it your active one.")
 @app_commands.describe(
     name="Character name.",
-    clan="Great/Minor Clan (optional).",
+    school="School (start typing for the catalog — a match auto-fills Benefit, Skills, Honor).",
+    clan="Great/Minor Clan (optional; a catalog school sets this for you).",
     family="Family (optional).",
-    school="School name (optional).",
-    school_type="School type (default Bushi).",
+    school_type="School type (default Bushi; a catalog school sets this for you).",
     age="Age (default 16).",
 )
+@app_commands.autocomplete(school=_school_autocomplete)
 @app_commands.choices(school_type=_SCHOOL_CHOICES)
 async def sheet_create(
     interaction: discord.Interaction,
     name: app_commands.Range[str, 1, 64],
+    school: str | None = None,
     clan: str | None = None,
     family: str | None = None,
-    school: str | None = None,
     school_type: app_commands.Choice[str] | None = None,
     age: app_commands.Range[int, 0, 200] | None = None,
 ) -> None:
@@ -897,6 +906,10 @@ async def sheet_create(
     if age is not None:
         char.age = age
 
+    # If the school matches a catalog entry, auto-apply its Benefit/Skills/Honor.
+    applied = schools.get(school) if school else None
+    report = schools.apply_to_character(char, applied) if applied else None
+
     try:
         record = store.create_character(guild, owner, char)
     except storage.DuplicateNameError:
@@ -908,12 +921,25 @@ async def sheet_create(
         return
 
     store.set_active(guild, owner, record.id)
-    await interaction.response.send_message(
-        content=f"Created **{name}** and set it as your active character. "
-        f"All Traits start at 2 (the L5R 4e baseline) — set them with `/sheet trait` "
-        f"and `/sheet skill`.",
-        embed=build_sheet_embed(record),
-    )
+    if report is not None:
+        bits = [f"applied **{applied['name']}**"]
+        if report["benefit"]:
+            bits.append(f"Benefit {report['benefit']}")
+        if report["skills"]:
+            bits.append(f"{len(report['skills'])} school skills")
+        if report["wildcards"]:
+            bits.append("choose: " + "; ".join(report["wildcards"]))
+        content = (
+            f"Created **{name}** ({applied['clan']} {applied['name']}) and set it active — "
+            + ", ".join(bits)
+            + ". `/school learn` to record your Rank-1 technique."
+        )
+    else:
+        content = (
+            f"Created **{name}** and set it as your active character. All Traits start at 2 "
+            f"(the L5R 4e baseline). Tip: pass a `school:` from the catalog to auto-fill it."
+        )
+    await interaction.response.send_message(content=content, embed=build_sheet_embed(record))
 
 
 @sheet.command(name="view", description="View a character sheet (yours, or another player's if you are a DM).")
@@ -1426,11 +1452,12 @@ npc = app_commands.Group(name="npc", description="Generate and manage NPC charac
     insight_rank="Insight Rank 1–5 (power level; higher = stronger).",
     clan="Clan (flavor).",
     family="Family (flavor).",
-    school="School name (flavor).",
-    school_type="School type (default Bushi).",
-    skills="Comma-separated school skills, e.g. 'Kenjutsu, Iaijutsu, Defense'. One becomes the specialty.",
-    base_honor="Starting Honor before ±0.5 variance (default 3.5).",
+    school="School (catalog match auto-fills skills, honor, clan, type; s22.4 ring bands already include the Benefit).",
+    school_type="School type (default Bushi; a catalog school sets this).",
+    skills="Override the school skills (comma-separated). One becomes the specialty.",
+    base_honor="Starting Honor before ±0.5 variance (a catalog school sets this).",
 )
+@app_commands.autocomplete(school=_school_autocomplete)
 @app_commands.choices(school_type=_SCHOOL_CHOICES)
 async def npc_generate(
     interaction: discord.Interaction,
@@ -1449,11 +1476,27 @@ async def npc_generate(
     if not _is_dm(interaction):
         await interaction.response.send_message("Only a DM can generate NPCs.", ephemeral=True)
         return
+
     school_skills = [s for s in skills.split(",")] if skills else None
+    resolved_type = school_type.value if school_type else "Bushi"
+    # A catalog school fills in the concrete skills, honor, clan, and type. The
+    # Benefit is NOT re-applied here — the s22.4 ring bands already reflect it.
+    catalog = schools.get(school) if school else None
+    if catalog:
+        if not school_skills:
+            assigned, _ = schools.parse_skills(catalog.get("skills", ""))
+            school_skills = [nm for nm, _r, _e in assigned]
+        if base_honor is None:
+            base_honor = schools.parse_honor(catalog.get("honor", ""))
+        clan = clan or catalog.get("clan")
+        if school_type is None and schools._infer_type(catalog):
+            resolved_type = schools._infer_type(catalog)
+        school = catalog["name"]
+
     char = npc_gen.generate(
         name, insight_rank, engine,
         clan=clan or "", family=family or "", school=school or "",
-        school_type=(school_type.value if school_type else "Bushi"),
+        school_type=resolved_type,
         school_skills=school_skills,
         base_honor=(base_honor if base_honor is not None else 3.5),
     )
@@ -2373,12 +2416,6 @@ async def xp_costs(interaction: discord.Interaction) -> None:
 # /school group — schools & techniques (GDD s29)
 # ===========================================================================
 school = app_commands.Group(name="school", description="Browse schools and their techniques (GDD s29).")
-
-
-async def _school_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
-    cur = current.lower().strip()
-    out = [app_commands.Choice(name=s["name"], value=s["name"]) for s in schools.ALL if cur in s["name"].lower()]
-    return out[:25]
 
 
 def build_school_embed(s: dict) -> discord.Embed:

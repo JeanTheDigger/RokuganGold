@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 10 — all 106 schools & techniques (GDD s29)
+## Status: Phase 11 — schools auto-apply at character creation
 
 **Dice**
 
@@ -24,7 +24,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 | Command | What it does |
 |---|---|
-| `/sheet create` | Make a character (name, optional clan/family/school/type/age) and set it active. Traits start at 2 (the L5R 4e baseline). |
+| `/sheet create` | Make a character and set it active. Pass a `school:` from the catalog (autocomplete) and it **auto-fills** the school's Benefit trait, starting skills (with free emphases), Honor, clan, and type — a Hida Bushi in one command. Any-choice skill slots ("any one Bugei Skill") are reported for you to fill. Without a school, Traits start at 2. |
 | `/sheet view` | Show a sheet — rings (derived as min of two traits), wounds & wound level, Insight & Rank, standing, gear, skills. `member:` shows another player's (DM only). |
 | `/sheet list` | List your characters (active one marked). |
 | `/sheet activate` | Choose which of your characters is active. |
@@ -139,7 +139,7 @@ fight; sheets and wounds are in the database and persist).
 
 | Command | What it does |
 |---|---|
-| `/npc generate` | DM generates a samurai NPC by `insight_rank` (1–5): Traits/Rings, Honor, Glory, age, and koku all within the s22.4 bands, with random variance so two are never identical. Optional `clan`/`family`/`school` (flavor), `skills` (comma list → distributed per Rank, one specialty), `base_honor`. |
+| `/npc generate` | DM generates a samurai NPC by `insight_rank` (1–5): Traits/Rings, Honor, Glory, age, koku within the s22.4 bands, random variance. A `school:` from the catalog (autocomplete) auto-fills the school's skills, Honor, clan, and type (the Benefit is already baked into the s22.4 ring bands, so it isn't re-applied); or set `skills` manually. |
 | `/npc view` · `/npc list` · `/npc delete` | View / roster / remove NPCs (delete is DM-only). |
 | `/npc trait` · `/npc skill` · `/npc set` · `/npc wound` · `/npc heal` · `/npc rename` | Edit a generated NPC field-by-field (DM only) — same fields as the `/sheet` editors. |
 
