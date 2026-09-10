@@ -86,3 +86,9 @@ def insight_rank(c: Character) -> int:
 
 def all_rings(c: Character) -> dict[str, int]:
     return {r: ring_value(c, r) for r in ("air", "earth", "fire", "water", "void")}
+
+
+def honor_rank(c: Character) -> int:
+    """Honor Rank = the integer part of the Honor score (L5R convention:
+    Honor is a 0.0-10.0 value whose whole number is the Rank; e.g. 3.5 = Rank 3)."""
+    return int(c.honor)

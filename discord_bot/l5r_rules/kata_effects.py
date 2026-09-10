@@ -23,6 +23,7 @@ carries an `active_kata`; NPCs/creatures simply have none unless a DM sets one.
 from __future__ import annotations
 
 from . import stats
+from . import combat
 from . import kata as kata_mod
 from .character import Character
 
@@ -40,11 +41,19 @@ AUTO_KATA: frozenset[str] = frozenset({
     "strike as the avalanche",  # Heavy Weapons skill -> Strength +1 rank for damage (+1k0)
     "son of storms",           # Small melee weapon -> opponent Reduction -1
     "strength of the crab",    # Attack Stance + wearing Armor -> +2 Reduction
+    "strength of the crane",   # wielding sword/spear -> Armor TN += max(1, Honor Rank - 3)
+    "strength of the dragon",  # katana main + wakizashi off -> Armor TN += 3
 })
 
 # Weapon-skill classes used by the conditional kata (match WEAPON_CATALOG['skill']).
 _SPEAR_POLEARM_SKILLS = frozenset({"spears", "polearms"})
 _HEAVY_WEAPON_SKILL = "heavy weapons"
+_SWORD_SKILL = "kenjutsu"   # every Kenjutsu-skill weapon in the catalog is a sword
+_SPEAR_SKILL = "spears"
+
+
+def _weapon_skill(weapon_name: str) -> str:
+    return str(combat.get_weapon_profile(weapon_name).get("skill", "")).lower()
 
 
 def is_auto(name: str) -> bool:
@@ -86,6 +95,19 @@ def defender_armor_tn_bonus(defender: Character, defender_stance: str) -> tuple[
         earth = stats.ring_value(defender, "earth")
         delta = earth - air
         return delta, f"Iron in the Mountains: Defense uses Earth {earth} (was Air {air}), {delta:+d} Armor TN"
+    if k == "strength of the crane":
+        # Fighting with a sword or spear -> + max(1, Honor Rank - 3) Armor TN.
+        # Only a real wielded weapon counts (an empty hand must not fall back to
+        # the DEFAULT_WEAPON's Kenjutsu skill).
+        eq = (defender.equipped_weapon or "").strip()
+        if eq and _weapon_skill(eq) in (_SWORD_SKILL, _SPEAR_SKILL):
+            v = max(1, stats.honor_rank(defender) - 3)
+            return v, f"Strength of the Crane +{v} Armor TN (sword/spear, Honor Rank − 3)"
+    if k == "strength of the dragon":
+        # Katana in the main hand and wakizashi in the off hand -> +3 Armor TN.
+        if defender.equipped_weapon.lower().strip() == "katana" and \
+                defender.off_hand_weapon.lower().strip() == "wakizashi":
+            return 3, "Strength of the Dragon +3 Armor TN (katana + wakizashi)"
     return 0, ""
 
 

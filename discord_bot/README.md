@@ -92,8 +92,8 @@ Level**, so the RAW cost is computed for you.
 
 **Active-Kata combat effects** — the active Kata (⚑ on the sheet) feeds straight
 into `/attack`. The bot auto-applies the **deterministic subset** it can compute
-faithfully from the sheet, the chosen stance, the maneuver, and the weapon —
-**12 Kata**:
+faithfully from the sheet, the chosen stance, the maneuver, and the weapon
+(main- and off-hand, via `/sheet wield`) — **14 Kata**:
 
 | Kata | Auto-applied in `/attack` |
 |---|---|
@@ -102,6 +102,8 @@ faithfully from the sheet, the chosen stance, the maneuver, and the weapon —
 | Striking as Void | Center Stance → Armor TN **+Void Ring** |
 | Lee of the Stone | Defense Stance → Armor TN **+Earth Ring** |
 | Iron in the Mountains Style | Defense Stance uses **Earth Ring instead of Air** |
+| Strength of the Crane | wielding sword/spear → Armor TN **+max(1, Honor Rank−3)** |
+| Strength of the Dragon | katana + wakizashi (daishō) → Armor TN **+3** |
 | North Wind Style | Increased Damage maneuver → attack total **+Air Ring** |
 | South Wind Style | Knockdown maneuver → attack total **+Air Ring** |
 | Iron Forest Style | spear/polearm → attack roll uses **Air Ring, not Agility** |
@@ -109,6 +111,9 @@ faithfully from the sheet, the chosen stance, the maneuver, and the weapon —
 | Strike as the Avalanche | Heavy Weapons skill → **Strength +1 rank** for damage (**+1k0**) |
 | Son of Storms | Small melee weapon → target Reduction **−1** |
 | Strength of the Crab | Attack Stance + wearing armor → **+2 Reduction** |
+
+Weapon-conditional Kata read what the character is **wielding** — set that with
+`/sheet wield weapon: off_hand:` (it also becomes `/attack`'s default weapon).
 
 Everything else stays **DM-adjudicated on purpose** and is surfaced as a reminder
 line on the attack, never silently applied or dropped: rate-limited effects
@@ -167,7 +172,8 @@ Mastery Level** — so the RAW cost (1 × Mastery Level) is computed for you.
 |---|---|
 | `/weapon list` · `/weapon view` | Browse all **44 weapons** (damage rating, skill, trait, size). |
 | `/armor list` | The **7 armor types** with Armor TN bonus and Reduction. |
-| `/sheet equip` | Add/remove a weapon on your character (autocomplete). |
+| `/sheet equip` | Add/remove a weapon on your character's gear list (autocomplete). |
+| `/sheet wield` | Set the weapon(s) in hand — `weapon:` (main) and optional `off_hand:`. This is `/attack`'s **default weapon** and gates defender weapon-conditional Kata (Crane, Dragon). `unwield:true` goes unarmed. |
 | `/sheet armor` | Equip an armor type — sets the sheet's **Armor TN bonus** and **Reduction** automatically (e.g. Light → +5 TN, Reduction 3; Heavy → +10, 5); `none` removes it. |
 
 Weapon damage (used by `/attack`) and armor Reduction/Armor-TN (used by combat)

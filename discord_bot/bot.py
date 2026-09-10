@@ -160,6 +160,11 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     )
 
     gear = f"Armor: {c.armor_name or '—'}  (TN +{c.armor_tn_bonus}, Reduction {c.armor_reduction})"
+    if c.equipped_weapon:
+        wield = c.equipped_weapon
+        if c.off_hand_weapon:
+            wield += f" + {c.off_hand_weapon} (off)"
+        gear += f"\nWielding: {wield}"
     if c.weapons:
         gear += "\nWeapons: " + ", ".join(c.weapons)
     embed.add_field(name="Equipment", value=gear, inline=False)
@@ -754,7 +759,7 @@ _MANEUVER_CHOICES = [
     target_npc="Attack a stored NPC by name (instead of a player).",
     target_creature="Attack a spawned creature by name (instead of a player).",
     attacker_npc="Attack WITH a stored NPC instead of your own character (DM only).",
-    weapon="Weapon (default katana). Start typing for suggestions.",
+    weapon="Weapon for this attack. Defaults to your wielded weapon (`/sheet wield`), else katana.",
     raises="Called Raises — each adds +5 to the target's Armor TN.",
     increased_damage="Increased Damage raises — each adds +5 TN AND +1 damage die on a hit.",
     maneuver="A combat maneuver (its raise cost is added to the TN automatically).",
@@ -776,7 +781,7 @@ async def attack(
     target_npc: str | None = None,
     target_creature: str | None = None,
     attacker_npc: str | None = None,
-    weapon: str = "katana",
+    weapon: str | None = None,
     raises: app_commands.Range[int, 0, 10] = 0,
     increased_damage: app_commands.Range[int, 0, 10] = 0,
     maneuver: app_commands.Choice[str] | None = None,
@@ -810,6 +815,9 @@ async def attack(
                 "You have no active character. Use `/sheet create` first.", ephemeral=True
             )
             return
+
+    # Weapon: explicit choice, else the attacker's wielded weapon, else katana.
+    weapon = (weapon or "").strip() or attacker_rec.character.equipped_weapon or "katana"
 
     # Resolve the target: a spawned creature, a stored NPC, or a player's character.
     target_rec = None
@@ -1305,6 +1313,52 @@ async def sheet_equip(
         msg = f"**{c.name}** equips **{w}** (DR {prof['rolled']}k{prof['kept']}, {prof['skill']})."
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+@sheet.command(name="wield", description="Set the weapon(s) you're wielding — /attack's default weapon and defender Kata gates (s30).")
+@app_commands.describe(
+    weapon="Main-hand weapon (start typing for suggestions).",
+    off_hand="Off-hand weapon, e.g. wakizashi for a daisho. Blank clears the off hand.",
+    unwield="Lower both weapons (go unarmed).",
+    member="Target player (DM only).",
+)
+@app_commands.autocomplete(weapon=_weapon_autocomplete, off_hand=_weapon_autocomplete)
+async def sheet_wield(
+    interaction: discord.Interaction,
+    weapon: str | None = None,
+    off_hand: str | None = None,
+    unwield: bool = False,
+    member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    if unwield:
+        c.equipped_weapon = ""
+        c.off_hand_weapon = ""
+        store.save(rec)
+        await interaction.response.send_message(
+            f"**{c.name}** lowers their weapons (unarmed).", embed=build_sheet_embed(rec)
+        )
+        return
+    if weapon is not None and weapon.strip():
+        c.equipped_weapon = weapon.lower().strip()
+    c.off_hand_weapon = off_hand.lower().strip() if off_hand and off_hand.strip() else ""
+    store.save(rec)
+    if not c.equipped_weapon:
+        await interaction.response.send_message(
+            "Give a `weapon:` to wield, or `unwield:true` to go unarmed.", ephemeral=True
+        )
+        return
+    off = f" + **{c.off_hand_weapon}** (off hand)" if c.off_hand_weapon else ""
+    await interaction.response.send_message(
+        f"🗡️ **{c.name}** wields **{c.equipped_weapon}**{off}.", embed=build_sheet_embed(rec)
+    )
 
 
 @sheet.command(name="armor", description="Equip armor (sets Armor TN bonus & Reduction), or 'none' to remove.")
