@@ -7,9 +7,8 @@ RAW costs (owner-confirmed):
   - Void   to rank N        : N × 6 XP   (3→4 = 24)
   - Skill Emphasis          : flat 2 XP  (max ⌈skill rank ÷ 2⌉ per skill)
   - Kata / memorised Spell  : 1 XP × Mastery Level
-  - Kiho                    : 1 XP × Mastery Level (Brotherhood monks; non-Brotherhood
-                              modifiers per Core p.266 are NOT auto-applied — the DM
-                              adjudicates those, since that table isn't transcribed)
+  - Kiho                    : 1 XP × Mastery Level (Brotherhood monks); non-Brotherhood
+                              monks pay 1.5 × Mastery Level, rounded up (per s38a)
 
 RAW raises individual Traits (a Ring is min of its two Traits, derived in
 stats.py). Traits/Void cap at 5, Skills at 10. Insight and Insight Rank are
@@ -105,6 +104,12 @@ def apply_emphasis(character: Character, skill: str, emphasis: str) -> None:
     character.emphases.setdefault(skill, []).append(emphasis)
 
 
+def kiho_cost(mastery_level: int, non_brotherhood: bool = False) -> int:
+    """Kiho: 1 x Mastery Level; non-Brotherhood monks pay 1.5x (ceil) per s38a."""
+    import math
+    return math.ceil(mastery_level * 1.5) if non_brotherhood else max(1, mastery_level)
+
+
 def misc_cost(mastery_level: int) -> int:
     """Kata, memorised spell, and (Brotherhood) kiho all cost 1 XP × Mastery Level."""
     return max(1, mastery_level)
@@ -117,6 +122,6 @@ def cost_table() -> str:
         "**Skills** — new rank × 1 (3→4 = 4) · cap 10\n"
         "**Skill Emphasis** — flat 2 (max ⌈rank ÷ 2⌉ per skill)\n"
         "**Kata / memorised Spell** — 1 × Mastery Level\n"
-        "**Kiho** — 1 × Mastery Level (Brotherhood; non-Brotherhood mods per Core "
-        "p.266 are DM-adjudicated)"
+        "**Kiho** — 1 × Mastery Level (Brotherhood); 1.5 × Mastery Level, "
+        "rounded up, for non-Brotherhood monks (s38a)"
     )

@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 14 — advantages & disadvantages (GDD s45)
+## Status: Phase 15 — Kata & Kiho catalogs (GDD s30 & s38)
 
 **Dice**
 
@@ -59,19 +59,33 @@ follows automatically.
 | `/xp trait` | Raise a Trait or Void. Cost = **new rank × 4** (Void **× 6**). |
 | `/xp skill` | Raise or learn a Skill. Cost = **new rank × 1**. |
 | `/xp emphasis` | Add a Skill Emphasis. **Flat 2 XP**, max **⌈rank ÷ 2⌉** per skill. |
-| `/xp kata` · `/xp kiho` · `/xp spell` | Learn a Kata / Kiho / memorise a Spell. Cost = **1 × Mastery Level** (you give the ML). |
+| `/xp kata` · `/xp kiho` · `/xp spell` | Learn a Kata / Kiho / memorise a Spell. Cost = **1 × Mastery Level** — the name autocompletes and the ML is **auto-filled** from the catalog. `/xp kiho` also takes `non_brotherhood:` (1.5 × ML, rounded up, per s38a). |
 | `/xp costs` | The RAW cost reference. |
 
 **Costs are tabletop L5R 4e RAW:** Skill → N×1, Trait → N×4, Void → N×6, Emphasis
-flat 2 (capped at ⌈rank÷2⌉), Kata/Kiho/memorised-Spell → 1×Mastery Level. Traits/Void
+flat 2 (capped at ⌈rank÷2⌉), Kata/memorised-Spell → 1×Mastery Level, Kiho → 1×ML
+(Brotherhood) or 1.5×ML rounded up (non-Brotherhood, s38a). Traits/Void
 cap at rank 5, Skills at 10. RAW raises **Traits** (not Rings), so a Ring only rises
 once *both* its Traits do; **Insight** (`Σrings×10 + skill ranks`) and **Insight Rank**
 (150 → Rank 2, then +25/rank) recompute automatically.
 
-Kata/Kiho/spell prerequisites (school/ring gating) and the non-Brotherhood kiho
-modifiers (Core p.266) are DM-adjudicated — the bot handles the XP economy and
-records what was bought. Learning a new Rank *Technique* on advancement is
-roleplay (a dojo/Sensei visit).
+Kata/Kiho/spell prerequisites (school/ring gating) are DM-adjudicated — the bot
+handles the XP economy and records what was bought. Learning a new Rank
+*Technique* on advancement is roleplay (a dojo/Sensei visit).
+
+**Kata & Kiho** (all of **GDD s30** and **s38**, transcribed verbatim)
+
+Every Kata and Kiho is in the bot — **43 Kata** and **73 Kiho**, each with element,
+Mastery Level, and full effect text (Kata also carry their eligible Schools; Kiho
+their Type and Atemi flag).
+
+| Command | What it does |
+|---|---|
+| `/kata list` · `/kata search` · `/kata view` | Browse Kata by element/Mastery, with Schools and effect. |
+| `/kiho list` · `/kiho search` · `/kiho view` | Browse Kiho by element/Mastery, with Type and effect. |
+
+`/xp kata` and `/xp kiho` autocomplete real names and **auto-fill the Mastery
+Level**, so the RAW cost is computed for you.
 
 **Advantages & Disadvantages** (all of **GDD s45**, transcribed verbatim)
 
@@ -193,9 +207,10 @@ their ranks; Ranks are capped at **1–5** (s22.4 gives no 6+ ranges); koku is t
 `1d10 × Rank` savings term only (the role stipend needs role data). Generated
 NPCs can be tuned field-by-field with the `/npc` editors above.
 
-*Still faithful-core:* kata, kiho, skill masteries (R3/R5/R7 damage bonuses and
-9-explosions), dual-wielding, and thrown/charge/called-shot maneuvers are **not**
-modelled — the DM can express those with `raises`/`bonus_tn`.
+*Still faithful-core:* Kata/Kiho are catalogued, buyable, and recorded on sheets,
+but their **combat effects are not auto-applied**; skill masteries (R3/R5/R7 damage
+bonuses and 9-explosions), dual-wielding, and thrown/charge/called-shot maneuvers
+are likewise **not** modelled — the DM can express those with `raises`/`bonus_tn`.
 
 **Creatures / monsters** (stat blocks transcribed **verbatim** from the bestiaries)
 
@@ -239,7 +254,7 @@ and each room's initiative tracker is naturally separate (initiative is
 per-channel). So a DM can run several games at once in one server, each in its
 own room.
 
-Still to come: expanding the bestiary roster, and Vultr hosting.
+Still to come: Vultr hosting (the one original wish-list item left).
 
 ---
 
@@ -265,13 +280,18 @@ discord_bot/
 │   ├── spells_catalog.py  # AUTO-GENERATED: 287 spells (verbatim).
 │   ├── advantages.py      # Access helpers over the advantage catalog (GDD s45).
 │   ├── advantages_catalog.py # AUTO-GENERATED: 149 advantages/disadvantages (verbatim).
+│   ├── kata.py            # Access helpers over the kata catalog (GDD s30).
+│   ├── kata_catalog.py    # AUTO-GENERATED: 43 Kata (verbatim).
+│   ├── kiho.py            # Access helpers over the kiho catalog (GDD s38).
+│   ├── kiho_catalog.py    # AUTO-GENERATED: 73 Kiho (verbatim).
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).
 │   └── __init__.py
 ├── tools/
 │   ├── extract_bestiary.py # Re-runnable transcriber: bestiary .gd → creature_catalog.py.
 │   ├── extract_schools.py  # Re-runnable transcriber: GDD s29 → schools_catalog.py.
 │   ├── extract_spells.py   # Re-runnable transcriber: GDD s32-s37 → spells_catalog.py.
-│   └── extract_advantages.py # Re-runnable transcriber: GDD s45 → advantages_catalog.py.
+│   ├── extract_advantages.py # Re-runnable transcriber: GDD s45 → advantages_catalog.py.
+│   └── extract_kata_kiho.py # Re-runnable transcriber: GDD s30/s38 → kata_catalog.py, kiho_catalog.py.
 ├── requirements.txt       # Python dependencies.
 ├── .env.example           # Template for your secret token. Copy to .env.
 ├── .gitignore             # Keeps .env and the database out of git.

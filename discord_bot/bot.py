@@ -19,7 +19,9 @@ from discord import app_commands
 
 import encounter
 import storage
-from l5r_rules import advancement, advantages, combat, creature, enums, npc_gen, schools, spells, stats
+from l5r_rules import (
+    advancement, advantages, combat, creature, enums, kata, kiho, npc_gen, schools, spells, stats,
+)
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
 
@@ -446,6 +448,28 @@ async def _spell_autocomplete(
     out = [
         app_commands.Choice(name=f"{s['name']} ({s['element']} {s['mastery']})", value=s["name"])
         for s in spells.ALL if cur in s["name"].lower()
+    ]
+    return out[:25]
+
+
+async def _kata_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    out = [
+        app_commands.Choice(name=f"{k['name']} ({k['element']} {k['mastery']})", value=k["name"])
+        for k in kata.ALL if cur in k["name"].lower()
+    ]
+    return out[:25]
+
+
+async def _kiho_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    out = [
+        app_commands.Choice(name=f"{k['name']} ({k['element']} {k['mastery']})", value=k["name"])
+        for k in kiho.ALL if cur in k["name"].lower()
     ]
     return out[:25]
 
@@ -2391,8 +2415,8 @@ async def creature_attack_cmd(
 xp = app_commands.Group(name="xp", description="Grant and spend Experience to advance characters (L5R 4e RAW).")
 
 
-async def _buy_named(interaction, member, name, mastery_level, attr, label, emoji, note=""):
-    """Shared handler for Kata / Kiho / memorised Spell (cost = 1 x Mastery Level)."""
+async def _buy_named(interaction, member, name, mastery_level, attr, label, emoji, note="", cost=None):
+    """Shared handler for Kata / Kiho / memorised Spell (cost = 1 x Mastery Level unless overridden)."""
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
@@ -2402,7 +2426,8 @@ async def _buy_named(interaction, member, name, mastery_level, attr, label, emoj
     if any(x.lower() == name.lower() for x in lst):
         await interaction.response.send_message(f"**{c.name}** already knows the {label} **{name}**.", ephemeral=True)
         return
-    cost = advancement.misc_cost(mastery_level)
+    if cost is None:
+        cost = advancement.misc_cost(mastery_level)
     if c.xp < cost:
         await interaction.response.send_message(
             f"Not enough XP: **{name}** (Mastery Level {mastery_level}) costs **{cost}**, "
@@ -2556,16 +2581,55 @@ async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Rang
 
 
 @xp.command(name="kata", description="Learn a Kata (cost = 1 x Mastery Level).")
-@app_commands.describe(name="Kata name.", mastery_level="Its Mastery Level.", member="Advance another player's character (DM only).")
-async def xp_kata(interaction: discord.Interaction, name: app_commands.Range[str, 1, 60], mastery_level: app_commands.Range[int, 1, 10], member: discord.Member | None = None) -> None:
-    await _buy_named(interaction, member, name.strip(), mastery_level, "katas", "kata", "\U0001F94B")
+@app_commands.describe(
+    name="Kata name (catalog match auto-fills the Mastery Level).",
+    mastery_level="Its Mastery Level (optional if the kata is in the catalog).",
+    member="Advance another player's character (DM only).",
+)
+@app_commands.autocomplete(name=_kata_autocomplete)
+async def xp_kata(
+    interaction: discord.Interaction,
+    name: app_commands.Range[str, 1, 60],
+    mastery_level: app_commands.Range[int, 1, 10] | None = None,
+    member: discord.Member | None = None,
+) -> None:
+    rec = kata.get(name)
+    ml = mastery_level if mastery_level is not None else (rec["mastery"] if rec else None)
+    if ml is None:
+        await interaction.response.send_message(
+            f"**{name}** isn't in the catalog — give its `mastery_level:` too.", ephemeral=True
+        )
+        return
+    canonical = rec["name"] if rec else name.strip()
+    await _buy_named(interaction, member, canonical, ml, "katas", "kata", "\U0001F94B")
 
 
-@xp.command(name="kiho", description="Learn a Kiho (cost = 1 x Mastery Level; non-Brotherhood mods DM-adjudicated).")
-@app_commands.describe(name="Kiho name.", mastery_level="Its Mastery Level.", member="Advance another player's character (DM only).")
-async def xp_kiho(interaction: discord.Interaction, name: app_commands.Range[str, 1, 60], mastery_level: app_commands.Range[int, 1, 10], member: discord.Member | None = None) -> None:
-    await _buy_named(interaction, member, name.strip(), mastery_level, "kiho", "kiho", "✋",
-                     note=" *(Brotherhood cost; non-Brotherhood modifiers per Core p.266 are DM-adjudicated.)*")
+@xp.command(name="kiho", description="Learn a Kiho (cost = 1 x Mastery Level; non-Brotherhood pay 1.5x, ceil).")
+@app_commands.describe(
+    name="Kiho name (catalog match auto-fills the Mastery Level).",
+    mastery_level="Its Mastery Level (optional if the kiho is in the catalog).",
+    non_brotherhood="Set True if the buyer is not a Brotherhood monk (1.5x cost, per s38a).",
+    member="Advance another player's character (DM only).",
+)
+@app_commands.autocomplete(name=_kiho_autocomplete)
+async def xp_kiho(
+    interaction: discord.Interaction,
+    name: app_commands.Range[str, 1, 60],
+    mastery_level: app_commands.Range[int, 1, 10] | None = None,
+    non_brotherhood: bool = False,
+    member: discord.Member | None = None,
+) -> None:
+    rec = kiho.get(name)
+    ml = mastery_level if mastery_level is not None else (rec["mastery"] if rec else None)
+    if ml is None:
+        await interaction.response.send_message(
+            f"**{name}** isn't in the catalog — give its `mastery_level:` too.", ephemeral=True
+        )
+        return
+    canonical = rec["name"] if rec else name.strip()
+    cost = advancement.kiho_cost(ml, non_brotherhood)
+    note = " *(non-Brotherhood monk: 1.5x cost, per s38a.)*" if non_brotherhood else ""
+    await _buy_named(interaction, member, canonical, ml, "kiho", "kiho", "✋", note=note, cost=cost)
 
 
 @xp.command(name="spell", description="Memorise a spell so no scroll is needed (cost = 1 x Mastery Level).")
@@ -2991,6 +3055,141 @@ async def advantage_view(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(embed=build_advantage_embed(r))
 
 
+# ===========================================================================
+# /kata and /kiho groups — Kata (GDD s30) and Kiho (GDD s38) reference
+# ===========================================================================
+kata_group = app_commands.Group(name="kata", description="Browse Kata by element and mastery (GDD s30).")
+
+
+def build_kata_embed(k: dict) -> discord.Embed:
+    color = _ELEMENT_COLORS.get(k["element"].lower(), discord.Color.teal())
+    embed = discord.Embed(title=f"\U0001F94B {k['name']}", color=color)
+    embed.description = f"**{k['element']} {k['mastery']}**"
+    if k.get("schools"):
+        embed.add_field(name="Schools", value=k["schools"][:1024], inline=False)
+    if k.get("effect"):
+        embed.add_field(name="Effect", value=k["effect"][:1024], inline=False)
+    return embed
+
+
+@kata_group.command(name="list", description="List Kata by element (or a summary).")
+@app_commands.describe(element="Air, Earth, Fire, Water, Void. Omit for a summary.")
+async def kata_list(interaction: discord.Interaction, element: str | None = None) -> None:
+    if not element:
+        from collections import Counter
+        counts = Counter(k["element"] for k in kata.ALL)
+        summary = " · ".join(f"{el} {n}" for el, n in sorted(counts.items()))
+        await interaction.response.send_message(
+            f"\U0001F94B **{len(kata.ALL)} Kata.** Browse with `/kata list element:<element>`, "
+            f"`/kata search`, `/kata view`.\n{summary}", ephemeral=True
+        )
+        return
+    matches = kata.by_element(element)
+    if not matches:
+        await interaction.response.send_message(
+            f"No Kata for **{element}**. Elements: {', '.join(kata.elements())}", ephemeral=True
+        )
+        return
+    by_ml: dict[int, list[str]] = {}
+    for k in matches:
+        by_ml.setdefault(k["mastery"], []).append(k["name"])
+    lines = [f"**ML {ml}:** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
+    text = f"\U0001F94B **{element} Kata ({len(matches)}):**\n" + "\n".join(lines)
+    await interaction.response.send_message(text[:1990], ephemeral=True)
+
+
+@kata_group.command(name="search", description="Search Kata by name or element.")
+@app_commands.describe(query="Name or element fragment.")
+async def kata_search(interaction: discord.Interaction, query: str) -> None:
+    matches = kata.search(query)
+    if not matches:
+        await interaction.response.send_message(f"No Kata match `{query}`.", ephemeral=True)
+        return
+    lines = [f"• **{k['name']}** ({k['element']} {k['mastery']})" for k in matches[:40]]
+    extra = f"\n…and {len(matches) - 40} more." if len(matches) > 40 else ""
+    await interaction.response.send_message("\U0001F94B " + "\n".join(lines) + extra, ephemeral=True)
+
+
+@kata_group.command(name="view", description="Show a Kata's element, mastery, schools, and effect.")
+@app_commands.describe(name="The Kata to view.")
+@app_commands.autocomplete(name=_kata_autocomplete)
+async def kata_view(interaction: discord.Interaction, name: str) -> None:
+    k = kata.get(name)
+    if k is None:
+        await interaction.response.send_message(
+            f"No Kata named **{name}**. Try `/kata search`.", ephemeral=True
+        )
+        return
+    await interaction.response.send_message(embed=build_kata_embed(k))
+
+
+kiho_group = app_commands.Group(name="kiho", description="Browse Kiho by element and mastery (GDD s38).")
+
+
+def build_kiho_embed(k: dict) -> discord.Embed:
+    color = _ELEMENT_COLORS.get(k["element"].lower(), discord.Color.teal())
+    atemi = " · Atemi" if k.get("atemi") else ""
+    embed = discord.Embed(title=f"✋ {k['name']}{atemi}", color=color)
+    meta = f"**{k['element']} {k['mastery']}**"
+    if k.get("type"):
+        meta += f" · {k['type']}"
+    embed.description = meta
+    if k.get("effect"):
+        embed.add_field(name="Effect", value=k["effect"][:1024], inline=False)
+    return embed
+
+
+@kiho_group.command(name="list", description="List Kiho by element (or a summary).")
+@app_commands.describe(element="Air, Earth, Fire, Water, Void. Omit for a summary.")
+async def kiho_list(interaction: discord.Interaction, element: str | None = None) -> None:
+    if not element:
+        from collections import Counter
+        counts = Counter(k["element"] for k in kiho.ALL)
+        summary = " · ".join(f"{el} {n}" for el, n in sorted(counts.items()))
+        await interaction.response.send_message(
+            f"✋ **{len(kiho.ALL)} Kiho.** Browse with `/kiho list element:<element>`, "
+            f"`/kiho search`, `/kiho view`.\n{summary}", ephemeral=True
+        )
+        return
+    matches = kiho.by_element(element)
+    if not matches:
+        await interaction.response.send_message(
+            f"No Kiho for **{element}**. Elements: {', '.join(kiho.elements())}", ephemeral=True
+        )
+        return
+    by_ml: dict[int, list[str]] = {}
+    for k in matches:
+        by_ml.setdefault(k["mastery"], []).append(k["name"])
+    lines = [f"**ML {ml}:** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
+    text = f"✋ **{element} Kiho ({len(matches)}):**\n" + "\n".join(lines)
+    await interaction.response.send_message(text[:1990], ephemeral=True)
+
+
+@kiho_group.command(name="search", description="Search Kiho by name, element, or type.")
+@app_commands.describe(query="Name, element, or type fragment.")
+async def kiho_search(interaction: discord.Interaction, query: str) -> None:
+    matches = kiho.search(query)
+    if not matches:
+        await interaction.response.send_message(f"No Kiho match `{query}`.", ephemeral=True)
+        return
+    lines = [f"• **{k['name']}** ({k['element']} {k['mastery']})" for k in matches[:40]]
+    extra = f"\n…and {len(matches) - 40} more." if len(matches) > 40 else ""
+    await interaction.response.send_message("✋ " + "\n".join(lines) + extra, ephemeral=True)
+
+
+@kiho_group.command(name="view", description="Show a Kiho's element, mastery, type, and effect.")
+@app_commands.describe(name="The Kiho to view.")
+@app_commands.autocomplete(name=_kiho_autocomplete)
+async def kiho_view(interaction: discord.Interaction, name: str) -> None:
+    k = kiho.get(name)
+    if k is None:
+        await interaction.response.send_message(
+            f"No Kiho named **{name}**. Try `/kiho search`.", ephemeral=True
+        )
+        return
+    await interaction.response.send_message(embed=build_kiho_embed(k))
+
+
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
@@ -3003,6 +3202,8 @@ client.tree.add_command(spell_group)
 client.tree.add_command(weapon_group)
 client.tree.add_command(armor_group)
 client.tree.add_command(advantage_group)
+client.tree.add_command(kata_group)
+client.tree.add_command(kiho_group)
 
 
 def main() -> None:
