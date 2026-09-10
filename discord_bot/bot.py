@@ -19,7 +19,7 @@ from discord import app_commands
 
 import encounter
 import storage
-from l5r_rules import advancement, combat, creature, enums, npc_gen, schools, stats
+from l5r_rules import advancement, combat, creature, enums, npc_gen, schools, spells, stats
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
 
@@ -405,6 +405,17 @@ async def _school_autocomplete(
 ) -> list[app_commands.Choice[str]]:
     cur = current.lower().strip()
     out = [app_commands.Choice(name=s["name"], value=s["name"]) for s in schools.ALL if cur in s["name"].lower()]
+    return out[:25]
+
+
+async def _spell_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    out = [
+        app_commands.Choice(name=f"{s['name']} ({s['element']} {s['mastery']})", value=s["name"])
+        for s in spells.ALL if cur in s["name"].lower()
+    ]
     return out[:25]
 
 
@@ -2399,9 +2410,27 @@ async def xp_kiho(interaction: discord.Interaction, name: app_commands.Range[str
 
 
 @xp.command(name="spell", description="Memorise a spell so no scroll is needed (cost = 1 x Mastery Level).")
-@app_commands.describe(name="Spell name.", mastery_level="Its Mastery Level.", member="Advance another player's character (DM only).")
-async def xp_spell(interaction: discord.Interaction, name: app_commands.Range[str, 1, 60], mastery_level: app_commands.Range[int, 1, 10], member: discord.Member | None = None) -> None:
-    await _buy_named(interaction, member, name.strip(), mastery_level, "spells_known", "spell", "\U0001F4DC")
+@app_commands.describe(
+    name="Spell name (catalog match auto-fills the Mastery Level).",
+    mastery_level="Its Mastery Level (optional if the spell is in the catalog).",
+    member="Advance another player's character (DM only).",
+)
+@app_commands.autocomplete(name=_spell_autocomplete)
+async def xp_spell(
+    interaction: discord.Interaction,
+    name: app_commands.Range[str, 1, 60],
+    mastery_level: app_commands.Range[int, 1, 10] | None = None,
+    member: discord.Member | None = None,
+) -> None:
+    spell = spells.get(name)
+    ml = mastery_level if mastery_level is not None else (spell["mastery"] if spell else None)
+    if ml is None:
+        await interaction.response.send_message(
+            f"**{name}** isn't in the catalog — give its `mastery_level:` too.", ephemeral=True
+        )
+        return
+    canonical = spell["name"] if spell else name.strip()
+    await _buy_named(interaction, member, canonical, ml, "spells_known", "spell", "\U0001F4DC")
 
 
 @xp.command(name="costs", description="Show the Experience cost reference (L5R 4e RAW).")
@@ -2542,6 +2571,91 @@ async def school_learn(
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
+# ===========================================================================
+# /spell group — spells & elements (GDD s32–s37)
+# ===========================================================================
+spell_group = app_commands.Group(name="spell", description="Browse spells by element and mastery (GDD s32-s37).")
+
+_ELEMENT_COLORS = {
+    "air": discord.Color.light_grey(), "earth": discord.Color.dark_gold(),
+    "fire": discord.Color.red(), "water": discord.Color.blue(),
+    "void": discord.Color.purple(), "all": discord.Color.teal(),
+}
+
+
+def build_spell_embed(s: dict) -> discord.Embed:
+    color = _ELEMENT_COLORS.get(s["element"].lower(), discord.Color.teal())
+    kw = f" · {s['keyword']}" if s["keyword"] else ""
+    tags = f" [{', '.join(s['tags'])}]" if s["tags"] else ""
+    embed = discord.Embed(title=f"🔮 {s['name']}{tags}", color=color)
+    embed.description = f"**{s['element']} {s['mastery']}**{kw}"
+    line = []
+    if s["range"]:
+        line.append(f"**Range:** {s['range']}")
+    if s["area"]:
+        line.append(f"**Area:** {s['area']}")
+    if s["duration"]:
+        line.append(f"**Duration:** {s['duration']}")
+    if line:
+        embed.add_field(name="​", value="  ·  ".join(line), inline=False)
+    if s["raises"]:
+        embed.add_field(name="Raises", value=s["raises"][:1024], inline=False)
+    if s["effect"]:
+        embed.add_field(name="Effect", value=s["effect"][:1024], inline=False)
+    return embed
+
+
+@spell_group.command(name="list", description="List spells by element (or a summary).")
+@app_commands.describe(element="Air, Earth, Fire, Water, Void, All. Omit for a summary.")
+async def spell_list(interaction: discord.Interaction, element: str | None = None) -> None:
+    if not element:
+        from collections import Counter
+        counts = Counter(s["element"] for s in spells.ALL)
+        summary = " · ".join(f"{k} {v}" for k, v in sorted(counts.items()))
+        await interaction.response.send_message(
+            f"🔮 **{len(spells.ALL)} spells.** Browse with `/spell list element:<element>`, "
+            f"`/spell search`, `/spell view`.\n{summary}", ephemeral=True
+        )
+        return
+    matches = spells.by_element(element)
+    if not matches:
+        await interaction.response.send_message(
+            f"No spells for **{element}**. Elements: {', '.join(spells.elements())}", ephemeral=True
+        )
+        return
+    by_ml: dict[int, list[str]] = {}
+    for s in matches:
+        by_ml.setdefault(s["mastery"], []).append(s["name"])
+    lines = [f"**ML {ml}:** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
+    text = f"🔮 **{element} spells ({len(matches)}):**\n" + "\n".join(lines)
+    await interaction.response.send_message(text[:1990], ephemeral=True)
+
+
+@spell_group.command(name="search", description="Search spells by name, element, or keyword.")
+@app_commands.describe(query="Name, element, or keyword fragment.")
+async def spell_search(interaction: discord.Interaction, query: str) -> None:
+    matches = spells.search(query)
+    if not matches:
+        await interaction.response.send_message(f"No spells match `{query}`.", ephemeral=True)
+        return
+    lines = [f"• **{s['name']}** ({s['element']} {s['mastery']})" for s in matches[:40]]
+    extra = f"\n…and {len(matches) - 40} more." if len(matches) > 40 else ""
+    await interaction.response.send_message("🔮 " + "\n".join(lines) + extra, ephemeral=True)
+
+
+@spell_group.command(name="view", description="Show a spell's element, mastery, range, and effect.")
+@app_commands.describe(name="The spell to view.")
+@app_commands.autocomplete(name=_spell_autocomplete)
+async def spell_view(interaction: discord.Interaction, name: str) -> None:
+    s = spells.get(name)
+    if s is None:
+        await interaction.response.send_message(
+            f"No spell named **{name}**. Try `/spell search`.", ephemeral=True
+        )
+        return
+    await interaction.response.send_message(embed=build_spell_embed(s))
+
+
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
@@ -2550,6 +2664,7 @@ client.tree.add_command(room)
 client.tree.add_command(creature_group)
 client.tree.add_command(xp)
 client.tree.add_command(school)
+client.tree.add_command(spell_group)
 
 
 def main() -> None:

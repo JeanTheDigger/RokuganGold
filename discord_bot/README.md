@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 11 — schools auto-apply at character creation
+## Status: Phase 12 — all 287 spells (GDD s32–s37)
 
 **Dice**
 
@@ -89,6 +89,21 @@ sibling `tools/extract_schools.py` (re-runnable) straight from the s29 markdown 
 nothing invented. Bushi/monk schools carry the full Rank 1–5 ladder; shugenja
 schools carry their Affinity/Deficiency line; advanced/alternate schools carry
 their single Technique plus prerequisites.
+
+**Spells** (all of **GDD s32–s37**, transcribed verbatim)
+
+Every spell is in the bot — **287 spells** (Air 68, Water 62, Fire 59, Earth 58,
+Void 35, plus universal), each with element, Mastery Level, range, area, duration,
+raises, and full effect text.
+
+| Command | What it does |
+|---|---|
+| `/spell list` | Summary by element, or `element:` for that element's spells grouped by Mastery Level. |
+| `/spell search` | Find spells by name, element, or keyword. |
+| `/spell view` | A spell's element, Mastery, range/area/duration, raises, and effect. |
+
+`/xp spell` (memorise a spell) autocompletes real spell names and **auto-fills the
+Mastery Level** — so the RAW cost (1 × Mastery Level) is computed for you.
 
 **Combat — player rolls, DM approves damage**
 
@@ -222,11 +237,14 @@ discord_bot/
 │   ├── creature_catalog.py# AUTO-GENERATED: 208 bestiary stat blocks (verbatim).
 │   ├── schools.py         # Access helpers over the school catalog (GDD s29).
 │   ├── schools_catalog.py # AUTO-GENERATED: 106 schools + 345 techniques (verbatim).
+│   ├── spells.py          # Access helpers over the spell catalog (GDD s32-s37).
+│   ├── spells_catalog.py  # AUTO-GENERATED: 287 spells (verbatim).
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).
 │   └── __init__.py
 ├── tools/
 │   ├── extract_bestiary.py # Re-runnable transcriber: bestiary .gd → creature_catalog.py.
-│   └── extract_schools.py  # Re-runnable transcriber: GDD s29 → schools_catalog.py.
+│   ├── extract_schools.py  # Re-runnable transcriber: GDD s29 → schools_catalog.py.
+│   └── extract_spells.py   # Re-runnable transcriber: GDD s32-s37 → spells_catalog.py.
 ├── requirements.txt       # Python dependencies.
 ├── .env.example           # Template for your secret token. Copy to .env.
 ├── .gitignore             # Keeps .env and the database out of git.
