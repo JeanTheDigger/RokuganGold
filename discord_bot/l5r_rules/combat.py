@@ -115,10 +115,13 @@ def resolve_attack(
     dice_engine: DiceEngine,
     attacker_stance: str = "attack",
     increased_damage: int = 0,
+    bonus_rolled: int = 0,
+    bonus_kept: int = 0,
 ) -> dict:
     """Resolve one attack roll vs a Target Number. `increased_damage` are raises
     spent on the Increased Damage maneuver: they raise the TN like any called
-    raise AND add +1 rolled damage die each on the follow-up damage roll."""
+    raise AND add +1 rolled damage die each on the follow-up damage roll.
+    `bonus_rolled`/`bonus_kept` are extra dice from a Void Point spend (+1k1)."""
     weapon = get_weapon_profile(weapon_name)
     skill_name = weapon.get("skill", "Kenjutsu")
     skill_rank = attacker.skills.get(skill_name, 0)
@@ -130,6 +133,8 @@ def resolve_attack(
     kept = trait_value
     rolled += STANCE_ATTACK_ROLLED_BONUS.get(attacker_stance, 0)
     kept += STANCE_ATTACK_KEPT_BONUS.get(attacker_stance, 0)
+    rolled += bonus_rolled  # Void Point spend (+1k1); RAW: valid on the attack roll, not damage
+    kept += bonus_kept
 
     wound_penalty = stats.wound_penalty(attacker)  # <= 0
     flat_bonus = wound_penalty
@@ -195,3 +200,57 @@ def apply_damage(target: Character, raw_damage: int, reduction: int | None = Non
         "is_dead": stats.is_dead(target),
         "level_changed": old_level != new_level,
     }
+
+
+# ---------------------------------------------------------------------------
+# Initiative and contested maneuvers (individual_combat.gd s40)
+# ---------------------------------------------------------------------------
+
+# Maneuver raise costs (individual_combat.gd MANEUVER_RAISES). Only the ones the
+# bot resolves are listed; each is a called Raise on the attack (raises the TN).
+MANEUVER_RAISES = {"feint": 2, "disarm": 3, "knockdown": 2}
+
+
+def roll_initiative(character: Character, dice_engine: DiceEngine):
+    """Initiative Roll & Keep: (Reflexes + Insight Rank) keep Reflexes
+    (character_stats.gd get_initiative_rolled / _kept)."""
+    ir = stats.insight_rank(character)
+    return dice_engine.roll_and_keep(character.reflexes + ir, character.reflexes)
+
+
+def resolve_disarm(attacker: Character, defender: Character, dice_engine: DiceEngine) -> dict:
+    """Disarm (s40): 2k1 damage regardless of weapon, plus a contested Strength
+    roll (Strength k Strength, non-exploding, + wound penalties). Attacker wins ties-broken by >."""
+    dmg = dice_engine.roll_damage(2, 1)
+    a = dice_engine.roll_and_keep(max(attacker.strength, 1), max(attacker.strength, 1), False)
+    d = dice_engine.roll_and_keep(max(defender.strength, 1), max(defender.strength, 1), False)
+    a_total = a.total + stats.wound_penalty(attacker)
+    d_total = d.total + stats.wound_penalty(defender)
+    return {
+        "damage": dmg["raw"],
+        "damage_dice": dmg["dice"],
+        "attacker_roll": a_total,
+        "defender_roll": d_total,
+        "disarmed": a_total > d_total,
+    }
+
+
+def resolve_knockdown(
+    attacker: Character, defender: Character, dice_engine: DiceEngine, is_quadruped: bool = False
+) -> dict:
+    """Knockdown (s40): contested Strength roll (non-exploding, + wound penalties);
+    a quadruped defender adds +4. No inherent damage."""
+    a = dice_engine.roll_and_keep(max(attacker.strength, 1), max(attacker.strength, 1), False)
+    d = dice_engine.roll_and_keep(max(defender.strength, 1), max(defender.strength, 1), False)
+    a_total = a.total + stats.wound_penalty(attacker)
+    d_total = d.total + stats.wound_penalty(defender) + (4 if is_quadruped else 0)
+    return {
+        "attacker_roll": a_total,
+        "defender_roll": d_total,
+        "knocked_down": a_total > d_total,
+    }
+
+
+def compute_feint_bonus(attack_margin: int, attacker_insight_rank: int) -> int:
+    """Feint (s40): half the attack margin, capped at 5 x Insight Rank, added to damage."""
+    return min(attack_margin // 2, 5 * attacker_insight_rank)

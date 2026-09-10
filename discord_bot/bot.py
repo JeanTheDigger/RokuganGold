@@ -17,6 +17,7 @@ import os
 import discord
 from discord import app_commands
 
+import encounter
 import storage
 from l5r_rules import combat, enums, stats
 from l5r_rules.character import Character
@@ -40,6 +41,9 @@ intents = discord.Intents.default()
 
 engine = DiceEngine()
 store = storage.Store(DB_PATH)
+
+# In-memory initiative encounters, keyed by Discord channel id (see encounter.py).
+encounters: dict[int, encounter.Encounter] = {}
 
 
 class RokuganBot(discord.Client):
@@ -313,8 +317,19 @@ async def _weapon_autocomplete(
     return [app_commands.Choice(name=w, value=w) for w in sorted(names)[:25]]
 
 
+_MANEUVER_APPLY_LABEL = {
+    "none": "Roll & Apply Damage",
+    "feint": "Roll & Apply Damage (Feint)",
+    "increased_damage": "Roll & Apply Damage",
+    "disarm": "Resolve Disarm (2k1 + Strength)",
+    "knockdown": "Resolve Knockdown (Strength)",
+}
+
+
 class DamageView(discord.ui.View):
-    """DM-only buttons attached to a landed attack: roll & apply damage, or waive it."""
+    """DM-only buttons attached to a landed attack: resolve the hit, or waive it.
+
+    Handles the plain hit and the Feint / Disarm / Knockdown maneuvers."""
 
     def __init__(
         self,
@@ -324,6 +339,8 @@ class DamageView(discord.ui.View):
         increased_damage: int,
         attacker_name: str,
         target_name: str,
+        maneuver: str = "none",
+        attack_margin: int = 0,
     ) -> None:
         super().__init__(timeout=1800)  # 30 min
         self.attacker_id = attacker_id
@@ -332,38 +349,110 @@ class DamageView(discord.ui.View):
         self.increased_damage = increased_damage
         self.attacker_name = attacker_name
         self.target_name = target_name
+        self.maneuver = maneuver
+        self.attack_margin = attack_margin
+        # Relabel the primary button to match the maneuver.
+        for child in self.children:
+            if isinstance(child, discord.ui.Button) and child.style == discord.ButtonStyle.danger:
+                child.label = _MANEUVER_APPLY_LABEL.get(maneuver, "Roll & Apply Damage")
 
     def _disable(self) -> None:
         for child in self.children:
             child.disabled = True
         self.stop()
 
+    def _wound_status(self, target_rec: storage.CharacterRecord, applied: dict) -> str:
+        c = target_rec.character
+        if applied["level_changed"]:
+            status = (
+                f"{self.target_name}: {applied['old_wound_level']} → "
+                f"**{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+            )
+        else:
+            status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+        if applied["is_dead"]:
+            status += "  💀 **DEAD**"
+        return status
+
     @discord.ui.button(label="Roll & Apply Damage", style=discord.ButtonStyle.danger, emoji="⚔️")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not _is_dm(interaction):
-            await interaction.response.send_message(
-                "Only a DM can authorize damage.", ephemeral=True
-            )
+            await interaction.response.send_message("Only a DM can authorize this.", ephemeral=True)
             return
         attacker_rec = store.get_by_id(self.attacker_id)
         target_rec = store.get_by_id(self.target_id)
         if target_rec is None:
-            await interaction.response.send_message(
-                "The target character no longer exists.", ephemeral=True
-            )
+            await interaction.response.send_message("The target no longer exists.", ephemeral=True)
             return
         if attacker_rec is None:
-            await interaction.response.send_message(
-                "The attacker character no longer exists.", ephemeral=True
+            await interaction.response.send_message("The attacker no longer exists.", ephemeral=True)
+            return
+        attacker = attacker_rec.character
+        target = target_rec.character
+
+        if self.maneuver == "knockdown":
+            kd = combat.resolve_knockdown(attacker, target, engine)
+            embed = discord.Embed(
+                title="🥋 Knockdown",
+                color=discord.Color.green() if kd["knocked_down"] else discord.Color.greyple(),
             )
+            embed.add_field(
+                name="Contested Strength",
+                value=f"{self.attacker_name} **{kd['attacker_roll']}** vs "
+                f"{self.target_name} **{kd['defender_roll']}**",
+                inline=False,
+            )
+            verdict = (
+                f"**{self.target_name} is knocked prone!**" if kd["knocked_down"]
+                else f"{self.target_name} keeps their feet."
+            )
+            embed.add_field(name="Result", value=verdict, inline=False)
+            embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(embed=embed)
             return
 
-        dmg = combat.resolve_damage(
-            attacker_rec.character, self.weapon, engine, self.increased_damage
-        )
-        applied = combat.apply_damage(
-            target_rec.character, dmg["raw_damage"], target_rec.character.armor_reduction
-        )
+        if self.maneuver == "disarm":
+            dis = combat.resolve_disarm(attacker, target, engine)
+            applied = combat.apply_damage(target, dis["damage"], target.armor_reduction)
+            store.save(target_rec)
+            embed = discord.Embed(
+                title="🗡️ Disarm",
+                color=discord.Color.green() if dis["disarmed"] else discord.Color.orange(),
+            )
+            embed.add_field(
+                name="Damage (2k1)",
+                value=f"{_format_dice(dis['damage_dice'])}\nRaw **{dis['damage']}** − reduction "
+                f"{applied['reduction']} = **{applied['final_damage']}** wounds",
+                inline=False,
+            )
+            embed.add_field(
+                name="Contested Strength",
+                value=f"{self.attacker_name} **{dis['attacker_roll']}** vs "
+                f"{self.target_name} **{dis['defender_roll']}**",
+                inline=False,
+            )
+            verdict = (
+                f"**{self.target_name} is disarmed!**" if dis["disarmed"]
+                else f"{self.target_name} holds their weapon."
+            )
+            embed.add_field(name="Result", value=f"{verdict}\n{self._wound_status(target_rec, applied)}", inline=False)
+            embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(embed=embed)
+            return
+
+        # Plain hit or Feint: weapon damage (+ feint bonus).
+        dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage)
+        raw = dmg["raw_damage"]
+        feint_line = ""
+        if self.maneuver == "feint":
+            fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
+            raw += fb
+            feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
+        applied = combat.apply_damage(target, raw, target.armor_reduction)
         store.save(target_rec)
 
         embed = discord.Embed(
@@ -374,29 +463,19 @@ class DamageView(discord.ui.View):
             name="Damage",
             value=(
                 f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                f"{_format_dice(dmg['dice'])}\n"
-                f"Raw **{dmg['raw_damage']}** − reduction {applied['reduction']} = "
+                f"{_format_dice(dmg['dice'])}{feint_line}\n"
+                f"Raw **{raw}** − reduction {applied['reduction']} = "
                 f"**{applied['final_damage']}** wounds"
             ),
             inline=False,
         )
-        status = f"{self.target_name}: **{applied['new_wound_level']}** "
-        status += f"({target_rec.character.wounds_taken} wounds)"
-        if applied["level_changed"]:
-            status = (
-                f"{self.target_name}: {applied['old_wound_level']} → "
-                f"**{applied['new_wound_level']}** ({target_rec.character.wounds_taken} wounds)"
-            )
-        if applied["is_dead"]:
-            status += "  💀 **DEAD**"
-        embed.add_field(name="Result", value=status, inline=False)
+        embed.add_field(name="Result", value=self._wound_status(target_rec, applied), inline=False)
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
-
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(embed=embed)
 
-    @discord.ui.button(label="No Damage", style=discord.ButtonStyle.secondary, emoji="🛡️")
+    @discord.ui.button(label="No Effect", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not _is_dm(interaction):
             await interaction.response.send_message(
@@ -406,32 +485,46 @@ class DamageView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
-            f"🛡️ {interaction.user.display_name} ruled **no damage** on "
+            f"🛡️ {interaction.user.display_name} ruled **no effect** on "
             f"{self.attacker_name}'s hit against {self.target_name}."
         )
 
 
+_MANEUVER_CHOICES = [
+    app_commands.Choice(name="None", value="none"),
+    app_commands.Choice(name="Feint (2 raises → bonus damage)", value="feint"),
+    app_commands.Choice(name="Disarm (3 raises → 2k1 + contested Strength)", value="disarm"),
+    app_commands.Choice(name="Knockdown (2 raises → contested Strength)", value="knockdown"),
+]
+
+
 @client.tree.command(
     name="attack",
-    description="Attack another character. Rolls to hit; on a hit a DM authorizes the damage.",
+    description="Attack another character. Rolls to hit; on a hit a DM authorizes the outcome.",
 )
 @app_commands.describe(
     target="The character to attack (that player's active character).",
     weapon="Weapon (default katana). Start typing for suggestions.",
     raises="Called Raises — each adds +5 to the target's Armor TN.",
     increased_damage="Increased Damage raises — each adds +5 TN AND +1 damage die on a hit.",
+    maneuver="A combat maneuver (its raise cost is added to the TN automatically).",
+    spend_void="Spend a Void Point for +1k1 on the attack roll (RAW: not valid on damage).",
     attacker_stance="Your stance (Full Attack = +2k1 to hit).",
     defender_stance="Target's stance (affects their Armor TN).",
     bonus_tn="Situational +/- to the target's Armor TN (DM discretion).",
 )
 @app_commands.autocomplete(weapon=_weapon_autocomplete)
-@app_commands.choices(attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES)
+@app_commands.choices(
+    attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES, maneuver=_MANEUVER_CHOICES
+)
 async def attack(
     interaction: discord.Interaction,
     target: discord.Member,
     weapon: str = "katana",
     raises: app_commands.Range[int, 0, 10] = 0,
     increased_damage: app_commands.Range[int, 0, 10] = 0,
+    maneuver: app_commands.Choice[str] | None = None,
+    spend_void: bool = False,
     attacker_stance: app_commands.Choice[str] | None = None,
     defender_stance: app_commands.Choice[str] | None = None,
     bonus_tn: app_commands.Range[int, -50, 50] = 0,
@@ -456,11 +549,27 @@ async def attack(
 
     a_stance = attacker_stance.value if attacker_stance else "attack"
     d_stance = defender_stance.value if defender_stance else "attack"
+    man = maneuver.value if maneuver else "none"
+    maneuver_raises = combat.MANEUVER_RAISES.get(man, 0)
+
+    # Void Point spend: +1k1 on the attack roll (decrement the pool now).
+    void_line = ""
+    bonus_rolled = bonus_kept = 0
+    if spend_void:
+        c = attacker_rec.character
+        if c.current_void_points > 0:
+            c.current_void_points -= 1
+            bonus_rolled = bonus_kept = 1
+            store.save(attacker_rec)
+            void_line = f" · 🌀 Void +1k1 ({c.current_void_points} VP left)"
+        else:
+            void_line = " · 🌀 no Void Points to spend"
 
     tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn)
     outcome = combat.resolve_attack(
-        attacker_rec.character, weapon, tn, raises, engine,
+        attacker_rec.character, weapon, tn, raises + maneuver_raises, engine,
         attacker_stance=a_stance, increased_damage=increased_damage,
+        bonus_rolled=bonus_rolled, bonus_kept=bonus_kept,
     )
 
     a_name = attacker_rec.character.name
@@ -476,6 +585,9 @@ async def attack(
     )
     if a_stance != "attack":
         atk_desc += f"  ·  {a_stance.replace('_', ' ').title()}"
+    if man != "none":
+        atk_desc += f"  ·  Maneuver: {man.title()}"
+    atk_desc += void_line
     embed.add_field(name="Attacker", value=atk_desc, inline=False)
     embed.add_field(name="Attack roll", value=_format_dice(outcome["dice"]), inline=False)
 
@@ -495,11 +607,14 @@ async def attack(
 
     if hit:
         view = DamageView(
-            attacker_rec.id, target_rec.id, weapon, increased_damage, a_name, t_name
+            attacker_rec.id, target_rec.id, weapon, increased_damage, a_name, t_name,
+            maneuver=man, attack_margin=outcome["margin"],
         )
-        await interaction.response.send_message(
-            content="A DM can authorize the damage below.", embed=embed, view=view
-        )
+        prompt = {
+            "disarm": "A DM can resolve the disarm below.",
+            "knockdown": "A DM can resolve the knockdown below.",
+        }.get(man, "A DM can authorize the damage below.")
+        await interaction.response.send_message(content=prompt, embed=embed, view=view)
     else:
         await interaction.response.send_message(embed=embed)
 
@@ -905,8 +1020,170 @@ async def dm_list(interaction: discord.Interaction) -> None:
     )
 
 
+# ===========================================================================
+# /combat group — initiative tracker
+# ===========================================================================
+combat_group = app_commands.Group(name="combat", description="Track combat initiative and turn order.")
+
+
+def _render_encounter(enc: encounter.Encounter) -> str:
+    if not enc.combatants:
+        return "No combatants yet. Add them with `/combat join` or `/combat add`."
+    cur = enc.current()
+    lines = []
+    for i, c in enumerate(enc.combatants):
+        marker = "▶️ " if (enc.started and c is cur) else f"{i + 1}. "
+        tag = " *(NPC)*" if c.is_npc else ""
+        detail = f"  ·  {c.initiative_detail}" if c.initiative_detail else ""
+        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}")
+    header = f"⚔️ **Round {enc.round}**" if enc.started else "⚔️ **Not started** — use `/combat next` to begin."
+    return header + "\n" + "\n".join(lines)
+
+
+@combat_group.command(name="start", description="Start a fresh initiative tracker in this channel.")
+async def combat_start(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    encounters[interaction.channel_id] = encounter.Encounter(channel_id=interaction.channel_id)
+    await interaction.response.send_message(
+        "⚔️ New encounter started. Add combatants with `/combat join` (your character) "
+        "or `/combat add` (an NPC), then `/combat next` to begin."
+    )
+
+
+def _get_or_create(channel_id: int) -> encounter.Encounter:
+    enc = encounters.get(channel_id)
+    if enc is None:
+        enc = encounter.Encounter(channel_id=channel_id)
+        encounters[channel_id] = enc
+    return enc
+
+
+@combat_group.command(name="join", description="Add a character to initiative (rolls initiative).")
+@app_commands.describe(member="Add another player's active character (DM only). Omit for your own.")
+async def combat_join(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    if member is not None and member.id != interaction.user.id:
+        if not _is_dm(interaction):
+            await interaction.response.send_message(
+                "Only a DM can add another player's character.", ephemeral=True
+            )
+            return
+        owner = member
+    else:
+        owner = interaction.user
+    rec = store.get_active(guild, str(owner.id))
+    if rec is None:
+        who = "You have" if owner.id == interaction.user.id else f"{owner.display_name} has"
+        await interaction.response.send_message(f"{who} no active character.", ephemeral=True)
+        return
+
+    result = combat.roll_initiative(rec.character, engine)
+    enc = _get_or_create(interaction.channel_id)
+    enc.remove(rec.character.name)  # re-join re-rolls
+    enc.add(encounter.Combatant(
+        name=rec.character.name,
+        initiative=result.total,
+        initiative_detail=f"kept {result.kept_dice} = {result.total}",
+        owner_id=str(owner.id),
+        is_npc=False,
+    ))
+    await interaction.response.send_message(_render_encounter(enc))
+
+
+@combat_group.command(name="add", description="Add an NPC/monster to initiative by its Reflexes and Insight Rank.")
+@app_commands.describe(
+    name="NPC name.", reflexes="NPC Reflexes.", insight_rank="NPC Insight Rank (1 if unknown).",
+)
+async def combat_add(
+    interaction: discord.Interaction,
+    name: app_commands.Range[str, 1, 40],
+    reflexes: app_commands.Range[int, 1, 10],
+    insight_rank: app_commands.Range[int, 1, 10] = 1,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            "Only a DM can add NPCs to initiative.", ephemeral=True
+        )
+        return
+    result = engine.roll_and_keep(reflexes + insight_rank, reflexes)
+    enc = _get_or_create(interaction.channel_id)
+    enc.remove(name)
+    enc.add(encounter.Combatant(
+        name=name,
+        initiative=result.total,
+        initiative_detail=f"kept {result.kept_dice} = {result.total}",
+        owner_id=None,
+        is_npc=True,
+    ))
+    await interaction.response.send_message(_render_encounter(enc))
+
+
+@combat_group.command(name="next", description="Advance to the next combatant's turn.")
+async def combat_next(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None or not enc.combatants:
+        await interaction.response.send_message(
+            "No encounter here. Start one with `/combat start`.", ephemeral=True
+        )
+        return
+    current = enc.advance()
+    await interaction.response.send_message(
+        f"➡️ It is now **{current.name}**'s turn.\n\n{_render_encounter(enc)}"
+    )
+
+
+@combat_group.command(name="status", description="Show the current initiative order.")
+async def combat_status(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message(
+            "No encounter here. Start one with `/combat start`.", ephemeral=True
+        )
+        return
+    await interaction.response.send_message(_render_encounter(enc))
+
+
+@combat_group.command(name="remove", description="Remove a combatant from initiative.")
+@app_commands.describe(name="The combatant name to remove.")
+async def combat_remove(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None or not enc.remove(name):
+        await interaction.response.send_message(f"No combatant named **{name}** here.", ephemeral=True)
+        return
+    await interaction.response.send_message(f"Removed **{name}**.\n\n{_render_encounter(enc)}")
+
+
+@combat_group.command(name="end", description="End the encounter in this channel.")
+async def combat_end(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if encounters.pop(interaction.channel_id, None) is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    await interaction.response.send_message("⚔️ Encounter ended.")
+
+
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
+client.tree.add_command(combat_group)
 
 
 def main() -> None:

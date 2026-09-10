@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 3 — dice + sheets + accounts + combat
+## Status: Phase 4 — dice + sheets + accounts + combat + initiative
 
 **Dice**
 
@@ -61,19 +61,43 @@ On a **hit**, the message shows **DM-only buttons**:
 - **🛡️ No Damage** — the DM rules the blow off.
 
 Only a DM can press them, so the flow is exactly *"a player submits an attack; if
-it lands, the DM authorizes the damage."* `/attack` options: `weapon` (with
-autocomplete), `raises` (+5 TN each), `increased_damage` (+5 TN and +1 damage die
-each), `attacker_stance`, `defender_stance`, and `bonus_tn` (DM situational
-modifier).
+it lands, the DM authorizes the outcome."*
 
-*Faithful core only:* stances (Attack / Full Attack / Defense / Center), wound
-penalties, raises, and armor reduction are in. Kata, kiho, skill masteries
-(R3/R5/R7 damage bonuses and 9-explosions), void-point spends, dual-wielding,
-and thrown/charge/called-shot maneuvers are **not** modelled yet — the DM can
-express those with `raises`/`bonus_tn` for now.
+`/attack` options: `weapon` (autocomplete), `raises` (+5 TN each),
+`increased_damage` (+5 TN and +1 damage die each), `maneuver`, `spend_void`,
+`attacker_stance`, `defender_stance`, and `bonus_tn` (DM situational modifier).
 
-Still to come in later phases: tables/rooms with invites, NPC templates, more
-combat maneuvers, and Vultr hosting.
+**Maneuvers & Void** (the maneuver's raise cost is added to the TN automatically):
+
+- **Feint** (2 raises) — on a hit, adds bonus damage = ½ the attack margin, capped
+  at 5 × Insight Rank.
+- **Disarm** (3 raises) — on a hit, deals 2k1 damage and a contested Strength roll;
+  win and the target is disarmed.
+- **Knockdown** (2 raises) — on a hit, a contested Strength roll; win and the target
+  is knocked prone (quadrupeds resist at +4).
+- **Spend Void** — `spend_void:true` spends one Void Point for **+1k1** on the attack
+  roll (RAW: Void is not valid on damage rolls) and decrements the sheet's pool.
+
+**Initiative tracker** (`/combat`, one encounter per channel)
+
+| Command | What it does |
+|---|---|
+| `/combat start` | Begin a fresh encounter in this channel. |
+| `/combat join` | Add your active character; rolls initiative `(Reflexes + Insight Rank) keep Reflexes`. DMs can add a player with `member:`. |
+| `/combat add` | Add an NPC/monster by `name`, `reflexes`, `insight_rank` (rolls its initiative). DM only. |
+| `/combat next` | Advance to the next combatant; wraps and bumps the round. |
+| `/combat status` | Show the current order and whose turn it is. |
+| `/combat remove` / `/combat end` | Drop a combatant / end the encounter. |
+
+Initiative order is in-memory scratch state (a bot restart clears an in-progress
+fight; sheets and wounds are in the database and persist).
+
+*Still faithful-core:* kata, kiho, skill masteries (R3/R5/R7 damage bonuses and
+9-explosions), dual-wielding, and thrown/charge/called-shot maneuvers are **not**
+modelled — the DM can express those with `raises`/`bonus_tn`.
+
+Still to come in later phases: tables/rooms with invites, NPC templates, and
+Vultr hosting.
 
 ---
 
@@ -83,6 +107,7 @@ combat maneuvers, and Vultr hosting.
 discord_bot/
 ├── bot.py                 # Discord plumbing only (slash commands). No game math here.
 ├── storage.py             # SQLite persistence: characters, active-links, DM roles.
+├── encounter.py           # In-memory initiative tracker (per channel).
 ├── l5r_rules/             # Pure-Python L5R 4e rules. No Discord, no Godot. Testable alone.
 │   ├── dice.py            # Roll & Keep engine (ported from simulation/dice_engine.gd).
 │   ├── character.py       # The playable character sheet (subset of character_data.gd).
