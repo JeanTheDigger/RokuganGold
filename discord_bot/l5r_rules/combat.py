@@ -147,11 +147,14 @@ def resolve_attack(
     increased_damage: int = 0,
     bonus_rolled: int = 0,
     bonus_kept: int = 0,
+    extra_flat: int = 0,
 ) -> dict:
     """Resolve one attack roll vs a Target Number. `increased_damage` are raises
     spent on the Increased Damage maneuver: they raise the TN like any called
     raise AND add +1 rolled damage die each on the follow-up damage roll.
-    `bonus_rolled`/`bonus_kept` are extra dice from a Void Point spend (+1k1)."""
+    `bonus_rolled`/`bonus_kept` are extra dice from a Void Point spend (+1k1).
+    `extra_flat` is a flat bonus added to the attack-roll total (e.g. an active
+    kata's North/South Wind Air-Ring bonus, per s30)."""
     weapon = get_weapon_profile(weapon_name)
     skill_name = weapon.get("skill", "Kenjutsu")
     skill_rank = attacker.skills.get(skill_name, 0)
@@ -167,7 +170,7 @@ def resolve_attack(
     kept += bonus_kept
 
     wound_penalty = stats.wound_penalty(attacker)  # <= 0
-    flat_bonus = wound_penalty
+    flat_bonus = wound_penalty + extra_flat
     total_raises = raises + increased_damage
     explodes = skill_rank > 0
 
@@ -194,14 +197,18 @@ def resolve_damage(
     weapon_name: str,
     dice_engine: DiceEngine,
     increased_damage: int = 0,
+    extra_rolled: int = 0,
 ) -> dict:
-    """Roll raw damage (before the target's armor reduction)."""
+    """Roll raw damage (before the target's armor reduction). `extra_rolled`
+    are extra rolled damage dice from an active kata (e.g. Waves upon the
+    Breakers' +1k0, per s30) — added like Increased Damage but with no TN cost."""
     weapon = get_weapon_profile(weapon_name)
     rolled = weapon.get("rolled", 2)
     kept = weapon.get("kept", 1)
     if weapon.get("strength_adds", True) and weapon.get("melee", True):
         rolled += attacker.strength
     rolled += increased_damage  # Increased Damage maneuver: +1k0 per raise
+    rolled += extra_rolled       # active-kata bonus damage dice (no TN cost)
     can_explode = not weapon.get("no_explode", False)
     res = dice_engine.roll_damage(rolled, kept, 0, 0, False, False, can_explode)
     return {

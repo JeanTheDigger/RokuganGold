@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 15 — Kata & Kiho catalogs (GDD s30 & s38)
+## Status: Phase 16 — active-Kata combat effects (GDD s30 & s38)
 
 **Dice**
 
@@ -84,9 +84,35 @@ their Type and Atemi flag).
 | `/kata list` · `/kata search` · `/kata view` | Browse Kata by element/Mastery, with Schools and effect. |
 | `/kiho list` · `/kiho search` · `/kiho view` | Browse Kiho by element/Mastery, with Type and effect. |
 | `/sheet kata` · `/sheet kiho` | Record/remove a Kata or Kiho on the sheet (free) — e.g. one granted at creation. Buy with XP via `/xp kata`/`/xp kiho` instead. |
+| `/sheet kata_activate` | Set your **active Kata** (Simple Action; only one active — s30). Blank name drops it. |
+| `/sheet kiho_activate` | Activate/deactivate a **Kiho** — one Internal / one Kharmic / one Mystical at a time, Martial stacks (s38). |
 
 `/xp kata` and `/xp kiho` autocomplete real names and **auto-fill the Mastery
 Level**, so the RAW cost is computed for you.
+
+**Active-Kata combat effects** — the active Kata (⚑ on the sheet) feeds straight
+into `/attack`. The bot auto-applies the **deterministic subset** it can compute
+faithfully from the sheet, the chosen stance, the maneuver, and the weapon —
+**8 Kata**:
+
+| Kata | Auto-applied in `/attack` |
+|---|---|
+| Striking as Air | Defense Stance → target Armor TN **+Air Ring** |
+| Reckless Abandon Style | Full Attack Stance → Armor TN **+Fire Ring** |
+| Striking as Void | Center Stance → Armor TN **+Void Ring** |
+| Lee of the Stone | Defense Stance → Armor TN **+Earth Ring** |
+| North Wind Style | Increased Damage maneuver → attack total **+Air Ring** |
+| South Wind Style | Knockdown maneuver → attack total **+Air Ring** |
+| Waves upon the Breakers | weapon with 3+ Skill Ranks → damage **+1k0** |
+| Son of Storms | Small melee weapon → target Reduction **−1** |
+
+Everything else stays **DM-adjudicated on purpose** and is surfaced as a reminder
+line on the attack, never silently applied or dropped: rate-limited effects
+("once per Turn/Round" — the stateless `/attack` has no round tracking), "up to X"
+player-choice tradeoffs, and Initiative/movement/mount/ally/guard effects. **All
+Kiho** are reminder-only (activation cost — a Void Point or Meditation/Void roll —
+and durations are DM-adjudicated); their category limits (one Internal/Kharmic/
+Mystical, Martial stacks) *are* enforced by `/sheet kiho_activate`.
 
 **Advantages & Disadvantages** (all of **GDD s45**, transcribed verbatim)
 
@@ -208,10 +234,11 @@ their ranks; Ranks are capped at **1–5** (s22.4 gives no 6+ ranges); koku is t
 `1d10 × Rank` savings term only (the role stipend needs role data). Generated
 NPCs can be tuned field-by-field with the `/npc` editors above.
 
-*Still faithful-core:* Kata/Kiho are catalogued, buyable, and recorded on sheets,
-but their **combat effects are not auto-applied**; skill masteries (R3/R5/R7 damage
+*Still faithful-core:* a **deterministic subset of Kata** now auto-applies in
+`/attack` (see the Active-Kata table above); the rest of Kata, and all Kiho,
+stay DM-adjudicated (shown as reminders). Skill masteries (R3/R5/R7 damage
 bonuses and 9-explosions), dual-wielding, and thrown/charge/called-shot maneuvers
-are likewise **not** modelled — the DM can express those with `raises`/`bonus_tn`.
+are still **not** modelled — the DM can express those with `raises`/`bonus_tn`.
 
 **Creatures / monsters** (stat blocks transcribed **verbatim** from the bestiaries)
 
@@ -283,6 +310,7 @@ discord_bot/
 │   ├── advantages_catalog.py # AUTO-GENERATED: 149 advantages/disadvantages (verbatim).
 │   ├── kata.py            # Access helpers over the kata catalog (GDD s30).
 │   ├── kata_catalog.py    # AUTO-GENERATED: 43 Kata (verbatim).
+│   ├── kata_effects.py    # Deterministic active-Kata combat modifiers for /attack (GDD s30).
 │   ├── kiho.py            # Access helpers over the kiho catalog (GDD s38).
 │   ├── kiho_catalog.py    # AUTO-GENERATED: 73 Kiho (verbatim).
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).

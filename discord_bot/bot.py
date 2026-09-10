@@ -20,7 +20,8 @@ from discord import app_commands
 import encounter
 import storage
 from l5r_rules import (
-    advancement, advantages, combat, creature, enums, kata, kiho, npc_gen, schools, spells, stats,
+    advancement, advantages, combat, creature, enums, kata, kata_effects, kiho, npc_gen,
+    schools, spells, stats,
 )
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
@@ -171,9 +172,13 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     if c.techniques:
         extras.append("**Techniques:** " + ", ".join(c.techniques))
     if c.katas:
-        extras.append("**Kata:** " + ", ".join(c.katas))
+        act = (c.active_kata or "").lower()
+        extras.append("**Kata:** " + ", ".join(
+            (f"⚑{k}" if k.lower() == act else k) for k in c.katas))
     if c.kiho:
-        extras.append("**Kiho:** " + ", ".join(c.kiho))
+        active_kiho = [a.lower() for a in getattr(c, "active_kiho", [])]
+        extras.append("**Kiho:** " + ", ".join(
+            (f"⚑{k}" if k.lower() in active_kiho else k) for k in c.kiho))
     if c.emphases:
         extras.append("**Emphases:** " + ", ".join(
             f"{sk} ({', '.join(em)})" for sk, em in sorted(c.emphases.items()) if em))
@@ -551,14 +556,20 @@ class DamageView(discord.ui.View):
             if attacker_rec is None:
                 await interaction.response.send_message("The attacker no longer exists.", ephemeral=True)
                 return
-            dmg = combat.resolve_damage(attacker_rec.character, self.weapon, engine, self.increased_damage)
+            attacker = attacker_rec.character
+            wp = combat.get_weapon_profile(self.weapon)
+            extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
+            ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
+            dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled)
             raw = dmg["raw_damage"]
             feint_line = ""
             if self.maneuver == "feint":
-                fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker_rec.character))
+                fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
                 raw += fb
                 feint_line = f"\nFeint bonus **+{fb}**"
-            applied = creature.apply_damage_to_creature(cre_rec.creature, raw, cre_rec.creature.reduction)
+            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note) if n)
+            reduction = max(0, cre_rec.creature.reduction - ignore)
+            applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction)
             store.save_creature(cre_rec)
             cr = cre_rec.creature
             embed = discord.Embed(
@@ -569,7 +580,7 @@ class DamageView(discord.ui.View):
                 name="Damage",
                 value=(
                     f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                    f"{_format_dice(dmg['dice'])}{feint_line}\n"
+                    f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}\n"
                     f"Raw **{raw}** − reduction {applied['reduction']} = "
                     f"**{applied['final_damage']}** wounds"
                 ),
@@ -656,15 +667,20 @@ class DamageView(discord.ui.View):
             await interaction.followup.send(embed=embed)
             return
 
-        # Plain hit or Feint: weapon damage (+ feint bonus).
-        dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage)
+        # Plain hit or Feint: weapon damage (+ feint bonus, + active-kata mods).
+        wp = combat.get_weapon_profile(self.weapon)
+        extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
+        ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
+        dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled)
         raw = dmg["raw_damage"]
         feint_line = ""
         if self.maneuver == "feint":
             fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
             raw += fb
             feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
-        applied = combat.apply_damage(target, raw, target.armor_reduction)
+        kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note) if n)
+        reduction = max(0, target.armor_reduction - ignore)
+        applied = combat.apply_damage(target, raw, reduction)
         store.save(target_rec)
 
         embed = discord.Embed(
@@ -675,7 +691,7 @@ class DamageView(discord.ui.View):
             name="Damage",
             value=(
                 f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                f"{_format_dice(dmg['dice'])}{feint_line}\n"
+                f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}\n"
                 f"Raw **{raw}** − reduction {applied['reduction']} = "
                 f"**{applied['final_damage']}** wounds"
             ),
@@ -700,6 +716,22 @@ class DamageView(discord.ui.View):
             f"🛡️ {interaction.user.display_name} ruled **no effect** on "
             f"{self.attacker_name}'s hit against {self.target_name}."
         )
+
+
+def _active_ability_reminders(c: Character, role: str) -> list[str]:
+    """DM reminder lines for a combatant's active kata/kiho that the bot does NOT
+    auto-apply (rate-limited, positional, tradeoff, or every kiho). The
+    deterministic kata are folded into the roll instead and shown separately."""
+    lines: list[str] = []
+    kata_text = kata_effects.active_kata_reminder(c)
+    if kata_text:
+        active = c.active_kata
+        lines.append(f"**{role.capitalize()} kata — {active}:** {kata_text}")
+    for name in getattr(c, "active_kiho", []) or []:
+        rec = kiho.get(name)
+        effect = rec["effect"] if rec else ""
+        lines.append(f"**{role.capitalize()} kiho — {name}:** {effect}")
+    return lines
 
 
 _MANEUVER_CHOICES = [
@@ -829,18 +861,36 @@ async def attack(
         else:
             void_line = " · 🌀 no Void Points to spend"
 
+    # Active-kata combat modifiers (GDD s30; deterministic subset only).
+    kata_notes: list[str] = []
+    # Defender's active kata: stance-conditional Armor TN bonus (players only —
+    # creatures use fixed stat blocks and carry no active kata).
+    def_kata_bonus = 0
+    if target_creature_rec is None:
+        def_kata_bonus, def_note = kata_effects.defender_armor_tn_bonus(
+            target_rec.character, d_stance
+        )
+        if def_note:
+            kata_notes.append(def_note)
+    # Attacker's active kata: flat bonus added to the attack-roll total.
+    atk_flat, atk_note = kata_effects.attacker_roll_flat_bonus(
+        attacker_rec.character, man, increased_damage
+    )
+    if atk_note:
+        kata_notes.append(atk_note)
+
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
         t_name = target_creature_rec.creature.name
         tn = target_creature_rec.creature.armor_tn + bonus_tn
     else:
         t_name = target_rec.character.name
-        tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn)
+        tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus)
 
     outcome = combat.resolve_attack(
         attacker_rec.character, weapon, tn, raises + maneuver_raises, engine,
         attacker_stance=a_stance, increased_damage=increased_damage,
-        bonus_rolled=bonus_rolled, bonus_kept=bonus_kept,
+        bonus_rolled=bonus_rolled, bonus_kept=bonus_kept, extra_flat=atk_flat,
     )
 
     a_name = attacker_rec.character.name
@@ -874,6 +924,18 @@ async def attack(
     )
     if outcome["unskilled"]:
         embed.set_footer(text=f"Unskilled in {outcome['skill_name']} — dice did not explode.")
+
+    if kata_notes:
+        embed.add_field(name="⚑ Kata effects (auto-applied)", value=" · ".join(kata_notes), inline=False)
+    reminders = _active_ability_reminders(attacker_rec.character, "attacker")
+    if target_creature_rec is None:
+        reminders += _active_ability_reminders(target_rec.character, "defender")
+    if reminders:
+        embed.add_field(
+            name="Active abilities — DM adjudicates",
+            value="\n".join(reminders)[:1024],
+            inline=False,
+        )
 
     if hit:
         if target_creature_rec is not None:
@@ -1379,6 +1441,109 @@ async def sheet_kiho(
         msg = f"✋ **{c.name}** learns the Kiho **{canonical}**."
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+@sheet.command(name="kata_activate", description="Set your active Kata (Simple Action; only one active — s30). Blank name drops it.")
+@app_commands.describe(
+    name="A Kata your character knows. Leave blank to drop the active Kata.",
+    member="Target player (DM only).",
+)
+@app_commands.autocomplete(name=_kata_autocomplete)
+async def sheet_kata_activate(
+    interaction: discord.Interaction, name: str | None = None, member: discord.Member | None = None
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    if not name or not name.strip():
+        prev = c.active_kata
+        c.active_kata = ""
+        store.save(rec)
+        tail = f" (**{prev}**)" if prev else ""
+        await interaction.response.send_message(
+            f"**{c.name}** drops their active Kata{tail}.", embed=build_sheet_embed(rec)
+        )
+        return
+    k = kata.get(name)
+    canonical = k["name"] if k else name.strip()
+    if canonical.lower() not in [x.lower() for x in c.katas]:
+        await interaction.response.send_message(
+            f"**{c.name}** hasn't learned the Kata **{canonical}** — add it with `/sheet kata` "
+            f"or buy it with `/xp kata`.", ephemeral=True,
+        )
+        return
+    c.active_kata = canonical
+    store.save(rec)
+    note = (
+        "" if kata_effects.is_auto(canonical)
+        else " *(its effect is DM-adjudicated — shown as a reminder on attacks.)*"
+    )
+    await interaction.response.send_message(
+        f"🥋 **{c.name}** assumes the Kata **{canonical}**.{note}", embed=build_sheet_embed(rec)
+    )
+
+
+@sheet.command(name="kiho_activate", description="Activate/deactivate a Kiho (one Internal/Kharmic/Mystical; Martial stacks — s38).")
+@app_commands.describe(
+    name="A Kiho your character knows.",
+    off="Deactivate it instead.",
+    member="Target player (DM only).",
+)
+@app_commands.autocomplete(name=_kiho_autocomplete)
+async def sheet_kiho_activate(
+    interaction: discord.Interaction, name: str, off: bool = False, member: discord.Member | None = None
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    h = kiho.get(name)
+    canonical = h["name"] if h else name.strip()
+    if off:
+        c.active_kiho = [x for x in c.active_kiho if x.lower() != canonical.lower()]
+        store.save(rec)
+        await interaction.response.send_message(
+            f"**{c.name}** ends the Kiho **{canonical}**.", embed=build_sheet_embed(rec)
+        )
+        return
+    if canonical.lower() not in [x.lower() for x in c.kiho]:
+        await interaction.response.send_message(
+            f"**{c.name}** hasn't learned the Kiho **{canonical}** — add it with `/sheet kiho` "
+            f"or buy it with `/xp kiho`.", ephemeral=True,
+        )
+        return
+    # s38: only one Internal, one Kharmic, one Mystical may be active; Martial stacks.
+    ktype = (h["type"] if h else "").strip().lower()
+    replaced = ""
+    if ktype in ("internal", "kharmic", "mystical"):
+        dropped = []
+        kept = []
+        for x in c.active_kiho:
+            xr = kiho.get(x)
+            xt = (xr["type"] if xr else "").strip().lower()
+            (dropped if xt == ktype else kept).append(x)
+        c.active_kiho = kept
+        if dropped:
+            replaced = f" (replaces {', '.join(dropped)})"
+    if canonical.lower() not in [x.lower() for x in c.active_kiho]:
+        c.active_kiho.append(canonical)
+    store.save(rec)
+    tlabel = h["type"] if h and h.get("type") else "Kiho"
+    await interaction.response.send_message(
+        f"✋ **{c.name}** activates the {tlabel} Kiho **{canonical}**{replaced}. "
+        f"*(Activation cost — a Void Point or Meditation/Void roll — and duration are "
+        f"DM-adjudicated; its combat effect is shown as a reminder on attacks.)*",
+        embed=build_sheet_embed(rec),
+    )
 
 
 @sheet.command(name="wound", description="Apply wounds to the active character (raw, no armor reduction here).")

@@ -60,6 +60,13 @@ class Character:
     affinity_element: str = ""
     deficiency_element: str = ""
 
+    # -- Currently-active kata / kiho (GDD s30/s38). Executing a kata is a Simple
+    #    Action and only ONE may be active (s30). Kiho: only one Internal, one
+    #    Kharmic, one Mystical may be active; multiple Martial may (s38). Names
+    #    only; the deterministic combat modifiers live in kata_effects.py. --
+    active_kata: str = ""
+    active_kiho: list[str] = field(default_factory=list)
+
     # -- Honor, Glory, Status, Infamy (0.0-10.0) --
     honor: float = 3.5
     glory: float = 1.0
