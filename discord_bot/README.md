@@ -83,6 +83,7 @@ their Type and Atemi flag).
 |---|---|
 | `/kata list` · `/kata search` · `/kata view` | Browse Kata by element/Mastery, with Schools and effect. |
 | `/kiho list` · `/kiho search` · `/kiho view` | Browse Kiho by element/Mastery, with Type and effect. |
+| `/sheet kata` · `/sheet kiho` | Record/remove a Kata or Kiho on the sheet (free) — e.g. one granted at creation. Buy with XP via `/xp kata`/`/xp kiho` instead. |
 
 `/xp kata` and `/xp kiho` autocomplete real names and **auto-fill the Mastery
 Level**, so the RAW cost is computed for you.

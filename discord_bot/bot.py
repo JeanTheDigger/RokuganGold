@@ -1327,6 +1327,60 @@ async def sheet_disadvantage(
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
+@sheet.command(name="kata", description="Record (or remove) a Kata on your sheet (free — no XP; use /xp kata to buy).")
+@app_commands.describe(name="Kata name.", remove="Remove it instead.", member="Target player (DM only).")
+@app_commands.autocomplete(name=_kata_autocomplete)
+async def sheet_kata(
+    interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    k = kata.get(name)
+    canonical = k["name"] if k else name.strip()
+    c = rec.character
+    if remove:
+        c.katas = [x for x in c.katas if x.lower() != canonical.lower()]
+        msg = f"Removed Kata **{canonical}** from **{c.name}**."
+    else:
+        if canonical.lower() not in [x.lower() for x in c.katas]:
+            c.katas.append(canonical)
+        msg = f"\U0001F94B **{c.name}** learns the Kata **{canonical}**."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+@sheet.command(name="kiho", description="Record (or remove) a Kiho on your sheet (free — no XP; use /xp kiho to buy).")
+@app_commands.describe(name="Kiho name.", remove="Remove it instead.", member="Target player (DM only).")
+@app_commands.autocomplete(name=_kiho_autocomplete)
+async def sheet_kiho(
+    interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    k = kiho.get(name)
+    canonical = k["name"] if k else name.strip()
+    c = rec.character
+    if remove:
+        c.kiho = [x for x in c.kiho if x.lower() != canonical.lower()]
+        msg = f"Removed Kiho **{canonical}** from **{c.name}**."
+    else:
+        if canonical.lower() not in [x.lower() for x in c.kiho]:
+            c.kiho.append(canonical)
+        msg = f"✋ **{c.name}** learns the Kiho **{canonical}**."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
 @sheet.command(name="wound", description="Apply wounds to the active character (raw, no armor reduction here).")
 @app_commands.describe(
     amount="Wounds to apply.",
