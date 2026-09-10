@@ -45,6 +45,8 @@ class Creature:
     wound_thresholds: list[int] = field(default_factory=list)
     traits: dict[str, int] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
+    attack_flat: int = 0   # flat +N to the attack-roll total (SpiritCreatureData.attack_flat_bonus)
+    damage_flat: int = 0   # flat +N to the damage-roll total (SpiritCreatureData.damage_flat_bonus)
     wounds_taken: int = 0  # mutable, per spawned instance
 
     def to_dict(self) -> dict:
@@ -56,52 +58,31 @@ class Creature:
         return cls(**{k: v for k, v in data.items() if k in known})
 
 
-def _c(
-    template_id, name, air, earth, fire, water, init_r, init_k,
-    atk_name, atk_r, atk_k, dmg_r, dmg_k, atn, reduction, thresholds, dead, fear,
-    traits=None, tags=None,
-) -> Creature:
-    return Creature(
-        template_id=template_id, name=name, air=air, earth=earth, fire=fire, water=water,
-        initiative_rolled=init_r, initiative_kept=init_k,
-        attack_name=atk_name, attack_rolled=atk_r, attack_kept=atk_k,
-        damage_rolled=dmg_r, damage_kept=dmg_k, armor_tn=atn, reduction=reduction,
-        wound_thresholds=list(thresholds), wounds_dead=dead, fear=fear,
-        traits=traits or {}, tags=tags or [],
-    )
+from .creature_catalog import CATALOG_DATA
+
+# Tags that mark an entry as not a spawnable combatant (environmental hazards).
+_EXCLUDE_TAGS = {"not_creature", "cannot_be_fought"}
 
 
-# --- Starter roster (verbatim from the bestiaries) -------------------------
-# _c(id, name, air, earth, fire, water, init_r, init_k, atk_name, atk_r, atk_k,
-#    dmg_r, dmg_k, armor_tn, reduction, thresholds, wounds_dead, fear, traits, tags)
-CREATURE_CATALOG: dict[str, Creature] = {c.template_id: c for c in [
-    # Natural animals (natural_creature_bestiary.gd)
-    _c("dog", "Dog (Inu)", 1, 2, 1, 1, 4, 3, "Bite", 3, 3, 2, 1, 20, 0, [12], 24, 0,
-       {"reflexes": 3, "agility": 3, "perception": 3}, ["animal", "natural"]),
-    _c("wolf", "Wolf (Ookami)", 1, 3, 2, 3, 4, 3, "Bite", 4, 3, 5, 2, 20, 3, [18], 36, 0,
-       {"reflexes": 3, "agility": 3, "perception": 4}, ["animal", "natural"]),
-    _c("boar", "Boar (Inoshishi)", 1, 5, 1, 2, 4, 3, "Tusks", 5, 3, 5, 2, 20, 12, [30], 75, 0,
-       {"reflexes": 3, "agility": 3, "strength": 4}, ["animal", "natural", "huge"]),
-    _c("crocodile", "Crocodile (Wani)", 1, 3, 2, 2, 4, 3, "Bite", 5, 4, 4, 4, 20, 5, [24, 36], 64, 2,
-       {"reflexes": 3, "stamina": 4, "agility": 4, "strength": 4}, ["animal", "natural", "aquatic"]),
-    _c("eagle", "Eagle (Washi)", 1, 1, 1, 2, 5, 5, "Beak/Talons", 5, 4, 2, 2, 30, 0, [7], 15, 0,
-       {"reflexes": 5, "agility": 4, "perception": 4}, ["animal", "natural", "flying"]),
-    # Shadowlands (shadowlands_beast_bestiary.gd)
-    _c("goblin_warmonger", "Goblin Warmonger", 2, 3, 2, 2, 6, 3, "Katana", 6, 3, 6, 2, 25, 7, [15, 30], 45, 0,
-       {"reflexes": 3, "agility": 3, "strength": 3}, ["shadowlands", "goblin"]),
-    _c("ogre_free", "Free Ogre", 2, 3, 3, 2, 4, 3, "Tetsubo", 8, 4, 9, 3, 30, 15, [20, 40, 60], 80, 2,
-       {"reflexes": 3, "stamina": 6, "strength": 6}, ["shadowlands", "ogre", "huge"]),
-    _c("troll_common", "Troll, Common", 1, 3, 3, 3, 5, 3, "Claws", 6, 3, 6, 3, 20, 5, [20, 40, 65], 90, 0,
-       {"reflexes": 3, "stamina": 5, "strength": 5}, ["shadowlands", "troll"]),
-    # Undead (undead_bestiary.gd)
-    _c("plague_zombie", "Plague Zombie", 0, 3, 0, 1, 1, 1, "Fist", 4, 2, 3, 1, 10, 5, [], 72, 3,
-       {"reflexes": 1, "stamina": 4, "agility": 2, "strength": 3}, ["undead"]),
-    # Oni (oni_bestiary.gd) — lesser (MID tier)
-    _c("morei_no_oni", "Morei no Oni, the Grain Demon", 2, 2, 1, 1, 3, 2, "Claws", 3, 2, 3, 1, 15, 10, [12, 24], 36, 0,
-       {"strength": 2}, ["oni", "immobile"]),
-    _c("quiet_death", "Quiet Death", 1, 2, 1, 4, 3, 3, "Touch", 4, 4, 4, 1, 20, 10, [30, 60], 120, 0,
-       {"reflexes": 3, "stamina": 5, "agility": 4}, ["oni", "amorphous"]),
-]}
+def _build_catalog() -> dict[str, Creature]:
+    out: dict[str, Creature] = {}
+    for raw in CATALOG_DATA:
+        if _EXCLUDE_TAGS & set(raw.get("tags", [])):
+            continue
+        d = dict(raw)
+        # A creature stored with wounds_dead == 0 uses the human wound track
+        # ("human_wounds" tag): Earth ring x 2 per level, 8 levels to death —
+        # the same LOCKED formula as PCs (character_stats.gd). Derive it here.
+        if int(d.get("wounds_dead", 0)) <= 0:
+            per = max(1, int(d.get("earth", 2))) * 2
+            d["wound_thresholds"] = [per * i for i in range(1, 8)]
+            d["wounds_dead"] = per * 8
+        out[d["template_id"]] = Creature(**d)
+    return out
+
+
+# The full bestiary, transcribed verbatim by tools/extract_bestiary.py.
+CREATURE_CATALOG: dict[str, Creature] = _build_catalog()
 
 
 def spawn(template_id: str, instance_name: str) -> Creature | None:
@@ -138,13 +119,16 @@ def roll_creature_initiative(cr: Creature, dice: DiceEngine):
 
 
 def creature_attack(cr: Creature, target_armor_tn: int, dice: DiceEngine, raises: int = 0, bonus: int = 0) -> dict:
-    """The creature's fixed attack vs a target's Armor TN."""
-    return dice.roll_check(cr.attack_rolled, cr.attack_kept, target_armor_tn, raises, bonus, True)
+    """The creature's fixed attack vs a target's Armor TN (plus any attack_flat)."""
+    return dice.roll_check(cr.attack_rolled, cr.attack_kept, target_armor_tn, raises, bonus + cr.attack_flat, True)
 
 
 def creature_damage(cr: Creature, dice: DiceEngine) -> dict:
-    """The creature's fixed damage (exploding)."""
-    return dice.roll_damage(cr.damage_rolled, cr.damage_kept, 0, 0, False, False, True)
+    """The creature's fixed damage (exploding, plus any damage_flat)."""
+    res = dice.roll_damage(cr.damage_rolled, cr.damage_kept, 0, 0, False, False, True)
+    res["raw"] += cr.damage_flat
+    res["final"] = max(0, res["raw"] - res["reduction"])
+    return res
 
 
 def apply_damage_to_creature(cr: Creature, raw_damage: int, reduction: int | None = None) -> dict:

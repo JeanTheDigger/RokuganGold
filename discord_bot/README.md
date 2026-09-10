@@ -123,7 +123,7 @@ that dies at `wounds_dead`).
 
 | Command | What it does |
 |---|---|
-| `/creature catalog` | List the templates you can spawn. |
+| `/creature catalog` | Search the bestiary (`search:` by name/id/tag; omit for a category summary). |
 | `/creature spawn` | DM spawns a creature instance (give it a `name:` to run several). |
 | `/creature list` · `/creature view` · `/creature delete` | Roster / sheet / remove. |
 | `/creature wound` · `/creature heal` | Adjust a creature's wounds directly. |
@@ -134,9 +134,13 @@ attacker rolls their weapon as usual, and the DM-authorized damage goes onto the
 creature's wound track (plain hit or Feint; Disarm/Knockdown against creatures
 aren't wired). `/combat creature` drops a spawned creature into initiative.
 
-*Starter roster (verbatim from your bestiary):* Dog, Wolf, Boar, Crocodile,
-Eagle, Goblin Warmonger, Free Ogre, Common Troll, Plague Zombie, Morei no Oni,
-Quiet Death. More can be transcribed the same way on request.
+*The full bestiary is in* — **208 creatures**, transcribed verbatim from the Godot
+bestiary files by `tools/extract_bestiary.py` (re-runnable): ~42 animals, ~41
+Shadowlands beasts, ~38 oni, ~20 undead, ~53 spirits, plus kenku, tsuno, nezumi,
+ningyo, and named antagonists (the Lost). Creatures whose sheet uses the human
+wound track (`Earth×2`) are handled correctly; one non-combat environmental
+hazard is excluded. `l5r_rules/creature_catalog.py` is generated — don't hand-edit
+it; re-run the extractor to refresh.
 
 **Rooms** (private play rooms — each is a Discord **private thread**)
 
@@ -170,9 +174,12 @@ discord_bot/
 │   ├── stats.py           # Derived values: rings, wound levels, Insight (character_stats.gd).
 │   ├── combat.py          # Attack/damage/armor-TN core (individual_combat.gd s40).
 │   ├── npc_gen.py         # Procedural NPC samurai generator (GDD s22.4, LOCKED).
-│   ├── creature.py        # Bestiary monster stat blocks + creature combat.
+│   ├── creature.py        # Creature model + combat; loads the generated catalog.
+│   ├── creature_catalog.py# AUTO-GENERATED: 208 bestiary stat blocks (verbatim).
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).
 │   └── __init__.py
+├── tools/
+│   └── extract_bestiary.py # Re-runnable transcriber: bestiary .gd → creature_catalog.py.
 ├── requirements.txt       # Python dependencies.
 ├── .env.example           # Template for your secret token. Copy to .env.
 ├── .gitignore             # Keeps .env and the database out of git.

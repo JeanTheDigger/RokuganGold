@@ -1941,14 +1941,41 @@ def _resolve_creature(
     return rec, None
 
 
-@creature_group.command(name="catalog", description="List the creature templates you can spawn.")
-async def creature_catalog(interaction: discord.Interaction) -> None:
+@creature_group.command(name="catalog", description="Search the bestiary templates you can spawn.")
+@app_commands.describe(search="Filter by name, id, or tag (e.g. 'oni', 'goblin', 'wolf'). Omit for a summary.")
+async def creature_catalog(interaction: discord.Interaction, search: str | None = None) -> None:
+    items = sorted(creature.CREATURE_CATALOG.items(), key=lambda kv: kv[1].name)
+    total = len(items)
+    if not search:
+        # No filter: show a category summary (the full list is too long to dump).
+        cats = {}
+        for _, t in items:
+            key = next((tag for tag in ("animal", "oni", "undead", "spirit", "shadowlands") if tag in t.tags), "other")
+            cats[key] = cats.get(key, 0) + 1
+        summary = " · ".join(f"{k} {v}" for k, v in sorted(cats.items()))
+        await interaction.response.send_message(
+            f"👹 **{total} creature templates.** Use `/creature catalog search:<term>` to filter "
+            f"(by name, id, or tag).\nCategories: {summary}",
+            ephemeral=True,
+        )
+        return
+    cur = search.lower().strip()
+    matches = [
+        (tid, t) for tid, t in items
+        if cur in tid or cur in t.name.lower() or any(cur in tag for tag in t.tags)
+    ]
+    if not matches:
+        await interaction.response.send_message(f"No templates match `{search}`.", ephemeral=True)
+        return
     lines = [
         f"• `{tid}` — **{t.name}** (atk {t.attack_rolled}k{t.attack_kept}, dmg "
         f"{t.damage_rolled}k{t.damage_kept}, TN {t.armor_tn}, red {t.reduction}, dead {t.wounds_dead})"
-        for tid, t in sorted(creature.CREATURE_CATALOG.items(), key=lambda kv: kv[1].name)
+        for tid, t in matches[:40]
     ]
-    await interaction.response.send_message("👹 **Bestiary templates:**\n" + "\n".join(lines), ephemeral=True)
+    extra = f"\n…and {len(matches) - 40} more — narrow your search." if len(matches) > 40 else ""
+    await interaction.response.send_message(
+        f"👹 **{len(matches)} match(es) for `{search}`:**\n" + "\n".join(lines) + extra, ephemeral=True
+    )
 
 
 @creature_group.command(name="spawn", description="Spawn a creature instance from a template. DM only.")
