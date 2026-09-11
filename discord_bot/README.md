@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 20 — School Technique effects, tranche 2 (GDD s29)
+## Status: Phase 21 — School Technique effects, tranche 3 (GDD s29)
 
 **Dice**
 
@@ -193,6 +193,11 @@ or always-on); everything else stays DM-adjudicated (full text on the sheet via
 | The Way of the Scorpion (Bayushi 1) | attacker lower Initiative → **+5 Armor TN** † |
 | Speed of Lightning (Kakita 2) | target lower Initiative → **+2k0 attack** † |
 | Wing of Thunder (Kenku 1) | attacker lower Initiative → **+Reflexes + School Rank Armor TN** † |
+| Temper Steel With Honor (Doji Mag. 1) | always → **+Air Ring Armor TN**; jitte/sasumata → **+1k0 attack** |
+| Way of the Dragon (Mirumoto 1) | daishō (katana+wakizashi) → **+School Rank Armor TN** |
+| The Way of Magari-Yarijutsu (Lion Spear 1) | spear/polearm → **+1k0 attack** |
+| Strike Like the Lion (Lion Spear 2) | spear/polearm → **ignore ½ Honor Rank Reduction** |
+| The Face of Justice (Soshi Mag. 1) | melee → **+1k0 damage** |
 
 † Initiative-comparison techniques apply only while both combatants are in the
 channel's `/combat` encounter (so the tracker knows their Initiative); untracked,

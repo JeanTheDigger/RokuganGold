@@ -22,12 +22,20 @@ they fall through to DM adjudication.
 
 from __future__ import annotations
 
+import math
+
 from . import stats
 from .character import Character
+
+_SPEAR_POLEARM = frozenset({"spears", "polearms"})
 
 
 def _known(character: Character) -> set[str]:
     return {t.lower().strip() for t in getattr(character, "techniques", [])}
+
+
+def _skill(weapon_profile: dict) -> str:
+    return str(weapon_profile.get("skill", "")).lower()
 
 
 def _is_two_handed_melee(weapon_profile: dict) -> bool:
@@ -76,6 +84,12 @@ def attacker_attack_dice(
     if "speed of lightning" in known and atk_init is not None and def_init is not None and def_init < atk_init:
         rolled += 2
         notes.append("Speed of Lightning +2k0 attack (target lower Initiative)")
+    if "temper steel with honor" in known and wname in ("jitte", "sasumata"):
+        rolled += 1
+        notes.append("Temper Steel With Honor +1k0 attack (jitte/sasumata)")
+    if "the way of magari-yarijutsu" in known and _skill(weapon_profile) in _SPEAR_POLEARM:
+        rolled += 1
+        notes.append("The Way of Magari-Yarijutsu +1k0 attack (spear/polearm)")
     return rolled, kept, flat, notes
 
 
@@ -107,7 +121,22 @@ def attacker_damage(attacker: Character, weapon_profile: dict, weapon_name: str)
         hr = stats.honor_rank(attacker)
         flat += hr
         notes.append(f"The Lion's Roar +{hr} damage (Honor Rank)")
+    if "the face of justice" in known and weapon_profile.get("melee"):
+        rolled += 1
+        notes.append("The Face of Justice +1k0 damage (melee)")
     return rolled, kept, flat, notes
+
+
+def attacker_reduction_ignored(attacker: Character, weapon_profile: dict) -> tuple[int, list[str]]:
+    """Amount of the target's Reduction ignored by the attacker's known Techniques."""
+    known = _known(attacker)
+    ignore = 0
+    notes: list[str] = []
+    if "strike like the lion" in known and _skill(weapon_profile) in _SPEAR_POLEARM:
+        v = math.ceil(stats.honor_rank(attacker) / 2)
+        ignore += v
+        notes.append(f"Strike Like the Lion ignores {v} Reduction (spear/polearm, ½ Honor Rank)")
+    return ignore, notes
 
 
 def defender_armor_tn_bonus(
@@ -137,6 +166,16 @@ def defender_armor_tn_bonus(
         v = defender.reflexes + max(1, defender.school_rank)
         bonus += v
         notes.append(f"Wing of Thunder +{v} Armor TN (attacker lower Initiative)")
+    if "temper steel with honor" in known:
+        v = stats.ring_value(defender, "air")
+        bonus += v
+        notes.append(f"Temper Steel With Honor +{v} Armor TN (Air Ring)")
+    if "way of the dragon" in known and \
+            defender.equipped_weapon.lower().strip() == "katana" and \
+            defender.off_hand_weapon.lower().strip() == "wakizashi":
+        v = max(1, defender.school_rank)
+        bonus += v
+        notes.append(f"Way of the Dragon +{v} Armor TN (daishō)")
     return bonus, notes
 
 

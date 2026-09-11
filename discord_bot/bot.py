@@ -595,6 +595,9 @@ class DamageView(discord.ui.View):
             t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
             extra_rolled += t_roll
             ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
+            t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp)
+            ignore += t_ignore
+            t_dmg_notes = t_dmg_notes + t_ign_notes
             dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled, t_kept, t_flat)
             raw = dmg["raw_damage"]
             feint_line = ""
@@ -710,6 +713,9 @@ class DamageView(discord.ui.View):
         t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
         extra_rolled += t_roll
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
+        t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp)
+        ignore += t_ignore
+        t_dmg_notes = t_dmg_notes + t_ign_notes
         dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled, t_kept, t_flat)
         raw = dmg["raw_damage"]
         feint_line = ""
