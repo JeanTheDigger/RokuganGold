@@ -111,6 +111,28 @@ ARMOR_CATALOG: dict[str, dict] = {
 def get_armor(armor_name: str) -> dict | None:
     return ARMOR_CATALOG.get(armor_name.lower().strip())
 
+
+def armor_attack_penalty(attacker: Character) -> tuple[int, str]:
+    """Flat penalty on the attack roll from the attacker's armor (s39).
+    Heavy: +5 TN on Agility/Reflexes skills (−5 flat). Tetsu-Do: +10 (or +5
+    if Strength ≥ 5). Hida Bushi R1 (Way of the Crab) ignores heavy armor
+    penalties. Returns (penalty, note) where penalty is ≤ 0."""
+    if not attacker.armor_name:
+        return 0, ""
+    prof = get_armor(attacker.armor_name)
+    if prof is None:
+        return 0, ""
+    kind = prof.get("penalty_kind", "none")
+    if kind not in ("agi_ref", "agi_ref_iron"):
+        return 0, ""
+    known = {t.lower() for t in attacker.known_techniques}
+    if "the way of the crab" in known:
+        return 0, ""
+    if kind == "agi_ref":
+        return -5, "Heavy Armor: −5 attack (Agi/Ref skill TN +5)"
+    pen = -5 if attacker.strength >= 5 else -10
+    return pen, f"Tetsu-Do: {pen} attack (Agi/Ref skill TN +{-pen}, Str {attacker.strength})"
+
 # individual_combat.gd DEFAULT_WEAPON — used for any unknown weapon name.
 DEFAULT_WEAPON: dict = {
     "rolled": 2, "kept": 1, "strength_adds": True, "skill": "Kenjutsu",

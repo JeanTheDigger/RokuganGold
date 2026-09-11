@@ -1305,6 +1305,12 @@ async def attack(
     atk_flat += cond_flat
     kata_notes.extend(cond_atk_notes)
 
+    # Armor attack penalty (s39: Heavy −5, Tetsu-Do −10/−5; Hida R1 exempt).
+    armor_pen, armor_note = combat.armor_attack_penalty(attacker)
+    if armor_pen:
+        atk_flat += armor_pen
+        kata_notes.append(armor_note)
+
     # Defender condition modifiers (Prone -10 Armor TN vs melee).
     # Kept separate from def_kata_bonus so it applies even when an override fires.
     def_conds = def_combatant.conditions if def_combatant else set()

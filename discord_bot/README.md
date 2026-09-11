@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 28 — Missing maneuvers (Called Shot, Extra Attack, Guard)
+## Status: Phase 29 — Armor attack penalties
 
 **Dice**
 
@@ -378,6 +378,10 @@ it lands, the DM authorizes the outcome."*
   Once per Turn (enforced by the encounter tracker).
 - **Spend Void** — `spend_void:true` spends one Void Point for **+1k1** on the attack
   roll (RAW: Void is not valid on damage rolls) and decrements the sheet's pool.
+- **Armor penalty** — Heavy armor imposes **−5** on the attack roll (Agi/Ref skill
+  TN +5); Tetsu-Do imposes **−10** (or **−5** if Strength ≥ 5). Hida Bushi R1
+  ("The Way of the Crab") ignores these penalties. Light/Ashigaru/Riding armor
+  have no attack penalty. Auto-applied when the attacker has armor equipped.
 
 **Initiative tracker** (`/combat`, one encounter per channel)
 
@@ -433,9 +437,10 @@ targets (no VP) and knockdown maneuvers (no damage). **Called Shot** (1–4 rais
 labels the targeted body part in the damage embed; **Extra Attack** (5 raises)
 auto-fires a second attack roll after the first hit resolves (once per Turn);
 **Guard** (`/combat guard`) assigns a ward (+10 TN) and penalizes the guarder
-(−5 TN), clearing on the guarder's next turn. Dual-wielding and
-thrown/charge maneuvers are still **not** modelled — the DM can express those
-with `raises`/`bonus_tn`.
+(−5 TN), clearing on the guarder's next turn. **Armor attack penalties** (s39)
+auto-apply: Heavy −5, Tetsu-Do −10 (−5 if Str ≥ 5); Hida Bushi R1 is exempt.
+Dual-wielding and thrown/charge maneuvers are still **not** modelled — the DM
+can express those with `raises`/`bonus_tn`.
 
 **Creatures / monsters** (stat blocks transcribed **verbatim** from the bestiaries)
 
