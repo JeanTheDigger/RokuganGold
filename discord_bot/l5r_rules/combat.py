@@ -25,6 +25,8 @@ No game values are invented — every number traces to the GDScript / GDD.
 
 from __future__ import annotations
 
+import math
+
 from . import stats
 from .character import Character
 from .dice import DiceEngine
@@ -132,6 +134,28 @@ def armor_attack_penalty(attacker: Character) -> tuple[int, str]:
         return -5, "Heavy Armor: −5 attack (Agi/Ref skill TN +5)"
     pen = -5 if attacker.strength >= 5 else -10
     return pen, f"Tetsu-Do: {pen} attack (Agi/Ref skill TN +{-pen}, Str {attacker.strength})"
+
+
+def roll_full_defense(
+    reflexes: int,
+    defense_skill: int,
+    dice_engine: DiceEngine,
+) -> dict:
+    """Full Defense Stance (s40): Defense/Reflexes roll, add half (rounded up)
+    to Armor TN until the character's next Turn. Complex Action."""
+    rolled = reflexes + defense_skill
+    kept = reflexes
+    explodes = defense_skill > 0
+    result = dice_engine.roll_and_keep(rolled, kept, explodes)
+    bonus = math.ceil(result.total / 2)
+    return {
+        "total": result.total,
+        "bonus": bonus,
+        "rolled": rolled,
+        "kept": kept,
+        "detail": str(result),
+    }
+
 
 # individual_combat.gd DEFAULT_WEAPON — used for any unknown weapon name.
 DEFAULT_WEAPON: dict = {

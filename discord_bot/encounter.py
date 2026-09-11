@@ -38,6 +38,9 @@ class Combatant:
     # Guard maneuver (s40): name of the combatant being guarded, or empty.
     # Ward gets +10 Armor TN, guarder gets -5 Armor TN. Clears on guarder's turn.
     guarding: str = ""
+    # Full Defense (s40): Defense/Reflexes roll bonus added to Armor TN.
+    # Set by /combat full_defense; clears on combatant's next turn.
+    full_defense_bonus: int = 0
 
     def consume_once(self, key: str, scope: str) -> bool:
         """Try to spend a once-per-`scope` ability ('turn' or 'round'). Returns
@@ -113,4 +116,5 @@ class Encounter:
         if cur is not None:
             cur.used_this_turn.clear()
             cur.guarding = ""
+            cur.full_defense_bonus = 0
         return cur

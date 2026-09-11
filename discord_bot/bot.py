@@ -919,6 +919,7 @@ class DamageView(discord.ui.View):
         is_melee = wp.get("melee", True)
         enc = encounters.get(self.channel_id)
         def_conds = set()
+        dc = None
         if enc:
             dc = enc.find(target.name)
             if dc:
@@ -927,10 +928,19 @@ class DamageView(discord.ui.View):
             def_conds, target.reflexes, target.armor_tn_bonus, is_melee,
         )
         cond_def_mod, _ = condition_effects.defender_armor_tn_mod(def_conds, is_melee)
+        guard_mod2 = 0
+        fd_bonus2 = dc.full_defense_bonus if dc else 0
+        if enc:
+            for gc in enc.combatants:
+                if gc.guarding.lower() == target.name.lower():
+                    guard_mod2 += 10
+                    break
+            if dc and dc.guarding:
+                guard_mod2 -= 5
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod
+            tn = cond_tn_ovr + cond_def_mod + guard_mod2 + fd_bonus2
         else:
-            tn = combat.armor_tn(target, self.defender_stance) + cond_def_mod
+            tn = combat.armor_tn(target, self.defender_stance) + cond_def_mod + guard_mod2 + fd_bonus2
         outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, engine)
         hit = outcome["hit"]
         embed2 = discord.Embed(
@@ -1339,6 +1349,12 @@ async def attack(
             guard_mod -= 5
             kata_notes.append(f"Guarding {def_combatant.guarding}: −5 Armor TN")
 
+    # Full Defense bonus (s40): half of Defense/Reflexes roll, set by /combat full_defense.
+    fd_bonus = 0
+    if def_combatant and def_combatant.full_defense_bonus:
+        fd_bonus = def_combatant.full_defense_bonus
+        kata_notes.append(f"Full Defense: +{fd_bonus} Armor TN")
+
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
         t_name = target_creature_rec.creature.name
@@ -1353,10 +1369,10 @@ async def attack(
             is_melee_attack,
         )
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod + bonus_tn
+            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + bonus_tn
             kata_notes.extend(cond_tn_notes)
         else:
-            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod)
+            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus)
 
     outcome = combat.resolve_attack(
         attacker, weapon, tn, raises + maneuver_raises, engine,
@@ -2210,7 +2226,8 @@ def _render_encounter(enc: encounter.Encounter) -> str:
         detail = f"  ·  {c.initiative_detail}" if c.initiative_detail else ""
         cond = f"  [{', '.join(sorted(c.conditions))}]" if c.conditions else ""
         guard = f"  🛡️→{c.guarding}" if c.guarding else ""
-        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}{cond}{guard}")
+        fd = f"  🛡️FD+{c.full_defense_bonus}" if c.full_defense_bonus else ""
+        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}{cond}{guard}{fd}")
     header = f"⚔️ **Round {enc.round}**" if enc.started else "⚔️ **Not started** — use `/combat next` to begin."
     return header + "\n" + "\n".join(lines)
 
@@ -2508,6 +2525,63 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
         f"🛡️ **{g.name}** is guarding **{w.name}**.\n"
         f"  Ward: +10 Armor TN · Guarder: −5 Armor TN\n"
         f"  Expires at the start of {g.name}'s next turn."
+    )
+
+
+@combat_group.command(name="full_defense", description="Full Defense: Defense/Reflexes roll, half (rounded up) added to Armor TN until next turn.")
+@app_commands.describe(
+    combatant="The combatant entering Full Defense.",
+    reflexes="Override Reflexes (for ad-hoc NPCs without a sheet).",
+    defense_skill="Override Defense skill rank (for ad-hoc NPCs without a sheet).",
+)
+async def combat_full_defense(
+    interaction: discord.Interaction,
+    combatant: str,
+    reflexes: app_commands.Range[int, 1, 10] | None = None,
+    defense_skill: app_commands.Range[int, 0, 10] | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can declare Full Defense.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    cb = enc.find(combatant)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
+        return
+    ref = reflexes
+    def_sk = defense_skill
+    if ref is None or def_sk is None:
+        guild = str(interaction.guild_id)
+        rec = None
+        if cb.is_npc:
+            rec = store.get_by_name(guild, NPC_OWNER, cb.name)
+        elif cb.owner_id:
+            rec = store.get_active(guild, cb.owner_id)
+        if rec is not None:
+            if ref is None:
+                ref = rec.character.reflexes
+            if def_sk is None:
+                def_sk = rec.character.skills.get("Defense", 0)
+    if ref is None or def_sk is None:
+        await interaction.response.send_message(
+            f"Cannot resolve stats for **{cb.name}**. Provide `reflexes:` and `defense_skill:` explicitly.",
+            ephemeral=True,
+        )
+        return
+    result = combat.roll_full_defense(ref, def_sk, engine)
+    cb.full_defense_bonus = result["bonus"]
+    await interaction.response.send_message(
+        f"🛡️ **{cb.name}** enters **Full Defense**.\n"
+        f"  Roll: {result['rolled']}k{result['kept']} → **{result['total']}** · "
+        f"half (rounded up) = **+{result['bonus']} Armor TN**\n"
+        f"  Complex Action — only Free Actions until next turn.\n"
+        f"  Expires at the start of {cb.name}'s next turn."
     )
 
 

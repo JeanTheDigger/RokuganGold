@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 29 — Armor attack penalties
+## Status: Phase 30 — Full Defense roll
 
 **Dice**
 
@@ -397,6 +397,7 @@ it lands, the DM authorizes the outcome."*
 | `/combat condition_clear` | Remove a condition from a combatant (DM only). |
 | `/combat conditions` | Show a combatant's active conditions and their DM-adjudicated effects. |
 | `/combat guard` | Guard another combatant (DM only). Ward gets +10 Armor TN, guarder gets −5. Clears on guarder's next turn. |
+| `/combat full_defense` | Full Defense (DM only). Rolls Defense/Reflexes, adds half (rounded up) to Armor TN until next turn. Complex Action. |
 
 Initiative order is in-memory scratch state (a bot restart clears an in-progress
 fight; sheets and wounds are in the database and persist). Each combatant also
@@ -405,7 +406,8 @@ carries **round/turn usage state**, **active conditions**, and **guard state** �
 assignment, and, at the top of a new Round, everyone's once-per-Round abilities —
 which is what lets `/attack` enforce rate-limited Kata (see the Active-Kata
 section). Conditions display inline in the initiative listing (e.g. `[dazed,
-prone]`), and active guards show as `🛡️→WardName`.
+prone]`), active guards show as `🛡️→WardName`, and Full Defense as
+`🛡️FD+N`.
 
 **NPCs** (generated from **GDD s22.4** — Generation Templates, LOCKED)
 
@@ -439,6 +441,8 @@ auto-fires a second attack roll after the first hit resolves (once per Turn);
 **Guard** (`/combat guard`) assigns a ward (+10 TN) and penalizes the guarder
 (−5 TN), clearing on the guarder's next turn. **Armor attack penalties** (s39)
 auto-apply: Heavy −5, Tetsu-Do −10 (−5 if Str ≥ 5); Hida Bushi R1 is exempt.
+**Full Defense** (`/combat full_defense`) rolls Defense/Reflexes and adds half
+(rounded up) to Armor TN until the combatant's next turn — a Complex Action.
 Dual-wielding and thrown/charge maneuvers are still **not** modelled — the DM
 can express those with `raises`/`bonus_tn`.
 
