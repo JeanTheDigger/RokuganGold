@@ -15,6 +15,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+VALID_CONDITIONS: frozenset[str] = frozenset({
+    "blinded", "dazed", "entangled", "fatigued",
+    "grappled", "mounted", "prone", "stunned",
+})
+
+
 @dataclass
 class Combatant:
     name: str
@@ -27,6 +33,8 @@ class Combatant:
     # clears at the top of each new Round. Used to enforce rate-limited kata.
     used_this_turn: set[str] = field(default_factory=set)
     used_this_round: set[str] = field(default_factory=set)
+    # Combat conditions (GDD s40): transient per-encounter, DM-managed.
+    conditions: set[str] = field(default_factory=set)
 
     def consume_once(self, key: str, scope: str) -> bool:
         """Try to spend a once-per-`scope` ability ('turn' or 'round'). Returns

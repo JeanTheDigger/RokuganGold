@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 25 — Kiho combat effects (GDD s38)
+## Status: Phase 26 — Condition tracking (GDD s40)
 
 **Dice**
 
@@ -200,6 +200,27 @@ Soul, Earth Palm), cumulative tracking (Rising Mountain), action-economy changes
 (Dance of the Flames), and non-combat effects. Auto-applied kiho are suppressed
 from the reminder line to reduce noise.
 
+**Auto-applied Condition effects** — when a combatant has a condition set via
+`/combat condition_set`, `/attack` applies the modifier automatically
+(`l5r_rules/condition_effects.py`). Successful Knockdown maneuvers auto-set
+Prone on the target. **15 effects across 7 conditions:**
+
+| Condition | Auto-applied in `/attack` |
+|---|---|
+| Blinded | attacker: melee **−1k1**, ranged **−3k3**; defender Armor TN = **Reflexes + 5 + armor** |
+| Dazed | attacker: **−3k0** to all actions |
+| Fatigued | attacker: **+5 TN** (applied as −5 flat to attack roll) |
+| Grappled | defender: Armor TN = **5 + armor bonus** |
+| Mounted | attacker: **+1k0** attack rolls (vs unmounted/lower) |
+| Prone | defender: **−10** Armor TN vs melee; attacker: **−2k0** with Medium/Small, **cannot attack** with Large |
+| Stunned | defender: Armor TN = **5 + armor bonus** |
+
+**Entangled** is reminder-only (break-free TN set by DM). Each condition also
+displays non-auto-applied reminders (movement restrictions, stance limits,
+recovery rolls) in the DM-adjudicates section of the attack embed. Conditions
+are transient per-encounter state on the Combatant — they are cleared when the
+encounter ends, not persisted to the database.
+
 **Schools & Techniques** (all of **GDD s29**, transcribed verbatim)
 
 Every school **and path** and its techniques are in the bot — **347 entries**
@@ -362,13 +383,17 @@ it lands, the DM authorizes the outcome."*
 | `/combat next` | Advance to the next combatant; wraps and bumps the round. |
 | `/combat status` | Show the current order and whose turn it is. |
 | `/combat remove` / `/combat end` | Drop a combatant / end the encounter. |
+| `/combat condition_set` | Apply a condition to a combatant (DM only). 8 choices: Blinded, Dazed, Entangled, Fatigued, Grappled, Mounted, Prone, Stunned. |
+| `/combat condition_clear` | Remove a condition from a combatant (DM only). |
+| `/combat conditions` | Show a combatant's active conditions and their DM-adjudicated effects. |
 
 Initiative order is in-memory scratch state (a bot restart clears an in-progress
 fight; sheets and wounds are in the database and persist). Each combatant also
-carries **round/turn usage state** — `/combat next` resets the incoming actor's
-once-per-Turn abilities and, at the top of a new Round, everyone's once-per-Round
-abilities — which is what lets `/attack` enforce rate-limited Kata (see the
-Active-Kata section).
+carries **round/turn usage state** and **active conditions** — `/combat next`
+resets the incoming actor's once-per-Turn abilities and, at the top of a new
+Round, everyone's once-per-Round abilities — which is what lets `/attack` enforce
+rate-limited Kata (see the Active-Kata section). Conditions display inline in the
+initiative listing (e.g. `[dazed, prone]`).
 
 **NPCs** (generated from **GDD s22.4** — Generation Templates, LOCKED)
 
@@ -390,11 +415,12 @@ their ranks; Ranks are capped at **1–5** (s22.4 gives no 6+ ranges); koku is t
 NPCs can be tuned field-by-field with the `/npc` editors above.
 
 *Still faithful-core:* deterministic subsets of **Kata**, **School Techniques**,
-**Skill Masteries**, **Advantages/Disadvantages**, and **Kiho** now auto-apply in
-`/attack` (see the tables above); the rest of Kata, most Techniques, and most
-Kiho stay DM-adjudicated (shown as reminders; technique text on the sheet via
-`/school view`). Dual-wielding and thrown/charge/called-shot maneuvers are still
-**not** modelled — the DM can express those with `raises`/`bonus_tn`.
+**Skill Masteries**, **Advantages/Disadvantages**, **Kiho**, and **Conditions**
+now auto-apply in `/attack` (see the tables above); the rest of Kata, most
+Techniques, and most Kiho stay DM-adjudicated (shown as reminders; technique
+text on the sheet via `/school view`). Dual-wielding and thrown/charge/called-shot
+maneuvers are still **not** modelled — the DM can express those with
+`raises`/`bonus_tn`.
 
 **Creatures / monsters** (stat blocks transcribed **verbatim** from the bestiaries)
 
@@ -471,6 +497,7 @@ discord_bot/
 │   ├── skill_mastery.py   # Weapon Skill Mastery combat modifiers for /attack (GDD s24).
 │   ├── advantage_effects.py # Advantage/Disadvantage combat modifiers for /attack (GDD s45).
 │   ├── kiho_effects.py    # Active-Kiho combat modifiers for /attack (GDD s38).
+│   ├── condition_effects.py # Condition combat modifiers for /attack (GDD s40).
 │   ├── kiho.py            # Access helpers over the kiho catalog (GDD s38).
 │   ├── kiho_catalog.py    # AUTO-GENERATED: 73 Kiho (verbatim).
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).

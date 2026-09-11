@@ -20,8 +20,9 @@ from discord import app_commands
 import encounter
 import storage
 from l5r_rules import (
-    advancement, advantage_effects, advantages, combat, creature, enums, kata, kata_effects,
-    kiho, kiho_effects, npc_gen, schools, skill_mastery, spells, stats, technique_effects,
+    advancement, advantage_effects, advantages, combat, condition_effects, creature, enums,
+    kata, kata_effects, kiho, kiho_effects, npc_gen, schools, skill_mastery, spells, stats,
+    technique_effects,
 )
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
@@ -694,6 +695,12 @@ class DamageView(discord.ui.View):
 
         if self.maneuver == "knockdown":
             kd = combat.resolve_knockdown(attacker, target, engine)
+            if kd["knocked_down"]:
+                enc = encounters.get(interaction.channel_id)
+                if enc:
+                    def_c = enc.find(target.name)
+                    if def_c:
+                        def_c.conditions.add("prone")
             embed = discord.Embed(
                 title="🥋 Knockdown",
                 color=discord.Color.green() if kd["knocked_down"] else discord.Color.greyple(),
@@ -1112,6 +1119,23 @@ async def attack(
         atk_flat += kiho_wp_mod
         kata_notes.extend(kiho_wp_notes)
 
+    # Condition-based attack modifiers (GDD s40: Blinded, Dazed, Fatigued, Mounted, Prone).
+    atk_conds = atk_combatant.conditions if atk_combatant else set()
+    cond_rolled, cond_kept, cond_flat, cond_atk_notes = condition_effects.attacker_attack_dice(
+        atk_conds, atk_weapon_profile
+    )
+    bonus_rolled += cond_rolled
+    bonus_kept += cond_kept
+    atk_flat += cond_flat
+    kata_notes.extend(cond_atk_notes)
+
+    # Defender condition modifiers (Prone -10 Armor TN vs melee).
+    # Kept separate from def_kata_bonus so it applies even when an override fires.
+    def_conds = def_combatant.conditions if def_combatant else set()
+    is_melee_attack = atk_weapon_profile.get("melee", True)
+    cond_def_mod, cond_def_notes = condition_effects.defender_armor_tn_mod(def_conds, is_melee_attack)
+    kata_notes.extend(cond_def_notes)
+
     # Skill mastery: free raises that reduce a maneuver's raise cost (s24).
     mastery_free, mastery_free_notes = skill_mastery.maneuver_free_raises(
         attacker, atk_weapon_profile, weapon, man
@@ -1126,7 +1150,18 @@ async def attack(
         tn = target_creature_rec.creature.armor_tn + bonus_tn
     else:
         t_name = target_rec.character.name
-        tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus)
+        # Condition Armor TN override (Stunned/Grappled/Blinded replace the formula).
+        # Overrides ignore stance and kata/technique bonuses (GDD: "5 + armor bonuses").
+        # Condition modifiers (Prone -10) still stack on top.
+        cond_tn_ovr, cond_tn_notes = condition_effects.defender_armor_tn_override(
+            def_conds, target_rec.character.reflexes, target_rec.character.armor_tn_bonus,
+            is_melee_attack,
+        )
+        if cond_tn_ovr is not None:
+            tn = cond_tn_ovr + cond_def_mod + bonus_tn
+            kata_notes.extend(cond_tn_notes)
+        else:
+            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod)
 
     outcome = combat.resolve_attack(
         attacker, weapon, tn, raises + maneuver_raises, engine,
@@ -1174,6 +1209,11 @@ async def attack(
     reminders = _active_ability_reminders(attacker, "attacker", drop_rate_limited=rate_limited_handled)
     if target_creature_rec is None:
         reminders += _active_ability_reminders(target_rec.character, "defender")
+    # Condition reminders for non-auto-applied effects (movement, stance limits, recovery).
+    cond_reminders = condition_effects.condition_reminders(atk_conds)
+    if def_conds:
+        cond_reminders += condition_effects.condition_reminders(def_conds)
+    reminders += cond_reminders
     if reminders:
         embed.add_field(
             name="Active abilities — DM adjudicates",
@@ -1970,7 +2010,8 @@ def _render_encounter(enc: encounter.Encounter) -> str:
         marker = "▶️ " if (enc.started and c is cur) else f"{i + 1}. "
         tag = " *(NPC)*" if c.is_npc else ""
         detail = f"  ·  {c.initiative_detail}" if c.initiative_detail else ""
-        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}")
+        cond = f"  [{', '.join(sorted(c.conditions))}]" if c.conditions else ""
+        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}{cond}")
     header = f"⚔️ **Round {enc.round}**" if enc.started else "⚔️ **Not started** — use `/combat next` to begin."
     return header + "\n" + "\n".join(lines)
 
@@ -2141,6 +2182,99 @@ async def combat_npc(interaction: discord.Interaction, name: str) -> None:
         is_npc=True,
     ))
     await interaction.response.send_message(_render_encounter(enc))
+
+
+_CONDITION_CHOICES = [
+    app_commands.Choice(name=c.title(), value=c)
+    for c in sorted(encounter.VALID_CONDITIONS)
+]
+
+
+@combat_group.command(name="condition_set", description="Apply a condition to a combatant (DM only).")
+@app_commands.describe(
+    name="The combatant to affect.",
+    condition="The condition to apply.",
+)
+@app_commands.choices(condition=_CONDITION_CHOICES)
+async def combat_condition_set(
+    interaction: discord.Interaction,
+    name: str,
+    condition: app_commands.Choice[str],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can set conditions.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    c = enc.find(name)
+    if c is None:
+        await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
+        return
+    c.conditions.add(condition.value)
+    await interaction.response.send_message(
+        f"**{c.name}** is now **{condition.name}**.\n\n{_render_encounter(enc)}"
+    )
+
+
+@combat_group.command(name="condition_clear", description="Remove a condition from a combatant (DM only).")
+@app_commands.describe(
+    name="The combatant to affect.",
+    condition="The condition to remove.",
+)
+@app_commands.choices(condition=_CONDITION_CHOICES)
+async def combat_condition_clear(
+    interaction: discord.Interaction,
+    name: str,
+    condition: app_commands.Choice[str],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can clear conditions.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    c = enc.find(name)
+    if c is None:
+        await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
+        return
+    c.conditions.discard(condition.value)
+    await interaction.response.send_message(
+        f"**{c.name}** is no longer **{condition.name}**.\n\n{_render_encounter(enc)}"
+    )
+
+
+@combat_group.command(name="conditions", description="Show a combatant's active conditions.")
+@app_commands.describe(name="The combatant to check.")
+async def combat_conditions(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    c = enc.find(name)
+    if c is None:
+        await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
+        return
+    if not c.conditions:
+        await interaction.response.send_message(f"**{c.name}** has no active conditions.")
+        return
+    cond_list = ", ".join(sorted(c.conditions))
+    reminders = condition_effects.condition_reminders(c.conditions)
+    lines = f"**{c.name}** conditions: {cond_list}"
+    if reminders:
+        lines += "\n" + "\n".join(reminders)
+    await interaction.response.send_message(lines)
 
 
 # ===========================================================================
