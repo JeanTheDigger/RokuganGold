@@ -22,6 +22,20 @@ class Combatant:
     initiative_detail: str = ""       # e.g. "kept [7, 4] = 11"
     owner_id: str | None = None       # Discord user id for a player character; None for NPCs
     is_npc: bool = False
+    # Keys of "once per Turn" / "once per Round" abilities already spent (L5R s30).
+    # used_this_turn clears when this combatant's turn begins; used_this_round
+    # clears at the top of each new Round. Used to enforce rate-limited kata.
+    used_this_turn: set[str] = field(default_factory=set)
+    used_this_round: set[str] = field(default_factory=set)
+
+    def consume_once(self, key: str, scope: str) -> bool:
+        """Try to spend a once-per-`scope` ability ('turn' or 'round'). Returns
+        True if it was available (and marks it spent), False if already used."""
+        bucket = self.used_this_turn if scope == "turn" else self.used_this_round
+        if key in bucket:
+            return False
+        bucket.add(key)
+        return True
 
 
 @dataclass
@@ -62,8 +76,19 @@ class Encounter:
             return None
         return self.combatants[self.turn_index % len(self.combatants)]
 
+    def find(self, name: str) -> Combatant | None:
+        """The combatant with this name (case-insensitive), or None."""
+        lowered = name.lower()
+        for c in self.combatants:
+            if c.name.lower() == lowered:
+                return c
+        return None
+
     def advance(self) -> Combatant | None:
-        """Advance to the next combatant; wraps and increments the round."""
+        """Advance to the next combatant; wraps and increments the round.
+
+        Resets the incoming actor's once-per-Turn abilities, and every
+        combatant's once-per-Round abilities at the top of a new Round."""
         if not self.combatants:
             return None
         self.started = True
@@ -71,4 +96,9 @@ class Encounter:
         if self.turn_index >= len(self.combatants):
             self.turn_index = 0
             self.round += 1
-        return self.current()
+            for c in self.combatants:
+                c.used_this_round.clear()
+        cur = self.current()
+        if cur is not None:
+            cur.used_this_turn.clear()
+        return cur

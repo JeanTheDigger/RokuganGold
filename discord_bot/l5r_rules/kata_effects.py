@@ -186,6 +186,62 @@ def attacker_reduction_ignored(attacker: Character, weapon_profile: dict) -> tup
     return 0, ""
 
 
+# --- Rate-limited kata (once per Turn/Round) --------------------------------
+# These are deterministic except for their usage limit, which only a live round
+# tracker can enforce. The bot applies them ONLY while an encounter is tracking
+# the attacker; otherwise they stay DM-adjudicated reminders. Each key here is
+# the encounter usage-set key; the scope says which set gates it.
+RATE_LIMITED_SCOPE: dict[str, str] = {
+    "striking as fire": "round",        # Full Attack -> +Fire to one attack/Round
+    "strength in arms style": "turn",   # Heavy Weapon -> Strength for attack, once/Turn
+    "strength of the scorpion": "turn",  # after a Feint -> +3 damage, once/Turn
+    "power of the tsunami": "round",     # ignore Reduction = Water Ring, once/Round
+}
+
+
+def is_rate_limited(name: str) -> bool:
+    return (name or "").lower().strip() in RATE_LIMITED_SCOPE
+
+
+def rate_limited_scope(name: str) -> str:
+    return RATE_LIMITED_SCOPE.get((name or "").lower().strip(), "")
+
+
+def striking_as_fire_bonus(attacker: Character, attacker_stance: str) -> tuple[int, str]:
+    """Striking as Fire: in Full Attack Stance, add Fire Ring to the total of one
+    attack roll per Round (s30). Rate limit enforced by the caller."""
+    if _active(attacker) == "striking as fire" and attacker_stance == "full_attack":
+        v = stats.ring_value(attacker, "fire")
+        return v, f"Striking as Fire +{v} to attack (Full Attack, 1/Round)"
+    return 0, ""
+
+
+def strength_in_arms_override(attacker: Character, weapon_profile: dict) -> tuple[int | None, str]:
+    """Strength in Arms Style: once per Turn while wielding a Heavy Weapon, use
+    Strength instead of Agility for an attack roll (s30)."""
+    if _active(attacker) == "strength in arms style":
+        if str(weapon_profile.get("skill", "")).lower() == _HEAVY_WEAPON_SKILL:
+            return attacker.strength, "Strength in Arms: Strength replaces Agility on the attack roll (1/Turn)"
+    return None, ""
+
+
+def scorpion_feint_damage(attacker: Character, maneuver: str) -> tuple[int, str]:
+    """Strength of the Scorpion: once per Turn, after a successful Feint Maneuver,
+    damage total is increased by +3 Wounds (s30)."""
+    if _active(attacker) == "strength of the scorpion" and maneuver == "feint":
+        return 3, "Strength of the Scorpion +3 damage (after Feint, 1/Turn)"
+    return 0, ""
+
+
+def tsunami_ignore_reduction(attacker: Character) -> tuple[int, str]:
+    """Power of the Tsunami: once per Round when attacking, ignore Reduction
+    equal to Water Ring (s30)."""
+    if _active(attacker) == "power of the tsunami":
+        v = stats.ring_value(attacker, "water")
+        return v, f"Power of the Tsunami ignores {v} Reduction (1/Round)"
+    return 0, ""
+
+
 def active_kata_reminder(character: Character) -> str:
     """Effect text of an active kata the bot does NOT auto-apply, for the DM.
 

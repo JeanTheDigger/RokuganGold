@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 16 — active-Kata combat effects (GDD s30 & s38)
+## Status: Phase 17 — round/turn state & rate-limited Kata (GDD s30)
 
 **Dice**
 
@@ -115,10 +115,26 @@ faithfully from the sheet, the chosen stance, the maneuver, and the weapon
 Weapon-conditional Kata read what the character is **wielding** — set that with
 `/sheet wield weapon: off_hand:` (it also becomes `/attack`'s default weapon).
 
+**Rate-limited Kata — enforced while a `/combat` encounter is running.** The
+initiative tracker now carries real round/turn state (it resets each combatant's
+*once-per-Turn* abilities when their turn begins and everyone's *once-per-Round*
+abilities at the top of a new Round). When the attacker is a combatant in the
+channel's encounter, `/attack` applies these and marks them spent; attack again
+in the same Turn/Round and it says "already used." **Without** a tracked
+encounter the bot can't count rounds, so they fall back to a DM reminder:
+
+| Kata | Enforced effect |
+|---|---|
+| Striking as Fire | Full Attack → **+Fire Ring** to one attack **per Round** |
+| Strength in Arms Style | Heavy Weapon → **Strength** replaces Agility on one attack **per Turn** |
+| Strength of the Scorpion | after a Feint → **+3 damage**, once **per Turn** |
+| Power of the Tsunami | ignore **Water Ring** of Reduction, once **per Round** |
+
 Everything else stays **DM-adjudicated on purpose** and is surfaced as a reminder
-line on the attack, never silently applied or dropped: rate-limited effects
-("once per Turn/Round" — the stateless `/attack` has no round tracking), "up to X"
-player-choice tradeoffs, and Initiative/movement/mount/ally/guard effects. **All
+line on the attack, never silently applied or dropped: the remaining rate-limited
+effects (those that also need a chosen target or an opponent-debuff the bot
+doesn't model), "up to X" player-choice tradeoffs, and Initiative/movement/mount/
+ally/guard effects. **All
 Kiho** are reminder-only (activation cost — a Void Point or Meditation/Void roll —
 and durations are DM-adjudicated); their category limits (one Internal/Kharmic/
 Mystical, Martial stacks) *are* enforced by `/sheet kiho_activate`.
@@ -223,7 +239,11 @@ it lands, the DM authorizes the outcome."*
 | `/combat remove` / `/combat end` | Drop a combatant / end the encounter. |
 
 Initiative order is in-memory scratch state (a bot restart clears an in-progress
-fight; sheets and wounds are in the database and persist).
+fight; sheets and wounds are in the database and persist). Each combatant also
+carries **round/turn usage state** — `/combat next` resets the incoming actor's
+once-per-Turn abilities and, at the top of a new Round, everyone's once-per-Round
+abilities — which is what lets `/attack` enforce rate-limited Kata (see the
+Active-Kata section).
 
 **NPCs** (generated from **GDD s22.4** — Generation Templates, LOCKED)
 

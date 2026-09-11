@@ -545,6 +545,22 @@ class DamageView(discord.ui.View):
             status += "  💀 **DEAD**"
         return status
 
+    def _rate_limited_damage(self, interaction: discord.Interaction, attacker: Character):
+        """Enforce once-per-Turn/Round damage-side kata against the live tracker.
+        Returns (scorpion_bonus, scorpion_note, tsunami_ignore, tsunami_note); an
+        effect fires only while an encounter is tracking the attacker."""
+        enc = encounters.get(interaction.channel_id)
+        combatant = enc.find(attacker.name) if enc else None
+        scorp_bonus, scorp_note = 0, ""
+        val, note = kata_effects.scorpion_feint_damage(attacker, self.maneuver)
+        if val and _rate_status(combatant, "scorpion", "turn") == "apply":
+            scorp_bonus, scorp_note = val, note
+        tsu_ignore, tsu_note = 0, ""
+        val, note = kata_effects.tsunami_ignore_reduction(attacker)
+        if val and _rate_status(combatant, "tsunami", "round") == "apply":
+            tsu_ignore, tsu_note = val, note
+        return scorp_bonus, scorp_note, tsu_ignore, tsu_note
+
     @discord.ui.button(label="Roll & Apply Damage", style=discord.ButtonStyle.danger, emoji="⚔️")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not _is_dm(interaction):
@@ -574,8 +590,10 @@ class DamageView(discord.ui.View):
                 fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
                 raw += fb
                 feint_line = f"\nFeint bonus **+{fb}**"
-            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note) if n)
-            reduction = max(0, cre_rec.creature.reduction - ignore)
+            scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
+            raw += scorp_bonus
+            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note) if n)
+            reduction = max(0, cre_rec.creature.reduction - ignore - tsu_ignore)
             applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction)
             store.save_creature(cre_rec)
             cr = cre_rec.creature
@@ -686,8 +704,10 @@ class DamageView(discord.ui.View):
             raw += fb
             feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
         crab_bonus, crab_note = kata_effects.defender_reduction_bonus(target, self.defender_stance)
-        kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note) if n)
-        reduction = max(0, target.armor_reduction - ignore + crab_bonus)
+        scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
+        raw += scorp_bonus
+        kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note) if n)
+        reduction = max(0, target.armor_reduction - ignore - tsu_ignore + crab_bonus)
         applied = combat.apply_damage(target, raw, reduction)
         store.save(target_rec)
 
@@ -726,13 +746,26 @@ class DamageView(discord.ui.View):
         )
 
 
-def _active_ability_reminders(c: Character, role: str) -> list[str]:
+def _rate_status(combatant, key: str, scope: str) -> str:
+    """Gate a once-per-Turn/Round kata against the live encounter tracker.
+
+    Returns 'apply' (available — and marks it spent), 'used' (already spent this
+    Turn/Round), or 'untracked' (no encounter is tracking this attacker, so the
+    limit can't be enforced and the effect stays a DM-adjudicated reminder)."""
+    if combatant is None:
+        return "untracked"
+    return "apply" if combatant.consume_once(key, scope) else "used"
+
+
+def _active_ability_reminders(c: Character, role: str, drop_rate_limited: bool = False) -> list[str]:
     """DM reminder lines for a combatant's active kata/kiho that the bot does NOT
     auto-apply (rate-limited, positional, tradeoff, or every kiho). The
-    deterministic kata are folded into the roll instead and shown separately."""
+    deterministic kata are folded into the roll instead and shown separately.
+    `drop_rate_limited` skips the kata line when a rate-limited kata was already
+    enforced against the live tracker (the roll shows the enforced note instead)."""
     lines: list[str] = []
     kata_text = kata_effects.active_kata_reminder(c)
-    if kata_text:
+    if kata_text and not (drop_rate_limited and kata_effects.is_rate_limited(c.active_kata)):
         active = c.active_kata
         lines.append(f"**{role.capitalize()} kata — {active}:** {kata_text}")
     for name in getattr(c, "active_kiho", []) or []:
@@ -873,7 +906,13 @@ async def attack(
             void_line = " · 🌀 no Void Points to spend"
 
     # Active-kata combat modifiers (GDD s30; deterministic subset only).
-    kata_notes: list[str] = []
+    kata_notes: list[str] = []          # effects auto-applied to this roll
+    rl_used_notes: list[str] = []       # rate-limited effects already spent this Turn/Round
+    rate_limited_handled = False        # attacker's active kata was enforced (suppress its reminder)
+    attacker = attacker_rec.character
+    enc = encounters.get(interaction.channel_id)
+    atk_combatant = enc.find(attacker.name) if enc else None
+
     # Defender's active kata: stance-conditional Armor TN bonus (players only —
     # creatures use fixed stat blocks and carry no active kata).
     def_kata_bonus = 0
@@ -884,18 +923,38 @@ async def attack(
         if def_note:
             kata_notes.append(def_note)
     # Attacker's active kata: flat bonus added to the attack-roll total.
-    atk_flat, atk_note = kata_effects.attacker_roll_flat_bonus(
-        attacker_rec.character, man, increased_damage
-    )
+    atk_flat, atk_note = kata_effects.attacker_roll_flat_bonus(attacker, man, increased_damage)
     if atk_note:
         kata_notes.append(atk_note)
+    # Rate-limited: Striking as Fire adds Fire Ring to one attack roll per Round.
+    sf_val, sf_note = kata_effects.striking_as_fire_bonus(attacker, a_stance)
+    if sf_val:
+        status = _rate_status(atk_combatant, "striking_as_fire", "round")
+        if status == "apply":
+            atk_flat += sf_val
+            kata_notes.append(sf_note)
+            rate_limited_handled = True
+        elif status == "used":
+            rl_used_notes.append("Striking as Fire already used this Round.")
+            rate_limited_handled = True
     # Attacker's active kata: a Trait replaced by a Ring on the attack roll.
     atk_weapon_profile = combat.get_weapon_profile(weapon)
-    trait_ovr, trait_ovr_note = kata_effects.attacker_trait_override(
-        attacker_rec.character, atk_weapon_profile
-    )
+    trait_ovr, trait_ovr_note = kata_effects.attacker_trait_override(attacker, atk_weapon_profile)
+    trait_ovr_name = "Air" if trait_ovr is not None else ""
     if trait_ovr_note:
         kata_notes.append(trait_ovr_note)
+    # Rate-limited: Strength in Arms uses Strength (not Agility) once per Turn (Heavy Weapon).
+    if trait_ovr is None:
+        sia_val, sia_note = kata_effects.strength_in_arms_override(attacker, atk_weapon_profile)
+        if sia_val is not None:
+            status = _rate_status(atk_combatant, "strength_in_arms", "turn")
+            if status == "apply":
+                trait_ovr, trait_ovr_name = sia_val, "Strength"
+                kata_notes.append(sia_note)
+                rate_limited_handled = True
+            elif status == "used":
+                rl_used_notes.append("Strength in Arms already used this Turn.")
+                rate_limited_handled = True
 
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
@@ -906,10 +965,10 @@ async def attack(
         tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus)
 
     outcome = combat.resolve_attack(
-        attacker_rec.character, weapon, tn, raises + maneuver_raises, engine,
+        attacker, weapon, tn, raises + maneuver_raises, engine,
         attacker_stance=a_stance, increased_damage=increased_damage,
         bonus_rolled=bonus_rolled, bonus_kept=bonus_kept, extra_flat=atk_flat,
-        trait_override=trait_ovr, trait_override_name=("Air" if trait_ovr is not None else ""),
+        trait_override=trait_ovr, trait_override_name=trait_ovr_name,
     )
 
     a_name = attacker_rec.character.name
@@ -946,7 +1005,9 @@ async def attack(
 
     if kata_notes:
         embed.add_field(name="⚑ Kata effects (auto-applied)", value=" · ".join(kata_notes), inline=False)
-    reminders = _active_ability_reminders(attacker_rec.character, "attacker")
+    if rl_used_notes:
+        embed.add_field(name="Rate-limited (already spent)", value="\n".join(rl_used_notes)[:1024], inline=False)
+    reminders = _active_ability_reminders(attacker, "attacker", drop_rate_limited=rate_limited_handled)
     if target_creature_rec is None:
         reminders += _active_ability_reminders(target_rec.character, "defender")
     if reminders:
