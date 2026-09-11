@@ -86,10 +86,12 @@ WEAPON_CATALOG: dict[str, dict] = {
     "kusarigama": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
     "kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
     "manrikikusari": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
-    # Thrown / ninja (Ninjutsu; no Strength to damage)
-    "shuriken": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small"},
-    "tsubute": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small"},
-    "blowgun": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Medium"},
+    # Thrown / ninja (Ninjutsu; no Strength to damage; damage does NOT explode
+    # by default — s24: "Rank 5: Damage dice explode normally (they do not
+    # normally)"; Ninjutsu R5 mastery overrides this).
+    "shuriken": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
+    "tsubute": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
+    "blowgun": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Medium", "no_explode": True},
     # Unarmed
     "unarmed": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Jiujutsu", "trait": "agility", "melee": True, "size": "Small"},
 }
@@ -207,12 +209,16 @@ def resolve_damage(
     extra_rolled: int = 0,
     extra_kept: int = 0,
     extra_flat: int = 0,
+    explode_9: bool = False,
+    force_explode: bool = False,
 ) -> dict:
     """Roll raw damage (before the target's armor reduction). `extra_rolled`/
     `extra_kept` are bonus damage dice from an active kata or School Technique
     (e.g. Waves upon the Breakers' +1k0, The Hand of Thunder's +0k1) — added like
     Increased Damage but with no TN cost. `extra_flat` is a flat bonus added to
-    the damage total (e.g. Matsu's Lion's Roar +Honor Rank)."""
+    the damage total (e.g. Matsu's Lion's Roar +Honor Rank). `explode_9` makes
+    damage dice explode on 9+ (Kenjutsu R7, Heavy Weapons R7). `force_explode`
+    overrides a weapon's default no-explode (Ninjutsu R5)."""
     weapon = get_weapon_profile(weapon_name)
     rolled = weapon.get("rolled", 2)
     kept = weapon.get("kept", 1)
@@ -221,8 +227,8 @@ def resolve_damage(
     rolled += increased_damage  # Increased Damage maneuver: +1k0 per raise
     rolled += extra_rolled       # bonus damage dice (no TN cost)
     kept += extra_kept
-    can_explode = not weapon.get("no_explode", False)
-    res = dice_engine.roll_damage(rolled, kept, 0, 0, False, False, can_explode)
+    can_explode = force_explode or not weapon.get("no_explode", False)
+    res = dice_engine.roll_damage(rolled, kept, 0, 0, False, explode_9, can_explode)
     return {
         "rolled": rolled,
         "kept": kept,

@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 22 — School Technique effects, full sweep (GDD s29)
+## Status: Phase 23 — Weapon Skill Mastery effects (GDD s24)
 
 **Dice**
 
@@ -205,6 +205,43 @@ technique shape in the source: the `- Rank N — Name:` ladder, dash- and inline
 `- Technique: Name — effect` shugenja form. s29.15 (the LOCKED courtier framework)
 is skipped — its two schools already appear in the clan files.
 
+**Weapon Skill Masteries** (GDD s24, auto-applied in `/attack`)
+
+Every weapon skill has mastery abilities at Ranks 3, 5, and 7. The bot
+auto-applies the **18** whose conditions it can evaluate from the sheet, the
+weapon, and the encounter state (`l5r_rules/skill_mastery.py`):
+
+| Skill | Rank | Auto-applied in `/attack` |
+|---|---|---|
+| Kenjutsu | 3 | sword damage **+1k0** |
+| Kenjutsu | 7 | sword damage dice **explode on 9+** |
+| Jiujutsu | 3 | unarmed damage **+1k0** |
+| Jiujutsu | 7 | unarmed damage **+0k1** |
+| Heavy Weapons | 3 | target Reduction **−2** |
+| Heavy Weapons | 5 | **free raise** toward Knockdown |
+| Heavy Weapons | 7 | damage dice **explode on 9+** |
+| Kyujutsu | 7 | bow damage **+1k0** (Strength +1) |
+| Spears | 3 | target Reduction **−3** (first round only †) |
+| Ninjutsu | 3 | damage **+1k0** |
+| Ninjutsu | 5 | damage dice **explode normally** (overrides default no-explode) |
+| Ninjutsu | 7 | damage **+0k1** |
+| Staves | 5 | **free raise** toward Knockdown |
+| Staves | 7 | small staves damage **+1k0** |
+| Knives | 5 | **free raise** toward Disarm (sai/jitte only) |
+| Chain Weapons | 7 | **free raise** toward Disarm or Knockdown |
+| War Fan | 5 | defender Armor TN **+1** |
+| War Fan | 7 | defender Armor TN **+3** |
+
+† Spears R3 fires only when the encounter is in round 1; without a tracked
+encounter it falls back to DM adjudication.
+
+Ninjutsu weapons (shuriken, tsubute, blowgun) do **not** explode by default
+(s24) — this is now correctly modeled. Ninjutsu R5 overrides it.
+
+Mastery abilities that need systems the bot doesn't model (off-hand penalties,
+extra attacks, grappling, range, ready actions) or need per-round initiative
+changes (Polearms R3 +5 Init) stay **DM-adjudicated**.
+
 **Spells** (all of **GDD s32–s37**, transcribed verbatim)
 
 Every spell is in the bot — **287 spells** (Air 68, Water 62, Fire 59, Earth 58,
@@ -302,13 +339,13 @@ their ranks; Ranks are capped at **1–5** (s22.4 gives no 6+ ranges); koku is t
 `1d10 × Rank` savings term only (the role stipend needs role data). Generated
 NPCs can be tuned field-by-field with the `/npc` editors above.
 
-*Still faithful-core:* deterministic subsets of **Kata** and **School Techniques**
-now auto-apply in `/attack` (see the Active-Kata and Technique tables above); the
-rest of Kata, most Techniques, and all Kiho stay DM-adjudicated (Kata/Kiho shown
-as reminders, technique text on the sheet via `/school view`). Skill masteries
-(R3/R5/R7 damage bonuses and 9-explosions), dual-wielding, and
-thrown/charge/called-shot maneuvers are still **not** modelled — the DM can
-express those with `raises`/`bonus_tn`.
+*Still faithful-core:* deterministic subsets of **Kata**, **School Techniques**,
+and **Skill Masteries** now auto-apply in `/attack` (see the Active-Kata,
+Technique, and Skill Mastery tables above); the rest of Kata, most Techniques,
+and all Kiho stay DM-adjudicated (Kata/Kiho shown as reminders, technique text on
+the sheet via `/school view`). Dual-wielding and thrown/charge/called-shot
+maneuvers are still **not** modelled — the DM can express those with
+`raises`/`bonus_tn`.
 
 **Creatures / monsters** (stat blocks transcribed **verbatim** from the bestiaries)
 

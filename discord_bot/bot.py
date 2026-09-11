@@ -21,7 +21,7 @@ import encounter
 import storage
 from l5r_rules import (
     advancement, advantages, combat, creature, enums, kata, kata_effects, kiho, npc_gen,
-    schools, spells, stats, technique_effects,
+    schools, skill_mastery, spells, stats, technique_effects,
 )
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
@@ -594,11 +594,29 @@ class DamageView(discord.ui.View):
             extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
             t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
             extra_rolled += t_roll
+            m_roll, m_kept, m_flat, m_dmg_notes = skill_mastery.attacker_damage(attacker, wp, self.weapon)
+            extra_rolled += m_roll
+            t_kept += m_kept
+            t_flat += m_flat
+            t_dmg_notes = t_dmg_notes + m_dmg_notes
             ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
             t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
             ignore += t_ignore
-            t_dmg_notes = t_dmg_notes + t_ign_notes
-            dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled, t_kept, t_flat)
+            enc = encounters.get(interaction.channel_id)
+            enc_round = enc.round if enc else None
+            m_ignore, m_ign_notes = skill_mastery.attacker_reduction_ignored(attacker, wp, enc_round)
+            ignore += m_ignore
+            t_dmg_notes = t_dmg_notes + t_ign_notes + m_ign_notes
+            explode_9, e9_note = skill_mastery.attacker_explode_9(attacker, wp)
+            force_explode, fe_note = skill_mastery.attacker_ninjutsu_can_explode(attacker, wp)
+            if e9_note:
+                t_dmg_notes.append(e9_note)
+            if fe_note:
+                t_dmg_notes.append(fe_note)
+            dmg = combat.resolve_damage(
+                attacker, self.weapon, engine, self.increased_damage,
+                extra_rolled, t_kept, t_flat, explode_9=explode_9, force_explode=force_explode,
+            )
             raw = dmg["raw_damage"]
             feint_line = ""
             if self.maneuver == "feint":
@@ -707,16 +725,34 @@ class DamageView(discord.ui.View):
             await interaction.followup.send(embed=embed)
             return
 
-        # Plain hit or Feint: weapon damage (+ feint bonus, + active-kata & Technique mods).
+        # Plain hit or Feint: weapon damage (+ feint bonus, + active-kata, Technique & Mastery mods).
         wp = combat.get_weapon_profile(self.weapon)
         extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
         t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
         extra_rolled += t_roll
+        m_roll, m_kept, m_flat, m_dmg_notes = skill_mastery.attacker_damage(attacker, wp, self.weapon)
+        extra_rolled += m_roll
+        t_kept += m_kept
+        t_flat += m_flat
+        t_dmg_notes = t_dmg_notes + m_dmg_notes
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
         t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
         ignore += t_ignore
-        t_dmg_notes = t_dmg_notes + t_ign_notes
-        dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled, t_kept, t_flat)
+        enc = encounters.get(interaction.channel_id)
+        enc_round = enc.round if enc else None
+        m_ignore, m_ign_notes = skill_mastery.attacker_reduction_ignored(attacker, wp, enc_round)
+        ignore += m_ignore
+        t_dmg_notes = t_dmg_notes + t_ign_notes + m_ign_notes
+        explode_9, e9_note = skill_mastery.attacker_explode_9(attacker, wp)
+        force_explode, fe_note = skill_mastery.attacker_ninjutsu_can_explode(attacker, wp)
+        if e9_note:
+            t_dmg_notes.append(e9_note)
+        if fe_note:
+            t_dmg_notes.append(fe_note)
+        dmg = combat.resolve_damage(
+            attacker, self.weapon, engine, self.increased_damage,
+            extra_rolled, t_kept, t_flat, explode_9=explode_9, force_explode=force_explode,
+        )
         raw = dmg["raw_damage"]
         feint_line = ""
         if self.maneuver == "feint":
@@ -956,6 +992,9 @@ async def attack(
         )
         def_kata_bonus += def_tech_bonus
         kata_notes.extend(def_tech_notes)
+        def_mastery_bonus, def_mastery_notes = skill_mastery.defender_armor_tn_bonus(target_rec.character)
+        def_kata_bonus += def_mastery_bonus
+        kata_notes.extend(def_mastery_notes)
     # Attacker's active kata: flat bonus added to the attack-roll total.
     atk_flat, atk_note = kata_effects.attacker_roll_flat_bonus(attacker, man, increased_damage)
     if atk_note:
@@ -1001,6 +1040,14 @@ async def attack(
     bonus_kept += t_kept
     atk_flat += t_flat
     kata_notes.extend(t_notes)
+
+    # Skill mastery: free raises that reduce a maneuver's raise cost (s24).
+    mastery_free, mastery_free_notes = skill_mastery.maneuver_free_raises(
+        attacker, atk_weapon_profile, weapon, man
+    )
+    if mastery_free:
+        maneuver_raises = max(0, maneuver_raises - mastery_free)
+        kata_notes.extend(mastery_free_notes)
 
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
@@ -1050,7 +1097,7 @@ async def attack(
         embed.set_footer(text=f"Unskilled in {outcome['skill_name']} — dice did not explode.")
 
     if kata_notes:
-        embed.add_field(name="⚑ Kata & Technique effects (auto-applied)", value=" · ".join(kata_notes)[:1024], inline=False)
+        embed.add_field(name="⚑ Combat effects (auto-applied)", value=" · ".join(kata_notes)[:1024], inline=False)
     if rl_used_notes:
         embed.add_field(name="Rate-limited (already spent)", value="\n".join(rl_used_notes)[:1024], inline=False)
     reminders = _active_ability_reminders(attacker, "attacker", drop_rate_limited=rate_limited_handled)
