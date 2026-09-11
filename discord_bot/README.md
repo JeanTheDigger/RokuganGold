@@ -324,7 +324,7 @@ raises, and full effect text.
 | `/spell list` | Summary by element, or `element:` for that element's spells grouped by Mastery Level. |
 | `/spell search` | Find spells by name, element, or keyword. |
 | `/spell view` | A spell's element, Mastery, range/area/duration, raises, and effect. |
-| `/spell cast` | Cast a spell: rolls **(Ring + School Rank) keep Ring** vs TN **5 + (5 × Mastery Level)**. Affinity +1 / Deficiency −1 effective rank. Supports Void Point (+1k1), Called Raises (+5 TN each, reduce casting time), wound penalty. DM only. |
+| `/spell cast` | Cast a spell: rolls **(Ring + School Rank) keep Ring** vs TN **5 + (5 × Mastery Level)**. Affinity +1 / Deficiency −1 effective rank. Supports Void Point (+1k1), Called Raises (+5 TN each, reduce casting time), wound penalty. DMs can cast for NPCs or other players. |
 
 `/xp spell` (memorise a spell) autocompletes real spell names and **auto-fills the
 Mastery Level** — so the RAW cost (1 × Mastery Level) is computed for you.
@@ -468,7 +468,8 @@ buttons), Throw (Prone + leave grapple), and Break Free.
 **Spell Casting** (`/spell cast`) rolls (Ring + School Rank) keep Ring vs TN
 5 + (5 × Mastery Level), with Affinity (+1 effective rank) and Deficiency (−1),
 Void Point (+1k1), Called Raises (+5 TN each, reduce casting time by 1 per
-raise), and wound penalty — DM only.
+raise), and wound penalty. Players cast their own spells; DMs can cast for NPCs
+or other players.
 **Iaijutsu Dueling** (`/duel`) covers the full three-stage formal duel:
 Assessment (Iaijutsu/Awareness, reveals opponent stats, +1k1 Focus bonus if
 exceeded by 10+), Focus (contested Iaijutsu/Void, winner by 5+ strikes first
@@ -657,13 +658,8 @@ Try:
 
 ---
 
-## What's next (later phases — not built yet)
+## What's next
 
-- **Tables / rooms** — private threads or channels as "rooms," with invites.
-- **Combat** — `/attack` against a TN, damage, wounds, armor, and the
-  **DM-authorizes-damage** button flow.
-- **NPC templates** — generate stat blocks (ashigaru, bandit, bushi…) with
-  controlled randomness.
 - **Hosting on Vultr** — a small, cheap Linux box with the bot running as a
   background service that restarts itself and survives reboots, plus a
   copy-paste setup script and a plain-English runbook. (You won't need to

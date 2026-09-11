@@ -2600,6 +2600,22 @@ def _resolve_combatant_record(guild: str, cb: encounter.Combatant) -> storage.Ch
     return None
 
 
+def _resolve_duelist(
+    guild: str, channel_id: int, name: str, is_npc: bool, member: discord.Member | None,
+) -> storage.CharacterRecord | None:
+    """Resolve a duelist by NPC flag, member, encounter combatant, or NPC name."""
+    if is_npc:
+        return store.get_by_name(guild, NPC_OWNER, name)
+    if member is not None:
+        return store.get_active(guild, str(member.id))
+    enc = encounters.get(channel_id)
+    if enc:
+        cb = enc.find(name)
+        if cb:
+            return _resolve_combatant_record(guild, cb)
+    return store.get_by_name(guild, NPC_OWNER, name)
+
+
 @grapple_group.command(name="initiate", description="Initiate a Grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus). DM only.")
 @app_commands.describe(
     attacker="The combatant initiating the grapple.",
@@ -2722,7 +2738,9 @@ async def grapple_control(
     jiu_a = rec_a.character.skills.get("Jiujutsu", 0)
     str_b = rec_b.character.strength
     jiu_b = rec_b.character.skills.get("Jiujutsu", 0)
-    result = combat.resolve_grapple_control(str_a, jiu_a, str_b, jiu_b, engine)
+    wp_a = stats.wound_penalty(rec_a.character)
+    wp_b = stats.wound_penalty(rec_b.character)
+    result = combat.resolve_grapple_control(str_a, jiu_a, str_b, jiu_b, engine, wp_a, wp_b)
     if result["winner"] == "a":
         winner, loser = cb_a.name, cb_b.name
     elif result["winner"] == "b":
@@ -2898,21 +2916,9 @@ async def duel_assess(
         await interaction.response.send_message("Only a DM can run a duel.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-
-    def _resolve_duelist(name: str, is_npc: bool, member: discord.Member | None):
-        if is_npc:
-            return store.get_by_name(guild, NPC_OWNER, name)
-        if member is not None:
-            return store.get_active(guild, str(member.id))
-        enc = encounters.get(interaction.channel_id)
-        if enc:
-            cb = enc.find(name)
-            if cb:
-                return _resolve_combatant_record(guild, cb)
-        return store.get_by_name(guild, NPC_OWNER, name)
-
-    rec_a = _resolve_duelist(duelist_a, a_is_npc, a_member)
-    rec_b = _resolve_duelist(duelist_b, b_is_npc, b_member)
+    ch = interaction.channel_id
+    rec_a = _resolve_duelist(guild, ch, duelist_a, a_is_npc, a_member)
+    rec_b = _resolve_duelist(guild, ch, duelist_b, b_is_npc, b_member)
     if rec_a is None:
         await interaction.response.send_message(f"No character found for **{duelist_a}**.", ephemeral=True)
         return
@@ -3014,21 +3020,9 @@ async def duel_focus(
         await interaction.response.send_message("Only a DM can run a duel.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-
-    def _resolve_duelist(name: str, is_npc: bool, member: discord.Member | None):
-        if is_npc:
-            return store.get_by_name(guild, NPC_OWNER, name)
-        if member is not None:
-            return store.get_active(guild, str(member.id))
-        enc = encounters.get(interaction.channel_id)
-        if enc:
-            cb_found = enc.find(name)
-            if cb_found:
-                return _resolve_combatant_record(guild, cb_found)
-        return store.get_by_name(guild, NPC_OWNER, name)
-
-    rec_a = _resolve_duelist(duelist_a, a_is_npc, a_member)
-    rec_b = _resolve_duelist(duelist_b, b_is_npc, b_member)
+    ch = interaction.channel_id
+    rec_a = _resolve_duelist(guild, ch, duelist_a, a_is_npc, a_member)
+    rec_b = _resolve_duelist(guild, ch, duelist_b, b_is_npc, b_member)
     if rec_a is None:
         await interaction.response.send_message(f"No character found for **{duelist_a}**.", ephemeral=True)
         return
@@ -3129,21 +3123,9 @@ async def duel_strike(
         await interaction.response.send_message("Only a DM can run a duel strike.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-
-    def _resolve_duelist(name: str, is_npc: bool, member: discord.Member | None):
-        if is_npc:
-            return store.get_by_name(guild, NPC_OWNER, name)
-        if member is not None:
-            return store.get_active(guild, str(member.id))
-        enc = encounters.get(interaction.channel_id)
-        if enc:
-            cb_found = enc.find(name)
-            if cb_found:
-                return _resolve_combatant_record(guild, cb_found)
-        return store.get_by_name(guild, NPC_OWNER, name)
-
-    rec_a = _resolve_duelist(attacker, attacker_npc, attacker_member)
-    rec_t = _resolve_duelist(target, target_npc, target_member)
+    ch = interaction.channel_id
+    rec_a = _resolve_duelist(guild, ch, attacker, attacker_npc, attacker_member)
+    rec_t = _resolve_duelist(guild, ch, target, target_npc, target_member)
     if rec_a is None:
         await interaction.response.send_message(f"No character found for **{attacker}**.", ephemeral=True)
         return

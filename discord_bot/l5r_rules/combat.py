@@ -146,14 +146,14 @@ def roll_full_defense(
     rolled = reflexes + defense_skill
     kept = reflexes
     explodes = defense_skill > 0
-    result = dice_engine.roll_and_keep(rolled, kept, explodes)
+    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
     bonus = math.ceil(result.total / 2)
     return {
         "total": result.total,
         "bonus": bonus,
         "rolled": rolled,
         "kept": kept,
-        "detail": str(result),
+        "dice": result,
     }
 
 
@@ -191,7 +191,7 @@ def resolve_grapple_initiate(
     kept = agility
     explodes = jiujutsu > 0
     wound_pen = stats.wound_penalty(attacker)
-    result = dice_engine.roll_and_keep(rolled, kept, explodes)
+    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
     total = result.total + extra_flat + wound_pen
     return {
         "hit": total >= target_tn,
@@ -211,12 +211,32 @@ def resolve_grapple_control(
     strength_b: int,
     jiujutsu_b: int,
     dice_engine: DiceEngine,
+    wound_penalty_a: int = 0,
+    wound_penalty_b: int = 0,
 ) -> dict:
     """Contested Jiujutsu/Strength roll for grapple control."""
-    return dice_engine.contested_roll(
-        strength_a + jiujutsu_a, strength_a,
-        strength_b + jiujutsu_b, strength_b,
-    )
+    rolled_a = strength_a + jiujutsu_a
+    kept_a = strength_a
+    rolled_b = strength_b + jiujutsu_b
+    kept_b = strength_b
+    explodes_a = jiujutsu_a > 0
+    explodes_b = jiujutsu_b > 0
+    result_a = dice_engine.roll_and_keep(max(1, rolled_a), max(1, kept_a), explodes_a)
+    result_b = dice_engine.roll_and_keep(max(1, rolled_b), max(1, kept_b), explodes_b)
+    total_a = result_a.total + wound_penalty_a
+    total_b = result_b.total + wound_penalty_b
+    winner = "a"
+    if total_b > total_a:
+        winner = "b"
+    elif total_a == total_b:
+        winner = "tie"
+    return {
+        "winner": winner,
+        "total_a": total_a,
+        "total_b": total_b,
+        "dice_a": result_a,
+        "dice_b": result_b,
+    }
 
 
 def spell_casting_tn(mastery_level: int) -> int:
@@ -332,9 +352,8 @@ def resolve_attack(
     total_raises = raises + increased_damage
     explodes = skill_rank > 0
 
-    result = dice_engine.roll_check(rolled, kept, target_armor_tn, total_raises, flat_bonus, explodes)
+    result = dice_engine.roll_check(max(1, rolled), max(1, kept), target_armor_tn, total_raises, flat_bonus, explodes)
     return {
-        "success": result["success"],
         "hit": result["success"],
         "roll": result["total"],
         "target_tn": result["tn"],
@@ -377,7 +396,7 @@ def resolve_damage(
     rolled += extra_rolled       # bonus damage dice (no TN cost)
     kept += extra_kept
     can_explode = force_explode or not weapon.get("no_explode", False)
-    res = dice_engine.roll_damage(rolled, kept, 0, 0, False, explode_9, can_explode)
+    res = dice_engine.roll_damage(max(1, rolled), max(1, kept), 0, 0, False, explode_9, can_explode)
     return {
         "rolled": rolled,
         "kept": kept,
@@ -426,7 +445,9 @@ def roll_initiative(character: Character, dice_engine: DiceEngine):
     """Initiative Roll & Keep: (Reflexes + Insight Rank) keep Reflexes
     (character_stats.gd get_initiative_rolled / _kept)."""
     ir = stats.insight_rank(character)
-    return dice_engine.roll_and_keep(character.reflexes + ir, character.reflexes)
+    rolled = character.reflexes + ir
+    kept = character.reflexes
+    return dice_engine.roll_and_keep(max(1, rolled), max(1, kept))
 
 
 def resolve_disarm(attacker: Character, defender: Character, dice_engine: DiceEngine) -> dict:
