@@ -169,6 +169,56 @@ STANCE_ATTACK_ROLLED_BONUS = {"attack": 0, "full_attack": 2, "defense": 0, "cent
 STANCE_ATTACK_KEPT_BONUS = {"attack": 0, "full_attack": 1, "defense": 0, "center": 0}
 
 
+def grapple_initiate_tn(target: Character, defender_stance: str = "attack", extra: int = 0) -> int:
+    """Grapple initiation TN (s40): Armor TN minus armor's TN bonus."""
+    base = target.reflexes * 5 + 5
+    base += STANCE_ARMOR_TN_BONUS.get(defender_stance, 0)
+    if defender_stance == "defense":
+        base += stats.ring_value(target, "air") + target.skills.get("Defense", 0)
+    return base + extra
+
+
+def resolve_grapple_initiate(
+    attacker: Character,
+    target_tn: int,
+    dice_engine: DiceEngine,
+    extra_flat: int = 0,
+) -> dict:
+    """Grapple initiation attack: Jiujutsu/Agility vs modified Armor TN."""
+    agility = attacker.agility
+    jiujutsu = attacker.skills.get("Jiujutsu", 0)
+    rolled = agility + jiujutsu
+    kept = agility
+    explodes = jiujutsu > 0
+    wound_pen = stats.wound_penalty(attacker)
+    result = dice_engine.roll_and_keep(rolled, kept, explodes)
+    total = result.total + extra_flat + wound_pen
+    return {
+        "hit": total >= target_tn,
+        "roll": total,
+        "target_tn": target_tn,
+        "margin": total - target_tn,
+        "dice": result,
+        "rolled": rolled,
+        "kept": kept,
+        "wound_penalty": wound_pen,
+    }
+
+
+def resolve_grapple_control(
+    strength_a: int,
+    jiujutsu_a: int,
+    strength_b: int,
+    jiujutsu_b: int,
+    dice_engine: DiceEngine,
+) -> dict:
+    """Contested Jiujutsu/Strength roll for grapple control."""
+    return dice_engine.contested_roll(
+        strength_a + jiujutsu_a, strength_a,
+        strength_b + jiujutsu_b, strength_b,
+    )
+
+
 def get_weapon_profile(weapon_name: str) -> dict:
     return WEAPON_CATALOG.get(weapon_name.lower().strip(), DEFAULT_WEAPON)
 

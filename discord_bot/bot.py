@@ -2586,6 +2586,288 @@ async def combat_full_defense(
 
 
 # ===========================================================================
+# /grapple group — grappling subsystem (s40)
+# ===========================================================================
+grapple_group = app_commands.Group(name="grapple", description="Grappling subsystem: initiate, control, hit, throw, break (s40).")
+
+
+def _resolve_combatant_record(guild: str, cb: encounter.Combatant) -> storage.CharacterRecord | None:
+    """Look up a stored character record from a Combatant (PC or NPC)."""
+    if cb.is_npc:
+        return store.get_by_name(guild, NPC_OWNER, cb.name)
+    if cb.owner_id:
+        return store.get_active(guild, cb.owner_id)
+    return None
+
+
+@grapple_group.command(name="initiate", description="Initiate a Grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus). DM only.")
+@app_commands.describe(
+    attacker="The combatant initiating the grapple.",
+    target="The target being grappled.",
+    bonus_tn="DM situational TN modifier.",
+    defender_stance="Target's stance.",
+)
+@app_commands.choices(defender_stance=_DEFENDER_STANCES)
+async def grapple_initiate(
+    interaction: discord.Interaction,
+    attacker: str,
+    target: str,
+    bonus_tn: int = 0,
+    defender_stance: app_commands.Choice[str] | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can initiate a grapple.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    atk_cb = enc.find(attacker)
+    if atk_cb is None:
+        await interaction.response.send_message(f"No combatant named **{attacker}**.", ephemeral=True)
+        return
+    def_cb = enc.find(target)
+    if def_cb is None:
+        await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    atk_rec = _resolve_combatant_record(guild, atk_cb)
+    def_rec = _resolve_combatant_record(guild, def_cb)
+    if atk_rec is None or def_rec is None:
+        await interaction.response.send_message(
+            "Both combatants need stored character sheets for grapple initiation.", ephemeral=True
+        )
+        return
+    d_stance = defender_stance.value if defender_stance else "attack"
+    tn = combat.grapple_initiate_tn(def_rec.character, d_stance, bonus_tn)
+    # Full Defense bonus and condition/guard modifiers still apply to the TN.
+    extra_tn = 0
+    if def_cb.full_defense_bonus:
+        extra_tn += def_cb.full_defense_bonus
+    # Condition TN override (Stunned/Grappled replace formula).
+    def_conds = def_cb.conditions
+    cond_tn_ovr, cond_tn_notes = condition_effects.defender_armor_tn_override(
+        def_conds, def_rec.character.reflexes, def_rec.character.armor_tn_bonus, True,
+    )
+    cond_def_mod, _ = condition_effects.defender_armor_tn_mod(def_conds, True)
+    if cond_tn_ovr is not None:
+        tn = cond_tn_ovr + cond_def_mod + extra_tn + bonus_tn
+    else:
+        tn += cond_def_mod + extra_tn
+    outcome = combat.resolve_grapple_initiate(atk_rec.character, tn, engine)
+    hit = outcome["hit"]
+    embed = discord.Embed(
+        title=f"🤼 {atk_cb.name} attempts to grapple {def_cb.name}",
+        color=discord.Color.green() if hit else discord.Color.greyple(),
+    )
+    embed.add_field(
+        name="Grapple Attack (Jiujutsu/Agility)",
+        value=f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
+              f" — {'**GRAPPLED**' if hit else 'miss'}"
+              f"\n({outcome['rolled']}k{outcome['kept']}, wound penalty {outcome['wound_penalty']})",
+        inline=False,
+    )
+    if hit:
+        atk_cb.conditions.add("grappled")
+        def_cb.conditions.add("grappled")
+        embed.add_field(
+            name="Result",
+            value=f"Both **{atk_cb.name}** and **{def_cb.name}** are now **Grappled**.\n"
+                  f"{atk_cb.name} has initial control.",
+            inline=False,
+        )
+    await interaction.response.send_message(embed=embed)
+
+
+@grapple_group.command(name="control", description="Contested Jiujutsu/Strength roll for grapple control. DM only.")
+@app_commands.describe(
+    combatant_a="First grapple participant.",
+    combatant_b="Second grapple participant.",
+)
+async def grapple_control(
+    interaction: discord.Interaction,
+    combatant_a: str,
+    combatant_b: str,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can roll grapple control.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    cb_a = enc.find(combatant_a)
+    cb_b = enc.find(combatant_b)
+    if cb_a is None:
+        await interaction.response.send_message(f"No combatant named **{combatant_a}**.", ephemeral=True)
+        return
+    if cb_b is None:
+        await interaction.response.send_message(f"No combatant named **{combatant_b}**.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec_a = _resolve_combatant_record(guild, cb_a)
+    rec_b = _resolve_combatant_record(guild, cb_b)
+    if rec_a is None or rec_b is None:
+        await interaction.response.send_message(
+            "Both combatants need stored character sheets for grapple control.", ephemeral=True
+        )
+        return
+    str_a = rec_a.character.strength
+    jiu_a = rec_a.character.skills.get("Jiujutsu", 0)
+    str_b = rec_b.character.strength
+    jiu_b = rec_b.character.skills.get("Jiujutsu", 0)
+    result = combat.resolve_grapple_control(str_a, jiu_a, str_b, jiu_b, engine)
+    if result["winner"] == "a":
+        winner, loser = cb_a.name, cb_b.name
+    elif result["winner"] == "b":
+        winner, loser = cb_b.name, cb_a.name
+    else:
+        winner = "Tie (previous controller retains)"
+        loser = ""
+    embed = discord.Embed(
+        title="🤼 Grapple Control — Contested Jiujutsu/Strength",
+        color=discord.Color.blue(),
+    )
+    embed.add_field(
+        name=cb_a.name,
+        value=f"({str_a + jiu_a}k{str_a}) → **{result['total_a']}**",
+        inline=True,
+    )
+    embed.add_field(
+        name=cb_b.name,
+        value=f"({str_b + jiu_b}k{str_b}) → **{result['total_b']}**",
+        inline=True,
+    )
+    if loser:
+        embed.add_field(name="Control", value=f"**{winner}** has control.", inline=False)
+    else:
+        embed.add_field(name="Control", value=f"**{winner}**", inline=False)
+    await interaction.response.send_message(embed=embed)
+
+
+@grapple_group.command(name="hit", description="Grapple Hit: unarmed damage on a grappled opponent (no attack roll). DM only.")
+@app_commands.describe(
+    attacker="The combatant in control (dealing damage).",
+    target="The grapple participant receiving damage.",
+)
+async def grapple_hit(
+    interaction: discord.Interaction,
+    attacker: str,
+    target: str,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can resolve a grapple hit.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    atk_cb = enc.find(attacker)
+    def_cb = enc.find(target)
+    if atk_cb is None:
+        await interaction.response.send_message(f"No combatant named **{attacker}**.", ephemeral=True)
+        return
+    if def_cb is None:
+        await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    atk_rec = _resolve_combatant_record(guild, atk_cb)
+    def_rec = _resolve_combatant_record(guild, def_cb)
+    if atk_rec is None:
+        await interaction.response.send_message(f"No character sheet for **{attacker}**.", ephemeral=True)
+        return
+    if def_rec is None:
+        await interaction.response.send_message(f"No character sheet for **{target}**.", ephemeral=True)
+        return
+    embed = discord.Embed(
+        title=f"🤼 Grapple Hit — {atk_cb.name} strikes {def_cb.name}",
+        description="Unarmed damage, no attack roll (controller's action).",
+        color=discord.Color.orange(),
+    )
+    view = DamageView(
+        atk_rec.id, def_rec.id, "unarmed", 0,
+        atk_cb.name, def_cb.name,
+        maneuver="none", attack_margin=0,
+        defender_stance="attack",
+        channel_id=interaction.channel_id,
+    )
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+@grapple_group.command(name="throw", description="Grapple Throw: target becomes Prone and leaves the grapple. DM only.")
+@app_commands.describe(
+    thrower="The combatant in control (throwing).",
+    target="The combatant being thrown.",
+)
+async def grapple_throw(
+    interaction: discord.Interaction,
+    thrower: str,
+    target: str,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can resolve a grapple throw.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    thrower_cb = enc.find(thrower)
+    target_cb = enc.find(target)
+    if thrower_cb is None:
+        await interaction.response.send_message(f"No combatant named **{thrower}**.", ephemeral=True)
+        return
+    if target_cb is None:
+        await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
+        return
+    target_cb.conditions.discard("grappled")
+    target_cb.conditions.add("prone")
+    await interaction.response.send_message(
+        f"🤼 **{thrower_cb.name}** throws **{target_cb.name}**!\n"
+        f"  {target_cb.name} is now **Prone** and removed from the grapple.\n"
+        f"  (Standing up is a Simple Action.)"
+    )
+
+
+@grapple_group.command(name="break_free", description="Break free from a grapple (Simple Action for controller). DM only.")
+@app_commands.describe(combatant="The combatant leaving the grapple.")
+async def grapple_break(
+    interaction: discord.Interaction,
+    combatant: str,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can break a grapple.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    cb = enc.find(combatant)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
+        return
+    cb.conditions.discard("grappled")
+    await interaction.response.send_message(
+        f"🤼 **{cb.name}** breaks free from the grapple.\n"
+        f"  (Grappled condition removed.)"
+    )
+
+
+# ===========================================================================
 # /npc group — generate and manage NPC characters (s22.4 templates)
 # ===========================================================================
 npc = app_commands.Group(name="npc", description="Generate and manage NPC characters (GDD s22.4 templates).")
@@ -4160,6 +4442,7 @@ async def kiho_view(interaction: discord.Interaction, name: str) -> None:
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
+client.tree.add_command(grapple_group)
 client.tree.add_command(npc)
 client.tree.add_command(room)
 client.tree.add_command(creature_group)

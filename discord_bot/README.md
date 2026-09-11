@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 30 — Full Defense roll
+## Status: Phase 31 — Grappling subsystem
 
 **Dice**
 
@@ -409,6 +409,16 @@ section). Conditions display inline in the initiative listing (e.g. `[dazed,
 prone]`), active guards show as `🛡️→WardName`, and Full Defense as
 `🛡️FD+N`.
 
+**Grappling** (`/grapple`, all DM-only — s40 Grappling rules)
+
+| Command | What it does |
+|---|---|
+| `/grapple initiate` | Initiate a grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus). On success, both combatants gain the **Grappled** condition; initiator has control. |
+| `/grapple control` | Contested Jiujutsu/Strength roll between two grapple participants. Winner has control until the next Turn. |
+| `/grapple hit` | Grapple Hit (controller only): unarmed damage (1k1+Str) on a grappled opponent. No attack roll — DM authorizes damage via the standard button flow. |
+| `/grapple throw` | Throw a grappled opponent: target becomes **Prone** and leaves the grapple. |
+| `/grapple break_free` | Break free from a grapple (controller's Simple Action): removes the Grappled condition. |
+
 **NPCs** (generated from **GDD s22.4** — Generation Templates, LOCKED)
 
 | Command | What it does |
@@ -443,6 +453,9 @@ auto-fires a second attack roll after the first hit resolves (once per Turn);
 auto-apply: Heavy −5, Tetsu-Do −10 (−5 if Str ≥ 5); Hida Bushi R1 is exempt.
 **Full Defense** (`/combat full_defense`) rolls Defense/Reflexes and adds half
 (rounded up) to Armor TN until the combatant's next turn — a Complex Action.
+**Grappling** (`/grapple`) covers the full subsystem: initiate (Jiujutsu/Agility
+vs TN ignoring armor), contested control rolls, Hit (unarmed damage via DM
+buttons), Throw (Prone + leave grapple), and Break Free.
 Dual-wielding and thrown/charge maneuvers are still **not** modelled — the DM
 can express those with `raises`/`bonus_tn`.
 
@@ -504,7 +517,7 @@ discord_bot/
 │   ├── character.py       # The playable character sheet (subset of character_data.gd).
 │   ├── stats.py           # Derived values: rings, wound levels, Insight (character_stats.gd).
 │   ├── advancement.py     # RAW XP costs: Traits/Void/Skills/Emphasis/Kata/Kiho/Spell.
-│   ├── combat.py          # Attack/damage/armor-TN core + full weapon & armor catalogs.
+│   ├── combat.py          # Attack/damage/armor-TN/grapple core + full weapon & armor catalogs.
 │   ├── npc_gen.py         # Procedural NPC samurai generator (GDD s22.4, LOCKED).
 │   ├── creature.py        # Creature model + combat; loads the generated catalog.
 │   ├── creature_catalog.py# AUTO-GENERATED: 208 bestiary stat blocks (verbatim).
