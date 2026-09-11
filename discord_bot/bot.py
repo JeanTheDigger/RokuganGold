@@ -317,6 +317,50 @@ async def whoami(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
+@client.tree.command(name="party", description="DM overview — all active PCs on this server.")
+async def party_overview(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only DMs can view the party roster.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    active = store.list_active_pcs(guild)
+    if not active:
+        await interaction.response.send_message("No active PCs on this server.", ephemeral=True)
+        return
+    embed = discord.Embed(title="Party Roster", color=discord.Color.gold())
+    for owner_id, rec in active:
+        c = rec.character
+        rings = stats.all_rings(c)
+        ring_str = " / ".join(f"{r[0].upper()}{v}" for r, v in rings.items())
+        lvl = stats.wound_level_name(c)
+        pen = stats.wound_penalty(c)
+        cap = stats.total_wound_capacity(c)
+        wound_str = f"{lvl}" + (f" ({pen})" if pen else "") + f" — {c.wounds_taken}/{cap}"
+        vp_str = f"VP {c.current_void_points}/{c.max_void_points}"
+        header = " · ".join(b for b in (c.clan, c.school) if b) or "—"
+        val_parts = [
+            f"{header} (Rank {stats.insight_rank(c)})",
+            f"Rings: {ring_str}",
+            f"Wounds: {wound_str}  ·  {vp_str}",
+            f"Honor {c.honor:g} · Glory {c.glory:g} · Status {c.status:g}",
+        ]
+        if c.equipped_weapon:
+            wield = c.equipped_weapon
+            if c.off_hand_weapon:
+                wield += f" + {c.off_hand_weapon}"
+            val_parts.append(f"Wielding: {wield}")
+        embed.add_field(
+            name=f"{c.name}  (<@{owner_id}>)",
+            value="\n".join(val_parts),
+            inline=False,
+        )
+    embed.set_footer(text=f"{len(active)} active PC{'s' if len(active) != 1 else ''}")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 def _format_dice(result: DiceResult) -> str:
     kept = ", ".join(str(d) for d in result.kept_dice) or "—"
     line = f"**Kept:** {kept}"
@@ -536,6 +580,43 @@ async def _kiho_autocomplete(
     out = [
         app_commands.Choice(name=f"{k['name']} ({k['element']} {k['mastery']})", value=k["name"])
         for k in kiho.ALL if cur in k["name"].lower()
+    ]
+    return out[:25]
+
+
+async def _skill_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    """Autocomplete skill names from the caller's active character (or the
+    member/NPC target if those params are already filled in)."""
+    if interaction.guild_id is None:
+        return []
+    guild = str(interaction.guild_id)
+    cur = current.lower().strip()
+    ns = interaction.namespace
+    char = None
+    is_npc = getattr(ns, "is_npc", False)
+    name_val = getattr(ns, "name", None)
+    member_val = getattr(ns, "member", None)
+    if is_npc and name_val:
+        rec = store.get_by_name(guild, NPC_OWNER, name_val)
+        if rec:
+            char = rec.character
+    elif member_val is not None:
+        mid = str(member_val.id) if hasattr(member_val, "id") else str(member_val)
+        rec = store.get_active(guild, mid)
+        if rec:
+            char = rec.character
+    if char is None:
+        rec = store.get_active(guild, str(interaction.user.id))
+        if rec:
+            char = rec.character
+    if char is None or not char.skills:
+        return []
+    skills = sorted(char.skills.keys())
+    out = [
+        app_commands.Choice(name=f"{s} ({char.skills[s]})", value=s)
+        for s in skills if cur in s.lower()
     ]
     return out[:25]
 
@@ -3911,6 +3992,7 @@ def _build_check_embed(
     reason="Label shown with the roll.",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
+@app_commands.autocomplete(skill=_skill_autocomplete)
 async def skill_check(
     interaction: discord.Interaction,
     name: str,
@@ -4152,6 +4234,7 @@ async def social_check(
     bonus="Flat bonus (tools, workshop, etc.).",
     reason="Label (e.g. 'forging a katana').",
 )
+@app_commands.autocomplete(skill=_skill_autocomplete)
 async def craft_check(
     interaction: discord.Interaction,
     name: str,
@@ -4201,6 +4284,7 @@ async def craft_check(
     bonus="Flat bonus (library, scrolls, advantages, etc.).",
     reason="Label (e.g. 'identifying the creature').",
 )
+@app_commands.autocomplete(specialty=_skill_autocomplete)
 async def lore_check(
     interaction: discord.Interaction,
     name: str,
@@ -4327,6 +4411,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
     ("DM Management", [
         ("/dm grant / revoke", "Grant or revoke DM status (admin only)."),
         ("/dm list", "List this server's DMs."),
+        ("/party", "Overview of all active PCs (DM only)."),
     ]),
     ("Combat", [
         ("/attack", "Attack a character, NPC, or creature."),

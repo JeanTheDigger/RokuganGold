@@ -218,6 +218,18 @@ class Store:
             ).fetchone()
         return self._row_to_record(row) if row else None
 
+    def list_active_pcs(self, guild_id: str) -> list[tuple[str, CharacterRecord]]:
+        """Return (owner_id, record) for every active PC in the guild."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT a.user_id, c.* FROM active_characters a JOIN characters c "
+                "ON c.id = a.character_id "
+                "WHERE a.guild_id = ? AND a.user_id != ? "
+                "ORDER BY c.name COLLATE NOCASE",
+                (guild_id, "npc"),
+            ).fetchall()
+        return [(r["user_id"], self._row_to_record(r)) for r in rows]
+
     # -- DM roles --------------------------------------------------------------
     def grant_dm(self, guild_id: str, user_id: str) -> None:
         with self._lock, self._conn:

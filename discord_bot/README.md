@@ -48,6 +48,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 |---|---|
 | `/dm grant` / `/dm revoke` | Server admins make/unmake a member a DM. |
 | `/dm list` | Show this server's DMs. |
+| `/party` | DM-only roster of every active PC: school, rings, wounds, VP, honor/glory/status, wielded weapon. Gold embed with player mention. |
 
 A **DM** — a server admin, anyone with *Manage Server*, or a member granted via
 `/dm grant` — can `view`, edit (`trait`/`skill`/`set`/`wound`/`heal`), and
@@ -469,12 +470,12 @@ helper for a consistent three-field embed (Roll / Dice / Result).
 
 | Command | What it does |
 |---|---|
-| `/skillcheck` | **Universal** skill check — DM picks the trait (dropdown) and skill name (free text; rank read from sheet). For anything not covered by a dedicated command. |
+| `/skillcheck` | **Universal** skill check — DM picks the trait (dropdown) and skill name (autocomplete from sheet; rank read automatically). For anything not covered by a dedicated command. |
 | `/stealth` | **Stealth/Agility** vs TN. Auto-reads the Stealth skill from the sheet. Verdict: "Undetected!" / "Spotted!" |
 | `/investigate` | **Investigation/Perception** vs TN. Optional emphasis choice (Notice, Interrogation, Search) — checks the sheet for a matching emphasis and adds a footer reminder about emphasis rerolls. |
 | `/social` | **Social skill** dropdown (Courtier, Etiquette, Intimidation, Temptation, Sincerity, Perform) — auto-selects the correct trait per L5R 4e rules (Awareness for most, Willpower for Intimidation). |
-| `/craft` | **Artisan or Craft / Intelligence** vs TN. Free-text skill name (e.g. "Artisan: Painting", "Craft: Weaponsmithing"). |
-| `/lore` | **Lore / Intelligence** vs TN. Free-text specialty (e.g. "Lore: Heraldry", "Lore: Shadowlands"). |
+| `/craft` | **Artisan or Craft / Intelligence** vs TN. Skill name autocompletes from sheet (e.g. "Artisan: Painting", "Craft: Weaponsmithing"). |
+| `/lore` | **Lore / Intelligence** vs TN. Specialty autocompletes from sheet (e.g. "Lore: Heraldry", "Lore: Shadowlands"). |
 
 All six support `member:` (DM targets a player's active character), `is_npc:`
 (look up by name), `bonus:` (flat modifier for advantages, tools, etc.), and
