@@ -272,6 +272,51 @@ async def ping(interaction: discord.Interaction) -> None:
     )
 
 
+@client.tree.command(name="whoami", description="Quick glance at your active character's status.")
+async def whoami(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = store.get_active(guild, str(interaction.user.id))
+    if rec is None:
+        await interaction.response.send_message(
+            "You have no active character. Use `/sheet create` first.", ephemeral=True
+        )
+        return
+    c = rec.character
+    rings = stats.all_rings(c)
+    lvl = stats.wound_level_name(c)
+    pen = stats.wound_penalty(c)
+    cap = stats.total_wound_capacity(c)
+    ring_str = " · ".join(f"{r.capitalize()} **{v}**" for r, v in rings.items())
+    wound_str = f"**{lvl}**" + (f" ({pen} penalty)" if pen else "") + f" — {c.wounds_taken}/{cap}"
+    vp_str = f"{c.current_void_points}/{c.max_void_points} VP"
+    header = " · ".join(b for b in (c.clan, c.school) if b) or "—"
+    lines = [
+        f"**{c.name}** — {header} (Rank {stats.insight_rank(c)})",
+        f"Rings: {ring_str}",
+        f"Wounds: {wound_str}  ·  {vp_str}",
+        f"Honor {c.honor:g} · Glory {c.glory:g} · Status {c.status:g}",
+    ]
+    if c.equipped_weapon:
+        wield = c.equipped_weapon
+        if c.off_hand_weapon:
+            wield += f" + {c.off_hand_weapon}"
+        lines.append(f"Wielding: {wield}")
+    if c.active_kata:
+        lines.append(f"Active Kata: {c.active_kata}")
+    enc = encounters.get(interaction.channel_id)
+    if enc:
+        uid = str(interaction.user.id)
+        for cb in enc.combatants:
+            if cb.owner_id == uid and cb.name.lower() == c.name.lower():
+                conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "none"
+                lines.append(f"In combat — conditions: {conds}")
+                break
+    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+
 def _format_dice(result: DiceResult) -> str:
     kept = ", ".join(str(d) for d in result.kept_dice) or "—"
     line = f"**Kept:** {kept}"
@@ -4146,8 +4191,9 @@ async def lore_check(
 # /help — categorized command reference
 # ===========================================================================
 _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
-    ("Dice", [
+    ("Dice & Basics", [
         ("/ping", "Check the bot is alive (shows gateway latency)."),
+        ("/whoami", "Quick glance at your active character's status."),
         ("/roll", "Roll & Keep: XkY, optional TN, raises, emphasis, unskilled."),
     ]),
     ("Character Sheets", [

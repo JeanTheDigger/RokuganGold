@@ -18,6 +18,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 | Command | What it does |
 |---|---|
 | `/help` | Categorized command reference — 13 categories, expandable. Shows a compact overview or drill into one category. Ephemeral (only you see it). |
+| `/whoami` | Quick glance at your active character: name, school, rings, wounds, VP, wielded weapon, active Kata, and combat conditions (if in an encounter). Ephemeral. |
 
 **Dice**
 
