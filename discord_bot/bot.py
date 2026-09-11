@@ -1296,8 +1296,8 @@ async def attack(
         )
         return
 
-    a_stance = attacker_stance.value if attacker_stance else "attack"
-    d_stance = defender_stance.value if defender_stance else "attack"
+    a_stance_explicit = attacker_stance.value if attacker_stance else None
+    d_stance_explicit = defender_stance.value if defender_stance else None
     man = maneuver.value if maneuver else "none"
 
     if target_creature_rec is not None and man in ("disarm", "knockdown"):
@@ -1347,6 +1347,11 @@ async def attack(
     atk_init = atk_combatant.initiative if atk_combatant else None
     def_combatant = enc.find(target_rec.character.name) if (enc and target_rec is not None) else None
     def_init = def_combatant.initiative if def_combatant else None
+
+    # Stance resolution: explicit parameter wins; otherwise read from encounter.
+    a_stance = a_stance_explicit or (atk_combatant.stance if atk_combatant else "attack")
+    d_stance = d_stance_explicit or (def_combatant.stance if def_combatant else "attack")
+
     # A rate-limited kata is enforced by the tracker (on this roll or its damage
     # step) only while an encounter is tracking the attacker; then suppress its
     # generic reminder. Untracked -> stays a DM-adjudicated reminder.
@@ -1529,7 +1534,8 @@ async def attack(
         f"{outcome['trait_name'].capitalize()} with **{weapon}**"
     )
     if a_stance != "attack":
-        atk_desc += f"  ·  {a_stance.replace('_', ' ').title()}"
+        auto_tag = " *(enc)*" if (not a_stance_explicit and atk_combatant) else ""
+        atk_desc += f"  ·  {a_stance.replace('_', ' ').title()}{auto_tag}"
     if man != "none":
         atk_desc += f"  ·  Maneuver: {man.title()}"
     atk_desc += void_line
@@ -1540,7 +1546,8 @@ async def attack(
     if outcome["raises"]:
         tn_note += f" ({outcome['raises']} raises)"
     if target_creature_rec is None and d_stance != "attack":
-        tn_note += f"  ·  {d_stance.replace('_', ' ').title()}"
+        auto_tag = " *(enc)*" if (not d_stance_explicit and def_combatant) else ""
+        tn_note += f"  ·  {d_stance.replace('_', ' ').title()}{auto_tag}"
     verdict = "✅ **HIT**" if hit else "❌ **MISS**"
     embed.add_field(
         name="Result",
