@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 23 — Weapon Skill Mastery effects (GDD s24)
+## Status: Phase 24 — Advantage & Disadvantage combat effects (GDD s45)
 
 **Dice**
 
@@ -149,6 +149,33 @@ and full effect text.
 | `/advantage list` · `/advantage search` · `/advantage view` | Browse both, with costs and effects. |
 | `/xp advantage` | Buy an Advantage with XP (cost = its point value; pass `points:` for Variable-cost ones). |
 | `/sheet advantage` · `/sheet disadvantage` | Record/remove on the sheet (free) — e.g. at creation. Taking a Disadvantage tells you the XP it grants; a DM applies that with `/xp grant`. |
+
+**Auto-applied Advantage & Disadvantage combat effects** — when a character has
+one of the entries below, `/attack` applies the modifier automatically, the same
+way it does for Kata and Techniques (`l5r_rules/advantage_effects.py`). **12
+effects across 10 entries:**
+
+| Advantage / Disadvantage | Auto-applied in `/attack` |
+|---|---|
+| Large | melee with a Large weapon → damage **+1k0** |
+| Hands of Stone | unarmed → damage **+0k1** |
+| Small | melee → damage **−1k0** |
+| Bad Eyesight | ranged attack → attack roll **−1k1** |
+| Blind | melee attack **−1k1**; ranged attack **−3k3**; defender Armor TN base = **Reflexes + 5** (not ×5) |
+| Strength of the Earth | wound penalties **reduced by 3** |
+| Low Pain Threshold | wound penalties **increased by 5** |
+| Permanent Wound | always at least **Nicked** wound level (applied in wound calculation) |
+| Touch of the Spirit Realms: Jigoku | attack roll **+Taint Rank** flat |
+| Touch of the Spirit Realms: Gaki-do | on kill, attacker **heals 5 Wounds** |
+| Seven Fortunes' Curse: Bishamon | damage **−1k0** (Strength −1) |
+| Bishamon's Blessing | 3+ Increased Damage raises → **+1k0** extra damage (one bonus raise) |
+
+Everything else from GDD s45 stays **DM-adjudicated** — Quick (Initiative),
+Prodigy (school-skill detection), Sacred Weapons (weapon identity beyond name),
+Crab Hands (unskilled fallback), movement penalties (Blind, Small, Lame),
+Missing Limb, Weakness/Doubt (parameterised skills/traits), Momoku/Consumed/
+Failure of Bushido (Void-spend restrictions), and Magic Resistance (spell
+combat not modelled).
 
 **Schools & Techniques** (all of **GDD s29**, transcribed verbatim)
 
@@ -340,12 +367,11 @@ their ranks; Ranks are capped at **1–5** (s22.4 gives no 6+ ranges); koku is t
 NPCs can be tuned field-by-field with the `/npc` editors above.
 
 *Still faithful-core:* deterministic subsets of **Kata**, **School Techniques**,
-and **Skill Masteries** now auto-apply in `/attack` (see the Active-Kata,
-Technique, and Skill Mastery tables above); the rest of Kata, most Techniques,
-and all Kiho stay DM-adjudicated (Kata/Kiho shown as reminders, technique text on
-the sheet via `/school view`). Dual-wielding and thrown/charge/called-shot
-maneuvers are still **not** modelled — the DM can express those with
-`raises`/`bonus_tn`.
+**Skill Masteries**, and **Advantages/Disadvantages** now auto-apply in `/attack`
+(see the tables above); the rest of Kata, most Techniques, and all Kiho stay
+DM-adjudicated (Kata/Kiho shown as reminders, technique text on the sheet via
+`/school view`). Dual-wielding and thrown/charge/called-shot maneuvers are still
+**not** modelled — the DM can express those with `raises`/`bonus_tn`.
 
 **Creatures / monsters** (stat blocks transcribed **verbatim** from the bestiaries)
 
@@ -419,6 +445,8 @@ discord_bot/
 │   ├── kata_catalog.py    # AUTO-GENERATED: 43 Kata (verbatim).
 │   ├── kata_effects.py    # Deterministic active-Kata combat modifiers for /attack (GDD s30).
 │   ├── technique_effects.py # Deterministic School-Technique combat modifiers for /attack (GDD s29).
+│   ├── skill_mastery.py   # Weapon Skill Mastery combat modifiers for /attack (GDD s24).
+│   ├── advantage_effects.py # Advantage/Disadvantage combat modifiers for /attack (GDD s45).
 │   ├── kiho.py            # Access helpers over the kiho catalog (GDD s38).
 │   ├── kiho_catalog.py    # AUTO-GENERATED: 73 Kiho (verbatim).
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).

@@ -11,8 +11,9 @@ Faithful port of the relevant parts of `simulation/character_stats.gd` and
   - Insight Rank ladder: R1@0, R2@150, then +25 per rank
 
 Known simplifications vs the GDScript (documented, not silent):
-  - The PERMANENT_WOUND advantage floor (min NICKED) is not applied — the bot's
-    advantages are plain names at this phase, with no s45 advantage engine.
+  - PERMANENT_WOUND advantage floor (min NICKED) IS now applied in
+    wound_level_index() — characters with the disadvantage are always at
+    least at the Nicked wound level.
   - Insight omits the Skill Mastery / Courtier insight bonuses (no s24 mastery
     engine here). The core formula is exact.
   - Spirit-creature stat-block wound tracks are not modelled (PC formula only).
@@ -44,9 +45,12 @@ def wound_level_index(c: Character) -> int:
     threshold = wound_threshold_per_level(c)
     if threshold <= 0:
         return 8  # Earth 0 -> Dead
-    if c.wounds_taken <= 0:
+    effective = c.wounds_taken
+    if any(d.lower() == "permanent wound" for d in c.disadvantages):
+        effective = max(effective, threshold + 1)
+    if effective <= 0:
         return 0  # Healthy
-    idx = (c.wounds_taken - 1) // threshold
+    idx = (effective - 1) // threshold
     return min(idx, 8)
 
 

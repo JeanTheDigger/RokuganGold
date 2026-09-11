@@ -20,8 +20,8 @@ from discord import app_commands
 import encounter
 import storage
 from l5r_rules import (
-    advancement, advantages, combat, creature, enums, kata, kata_effects, kiho, npc_gen,
-    schools, skill_mastery, spells, stats, technique_effects,
+    advancement, advantage_effects, advantages, combat, creature, enums, kata, kata_effects,
+    kiho, npc_gen, schools, skill_mastery, spells, stats, technique_effects,
 )
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
@@ -599,6 +599,14 @@ class DamageView(discord.ui.View):
             t_kept += m_kept
             t_flat += m_flat
             t_dmg_notes = t_dmg_notes + m_dmg_notes
+            a_roll, a_kept, a_flat, a_dmg_notes = advantage_effects.attacker_damage(attacker, wp, self.weapon)
+            extra_rolled += a_roll
+            t_kept += a_kept
+            t_flat += a_flat
+            t_dmg_notes = t_dmg_notes + a_dmg_notes
+            bish_roll, bish_notes = advantage_effects.increased_damage_bonus(attacker, self.increased_damage)
+            extra_rolled += bish_roll
+            t_dmg_notes = t_dmg_notes + bish_notes
             ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
             t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
             ignore += t_ignore
@@ -628,6 +636,13 @@ class DamageView(discord.ui.View):
             kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, *t_dmg_notes) if n)
             reduction = max(0, cre_rec.creature.reduction - ignore - tsu_ignore)
             applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction)
+            heal_line = ""
+            if applied["is_dead"]:
+                heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
+                if heal_amt:
+                    attacker.wounds_taken = max(0, attacker.wounds_taken - heal_amt)
+                    store.save(attacker_rec)
+                    heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
             store.save_creature(cre_rec)
             cr = cre_rec.creature
             embed = discord.Embed(
@@ -653,6 +668,7 @@ class DamageView(discord.ui.View):
                 status = f"{self.target_name}: **{applied['new_wound_level']}** ({cr.wounds_taken}/{cr.wounds_dead})"
             if applied["is_dead"]:
                 status += "  💀 **SLAIN**"
+            status += heal_line
             embed.add_field(name="Result", value=status, inline=False)
             embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
             self._disable()
@@ -735,6 +751,14 @@ class DamageView(discord.ui.View):
         t_kept += m_kept
         t_flat += m_flat
         t_dmg_notes = t_dmg_notes + m_dmg_notes
+        a_roll, a_kept, a_flat, a_dmg_notes = advantage_effects.attacker_damage(attacker, wp, self.weapon)
+        extra_rolled += a_roll
+        t_kept += a_kept
+        t_flat += a_flat
+        t_dmg_notes = t_dmg_notes + a_dmg_notes
+        bish_roll, bish_notes = advantage_effects.increased_damage_bonus(attacker, self.increased_damage)
+        extra_rolled += bish_roll
+        t_dmg_notes = t_dmg_notes + bish_notes
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
         t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
         ignore += t_ignore
@@ -768,6 +792,13 @@ class DamageView(discord.ui.View):
         )
         reduction = max(0, target.armor_reduction - ignore - tsu_ignore + crab_bonus + tech_red)
         applied = combat.apply_damage(target, raw, reduction)
+        heal_line = ""
+        if applied["is_dead"]:
+            heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
+            if heal_amt:
+                attacker.wounds_taken = max(0, attacker.wounds_taken - heal_amt)
+                store.save(attacker_rec)
+                heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
         store.save(target_rec)
 
         embed = discord.Embed(
@@ -784,7 +815,7 @@ class DamageView(discord.ui.View):
             ),
             inline=False,
         )
-        embed.add_field(name="Result", value=self._wound_status(target_rec, applied), inline=False)
+        embed.add_field(name="Result", value=self._wound_status(target_rec, applied) + heal_line, inline=False)
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
         await interaction.response.edit_message(view=self)
@@ -995,6 +1026,9 @@ async def attack(
         def_mastery_bonus, def_mastery_notes = skill_mastery.defender_armor_tn_bonus(target_rec.character)
         def_kata_bonus += def_mastery_bonus
         kata_notes.extend(def_mastery_notes)
+        def_adv_mod, def_adv_notes = advantage_effects.defender_armor_tn_mod(target_rec.character)
+        def_kata_bonus += def_adv_mod
+        kata_notes.extend(def_adv_notes)
     # Attacker's active kata: flat bonus added to the attack-roll total.
     atk_flat, atk_note = kata_effects.attacker_roll_flat_bonus(attacker, man, increased_damage)
     if atk_note:
@@ -1040,6 +1074,21 @@ async def attack(
     bonus_kept += t_kept
     atk_flat += t_flat
     kata_notes.extend(t_notes)
+
+    # Advantage/disadvantage attack-roll modifiers (Bad Eyesight, Blind, Touch of Jigoku).
+    adv_rolled, adv_kept, adv_flat, adv_notes = advantage_effects.attacker_attack_dice(
+        attacker, atk_weapon_profile
+    )
+    bonus_rolled += adv_rolled
+    bonus_kept += adv_kept
+    atk_flat += adv_flat
+    kata_notes.extend(adv_notes)
+
+    # Advantage wound-penalty modifiers (Strength of the Earth, Low Pain Threshold).
+    wp_mod, wp_notes = advantage_effects.attacker_wound_penalty_mod(attacker)
+    if wp_mod:
+        atk_flat += wp_mod
+        kata_notes.extend(wp_notes)
 
     # Skill mastery: free raises that reduce a maneuver's raise cost (s24).
     mastery_free, mastery_free_notes = skill_mastery.maneuver_free_raises(
