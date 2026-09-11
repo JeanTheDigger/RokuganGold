@@ -21,8 +21,8 @@ import encounter
 import storage
 from l5r_rules import (
     advancement, advantage_effects, advantages, combat, condition_effects, creature, enums,
-    kata, kata_effects, kiho, kiho_effects, npc_gen, schools, skill_mastery, spells, stats,
-    technique_effects,
+    families, heritage, kata, kata_effects, kiho, kiho_effects, mass_battle, npc_gen,
+    schools, skill_mastery, spells, stats, taint, technique_effects,
 )
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
@@ -548,6 +548,17 @@ async def _basic_school_autocomplete(
     Advanced Schools and Alternate Paths are transitions, not starting Schools."""
     cur = current.lower().strip()
     out = [app_commands.Choice(name=s["name"], value=s["name"]) for s in schools.basic() if cur in s["name"].lower()]
+    return out[:25]
+
+
+async def _family_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    out = [
+        app_commands.Choice(name=f"{f['name']} ({f['clan']}, +1 {f['bonus_trait'].capitalize()})", value=f["name"])
+        for f in families.ALL if cur in f["name"].lower() or cur in f["clan"].lower()
+    ]
     return out[:25]
 
 
@@ -1631,7 +1642,7 @@ _SET_CHOICES = [app_commands.Choice(name=f, value=f) for f in _SET_FIELDS]
     school_type="School type (default Bushi; a catalog school sets this for you).",
     age="Age (default 16).",
 )
-@app_commands.autocomplete(school=_basic_school_autocomplete)
+@app_commands.autocomplete(school=_basic_school_autocomplete, family=_family_autocomplete)
 @app_commands.choices(school_type=_SCHOOL_CHOICES)
 async def sheet_create(
     interaction: discord.Interaction,
@@ -1658,6 +1669,14 @@ async def sheet_create(
     if age is not None:
         char.age = age
 
+    # If the family matches a catalog entry, auto-apply its +1 Trait bonus.
+    family_entry = families.get(family) if family else None
+    family_report = None
+    if family_entry:
+        family_report = families.apply_to_character(char, family_entry)
+        if not clan:
+            char.clan = family_entry["clan"]
+
     # If the school matches a catalog entry, auto-apply its Benefit/Skills/Honor.
     applied = schools.get(school) if school else None
     report = schools.apply_to_character(char, applied) if applied else None
@@ -1675,6 +1694,8 @@ async def sheet_create(
     store.set_active(guild, owner, record.id)
     if report is not None:
         bits = [f"applied **{applied['name']}**"]
+        if family_report:
+            bits.append(f"Family {family_entry['name']} ({family_report})")
         if report["benefit"]:
             bits.append(f"Benefit {report['benefit']}")
         if report["skills"]:
@@ -1687,9 +1708,12 @@ async def sheet_create(
             + ". `/school learn` to record your Rank-1 technique."
         )
     else:
+        fam_note = ""
+        if family_report:
+            fam_note = f" Family **{family_entry['name']}** applied ({family_report})."
         content = (
             f"Created **{name}** and set it as your active character. All Traits start at 2 "
-            f"(the L5R 4e baseline). Tip: pass a `school:` from the catalog to auto-fill it."
+            f"(the L5R 4e baseline).{fam_note} Tip: pass a `school:` from the catalog to auto-fill it."
         )
     await interaction.response.send_message(content=content, embed=build_sheet_embed(record))
 
@@ -2350,10 +2374,12 @@ def _render_encounter(enc: encounter.Encounter) -> str:
         marker = "▶️ " if (enc.started and c is cur) else f"{i + 1}. "
         tag = " *(NPC)*" if c.is_npc else ""
         detail = f"  ·  {c.initiative_detail}" if c.initiative_detail else ""
+        stance_str = f"  ⚔️{c.stance.replace('_', ' ').title()}" if c.stance != "attack" else ""
+        acts = f"  [{c.actions_used}/2 acts]" if enc.started and c.actions_used > 0 else ""
         cond = f"  [{', '.join(sorted(c.conditions))}]" if c.conditions else ""
         guard = f"  🛡️→{c.guarding}" if c.guarding else ""
         fd = f"  🛡️FD+{c.full_defense_bonus}" if c.full_defense_bonus else ""
-        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}{cond}{guard}{fd}")
+        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}{stance_str}{acts}{cond}{guard}{fd}")
     header = f"⚔️ **Round {enc.round}**" if enc.started else "⚔️ **Not started** — use `/combat next` to begin."
     return header + "\n" + "\n".join(lines)
 
@@ -2529,9 +2555,11 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "—"
             fd = f", FD+{cb.full_defense_bonus}" if cb.full_defense_bonus else ""
             guard = f", guarding {cb.guarding}" if cb.guarding else ""
+            stance_label = cb.stance.replace("_", " ").title()
+            acts_left = 2 - cb.actions_used
             value = (
                 f"Wounds: {c.wounds_taken}/{cap} **{lvl}**{pen_str}\n"
-                f"ATN: **{tn}** · {vp}\n"
+                f"ATN: **{tn}** · {vp} · Stance: **{stance_label}** · Acts: {acts_left}\n"
                 f"Conditions: {conds}{fd}{guard}"
             )
         else:
@@ -4487,6 +4515,33 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/kata list / search / view", "Browse 43 Kata."),
         ("/kiho list / search / view", "Browse 73 Kiho."),
     ]),
+    ("Combat — Stances & Actions", [
+        ("/combat stance", "Declare stance (Attack, Full Attack, Defense, Full Defense, Center)."),
+        ("/combat action", "Track Simple/Complex action economy per turn."),
+        ("/combat mount", "Mount or dismount (adds/removes Mounted condition)."),
+        ("/combat full_defense", "Full Defense roll (Complex Action)."),
+        ("/dual_wield", "Dual-wielding rules and off-hand penalties."),
+    ]),
+    ("Mass Battle", [
+        ("/battle roll", "Mass Battle engagement roll (Battle/Perception vs TN)."),
+        ("/battle damage", "Incidental damage by engagement level."),
+    ]),
+    ("Character Creation", [
+        ("/family list / search", "Browse 47 families and their Trait bonuses."),
+        ("/heritage roll / table", "Roll on clan Heritage tables."),
+        ("/ancestors", "Ancestor advantage mechanical effects."),
+    ]),
+    ("Taint & Corruption", [
+        ("/taint", "View or modify Shadowlands Taint (rank, mutations, madness)."),
+    ]),
+    ("Utility", [
+        ("/spell_damage", "Roll spell damage dice (optional auto-apply)."),
+        ("/craft_extended", "Multi-step extended crafting rolls with quality tiers."),
+        ("/encumbrance", "Strength-based carrying capacity check."),
+        ("/horsemanship", "Horsemanship/Agility check."),
+        ("/influence", "Track court influence points (DM)."),
+        ("/travel", "Calculate travel time by mode and terrain."),
+    ]),
     ("Rooms", [
         ("/room create", "Open a private play room (thread)."),
         ("/room invite / kick", "Add or remove a member."),
@@ -6220,6 +6275,802 @@ async def kiho_view(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(embed=build_kiho_embed(k))
 
 
+# ---------------------------------------------------------------------------
+# Phase 42 — Stance Tracking (#1)
+# ---------------------------------------------------------------------------
+
+_STANCE_CHOICES = [
+    app_commands.Choice(name="Attack", value="attack"),
+    app_commands.Choice(name="Full Attack (+2k1 hit, −10 ATN)", value="full_attack"),
+    app_commands.Choice(name="Defense (+Air+Defense to ATN)", value="defense"),
+    app_commands.Choice(name="Full Defense (Complex Action)", value="full_defense"),
+    app_commands.Choice(name="Center (no bonus, preparing)", value="center"),
+]
+
+
+@combat_group.command(name="stance", description="Declare your stance for this turn (persists until your next turn).")
+@app_commands.describe(
+    name="Combatant name.",
+    stance="Stance to adopt.",
+)
+@app_commands.choices(stance=_STANCE_CHOICES)
+async def combat_stance(
+    interaction: discord.Interaction,
+    name: str,
+    stance: app_commands.Choice[str],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    cb = enc.find(name)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    if stance.value not in encounter.VALID_STANCES:
+        await interaction.response.send_message("Invalid stance.", ephemeral=True)
+        return
+    cb.stance = stance.value
+    label = stance.name
+    await interaction.response.send_message(f"**{cb.name}** adopts **{label}** stance.")
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Heritage Tables (#4)
+# ---------------------------------------------------------------------------
+
+heritage_group = app_commands.Group(name="heritage", description="Heritage table rolls (L5R 4e character creation).")
+
+
+@heritage_group.command(name="roll", description="Roll on a clan's Heritage Table (1d10). DM only.")
+@app_commands.describe(clan="Clan name (Crab, Crane, Dragon, Lion, Mantis, Phoenix, Scorpion, Unicorn).")
+async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only DMs can roll heritage.", ephemeral=True)
+        return
+    result = heritage.roll_heritage(clan)
+    embed = discord.Embed(
+        title=f"Heritage Roll — {clan}",
+        color=discord.Color.dark_teal(),
+    )
+    embed.add_field(name=f"Roll: {result['roll']} — {result['name']}", value=result["effect"], inline=False)
+    await interaction.response.send_message(embed=embed)
+
+
+@heritage_group.command(name="table", description="Show a clan's full Heritage Table.")
+@app_commands.describe(clan="Clan name.")
+async def heritage_table(interaction: discord.Interaction, clan: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    table = heritage.get_table(clan)
+    lines = [f"**{r['roll']}.** {r['name']} — {r['effect']}" for r in table]
+    embed = discord.Embed(title=f"Heritage Table — {clan}", description="\n".join(lines), color=discord.Color.dark_teal())
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Taint Progression (#14)
+# ---------------------------------------------------------------------------
+
+@client.tree.command(name="taint", description="View or modify a character's Shadowlands Taint. DM only.")
+@app_commands.describe(
+    name="Character name.",
+    add="Taint points to add (can be negative to remove).",
+    member="Player whose character to check (omit for caller's).",
+    is_npc="Target is an NPC.",
+)
+async def taint_command(
+    interaction: discord.Interaction,
+    name: str | None = None,
+    add: float | None = None,
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    if add is not None and not _is_dm(interaction):
+        await interaction.response.send_message("Only DMs can modify Taint.", ephemeral=True)
+        return
+    if is_npc and name:
+        rec = store.get_by_name(guild, NPC_OWNER, name)
+    elif member is not None:
+        rec = store.get_active(guild, str(member.id))
+    elif name:
+        rec = store.get_by_name(guild, NPC_OWNER, name)
+        if rec is None:
+            rec = store.get_active(guild, str(interaction.user.id))
+    else:
+        rec = store.get_active(guild, str(interaction.user.id))
+    if rec is None:
+        await interaction.response.send_message("Character not found.", ephemeral=True)
+        return
+    c = rec.character
+    if add is not None:
+        old_taint = c.taint
+        c.taint = max(0.0, c.taint + add)
+        store.save(rec)
+        crossing = taint.check_threshold_crossing(old_taint, c.taint, c)
+        embed = discord.Embed(title=f"Taint — {c.name}", color=discord.Color.dark_purple())
+        embed.add_field(name="Taint", value=f"{old_taint:g} → **{c.taint:g}**", inline=True)
+        embed.add_field(name="Taint Rank", value=f"**{taint.taint_rank(c)}**", inline=True)
+        embed.add_field(name="Earth Ring", value=str(stats.earth_ring(c)), inline=True)
+        if crossing:
+            embed.add_field(name="Rank Crossed!", value=crossing["description"], inline=False)
+            if "mutation" in crossing:
+                embed.add_field(name="Mutation", value=crossing["mutation"], inline=False)
+            if "madness" in crossing:
+                embed.add_field(name="Madness", value=crossing["madness"], inline=False)
+            if crossing["is_lost"]:
+                embed.add_field(name="LOST TO THE TAINT", value="Character becomes an NPC.", inline=False)
+        await interaction.response.send_message(embed=embed)
+    else:
+        rank = taint.taint_rank(c)
+        embed = discord.Embed(title=f"Taint — {c.name}", color=discord.Color.dark_purple())
+        embed.add_field(name="Taint", value=f"**{c.taint:g}**", inline=True)
+        embed.add_field(name="Taint Rank", value=f"**{rank}**", inline=True)
+        embed.add_field(name="Earth Ring", value=str(stats.earth_ring(c)), inline=True)
+        embed.add_field(name="Status", value=taint.taint_description(rank), inline=False)
+        if taint.social_penalty(c):
+            embed.add_field(name="Social Penalty", value=f"TN +{taint.social_penalty(c)}", inline=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Mass Battle (#3)
+# ---------------------------------------------------------------------------
+
+battle_group = app_commands.Group(name="battle", description="Mass Battle system (L5R 4e).")
+
+
+@battle_group.command(name="roll", description="Battle/Perception roll to determine engagement level. DM only.")
+@app_commands.describe(
+    name="Character name.",
+    tn="Battle TN set by DM (10-15 winning, 15-20 even, 20-30 losing, 30+ desperate).",
+    member="Player whose character to use.",
+    is_npc="Target is an NPC.",
+    bonus="Flat bonus (advantages, terrain, etc.).",
+)
+async def battle_roll(
+    interaction: discord.Interaction,
+    name: str,
+    tn: app_commands.Range[int, 5, 100],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: int = 0,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only DMs can run mass battle rolls.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    c, _ = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if c is None:
+        await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
+        return
+    battle_skill = c.skills.get("Battle", 0)
+    wp = stats.wound_penalty(c)
+    result = mass_battle.resolve_battle_roll(c.perception, battle_skill, tn, engine, bonus + wp)
+    info = result["engagement_info"]
+    embed = discord.Embed(
+        title=f"Mass Battle — {c.name}",
+        color=discord.Color.red() if result["engagement"] in ("heavily_engaged", "heroic") else discord.Color.orange(),
+    )
+    embed.add_field(name="Roll", value=f"({result['rolled']}k{result['kept']}) = **{result['total']}** vs TN {tn}", inline=False)
+    embed.add_field(name="Engagement", value=f"**{info['name']}**", inline=True)
+    embed.add_field(name="Margin", value=f"{result['margin']:+d}", inline=True)
+    embed.add_field(name="Description", value=info["description"], inline=False)
+    dice_str = _format_dice(result["dice"])
+    embed.add_field(name="Dice", value=dice_str, inline=False)
+    await interaction.response.send_message(embed=embed)
+
+
+@battle_group.command(name="damage", description="Roll incidental damage from a mass battle round. DM only.")
+@app_commands.describe(engagement="Engagement level from the battle roll.")
+@app_commands.choices(engagement=[
+    app_commands.Choice(name="Reserves (0 damage)", value="reserves"),
+    app_commands.Choice(name="Disengaged (1k1)", value="disengaged"),
+    app_commands.Choice(name="Engaged (2k1)", value="engaged"),
+    app_commands.Choice(name="Heavily Engaged (3k2)", value="heavily_engaged"),
+    app_commands.Choice(name="Heroic (4k3)", value="heroic"),
+])
+async def battle_damage(
+    interaction: discord.Interaction,
+    engagement: app_commands.Choice[str],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only DMs can roll battle damage.", ephemeral=True)
+        return
+    result = mass_battle.resolve_battle_turn_damage(engagement.value, engine)
+    if result["damage"] == 0:
+        await interaction.response.send_message(f"**{engagement.name}** — no incidental damage this round.")
+        return
+    embed = discord.Embed(title=f"Mass Battle Damage — {engagement.name}", color=discord.Color.dark_red())
+    embed.add_field(name="Damage", value=f"**{result['damage']}** ({result['rolled']}k{result['kept']})", inline=True)
+    if result["dice"]:
+        embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
+    embed.set_footer(text="Apply with /sheet wound or /npc wound, subtracting armor Reduction.")
+    await interaction.response.send_message(embed=embed)
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Mounted Combat (#10)
+# ---------------------------------------------------------------------------
+
+@combat_group.command(name="mount", description="Mount or dismount (sets/clears Mounted condition). DM only.")
+@app_commands.describe(
+    name="Combatant name.",
+    dismount="Dismount instead of mounting.",
+)
+async def combat_mount(
+    interaction: discord.Interaction,
+    name: str,
+    dismount: bool = False,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only DMs can mount/dismount combatants.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    cb = enc.find(name)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    if dismount:
+        cb.conditions.discard("mounted")
+        await interaction.response.send_message(f"**{cb.name}** dismounts.")
+    else:
+        cb.conditions.add("mounted")
+        await interaction.response.send_message(
+            f"**{cb.name}** mounts up. Mounted combat: +1k0 damage on melee "
+            f"vs unmounted, +1 rolled die on Horsemanship checks. Mounted archery "
+            f"at −1k0 unless Mounted Archery emphasis."
+        )
+
+
+@client.tree.command(name="horsemanship", description="Horsemanship/Agility check (mounted combat maneuver). DM only.")
+@app_commands.describe(
+    name="Character name.",
+    tn="Target Number.",
+    member="Player whose character to use.",
+    is_npc="Target is an NPC.",
+    bonus="Flat bonus.",
+    reason="Label (e.g. 'charge', 'leap obstacle', 'stay mounted').",
+)
+async def horsemanship_check(
+    interaction: discord.Interaction,
+    name: str,
+    tn: app_commands.Range[int, 1, 200],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: int = 0,
+    reason: str = "",
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only DMs can call Horsemanship checks.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    c, _ = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if c is None:
+        await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
+        return
+    skill_rank = c.skills.get("Horsemanship", 0)
+    wp = stats.wound_penalty(c)
+    result = combat.resolve_skill_check(c.agility, skill_rank, tn, engine, bonus + wp)
+    embed = _build_check_embed(
+        reason or "Horsemanship Check", c.name, "Horsemanship", "Agility", result, wp, bonus,
+        success_text="Maneuver succeeds!", fail_text="The rider falters!",
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Crafting Extended (#6)
+# ---------------------------------------------------------------------------
+
+@client.tree.command(name="craft_extended", description="Extended crafting roll — multi-step project with cumulative total. DM only.")
+@app_commands.describe(
+    name="Character name.",
+    skill="Craft/Artisan skill name.",
+    tn="Cumulative TN to complete the project.",
+    member="Player whose character to use.",
+    is_npc="Target is an NPC.",
+    bonus="Flat bonus (tools, workshop, etc.).",
+    reason="Label (e.g. 'forging a katana').",
+)
+@app_commands.autocomplete(skill=_skill_autocomplete)
+async def craft_extended(
+    interaction: discord.Interaction,
+    name: str,
+    skill: str,
+    tn: app_commands.Range[int, 1, 1000],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: int = 0,
+    reason: str = "",
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only DMs can run extended crafting.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    c, _ = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if c is None:
+        await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
+        return
+    skill_rank = c.skills.get(skill, 0)
+    wp = stats.wound_penalty(c)
+    result = combat.resolve_skill_check(c.intelligence, skill_rank, 10, engine, bonus + wp)
+    embed = discord.Embed(
+        title=reason or f"Extended Crafting — {skill}",
+        color=discord.Color.teal(),
+    )
+    embed.add_field(name="Craftsman", value=c.name, inline=True)
+    embed.add_field(name="Roll", value=f"({result['rolled']}k{result['kept']}) = **{result['total']}**", inline=True)
+    embed.add_field(name="Progress", value=f"+{result['total']} toward TN **{tn}**", inline=False)
+    embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
+    quality_thresholds = [
+        (tn * 2, "Exceptional Quality (+1k0 relevant rolls)"),
+        (int(tn * 1.5), "Fine Quality (+0k1 relevant rolls)"),
+        (tn, "Standard Quality"),
+    ]
+    quality_lines = [f"TN {t}: {desc}" for t, desc in quality_thresholds]
+    embed.add_field(name="Quality Tiers (cumulative total)", value="\n".join(quality_lines), inline=False)
+    embed.set_footer(text="DM: track cumulative total across rolls. Each roll = one crafting period.")
+    await interaction.response.send_message(embed=embed)
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Encumbrance (#11)
+# ---------------------------------------------------------------------------
+
+@client.tree.command(name="encumbrance", description="Check a character's carrying capacity (Strength-based).")
+@app_commands.describe(
+    member="Player whose character to check.",
+    is_npc="Target is an NPC.",
+    name="NPC name (if is_npc).",
+)
+async def encumbrance_check(
+    interaction: discord.Interaction,
+    name: str | None = None,
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    if is_npc and name:
+        rec = store.get_by_name(guild, NPC_OWNER, name)
+    elif member is not None:
+        rec = store.get_active(guild, str(member.id))
+    else:
+        rec = store.get_active(guild, str(interaction.user.id))
+    if rec is None:
+        await interaction.response.send_message("Character not found.", ephemeral=True)
+        return
+    c = rec.character
+    cap = stats.encumbrance_capacity(c)
+    water = stats.water_ring(c)
+    embed = discord.Embed(title=f"Encumbrance — {c.name}", color=discord.Color.greyple())
+    embed.add_field(name="Strength", value=str(c.strength), inline=True)
+    embed.add_field(name="Carry Capacity", value=f"**{cap}** items", inline=True)
+    embed.add_field(name="Water Ring", value=str(water), inline=True)
+    embed.add_field(
+        name="Overloaded Penalty",
+        value=f"Beyond {cap} items: −{1}k0 to all physical rolls per {c.strength} items over capacity.",
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Family catalog (#12)
+# ---------------------------------------------------------------------------
+
+family_group = app_commands.Group(name="family", description="Family catalog (L5R 4e character creation bonuses).")
+
+
+@family_group.command(name="list", description="List families by clan.")
+@app_commands.describe(clan="Filter by clan (optional).")
+async def family_list(interaction: discord.Interaction, clan: str | None = None) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if clan:
+        fams = families.by_clan(clan)
+        if not fams:
+            await interaction.response.send_message(f"No families found for clan **{clan}**.", ephemeral=True)
+            return
+        lines = [f"**{f['name']}** — +1 {f['bonus_trait'].capitalize()}" for f in fams]
+        embed = discord.Embed(title=f"Families — {clan}", description="\n".join(lines), color=discord.Color.blue())
+    else:
+        clans: dict[str, list[str]] = {}
+        for f in families.ALL:
+            clans.setdefault(f["clan"], []).append(f"{f['name']} (+1 {f['bonus_trait'].capitalize()})")
+        embed = discord.Embed(title="All Families", color=discord.Color.blue())
+        for clan_name in sorted(clans):
+            embed.add_field(name=clan_name, value=", ".join(clans[clan_name]), inline=False)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@family_group.command(name="search", description="Search families by name or clan.")
+@app_commands.describe(query="Name or clan to search for.")
+async def family_search(interaction: discord.Interaction, query: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    results = families.search(query)
+    if not results:
+        await interaction.response.send_message(f"No families matching **{query}**.", ephemeral=True)
+        return
+    lines = [f"**{f['name']}** ({f['clan']}) — +1 {f['bonus_trait'].capitalize()}" for f in results[:25]]
+    embed = discord.Embed(title=f"Family Search — \"{query}\"", description="\n".join(lines), color=discord.Color.blue())
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Spell Damage (#8 partial)
+# ---------------------------------------------------------------------------
+
+@client.tree.command(name="spell_damage", description="Roll spell damage dice (for offensive spells). DM only.")
+@app_commands.describe(
+    rolled="Number of dice to roll (from spell description, e.g. Fire Ring for Fires of Purity).",
+    kept="Number of dice to keep.",
+    bonus="Flat damage bonus.",
+    target="Target character name (to auto-apply damage).",
+    reason="Spell name or label.",
+)
+async def spell_damage(
+    interaction: discord.Interaction,
+    rolled: app_commands.Range[int, 1, 30],
+    kept: app_commands.Range[int, 1, 15],
+    bonus: int = 0,
+    target: str | None = None,
+    reason: str = "",
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only DMs can roll spell damage.", ephemeral=True)
+        return
+    result = engine.roll_and_keep(rolled, kept)
+    total = result.total + bonus
+    embed = discord.Embed(
+        title=reason or "Spell Damage",
+        color=discord.Color.dark_magenta(),
+    )
+    embed.add_field(name="Damage Roll", value=f"({rolled}k{kept}{f'+{bonus}' if bonus else ''}) = **{total}**", inline=False)
+    embed.add_field(name="Dice", value=_format_dice(result), inline=False)
+    if target:
+        guild = str(interaction.guild_id)
+        rec = store.get_by_name(guild, NPC_OWNER, target)
+        if rec is None:
+            rec = store.get_active(guild, str(interaction.user.id))
+        if rec:
+            dmg_result = combat.apply_damage(rec.character, total)
+            store.save(rec)
+            embed.add_field(
+                name=f"Applied to {rec.character.name}",
+                value=(
+                    f"Raw {total} − {dmg_result['reduction']} Reduction = **{dmg_result['final_damage']}** wounds\n"
+                    f"Wound level: {dmg_result['old_wound_level']} → **{dmg_result['new_wound_level']}**"
+                ),
+                inline=False,
+            )
+            if dmg_result["is_dead"]:
+                embed.add_field(name="DEAD", value="The target is slain.", inline=False)
+        else:
+            embed.set_footer(text=f"Target '{target}' not found — apply manually with /sheet wound.")
+    else:
+        embed.set_footer(text="Apply with /sheet wound or /npc wound, subtracting armor Reduction.")
+    await interaction.response.send_message(embed=embed)
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Multiple Attacks / Action Economy (#9)
+# ---------------------------------------------------------------------------
+
+@combat_group.command(name="action", description="Track action usage this turn (Simple or Complex). DM only.")
+@app_commands.describe(
+    name="Combatant name.",
+    action_type="Type of action being taken.",
+)
+@app_commands.choices(action_type=[
+    app_commands.Choice(name="Simple Action (1 of 2)", value="simple"),
+    app_commands.Choice(name="Complex Action (uses both)", value="complex"),
+    app_commands.Choice(name="Free Action (no cost)", value="free"),
+    app_commands.Choice(name="Reset (undo)", value="reset"),
+])
+async def combat_action(
+    interaction: discord.Interaction,
+    name: str,
+    action_type: app_commands.Choice[str],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only DMs can track actions.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    cb = enc.find(name)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    if action_type.value == "reset":
+        cb.actions_used = 0
+        await interaction.response.send_message(f"**{cb.name}** — actions reset.")
+        return
+    if action_type.value == "free":
+        await interaction.response.send_message(f"**{cb.name}** takes a Free Action.")
+        return
+    if action_type.value == "complex":
+        if cb.actions_used > 0:
+            await interaction.response.send_message(f"**{cb.name}** has already used an action this turn.", ephemeral=True)
+            return
+        cb.actions_used = 2
+        await interaction.response.send_message(f"**{cb.name}** takes a **Complex Action** (turn used).")
+    else:
+        if cb.actions_used >= 2:
+            await interaction.response.send_message(f"**{cb.name}** has no actions remaining this turn.", ephemeral=True)
+            return
+        cb.actions_used += 1
+        remaining = 2 - cb.actions_used
+        await interaction.response.send_message(
+            f"**{cb.name}** takes a **Simple Action** ({remaining} action{'s' if remaining != 1 else ''} remaining)."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Ancestor Advantages effects reminder (#13)
+# ---------------------------------------------------------------------------
+
+ANCESTOR_EFFECTS: dict[str, str] = {
+    "ancestor: hida": "+1k0 vs Shadowlands creatures.",
+    "ancestor: hiruma": "+1k0 on Hunting and Stealth checks.",
+    "ancestor: kaiu": "+1k0 on Engineering and Craft checks.",
+    "ancestor: kuni": "+1k0 on Lore: Shadowlands checks.",
+    "ancestor: doji": "+1k0 on Etiquette and Courtier checks.",
+    "ancestor: kakita": "+1k0 on Iaijutsu checks.",
+    "ancestor: daidoji": "+1k0 on Battle checks.",
+    "ancestor: mirumoto": "+1k0 on Kenjutsu checks when wielding two weapons.",
+    "ancestor: kitsuki": "+1k0 on Investigation checks.",
+    "ancestor: togashi": "+1k0 on Meditation checks.",
+    "ancestor: akodo": "+1k0 on Battle checks.",
+    "ancestor: matsu": "+1k0 on attack rolls when at Hurt or worse.",
+    "ancestor: ikoma": "+1k0 on Lore: History checks.",
+    "ancestor: bayushi": "+1k0 on Stealth and Sincerity checks.",
+    "ancestor: shosuro": "+1k0 on Acting and Disguise checks.",
+    "ancestor: soshi": "+1k0 on spell casting rolls for Air spells.",
+    "ancestor: shinjo": "+1k0 on Horsemanship checks.",
+    "ancestor: moto": "+1k0 on attack rolls while Mounted.",
+    "ancestor: ide": "+1k0 on Commerce and Etiquette checks.",
+    "ancestor: isawa": "+1k0 on spell casting rolls.",
+    "ancestor: shiba": "+1k0 on Defense rolls.",
+}
+
+
+@client.tree.command(name="ancestors", description="Show mechanical effects of Ancestor advantages on a character.")
+@app_commands.describe(
+    member="Player whose character to check.",
+    is_npc="Target is an NPC.",
+    name="NPC name (if is_npc).",
+)
+async def ancestors_check(
+    interaction: discord.Interaction,
+    name: str | None = None,
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    if is_npc and name:
+        rec = store.get_by_name(guild, NPC_OWNER, name)
+    elif member is not None:
+        rec = store.get_active(guild, str(member.id))
+    else:
+        rec = store.get_active(guild, str(interaction.user.id))
+    if rec is None:
+        await interaction.response.send_message("Character not found.", ephemeral=True)
+        return
+    c = rec.character
+    found = []
+    for adv in c.advantages:
+        key = adv.lower().strip()
+        if key in ANCESTOR_EFFECTS:
+            found.append(f"**{adv}** — {ANCESTOR_EFFECTS[key]}")
+    if not found:
+        await interaction.response.send_message(
+            f"**{c.name}** has no Ancestor advantages recorded. Use `/sheet advantage` to add one.",
+            ephemeral=True,
+        )
+        return
+    embed = discord.Embed(
+        title=f"Ancestor Effects — {c.name}",
+        description="\n".join(found),
+        color=discord.Color.gold(),
+    )
+    embed.set_footer(text="DM: apply these bonuses manually to relevant rolls.")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Dual Wield reminder (#9 supplement)
+# ---------------------------------------------------------------------------
+
+@client.tree.command(name="dual_wield", description="Show dual-wielding rules and penalties for a character.")
+@app_commands.describe(
+    member="Player whose character to check.",
+    name="NPC name.",
+    is_npc="Target is an NPC.",
+)
+async def dual_wield_info(
+    interaction: discord.Interaction,
+    name: str | None = None,
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    if is_npc and name:
+        rec = store.get_by_name(guild, NPC_OWNER, name)
+    elif member is not None:
+        rec = store.get_active(guild, str(member.id))
+    else:
+        rec = store.get_active(guild, str(interaction.user.id))
+    if rec is None:
+        await interaction.response.send_message("Character not found.", ephemeral=True)
+        return
+    c = rec.character
+    embed = discord.Embed(title=f"Dual Wielding — {c.name}", color=discord.Color.dark_blue())
+    if c.equipped_weapon and c.off_hand_weapon:
+        main_w = combat.get_weapon_profile(c.equipped_weapon)
+        off_w = combat.get_weapon_profile(c.off_hand_weapon)
+        embed.add_field(name="Main Hand", value=f"{c.equipped_weapon} ({main_w.get('rolled',2)}k{main_w.get('kept',1)})", inline=True)
+        embed.add_field(name="Off Hand", value=f"{c.off_hand_weapon} ({off_w.get('rolled',2)}k{off_w.get('kept',1)})", inline=True)
+        off_size = off_w.get("size", "Medium")
+        if off_size == "Small":
+            penalty = "−5 TN (Small off-hand weapon)"
+        elif off_size == "Medium":
+            penalty = "−10 TN (Medium off-hand weapon)"
+        else:
+            penalty = "−15 TN (Large off-hand weapon — not normally allowed)"
+        embed.add_field(name="Off-hand Attack Penalty", value=penalty, inline=False)
+        embed.add_field(
+            name="Rules",
+            value=(
+                "• Main-hand attack: normal (Simple Action)\n"
+                "• Off-hand attack: Simple Action with penalty above\n"
+                "• Both attacks in one turn use both Simple Actions\n"
+                "• Mirumoto Two-Heavens / Niten Mastery may reduce penalties"
+            ),
+            inline=False,
+        )
+    elif c.equipped_weapon:
+        embed.description = f"Only wielding **{c.equipped_weapon}** (no off-hand). Use `/sheet wield` to set both weapons."
+    else:
+        embed.description = "No weapons wielded. Use `/sheet wield` to equip weapons."
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Courtier/Social Influence (#5)
+# ---------------------------------------------------------------------------
+
+@client.tree.command(name="influence", description="Track Influence Points during a court scene. DM only.")
+@app_commands.describe(
+    name="Character name.",
+    change="Influence points to add (negative to subtract).",
+    reason="Why the influence changed.",
+)
+async def influence_track(
+    interaction: discord.Interaction,
+    name: str,
+    change: int,
+    reason: str = "",
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only DMs can track influence.", ephemeral=True)
+        return
+    embed = discord.Embed(title="Court Influence", color=discord.Color.purple())
+    sign = "+" if change >= 0 else ""
+    embed.add_field(name=name, value=f"{sign}{change} Influence" + (f" — {reason}" if reason else ""), inline=False)
+    embed.set_footer(text="DM: track cumulative influence totals for the court scene. Use /social for Courtier/Etiquette checks.")
+    await interaction.response.send_message(embed=embed)
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 — Travel (#7)
+# ---------------------------------------------------------------------------
+
+TRAVEL_SPEEDS: dict[str, dict] = {
+    "foot": {"name": "On Foot", "miles_per_day": 20, "description": "Standard travel pace. Can force-march for 30 (Stamina TN 15 or gain Fatigued)."},
+    "horse": {"name": "Mounted", "miles_per_day": 40, "description": "Standard mounted pace. Can push for 60 (Horsemanship TN 15)."},
+    "forced_march": {"name": "Forced March", "miles_per_day": 30, "description": "Stamina check TN 15 each day or gain Fatigued condition."},
+    "cart": {"name": "Cart/Wagon", "miles_per_day": 15, "description": "Slow but can carry heavy loads."},
+    "ship": {"name": "Ship (coastal)", "miles_per_day": 50, "description": "Coastal sailing. Open-sea routes may be faster or slower depending on winds."},
+    "river": {"name": "River Barge", "miles_per_day": 25, "description": "Downstream travel. Upstream is half speed."},
+}
+
+
+@client.tree.command(name="travel", description="Calculate travel time between locations.")
+@app_commands.describe(
+    distance="Distance in miles.",
+    mode="Travel mode.",
+    terrain="Terrain modifier (halves or quarters speed).",
+)
+@app_commands.choices(
+    mode=[app_commands.Choice(name=v["name"], value=k) for k, v in TRAVEL_SPEEDS.items()],
+    terrain=[
+        app_commands.Choice(name="Road/Clear (normal)", value="normal"),
+        app_commands.Choice(name="Rough/Hills (half)", value="half"),
+        app_commands.Choice(name="Mountain/Swamp (quarter)", value="quarter"),
+    ],
+)
+async def travel_calc(
+    interaction: discord.Interaction,
+    distance: app_commands.Range[int, 1, 10000],
+    mode: app_commands.Choice[str],
+    terrain: app_commands.Choice[str] | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    info = TRAVEL_SPEEDS[mode.value]
+    speed = info["miles_per_day"]
+    terrain_name = "Road/Clear"
+    if terrain and terrain.value == "half":
+        speed = speed // 2
+        terrain_name = "Rough/Hills"
+    elif terrain and terrain.value == "quarter":
+        speed = speed // 4
+        terrain_name = "Mountain/Swamp"
+    days = (distance + speed - 1) // speed if speed > 0 else 999
+    embed = discord.Embed(title="Travel Calculator", color=discord.Color.green())
+    embed.add_field(name="Distance", value=f"{distance} miles", inline=True)
+    embed.add_field(name="Mode", value=info["name"], inline=True)
+    embed.add_field(name="Terrain", value=terrain_name, inline=True)
+    embed.add_field(name="Speed", value=f"{speed} miles/day", inline=True)
+    embed.add_field(name="Travel Time", value=f"**{days} day{'s' if days != 1 else ''}**", inline=True)
+    embed.add_field(name="Notes", value=info["description"], inline=False)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
@@ -6237,6 +7088,9 @@ client.tree.add_command(armor_group)
 client.tree.add_command(advantage_group)
 client.tree.add_command(kata_group)
 client.tree.add_command(kiho_group)
+client.tree.add_command(heritage_group)
+client.tree.add_command(battle_group)
+client.tree.add_command(family_group)
 
 
 def main() -> None:

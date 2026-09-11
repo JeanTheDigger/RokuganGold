@@ -20,6 +20,10 @@ VALID_CONDITIONS: frozenset[str] = frozenset({
     "grappled", "mounted", "prone", "stunned",
 })
 
+VALID_STANCES: frozenset[str] = frozenset({
+    "attack", "full_attack", "defense", "full_defense", "center",
+})
+
 
 @dataclass
 class Combatant:
@@ -41,6 +45,12 @@ class Combatant:
     # Full Defense (s40): Defense/Reflexes roll bonus added to Armor TN.
     # Set by /combat full_defense; clears on combatant's next turn.
     full_defense_bonus: int = 0
+    # Stance declared for this round (L5R 4e: Attack, Full Attack, Defense,
+    # Full Defense, Center). Defaults to "attack". Resets on turn advance.
+    stance: str = "attack"
+    # Action economy: tracks simple/complex actions used this turn.
+    # L5R 4e: 1 Complex OR 2 Simple actions per turn.
+    actions_used: int = 0  # 0=none, 1=one simple, 2=done (complex or 2 simples)
 
     def consume_once(self, key: str, scope: str) -> bool:
         """Try to spend a once-per-`scope` ability ('turn' or 'round'). Returns
@@ -117,4 +127,6 @@ class Encounter:
             cur.used_this_turn.clear()
             cur.guarding = ""
             cur.full_defense_bonus = 0
+            cur.stance = "attack"
+            cur.actions_used = 0
         return cur

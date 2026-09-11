@@ -96,3 +96,23 @@ def honor_rank(c: Character) -> int:
     """Honor Rank = the integer part of the Honor score (L5R convention:
     Honor is a 0.0-10.0 value whose whole number is the Rank; e.g. 3.5 = Rank 3)."""
     return int(c.honor)
+
+
+def taint_rank(c: Character) -> int:
+    """Taint Rank = floor(Taint / Earth Ring). 0 if no taint. Capped at 5."""
+    if c.taint <= 0:
+        return 0
+    earth = earth_ring(c)
+    if earth <= 0:
+        return 5
+    return min(int(c.taint // earth), 5)
+
+
+def water_ring(c: Character) -> int:
+    return ring_value(c, "water")
+
+
+def encumbrance_capacity(c: Character) -> int:
+    """L5R 4e: a character can carry Strength x 5 items without penalty.
+    Beyond that, TN penalties apply. This returns the threshold."""
+    return c.strength * 5

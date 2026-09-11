@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 41 — Quality of Life
+## Status: Phase 42 — Full Mechanics
 
 **Help & Navigation**
 
@@ -583,6 +583,38 @@ and each room's initiative tracker is naturally separate (initiative is
 per-channel). So a DM can run several games at once in one server, each in its
 own room.
 
+**Phase 42 — Stances, Action Economy, and Remaining Mechanics**
+
+| Command | What it does |
+|---|---|
+| `/combat stance` | Declare stance for the round: Attack, Full Attack (−10 ATN, +2k1), Defense (+Air+Defense ATN), Full Defense (Complex Action), Center. Resets on turn advance. |
+| `/combat action` | Track Simple/Complex action usage per turn. L5R 4e: 1 Complex OR 2 Simple per turn. |
+| `/combat mount` | Mount or dismount — toggles the Mounted condition on a combatant (DM only). |
+| `/dual_wield` | Show dual-wielding rules and off-hand penalties based on weapon size (Small −5, Medium −10, Large −15). |
+| `/heritage roll` | Roll on the Heritage table for a clan (d10). |
+| `/heritage table` | View the full Heritage table for a clan (10 entries). |
+| `/taint` | View or modify Shadowlands Taint. Shows Taint Rank (floor(Taint/Earth)), effects, mutations, and madness when crossing rank boundaries. |
+| `/battle roll` | Mass Battle engagement roll: Battle/Perception vs a DM-set TN. Result determines engagement level (Reserves → Heroic Opportunity). |
+| `/battle damage` | Incidental damage by engagement level: Reserves 0, Disengaged 1k1, Engaged 2k1, Heavily Engaged 3k2, Heroic 4k3. |
+| `/family list` | Browse all 47 families grouped by clan with their +1 Trait bonuses. |
+| `/family search` | Search families by name or clan. |
+| `/spell_damage` | Roll spell damage dice (XkY), optionally auto-apply to a target. |
+| `/craft_extended` | Multi-step extended crafting roll (Craft or Artisan/Intelligence). Shows quality tier thresholds (Standard, Fine at 1.5×, Exceptional at 2×). |
+| `/encumbrance` | Check carrying capacity (Strength × 5 items). |
+| `/horsemanship` | Horsemanship/Agility check vs a TN. |
+| `/influence` | Track court influence points for a character (DM-managed). |
+| `/travel` | Calculate travel time by mode (foot, horse, forced march, cart, ship, river) and terrain (normal, rough, mountains). |
+| `/ancestors` | Show Ancestor advantage mechanical effects (21 ancestors with their bonuses). |
+
+`/combat status` and `/combat summary` now display each combatant's **stance**
+and **actions remaining** alongside initiative, conditions, guards, and Full
+Defense.
+
+**Family bonuses** are auto-applied at `/sheet create` — pick a `family:` from
+the autocomplete and the character gets +1 to the family's Trait automatically
+(e.g. Hida → +1 Strength, Doji → +1 Awareness). The `clan:` is auto-set from
+the family if not specified.
+
 Still to come: Vultr hosting (the one original wish-list item left).
 
 ---
@@ -617,6 +649,11 @@ discord_bot/
 │   ├── advantage_effects.py # Advantage/Disadvantage combat modifiers for /attack (GDD s45).
 │   ├── kiho_effects.py    # Active-Kiho combat modifiers for /attack (GDD s38).
 │   ├── condition_effects.py # Condition combat modifiers for /attack (GDD s40).
+│   ├── families.py        # Family catalog access helpers (47 families).
+│   ├── families_catalog.py# Family data: name, clan, bonus_trait (L5R 4e).
+│   ├── heritage.py        # Heritage tables (d10 per clan, 8 Great Clans + default).
+│   ├── mass_battle.py     # Mass Battle engagement & damage (L5R 4e p.173-175).
+│   ├── taint.py           # Shadowlands Taint progression (L5R 4e p.274-276).
 │   ├── kiho.py            # Access helpers over the kiho catalog (GDD s38).
 │   ├── kiho_catalog.py    # AUTO-GENERATED: 73 Kiho (verbatim).
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).
