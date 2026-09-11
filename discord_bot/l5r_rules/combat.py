@@ -465,3 +465,129 @@ def resolve_knockdown(
 def compute_feint_bonus(attack_margin: int, attacker_insight_rank: int) -> int:
     """Feint (s40): half the attack margin, capped at 5 x Insight Rank, added to damage."""
     return min(attack_margin // 2, 5 * attacker_insight_rank)
+
+
+# ---------------------------------------------------------------------------
+# Iaijutsu dueling (s40)
+# ---------------------------------------------------------------------------
+
+ASSESSMENT_REVEALS = [
+    "Void Ring",
+    "Reflexes",
+    "Iaijutsu Skill rank",
+    "Iaijutsu Emphases",
+    "Current Void Points",
+    "Current Wound Level",
+]
+
+
+def iaijutsu_assessment_tn(opponent_insight_rank: int) -> int:
+    return 10 + opponent_insight_rank * 5
+
+
+def resolve_iaijutsu_assessment(
+    awareness: int,
+    iaijutsu_skill: int,
+    opponent_insight_rank: int,
+    dice_engine: DiceEngine,
+    raises: int = 0,
+    extra_flat: int = 0,
+) -> dict:
+    """Iaijutsu (Assessment)/Awareness roll vs TN 10 + opponent IR×5."""
+    rolled = awareness + iaijutsu_skill
+    kept = awareness
+    explodes = iaijutsu_skill > 0
+    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
+    total = result.total + extra_flat
+    tn = iaijutsu_assessment_tn(opponent_insight_rank) + raises * 5
+    success = total >= tn
+    reveals = 0
+    if success:
+        reveals = 1 + raises
+    return {
+        "success": success,
+        "total": total,
+        "tn": tn,
+        "dice": result,
+        "rolled": rolled,
+        "kept": kept,
+        "reveals": min(reveals, len(ASSESSMENT_REVEALS)),
+    }
+
+
+def resolve_iaijutsu_focus(
+    void_a: int,
+    iaijutsu_a: int,
+    void_b: int,
+    iaijutsu_b: int,
+    dice_engine: DiceEngine,
+    bonus_rolled_a: int = 0,
+    bonus_kept_a: int = 0,
+    bonus_rolled_b: int = 0,
+    bonus_kept_b: int = 0,
+    extra_flat_a: int = 0,
+    extra_flat_b: int = 0,
+) -> dict:
+    """Contested Iaijutsu (Focus)/Void roll.
+
+    Returns who strikes first and how many Free Raises.
+    If neither wins by 5+, kharmic strike (simultaneous)."""
+    r_a = void_a + iaijutsu_a + bonus_rolled_a
+    k_a = void_a + bonus_kept_a
+    r_b = void_b + iaijutsu_b + bonus_rolled_b
+    k_b = void_b + bonus_kept_b
+    explodes_a = iaijutsu_a > 0
+    explodes_b = iaijutsu_b > 0
+    roll_a = dice_engine.roll_and_keep(max(1, r_a), max(1, k_a), explodes_a)
+    roll_b = dice_engine.roll_and_keep(max(1, r_b), max(1, k_b), explodes_b)
+    total_a = roll_a.total + extra_flat_a
+    total_b = roll_b.total + extra_flat_b
+    diff = total_a - total_b
+    if abs(diff) < 5:
+        first_striker = "kharmic"
+        free_raises = 0
+    elif diff >= 5:
+        first_striker = "a"
+        free_raises = (abs(diff) - 5) // 5
+    else:
+        first_striker = "b"
+        free_raises = (abs(diff) - 5) // 5
+    return {
+        "a_total": total_a,
+        "b_total": total_b,
+        "a_dice": roll_a,
+        "b_dice": roll_b,
+        "a_rolled": r_a,
+        "a_kept": k_a,
+        "b_rolled": r_b,
+        "b_kept": k_b,
+        "diff": diff,
+        "first_striker": first_striker,
+        "free_raises": free_raises,
+    }
+
+
+def resolve_iaijutsu_strike(
+    reflexes: int,
+    iaijutsu_skill: int,
+    target_armor_tn: int,
+    dice_engine: DiceEngine,
+    free_raises: int = 0,
+    extra_flat: int = 0,
+) -> dict:
+    """Iaijutsu/Reflexes attack roll vs target's normal Armor TN."""
+    rolled = reflexes + iaijutsu_skill
+    kept = reflexes
+    explodes = iaijutsu_skill > 0
+    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
+    total = result.total + extra_flat
+    return {
+        "total": total,
+        "tn": target_armor_tn,
+        "hit": total >= target_armor_tn,
+        "margin": total - target_armor_tn,
+        "dice": result,
+        "rolled": rolled,
+        "kept": kept,
+        "free_raises": free_raises,
+    }

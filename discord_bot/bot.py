@@ -2868,6 +2868,339 @@ async def grapple_break(
 
 
 # ===========================================================================
+# /duel group — Iaijutsu dueling (s40)
+# ===========================================================================
+duel_group = app_commands.Group(name="duel", description="Iaijutsu dueling: assessment, focus, strike (s40).")
+
+
+@duel_group.command(name="assess", description="Assessment stage: both duelists roll Iaijutsu(Assessment)/Awareness. DM only.")
+@app_commands.describe(
+    duelist_a="First duelist (combatant name or character).",
+    duelist_b="Second duelist (combatant name or character).",
+    a_is_npc="First duelist is a stored NPC.",
+    b_is_npc="Second duelist is a stored NPC.",
+    a_member="First duelist is another player's character.",
+    b_member="Second duelist is another player's character.",
+)
+async def duel_assess(
+    interaction: discord.Interaction,
+    duelist_a: str,
+    duelist_b: str,
+    a_is_npc: bool = False,
+    b_is_npc: bool = False,
+    a_member: discord.Member | None = None,
+    b_member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can run a duel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+
+    def _resolve_duelist(name: str, is_npc: bool, member: discord.Member | None):
+        if is_npc:
+            return store.get_by_name(guild, NPC_OWNER, name)
+        if member is not None:
+            return store.get_active(guild, str(member.id))
+        enc = encounters.get(interaction.channel_id)
+        if enc:
+            cb = enc.find(name)
+            if cb:
+                return _resolve_combatant_record(guild, cb)
+        return store.get_by_name(guild, NPC_OWNER, name)
+
+    rec_a = _resolve_duelist(duelist_a, a_is_npc, a_member)
+    rec_b = _resolve_duelist(duelist_b, b_is_npc, b_member)
+    if rec_a is None:
+        await interaction.response.send_message(f"No character found for **{duelist_a}**.", ephemeral=True)
+        return
+    if rec_b is None:
+        await interaction.response.send_message(f"No character found for **{duelist_b}**.", ephemeral=True)
+        return
+
+    ca, cb_char = rec_a.character, rec_b.character
+    ir_a = stats.insight_rank(ca)
+    ir_b = stats.insight_rank(cb_char)
+    wp_a = stats.wound_penalty(ca)
+    wp_b = stats.wound_penalty(cb_char)
+
+    res_a = combat.resolve_iaijutsu_assessment(
+        ca.awareness, ca.skills.get("Iaijutsu", 0), ir_b, engine, extra_flat=wp_a,
+    )
+    res_b = combat.resolve_iaijutsu_assessment(
+        cb_char.awareness, cb_char.skills.get("Iaijutsu", 0), ir_a, engine, extra_flat=wp_b,
+    )
+
+    diff_ab = res_a["total"] - res_b["total"]
+    focus_bonus = ""
+    if diff_ab >= 10:
+        focus_bonus = f"⚡ **{ca.name}** exceeded by {diff_ab} → **+1k1** on Focus roll."
+    elif diff_ab <= -10:
+        focus_bonus = f"⚡ **{cb_char.name}** exceeded by {-diff_ab} → **+1k1** on Focus roll."
+
+    embed = discord.Embed(title=f"⚔️ Iaijutsu Duel — Assessment", color=discord.Color.gold())
+
+    def _reveal_text(res, opponent):
+        if not res["success"]:
+            return "Failed — no information learned."
+        reveals = res["reveals"]
+        opponent_ir = stats.insight_rank(opponent)
+        opponent_iaijutsu = opponent.skills.get("Iaijutsu", 0)
+        available = [
+            f"Void Ring: **{opponent.void_ring}**",
+            f"Reflexes: **{opponent.reflexes}**",
+            f"Iaijutsu Skill: **{opponent_iaijutsu}**",
+            f"Iaijutsu Emphases: **{'Assessment, Focus' if opponent_iaijutsu >= 1 else 'none listed'}**",
+            f"Void Points: **{opponent.current_void_points}**",
+            f"Wound Level: **{stats.wound_level_name(opponent)}**",
+        ]
+        chosen = available[:reveals]
+        return "Learned " + str(reveals) + ":\n" + "\n".join(chosen)
+
+    embed.add_field(
+        name=f"{ca.name} — Assessment",
+        value=(
+            f"{res_a['rolled']}k{res_a['kept']} → **{res_a['total']}** vs TN **{res_a['tn']}**"
+            f" — {'**SUCCESS**' if res_a['success'] else '**FAILED**'}"
+            + (f" (wound penalty {wp_a})" if wp_a else "")
+            + "\n" + _reveal_text(res_a, cb_char)
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name=f"{cb_char.name} — Assessment",
+        value=(
+            f"{res_b['rolled']}k{res_b['kept']} → **{res_b['total']}** vs TN **{res_b['tn']}**"
+            f" — {'**SUCCESS**' if res_b['success'] else '**FAILED**'}"
+            + (f" (wound penalty {wp_b})" if wp_b else "")
+            + "\n" + _reveal_text(res_b, ca)
+        ),
+        inline=False,
+    )
+    if focus_bonus:
+        embed.add_field(name="Focus Bonus", value=focus_bonus.strip(), inline=False)
+    embed.set_footer(text="Either duelist may concede after Assessment. Otherwise: /duel focus")
+    await interaction.response.send_message(embed=embed)
+
+
+@duel_group.command(name="focus", description="Focus stage: contested Iaijutsu(Focus)/Void roll. DM only.")
+@app_commands.describe(
+    duelist_a="First duelist.",
+    duelist_b="Second duelist.",
+    a_focus_bonus="Duelist A got +1k1 from Assessment (exceeded by 10+).",
+    b_focus_bonus="Duelist B got +1k1 from Assessment (exceeded by 10+).",
+    a_is_npc="First duelist is a stored NPC.",
+    b_is_npc="Second duelist is a stored NPC.",
+    a_member="First duelist is another player's character.",
+    b_member="Second duelist is another player's character.",
+)
+async def duel_focus(
+    interaction: discord.Interaction,
+    duelist_a: str,
+    duelist_b: str,
+    a_focus_bonus: bool = False,
+    b_focus_bonus: bool = False,
+    a_is_npc: bool = False,
+    b_is_npc: bool = False,
+    a_member: discord.Member | None = None,
+    b_member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can run a duel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+
+    def _resolve_duelist(name: str, is_npc: bool, member: discord.Member | None):
+        if is_npc:
+            return store.get_by_name(guild, NPC_OWNER, name)
+        if member is not None:
+            return store.get_active(guild, str(member.id))
+        enc = encounters.get(interaction.channel_id)
+        if enc:
+            cb_found = enc.find(name)
+            if cb_found:
+                return _resolve_combatant_record(guild, cb_found)
+        return store.get_by_name(guild, NPC_OWNER, name)
+
+    rec_a = _resolve_duelist(duelist_a, a_is_npc, a_member)
+    rec_b = _resolve_duelist(duelist_b, b_is_npc, b_member)
+    if rec_a is None:
+        await interaction.response.send_message(f"No character found for **{duelist_a}**.", ephemeral=True)
+        return
+    if rec_b is None:
+        await interaction.response.send_message(f"No character found for **{duelist_b}**.", ephemeral=True)
+        return
+
+    ca, cb_char = rec_a.character, rec_b.character
+    bonus_r_a = 1 if a_focus_bonus else 0
+    bonus_k_a = 1 if a_focus_bonus else 0
+    bonus_r_b = 1 if b_focus_bonus else 0
+    bonus_k_b = 1 if b_focus_bonus else 0
+    wp_a = stats.wound_penalty(ca)
+    wp_b = stats.wound_penalty(cb_char)
+
+    result = combat.resolve_iaijutsu_focus(
+        ca.void_ring, ca.skills.get("Iaijutsu", 0),
+        cb_char.void_ring, cb_char.skills.get("Iaijutsu", 0),
+        engine,
+        bonus_rolled_a=bonus_r_a, bonus_kept_a=bonus_k_a,
+        bonus_rolled_b=bonus_r_b, bonus_kept_b=bonus_k_b,
+        extra_flat_a=wp_a, extra_flat_b=wp_b,
+    )
+
+    embed = discord.Embed(title="⚔️ Iaijutsu Duel — Focus", color=discord.Color.dark_gold())
+    a_mods = []
+    b_mods = []
+    if a_focus_bonus:
+        a_mods.append("+1k1 Assessment")
+    if wp_a:
+        a_mods.append(f"wound {wp_a}")
+    if b_focus_bonus:
+        b_mods.append("+1k1 Assessment")
+    if wp_b:
+        b_mods.append(f"wound {wp_b}")
+    a_notes = f" ({', '.join(a_mods)})" if a_mods else ""
+    b_notes = f" ({', '.join(b_mods)})" if b_mods else ""
+    embed.add_field(
+        name=f"{ca.name} — Focus (Iaijutsu/Void)",
+        value=f"{result['a_rolled']}k{result['a_kept']}{a_notes} → **{result['a_total']}**",
+        inline=True,
+    )
+    embed.add_field(
+        name=f"{cb_char.name} — Focus (Iaijutsu/Void)",
+        value=f"{result['b_rolled']}k{result['b_kept']}{b_notes} → **{result['b_total']}**",
+        inline=True,
+    )
+
+    diff = abs(result["diff"])
+    fs = result["first_striker"]
+    if fs == "kharmic":
+        outcome = (
+            f"Neither exceeds by 5 — **Kharmic Strike** (simultaneous).\n"
+            f"Both attack at the same time; the cause is considered dropped."
+        )
+    else:
+        winner = ca.name if fs == "a" else cb_char.name
+        loser = cb_char.name if fs == "a" else ca.name
+        fr = result["free_raises"]
+        fr_text = f" with **{fr} Free Raise{'s' if fr != 1 else ''}**" if fr else ""
+        outcome = (
+            f"**{winner}** wins Focus by {diff} → strikes first{fr_text}.\n"
+            f"**{loser}** may strike after if still alive."
+        )
+    embed.add_field(name="Result", value=outcome, inline=False)
+    embed.set_footer(text="Proceed to: /duel strike")
+    await interaction.response.send_message(embed=embed)
+
+
+@duel_group.command(name="strike", description="Strike stage: Iaijutsu/Reflexes attack roll + damage. DM only.")
+@app_commands.describe(
+    attacker="The duelist striking.",
+    target="The opponent being struck.",
+    weapon="Weapon used (default: katana).",
+    free_raises="Free Raises from Focus (auto-applied to damage total).",
+    bonus_tn="DM situational modifier to the target's Armor TN.",
+    attacker_npc="Attacker is a stored NPC.",
+    target_npc="Target is a stored NPC.",
+    attacker_member="Attacker is another player's character.",
+    target_member="Target is another player's character.",
+)
+async def duel_strike(
+    interaction: discord.Interaction,
+    attacker: str,
+    target: str,
+    weapon: str = "katana",
+    free_raises: int = 0,
+    bonus_tn: int = 0,
+    attacker_npc: bool = False,
+    target_npc: bool = False,
+    attacker_member: discord.Member | None = None,
+    target_member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can run a duel strike.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+
+    def _resolve_duelist(name: str, is_npc: bool, member: discord.Member | None):
+        if is_npc:
+            return store.get_by_name(guild, NPC_OWNER, name)
+        if member is not None:
+            return store.get_active(guild, str(member.id))
+        enc = encounters.get(interaction.channel_id)
+        if enc:
+            cb_found = enc.find(name)
+            if cb_found:
+                return _resolve_combatant_record(guild, cb_found)
+        return store.get_by_name(guild, NPC_OWNER, name)
+
+    rec_a = _resolve_duelist(attacker, attacker_npc, attacker_member)
+    rec_t = _resolve_duelist(target, target_npc, target_member)
+    if rec_a is None:
+        await interaction.response.send_message(f"No character found for **{attacker}**.", ephemeral=True)
+        return
+    if rec_t is None:
+        await interaction.response.send_message(f"No character found for **{target}**.", ephemeral=True)
+        return
+
+    atk = rec_a.character
+    tgt = rec_t.character
+    wp = combat.get_weapon(weapon)
+    if wp is None:
+        await interaction.response.send_message(f"No weapon named **{weapon}**.", ephemeral=True)
+        return
+    target_tn = combat.armor_tn(tgt, "center", bonus_tn)
+    wound_pen = stats.wound_penalty(atk)
+    result = combat.resolve_iaijutsu_strike(
+        atk.reflexes, atk.skills.get("Iaijutsu", 0), target_tn, engine,
+        free_raises=free_raises, extra_flat=wound_pen,
+    )
+    hit = result["hit"]
+    embed = discord.Embed(
+        title=f"⚔️ {atk.name} strikes at {tgt.name}",
+        color=discord.Color.red() if hit else discord.Color.greyple(),
+    )
+    roll_text = (
+        f"Iaijutsu/Reflexes: {result['rolled']}k{result['kept']} → **{result['total']}**"
+        f" vs TN **{result['tn']}** — {'**HIT**' if hit else '**MISS**'}"
+    )
+    notes = []
+    if wound_pen:
+        notes.append(f"wound penalty {wound_pen}")
+    if free_raises:
+        notes.append(f"{free_raises} Free Raise{'s' if free_raises != 1 else ''} from Focus")
+    if notes:
+        roll_text += f"\n({', '.join(notes)})"
+    embed.add_field(name="Strike Roll", value=roll_text, inline=False)
+
+    view = None
+    if hit:
+        view = DamageView(
+            attacker_id=rec_a.id,
+            target_id=rec_t.id,
+            weapon=weapon,
+            increased_damage=free_raises,
+            attacker_name=atk.name,
+            target_name=tgt.name,
+            maneuver="none",
+            attack_margin=result["margin"],
+            channel_id=interaction.channel_id,
+        )
+    else:
+        embed.set_footer(text="The strike misses.")
+
+    await interaction.response.send_message(embed=embed, view=view)
+
+
+# ===========================================================================
 # /npc group — generate and manage NPC characters (s22.4 templates)
 # ===========================================================================
 npc = app_commands.Group(name="npc", description="Generate and manage NPC characters (GDD s22.4 templates).")
@@ -4553,6 +4886,7 @@ client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
 client.tree.add_command(grapple_group)
+client.tree.add_command(duel_group)
 client.tree.add_command(npc)
 client.tree.add_command(room)
 client.tree.add_command(creature_group)

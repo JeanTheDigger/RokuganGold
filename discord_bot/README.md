@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 32 — Spell casting
+## Status: Phase 33 — Iaijutsu dueling
 
 **Dice**
 
@@ -420,6 +420,14 @@ prone]`), active guards show as `🛡️→WardName`, and Full Defense as
 | `/grapple throw` | Throw a grappled opponent: target becomes **Prone** and leaves the grapple. |
 | `/grapple break_free` | Break free from a grapple (controller's Simple Action): removes the Grappled condition. |
 
+**Iaijutsu dueling** (`/duel`, all DM-only — s40 Iaijutsu rules)
+
+| Command | What it does |
+|---|---|
+| `/duel assess` | Assessment: both duelists roll Iaijutsu(Assessment)/Awareness vs TN 10 + opponent's Insight Rank × 5. On success, learn opponent's Void, Reflexes, Iaijutsu, emphases, VP, or wound level (+1 per Raise). If one exceeds the other by 10+, that duelist gains +1k1 on Focus. |
+| `/duel focus` | Focus: contested Iaijutsu(Focus)/Void roll. Winner by 5+ strikes first; +1 Free Raise per additional 5. Neither by 5 → Kharmic Strike (simultaneous, cause dropped). |
+| `/duel strike` | Strike: Iaijutsu/Reflexes attack vs normal Armor TN. Free Raises from Focus apply as Increased Damage. On hit, DM-authorized damage via the standard button flow (default weapon: katana). |
+
 **NPCs** (generated from **GDD s22.4** — Generation Templates, LOCKED)
 
 | Command | What it does |
@@ -461,6 +469,12 @@ buttons), Throw (Prone + leave grapple), and Break Free.
 5 + (5 × Mastery Level), with Affinity (+1 effective rank) and Deficiency (−1),
 Void Point (+1k1), Called Raises (+5 TN each, reduce casting time by 1 per
 raise), and wound penalty — DM only.
+**Iaijutsu Dueling** (`/duel`) covers the full three-stage formal duel:
+Assessment (Iaijutsu/Awareness, reveals opponent stats, +1k1 Focus bonus if
+exceeded by 10+), Focus (contested Iaijutsu/Void, winner by 5+ strikes first
+with Free Raises per additional 5, otherwise Kharmic Strike), and Strike
+(Iaijutsu/Reflexes attack vs normal Armor TN, Free Raises as Increased Damage,
+DM-authorized damage via buttons) — DM only.
 Dual-wielding and thrown/charge maneuvers are still **not** modelled — the DM
 can express those with `raises`/`bonus_tn`.
 
