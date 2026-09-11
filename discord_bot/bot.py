@@ -595,7 +595,7 @@ class DamageView(discord.ui.View):
             t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
             extra_rolled += t_roll
             ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
-            t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp)
+            t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
             ignore += t_ignore
             t_dmg_notes = t_dmg_notes + t_ign_notes
             dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled, t_kept, t_flat)
@@ -713,7 +713,7 @@ class DamageView(discord.ui.View):
         t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
         extra_rolled += t_roll
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
-        t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp)
+        t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
         ignore += t_ignore
         t_dmg_notes = t_dmg_notes + t_ign_notes
         dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled, t_kept, t_flat)
@@ -952,7 +952,7 @@ async def attack(
         if def_note:
             kata_notes.append(def_note)
         def_tech_bonus, def_tech_notes = technique_effects.defender_armor_tn_bonus(
-            target_rec.character, d_stance, atk_init, def_init
+            target_rec.character, d_stance, atk_init, def_init, attacker=attacker
         )
         def_kata_bonus += def_tech_bonus
         kata_notes.extend(def_tech_notes)
@@ -985,6 +985,13 @@ async def attack(
                 kata_notes.append(sia_note)
             elif status == "used":
                 rl_used_notes.append("Strength in Arms already used this Turn.")
+    # Technique trait override (Falcon's Strike: Perception for bow attacks) —
+    # only if no kata already replaced the attack Trait.
+    if trait_ovr is None:
+        to_val, to_name, to_note = technique_effects.attacker_trait_override(attacker, atk_weapon_profile)
+        if to_val is not None:
+            trait_ovr, trait_ovr_name = to_val, to_name
+            kata_notes.append(to_note)
 
     # Attacker's known Techniques: extra attack dice / flat bonus to the roll.
     t_rolled, t_kept, t_flat, t_notes = technique_effects.attacker_attack_dice(
