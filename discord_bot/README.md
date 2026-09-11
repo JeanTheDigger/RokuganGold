@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 26 — Condition tracking (GDD s40)
+## Status: Phase 27 — Void Point damage reduction (L5R 4e core)
 
 **Dice**
 
@@ -418,9 +418,12 @@ NPCs can be tuned field-by-field with the `/npc` editors above.
 **Skill Masteries**, **Advantages/Disadvantages**, **Kiho**, and **Conditions**
 now auto-apply in `/attack` (see the tables above); the rest of Kata, most
 Techniques, and most Kiho stay DM-adjudicated (shown as reminders; technique
-text on the sheet via `/school view`). Dual-wielding and thrown/charge/called-shot
-maneuvers are still **not** modelled — the DM can express those with
-`raises`/`bonus_tn`.
+text on the sheet via `/school view`). **Void Point damage reduction** adds a
+second button on every hit — DM clicks "Void Reduce" to spend 1 VP and subtract
+10 wounds from the target (L5R 4e core rule). The button is hidden for creature
+targets (no VP) and knockdown maneuvers (no damage). Dual-wielding and
+thrown/charge/called-shot maneuvers are still **not** modelled — the DM can
+express those with `raises`/`bonus_tn`.
 
 **Creatures / monsters** (stat blocks transcribed **verbatim** from the bestiaries)
 

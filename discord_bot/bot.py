@@ -533,10 +533,18 @@ class DamageView(discord.ui.View):
         self.maneuver = maneuver
         self.attack_margin = attack_margin
         self.defender_stance = defender_stance
-        # Relabel the primary button to match the maneuver.
+        # Relabel the primary button to match the maneuver, and hide the Void
+        # button when it would be nonsensical (knockdown has no damage roll;
+        # creature targets have no VP pool).
+        hide_void = maneuver == "knockdown" or target_creature_id is not None
+        to_remove = []
         for child in self.children:
             if isinstance(child, discord.ui.Button) and child.style == discord.ButtonStyle.danger:
                 child.label = _MANEUVER_APPLY_LABEL.get(maneuver, "Roll & Apply Damage")
+            if isinstance(child, discord.ui.Button) and child.style == discord.ButtonStyle.primary and hide_void:
+                to_remove.append(child)
+        for child in to_remove:
+            self.remove_item(child)
 
     def _disable(self) -> None:
         for child in self.children:
@@ -577,6 +585,17 @@ class DamageView(discord.ui.View):
         if not _is_dm(interaction):
             await interaction.response.send_message("Only a DM can authorize this.", ephemeral=True)
             return
+        await self._resolve_damage(interaction, void_reduce=False)
+
+    @discord.ui.button(label="Void Reduce (−10 wounds)", style=discord.ButtonStyle.primary, emoji="🔮")
+    async def void_reduce_apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can authorize this.", ephemeral=True)
+            return
+        await self._resolve_damage(interaction, void_reduce=True)
+
+    async def _resolve_damage(self, interaction: discord.Interaction, void_reduce: bool = False) -> None:
+        """Shared damage resolution for both normal and Void-reduced paths."""
 
         # Creature target: apply the attacker's weapon damage to the creature's
         # own wound track (plain hit or Feint only; disarm/knockdown are blocked
@@ -725,6 +744,18 @@ class DamageView(discord.ui.View):
         if self.maneuver == "disarm":
             dis = combat.resolve_disarm(attacker, target, engine)
             applied = combat.apply_damage(target, dis["damage"], target.armor_reduction)
+            void_line = ""
+            if void_reduce and target.current_void_points > 0:
+                void_saved = min(10, applied["final_damage"])
+                target.wounds_taken = max(0, target.wounds_taken - void_saved)
+                target.current_void_points -= 1
+                applied["final_damage"] -= void_saved
+                applied["new_wound_level"] = stats.wound_level_name(target)
+                applied["is_dead"] = stats.is_dead(target)
+                applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
+                void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
+            elif void_reduce:
+                void_line = "\n🔮 No Void Points available — full damage applied"
             store.save(target_rec)
             embed = discord.Embed(
                 title="🗡️ Disarm",
@@ -733,7 +764,7 @@ class DamageView(discord.ui.View):
             embed.add_field(
                 name="Damage (2k1)",
                 value=f"{_format_dice(dis['damage_dice'])}\nRaw **{dis['damage']}** − reduction "
-                f"{applied['reduction']} = **{applied['final_damage']}** wounds",
+                f"{applied['reduction']} = **{applied['final_damage']}** wounds{void_line}",
                 inline=False,
             )
             embed.add_field(
@@ -810,6 +841,18 @@ class DamageView(discord.ui.View):
         )
         reduction = max(0, target.armor_reduction - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red)
         applied = combat.apply_damage(target, raw, reduction)
+        void_line = ""
+        if void_reduce and target.current_void_points > 0:
+            void_saved = min(10, applied["final_damage"])
+            target.wounds_taken = max(0, target.wounds_taken - void_saved)
+            target.current_void_points -= 1
+            applied["final_damage"] -= void_saved
+            applied["new_wound_level"] = stats.wound_level_name(target)
+            applied["is_dead"] = stats.is_dead(target)
+            applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
+            void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
+        elif void_reduce:
+            void_line = "\n🔮 No Void Points available — full damage applied"
         heal_line = ""
         if applied["is_dead"]:
             heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
@@ -829,7 +872,7 @@ class DamageView(discord.ui.View):
                 f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
                 f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}\n"
                 f"Raw **{raw}** − reduction {applied['reduction']} = "
-                f"**{applied['final_damage']}** wounds"
+                f"**{applied['final_damage']}** wounds{void_line}"
             ),
             inline=False,
         )
