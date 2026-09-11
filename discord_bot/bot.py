@@ -908,10 +908,13 @@ async def attack(
     # Active-kata combat modifiers (GDD s30; deterministic subset only).
     kata_notes: list[str] = []          # effects auto-applied to this roll
     rl_used_notes: list[str] = []       # rate-limited effects already spent this Turn/Round
-    rate_limited_handled = False        # attacker's active kata was enforced (suppress its reminder)
     attacker = attacker_rec.character
     enc = encounters.get(interaction.channel_id)
     atk_combatant = enc.find(attacker.name) if enc else None
+    # A rate-limited kata is enforced by the tracker (on this roll or its damage
+    # step) only while an encounter is tracking the attacker; then suppress its
+    # generic reminder. Untracked -> stays a DM-adjudicated reminder.
+    rate_limited_handled = atk_combatant is not None and kata_effects.is_rate_limited(attacker.active_kata)
 
     # Defender's active kata: stance-conditional Armor TN bonus (players only —
     # creatures use fixed stat blocks and carry no active kata).
@@ -933,10 +936,8 @@ async def attack(
         if status == "apply":
             atk_flat += sf_val
             kata_notes.append(sf_note)
-            rate_limited_handled = True
         elif status == "used":
             rl_used_notes.append("Striking as Fire already used this Round.")
-            rate_limited_handled = True
     # Attacker's active kata: a Trait replaced by a Ring on the attack roll.
     atk_weapon_profile = combat.get_weapon_profile(weapon)
     trait_ovr, trait_ovr_note = kata_effects.attacker_trait_override(attacker, atk_weapon_profile)
@@ -951,10 +952,8 @@ async def attack(
             if status == "apply":
                 trait_ovr, trait_ovr_name = sia_val, "Strength"
                 kata_notes.append(sia_note)
-                rate_limited_handled = True
             elif status == "used":
                 rl_used_notes.append("Strength in Arms already used this Turn.")
-                rate_limited_handled = True
 
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
