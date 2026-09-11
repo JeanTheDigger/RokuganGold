@@ -741,6 +741,35 @@ def resolve_poison_resist(
 
 
 # ---------------------------------------------------------------------------
+# Generic skill check (Skill/Trait vs TN)
+# ---------------------------------------------------------------------------
+
+def resolve_skill_check(
+    trait: int,
+    skill: int,
+    tn: int,
+    dice_engine: DiceEngine,
+    bonus: int = 0,
+) -> dict:
+    """Generic Skill/Trait check vs a TN. Roll (trait + skill) keep trait.
+    Explodes only if skilled (skill > 0)."""
+    rolled = trait + skill
+    kept = trait
+    explodes = skill > 0
+    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
+    total = result.total + bonus
+    return {
+        "success": total >= tn,
+        "total": total,
+        "tn": tn,
+        "margin": total - tn,
+        "dice": result,
+        "rolled": rolled,
+        "kept": kept,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Medicine check (L5R 4e core p.154)
 # ---------------------------------------------------------------------------
 

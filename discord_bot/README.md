@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 36 — Poison & Medicine
+## Status: Phase 40 — Lore & Knowledge
 
 **Dice**
 
@@ -450,6 +450,27 @@ prone]`), active guards show as `🛡️→WardName`, and Full Defense as
 |---|---|
 | `/poison` | Poison resistance: **Stamina vs TN (Strength × 5)**. Raw Stamina roll (no explosion). Optional poison name for display. |
 | `/medicine` | Medicine/Intelligence check vs a DM-set TN. Treats wounds, poison, disease, etc. Explodes only if skilled. |
+
+**Skill checks — Stealth, Investigation, Social, Craft, Lore** (all DM-only)
+
+Six commands that all use the same engine: `(Trait + Skill) keep Trait` vs TN,
+exploding only when skilled (skill rank > 0). Wound penalty auto-applied. Each
+uses `resolve_skill_check` in `combat.py` and the shared `_build_check_embed`
+helper for a consistent three-field embed (Roll / Dice / Result).
+
+| Command | What it does |
+|---|---|
+| `/skillcheck` | **Universal** skill check — DM picks the trait (dropdown) and skill name (free text; rank read from sheet). For anything not covered by a dedicated command. |
+| `/stealth` | **Stealth/Agility** vs TN. Auto-reads the Stealth skill from the sheet. Verdict: "Undetected!" / "Spotted!" |
+| `/investigate` | **Investigation/Perception** vs TN. Optional emphasis choice (Notice, Interrogation, Search) — checks the sheet for a matching emphasis and adds a footer reminder about emphasis rerolls. |
+| `/social` | **Social skill** dropdown (Courtier, Etiquette, Intimidation, Temptation, Sincerity, Perform) — auto-selects the correct trait per L5R 4e rules (Awareness for most, Willpower for Intimidation). |
+| `/craft` | **Artisan or Craft / Intelligence** vs TN. Free-text skill name (e.g. "Artisan: Painting", "Craft: Weaponsmithing"). |
+| `/lore` | **Lore / Intelligence** vs TN. Free-text specialty (e.g. "Lore: Heraldry", "Lore: Shadowlands"). |
+
+All six support `member:` (DM targets a player's active character), `is_npc:`
+(look up by name), `bonus:` (flat modifier for advantages, tools, etc.), and
+`reason:` (label shown with the roll). The opposed-check use case (e.g.
+Stealth vs Investigation) is already handled by `/contest`.
 
 **NPCs** (generated from **GDD s22.4** — Generation Templates, LOCKED)
 

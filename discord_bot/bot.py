@@ -3763,6 +3763,386 @@ async def medicine_check(
 
 
 # ===========================================================================
+# Shared skill-check embed builder (Phases 37-40)
+# ===========================================================================
+def _build_check_embed(
+    title: str,
+    c_name: str,
+    skill_label: str,
+    trait_name: str,
+    result: dict,
+    wp: int,
+    bonus: int,
+    success_text: str = "✅ **Success!**",
+    fail_text: str = "❌ **Failure.**",
+) -> discord.Embed:
+    success = result["success"]
+    embed = discord.Embed(
+        title=f"{title} — {c_name}",
+        color=discord.Color.green() if success else discord.Color.greyple(),
+    )
+    wp_str = f" {wp}" if wp else ""
+    bonus_str = f" {bonus:+d}" if bonus else ""
+    embed.add_field(
+        name="Roll",
+        value=(
+            f"{skill_label}/{trait_name} ({result['rolled']}k{result['kept']}"
+            f"{wp_str}{bonus_str}) vs TN **{result['tn']}**"
+        ),
+        inline=False,
+    )
+    embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
+    verdict = success_text if success else fail_text
+    embed.add_field(
+        name="Result",
+        value=f"**{result['total']}** vs TN {result['tn']} — {verdict} (margin {result['margin']:+d})",
+        inline=False,
+    )
+    return embed
+
+
+# ===========================================================================
+# /skillcheck — generic Skill/Trait check (Phase 37)
+# ===========================================================================
+@client.tree.command(
+    name="skillcheck",
+    description="Generic Skill/Trait check vs a TN. DM picks the trait and skill. DM only.",
+)
+@app_commands.describe(
+    name="Character making the check (encounter combatant or NPC name).",
+    trait="Trait for the roll (the kept dice).",
+    skill="Skill name (case-sensitive, e.g. 'Athletics'). Rank is read from the character sheet.",
+    tn="Target Number.",
+    member="Player making the check (uses their active character).",
+    is_npc="Character is an NPC (look up by name).",
+    bonus="Flat bonus (Void Point, advantages, etc.).",
+    reason="Label shown with the roll.",
+)
+@app_commands.choices(trait=_CONTEST_TRAITS)
+async def skill_check(
+    interaction: discord.Interaction,
+    name: str,
+    trait: app_commands.Choice[str],
+    skill: str,
+    tn: app_commands.Range[int, 1, 200],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+    reason: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for a skill check.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
+        return
+    c = rec.character
+    tv = _trait_value(c, trait.value)
+    sk = c.skills.get(skill, 0)
+    wp = stats.wound_penalty(c)
+    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp)
+    skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
+    title = "🎯 Skill Check"
+    if reason:
+        title += f" — {reason}"
+    embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus)
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
+# /stealth — Stealth/Agility check (Phase 37)
+# ===========================================================================
+@client.tree.command(
+    name="stealth",
+    description="Stealth/Agility check vs a TN. DM only.",
+)
+@app_commands.describe(
+    name="Character attempting stealth.",
+    tn="Target Number (DM sets based on conditions, observer alertness, etc.).",
+    member="Player making the check (uses their active character).",
+    is_npc="Character is an NPC (look up by name).",
+    bonus="Flat bonus (cover, darkness, distractions, etc.).",
+    reason="Label (e.g. 'sneaking past the guards').",
+)
+async def stealth_check(
+    interaction: discord.Interaction,
+    name: str,
+    tn: app_commands.Range[int, 1, 200],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+    reason: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for a Stealth check.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
+        return
+    c = rec.character
+    sk = c.skills.get("Stealth", 0)
+    wp = stats.wound_penalty(c)
+    result = combat.resolve_skill_check(c.agility, sk, tn, engine, bonus=bonus + wp)
+    skill_label = f"Stealth {sk}" if sk > 0 else "Stealth (unskilled)"
+    title = "🥷 Stealth Check"
+    if reason:
+        title += f" — {reason}"
+    embed = _build_check_embed(
+        title, c.name, skill_label, "Agility", result, wp, bonus,
+        success_text="✅ **Undetected!**",
+        fail_text="❌ **Spotted!**",
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
+# /investigate — Investigation/Perception check (Phase 37)
+# ===========================================================================
+_INVESTIGATION_EMPHASIS = [
+    app_commands.Choice(name="Notice (passive alertness)", value="Notice"),
+    app_commands.Choice(name="Interrogation (questioning a subject)", value="Interrogation"),
+    app_commands.Choice(name="Search (active search of an area)", value="Search"),
+]
+
+
+@client.tree.command(
+    name="investigate",
+    description="Investigation/Perception check vs a TN. DM only.",
+)
+@app_commands.describe(
+    name="Character investigating.",
+    tn="Target Number.",
+    emphasis="Investigation emphasis (display/reminder — DM adjudicates emphasis reroll).",
+    member="Player making the check (uses their active character).",
+    is_npc="Character is an NPC (look up by name).",
+    bonus="Flat bonus (advantages, tools, etc.).",
+    reason="Label (e.g. 'searching the crime scene').",
+)
+@app_commands.choices(emphasis=_INVESTIGATION_EMPHASIS)
+async def investigate_check(
+    interaction: discord.Interaction,
+    name: str,
+    tn: app_commands.Range[int, 1, 200],
+    emphasis: app_commands.Choice[str] | None = None,
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+    reason: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for an Investigation check.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
+        return
+    c = rec.character
+    sk = c.skills.get("Investigation", 0)
+    wp = stats.wound_penalty(c)
+    result = combat.resolve_skill_check(c.perception, sk, tn, engine, bonus=bonus + wp)
+    emp_name = emphasis.value if emphasis else None
+    has_emphasis = emp_name and emp_name in c.emphases.get("Investigation", [])
+    skill_label = f"Investigation {sk}" if sk > 0 else "Investigation (unskilled)"
+    if emp_name:
+        skill_label += f" [{emp_name}]"
+    title = "🔍 Investigation"
+    if emp_name:
+        title += f" ({emp_name})"
+    if reason:
+        title += f" — {reason}"
+    embed = _build_check_embed(title, c.name, skill_label, "Perception", result, wp, bonus)
+    if has_emphasis:
+        embed.set_footer(text=f"Has {emp_name} emphasis — reroll 1s once (DM adjudicates).")
+    elif emp_name:
+        embed.set_footer(text=f"No {emp_name} emphasis on sheet.")
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
+# /social — Social skill checks (Phase 38)
+# ===========================================================================
+_SOCIAL_SKILLS = [
+    app_commands.Choice(name="Courtier (Awareness)", value="Courtier"),
+    app_commands.Choice(name="Etiquette (Awareness)", value="Etiquette"),
+    app_commands.Choice(name="Intimidation (Willpower)", value="Intimidation"),
+    app_commands.Choice(name="Temptation (Awareness)", value="Temptation"),
+    app_commands.Choice(name="Sincerity (Awareness)", value="Sincerity"),
+    app_commands.Choice(name="Perform (Awareness)", value="Perform"),
+]
+
+_SOCIAL_TRAIT_MAP: dict[str, str] = {
+    "Courtier": "awareness",
+    "Etiquette": "awareness",
+    "Intimidation": "willpower",
+    "Temptation": "awareness",
+    "Sincerity": "awareness",
+    "Perform": "awareness",
+}
+
+
+@client.tree.command(
+    name="social",
+    description="Social skill check vs a TN. Auto-selects the correct trait. DM only.",
+)
+@app_commands.describe(
+    name="Character making the social check.",
+    skill="Social skill (auto-selects the correct trait).",
+    tn="Target Number.",
+    member="Player making the check (uses their active character).",
+    is_npc="Character is an NPC (look up by name).",
+    bonus="Flat bonus (Status, Honor, Void Point, etc.).",
+    reason="Label (e.g. 'convincing the magistrate').",
+)
+@app_commands.choices(skill=_SOCIAL_SKILLS)
+async def social_check(
+    interaction: discord.Interaction,
+    name: str,
+    skill: app_commands.Choice[str],
+    tn: app_commands.Range[int, 1, 200],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+    reason: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for a social check.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
+        return
+    c = rec.character
+    trait_attr = _SOCIAL_TRAIT_MAP[skill.value]
+    tv = _trait_value(c, trait_attr)
+    sk = c.skills.get(skill.value, 0)
+    wp = stats.wound_penalty(c)
+    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp)
+    skill_label = f"{skill.value} {sk}" if sk > 0 else f"{skill.value} (unskilled)"
+    trait_display = trait_attr.capitalize()
+    title = "🗣️ Social Check"
+    if reason:
+        title += f" — {reason}"
+    embed = _build_check_embed(title, c.name, skill_label, trait_display, result, wp, bonus)
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
+# /craft — Artisan & Craft skill checks (Phase 39)
+# ===========================================================================
+@client.tree.command(
+    name="craft",
+    description="Artisan or Craft skill / Intelligence check vs a TN. DM only.",
+)
+@app_commands.describe(
+    name="Character making the craft check.",
+    skill="Skill name as it appears on the sheet (e.g. 'Artisan: Painting', 'Craft: Weaponsmithing').",
+    tn="Target Number.",
+    member="Player making the check (uses their active character).",
+    is_npc="Character is an NPC (look up by name).",
+    bonus="Flat bonus (tools, workshop, etc.).",
+    reason="Label (e.g. 'forging a katana').",
+)
+async def craft_check(
+    interaction: discord.Interaction,
+    name: str,
+    skill: str,
+    tn: app_commands.Range[int, 1, 200],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+    reason: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for a Craft check.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
+        return
+    c = rec.character
+    sk = c.skills.get(skill, 0)
+    wp = stats.wound_penalty(c)
+    result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp)
+    skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
+    title = "🔨 Craft Check"
+    if reason:
+        title += f" — {reason}"
+    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus)
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
+# /lore — Lore & Knowledge skill checks (Phase 40)
+# ===========================================================================
+@client.tree.command(
+    name="lore",
+    description="Lore/Intelligence check vs a TN. DM only.",
+)
+@app_commands.describe(
+    name="Character making the knowledge check.",
+    specialty="Lore specialty as on the sheet (e.g. 'Lore: Heraldry', 'Lore: Shadowlands').",
+    tn="Target Number.",
+    member="Player making the check (uses their active character).",
+    is_npc="Character is an NPC (look up by name).",
+    bonus="Flat bonus (library, scrolls, advantages, etc.).",
+    reason="Label (e.g. 'identifying the creature').",
+)
+async def lore_check(
+    interaction: discord.Interaction,
+    name: str,
+    specialty: str,
+    tn: app_commands.Range[int, 1, 200],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+    reason: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for a Lore check.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
+        return
+    c = rec.character
+    sk = c.skills.get(specialty, 0)
+    wp = stats.wound_penalty(c)
+    result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp)
+    skill_label = f"{specialty} {sk}" if sk > 0 else f"{specialty} (unskilled)"
+    title = "📚 Lore Check"
+    if reason:
+        title += f" — {reason}"
+    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus)
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
 # /npc group — generate and manage NPC characters (s22.4 templates)
 # ===========================================================================
 npc = app_commands.Group(name="npc", description="Generate and manage NPC characters (GDD s22.4 templates).")
