@@ -2385,18 +2385,22 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
     lines = []
     for owner_id, rec in active:
         c = rec.character
+        parts = []
         healed = 0
         rate = stats.natural_healing_rate(c)
         if c.wounds_taken > 0:
             old_wounds = c.wounds_taken
             c.wounds_taken = max(0, c.wounds_taken - rate)
             healed = old_wounds - c.wounds_taken
+        if healed > 0:
+            parts.append(f"healed {healed} wounds ({c.wounds_taken} left)")
+        vp_old = c.current_void_points
+        c.current_void_points = c.max_void_points
+        if vp_old < c.max_void_points:
+            parts.append(f"VP {vp_old} → {c.max_void_points}/{c.max_void_points}")
         for element in SPELL_ELEMENTS:
             c.spell_slots[element] = stats.spell_slot_max(c, element)
         store.save(rec)
-        parts = []
-        if healed > 0:
-            parts.append(f"healed {healed} wounds ({c.wounds_taken} left)")
         slots_str = ", ".join(
             f"{e.title()} {c.spell_slots[e]}" for e in SPELL_ELEMENTS
         )
@@ -2407,7 +2411,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         description="\n".join(lines),
         color=discord.Color.green(),
     )
-    embed.set_footer(text=f"Natural healing: Stamina x 2 per day · Spell slots: Ring + School Rank per element")
+    embed.set_footer(text="Rest: full VP · Stamina x 2 healing · Spell slots: Ring + School Rank per element")
     await interaction.response.send_message(embed=embed)
 
 

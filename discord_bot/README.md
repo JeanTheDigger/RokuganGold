@@ -48,7 +48,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 |---|---|
 | `/dm grant` / `/dm revoke` | Server admins make/unmake a member a DM. |
 | `/dm list` | Show this server's DMs. |
-| `/dm new_day` | **DM** advances the in-game day: refreshes all active PCs' spell slots (Ring + School Rank per element) and applies natural healing (Stamina x 2 wounds). No real-time connection — the DM decides when a new day dawns. |
+| `/dm new_day` | **DM** advances the in-game day: full VP refresh, natural healing (Stamina x 2 wounds), and spell slot refresh (Ring + School Rank per element) for all active PCs. No real-time connection — the DM decides when a new day dawns. |
 | `/party` | DM-only roster of every active PC: school, rings, wounds, VP, honor/glory/status, wielded weapon. Gold embed with player mention. |
 
 A **DM** — a server admin, anyone with *Manage Server*, or a member granted via
