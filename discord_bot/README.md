@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 31 — Grappling subsystem
+## Status: Phase 32 — Spell casting
 
 **Dice**
 
@@ -324,6 +324,7 @@ raises, and full effect text.
 | `/spell list` | Summary by element, or `element:` for that element's spells grouped by Mastery Level. |
 | `/spell search` | Find spells by name, element, or keyword. |
 | `/spell view` | A spell's element, Mastery, range/area/duration, raises, and effect. |
+| `/spell cast` | Cast a spell: rolls **(Ring + School Rank) keep Ring** vs TN **5 + (5 × Mastery Level)**. Affinity +1 / Deficiency −1 effective rank. Supports Void Point (+1k1), Called Raises (+5 TN each, reduce casting time), wound penalty. DM only. |
 
 `/xp spell` (memorise a spell) autocompletes real spell names and **auto-fills the
 Mastery Level** — so the RAW cost (1 × Mastery Level) is computed for you.
@@ -456,6 +457,10 @@ auto-apply: Heavy −5, Tetsu-Do −10 (−5 if Str ≥ 5); Hida Bushi R1 is exe
 **Grappling** (`/grapple`) covers the full subsystem: initiate (Jiujutsu/Agility
 vs TN ignoring armor), contested control rolls, Hit (unarmed damage via DM
 buttons), Throw (Prone + leave grapple), and Break Free.
+**Spell Casting** (`/spell cast`) rolls (Ring + School Rank) keep Ring vs TN
+5 + (5 × Mastery Level), with Affinity (+1 effective rank) and Deficiency (−1),
+Void Point (+1k1), Called Raises (+5 TN each, reduce casting time by 1 per
+raise), and wound penalty — DM only.
 Dual-wielding and thrown/charge maneuvers are still **not** modelled — the DM
 can express those with `raises`/`bonus_tn`.
 

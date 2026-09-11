@@ -219,6 +219,59 @@ def resolve_grapple_control(
     )
 
 
+def spell_casting_tn(mastery_level: int) -> int:
+    """Spell casting TN (s31): 5 + (5 × Mastery Level)."""
+    return 5 + 5 * mastery_level
+
+
+def resolve_spell_casting(
+    ring_value: int,
+    school_rank: int,
+    mastery_level: int,
+    dice_engine: DiceEngine,
+    affinity: bool = False,
+    deficiency: bool = False,
+    extra_rolled: int = 0,
+    extra_kept: int = 0,
+    raises: int = 0,
+    extra_flat: int = 0,
+) -> dict:
+    """Spell Casting Roll (s31): (Ring + effective School Rank) keep Ring.
+
+    Affinity: +1 effective School Rank. Deficiency: -1 (0 = cannot cast)."""
+    effective_rank = school_rank
+    if affinity:
+        effective_rank += 1
+    if deficiency:
+        effective_rank -= 1
+    if effective_rank <= 0:
+        return {
+            "success": False,
+            "cannot_cast": True,
+            "reason": "Deficiency reduces effective School Rank to 0",
+        }
+    rolled = ring_value + effective_rank + extra_rolled
+    kept = ring_value + extra_kept
+    tn = spell_casting_tn(mastery_level)
+    effective_tn = tn + raises * 5
+    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept))
+    total = result.total + extra_flat
+    return {
+        "success": total >= effective_tn,
+        "cannot_cast": False,
+        "total": total,
+        "tn": effective_tn,
+        "base_tn": tn,
+        "margin": total - effective_tn,
+        "dice": result,
+        "rolled": rolled,
+        "kept": kept,
+        "effective_rank": effective_rank,
+        "affinity": affinity,
+        "deficiency": deficiency,
+    }
+
+
 def get_weapon_profile(weapon_name: str) -> dict:
     return WEAPON_CATALOG.get(weapon_name.lower().strip(), DEFAULT_WEAPON)
 

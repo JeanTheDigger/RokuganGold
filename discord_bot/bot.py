@@ -4180,6 +4180,116 @@ async def spell_view(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(embed=build_spell_embed(s))
 
 
+@spell_group.command(name="cast", description="Roll a Spell Casting Roll: (Ring + School Rank) keep Ring vs TN.")
+@app_commands.describe(
+    name="Spell name (auto-complete from the catalog).",
+    raises="Called raises on the casting roll.",
+    spend_void="Spend a Void Point for +1k1.",
+    attacker_npc="Cast as a stored NPC (DM only).",
+    member="Cast as another player's character (DM only).",
+)
+@app_commands.autocomplete(name=_spell_autocomplete)
+async def spell_cast(
+    interaction: discord.Interaction,
+    name: str,
+    raises: int = 0,
+    spend_void: bool = False,
+    attacker_npc: str | None = None,
+    member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    s = spells.get(name)
+    if s is None:
+        await interaction.response.send_message(f"No spell named **{name}**. Try `/spell search`.", ephemeral=True)
+        return
+    # Resolve caster.
+    if attacker_npc:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can cast as an NPC.", ephemeral=True)
+            return
+        rec = store.get_by_name(guild, NPC_OWNER, attacker_npc)
+        if rec is None:
+            await interaction.response.send_message(f"No NPC named **{attacker_npc}**.", ephemeral=True)
+            return
+    elif member is not None and member.id != interaction.user.id:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can cast for another player.", ephemeral=True)
+            return
+        rec = store.get_active(guild, str(member.id))
+        if rec is None:
+            await interaction.response.send_message(f"{member.display_name} has no active character.", ephemeral=True)
+            return
+    else:
+        rec = store.get_active(guild, str(interaction.user.id))
+        if rec is None:
+            await interaction.response.send_message(
+                "You have no active character. Use `/sheet create` first.", ephemeral=True
+            )
+            return
+    caster = rec.character
+    element = s["element"].lower()
+    ring_val = stats.ring_value(caster, element)
+    affinity = caster.affinity_element.lower() == element if caster.affinity_element else False
+    deficiency = caster.deficiency_element.lower() == element if caster.deficiency_element else False
+    extra_rolled = 1 if spend_void else 0
+    extra_kept = 1 if spend_void else 0
+    # Wound penalty as flat modifier.
+    wound_pen = stats.wound_penalty(caster)
+    if spend_void:
+        if caster.current_void_points <= 0:
+            await interaction.response.send_message("No Void Points remaining.", ephemeral=True)
+            return
+        caster.current_void_points -= 1
+        store.save(rec)
+    result = combat.resolve_spell_casting(
+        ring_val, caster.school_rank, s["mastery"], engine,
+        affinity=affinity, deficiency=deficiency,
+        extra_rolled=extra_rolled, extra_kept=extra_kept,
+        raises=raises, extra_flat=wound_pen,
+    )
+    if result.get("cannot_cast"):
+        await interaction.response.send_message(
+            f"**{caster.name}** cannot cast **{s['name']}**: {result['reason']}.", ephemeral=True
+        )
+        return
+    success = result["success"]
+    embed = discord.Embed(
+        title=f"📜 {caster.name} casts {s['name']}",
+        color=discord.Color.gold() if success else discord.Color.greyple(),
+    )
+    notes = []
+    if affinity:
+        notes.append(f"Affinity ({element.title()}): effective rank {result['effective_rank']}")
+    if deficiency:
+        notes.append(f"Deficiency ({element.title()}): effective rank {result['effective_rank']}")
+    if spend_void:
+        notes.append(f"Void Point: +1k1 ({caster.current_void_points} VP left)")
+    if wound_pen:
+        notes.append(f"Wound penalty: {wound_pen}")
+    roll_desc = (
+        f"**{s['element']}** Ring {ring_val} + School Rank {result['effective_rank']}"
+        f" → {result['rolled']}k{result['kept']}\n"
+        f"Roll **{result['total']}** vs TN **{result['tn']}**"
+        f" — {'**SUCCESS**' if success else '**FAILED** (slot consumed)'}"
+    )
+    embed.add_field(name="Spell Casting Roll", value=roll_desc, inline=False)
+    if notes:
+        embed.add_field(name="Modifiers", value=" · ".join(notes), inline=False)
+    if success:
+        casting_time = max(1, s["mastery"] - raises) if raises else s["mastery"]
+        spell_info = f"**Mastery {s['mastery']}** · Range: {s['range']} · Duration: {s['duration']}"
+        if casting_time > 1:
+            spell_info += f"\n⏱️ **{casting_time} Complex Actions** to complete"
+        embed.add_field(name="Spell", value=spell_info, inline=False)
+        if s.get("effect"):
+            effect_text = s["effect"][:1024]
+            embed.add_field(name="Effect", value=effect_text, inline=False)
+    await interaction.response.send_message(embed=embed)
+
+
 # ===========================================================================
 # /weapon and /armor groups — equipment reference (individual_combat.gd / armor_system.gd)
 # ===========================================================================
