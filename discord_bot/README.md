@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 27 — Void Point damage reduction (L5R 4e core)
+## Status: Phase 28 — Missing maneuvers (Called Shot, Extra Attack, Guard)
 
 **Dice**
 
@@ -370,6 +370,12 @@ it lands, the DM authorizes the outcome."*
   win and the target is disarmed.
 - **Knockdown** (2 raises) — on a hit, a contested Strength roll; win and the target
   is knocked prone (quadrupeds resist at +4).
+- **Called Shot** (1–4 raises via `raises:`) — targets a body part (1=limb, 2=hand/foot,
+  3=head, 4=eye/ear/finger). Normal damage; the embed notes the targeted part and the
+  DM rules on the effect of sufficient damage.
+- **Extra Attack** (5 raises) — on a hit, damage resolves normally, then a free second
+  attack roll fires automatically (no raises, same weapon). The 2nd attack can miss.
+  Once per Turn (enforced by the encounter tracker).
 - **Spend Void** — `spend_void:true` spends one Void Point for **+1k1** on the attack
   roll (RAW: Void is not valid on damage rolls) and decrements the sheet's pool.
 
@@ -386,14 +392,16 @@ it lands, the DM authorizes the outcome."*
 | `/combat condition_set` | Apply a condition to a combatant (DM only). 8 choices: Blinded, Dazed, Entangled, Fatigued, Grappled, Mounted, Prone, Stunned. |
 | `/combat condition_clear` | Remove a condition from a combatant (DM only). |
 | `/combat conditions` | Show a combatant's active conditions and their DM-adjudicated effects. |
+| `/combat guard` | Guard another combatant (DM only). Ward gets +10 Armor TN, guarder gets −5. Clears on guarder's next turn. |
 
 Initiative order is in-memory scratch state (a bot restart clears an in-progress
 fight; sheets and wounds are in the database and persist). Each combatant also
-carries **round/turn usage state** and **active conditions** — `/combat next`
-resets the incoming actor's once-per-Turn abilities and, at the top of a new
-Round, everyone's once-per-Round abilities — which is what lets `/attack` enforce
-rate-limited Kata (see the Active-Kata section). Conditions display inline in the
-initiative listing (e.g. `[dazed, prone]`).
+carries **round/turn usage state**, **active conditions**, and **guard state** —
+`/combat next` resets the incoming actor's once-per-Turn abilities, guard
+assignment, and, at the top of a new Round, everyone's once-per-Round abilities —
+which is what lets `/attack` enforce rate-limited Kata (see the Active-Kata
+section). Conditions display inline in the initiative listing (e.g. `[dazed,
+prone]`), and active guards show as `🛡️→WardName`.
 
 **NPCs** (generated from **GDD s22.4** — Generation Templates, LOCKED)
 
@@ -421,9 +429,13 @@ Techniques, and most Kiho stay DM-adjudicated (shown as reminders; technique
 text on the sheet via `/school view`). **Void Point damage reduction** adds a
 second button on every hit — DM clicks "Void Reduce" to spend 1 VP and subtract
 10 wounds from the target (L5R 4e core rule). The button is hidden for creature
-targets (no VP) and knockdown maneuvers (no damage). Dual-wielding and
-thrown/charge/called-shot maneuvers are still **not** modelled — the DM can
-express those with `raises`/`bonus_tn`.
+targets (no VP) and knockdown maneuvers (no damage). **Called Shot** (1–4 raises)
+labels the targeted body part in the damage embed; **Extra Attack** (5 raises)
+auto-fires a second attack roll after the first hit resolves (once per Turn);
+**Guard** (`/combat guard`) assigns a ward (+10 TN) and penalizes the guarder
+(−5 TN), clearing on the guarder's next turn. Dual-wielding and
+thrown/charge maneuvers are still **not** modelled — the DM can express those
+with `raises`/`bonus_tn`.
 
 **Creatures / monsters** (stat blocks transcribed **verbatim** from the bestiaries)
 

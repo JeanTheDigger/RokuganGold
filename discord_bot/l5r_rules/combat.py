@@ -263,7 +263,14 @@ def apply_damage(target: Character, raw_damage: int, reduction: int | None = Non
 
 # Maneuver raise costs (individual_combat.gd MANEUVER_RAISES). Only the ones the
 # bot resolves are listed; each is a called Raise on the attack (raises the TN).
-MANEUVER_RAISES = {"feint": 2, "disarm": 3, "knockdown": 2}
+MANEUVER_RAISES = {"feint": 2, "disarm": 3, "knockdown": 2, "extra_attack": 5}
+
+CALLED_SHOT_PARTS = {
+    1: "specific limb",
+    2: "hand or foot",
+    3: "head",
+    4: "eye, ear, or finger",
+}
 
 
 def roll_initiative(character: Character, dice_engine: DiceEngine):

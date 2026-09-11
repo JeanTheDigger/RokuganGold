@@ -501,6 +501,8 @@ _MANEUVER_APPLY_LABEL = {
     "increased_damage": "Roll & Apply Damage",
     "disarm": "Resolve Disarm (2k1 + Strength)",
     "knockdown": "Resolve Knockdown (Strength)",
+    "called_shot": "Roll & Apply Damage (Called Shot)",
+    "extra_attack": "Roll & Apply Damage (1st Attack)",
 }
 
 
@@ -521,6 +523,8 @@ class DamageView(discord.ui.View):
         attack_margin: int = 0,
         target_creature_id: int | None = None,
         defender_stance: str = "attack",
+        called_shot_raises: int = 0,
+        channel_id: int = 0,
     ) -> None:
         super().__init__(timeout=1800)  # 30 min
         self.attacker_id = attacker_id
@@ -533,6 +537,8 @@ class DamageView(discord.ui.View):
         self.maneuver = maneuver
         self.attack_margin = attack_margin
         self.defender_stance = defender_stance
+        self.called_shot_raises = called_shot_raises
+        self.channel_id = channel_id
         # Relabel the primary button to match the maneuver, and hide the Void
         # button when it would be nonsensical (knockdown has no damage roll;
         # creature targets have no VP pool).
@@ -670,6 +676,12 @@ class DamageView(discord.ui.View):
                     heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
             store.save_creature(cre_rec)
             cr = cre_rec.creature
+            cre_cs_line = ""
+            if self.maneuver == "called_shot" and self.called_shot_raises > 0:
+                part = combat.CALLED_SHOT_PARTS.get(
+                    min(self.called_shot_raises, 4), "specific part"
+                )
+                cre_cs_line = f"\n🎯 Called Shot: **{part}** ({self.called_shot_raises} raise{'s' if self.called_shot_raises != 1 else ''})"
             embed = discord.Embed(
                 title="⚔️ Damage applied",
                 color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
@@ -678,7 +690,7 @@ class DamageView(discord.ui.View):
                 name="Damage",
                 value=(
                     f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                    f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}\n"
+                    f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}{cre_cs_line}\n"
                     f"Raw **{raw}** − reduction {applied['reduction']} = "
                     f"**{applied['final_damage']}** wounds"
                 ),
@@ -699,6 +711,8 @@ class DamageView(discord.ui.View):
             self._disable()
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(embed=embed)
+            if self.maneuver == "extra_attack" and not applied["is_dead"]:
+                await self._second_attack_creature(interaction, attacker_rec, cre_rec)
             return
 
         attacker_rec = store.get_by_id(self.attacker_id)
@@ -862,6 +876,13 @@ class DamageView(discord.ui.View):
                 heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
         store.save(target_rec)
 
+        called_shot_line = ""
+        if self.maneuver == "called_shot" and self.called_shot_raises > 0:
+            part = combat.CALLED_SHOT_PARTS.get(
+                min(self.called_shot_raises, 4), "specific part"
+            )
+            called_shot_line = f"\n🎯 Called Shot: **{part}** ({self.called_shot_raises} raise{'s' if self.called_shot_raises != 1 else ''})"
+
         embed = discord.Embed(
             title="⚔️ Damage applied",
             color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
@@ -870,7 +891,7 @@ class DamageView(discord.ui.View):
             name="Damage",
             value=(
                 f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}\n"
+                f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}{called_shot_line}\n"
                 f"Raw **{raw}** − reduction {applied['reduction']} = "
                 f"**{applied['final_damage']}** wounds{void_line}"
             ),
@@ -881,6 +902,99 @@ class DamageView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(embed=embed)
+
+        if self.maneuver == "extra_attack" and not applied["is_dead"]:
+            await self._second_attack(interaction, attacker_rec, target_rec)
+
+    async def _second_attack(
+        self,
+        interaction: discord.Interaction,
+        attacker_rec: storage.CharacterRecord,
+        target_rec: storage.CharacterRecord,
+    ) -> None:
+        """Roll the free second attack granted by Extra Attack (s40)."""
+        attacker = attacker_rec.character
+        target = target_rec.character
+        wp = combat.get_weapon_profile(self.weapon)
+        is_melee = wp.get("melee", True)
+        enc = encounters.get(self.channel_id)
+        def_conds = set()
+        if enc:
+            dc = enc.find(target.name)
+            if dc:
+                def_conds = dc.conditions
+        cond_tn_ovr, cond_tn_notes = condition_effects.defender_armor_tn_override(
+            def_conds, target.reflexes, target.armor_tn_bonus, is_melee,
+        )
+        cond_def_mod, _ = condition_effects.defender_armor_tn_mod(def_conds, is_melee)
+        if cond_tn_ovr is not None:
+            tn = cond_tn_ovr + cond_def_mod
+        else:
+            tn = combat.armor_tn(target, self.defender_stance) + cond_def_mod
+        outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, engine)
+        hit = outcome["hit"]
+        embed2 = discord.Embed(
+            title="⚔️ Extra Attack — 2nd strike",
+            color=discord.Color.green() if hit else discord.Color.light_grey(),
+        )
+        embed2.add_field(
+            name="Attack Roll",
+            value=f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+                  f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
+                  f" — {'**HIT**' if hit else 'miss'}",
+            inline=False,
+        )
+        if hit:
+            view2 = DamageView(
+                attacker_rec.id, target_rec.id, self.weapon, 0,
+                self.attacker_name, self.target_name,
+                maneuver="none", attack_margin=outcome["margin"],
+                defender_stance=self.defender_stance,
+                channel_id=self.channel_id,
+            )
+            await interaction.followup.send(
+                content="A DM can authorize the 2nd attack's damage below.",
+                embed=embed2, view=view2,
+            )
+        else:
+            await interaction.followup.send(embed=embed2)
+
+    async def _second_attack_creature(
+        self,
+        interaction: discord.Interaction,
+        attacker_rec: storage.CharacterRecord,
+        cre_rec: storage.CreatureRecord,
+    ) -> None:
+        """Roll the free second attack against a creature (Extra Attack, s40)."""
+        attacker = attacker_rec.character
+        tn = cre_rec.creature.armor_tn
+        outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, engine)
+        hit = outcome["hit"]
+        embed2 = discord.Embed(
+            title="⚔️ Extra Attack — 2nd strike",
+            color=discord.Color.green() if hit else discord.Color.light_grey(),
+        )
+        embed2.add_field(
+            name="Attack Roll",
+            value=f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+                  f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
+                  f" — {'**HIT**' if hit else 'miss'}",
+            inline=False,
+        )
+        if hit:
+            view2 = DamageView(
+                attacker_rec.id, None, self.weapon, 0,
+                self.attacker_name, self.target_name,
+                maneuver="none", attack_margin=outcome["margin"],
+                target_creature_id=cre_rec.id,
+                channel_id=self.channel_id,
+            )
+            await interaction.followup.send(
+                content="A DM can authorize the 2nd attack's damage below.",
+                embed=embed2, view=view2,
+            )
+        else:
+            await interaction.followup.send(embed=embed2)
 
     @discord.ui.button(label="No Effect", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -933,6 +1047,8 @@ _MANEUVER_CHOICES = [
     app_commands.Choice(name="Feint (2 raises → bonus damage)", value="feint"),
     app_commands.Choice(name="Disarm (3 raises → 2k1 + contested Strength)", value="disarm"),
     app_commands.Choice(name="Knockdown (2 raises → contested Strength)", value="knockdown"),
+    app_commands.Choice(name="Called Shot (1-4 raises → target body part)", value="called_shot"),
+    app_commands.Choice(name="Extra Attack (5 raises → second attack)", value="extra_attack"),
 ]
 
 
@@ -1043,6 +1159,23 @@ async def attack(
             ephemeral=True,
         )
         return
+    if man == "called_shot" and raises < 1:
+        await interaction.response.send_message(
+            "Called Shot requires at least 1 raise (1=limb, 2=hand/foot, 3=head, 4=eye/ear/finger).",
+            ephemeral=True,
+        )
+        return
+    if man == "extra_attack":
+        enc = encounters.get(interaction.channel_id)
+        if enc:
+            atk_c = enc.find(attacker_rec.character.name)
+            if atk_c and "extra_attack" in atk_c.used_this_turn:
+                await interaction.response.send_message(
+                    "Extra Attack can only be used once per Turn.", ephemeral=True
+                )
+                return
+            if atk_c:
+                atk_c.used_this_turn.add("extra_attack")
     maneuver_raises = combat.MANEUVER_RAISES.get(man, 0)
 
     # Void Point spend: +1k1 on the attack roll (decrement the pool now).
@@ -1187,6 +1320,19 @@ async def attack(
         maneuver_raises = max(0, maneuver_raises - mastery_free)
         kata_notes.extend(mastery_free_notes)
 
+    # Guard maneuver TN modifiers (s40): guarded target gets +10, guarder gets -5.
+    guard_mod = 0
+    if enc and target_rec is not None:
+        def_name_lower = target_rec.character.name.lower()
+        for gc in enc.combatants:
+            if gc.guarding.lower() == def_name_lower:
+                guard_mod += 10
+                kata_notes.append(f"Guarded by {gc.name}: +10 Armor TN")
+                break
+        if def_combatant and def_combatant.guarding:
+            guard_mod -= 5
+            kata_notes.append(f"Guarding {def_combatant.guarding}: −5 Armor TN")
+
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
         t_name = target_creature_rec.creature.name
@@ -1201,10 +1347,10 @@ async def attack(
             is_melee_attack,
         )
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + bonus_tn
+            tn = cond_tn_ovr + cond_def_mod + guard_mod + bonus_tn
             kata_notes.extend(cond_tn_notes)
         else:
-            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod)
+            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod)
 
     outcome = combat.resolve_attack(
         attacker, weapon, tn, raises + maneuver_raises, engine,
@@ -1264,17 +1410,20 @@ async def attack(
             inline=False,
         )
 
+    cs_raises = raises if man == "called_shot" else 0
     if hit:
         if target_creature_rec is not None:
             view = DamageView(
                 attacker_rec.id, None, weapon, increased_damage, a_name, t_name,
                 maneuver=man, attack_margin=outcome["margin"],
                 target_creature_id=target_creature_rec.id, defender_stance=d_stance,
+                called_shot_raises=cs_raises, channel_id=interaction.channel_id,
             )
         else:
             view = DamageView(
                 attacker_rec.id, target_rec.id, weapon, increased_damage, a_name, t_name,
                 maneuver=man, attack_margin=outcome["margin"], defender_stance=d_stance,
+                called_shot_raises=cs_raises, channel_id=interaction.channel_id,
             )
         prompt = {
             "disarm": "A DM can resolve the disarm below.",
@@ -2054,7 +2203,8 @@ def _render_encounter(enc: encounter.Encounter) -> str:
         tag = " *(NPC)*" if c.is_npc else ""
         detail = f"  ·  {c.initiative_detail}" if c.initiative_detail else ""
         cond = f"  [{', '.join(sorted(c.conditions))}]" if c.conditions else ""
-        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}{cond}")
+        guard = f"  🛡️→{c.guarding}" if c.guarding else ""
+        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}{cond}{guard}")
     header = f"⚔️ **Round {enc.round}**" if enc.started else "⚔️ **Not started** — use `/combat next` to begin."
     return header + "\n" + "\n".join(lines)
 
@@ -2318,6 +2468,41 @@ async def combat_conditions(interaction: discord.Interaction, name: str) -> None
     if reminders:
         lines += "\n" + "\n".join(reminders)
     await interaction.response.send_message(lines)
+
+
+@combat_group.command(name="guard", description="Guard another combatant (+10 Armor TN to ward, −5 to you). Lasts until your next turn.")
+@app_commands.describe(
+    guarder="The combatant doing the guarding.",
+    ward="The combatant being protected.",
+)
+async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can assign Guard.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    g = enc.find(guarder)
+    if g is None:
+        await interaction.response.send_message(f"No combatant named **{guarder}**.", ephemeral=True)
+        return
+    w = enc.find(ward)
+    if w is None:
+        await interaction.response.send_message(f"No combatant named **{ward}**.", ephemeral=True)
+        return
+    if g.name == w.name:
+        await interaction.response.send_message("A combatant cannot guard themselves.", ephemeral=True)
+        return
+    g.guarding = w.name
+    await interaction.response.send_message(
+        f"🛡️ **{g.name}** is guarding **{w.name}**.\n"
+        f"  Ward: +10 Armor TN · Guarder: −5 Armor TN\n"
+        f"  Expires at the start of {g.name}'s next turn."
+    )
 
 
 # ===========================================================================

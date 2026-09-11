@@ -35,6 +35,9 @@ class Combatant:
     used_this_round: set[str] = field(default_factory=set)
     # Combat conditions (GDD s40): transient per-encounter, DM-managed.
     conditions: set[str] = field(default_factory=set)
+    # Guard maneuver (s40): name of the combatant being guarded, or empty.
+    # Ward gets +10 Armor TN, guarder gets -5 Armor TN. Clears on guarder's turn.
+    guarding: str = ""
 
     def consume_once(self, key: str, scope: str) -> bool:
         """Try to spend a once-per-`scope` ability ('turn' or 'round'). Returns
@@ -109,4 +112,5 @@ class Encounter:
         cur = self.current()
         if cur is not None:
             cur.used_this_turn.clear()
+            cur.guarding = ""
         return cur
