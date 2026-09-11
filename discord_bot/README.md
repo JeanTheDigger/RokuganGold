@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 42 — Full Mechanics
+## Status: Phase 43 — Day Cycle, Spell Slots & Combat Depth
 
 **Help & Navigation**
 
@@ -48,6 +48,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 |---|---|
 | `/dm grant` / `/dm revoke` | Server admins make/unmake a member a DM. |
 | `/dm list` | Show this server's DMs. |
+| `/dm new_day` | **DM** advances the in-game day: refreshes all active PCs' spell slots (Ring + School Rank per element) and applies natural healing (Stamina x 2 wounds). No real-time connection — the DM decides when a new day dawns. |
 | `/party` | DM-only roster of every active PC: school, rings, wounds, VP, honor/glory/status, wielded weapon. Gold embed with player mention. |
 
 A **DM** — a server admin, anyone with *Manage Server*, or a member granted via
@@ -69,6 +70,8 @@ follows automatically.
 | `/xp skill` | Raise or learn a Skill. Cost = **new rank × 1**. |
 | `/xp emphasis` | Add a Skill Emphasis. **Flat 2 XP**, max **⌈rank ÷ 2⌉** per skill. |
 | `/xp kata` · `/xp kiho` · `/xp spell` | Learn a Kata / Kiho / memorise a Spell. Cost = **1 × Mastery Level** — the name autocompletes and the ML is **auto-filled** from the catalog. `/xp kiho` also takes `non_brotherhood:` (1.5 × ML, rounded up, per s38a). |
+| `/xp advantage` | Buy an Advantage with XP (cost = its point value). |
+| `/xp remove_disadvantage` | Buy off a Disadvantage with XP. Cost = **2 × point value** (L5R 4e RAW). |
 | `/xp costs` | The RAW cost reference. |
 
 **Costs are tabletop L5R 4e RAW:** Skill → N×1, Trait → N×4, Void → N×6, Emphasis
@@ -333,7 +336,7 @@ raises, and full effect text.
 | `/spell list` | Summary by element, or `element:` for that element's spells grouped by Mastery Level. |
 | `/spell search` | Find spells by name, element, or keyword. |
 | `/spell view` | A spell's element, Mastery, range/area/duration, raises, and effect. |
-| `/spell cast` | Cast a spell: rolls **(Ring + School Rank) keep Ring** vs TN **5 + (5 × Mastery Level)**. Affinity +1 / Deficiency −1 effective rank. Supports Void Point (+1k1), Called Raises (+5 TN each, reduce casting time), wound penalty. DMs can cast for NPCs or other players. |
+| `/spell cast` | Cast a spell: rolls **(Ring + School Rank) keep Ring** vs TN **5 + (5 × Mastery Level)**. Affinity +1 / Deficiency −1 effective rank. Supports Void Point (+1k1), Called Raises (+5 TN each, reduce casting time), wound penalty. **Spell slots** (Ring + School Rank per element per day) are consumed on cast — whether the roll succeeds or fails. Refresh slots with `/dm new_day`. DMs can cast for NPCs or other players. |
 
 `/xp spell` (memorise a spell) autocompletes real spell names and **auto-fills the
 Mastery Level** — so the RAW cost (1 × Mastery Level) is computed for you.
@@ -522,8 +525,10 @@ buttons), Throw (Prone + leave grapple), and Break Free.
 **Spell Casting** (`/spell cast`) rolls (Ring + School Rank) keep Ring vs TN
 5 + (5 × Mastery Level), with Affinity (+1 effective rank) and Deficiency (−1),
 Void Point (+1k1), Called Raises (+5 TN each, reduce casting time by 1 per
-raise), and wound penalty. Players cast their own spells; DMs can cast for NPCs
-or other players.
+raise), and wound penalty. **Spell slots** are tracked per element: max = Ring +
+School Rank per day, consumed on each cast (success or failure). DM refreshes all
+slots and heals wounds via `/dm new_day` — no connection between real time and game
+time. Players cast their own spells; DMs can cast for NPCs or other players.
 **Iaijutsu Dueling** (`/duel`) covers the full three-stage formal duel:
 Assessment (Iaijutsu/Awareness, reveals opponent stats, +1k1 Focus bonus if
 exceeded by 10+), Focus (contested Iaijutsu/Void, winner by 5+ strikes first
@@ -587,8 +592,12 @@ own room.
 
 | Command | What it does |
 |---|---|
-| `/combat stance` | Declare stance for the round: Attack, Full Attack (−10 ATN, +2k1), Defense (+Air+Defense ATN), Full Defense (Complex Action), Center. Resets on turn advance. |
+| `/combat stance` | Declare stance for the round: Attack, Full Attack (−10 ATN, +2k1), Defense (+Air+Defense ATN), Full Defense (Complex Action), Center (+Void ATN, +1k1 next turn). Resets on turn advance. |
 | `/combat action` | Track Simple/Complex action usage per turn. L5R 4e: 1 Complex OR 2 Simple per turn. |
+| `/combat init` | **DM** adjusts a combatant's initiative mid-combat (covers re-rolls and delayed-action repositioning). |
+| `/combat hold` | **DM** toggles a combatant's held-action flag. Shown in the encounter display. |
+| `/combat delay` | **DM** toggles delayed status, with an optional new initiative value. |
+| `/combat surprise` | **DM** toggles the surprise-round flag. Auto-clears when Round 2 begins. |
 | `/combat mount` | Mount or dismount — toggles the Mounted condition on a combatant (DM only). |
 | `/dual_wield` | Show dual-wielding rules and off-hand penalties based on weapon size (Small −5, Medium −10, Large −15). |
 | `/heritage roll` | Roll on the Heritage table for a clan (d10). |

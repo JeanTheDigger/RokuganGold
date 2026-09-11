@@ -112,6 +112,16 @@ def water_ring(c: Character) -> int:
     return ring_value(c, "water")
 
 
+def natural_healing_rate(c: Character) -> int:
+    """L5R 4e: a character heals Stamina x 2 wounds per day of rest."""
+    return c.stamina * 2
+
+
+def spell_slot_max(c: Character, element: str) -> int:
+    """L5R 4e: per-element daily spell slots = Ring value + School Rank."""
+    return ring_value(c, element) + c.school_rank
+
+
 def encumbrance_capacity(c: Character) -> int:
     """L5R 4e: a character can carry Strength x 5 items without penalty.
     Beyond that, TN penalties apply. This returns the threshold."""

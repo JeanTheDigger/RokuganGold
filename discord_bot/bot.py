@@ -2366,6 +2366,51 @@ async def dm_list(interaction: discord.Interaction) -> None:
     )
 
 
+SPELL_ELEMENTS = ("air", "earth", "fire", "water", "void")
+
+
+@dm.command(name="new_day", description="Advance to a new day: refresh spell slots and apply natural healing for all active PCs.")
+async def dm_new_day(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can advance the day.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    active = store.list_active_pcs(guild)
+    if not active:
+        await interaction.response.send_message("No active PCs on this server.", ephemeral=True)
+        return
+    lines = []
+    for owner_id, rec in active:
+        c = rec.character
+        healed = 0
+        rate = stats.natural_healing_rate(c)
+        if c.wounds_taken > 0:
+            old_wounds = c.wounds_taken
+            c.wounds_taken = max(0, c.wounds_taken - rate)
+            healed = old_wounds - c.wounds_taken
+        for element in SPELL_ELEMENTS:
+            c.spell_slots[element] = stats.spell_slot_max(c, element)
+        store.save(rec)
+        parts = []
+        if healed > 0:
+            parts.append(f"healed {healed} wounds ({c.wounds_taken} left)")
+        slots_str = ", ".join(
+            f"{e.title()} {c.spell_slots[e]}" for e in SPELL_ELEMENTS
+        )
+        parts.append(f"slots: {slots_str}")
+        lines.append(f"**{c.name}** — {' · '.join(parts)}")
+    embed = discord.Embed(
+        title="New Day",
+        description="\n".join(lines),
+        color=discord.Color.green(),
+    )
+    embed.set_footer(text=f"Natural healing: Stamina x 2 per day · Spell slots: Ring + School Rank per element")
+    await interaction.response.send_message(embed=embed)
+
+
 # ===========================================================================
 # /combat group — initiative tracker
 # ===========================================================================
@@ -2386,8 +2431,16 @@ def _render_encounter(enc: encounter.Encounter) -> str:
         cond = f"  [{', '.join(sorted(c.conditions))}]" if c.conditions else ""
         guard = f"  🛡️→{c.guarding}" if c.guarding else ""
         fd = f"  🛡️FD+{c.full_defense_bonus}" if c.full_defense_bonus else ""
-        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}{stance_str}{acts}{cond}{guard}{fd}")
-    header = f"⚔️ **Round {enc.round}**" if enc.started else "⚔️ **Not started** — use `/combat next` to begin."
+        held = "  ⏸️HELD" if c.held else ""
+        delayed = "  ⏳DELAYED" if c.delayed else ""
+        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}{stance_str}{acts}{cond}{guard}{fd}{held}{delayed}")
+    header = f"⚔️ **Round {enc.round}**"
+    if enc.surprise_round:
+        header += " *(Surprise)*"
+    if not enc.started:
+        header = "⚔️ **Not started** — use `/combat next` to begin."
+        if enc.surprise_round:
+            header += " *(Surprise Round)*"
     return header + "\n" + "\n".join(lines)
 
 
@@ -2545,10 +2598,10 @@ async def combat_summary(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    embed = discord.Embed(
-        title=f"⚔️ Combat Summary — Round {enc.round}",
-        color=discord.Color.dark_red(),
-    )
+    title = f"⚔️ Combat Summary — Round {enc.round}"
+    if enc.surprise_round:
+        title += " (Surprise)"
+    embed = discord.Embed(title=title, color=discord.Color.dark_red())
     for cb in enc.combatants:
         rec = _resolve_combatant_record(guild, cb)
         if rec is not None:
@@ -2556,18 +2609,20 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             lvl = stats.wound_level_name(c)
             pen = stats.wound_penalty(c)
             cap = stats.total_wound_capacity(c)
-            tn = combat.armor_tn(c)
+            tn = combat.armor_tn(c, cb.stance)
             pen_str = f" ({pen})" if pen else ""
             vp = f"{c.current_void_points}/{c.max_void_points} VP"
             conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "—"
             fd = f", FD+{cb.full_defense_bonus}" if cb.full_defense_bonus else ""
             guard = f", guarding {cb.guarding}" if cb.guarding else ""
+            held = ", HELD" if cb.held else ""
+            delayed = ", DELAYED" if cb.delayed else ""
             stance_label = cb.stance.replace("_", " ").title()
             acts_left = 2 - cb.actions_used
             value = (
                 f"Wounds: {c.wounds_taken}/{cap} **{lvl}**{pen_str}\n"
                 f"ATN: **{tn}** · {vp} · Stance: **{stance_label}** · Acts: {acts_left}\n"
-                f"Conditions: {conds}{fd}{guard}"
+                f"Conditions: {conds}{fd}{guard}{held}{delayed}"
             )
         else:
             conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "—"
@@ -4446,6 +4501,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
     ("DM Management", [
         ("/dm grant / revoke", "Grant or revoke DM status (admin only)."),
         ("/dm list", "List this server's DMs."),
+        ("/dm new_day", "Advance to a new day: refresh spell slots & heal all PCs."),
         ("/party", "Overview of all active PCs (DM only)."),
     ]),
     ("Combat", [
@@ -4507,6 +4563,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/xp trait / skill / emphasis", "Spend XP on Traits, Skills, or Emphases."),
         ("/xp kata / kiho / spell", "Learn Kata, Kiho, or memorise a Spell."),
         ("/xp advantage", "Buy an Advantage with XP."),
+        ("/xp remove_disadvantage", "Buy off a Disadvantage (2x point cost)."),
         ("/xp costs", "Show the RAW cost reference."),
     ]),
     ("Schools & Spells", [
@@ -4525,6 +4582,9 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
     ("Combat — Stances & Actions", [
         ("/combat stance", "Declare stance (Attack, Full Attack, Defense, Full Defense, Center)."),
         ("/combat action", "Track Simple/Complex action economy per turn."),
+        ("/combat init", "Adjust a combatant's initiative (DM only)."),
+        ("/combat hold / delay", "Hold or delay a combatant's action (DM only)."),
+        ("/combat surprise", "Toggle surprise round (DM only)."),
         ("/combat mount", "Mount or dismount (adds/removes Mounted condition)."),
         ("/combat full_defense", "Full Defense roll (Complex Action)."),
         ("/dual_wield", "Dual-wielding rules and off-hand penalties."),
@@ -5674,6 +5734,63 @@ async def xp_advantage(
     )
 
 
+@xp.command(name="remove_disadvantage", description="Buy off a Disadvantage with XP (cost = 2x its point value).")
+@app_commands.describe(
+    name="Disadvantage name (must be on the character's sheet).",
+    points="Point value of the disadvantage (required if not in catalog or Variable cost).",
+    member="Target another player's character (DM only).",
+)
+@app_commands.autocomplete(name=_disadvantage_autocomplete)
+async def xp_remove_disadvantage(
+    interaction: discord.Interaction,
+    name: str,
+    points: app_commands.Range[int, 1, 20] | None = None,
+    member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    matched = [d for d in c.disadvantages if d.lower() == name.lower().strip()]
+    if not matched:
+        adv = advantages.get(name, "disadvantage")
+        canonical = adv["name"] if adv else name.strip()
+        matched = [d for d in c.disadvantages if d.lower() == canonical.lower()]
+    if not matched:
+        await interaction.response.send_message(
+            f"**{c.name}** doesn't have the disadvantage **{name}**.", ephemeral=True
+        )
+        return
+    canonical = matched[0]
+    adv = advantages.get(canonical, "disadvantage")
+    base_cost = points if points is not None else (adv["points"] if adv else None)
+    if base_cost is None:
+        await interaction.response.send_message(
+            f"**{canonical}** has a Variable cost — pass `points:` to set its base value.", ephemeral=True
+        )
+        return
+    cost = base_cost * 2
+    if c.xp < cost:
+        await interaction.response.send_message(
+            f"Not enough XP: removing **{canonical}** costs **{cost}** (2x{base_cost}), "
+            f"but **{c.name}** has {c.xp:g}.", ephemeral=True
+        )
+        return
+    c.disadvantages = [d for d in c.disadvantages if d.lower() != canonical.lower()]
+    c.xp -= cost
+    c.xp_spent += cost
+    store.save(rec)
+    await interaction.response.send_message(
+        f"**{c.name}** overcomes the disadvantage **{canonical}** for **{cost}** XP "
+        f"(2x base {base_cost}). XP left {c.xp:g}",
+        embed=build_sheet_embed(rec),
+    )
+
+
 @xp.command(name="costs", description="Show the Experience cost reference (L5R 4e RAW).")
 async def xp_costs(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
@@ -5967,9 +6084,18 @@ async def spell_cast(
     ring_val = stats.ring_value(caster, element)
     affinity = caster.affinity_element.lower() == element if caster.affinity_element else False
     deficiency = caster.deficiency_element.lower() == element if caster.deficiency_element else False
+    # Spell slot check: if slots are tracked, enforce the limit.
+    slot_remaining = caster.spell_slots.get(element)
+    if slot_remaining is not None and slot_remaining <= 0:
+        slot_max = stats.spell_slot_max(caster, element)
+        await interaction.response.send_message(
+            f"**{caster.name}** has no **{element.title()}** spell slots remaining "
+            f"(0/{slot_max}). A DM must call `/dm new_day` to refresh slots.",
+            ephemeral=True,
+        )
+        return
     extra_rolled = 1 if spend_void else 0
     extra_kept = 1 if spend_void else 0
-    # Wound penalty as flat modifier.
     wound_pen = stats.wound_penalty(caster)
     if spend_void:
         if caster.current_void_points <= 0:
@@ -5988,6 +6114,10 @@ async def spell_cast(
             f"**{caster.name}** cannot cast **{s['name']}**: {result['reason']}.", ephemeral=True
         )
         return
+    # Consume a spell slot (L5R 4e: consumed whether the roll succeeds or fails).
+    if element in caster.spell_slots:
+        caster.spell_slots[element] = max(0, caster.spell_slots[element] - 1)
+        store.save(rec)
     success = result["success"]
     embed = discord.Embed(
         title=f"📜 {caster.name} casts {s['name']}",
@@ -6002,6 +6132,9 @@ async def spell_cast(
         notes.append(f"Void Point: +1k1 ({caster.current_void_points} VP left)")
     if wound_pen:
         notes.append(f"Wound penalty: {wound_pen}")
+    if element in caster.spell_slots:
+        slot_max = stats.spell_slot_max(caster, element)
+        notes.append(f"{element.title()} slots: {caster.spell_slots[element]}/{slot_max}")
     roll_desc = (
         f"**{s['element']}** Ring {ring_val} + School Rank {result['effective_rank']}"
         f" → {result['rolled']}k{result['kept']}\n"
@@ -6291,7 +6424,7 @@ _STANCE_CHOICES = [
     app_commands.Choice(name="Full Attack (+2k1 hit, −10 ATN)", value="full_attack"),
     app_commands.Choice(name="Defense (+Air+Defense to ATN)", value="defense"),
     app_commands.Choice(name="Full Defense (Complex Action)", value="full_defense"),
-    app_commands.Choice(name="Center (no bonus, preparing)", value="center"),
+    app_commands.Choice(name="Center (+Void ATN, +1k1 next turn)", value="center"),
 ]
 
 
@@ -6323,6 +6456,115 @@ async def combat_stance(
     cb.stance = stance.value
     label = stance.name
     await interaction.response.send_message(f"**{cb.name}** adopts **{label}** stance.")
+
+
+@combat_group.command(name="init", description="Adjust a combatant's initiative value (DM only).")
+@app_commands.describe(
+    name="Combatant name.",
+    value="New initiative total.",
+)
+async def combat_init(
+    interaction: discord.Interaction,
+    name: str,
+    value: app_commands.Range[int, -100, 200],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can adjust initiative.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    cb = enc.find(name)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    old = cb.initiative
+    cb.initiative = value
+    enc._sort()
+    if enc.started:
+        cur = enc.current()
+        if cur is not None:
+            enc.turn_index = enc.combatants.index(cur)
+    await interaction.response.send_message(
+        f"**{cb.name}** initiative {old} → **{value}**\n{_render_encounter(enc)}"
+    )
+
+
+@combat_group.command(name="hold", description="Mark a combatant as holding their action (DM only).")
+@app_commands.describe(name="Combatant name.")
+async def combat_hold(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can manage held actions.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    cb = enc.find(name)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    cb.held = not cb.held
+    status = "holding" if cb.held else "no longer holding"
+    await interaction.response.send_message(f"**{cb.name}** is {status} their action.")
+
+
+@combat_group.command(name="delay", description="Mark a combatant as delaying (DM only).")
+@app_commands.describe(name="Combatant name.", new_initiative="Optional new initiative value.")
+async def combat_delay(
+    interaction: discord.Interaction,
+    name: str,
+    new_initiative: app_commands.Range[int, -100, 200] | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can manage delayed actions.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    cb = enc.find(name)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    cb.delayed = not cb.delayed
+    if new_initiative is not None and cb.delayed:
+        cb.initiative = new_initiative
+        enc._sort()
+        if enc.started:
+            cur = enc.current()
+            if cur is not None:
+                enc.turn_index = enc.combatants.index(cur)
+    status = "delaying" if cb.delayed else "no longer delaying"
+    init_note = f" (init → {cb.initiative})" if new_initiative is not None and cb.delayed else ""
+    await interaction.response.send_message(f"**{cb.name}** is {status}{init_note}.")
+
+
+@combat_group.command(name="surprise", description="Toggle the surprise round flag on the current encounter (DM only).")
+async def combat_surprise(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can toggle the surprise round.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    enc.surprise_round = not enc.surprise_round
+    state = "ON" if enc.surprise_round else "OFF"
+    await interaction.response.send_message(f"Surprise round: **{state}**\n{_render_encounter(enc)}")
 
 
 # ---------------------------------------------------------------------------

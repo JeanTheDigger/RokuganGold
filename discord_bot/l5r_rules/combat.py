@@ -302,9 +302,9 @@ def armor_tn(target: Character, defender_stance: str = "attack", extra: int = 0)
     base = target.reflexes * 5 + 5 + target.armor_tn_bonus
     base += STANCE_ARMOR_TN_BONUS.get(defender_stance, 0)
     if defender_stance == "defense":
-        # Defense stance: + Air ring + Defense skill rank (rolled bonus not modelled;
-        # this matches the GDScript's non-rolled Defense-stance contribution).
         base += stats.ring_value(target, "air") + target.skills.get("Defense", 0)
+    elif defender_stance == "center":
+        base += target.void_ring
     return base + extra
 
 

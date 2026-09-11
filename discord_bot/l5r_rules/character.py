@@ -94,6 +94,10 @@ class Character:
     advantages: list[str] = field(default_factory=list)
     disadvantages: list[str] = field(default_factory=list)
 
+    # -- Spell slots per element (L5R 4e: max = Ring + School Rank per day).
+    #    DM refreshes via /dm new_day. Empty dict = not yet tracked. --
+    spell_slots: dict[str, int] = field(default_factory=dict)
+
     # -- Money --
     koku: float = 0.0
 

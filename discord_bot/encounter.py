@@ -51,6 +51,9 @@ class Combatant:
     # Action economy: tracks simple/complex actions used this turn.
     # L5R 4e: 1 Complex OR 2 Simple actions per turn.
     actions_used: int = 0  # 0=none, 1=one simple, 2=done (complex or 2 simples)
+    # Held/delayed actions (s40): DM-managed.
+    held: bool = False      # holding action — acts later this round
+    delayed: bool = False   # delayed — moved to lower initiative
 
     def consume_once(self, key: str, scope: str) -> bool:
         """Try to spend a once-per-`scope` ability ('turn' or 'round'). Returns
@@ -69,6 +72,7 @@ class Encounter:
     round: int = 1
     turn_index: int = 0
     started: bool = False
+    surprise_round: bool = False
 
     def _sort(self) -> None:
         # Stable sort by initiative descending keeps insertion order on ties.
@@ -122,6 +126,8 @@ class Encounter:
             self.round += 1
             for c in self.combatants:
                 c.used_this_round.clear()
+        if self.turn_index == 0 and self.round == 2 and self.surprise_round:
+            self.surprise_round = False
         cur = self.current()
         if cur is not None:
             cur.used_this_turn.clear()
@@ -129,4 +135,6 @@ class Encounter:
             cur.full_defense_bonus = 0
             cur.stance = "attack"
             cur.actions_used = 0
+            cur.held = False
+            cur.delayed = False
         return cur
