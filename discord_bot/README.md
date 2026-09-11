@@ -19,6 +19,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 |---|---|
 | `/help` | Categorized command reference — 13 categories, expandable. Shows a compact overview or drill into one category. Ephemeral (only you see it). |
 | `/whoami` | Quick glance at your active character: name, school, rings, wounds, VP, wielded weapon, active Kata, and combat conditions (if in an encounter). Ephemeral. |
+| `/lookup` | Unified search across **all** catalogs (spells, schools, kata, kiho, advantages, weapons, creatures). Find anything without knowing which command to use. Ephemeral. |
 
 **Dice**
 
@@ -406,6 +407,7 @@ it lands, the DM authorizes the outcome."*
 | `/combat conditions` | Show a combatant's active conditions and their DM-adjudicated effects. |
 | `/combat guard` | Guard another combatant (DM only). Ward gets +10 Armor TN, guarder gets −5. Clears on guarder's next turn. |
 | `/combat full_defense` | Full Defense (DM only). Rolls Defense/Reflexes, adds half (rounded up) to Armor TN until next turn. Complex Action. |
+| `/combat summary` | Compact DM-only overview of all combatants: wounds, wound level, Armor TN, VP, conditions, guards, and Full Defense — at a glance. Ephemeral. |
 
 Initiative order is in-memory scratch state (a bot restart clears an in-progress
 fight; sheets and wounds are in the database and persist). Each combatant also

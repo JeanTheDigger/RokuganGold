@@ -2418,6 +2418,53 @@ async def combat_end(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("⚔️ Encounter ended.")
 
 
+@combat_group.command(name="summary", description="Compact overview of all combatants' key stats. DM only.")
+async def combat_summary(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can view the combat summary.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None or not enc.combatants:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    embed = discord.Embed(
+        title=f"⚔️ Combat Summary — Round {enc.round}",
+        color=discord.Color.dark_red(),
+    )
+    for cb in enc.combatants:
+        rec = _resolve_combatant_record(guild, cb)
+        if rec is not None:
+            c = rec.character
+            lvl = stats.wound_level_name(c)
+            pen = stats.wound_penalty(c)
+            cap = stats.total_wound_capacity(c)
+            tn = combat.armor_tn(c)
+            pen_str = f" ({pen})" if pen else ""
+            vp = f"{c.current_void_points}/{c.max_void_points} VP"
+            conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "—"
+            fd = f", FD+{cb.full_defense_bonus}" if cb.full_defense_bonus else ""
+            guard = f", guarding {cb.guarding}" if cb.guarding else ""
+            value = (
+                f"Wounds: {c.wounds_taken}/{cap} **{lvl}**{pen_str}\n"
+                f"ATN: **{tn}** · {vp}\n"
+                f"Conditions: {conds}{fd}{guard}"
+            )
+        else:
+            conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "—"
+            value = f"*(no sheet)* · Conditions: {conds}"
+        marker = "▶️ " if (enc.started and cb is enc.current()) else ""
+        embed.add_field(
+            name=f"{marker}{cb.name} (init {cb.initiative})",
+            value=value,
+            inline=True,
+        )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 @combat_group.command(name="npc", description="Add a stored NPC to initiative (rolls its initiative). DM only.")
 @app_commands.describe(name="The NPC to add.")
 @app_commands.autocomplete(name=_npc_autocomplete)
@@ -4188,6 +4235,69 @@ async def lore_check(
 
 
 # ===========================================================================
+# /lookup — unified cross-catalog search
+# ===========================================================================
+@client.tree.command(
+    name="lookup",
+    description="Search across all catalogs at once: spells, schools, kata, kiho, advantages, weapons, creatures.",
+)
+@app_commands.describe(
+    query="Search term (matches names, elements, categories).",
+)
+async def lookup(
+    interaction: discord.Interaction,
+    query: str,
+) -> None:
+    q = query.lower().strip()
+    if len(q) < 2:
+        await interaction.response.send_message("Search term must be at least 2 characters.", ephemeral=True)
+        return
+
+    results: list[tuple[str, str, str]] = []
+
+    for s in spells.search(q)[:5]:
+        results.append(("Spell", s["name"], f"{s['element']} {s['mastery']}"))
+
+    for s in schools.search(q)[:5]:
+        cat = s.get("category", "")
+        results.append(("School", s["name"], f"{s['clan']} {cat}"))
+
+    for k in kata.search(q)[:5]:
+        results.append(("Kata", k["name"], f"{k['element']} ML{k['mastery']}"))
+
+    for k in kiho.search(q)[:5]:
+        results.append(("Kiho", k["name"], f"{k['element']} ML{k['mastery']}"))
+
+    for a in advantages.search(q)[:5]:
+        kind = a.get("kind", "")
+        pts = a.get("points", "")
+        results.append(("Advt/Dis", a["name"], f"{kind} ({pts} pts)"))
+
+    for tid, t in sorted(creature.CREATURE_CATALOG.items(), key=lambda kv: kv[1].name):
+        if q in tid or q in t.name.lower() or any(q in tag for tag in t.tags):
+            results.append(("Creature", t.name, f"TN {t.armor_tn}, dead {t.wounds_dead}"))
+            if len([r for r in results if r[0] == "Creature"]) >= 5:
+                break
+
+    for wname, w in combat.WEAPON_CATALOG.items():
+        if q in wname:
+            size = w.get("size", "")
+            skill = w.get("skill", "")
+            results.append(("Weapon", wname.replace("_", " ").title(), f"{skill}, {size}"))
+
+    if not results:
+        await interaction.response.send_message(f"No results for **{query}**.", ephemeral=True)
+        return
+
+    lines = [f"`{cat:10s}` **{name}** — {detail}" for cat, name, detail in results[:25]]
+    extra = f"\n*…{len(results) - 25} more — narrow your search.*" if len(results) > 25 else ""
+    await interaction.response.send_message(
+        f"🔎 **{len(results)} result(s) for `{query}`:**\n" + "\n".join(lines) + extra,
+        ephemeral=True,
+    )
+
+
+# ===========================================================================
 # /help — categorized command reference
 # ===========================================================================
 _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
@@ -4195,6 +4305,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/ping", "Check the bot is alive (shows gateway latency)."),
         ("/whoami", "Quick glance at your active character's status."),
         ("/roll", "Roll & Keep: XkY, optional TN, raises, emphasis, unskilled."),
+        ("/lookup", "Search all catalogs at once (spells, schools, kata, etc.)."),
     ]),
     ("Character Sheets", [
         ("/sheet create", "Create a character (optionally with a school)."),
@@ -4223,6 +4334,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/combat join / add", "Add a PC or NPC to initiative."),
         ("/combat next", "Advance to the next combatant's turn."),
         ("/combat status", "Show initiative order."),
+        ("/combat summary", "Compact stat overview of all combatants (DM)."),
         ("/combat remove", "Remove a combatant."),
         ("/combat condition_set / clear", "Apply or remove a condition (DM)."),
         ("/combat conditions", "Show a combatant's active conditions."),
