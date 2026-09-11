@@ -4143,6 +4143,159 @@ async def lore_check(
 
 
 # ===========================================================================
+# /help — categorized command reference
+# ===========================================================================
+_HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
+    ("Dice", [
+        ("/ping", "Check the bot is alive (shows gateway latency)."),
+        ("/roll", "Roll & Keep: XkY, optional TN, raises, emphasis, unskilled."),
+    ]),
+    ("Character Sheets", [
+        ("/sheet create", "Create a character (optionally with a school)."),
+        ("/sheet view", "View a sheet (yours or another player's if DM)."),
+        ("/sheet list", "List your characters."),
+        ("/sheet activate", "Switch your active character."),
+        ("/sheet delete", "Delete a character."),
+        ("/sheet trait", "Set a Trait or Void."),
+        ("/sheet skill", "Set a skill rank (0 removes)."),
+        ("/sheet set", "Set a numeric field (honor, glory, koku, etc.)."),
+        ("/sheet wound / heal", "Apply or heal wounds."),
+        ("/sheet equip", "Add/remove a weapon from gear."),
+        ("/sheet wield", "Set wielded weapon(s) for /attack."),
+        ("/sheet armor", "Equip armor (auto-sets TN bonus & Reduction)."),
+        ("/sheet advantage / disadvantage", "Record advantages or disadvantages."),
+        ("/sheet kata / kiho", "Record Kata or Kiho (free, no XP)."),
+        ("/sheet kata_activate / kiho_activate", "Activate Kata (one) or Kiho (by type)."),
+    ]),
+    ("DM Management", [
+        ("/dm grant / revoke", "Grant or revoke DM status (admin only)."),
+        ("/dm list", "List this server's DMs."),
+    ]),
+    ("Combat", [
+        ("/attack", "Attack a character, NPC, or creature."),
+        ("/combat start / end", "Start or end an encounter in this channel."),
+        ("/combat join / add", "Add a PC or NPC to initiative."),
+        ("/combat next", "Advance to the next combatant's turn."),
+        ("/combat status", "Show initiative order."),
+        ("/combat remove", "Remove a combatant."),
+        ("/combat condition_set / clear", "Apply or remove a condition (DM)."),
+        ("/combat conditions", "Show a combatant's active conditions."),
+        ("/combat guard", "Guard another combatant (+10 TN ward)."),
+        ("/combat full_defense", "Full Defense roll (Complex Action)."),
+        ("/combat creature", "Add a spawned creature to initiative."),
+        ("/combat npc", "Add a stored NPC to initiative."),
+    ]),
+    ("Grappling & Dueling", [
+        ("/grapple initiate", "Start a grapple (Jiujutsu/Agility). DM only."),
+        ("/grapple control", "Contested control roll. DM only."),
+        ("/grapple hit / throw / break_free", "Grapple actions. DM only."),
+        ("/duel assess", "Assessment stage. DM only."),
+        ("/duel focus", "Focus stage (contested). DM only."),
+        ("/duel strike", "Strike stage. DM only."),
+    ]),
+    ("Checks & Rolls", [
+        ("/contest", "Contested Skill/Trait roll between two characters. DM only."),
+        ("/fear", "Fear check: Willpower vs TN. DM only."),
+        ("/honor_roll", "Honor Roll: Honor Rank dice, keep 1. DM only."),
+        ("/skillcheck", "Generic Skill/Trait check (DM picks trait). DM only."),
+        ("/stealth", "Stealth/Agility vs TN. DM only."),
+        ("/investigate", "Investigation/Perception vs TN (with emphasis). DM only."),
+        ("/social", "Social skill (auto-selects trait). DM only."),
+        ("/craft", "Artisan or Craft / Intelligence. DM only."),
+        ("/lore", "Lore specialty / Intelligence. DM only."),
+        ("/poison", "Poison resistance: Stamina vs TN. DM only."),
+        ("/medicine", "Medicine/Intelligence check. DM only."),
+    ]),
+    ("Void Points", [
+        ("/void spend", "Spend a VP with a reason label."),
+        ("/void refresh", "Rest (full) or Meditation check (1 VP)."),
+        ("/void status", "Show current VP bar."),
+    ]),
+    ("NPCs", [
+        ("/npc generate", "Generate an NPC samurai (s22.4). DM only."),
+        ("/npc view / list / delete", "View, roster, or remove NPCs."),
+        ("/npc trait / skill / set / wound / heal / rename", "Edit NPC fields. DM only."),
+    ]),
+    ("Creatures", [
+        ("/creature catalog", "Search the bestiary (208 creatures)."),
+        ("/creature spawn", "Spawn a creature instance. DM only."),
+        ("/creature list / view / delete", "Roster, view, or remove creatures."),
+        ("/creature wound / heal", "Adjust creature wounds. DM only."),
+        ("/creature attack", "Creature attacks a PC/NPC (fixed stat block). DM only."),
+    ]),
+    ("XP & Advancement", [
+        ("/xp grant", "Give XP to a player. DM only."),
+        ("/xp balance", "Show available/spent XP and Insight Rank."),
+        ("/xp trait / skill / emphasis", "Spend XP on Traits, Skills, or Emphases."),
+        ("/xp kata / kiho / spell", "Learn Kata, Kiho, or memorise a Spell."),
+        ("/xp advantage", "Buy an Advantage with XP."),
+        ("/xp costs", "Show the RAW cost reference."),
+    ]),
+    ("Schools & Spells", [
+        ("/school list / search / view", "Browse 347 schools and their techniques."),
+        ("/school learn", "Record techniques up to your School Rank."),
+        ("/spell list / search / view", "Browse 287 spells."),
+        ("/spell cast", "Cast a spell: (Ring + School Rank) keep Ring."),
+    ]),
+    ("Equipment & Catalogs", [
+        ("/weapon list / view", "Browse the 44 weapons."),
+        ("/armor list", "Browse the 7 armor types."),
+        ("/advantage list / search / view", "Browse 149 advantages & disadvantages."),
+        ("/kata list / search / view", "Browse 43 Kata."),
+        ("/kiho list / search / view", "Browse 73 Kiho."),
+    ]),
+    ("Rooms", [
+        ("/room create", "Open a private play room (thread)."),
+        ("/room invite / kick", "Add or remove a member."),
+        ("/room members / list", "Who's here / all rooms."),
+        ("/room close", "Archive the room."),
+    ]),
+]
+
+
+@client.tree.command(
+    name="help",
+    description="Show all bot commands, organized by category.",
+)
+@app_commands.describe(
+    category="Show only this category (omit for the full overview).",
+)
+@app_commands.choices(category=[
+    app_commands.Choice(name=cat, value=cat) for cat, _ in _HELP_CATEGORIES
+])
+async def help_command(
+    interaction: discord.Interaction,
+    category: app_commands.Choice[str] | None = None,
+) -> None:
+    if category:
+        for cat_name, cmds in _HELP_CATEGORIES:
+            if cat_name == category.value:
+                embed = discord.Embed(
+                    title=f"Rokugan Bot — {cat_name}",
+                    color=discord.Color.gold(),
+                )
+                lines = [f"`{cmd}` — {desc}" for cmd, desc in cmds]
+                embed.description = "\n".join(lines)
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+        await interaction.response.send_message("Category not found.", ephemeral=True)
+        return
+
+    embed = discord.Embed(
+        title="Rokugan Bot — Command Reference",
+        description="Use `/help category:` to expand a section. All game math is L5R 4th Edition RAW.",
+        color=discord.Color.gold(),
+    )
+    for cat_name, cmds in _HELP_CATEGORIES:
+        summary = ", ".join(f"`{cmd}`" for cmd, _ in cmds[:4])
+        if len(cmds) > 4:
+            summary += f" *… +{len(cmds) - 4} more*"
+        embed.add_field(name=f"{cat_name} ({len(cmds)})", value=summary, inline=False)
+    embed.set_footer(text="Tip: /help category:Combat — to see all combat commands.")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ===========================================================================
 # /npc group — generate and manage NPC characters (s22.4 templates)
 # ===========================================================================
 npc = app_commands.Group(name="npc", description="Generate and manage NPC characters (GDD s22.4 templates).")

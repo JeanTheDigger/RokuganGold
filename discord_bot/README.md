@@ -11,7 +11,13 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 40 — Lore & Knowledge
+## Status: Phase 41 — Quality of Life
+
+**Help & Navigation**
+
+| Command | What it does |
+|---|---|
+| `/help` | Categorized command reference — 13 categories, expandable. Shows a compact overview or drill into one category. Ephemeral (only you see it). |
 
 **Dice**
 
