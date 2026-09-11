@@ -7,14 +7,17 @@ School grants up to their School Rank — recorded on the sheet via `/school lea
 by technique name against `character.techniques`.
 
 Only the small, verbatim-verified subset whose condition the single-shot
-`/attack` can actually evaluate is auto-applied — a modifier gated on stance, the
-attacker's weapon, or nothing at all. The hundreds of Techniques that turn on
-target type ("vs Shadowlands", "vs unaware"), Initiative comparisons, grapples,
-duels, per-attack player choices, or reactive triggers stay DM-adjudicated (their
-full text is on the sheet via `/school view`). Per CLAUDE 'do not invent
-mechanics': every value here is read verbatim from the s29 LOCKED text.
+`/attack` (with the initiative tracker) can actually evaluate is auto-applied — a
+modifier gated on stance, the attacker's weapon, an Initiative comparison, or
+nothing at all. The hundreds of Techniques that turn on target type
+("vs Shadowlands", "vs unaware"), being mounted, grapples, duels, per-attack
+player choices, multi-opponent counts, or reactive triggers stay DM-adjudicated
+(full text on the sheet via `/school view`). Per CLAUDE 'do not invent mechanics':
+every value here is read verbatim from the s29 LOCKED text.
 
-This is tranche 1 — the list is deliberately extensible.
+Initiative-comparison techniques apply only when BOTH combatants are in the
+channel's `/combat` encounter (so the tracker knows their Initiative); otherwise
+they fall through to DM adjudication.
 """
 
 from __future__ import annotations
@@ -31,50 +34,109 @@ def _is_two_handed_melee(weapon_profile: dict) -> bool:
     return bool(weapon_profile.get("melee")) and str(weapon_profile.get("size", "")).lower() == "large"
 
 
-def attacker_attack_dice(attacker: Character, weapon_profile: dict, attacker_stance: str) -> tuple[int, int, int, list[str]]:
+def _is_bow(weapon_profile: dict) -> bool:
+    return str(weapon_profile.get("skill", "")).lower() == "kyujutsu"
+
+
+def _is_small(weapon_profile: dict) -> bool:
+    return str(weapon_profile.get("size", "")).lower() == "small"
+
+
+def attacker_attack_dice(
+    attacker: Character, weapon_profile: dict, weapon_name: str, attacker_stance: str,
+    atk_init: int | None = None, def_init: int | None = None,
+) -> tuple[int, int, int, list[str]]:
     """(bonus_rolled, bonus_kept, flat_bonus, notes) added to the attack roll by
     the attacker's known Techniques."""
     known = _known(attacker)
     rolled = kept = flat = 0
     notes: list[str] = []
+    wname = weapon_name.lower().strip()
     if "torch's flame flickers" in known and attacker_stance == "attack":
         rolled += 1
         notes.append("Torch's Flame Flickers +1k0 attack (Attack Stance)")
+    if "the force of honor" in known and attacker_stance == "attack":
+        rolled += 1
+        notes.append("The Force of Honor +1k0 attack (Attack Stance)")
     if "the way of the crane" in known and attacker_stance == "center":
-        # "+1k1 plus School Rank to attack … rolls in Center Stance"
         rolled += 1
         kept += 1
         flat += max(1, attacker.school_rank)
         notes.append(f"The Way of the Crane +1k1 +{max(1, attacker.school_rank)} attack (Center Stance)")
+    if "always be ready" in known and _is_bow(weapon_profile):
+        rolled += 1
+        notes.append("Always Be Ready +1k0 attack (bow)")
+    if "the subtle sting" in known and _is_small(weapon_profile):
+        rolled += 2
+        notes.append("The Subtle Sting +2k0 attack (Small weapon)")
+    if "the togashi tattooed order" in known and wname == "unarmed":
+        rolled += 1
+        kept += 1
+        notes.append("Togashi Tattooed Order +1k1 attack (unarmed)")
+    if "speed of lightning" in known and atk_init is not None and def_init is not None and def_init < atk_init:
+        rolled += 2
+        notes.append("Speed of Lightning +2k0 attack (target lower Initiative)")
     return rolled, kept, flat, notes
 
 
-def attacker_damage_rolled(attacker: Character, weapon_profile: dict, weapon_name: str = "") -> tuple[int, list[str]]:
-    """(extra rolled damage dice, notes) from the attacker's known Techniques."""
+def attacker_damage(attacker: Character, weapon_profile: dict, weapon_name: str) -> tuple[int, int, int, list[str]]:
+    """(extra_rolled, extra_kept, flat_bonus, notes) for the damage roll from the
+    attacker's known Techniques."""
     known = _known(attacker)
-    rolled = 0
+    rolled = kept = flat = 0
     notes: list[str] = []
     skill = str(weapon_profile.get("skill", "")).lower()
+    wname = weapon_name.lower().strip()
     if "the way of the crab" in known and skill == "heavy weapons":
         rolled += 1
         notes.append("The Way of the Crab +1k0 damage (Heavy Weapons)")
-    if "the way of the unicorn" in known:
-        # "+1k0 damage … using a scimitar, or using a two-handed melee weapon
-        #  (bonuses do not stack)" — mounted is not modelled.
-        if weapon_name.lower().strip() == "scimitar" or _is_two_handed_melee(weapon_profile):
-            rolled += 1
-            notes.append("The Way of the Unicorn +1k0 damage (scimitar / two-handed)")
-    return rolled, notes
+    if "the way of the unicorn" in known and (wname == "scimitar" or _is_two_handed_melee(weapon_profile)):
+        rolled += 1
+        notes.append("The Way of the Unicorn +1k0 damage (scimitar / two-handed)")
+    if "the arrow knows the way" in known and _is_bow(weapon_profile):
+        rolled += 2
+        notes.append("The Arrow Knows the Way +2k0 damage (bow)")
+    if "the togashi tattooed order" in known and wname == "unarmed":
+        rolled += 1
+        kept += 1
+        notes.append("Togashi Tattooed Order +1k1 damage (unarmed)")
+    if "the hand of thunder" in known and wname == "unarmed":
+        kept += 1
+        notes.append("The Hand of Thunder +0k1 damage (unarmed)")
+    if "the lion's roar" in known:
+        hr = stats.honor_rank(attacker)
+        flat += hr
+        notes.append(f"The Lion's Roar +{hr} damage (Honor Rank)")
+    return rolled, kept, flat, notes
 
 
-def defender_armor_tn_bonus(defender: Character, defender_stance: str) -> tuple[int, list[str]]:
-    """(Armor TN bonus, notes) from the DEFENDER's known Techniques."""
+def defender_armor_tn_bonus(
+    defender: Character, defender_stance: str,
+    atk_init: int | None = None, def_init: int | None = None,
+) -> tuple[int, list[str]]:
+    """(Armor TN bonus, notes) from the DEFENDER's known Techniques. `atk_init` is
+    the attacker's Initiative, `def_init` the defender's (both None if untracked)."""
     known = _known(defender)
     bonus = 0
     notes: list[str] = []
     if "drawing the void" in known and defender_stance == "center":
         bonus += 10
         notes.append("Drawing the Void +10 Armor TN (Center Stance)")
+    if "kitsuki's method" in known:
+        bonus += defender.perception
+        notes.append(f"Kitsuki's Method +{defender.perception} Armor TN (Perception)")
+    if "harmony" in known:
+        v = stats.ring_value(defender, "void")
+        bonus += v
+        notes.append(f"Harmony +{v} Armor TN (Void Rank)")
+    attacker_lower = atk_init is not None and def_init is not None and atk_init < def_init
+    if "the way of the scorpion" in known and attacker_lower:
+        bonus += 5
+        notes.append("The Way of the Scorpion +5 Armor TN (attacker lower Initiative)")
+    if "wing of thunder" in known and attacker_lower:
+        v = defender.reflexes + max(1, defender.school_rank)
+        bonus += v
+        notes.append(f"Wing of Thunder +{v} Armor TN (attacker lower Initiative)")
     return bonus, notes
 
 

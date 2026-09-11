@@ -592,10 +592,10 @@ class DamageView(discord.ui.View):
             attacker = attacker_rec.character
             wp = combat.get_weapon_profile(self.weapon)
             extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
-            t_extra, t_dmg_notes = technique_effects.attacker_damage_rolled(attacker, wp, self.weapon)
-            extra_rolled += t_extra
+            t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
+            extra_rolled += t_roll
             ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
-            dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled)
+            dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled, t_kept, t_flat)
             raw = dmg["raw_damage"]
             feint_line = ""
             if self.maneuver == "feint":
@@ -707,10 +707,10 @@ class DamageView(discord.ui.View):
         # Plain hit or Feint: weapon damage (+ feint bonus, + active-kata & Technique mods).
         wp = combat.get_weapon_profile(self.weapon)
         extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
-        t_extra, t_dmg_notes = technique_effects.attacker_damage_rolled(attacker, wp, self.weapon)
-        extra_rolled += t_extra
+        t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
+        extra_rolled += t_roll
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
-        dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled)
+        dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled, t_kept, t_flat)
         raw = dmg["raw_damage"]
         feint_line = ""
         if self.maneuver == "feint":
@@ -928,6 +928,9 @@ async def attack(
     attacker = attacker_rec.character
     enc = encounters.get(interaction.channel_id)
     atk_combatant = enc.find(attacker.name) if enc else None
+    atk_init = atk_combatant.initiative if atk_combatant else None
+    def_combatant = enc.find(target_rec.character.name) if (enc and target_rec is not None) else None
+    def_init = def_combatant.initiative if def_combatant else None
     # A rate-limited kata is enforced by the tracker (on this roll or its damage
     # step) only while an encounter is tracking the attacker; then suppress its
     # generic reminder. Untracked -> stays a DM-adjudicated reminder.
@@ -943,7 +946,7 @@ async def attack(
         if def_note:
             kata_notes.append(def_note)
         def_tech_bonus, def_tech_notes = technique_effects.defender_armor_tn_bonus(
-            target_rec.character, d_stance
+            target_rec.character, d_stance, atk_init, def_init
         )
         def_kata_bonus += def_tech_bonus
         kata_notes.extend(def_tech_notes)
@@ -979,7 +982,7 @@ async def attack(
 
     # Attacker's known Techniques: extra attack dice / flat bonus to the roll.
     t_rolled, t_kept, t_flat, t_notes = technique_effects.attacker_attack_dice(
-        attacker, atk_weapon_profile, a_stance
+        attacker, atk_weapon_profile, weapon, a_stance, atk_init, def_init
     )
     bonus_rolled += t_rolled
     bonus_kept += t_kept

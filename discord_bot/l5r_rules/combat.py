@@ -205,23 +205,28 @@ def resolve_damage(
     dice_engine: DiceEngine,
     increased_damage: int = 0,
     extra_rolled: int = 0,
+    extra_kept: int = 0,
+    extra_flat: int = 0,
 ) -> dict:
-    """Roll raw damage (before the target's armor reduction). `extra_rolled`
-    are extra rolled damage dice from an active kata (e.g. Waves upon the
-    Breakers' +1k0, per s30) — added like Increased Damage but with no TN cost."""
+    """Roll raw damage (before the target's armor reduction). `extra_rolled`/
+    `extra_kept` are bonus damage dice from an active kata or School Technique
+    (e.g. Waves upon the Breakers' +1k0, The Hand of Thunder's +0k1) — added like
+    Increased Damage but with no TN cost. `extra_flat` is a flat bonus added to
+    the damage total (e.g. Matsu's Lion's Roar +Honor Rank)."""
     weapon = get_weapon_profile(weapon_name)
     rolled = weapon.get("rolled", 2)
     kept = weapon.get("kept", 1)
     if weapon.get("strength_adds", True) and weapon.get("melee", True):
         rolled += attacker.strength
     rolled += increased_damage  # Increased Damage maneuver: +1k0 per raise
-    rolled += extra_rolled       # active-kata bonus damage dice (no TN cost)
+    rolled += extra_rolled       # bonus damage dice (no TN cost)
+    kept += extra_kept
     can_explode = not weapon.get("no_explode", False)
     res = dice_engine.roll_damage(rolled, kept, 0, 0, False, False, can_explode)
     return {
         "rolled": rolled,
         "kept": kept,
-        "raw_damage": res["raw"],
+        "raw_damage": res["raw"] + extra_flat,
         "dice": res["dice"],
     }
 

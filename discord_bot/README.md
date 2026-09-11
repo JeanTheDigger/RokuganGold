@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 19 — auto-applied School Technique effects (GDD s29)
+## Status: Phase 20 — School Technique effects, tranche 2 (GDD s29)
 
 **Dice**
 
@@ -178,9 +178,25 @@ or always-on); everything else stays DM-adjudicated (full text on the sheet via
 | The Way of the Crab (Hida 1) | Heavy Weapons → **+1k0 damage** |
 | The Mountain Does Not Move (Hida 2) | always → **Reduction += Earth Ring** |
 | Torch's Flame Flickers (Hiruma 1) | Attack Stance → **+1k0 attack** |
-| The Way of the Crane (Kakita 1) | Center Stance → **+1k1 + School Rank** to attack |
+| The Force of Honor (Daidoji Iron Warrior 1) | Attack Stance → **+1k0 attack** |
+| The Way of the Crane (Kakita 1) | Center Stance → **+1k1 + School Rank** attack |
 | Drawing the Void (Kenshinzen 1) | Center Stance → **+10 Armor TN** |
 | The Way of the Unicorn (Moto 1) | scimitar / two-handed melee → **+1k0 damage** |
+| Always Be Ready (Tsuruchi 1) | bow → **+1k0 attack** |
+| The Arrow Knows the Way (Tsuruchi 2) | bow → **+2k0 damage** |
+| The Subtle Sting (Shosuro Actor 2) | Small weapon → **+2k0 attack** |
+| The Hand of Thunder (Osano-Wo Monk) | unarmed → **+0k1 damage** |
+| Togashi Tattooed Order (2) | unarmed → **+1k1 attack & damage** |
+| The Lion's Roar (Matsu 1) | always → **+Honor Rank damage** |
+| Kitsuki's Method (Kitsuki 1) | always → **+Perception Armor TN** |
+| Harmony (Sainika 1) | always → **+Void Rank Armor TN** |
+| The Way of the Scorpion (Bayushi 1) | attacker lower Initiative → **+5 Armor TN** † |
+| Speed of Lightning (Kakita 2) | target lower Initiative → **+2k0 attack** † |
+| Wing of Thunder (Kenku 1) | attacker lower Initiative → **+Reflexes + School Rank Armor TN** † |
+
+† Initiative-comparison techniques apply only while both combatants are in the
+channel's `/combat` encounter (so the tracker knows their Initiative); untracked,
+they fall back to DM adjudication.
 
 Techniques stack (a character holds every technique up to their School Rank), so
 all a character's qualifying techniques apply together, alongside any active Kata.
