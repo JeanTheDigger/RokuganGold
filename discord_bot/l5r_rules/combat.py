@@ -612,3 +612,158 @@ def resolve_iaijutsu_strike(
         "kept": kept,
         "free_raises": free_raises,
     }
+
+
+# ---------------------------------------------------------------------------
+# Contested skill checks (s40 general)
+# ---------------------------------------------------------------------------
+
+def resolve_contested_check(
+    trait_a: int,
+    skill_a: int,
+    trait_b: int,
+    skill_b: int,
+    dice_engine: DiceEngine,
+    bonus_a: int = 0,
+    bonus_b: int = 0,
+) -> dict:
+    """Contested Skill/Trait roll. Each side rolls (trait + skill) keep trait;
+    explodes only if skill > 0. bonus_a/bonus_b are flat modifiers (wound
+    penalties, Void Point bonuses, situational). Higher total wins; tie = 'tie'."""
+    rolled_a = trait_a + skill_a
+    kept_a = trait_a
+    rolled_b = trait_b + skill_b
+    kept_b = trait_b
+    explodes_a = skill_a > 0
+    explodes_b = skill_b > 0
+    result_a = dice_engine.roll_and_keep(max(1, rolled_a), max(1, kept_a), explodes_a)
+    result_b = dice_engine.roll_and_keep(max(1, rolled_b), max(1, kept_b), explodes_b)
+    total_a = result_a.total + bonus_a
+    total_b = result_b.total + bonus_b
+    winner = "a"
+    if total_b > total_a:
+        winner = "b"
+    elif total_a == total_b:
+        winner = "tie"
+    return {
+        "winner": winner,
+        "total_a": total_a,
+        "total_b": total_b,
+        "dice_a": result_a,
+        "dice_b": result_b,
+        "rolled_a": rolled_a,
+        "kept_a": kept_a,
+        "rolled_b": rolled_b,
+        "kept_b": kept_b,
+        "margin": abs(total_a - total_b),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Fear check (s40 / creature Fear ratings)
+# ---------------------------------------------------------------------------
+
+def resolve_fear_check(
+    willpower: int,
+    fear_rank: int,
+    dice_engine: DiceEngine,
+    bonus: int = 0,
+) -> dict:
+    """Fear check: Willpower roll vs TN 5 + (Fear Rank × 5).
+    Willpower is both rolled and kept (trait-only, no skill — never explodes).
+    L5R 4e core: Fear rating gives a TN, character rolls raw Willpower."""
+    tn = 5 + fear_rank * 5
+    result = dice_engine.roll_and_keep(max(1, willpower), max(1, willpower), False)
+    total = result.total + bonus
+    return {
+        "success": total >= tn,
+        "total": total,
+        "tn": tn,
+        "margin": total - tn,
+        "dice": result,
+        "rolled": willpower,
+        "kept": willpower,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Honor Roll (L5R 4e core p.214)
+# ---------------------------------------------------------------------------
+
+def resolve_honor_roll(
+    honor_rank: int,
+    tn: int,
+    dice_engine: DiceEngine,
+    bonus: int = 0,
+) -> dict:
+    """Honor Roll: roll Honor Rank dice, keep 1, vs a TN.
+    L5R 4e core: a character resists temptation or dishonor by rolling
+    their Honor Rank in dice and keeping one. No explosion (not a skill)."""
+    rolled = max(1, honor_rank)
+    result = dice_engine.roll_and_keep(rolled, 1, False)
+    total = result.total + bonus
+    return {
+        "success": total >= tn,
+        "total": total,
+        "tn": tn,
+        "margin": total - tn,
+        "dice": result,
+        "rolled": rolled,
+        "kept": 1,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Poison resistance (L5R 4e core p.200)
+# ---------------------------------------------------------------------------
+
+def resolve_poison_resist(
+    stamina: int,
+    poison_strength: int,
+    dice_engine: DiceEngine,
+    bonus: int = 0,
+) -> dict:
+    """Poison resistance: Stamina roll vs TN (Poison Strength × 5).
+    Stamina is trait-only (rolled = kept = Stamina, no explosion)."""
+    tn = poison_strength * 5
+    rolled = max(1, stamina)
+    result = dice_engine.roll_and_keep(rolled, rolled, False)
+    total = result.total + bonus
+    return {
+        "success": total >= tn,
+        "total": total,
+        "tn": tn,
+        "margin": total - tn,
+        "dice": result,
+        "rolled": rolled,
+        "kept": rolled,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Medicine check (L5R 4e core p.154)
+# ---------------------------------------------------------------------------
+
+def resolve_medicine_check(
+    intelligence: int,
+    medicine_skill: int,
+    tn: int,
+    dice_engine: DiceEngine,
+    bonus: int = 0,
+) -> dict:
+    """Medicine/Intelligence check vs a TN. Used for treating poison, disease,
+    wounds, etc. Explodes only if skilled."""
+    rolled = intelligence + medicine_skill
+    kept = intelligence
+    explodes = medicine_skill > 0
+    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
+    total = result.total + bonus
+    return {
+        "success": total >= tn,
+        "total": total,
+        "tn": tn,
+        "margin": total - tn,
+        "dice": result,
+        "rolled": rolled,
+        "kept": kept,
+    }

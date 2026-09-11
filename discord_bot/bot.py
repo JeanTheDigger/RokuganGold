@@ -3183,6 +3183,586 @@ async def duel_strike(
 
 
 # ===========================================================================
+# /contest — contested skill checks
+# ===========================================================================
+_CONTEST_TRAITS = [
+    app_commands.Choice(name=("Void" if t == "void" else t.capitalize()), value=t)
+    for t in enums.TRAITS
+]
+
+
+def _trait_value(c: Character, name: str) -> int:
+    if name == "void":
+        return c.void_ring
+    return getattr(c, name, 0)
+
+
+@client.tree.command(
+    name="contest",
+    description="Contested Skill/Trait roll between two characters. DM only.",
+)
+@app_commands.describe(
+    name_a="First participant name (encounter combatant or NPC).",
+    trait_a="Trait for A (the kept dice).",
+    skill_a="Skill name for A (case-sensitive, e.g. 'Intimidation').",
+    name_b="Second participant name.",
+    trait_b="Trait for B.",
+    skill_b="Skill name for B.",
+    a_member="First participant (player — uses their active character).",
+    b_member="Second participant (player).",
+    a_is_npc="First participant is an NPC (look up by name, not encounter).",
+    b_is_npc="Second participant is an NPC.",
+    bonus_a="Flat bonus for A (Void Point, situational).",
+    bonus_b="Flat bonus for B.",
+    reason="Label shown with the roll.",
+)
+@app_commands.choices(trait_a=_CONTEST_TRAITS, trait_b=_CONTEST_TRAITS)
+async def contest(
+    interaction: discord.Interaction,
+    name_a: str,
+    trait_a: app_commands.Choice[str],
+    skill_a: str,
+    name_b: str,
+    trait_b: app_commands.Choice[str],
+    skill_b: str,
+    a_member: discord.Member | None = None,
+    b_member: discord.Member | None = None,
+    a_is_npc: bool = False,
+    b_is_npc: bool = False,
+    bonus_a: app_commands.Range[int, -50, 50] = 0,
+    bonus_b: app_commands.Range[int, -50, 50] = 0,
+    reason: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can run a contested check.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    ch = interaction.channel_id
+    rec_a = _resolve_duelist(guild, ch, name_a, a_is_npc, a_member)
+    rec_b = _resolve_duelist(guild, ch, name_b, b_is_npc, b_member)
+    if rec_a is None:
+        await interaction.response.send_message(f"No character found for **{name_a}**.", ephemeral=True)
+        return
+    if rec_b is None:
+        await interaction.response.send_message(f"No character found for **{name_b}**.", ephemeral=True)
+        return
+    ca, cb = rec_a.character, rec_b.character
+    tv_a = _trait_value(ca, trait_a.value)
+    tv_b = _trait_value(cb, trait_b.value)
+    sk_a = ca.skills.get(skill_a, 0)
+    sk_b = cb.skills.get(skill_b, 0)
+    wp_a = stats.wound_penalty(ca)
+    wp_b = stats.wound_penalty(cb)
+    result = combat.resolve_contested_check(
+        tv_a, sk_a, tv_b, sk_b, engine,
+        bonus_a=bonus_a + wp_a,
+        bonus_b=bonus_b + wp_b,
+    )
+    title = "🎯 Contested Check"
+    if reason:
+        title += f" — {reason}"
+    if result["winner"] == "a":
+        color = discord.Color.green()
+        verdict = f"**{ca.name}** wins by {result['margin']}!"
+    elif result["winner"] == "b":
+        color = discord.Color.green()
+        verdict = f"**{cb.name}** wins by {result['margin']}!"
+    else:
+        color = discord.Color.gold()
+        verdict = "**Tie!** (Higher trait breaks ties; if still tied, higher skill.)"
+    embed = discord.Embed(title=title, color=color)
+    a_label = f"{skill_a}/{trait_a.name}" if sk_a > 0 else f"Unskilled {skill_a}/{trait_a.name}"
+    b_label = f"{skill_b}/{trait_b.name}" if sk_b > 0 else f"Unskilled {skill_b}/{trait_b.name}"
+    a_wp_str = f" {wp_a}" if wp_a else ""
+    b_wp_str = f" {wp_b}" if wp_b else ""
+    a_bonus_str = f" {bonus_a:+d}" if bonus_a else ""
+    b_bonus_str = f" {bonus_b:+d}" if bonus_b else ""
+    embed.add_field(
+        name=ca.name,
+        value=(
+            f"{a_label} ({result['rolled_a']}k{result['kept_a']}"
+            f"{a_wp_str}{a_bonus_str}) → **{result['total_a']}**\n"
+            f"{_format_dice(result['dice_a'])}"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name=cb.name,
+        value=(
+            f"{b_label} ({result['rolled_b']}k{result['kept_b']}"
+            f"{b_wp_str}{b_bonus_str}) → **{result['total_b']}**\n"
+            f"{_format_dice(result['dice_b'])}"
+        ),
+        inline=False,
+    )
+    embed.add_field(name="Result", value=verdict, inline=False)
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
+# /fear — Fear check (s40 / creature Fear ratings)
+# ===========================================================================
+@client.tree.command(
+    name="fear",
+    description="Fear check: Willpower vs TN 5 + (Fear Rank x 5). DM only.",
+)
+@app_commands.describe(
+    name="Character making the check (encounter combatant or NPC name).",
+    fear_rank="Fear Rank of the source (1-10, sets TN to 5 + rank x 5).",
+    member="Player making the check (uses their active character).",
+    is_npc="Character is an NPC (look up by name).",
+    bonus="Flat bonus (Void Point, advantages, etc.).",
+)
+async def fear_check(
+    interaction: discord.Interaction,
+    name: str,
+    fear_rank: app_commands.Range[int, 1, 10],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for a Fear check.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
+        return
+    c = rec.character
+    wp = stats.wound_penalty(c)
+    result = combat.resolve_fear_check(c.willpower, fear_rank, engine, bonus=bonus + wp)
+    success = result["success"]
+    tn = result["tn"]
+    embed = discord.Embed(
+        title=f"😨 Fear Check — {c.name}",
+        color=discord.Color.green() if success else discord.Color.dark_red(),
+    )
+    wp_str = f" {wp}" if wp else ""
+    bonus_str = f" {bonus:+d}" if bonus else ""
+    embed.add_field(
+        name="Roll",
+        value=(
+            f"Willpower ({result['rolled']}k{result['kept']}{wp_str}{bonus_str})"
+            f" vs TN **{tn}** (Fear {fear_rank})"
+        ),
+        inline=False,
+    )
+    embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
+    verdict = "✅ **Resists the Fear!**" if success else "❌ **Fails!** Must flee or cower."
+    embed.add_field(
+        name="Result",
+        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
+# /honor_roll — Honor Roll (L5R 4e core p.214)
+# ===========================================================================
+@client.tree.command(
+    name="honor_roll",
+    description="Honor Roll: roll Honor Rank dice, keep 1, vs a TN. DM only.",
+)
+@app_commands.describe(
+    name="Character making the check (encounter combatant or NPC name).",
+    tn="Target Number to resist (DM sets this based on temptation).",
+    member="Player making the check (uses their active character).",
+    is_npc="Character is an NPC (look up by name).",
+    bonus="Flat bonus (advantages, situational).",
+)
+async def honor_roll(
+    interaction: discord.Interaction,
+    name: str,
+    tn: app_commands.Range[int, 1, 100],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for an Honor Roll.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
+        return
+    c = rec.character
+    hr = stats.honor_rank(c)
+    result = combat.resolve_honor_roll(hr, tn, engine, bonus=bonus)
+    success = result["success"]
+    embed = discord.Embed(
+        title=f"⚖️ Honor Roll — {c.name}",
+        color=discord.Color.gold() if success else discord.Color.dark_grey(),
+    )
+    bonus_str = f" {bonus:+d}" if bonus else ""
+    embed.add_field(
+        name="Roll",
+        value=(
+            f"Honor Rank **{hr}** (Honor {c.honor:.1f}) → "
+            f"{result['rolled']}k{result['kept']}{bonus_str} vs TN **{tn}**"
+        ),
+        inline=False,
+    )
+    embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
+    verdict = "✅ **Honor holds!**" if success else "❌ **Honor wavers.**"
+    embed.add_field(
+        name="Result",
+        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
+# /void group — Void Point management
+# ===========================================================================
+void_group = app_commands.Group(name="void", description="Void Point management: spend, refresh, status.")
+
+
+@void_group.command(name="spend", description="Spend a Void Point (general purpose: +1k1, negate Conditional, etc.).")
+@app_commands.describe(
+    reason="What the VP is for (e.g. '+1k1 on Investigation check').",
+    member="Player spending VP (uses their active character). Omit = yourself.",
+    npc_name="NPC name (DM only).",
+)
+async def void_spend(
+    interaction: discord.Interaction,
+    reason: str,
+    member: discord.Member | None = None,
+    npc_name: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    if npc_name:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can spend VP for an NPC.", ephemeral=True)
+            return
+        rec = store.get_by_name(guild, NPC_OWNER, npc_name)
+        if rec is None:
+            await interaction.response.send_message(f"No NPC named **{npc_name}**.", ephemeral=True)
+            return
+    elif member is not None:
+        if not _is_dm(interaction) and member.id != interaction.user.id:
+            await interaction.response.send_message("Only a DM can spend VP for another player.", ephemeral=True)
+            return
+        rec = store.get_active(guild, str(member.id))
+        if rec is None:
+            await interaction.response.send_message(f"{member.display_name} has no active character.", ephemeral=True)
+            return
+    else:
+        rec = store.get_active(guild, str(interaction.user.id))
+        if rec is None:
+            await interaction.response.send_message("You have no active character. Use `/sheet activate`.", ephemeral=True)
+            return
+    c = rec.character
+    if c.current_void_points <= 0:
+        await interaction.response.send_message(
+            f"**{c.name}** has no Void Points remaining (0/{c.max_void_points}).", ephemeral=True
+        )
+        return
+    c.current_void_points -= 1
+    store.save(rec)
+    await interaction.response.send_message(
+        f"🌀 **{c.name}** spends a Void Point: {reason}\n"
+        f"  VP remaining: **{c.current_void_points}/{c.max_void_points}**"
+    )
+
+
+@void_group.command(name="refresh", description="Refresh Void Points (rest = full, or Meditation/Void check for 1).")
+@app_commands.describe(
+    mode="How VP are being refreshed.",
+    member="Player refreshing (uses their active character). Omit = yourself.",
+    npc_name="NPC name (DM only).",
+    tn="Meditation TN (only for meditation mode; default 20).",
+)
+@app_commands.choices(mode=[
+    app_commands.Choice(name="Rest (full refresh)", value="rest"),
+    app_commands.Choice(name="Meditation (roll Meditation/Void, recover 1 on success)", value="meditation"),
+])
+async def void_refresh(
+    interaction: discord.Interaction,
+    mode: app_commands.Choice[str],
+    member: discord.Member | None = None,
+    npc_name: str | None = None,
+    tn: app_commands.Range[int, 1, 100] | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    if npc_name:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can refresh VP for an NPC.", ephemeral=True)
+            return
+        rec = store.get_by_name(guild, NPC_OWNER, npc_name)
+        if rec is None:
+            await interaction.response.send_message(f"No NPC named **{npc_name}**.", ephemeral=True)
+            return
+    elif member is not None:
+        if not _is_dm(interaction) and member.id != interaction.user.id:
+            await interaction.response.send_message("Only a DM can refresh VP for another player.", ephemeral=True)
+            return
+        rec = store.get_active(guild, str(member.id))
+        if rec is None:
+            await interaction.response.send_message(f"{member.display_name} has no active character.", ephemeral=True)
+            return
+    else:
+        rec = store.get_active(guild, str(interaction.user.id))
+        if rec is None:
+            await interaction.response.send_message("You have no active character. Use `/sheet activate`.", ephemeral=True)
+            return
+    c = rec.character
+    if mode.value == "rest":
+        old = c.current_void_points
+        c.current_void_points = c.max_void_points
+        store.save(rec)
+        await interaction.response.send_message(
+            f"🌀 **{c.name}** rests and recovers all Void Points.\n"
+            f"  VP: {old} → **{c.current_void_points}/{c.max_void_points}**"
+        )
+    else:
+        if c.current_void_points >= c.max_void_points:
+            await interaction.response.send_message(
+                f"**{c.name}** is already at full VP ({c.current_void_points}/{c.max_void_points}).",
+                ephemeral=True,
+            )
+            return
+        meditation_tn = tn if tn is not None else 20
+        meditation_skill = c.skills.get("Meditation", 0)
+        rolled = c.void_ring + meditation_skill
+        kept = c.void_ring
+        explodes = meditation_skill > 0
+        wp = stats.wound_penalty(c)
+        result = engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
+        total = result.total + wp
+        success = total >= meditation_tn
+        if success:
+            c.current_void_points = min(c.current_void_points + 1, c.max_void_points)
+        store.save(rec)
+        embed = discord.Embed(
+            title=f"🧘 Meditation — {c.name}",
+            color=discord.Color.teal() if success else discord.Color.greyple(),
+        )
+        wp_str = f" {wp}" if wp else ""
+        embed.add_field(
+            name="Roll",
+            value=f"Meditation/Void ({rolled}k{kept}{wp_str}) vs TN **{meditation_tn}**",
+            inline=False,
+        )
+        embed.add_field(name="Dice", value=_format_dice(result), inline=False)
+        if success:
+            embed.add_field(
+                name="Result",
+                value=(
+                    f"**{total}** vs TN {meditation_tn} — ✅ **Success!** Recovers 1 VP.\n"
+                    f"VP: **{c.current_void_points}/{c.max_void_points}**"
+                ),
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="Result",
+                value=(
+                    f"**{total}** vs TN {meditation_tn} — ❌ **Fails.** No VP recovered.\n"
+                    f"VP: **{c.current_void_points}/{c.max_void_points}**"
+                ),
+                inline=False,
+            )
+        await interaction.response.send_message(embed=embed)
+
+
+@void_group.command(name="status", description="Show current Void Points for a character.")
+@app_commands.describe(
+    member="Player to check (uses their active character). Omit = yourself.",
+    npc_name="NPC name (DM only).",
+)
+async def void_status(
+    interaction: discord.Interaction,
+    member: discord.Member | None = None,
+    npc_name: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    if npc_name:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can check NPC VP.", ephemeral=True)
+            return
+        rec = store.get_by_name(guild, NPC_OWNER, npc_name)
+        if rec is None:
+            await interaction.response.send_message(f"No NPC named **{npc_name}**.", ephemeral=True)
+            return
+    elif member is not None:
+        rec = store.get_active(guild, str(member.id))
+        if rec is None:
+            await interaction.response.send_message(f"{member.display_name} has no active character.", ephemeral=True)
+            return
+    else:
+        rec = store.get_active(guild, str(interaction.user.id))
+        if rec is None:
+            await interaction.response.send_message("You have no active character. Use `/sheet activate`.", ephemeral=True)
+            return
+    c = rec.character
+    bar_full = "🟣" * c.current_void_points
+    bar_empty = "⚫" * (c.max_void_points - c.current_void_points)
+    await interaction.response.send_message(
+        f"🌀 **{c.name}** — Void Points: **{c.current_void_points}/{c.max_void_points}**\n"
+        f"  {bar_full}{bar_empty}\n"
+        f"  Void Ring: **{c.void_ring}**",
+        ephemeral=True,
+    )
+
+
+# ===========================================================================
+# /poison — poison resistance checks
+# ===========================================================================
+@client.tree.command(
+    name="poison",
+    description="Poison resistance: Stamina vs TN (Strength x 5). DM only.",
+)
+@app_commands.describe(
+    name="Character resisting the poison (encounter combatant or NPC name).",
+    strength="Poison Strength rating (1-10; TN = Strength x 5).",
+    member="Player resisting (uses their active character).",
+    is_npc="Character is an NPC (look up by name).",
+    bonus="Flat bonus (advantages, antidotes, etc.).",
+    poison_name="Name of the poison (for display).",
+)
+async def poison_resist(
+    interaction: discord.Interaction,
+    name: str,
+    strength: app_commands.Range[int, 1, 10],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+    poison_name: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for a poison resistance check.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
+        return
+    c = rec.character
+    wp = stats.wound_penalty(c)
+    result = combat.resolve_poison_resist(c.stamina, strength, engine, bonus=bonus + wp)
+    success = result["success"]
+    tn = result["tn"]
+    title = f"☠️ Poison Resistance — {c.name}"
+    if poison_name:
+        title += f" vs {poison_name}"
+    embed = discord.Embed(
+        title=title,
+        color=discord.Color.green() if success else discord.Color.dark_purple(),
+    )
+    wp_str = f" {wp}" if wp else ""
+    bonus_str = f" {bonus:+d}" if bonus else ""
+    embed.add_field(
+        name="Roll",
+        value=(
+            f"Stamina ({result['rolled']}k{result['kept']}{wp_str}{bonus_str})"
+            f" vs TN **{tn}** (Strength {strength})"
+        ),
+        inline=False,
+    )
+    embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
+    verdict = "✅ **Resists the poison!**" if success else "❌ **Succumbs!** Apply poison effects."
+    embed.add_field(
+        name="Result",
+        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
+# /medicine — Medicine/Intelligence checks
+# ===========================================================================
+@client.tree.command(
+    name="medicine",
+    description="Medicine/Intelligence check vs a TN (treat wounds, poison, disease). DM only.",
+)
+@app_commands.describe(
+    name="Character making the check (encounter combatant or NPC name).",
+    tn="Target Number for the treatment.",
+    member="Player making the check (uses their active character).",
+    is_npc="Character is an NPC (look up by name).",
+    bonus="Flat bonus (advantages, tools, etc.).",
+    reason="What is being treated (for display).",
+)
+async def medicine_check(
+    interaction: discord.Interaction,
+    name: str,
+    tn: app_commands.Range[int, 1, 100],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+    reason: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for a Medicine check.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
+        return
+    c = rec.character
+    medicine_skill = c.skills.get("Medicine", 0)
+    wp = stats.wound_penalty(c)
+    result = combat.resolve_medicine_check(c.intelligence, medicine_skill, tn, engine, bonus=bonus + wp)
+    success = result["success"]
+    title = "💊 Medicine Check"
+    if reason:
+        title += f" — {reason}"
+    embed = discord.Embed(
+        title=f"{title} — {c.name}",
+        color=discord.Color.green() if success else discord.Color.greyple(),
+    )
+    wp_str = f" {wp}" if wp else ""
+    bonus_str = f" {bonus:+d}" if bonus else ""
+    skill_label = f"Medicine {medicine_skill}" if medicine_skill > 0 else "Medicine (unskilled)"
+    embed.add_field(
+        name="Roll",
+        value=(
+            f"{skill_label}/Intelligence ({result['rolled']}k{result['kept']}"
+            f"{wp_str}{bonus_str}) vs TN **{tn}**"
+        ),
+        inline=False,
+    )
+    embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
+    verdict = "✅ **Treatment successful!**" if success else "❌ **Treatment fails.**"
+    embed.add_field(
+        name="Result",
+        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
 # /npc group — generate and manage NPC characters (s22.4 templates)
 # ===========================================================================
 npc = app_commands.Group(name="npc", description="Generate and manage NPC characters (GDD s22.4 templates).")
@@ -4869,6 +5449,7 @@ client.tree.add_command(dm)
 client.tree.add_command(combat_group)
 client.tree.add_command(grapple_group)
 client.tree.add_command(duel_group)
+client.tree.add_command(void_group)
 client.tree.add_command(npc)
 client.tree.add_command(room)
 client.tree.add_command(creature_group)

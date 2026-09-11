@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 33 — Iaijutsu dueling
+## Status: Phase 36 — Poison & Medicine
 
 **Dice**
 
@@ -428,6 +428,29 @@ prone]`), active guards show as `🛡️→WardName`, and Full Defense as
 | `/duel focus` | Focus: contested Iaijutsu(Focus)/Void roll. Winner by 5+ strikes first; +1 Free Raise per additional 5. Neither by 5 → Kharmic Strike (simultaneous, cause dropped). |
 | `/duel strike` | Strike: Iaijutsu/Reflexes attack vs normal Armor TN. Free Raises from Focus apply as Increased Damage. On hit, DM-authorized damage via the standard button flow (default weapon: katana). |
 
+**Contested checks, Fear, and Honor rolls** (all DM-only)
+
+| Command | What it does |
+|---|---|
+| `/contest` | Contested Skill/Trait roll between two characters. Each side rolls **(Trait + Skill) keep Trait** with per-side explode (skilled only), wound penalties, and optional flat bonuses. Supports encounter combatants, NPCs, and players. |
+| `/fear` | Fear check: **Willpower vs TN 5 + (Fear Rank × 5)**. Raw Willpower roll (no explosion). |
+| `/honor_roll` | Honor Roll: **Honor Rank dice, keep 1** vs a DM-set TN. Resists temptation or dishonor. |
+
+**Void Point management** (`/void`)
+
+| Command | What it does |
+|---|---|
+| `/void spend` | Spend a Void Point with a reason label (+1k1, negate conditional, etc.). Tracks VP. Players can spend their own; DMs can spend for NPCs/other players. |
+| `/void refresh` | Recover VP: **Rest** (full refresh) or **Meditation** (Meditation/Void check vs TN, recovers 1 VP on success). |
+| `/void status` | Show current VP with a visual bar. |
+
+**Poison & Medicine** (DM-only)
+
+| Command | What it does |
+|---|---|
+| `/poison` | Poison resistance: **Stamina vs TN (Strength × 5)**. Raw Stamina roll (no explosion). Optional poison name for display. |
+| `/medicine` | Medicine/Intelligence check vs a DM-set TN. Treats wounds, poison, disease, etc. Explodes only if skilled. |
+
 **NPCs** (generated from **GDD s22.4** — Generation Templates, LOCKED)
 
 | Command | What it does |
@@ -476,6 +499,14 @@ exceeded by 10+), Focus (contested Iaijutsu/Void, winner by 5+ strikes first
 with Free Raises per additional 5, otherwise Kharmic Strike), and Strike
 (Iaijutsu/Reflexes attack vs normal Armor TN, Free Raises as Increased Damage,
 DM-authorized damage via buttons) — DM only.
+**Contested Checks** (`/contest`) handle any opposed Skill/Trait roll between
+two characters, with per-side explode, wound penalties, and flat bonuses.
+**Fear Checks** (`/fear`) roll Willpower vs TN 5 + Fear Rank × 5.
+**Honor Rolls** (`/honor_roll`) roll Honor Rank dice, keep 1, vs a DM-set TN.
+**Void Point Management** (`/void`) tracks VP spending (with reason labels),
+rest recovery (full refresh), and Meditation/Void checks (recover 1 on success).
+**Poison Resistance** (`/poison`) rolls Stamina vs TN Strength × 5.
+**Medicine Checks** (`/medicine`) roll Medicine/Intelligence vs a TN for treatment.
 Dual-wielding and thrown/charge maneuvers are still **not** modelled — the DM
 can express those with `raises`/`bonus_tn`.
 
