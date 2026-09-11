@@ -21,7 +21,7 @@ import encounter
 import storage
 from l5r_rules import (
     advancement, advantage_effects, advantages, combat, creature, enums, kata, kata_effects,
-    kiho, npc_gen, schools, skill_mastery, spells, stats, technique_effects,
+    kiho, kiho_effects, npc_gen, schools, skill_mastery, spells, stats, technique_effects,
 )
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
@@ -604,6 +604,11 @@ class DamageView(discord.ui.View):
             t_kept += a_kept
             t_flat += a_flat
             t_dmg_notes = t_dmg_notes + a_dmg_notes
+            k_roll, k_kept, k_flat, k_dmg_notes = kiho_effects.attacker_damage(attacker, self.weapon)
+            extra_rolled += k_roll
+            t_kept += k_kept
+            t_flat += k_flat
+            t_dmg_notes = t_dmg_notes + k_dmg_notes
             bish_roll, bish_notes = advantage_effects.increased_damage_bonus(attacker, self.increased_damage)
             extra_rolled += bish_roll
             t_dmg_notes = t_dmg_notes + bish_notes
@@ -756,6 +761,11 @@ class DamageView(discord.ui.View):
         t_kept += a_kept
         t_flat += a_flat
         t_dmg_notes = t_dmg_notes + a_dmg_notes
+        k_roll, k_kept, k_flat, k_dmg_notes = kiho_effects.attacker_damage(attacker, self.weapon)
+        extra_rolled += k_roll
+        t_kept += k_kept
+        t_flat += k_flat
+        t_dmg_notes = t_dmg_notes + k_dmg_notes
         bish_roll, bish_notes = advantage_effects.increased_damage_bonus(attacker, self.increased_damage)
         extra_rolled += bish_roll
         t_dmg_notes = t_dmg_notes + bish_notes
@@ -785,12 +795,13 @@ class DamageView(discord.ui.View):
             feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
         crab_bonus, crab_note = kata_effects.defender_reduction_bonus(target, self.defender_stance)
         tech_red, tech_red_notes = technique_effects.defender_reduction_bonus(target)
+        kiho_red, kiho_red_notes = kiho_effects.defender_reduction_bonus(target)
         scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
         raw += scorp_bonus
         kata_line = "".join(
-            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, *t_dmg_notes, *tech_red_notes) if n
+            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes) if n
         )
-        reduction = max(0, target.armor_reduction - ignore - tsu_ignore + crab_bonus + tech_red)
+        reduction = max(0, target.armor_reduction - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red)
         applied = combat.apply_damage(target, raw, reduction)
         heal_line = ""
         if applied["is_dead"]:
@@ -859,6 +870,8 @@ def _active_ability_reminders(c: Character, role: str, drop_rate_limited: bool =
         active = c.active_kata
         lines.append(f"**{role.capitalize()} kata — {active}:** {kata_text}")
     for name in getattr(c, "active_kiho", []) or []:
+        if kiho_effects.is_auto(name):
+            continue
         rec = kiho.get(name)
         effect = rec["effect"] if rec else ""
         lines.append(f"**{role.capitalize()} kiho — {name}:** {effect}")
@@ -1029,6 +1042,9 @@ async def attack(
         def_adv_mod, def_adv_notes = advantage_effects.defender_armor_tn_mod(target_rec.character)
         def_kata_bonus += def_adv_mod
         kata_notes.extend(def_adv_notes)
+        def_kiho_tn, def_kiho_tn_notes = kiho_effects.defender_armor_tn_bonus(target_rec.character)
+        def_kata_bonus += def_kiho_tn
+        kata_notes.extend(def_kiho_tn_notes)
     # Attacker's active kata: flat bonus added to the attack-roll total.
     atk_flat, atk_note = kata_effects.attacker_roll_flat_bonus(attacker, man, increased_damage)
     if atk_note:
@@ -1089,6 +1105,12 @@ async def attack(
     if wp_mod:
         atk_flat += wp_mod
         kata_notes.extend(wp_notes)
+
+    # Kiho wound-penalty modifier (Grasp the Earth Dragon).
+    kiho_wp_mod, kiho_wp_notes = kiho_effects.attacker_wound_penalty_mod(attacker)
+    if kiho_wp_mod:
+        atk_flat += kiho_wp_mod
+        kata_notes.extend(kiho_wp_notes)
 
     # Skill mastery: free raises that reduce a maneuver's raise cost (s24).
     mastery_free, mastery_free_notes = skill_mastery.maneuver_free_raises(

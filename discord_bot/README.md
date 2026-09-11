@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 24 — Advantage & Disadvantage combat effects (GDD s45)
+## Status: Phase 25 — Kiho combat effects (GDD s38)
 
 **Dice**
 
@@ -134,10 +134,13 @@ Everything else stays **DM-adjudicated on purpose** and is surfaced as a reminde
 line on the attack, never silently applied or dropped: the remaining rate-limited
 effects (those that also need a chosen target or an opponent-debuff the bot
 doesn't model), "up to X" player-choice tradeoffs, and Initiative/movement/mount/
-ally/guard effects. **All
-Kiho** are reminder-only (activation cost — a Void Point or Meditation/Void roll —
-and durations are DM-adjudicated); their category limits (one Internal/Kharmic/
-Mystical, Martial stacks) *are* enforced by `/sheet kiho_activate`.
+ally/guard effects. **Most
+Kiho** remain DM-adjudicated reminders (activation cost — a Void Point or
+Meditation/Void roll — and durations are DM-adjudicated); their category limits
+(one Internal/Kharmic/Mystical, Martial stacks) *are* enforced by
+`/sheet kiho_activate`. The **6 deterministic Kiho** whose effects the bot can
+compute faithfully are auto-applied (see the Kiho combat effects table below);
+auto-applied Kiho are suppressed from the reminder list to reduce noise.
 
 **Advantages & Disadvantages** (all of **GDD s45**, transcribed verbatim)
 
@@ -176,6 +179,26 @@ Crab Hands (unskilled fallback), movement penalties (Blind, Small, Lame),
 Missing Limb, Weakness/Doubt (parameterised skills/traits), Momoku/Consumed/
 Failure of Bushido (Void-spend restrictions), and Magic Resistance (spell
 combat not modelled).
+
+**Auto-applied Kiho combat effects** — when a character has one of the kiho
+below **active** (`/sheet kiho_activate`), `/attack` applies the modifier
+automatically (`l5r_rules/kiho_effects.py`). **6 effects across 6 kiho:**
+
+| Kiho | Auto-applied in `/attack` |
+|---|---|
+| Soul of the Four Winds | defender Armor TN **+Insight Rank + Air Ring** |
+| Musubi | defender Armor TN **+Water Ring + Staves Rank** (staff equipped) |
+| Embrace the Stone | defender Reduction **+Earth Ring x2** |
+| Partaking the Waters | defender Reduction **+Water Ring** |
+| Grasp the Earth Dragon | attacker wound penalties **reduced by Earth Ring** |
+| Air Fist | unarmed damage **−Air Ring** flat (tradeoff for +5 Initiative) |
+
+Everything else from GDD s38 stays **DM-adjudicated** — atemi-delivered effects
+(Rolling Avalanche, Flame Fist, Censure of Thunder, etc.), reactive abilities
+(Destiny's Strike, Way of the Willow), duration-tracked debuffs (Stain Upon the
+Soul, Earth Palm), cumulative tracking (Rising Mountain), action-economy changes
+(Dance of the Flames), and non-combat effects. Auto-applied kiho are suppressed
+from the reminder line to reduce noise.
 
 **Schools & Techniques** (all of **GDD s29**, transcribed verbatim)
 
@@ -367,9 +390,9 @@ their ranks; Ranks are capped at **1–5** (s22.4 gives no 6+ ranges); koku is t
 NPCs can be tuned field-by-field with the `/npc` editors above.
 
 *Still faithful-core:* deterministic subsets of **Kata**, **School Techniques**,
-**Skill Masteries**, and **Advantages/Disadvantages** now auto-apply in `/attack`
-(see the tables above); the rest of Kata, most Techniques, and all Kiho stay
-DM-adjudicated (Kata/Kiho shown as reminders, technique text on the sheet via
+**Skill Masteries**, **Advantages/Disadvantages**, and **Kiho** now auto-apply in
+`/attack` (see the tables above); the rest of Kata, most Techniques, and most
+Kiho stay DM-adjudicated (shown as reminders; technique text on the sheet via
 `/school view`). Dual-wielding and thrown/charge/called-shot maneuvers are still
 **not** modelled — the DM can express those with `raises`/`bonus_tn`.
 
@@ -447,6 +470,7 @@ discord_bot/
 │   ├── technique_effects.py # Deterministic School-Technique combat modifiers for /attack (GDD s29).
 │   ├── skill_mastery.py   # Weapon Skill Mastery combat modifiers for /attack (GDD s24).
 │   ├── advantage_effects.py # Advantage/Disadvantage combat modifiers for /attack (GDD s45).
+│   ├── kiho_effects.py    # Active-Kiho combat modifiers for /attack (GDD s38).
 │   ├── kiho.py            # Access helpers over the kiho catalog (GDD s38).
 │   ├── kiho_catalog.py    # AUTO-GENERATED: 73 Kiho (verbatim).
 │   ├── enums.py           # Traits/rings/wound tables (enums.gd).
