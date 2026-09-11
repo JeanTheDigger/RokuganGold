@@ -737,6 +737,18 @@ class DamageView(discord.ui.View):
             return
         await self._resolve_damage(interaction, void_reduce=True)
 
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can resolve this.", ephemeral=True)
+            return
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            f"🛡️ {interaction.user.display_name} denied the effect — "
+            f"no damage applied to **{self.target_name}**."
+        )
+
     async def _resolve_damage(self, interaction: discord.Interaction, void_reduce: bool = False) -> None:
         """Shared damage resolution for both normal and Void-reduced paths."""
 
@@ -2413,6 +2425,135 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
     )
     embed.set_footer(text="Rest: full VP · Stamina x 2 healing · Spell slots: Ring + School Rank per element")
     await interaction.response.send_message(embed=embed)
+
+
+async def _any_character_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    """Autocomplete across all PCs and NPCs in the guild."""
+    if interaction.guild_id is None:
+        return []
+    guild = str(interaction.guild_id)
+    cur = current.lower().strip()
+    names: list[str] = []
+    for _, rec in store.list_active_pcs(guild):
+        if cur in rec.character.name.lower():
+            names.append(rec.character.name)
+    for rec in store.list_by_owner(guild, NPC_OWNER):
+        if cur in rec.character.name.lower():
+            names.append(rec.character.name)
+    return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
+
+
+@dm.command(name="damage", description="Apply damage to a character (shows DM-approval buttons).")
+@app_commands.describe(
+    target="Character name (PC or NPC).",
+    amount="Raw damage to apply (before Reduction).",
+    reason="Source of the damage (spell, trap, environmental, etc.).",
+)
+@app_commands.autocomplete(target=_any_character_autocomplete)
+async def dm_damage(
+    interaction: discord.Interaction,
+    target: str,
+    amount: app_commands.Range[int, 1, 9999],
+    reason: str = "",
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can use this.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = store.get_by_name(guild, NPC_OWNER, target)
+    if rec is None:
+        for _, pc_rec in store.list_active_pcs(guild):
+            if pc_rec.character.name.lower() == target.lower():
+                rec = pc_rec
+                break
+    if rec is None:
+        await interaction.response.send_message(f"No character named **{target}**.", ephemeral=True)
+        return
+    c = rec.character
+    wl = stats.wound_level_name(c)
+    embed = discord.Embed(
+        title=f"💥 Pending damage — {c.name}",
+        color=discord.Color.orange(),
+    )
+    embed.add_field(
+        name="Proposed",
+        value=(
+            f"**{amount}** raw damage"
+            f"{f' ({reason})' if reason else ''}\n"
+            f"Reduction: {c.armor_reduction} · Current: **{wl}** ({c.wounds_taken} wounds)"
+        ),
+        inline=False,
+    )
+    view = DmDamageView(
+        target_id=rec.id, target_name=c.name,
+        amount=amount, reason=reason,
+    )
+    await interaction.response.send_message(
+        content="A DM can authorize the damage below.",
+        embed=embed, view=view,
+    )
+
+
+@dm.command(name="heal", description="Heal wounds on a character (shows DM-approval buttons).")
+@app_commands.describe(
+    target="Character name (PC or NPC).",
+    amount="Wounds to heal.",
+    reason="Source of healing (spell, medicine, rest, etc.).",
+)
+@app_commands.autocomplete(target=_any_character_autocomplete)
+async def dm_heal(
+    interaction: discord.Interaction,
+    target: str,
+    amount: app_commands.Range[int, 1, 9999],
+    reason: str = "",
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can use this.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = store.get_by_name(guild, NPC_OWNER, target)
+    if rec is None:
+        for _, pc_rec in store.list_active_pcs(guild):
+            if pc_rec.character.name.lower() == target.lower():
+                rec = pc_rec
+                break
+    if rec is None:
+        await interaction.response.send_message(f"No character named **{target}**.", ephemeral=True)
+        return
+    c = rec.character
+    if c.wounds_taken <= 0:
+        await interaction.response.send_message(f"**{c.name}** has no wounds to heal.", ephemeral=True)
+        return
+    wl = stats.wound_level_name(c)
+    embed = discord.Embed(
+        title=f"💚 Pending healing — {c.name}",
+        color=discord.Color.teal(),
+    )
+    embed.add_field(
+        name="Proposed",
+        value=(
+            f"**{amount}** wounds healed"
+            f"{f' ({reason})' if reason else ''}\n"
+            f"Current: **{wl}** ({c.wounds_taken} wounds)"
+        ),
+        inline=False,
+    )
+    view = DmHealView(
+        target_id=rec.id, target_name=c.name,
+        amount=amount, reason=reason,
+    )
+    await interaction.response.send_message(
+        content="A DM can authorize the healing below.",
+        embed=embed, view=view,
+    )
 
 
 # ===========================================================================
@@ -4506,6 +4647,8 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/dm grant / revoke", "Grant or revoke DM status (admin only)."),
         ("/dm list", "List this server's DMs."),
         ("/dm new_day", "Advance to a new day: refresh spell slots & heal all PCs."),
+        ("/dm damage", "Apply damage to a character (DM-approval gate)."),
+        ("/dm heal", "Heal wounds on a character (DM-approval gate)."),
         ("/party", "Overview of all active PCs (DM only)."),
     ]),
     ("Combat", [
@@ -4606,7 +4749,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/taint", "View or modify Shadowlands Taint (rank, mutations, madness)."),
     ]),
     ("Utility", [
-        ("/spell_damage", "Roll spell damage dice (optional auto-apply)."),
+        ("/spell_damage", "Roll spell damage dice (DM-approval gate to apply)."),
         ("/craft_extended", "Multi-step extended crafting rolls with quality tiers."),
         ("/encumbrance", "Strength-based carrying capacity check."),
         ("/horsemanship", "Horsemanship/Agility check."),
@@ -5200,6 +5343,249 @@ class CreatureAttackView(discord.ui.View):
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
             f"🛡️ {interaction.user.display_name} ruled no damage from {self.creature_name}."
+        )
+
+
+class SpellDamageView(discord.ui.View):
+    """DM-approval gate for spell damage: shows the rolled damage and lets
+    the DM approve, void-reduce, or deny before touching the target's sheet."""
+
+    def __init__(
+        self,
+        target_id: int,
+        target_name: str,
+        raw_damage: int,
+        dice_text: str,
+        reason: str,
+        rolled: int,
+        kept: int,
+        bonus: int,
+    ) -> None:
+        super().__init__(timeout=1800)
+        self.target_id = target_id
+        self.target_name = target_name
+        self.raw_damage = raw_damage
+        self.dice_text = dice_text
+        self.reason = reason
+        self.rolled = rolled
+        self.kept = kept
+        self.bonus = bonus
+
+    def _disable(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+
+    @discord.ui.button(label="Apply Damage", style=discord.ButtonStyle.danger, emoji="📜")
+    async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can authorize this.", ephemeral=True)
+            return
+        await self._resolve(interaction, void_reduce=False)
+
+    @discord.ui.button(label="Void Reduce (−10)", style=discord.ButtonStyle.primary, emoji="🔮")
+    async def void_reduce(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can authorize this.", ephemeral=True)
+            return
+        await self._resolve(interaction, void_reduce=True)
+
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can resolve this.", ephemeral=True)
+            return
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            f"🛡️ {interaction.user.display_name} denied — "
+            f"no spell damage applied to **{self.target_name}**."
+        )
+
+    async def _resolve(self, interaction: discord.Interaction, void_reduce: bool) -> None:
+        rec = store.get_by_id(self.target_id)
+        if rec is None:
+            await interaction.response.send_message("Target no longer exists.", ephemeral=True)
+            return
+        applied = combat.apply_damage(rec.character, self.raw_damage, rec.character.armor_reduction)
+        void_line = ""
+        if void_reduce and rec.character.current_void_points > 0:
+            void_saved = min(10, applied["final_damage"])
+            rec.character.wounds_taken = max(0, rec.character.wounds_taken - void_saved)
+            rec.character.current_void_points -= 1
+            applied["final_damage"] -= void_saved
+            applied["new_wound_level"] = stats.wound_level_name(rec.character)
+            applied["is_dead"] = stats.is_dead(rec.character)
+            applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
+            void_line = f"\n🔮 Void Point: **−{void_saved}** wounds ({rec.character.current_void_points} VP left)"
+        elif void_reduce:
+            void_line = "\n🔮 No Void Points available — full damage applied"
+        store.save(rec)
+        c = rec.character
+        embed = discord.Embed(
+            title=f"📜 {self.reason or 'Spell Damage'} — applied",
+            color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.dark_magenta(),
+        )
+        embed.add_field(
+            name="Damage",
+            value=(
+                f"→ **{self.target_name}**\n"
+                f"Raw **{self.raw_damage}** − reduction {applied['reduction']} = "
+                f"**{applied['final_damage']}** wounds{void_line}"
+            ),
+            inline=False,
+        )
+        if applied["level_changed"]:
+            status = (
+                f"{self.target_name}: {applied['old_wound_level']} → "
+                f"**{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+            )
+        else:
+            status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+        if applied["is_dead"]:
+            status += "  💀 **DEAD**"
+        embed.add_field(name="Result", value=status, inline=False)
+        embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(embed=embed)
+
+
+class DmDamageView(discord.ui.View):
+    """DM-approval gate for /dm damage: shows pending damage and lets a DM
+    confirm or deny before applying to the target's sheet."""
+
+    def __init__(self, target_id: int, target_name: str, amount: int, reason: str) -> None:
+        super().__init__(timeout=1800)
+        self.target_id = target_id
+        self.target_name = target_name
+        self.amount = amount
+        self.reason = reason
+
+    def _disable(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+
+    @discord.ui.button(label="Apply Damage", style=discord.ButtonStyle.danger, emoji="💥")
+    async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can authorize this.", ephemeral=True)
+            return
+        rec = store.get_by_id(self.target_id)
+        if rec is None:
+            await interaction.response.send_message("Target no longer exists.", ephemeral=True)
+            return
+        applied = combat.apply_damage(rec.character, self.amount, rec.character.armor_reduction)
+        store.save(rec)
+        c = rec.character
+        embed = discord.Embed(
+            title="💥 Damage applied",
+            color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
+        )
+        embed.add_field(
+            name="Damage",
+            value=(
+                f"→ **{self.target_name}**"
+                f"{f' ({self.reason})' if self.reason else ''}\n"
+                f"Raw **{self.amount}** − reduction {applied['reduction']} = "
+                f"**{applied['final_damage']}** wounds"
+            ),
+            inline=False,
+        )
+        if applied["level_changed"]:
+            status = (
+                f"{self.target_name}: {applied['old_wound_level']} → "
+                f"**{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+            )
+        else:
+            status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+        if applied["is_dead"]:
+            status += "  💀 **DEAD**"
+        embed.add_field(name="Result", value=status, inline=False)
+        embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(embed=embed)
+
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can resolve this.", ephemeral=True)
+            return
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            f"🛡️ {interaction.user.display_name} denied — "
+            f"no damage applied to **{self.target_name}**."
+        )
+
+
+class DmHealView(discord.ui.View):
+    """DM-approval gate for /dm heal: shows pending healing and lets a DM
+    confirm or deny before modifying the target's wound track."""
+
+    def __init__(self, target_id: int, target_name: str, amount: int, reason: str) -> None:
+        super().__init__(timeout=1800)
+        self.target_id = target_id
+        self.target_name = target_name
+        self.amount = amount
+        self.reason = reason
+
+    def _disable(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+
+    @discord.ui.button(label="Apply Healing", style=discord.ButtonStyle.success, emoji="💚")
+    async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can authorize this.", ephemeral=True)
+            return
+        rec = store.get_by_id(self.target_id)
+        if rec is None:
+            await interaction.response.send_message("Target no longer exists.", ephemeral=True)
+            return
+        c = rec.character
+        old_wounds = c.wounds_taken
+        old_level = stats.wound_level_name(c)
+        c.wounds_taken = max(0, c.wounds_taken - self.amount)
+        healed = old_wounds - c.wounds_taken
+        new_level = stats.wound_level_name(c)
+        store.save(rec)
+        embed = discord.Embed(
+            title="💚 Healing applied",
+            color=discord.Color.green(),
+        )
+        embed.add_field(
+            name="Healing",
+            value=(
+                f"→ **{self.target_name}**"
+                f"{f' ({self.reason})' if self.reason else ''}\n"
+                f"**{healed}** wounds healed ({c.wounds_taken} remaining)"
+            ),
+            inline=False,
+        )
+        if old_level != new_level:
+            status = f"{self.target_name}: {old_level} → **{new_level}**"
+        else:
+            status = f"{self.target_name}: **{new_level}** ({c.wounds_taken} wounds)"
+        embed.add_field(name="Result", value=status, inline=False)
+        embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(embed=embed)
+
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can resolve this.", ephemeral=True)
+            return
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            f"❌ {interaction.user.display_name} denied — "
+            f"no healing applied to **{self.target_name}**."
         )
 
 
@@ -6994,7 +7380,7 @@ async def family_search(interaction: discord.Interaction, query: str) -> None:
     rolled="Number of dice to roll (from spell description, e.g. Fire Ring for Fires of Purity).",
     kept="Number of dice to keep.",
     bonus="Flat damage bonus.",
-    target="Target character name (to auto-apply damage).",
+    target="Target character name (shows DM-approval buttons to apply).",
     reason="Spell name or label.",
 )
 async def spell_damage(
@@ -7023,25 +7409,33 @@ async def spell_damage(
         guild = str(interaction.guild_id)
         rec = store.get_by_name(guild, NPC_OWNER, target)
         if rec is None:
-            rec = store.get_active(guild, str(interaction.user.id))
+            for _, pc_rec in store.list_active_pcs(guild):
+                if pc_rec.character.name.lower() == target.lower():
+                    rec = pc_rec
+                    break
         if rec:
-            dmg_result = combat.apply_damage(rec.character, total)
-            store.save(rec)
+            red = rec.character.armor_reduction
+            wl = stats.wound_level_name(rec.character)
             embed.add_field(
-                name=f"Applied to {rec.character.name}",
-                value=(
-                    f"Raw {total} − {dmg_result['reduction']} Reduction = **{dmg_result['final_damage']}** wounds\n"
-                    f"Wound level: {dmg_result['old_wound_level']} → **{dmg_result['new_wound_level']}**"
-                ),
+                name=f"Target: {rec.character.name}",
+                value=f"Reduction {red} · Current: **{wl}** ({rec.character.wounds_taken} wounds)",
                 inline=False,
             )
-            if dmg_result["is_dead"]:
-                embed.add_field(name="DEAD", value="The target is slain.", inline=False)
+            view = SpellDamageView(
+                target_id=rec.id, target_name=rec.character.name,
+                raw_damage=total, dice_text=_format_dice(result),
+                reason=reason, rolled=rolled, kept=kept, bonus=bonus,
+            )
+            await interaction.response.send_message(
+                content="A DM can authorize the spell damage below.",
+                embed=embed, view=view,
+            )
         else:
-            embed.set_footer(text=f"Target '{target}' not found — apply manually with /sheet wound.")
+            embed.set_footer(text=f"Target '{target}' not found — use exact character name.")
+            await interaction.response.send_message(embed=embed)
     else:
-        embed.set_footer(text="Apply with /sheet wound or /npc wound, subtracting armor Reduction.")
-    await interaction.response.send_message(embed=embed)
+        embed.set_footer(text="Add target: to route damage through the DM-approval gate.")
+        await interaction.response.send_message(embed=embed)
 
 
 # ---------------------------------------------------------------------------

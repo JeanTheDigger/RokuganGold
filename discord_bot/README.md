@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 43 — Day Cycle, Spell Slots & Combat Depth
+## Status: Phase 44 — DM-Gated Effect Pipeline
 
 **Help & Navigation**
 
@@ -49,6 +49,8 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 | `/dm grant` / `/dm revoke` | Server admins make/unmake a member a DM. |
 | `/dm list` | Show this server's DMs. |
 | `/dm new_day` | **DM** advances the in-game day: full VP refresh, natural healing (Stamina x 2 wounds), and spell slot refresh (Ring + School Rank per element) for all active PCs. No real-time connection — the DM decides when a new day dawns. |
+| `/dm damage` | **DM** applies raw damage to any PC or NPC — posts the pending effect publicly with Approve / Deny buttons. Damage respects Reduction. |
+| `/dm heal` | **DM** heals wounds on any PC or NPC — posts pending healing with Approve / Deny buttons. |
 | `/party` | DM-only roster of every active PC: school, rings, wounds, VP, honor/glory/status, wielded weapon. Gold embed with player mention. |
 
 A **DM** — a server admin, anyone with *Manage Server*, or a member granted via
@@ -56,6 +58,22 @@ A **DM** — a server admin, anyone with *Manage Server*, or a member granted vi
 `delete` **any** player's active character by adding `member:@player`. Everyone
 else can only manage their own. Sheets are scoped **per server**, so one bot can
 run many separate games without them mixing.
+
+**DM-gated effect pipeline** — all rolls and calculations are free and automatic,
+but **applying any effect that changes another character's state** (damage,
+healing, conditions) requires explicit DM approval. The bot calculates everything,
+posts the result publicly in the channel with the relevant rule, and presents
+Approve / Deny buttons that only a DM can click. This applies to:
+
+- **Attack damage** (`/attack` → DM clicks "Roll & Apply Damage" or "Deny")
+- **Spell damage** (`/spell_damage` with `target:` → DM clicks "Apply Damage" or "Deny")
+- **Creature attacks** (`/creature attack` → DM clicks "Apply Creature Damage" or "No Damage")
+- **Arbitrary damage** (`/dm damage` → DM clicks "Apply Damage" or "Deny")
+- **Healing** (`/dm heal` → DM clicks "Apply Healing" or "Deny")
+
+No damage, wounds, or healing are applied without DM authorization. There is no
+automatic connection between real time and in-game time — the DM pushes day
+advancement via `/dm new_day`.
 
 **Experience & advancement** — DMs grant, players spend, tabletop **RAW**
 
