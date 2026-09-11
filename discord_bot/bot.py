@@ -451,6 +451,16 @@ async def _school_autocomplete(
     return out[:25]
 
 
+async def _basic_school_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    """Starting Schools only — for character creation / NPC generation.
+    Advanced Schools and Alternate Paths are transitions, not starting Schools."""
+    cur = current.lower().strip()
+    out = [app_commands.Choice(name=s["name"], value=s["name"]) for s in schools.basic() if cur in s["name"].lower()]
+    return out[:25]
+
+
 async def _spell_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -1086,7 +1096,7 @@ _SET_CHOICES = [app_commands.Choice(name=f, value=f) for f in _SET_FIELDS]
     school_type="School type (default Bushi; a catalog school sets this for you).",
     age="Age (default 16).",
 )
-@app_commands.autocomplete(school=_school_autocomplete)
+@app_commands.autocomplete(school=_basic_school_autocomplete)
 @app_commands.choices(school_type=_SCHOOL_CHOICES)
 async def sheet_create(
     interaction: discord.Interaction,
@@ -1995,7 +2005,7 @@ npc = app_commands.Group(name="npc", description="Generate and manage NPC charac
     skills="Override the school skills (comma-separated). One becomes the specialty.",
     base_honor="Starting Honor before ±0.5 variance (a catalog school sets this).",
 )
-@app_commands.autocomplete(school=_school_autocomplete)
+@app_commands.autocomplete(school=_basic_school_autocomplete)
 @app_commands.choices(school_type=_SCHOOL_CHOICES)
 async def npc_generate(
     interaction: discord.Interaction,
@@ -3066,10 +3076,16 @@ async def xp_costs(interaction: discord.Interaction) -> None:
 school = app_commands.Group(name="school", description="Browse schools and their techniques (GDD s29).")
 
 
+_SCHOOL_CATEGORY_LABEL = {
+    "basic": "school", "advanced": "Advanced School", "alternate": "Alternate Path",
+}
+
+
 def build_school_embed(s: dict) -> discord.Embed:
     kw = f" [{', '.join(s['keywords'])}]" if s["keywords"] else ""
     embed = discord.Embed(title=f"🏯 {s['name']}{kw}", color=discord.Color.dark_teal())
-    embed.description = f"{s['clan']} school"
+    cat = _SCHOOL_CATEGORY_LABEL.get(s.get("category", "basic"), "school")
+    embed.description = f"{s['clan']} {cat}"
     meta = []
     if s["benefit"]:
         meta.append(f"**Benefit:** {s['benefit']}")
@@ -3088,7 +3104,8 @@ def build_school_embed(s: dict) -> discord.Embed:
     # Techniques (each its own field; effect truncated to stay within limits).
     for t in s["techniques"][:12]:
         rank_label = f"Rank {t['rank']}" if t["rank"] else "Technique"
-        embed.add_field(name=f"{rank_label} — {t['name']}"[:256], value=t["effect"][:1024], inline=False)
+        title = f"{rank_label} — {t['name']}" if t["name"] else rank_label
+        embed.add_field(name=title[:256], value=t["effect"][:1024], inline=False)
     return embed
 
 
@@ -3102,17 +3119,22 @@ async def school_list(interaction: discord.Interaction, clan: str | None = None)
                 f"No schools for clan **{clan}**. Clans: {', '.join(schools.clans())}", ephemeral=True
             )
             return
-        names = ", ".join(s["name"] for s in matches)
-        await interaction.response.send_message(
-            f"🏯 **{clan} schools ({len(matches)}):** {names}", ephemeral=True
-        )
+        lines = []
+        for cat, label in (("basic", "Basic"), ("advanced", "Advanced"), ("alternate", "Alternate Paths")):
+            names = [s["name"] for s in matches if s.get("category", "basic") == cat]
+            if names:
+                lines.append(f"**{label} ({len(names)}):** " + ", ".join(names))
+        text = f"🏯 **{clan} — {len(matches)} schools/paths**\n" + "\n".join(lines)
+        await interaction.response.send_message(text[:1990], ephemeral=True)
         return
     from collections import Counter
     counts = Counter(s["clan"] for s in schools.ALL)
+    cats = Counter(s.get("category", "basic") for s in schools.ALL)
     summary = " · ".join(f"{k} {v}" for k, v in sorted(counts.items()))
     await interaction.response.send_message(
-        f"🏯 **{len(schools.ALL)} schools.** Browse with `/school list clan:<clan>`, "
-        f"`/school search`, or `/school view`.\n{summary}",
+        f"🏯 **{len(schools.ALL)} schools & paths** "
+        f"({cats['basic']} basic · {cats['advanced']} advanced · {cats['alternate']} alternate). "
+        f"Browse with `/school list clan:<clan>`, `/school search`, or `/school view`.\n{summary}",
         ephemeral=True,
     )
 
@@ -3124,7 +3146,11 @@ async def school_search(interaction: discord.Interaction, query: str) -> None:
     if not matches:
         await interaction.response.send_message(f"No schools match `{query}`.", ephemeral=True)
         return
-    lines = [f"• **{s['name']}** ({s['clan']})" for s in matches[:40]]
+    _abbr = {"basic": "basic", "advanced": "adv", "alternate": "path"}
+    lines = [
+        f"• **{s['name']}** ({s['clan']}, {_abbr.get(s.get('category', 'basic'), 'basic')})"
+        for s in matches[:40]
+    ]
     extra = f"\n…and {len(matches) - 40} more." if len(matches) > 40 else ""
     await interaction.response.send_message("🏯 " + "\n".join(lines) + extra, ephemeral=True)
 

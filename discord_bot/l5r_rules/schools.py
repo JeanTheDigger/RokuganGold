@@ -34,6 +34,16 @@ def by_clan(clan: str) -> list[dict]:
     return [s for s in SCHOOLS_DATA if s["clan"].lower() == clan.lower()]
 
 
+def by_category(category: str) -> list[dict]:
+    """basic / advanced / alternate."""
+    return [s for s in SCHOOLS_DATA if s.get("category") == category]
+
+
+def basic() -> list[dict]:
+    """Starting Schools only — the ones a character can be created with."""
+    return [s for s in SCHOOLS_DATA if s.get("category", "basic") == "basic"]
+
+
 def clans() -> list[str]:
     return sorted({s["clan"] for s in SCHOOLS_DATA})
 
