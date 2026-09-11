@@ -21,7 +21,7 @@ import encounter
 import storage
 from l5r_rules import (
     advancement, advantages, combat, creature, enums, kata, kata_effects, kiho, npc_gen,
-    schools, spells, stats,
+    schools, spells, stats, technique_effects,
 )
 from l5r_rules.character import Character
 from l5r_rules.dice import DiceEngine, DiceResult
@@ -592,6 +592,8 @@ class DamageView(discord.ui.View):
             attacker = attacker_rec.character
             wp = combat.get_weapon_profile(self.weapon)
             extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
+            t_extra, t_dmg_notes = technique_effects.attacker_damage_rolled(attacker, wp, self.weapon)
+            extra_rolled += t_extra
             ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
             dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled)
             raw = dmg["raw_damage"]
@@ -602,7 +604,7 @@ class DamageView(discord.ui.View):
                 feint_line = f"\nFeint bonus **+{fb}**"
             scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
             raw += scorp_bonus
-            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note) if n)
+            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, *t_dmg_notes) if n)
             reduction = max(0, cre_rec.creature.reduction - ignore - tsu_ignore)
             applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction)
             store.save_creature(cre_rec)
@@ -702,9 +704,11 @@ class DamageView(discord.ui.View):
             await interaction.followup.send(embed=embed)
             return
 
-        # Plain hit or Feint: weapon damage (+ feint bonus, + active-kata mods).
+        # Plain hit or Feint: weapon damage (+ feint bonus, + active-kata & Technique mods).
         wp = combat.get_weapon_profile(self.weapon)
         extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
+        t_extra, t_dmg_notes = technique_effects.attacker_damage_rolled(attacker, wp, self.weapon)
+        extra_rolled += t_extra
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
         dmg = combat.resolve_damage(attacker, self.weapon, engine, self.increased_damage, extra_rolled)
         raw = dmg["raw_damage"]
@@ -714,10 +718,13 @@ class DamageView(discord.ui.View):
             raw += fb
             feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
         crab_bonus, crab_note = kata_effects.defender_reduction_bonus(target, self.defender_stance)
+        tech_red, tech_red_notes = technique_effects.defender_reduction_bonus(target)
         scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
         raw += scorp_bonus
-        kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note) if n)
-        reduction = max(0, target.armor_reduction - ignore - tsu_ignore + crab_bonus)
+        kata_line = "".join(
+            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, *t_dmg_notes, *tech_red_notes) if n
+        )
+        reduction = max(0, target.armor_reduction - ignore - tsu_ignore + crab_bonus + tech_red)
         applied = combat.apply_damage(target, raw, reduction)
         store.save(target_rec)
 
@@ -926,8 +933,8 @@ async def attack(
     # generic reminder. Untracked -> stays a DM-adjudicated reminder.
     rate_limited_handled = atk_combatant is not None and kata_effects.is_rate_limited(attacker.active_kata)
 
-    # Defender's active kata: stance-conditional Armor TN bonus (players only —
-    # creatures use fixed stat blocks and carry no active kata).
+    # Defender's active kata + known Techniques: stance-conditional Armor TN
+    # bonus (players only — creatures use fixed stat blocks and carry neither).
     def_kata_bonus = 0
     if target_creature_rec is None:
         def_kata_bonus, def_note = kata_effects.defender_armor_tn_bonus(
@@ -935,6 +942,11 @@ async def attack(
         )
         if def_note:
             kata_notes.append(def_note)
+        def_tech_bonus, def_tech_notes = technique_effects.defender_armor_tn_bonus(
+            target_rec.character, d_stance
+        )
+        def_kata_bonus += def_tech_bonus
+        kata_notes.extend(def_tech_notes)
     # Attacker's active kata: flat bonus added to the attack-roll total.
     atk_flat, atk_note = kata_effects.attacker_roll_flat_bonus(attacker, man, increased_damage)
     if atk_note:
@@ -964,6 +976,15 @@ async def attack(
                 kata_notes.append(sia_note)
             elif status == "used":
                 rl_used_notes.append("Strength in Arms already used this Turn.")
+
+    # Attacker's known Techniques: extra attack dice / flat bonus to the roll.
+    t_rolled, t_kept, t_flat, t_notes = technique_effects.attacker_attack_dice(
+        attacker, atk_weapon_profile, a_stance
+    )
+    bonus_rolled += t_rolled
+    bonus_kept += t_kept
+    atk_flat += t_flat
+    kata_notes.extend(t_notes)
 
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
@@ -1013,7 +1034,7 @@ async def attack(
         embed.set_footer(text=f"Unskilled in {outcome['skill_name']} — dice did not explode.")
 
     if kata_notes:
-        embed.add_field(name="⚑ Kata effects (auto-applied)", value=" · ".join(kata_notes), inline=False)
+        embed.add_field(name="⚑ Kata & Technique effects (auto-applied)", value=" · ".join(kata_notes)[:1024], inline=False)
     if rl_used_notes:
         embed.add_field(name="Rate-limited (already spent)", value="\n".join(rl_used_notes)[:1024], inline=False)
     reminders = _active_ability_reminders(attacker, "attacker", drop_rate_limited=rate_limited_handled)
