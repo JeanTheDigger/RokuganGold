@@ -126,6 +126,10 @@ def condition_reminders(conditions: set[str]) -> list[str]:
         lines.append("**Dazed:** Defense/Full Defense stances only; recovers Earth TN 20 at Reactions Stage")
     if "entangled" in conditions:
         lines.append("**Entangled:** can only attempt to break free (Strength, TN set by DM)")
+    if "grappled" in conditions:
+        lines.append("**Grappled:** ATN = 5+armor; large weapons unusable; stances don't apply")
+    if "pinned" in conditions:
+        lines.append("**Pinned (Grapple):** fully immobilized; can only speak or cast verbal Mastery 1 spells")
     if "fatigued" in conditions:
         lines.append("**Fatigued:** cannot use Full Attack Stance; +5 TN stacks per extra day")
     if "prone" in conditions:

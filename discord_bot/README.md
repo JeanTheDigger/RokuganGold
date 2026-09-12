@@ -246,7 +246,8 @@ Prone on the target. **15 effects across 7 conditions:**
 | Blinded | attacker: melee **−1k1**, ranged **−3k3**; defender Armor TN = **Reflexes + 5 + armor** |
 | Dazed | attacker: **−3k0** to all actions |
 | Fatigued | attacker: **+5 TN** (applied as −5 flat to attack roll) |
-| Grappled | defender: Armor TN = **5 + armor bonus** |
+| Grappled | defender: Armor TN = **5 + armor bonus**; large weapons unusable; stances don't apply |
+| Pinned | fully immobilized (grapple); can only speak or cast verbal-only Mastery 1 spells |
 | Mounted | attacker: **+1k0** attack rolls (vs unmounted/lower) |
 | Prone | defender: **−10** Armor TN vs melee; attacker: **−2k0** with Medium/Small, **cannot attack** with Large |
 | Stunned | defender: Armor TN = **5 + armor bonus** |
@@ -451,11 +452,12 @@ prone]`), active guards show as `🛡️→WardName`, and Full Defense as
 
 | Command | What it does |
 |---|---|
-| `/grapple initiate` | Initiate a grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus). On success, both combatants gain the **Grappled** condition; initiator has control. |
+| `/grapple initiate` | Initiate a grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus), then contested Jiujutsu/Strength. On success, both gain **Grappled**; initiator has control. Complex Action. |
 | `/grapple control` | Contested Jiujutsu/Strength roll between two grapple participants. Winner has control until the next Turn. |
-| `/grapple hit` | Grapple Hit (controller only): unarmed damage (1k1+Str) on a grappled opponent. No attack roll: DM authorizes damage via the standard button flow. |
-| `/grapple throw` | Throw a grappled opponent: target becomes **Prone** and leaves the grapple. |
-| `/grapple break_free` | Break free from a grapple (controller's Simple Action): removes the Grappled condition. |
+| `/grapple hit` | Grapple Hit (controller only): unarmed damage on a grappled opponent. No attack roll: DM authorizes damage via the standard button flow. Complex Action. |
+| `/grapple throw` | Throw a grappled opponent: both become **Prone**, grapple ends for both. Complex Action. |
+| `/grapple pin` | Pin a grappled opponent: target gains **Pinned** condition (fully immobilized; prerequisite for Bind). Complex Action. |
+| `/grapple break_free` | Break free. No opponent = controller break (Simple Action, no roll). With opponent = defender break-free (Complex Action, contested Jiujutsu/Strength). |
 
 **Iaijutsu dueling** (`/duel`, all DM-only: s40 Iaijutsu rules)
 

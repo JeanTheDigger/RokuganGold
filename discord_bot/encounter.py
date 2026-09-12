@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 VALID_CONDITIONS: frozenset[str] = frozenset({
     "blinded", "dazed", "entangled", "fatigued",
-    "grappled", "mounted", "prone", "stunned",
+    "grappled", "mounted", "pinned", "prone", "stunned",
 })
 
 VALID_STANCES: frozenset[str] = frozenset({
