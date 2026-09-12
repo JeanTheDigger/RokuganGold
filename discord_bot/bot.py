@@ -1858,6 +1858,21 @@ async def attack(
         else:
             tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus)
 
+    # Center Stance bonus (s40): +1k1 + Void Ring on one roll, from centering last Round.
+    center_line = ""
+    if atk_combatant and atk_combatant.center_bonus_available:
+        void_ring_val = attacker.void_ring if attacker else 0
+        bonus_rolled += 1
+        bonus_kept += 1
+        atk_flat += void_ring_val
+        atk_combatant.center_bonus_available = False
+        center_line = f" · 🎯 Center: +1k1 +{void_ring_val} flat (Void Ring)"
+        kata_notes.append(f"Center Stance: +1k1 + {void_ring_val} (Void Ring)")
+
+    # Defense Stance warning (s40): may not attack while in Defense.
+    if a_stance == "defense":
+        kata_notes.append("⚠️ Defense Stance: may not attack (DM override in effect)")
+
     outcome = combat.resolve_attack(
         attacker, weapon, tn, raises + maneuver_raises, engine,
         attacker_stance=a_stance, increased_damage=increased_damage,
@@ -1917,6 +1932,9 @@ async def attack(
             value="\n".join(reminders)[:1024],
             inline=False,
         )
+
+    if center_line and enc:
+        _save_encounter(guild, enc)
 
     cs_raises = raises if man == "called_shot" else 0
     if hit:
@@ -3727,10 +3745,10 @@ def _wound_track(c) -> str:
 def _stance_effects(stance: str) -> str:
     effects = {
         "attack": "",
-        "full_attack": "+2k1 attack rolls, −10 Armor TN. Cannot use Defense/Full Defense.",
-        "defense": "+Air Ring + Defense skill to Armor TN.",
-        "full_defense": "Defense/Reflexes roll → half (rounded up) added to ATN. Complex Action. Cannot attack.",
-        "center": "+Void Ring to Armor TN. Regain Void Point if not struck before next turn.",
+        "full_attack": "+2k1 attack rolls, −10 own Armor TN. May only attack; no ranged attacks. Cannot use while mounted.",
+        "defense": "+Air Ring + Defense skill to Armor TN. May not attack.",
+        "full_defense": "Defense/Reflexes roll → half (rounded up) added to ATN. Complex Action; only Free Actions allowed.",
+        "center": "Forfeit all Actions. Next Round: +1k1 + Void Ring on one roll, +10 Initiative.",
     }
     return effects.get(stance, "")
 
@@ -3759,10 +3777,12 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         fd = f"  🛡️FD+{c.full_defense_bonus}" if c.full_defense_bonus else ""
         void_atn = f"  🌀ATN+{c.void_armor_tn_bonus}" if c.void_armor_tn_bonus else ""
         void_init = f"  🌀Init+{c.void_initiative_boost}" if c.void_initiative_boost else ""
+        center_tag = "  🎯Center+1k1" if c.center_bonus_available else ""
+        center_init = f"  🎯Init+{c.center_init_boost}" if c.center_init_boost else ""
         held = "  ⏸️HELD" if c.held else ""
         delayed = "  ⏳DELAYED" if c.delayed else ""
         init_val = c.effective_initiative
-        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{held}{delayed}")
+        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{held}{delayed}")
     header = f"⚔️ **Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
@@ -3888,6 +3908,10 @@ async def combat_next(interaction: discord.Interaction) -> None:
     _save_encounter(guild, enc)
     mention = f"<@{current.owner_id}> " if current.owner_id and not current.is_npc else ""
     parts = [f"➡️ {mention}It is now **{current.name}**'s turn."]
+    if current.center_bonus_available:
+        rec = _resolve_combatant_record(guild, current)
+        vr = rec.character.void_ring if rec else "?"
+        parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
     reminders = condition_effects.condition_reminders(current.conditions)
     if reminders:
         parts.append("\n".join(reminders))
@@ -3973,6 +3997,8 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             fd = f", FD+{cb.full_defense_bonus}" if cb.full_defense_bonus else ""
             v_atn = f", 🌀ATN+{cb.void_armor_tn_bonus}" if cb.void_armor_tn_bonus else ""
             v_init = f", 🌀Init+{cb.void_initiative_boost}" if cb.void_initiative_boost else ""
+            c_bonus = ", 🎯Center+1k1" if cb.center_bonus_available else ""
+            c_init = f", 🎯Init+{cb.center_init_boost}" if cb.center_init_boost else ""
             guard = f", guarding {cb.guarding}" if cb.guarding else ""
             held = ", HELD" if cb.held else ""
             delayed = ", DELAYED" if cb.delayed else ""
@@ -3981,7 +4007,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             value = (
                 f"Wounds: {c.wounds_taken}/{cap} **{lvl}**{pen_str}\n"
                 f"ATN: **{tn}** · {vp} · Stance: **{stance_label}** · Acts: {acts_left}\n"
-                f"Conditions: {conds}{fd}{v_atn}{v_init}{guard}{held}{delayed}"
+                f"Conditions: {conds}{fd}{v_atn}{v_init}{c_bonus}{c_init}{guard}{held}{delayed}"
             )
         else:
             conds = ", ".join(sorted(cb.conditions)) if cb.conditions else " "
@@ -4214,6 +4240,7 @@ async def combat_full_defense(
         return
     result = combat.roll_full_defense(ref, def_sk, engine)
     cb.full_defense_bonus = result["bonus"]
+    cb.stance = "full_defense"
     _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(
         f"🛡️ **{cb.name}** enters **Full Defense**.\n"
@@ -9473,11 +9500,11 @@ async def kiho_view(interaction: discord.Interaction, name: str) -> None:
 # ---------------------------------------------------------------------------
 
 _STANCE_CHOICES = [
-    app_commands.Choice(name="Attack", value="attack"),
-    app_commands.Choice(name="Full Attack (+2k1 hit, −10 ATN)", value="full_attack"),
-    app_commands.Choice(name="Defense (+Air+Defense to ATN)", value="defense"),
-    app_commands.Choice(name="Full Defense (Complex Action)", value="full_defense"),
-    app_commands.Choice(name="Center (+Void ATN, +1k1 next turn)", value="center"),
+    app_commands.Choice(name="Attack (standard)", value="attack"),
+    app_commands.Choice(name="Full Attack (+2k1 hit, −10 ATN, no ranged)", value="full_attack"),
+    app_commands.Choice(name="Defense (+Air+Defense to ATN, no attacks)", value="defense"),
+    app_commands.Choice(name="Full Defense (use /combat full_defense)", value="full_defense"),
+    app_commands.Choice(name="Center (forfeit actions, +1k1+Void next)", value="center"),
 ]
 
 
@@ -9507,7 +9534,16 @@ async def combat_stance(
     if stance.value not in encounter.VALID_STANCES:
         await interaction.response.send_message("Invalid stance.", ephemeral=True)
         return
+    if stance.value == "full_defense":
+        await interaction.response.send_message(
+            f"Use `/combat full_defense combatant:{cb.name}` instead — Full Defense requires a Defense/Reflexes roll (Complex Action).",
+            ephemeral=True,
+        )
+        return
     cb.stance = stance.value
+    if stance.value == "center":
+        cb.center_bonus_available = False
+        cb.center_init_boost = 0
     _save_encounter(str(interaction.guild_id), enc)
     label = stance.name
     effects = _stance_effects(stance.value)
@@ -9702,6 +9738,10 @@ async def combat_turn_done(
     mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
     parts = [f"**{ended_name}**'s turn is done."]
     parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
+    if next_cb.center_bonus_available:
+        rec = _resolve_combatant_record(guild, next_cb)
+        vr = rec.character.void_ring if rec else "?"
+        parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
     reminders = condition_effects.condition_reminders(next_cb.conditions)
     if reminders:
         parts.append("\n".join(reminders))

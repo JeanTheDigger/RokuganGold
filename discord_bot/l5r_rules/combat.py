@@ -303,8 +303,6 @@ def armor_tn(target: Character, defender_stance: str = "attack", extra: int = 0)
     base += STANCE_ARMOR_TN_BONUS.get(defender_stance, 0)
     if defender_stance == "defense":
         base += stats.ring_value(target, "air") + target.skills.get("Defense", 0)
-    elif defender_stance == "center":
-        base += target.void_ring
     return base + extra
 
 

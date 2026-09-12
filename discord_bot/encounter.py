@@ -58,10 +58,13 @@ class Combatant:
     # Void Point combat effects (GDD s25).
     void_armor_tn_bonus: int = 0   # +10 Armor TN for one Round; clears at round start
     void_initiative_boost: int = 0 # +10 Initiative for the skirmish; persists until encounter ends
+    # Center Stance (GDD s40): next-round benefits from centering.
+    center_bonus_available: bool = False  # +1k1 + Void Ring on one roll; set at round boundary
+    center_init_boost: int = 0           # +10 Initiative for one Round; clears at round boundary
 
     @property
     def effective_initiative(self) -> int:
-        return self.initiative + self.void_initiative_boost
+        return self.initiative + self.void_initiative_boost + self.center_init_boost
 
     def consume_once(self, key: str, scope: str) -> bool:
         """Try to spend a once-per-`scope` ability ('turn' or 'round'). Returns
@@ -91,6 +94,8 @@ class Combatant:
             "delayed": self.delayed,
             "void_armor_tn_bonus": self.void_armor_tn_bonus,
             "void_initiative_boost": self.void_initiative_boost,
+            "center_bonus_available": self.center_bonus_available,
+            "center_init_boost": self.center_init_boost,
         }
 
     @classmethod
@@ -113,6 +118,8 @@ class Combatant:
             delayed=d.get("delayed", False),
             void_armor_tn_bonus=d.get("void_armor_tn_bonus", 0),
             void_initiative_boost=d.get("void_initiative_boost", 0),
+            center_bonus_available=d.get("center_bonus_available", False),
+            center_init_boost=d.get("center_init_boost", 0),
         )
 
 
@@ -166,7 +173,9 @@ class Encounter:
         """Advance to the next combatant; wraps and increments the round.
 
         Resets the incoming actor's once-per-Turn abilities, and every
-        combatant's once-per-Round abilities at the top of a new Round."""
+        combatant's once-per-Round abilities at the top of a new Round.
+        At the round boundary, combatants who were in Center Stance gain
+        +10 Initiative and a one-roll bonus for the coming Round (s40)."""
         if not self.combatants:
             return None
         self.started = True
@@ -174,9 +183,20 @@ class Encounter:
         if self.turn_index >= len(self.combatants):
             self.turn_index = 0
             self.round += 1
+            resort = False
             for c in self.combatants:
                 c.used_this_round.clear()
                 c.void_armor_tn_bonus = 0
+                c.center_init_boost = 0
+                c.center_bonus_available = False
+            for c in self.combatants:
+                if c.stance == "center":
+                    c.center_init_boost = 10
+                    c.center_bonus_available = True
+                    c.stance = "attack"
+                    resort = True
+            if resort:
+                self._sort()
         if self.turn_index == 0 and self.round == 2 and self.surprise_round:
             self.surprise_round = False
         cur = self.current()
