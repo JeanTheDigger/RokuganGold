@@ -1112,6 +1112,10 @@ class DamageView(discord.ui.View):
             if self.weapon_material != "normal":
                 mat_line = f"\n🔶 Weapon material: **{self.weapon_material.title()}**"
             special_line = "".join(f"\n🛡️ {n}" for n in applied.get("special_notes", []))
+            break_line = ""
+            brk = wp.get("break_threshold")
+            if brk and raw >= brk:
+                break_line = f"\n💥 **WEAPON BROKEN** — {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
             embed = discord.Embed(
                 title="⚔️ Damage applied",
                 color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
@@ -1122,7 +1126,7 @@ class DamageView(discord.ui.View):
                     f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
                     f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}{cre_cs_line}{mat_line}\n"
                     f"Raw **{raw}** − reduction {applied['reduction']} = "
-                    f"**{applied['final_damage']}** wounds{special_line}"
+                    f"**{applied['final_damage']}** wounds{special_line}{break_line}"
                 ),
                 inline=False,
             )
@@ -1352,6 +1356,10 @@ class DamageView(discord.ui.View):
                 min(self.called_shot_raises, 4), "specific part"
             )
             called_shot_line = f"\n🎯 Called Shot: **{part}** ({self.called_shot_raises} raise{'s' if self.called_shot_raises != 1 else ''})"
+        break_line = ""
+        brk = wp.get("break_threshold")
+        if brk and raw >= brk:
+            break_line = f"\n💥 **WEAPON BROKEN** — {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
 
         embed = discord.Embed(
             title="⚔️ Damage applied",
@@ -1363,7 +1371,7 @@ class DamageView(discord.ui.View):
                 f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
                 f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}{called_shot_line}\n"
                 f"Raw **{raw}** − reduction {applied['reduction']} = "
-                f"**{applied['final_damage']}** wounds{void_line}"
+                f"**{applied['final_damage']}** wounds{void_line}{break_line}"
             ),
             inline=False,
         )

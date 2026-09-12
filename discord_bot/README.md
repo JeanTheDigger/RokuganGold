@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 53: Bow & Arrow Specials (Armor TN Modifiers, Bow Penalties, Bo-Hiya, Ninjutsu Scaling)
+## Status: Phase 54: Weapon Specials (Armor TN Modifiers, Bow Penalties, Bo-Hiya, Weapon Breakage, Ninjutsu Scaling)
 
 **Help & Navigation**
 
@@ -653,6 +653,19 @@ appears in the "Combat effects" field. Blowgun damage scaling is auto-applied at
 damage time based on the attacker's Ninjutsu rank. Bo-Hiya ignores all forms of
 Reduction at damage time (armor, kata bonuses, technique bonuses, natural
 toughness). "Half range" arrows display a DM reminder in the combat effects.
+
+**Weapon Breakage** (GDD s39 — auto-checked at damage time)
+
+| Weapon | Break Threshold |
+|---|---|
+| `kumade` | 25+ raw damage |
+| `lance` | 30+ raw damage |
+| `parangu` | 30+ raw damage |
+| `ninja_to` | 40+ raw damage |
+
+When a weapon's raw damage (pre-Reduction) meets or exceeds its break threshold,
+a **WEAPON BROKEN** warning appears in the damage embed. The DM should enforce
+removal of the weapon from play.
 
 **Rooms** (private play rooms: each is a Discord **private thread**)
 
