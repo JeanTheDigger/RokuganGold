@@ -1863,6 +1863,308 @@ async def sheet_create(
     await interaction.response.send_message(content=content, embed=build_sheet_embed(record))
 
 
+# ---------------------------------------------------------------------------
+# /sheet wizard — guided step-by-step character creation
+# ---------------------------------------------------------------------------
+_GREAT_CLANS = ["Crab", "Crane", "Dragon", "Lion", "Mantis", "Phoenix", "Scorpion", "Unicorn"]
+_ALL_SCHOOL_CLANS = sorted({s["clan"] for s in schools.ALL if s.get("category", "basic") == "basic"})
+
+
+def _wizard_embed(state: dict) -> discord.Embed:
+    """Build a progress embed from the wizard state dict."""
+    embed = discord.Embed(title=f"Character Wizard — {state['name']}", color=discord.Color.gold())
+    lines: list[str] = []
+    if state.get("clan"):
+        lines.append(f"**Clan:** {state['clan']}")
+    if state.get("family_name"):
+        fam = families.get(state["family_name"])
+        bonus = f" (+1 {fam['bonus_trait'].capitalize()})" if fam else ""
+        lines.append(f"**Family:** {state['family_name']}{bonus}")
+    if state.get("heritage_result"):
+        lines.append(f"**Heritage:** {state['heritage_result']}")
+    if state.get("different_school"):
+        lines.append("**Different School** advantage (5 pts)")
+    if state.get("school_name"):
+        sch = schools.get(state["school_name"])
+        if sch:
+            ben = schools.parse_benefit(sch.get("benefit", ""))
+            ben_str = f" (+{ben[1]} {ben[0].capitalize()})" if ben else ""
+            lines.append(f"**School:** {sch['name']}{ben_str}")
+    embed.description = "\n".join(lines) if lines else "Starting..."
+    return embed
+
+
+class _ClanSelect(discord.ui.Select):
+    def __init__(self, state: dict):
+        self.state = state
+        options = [discord.SelectOption(label=c) for c in _ALL_SCHOOL_CLANS]
+        super().__init__(placeholder="Choose your Clan...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        self.state["clan"] = self.values[0]
+        clan_families = families.by_clan(self.state["clan"])
+        if clan_families:
+            view = _WizardView(self.state)
+            view.add_item(_FamilySelect(self.state, clan_families))
+            await interaction.response.edit_message(
+                content="**Step 2/5** — Choose your Family.",
+                embed=_wizard_embed(self.state), view=view,
+            )
+        else:
+            self.state["family_name"] = ""
+            await _go_to_heritage_or_school(interaction, self.state)
+
+
+class _FamilySelect(discord.ui.Select):
+    def __init__(self, state: dict, clan_families: list[dict]):
+        self.state = state
+        options = [
+            discord.SelectOption(label=f["name"], description=f"+1 {f['bonus_trait'].capitalize()}")
+            for f in clan_families
+        ][:25]
+        super().__init__(placeholder="Choose your Family...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        self.state["family_name"] = self.values[0]
+        await _go_to_heritage_or_school(interaction, self.state)
+
+
+async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dict) -> None:
+    clan = state["clan"]
+    if clan in heritage.HERITAGE_TABLES:
+        view = _WizardView(state)
+        roll_btn = discord.ui.Button(label="Roll Heritage", style=discord.ButtonStyle.primary, emoji="\U0001f3b2")
+        skip_btn = discord.ui.Button(label="Skip", style=discord.ButtonStyle.secondary)
+
+        async def on_roll(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            result = heritage.roll_heritage(clan)
+            state["heritage_result"] = f"{result['name']} — {result['effect']}"
+            await _go_to_school_choice(btn_inter, state)
+
+        async def on_skip(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            await _go_to_school_choice(btn_inter, state)
+
+        roll_btn.callback = on_roll
+        skip_btn.callback = on_skip
+        view.add_item(roll_btn)
+        view.add_item(skip_btn)
+        await interaction.response.edit_message(
+            content="**Step 3/5** — Heritage Roll (optional).",
+            embed=_wizard_embed(state), view=view,
+        )
+    else:
+        await _go_to_school_choice(interaction, state)
+
+
+async def _go_to_school_choice(interaction: discord.Interaction, state: dict) -> None:
+    view = _WizardView(state)
+    same_btn = discord.ui.Button(label=f"{state['clan']} Schools", style=discord.ButtonStyle.primary)
+    diff_btn = discord.ui.Button(label="Different School (5 pts)", style=discord.ButtonStyle.secondary)
+
+    async def on_same(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        state["different_school"] = False
+        await _show_school_select(btn_inter, state, state["clan"])
+
+    async def on_diff(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        state["different_school"] = True
+        view2 = _WizardView(state)
+        view2.add_item(_SchoolClanSelect(state))
+        await btn_inter.response.edit_message(
+            content="**Step 4/5** — Pick the clan whose school you want to attend.",
+            embed=_wizard_embed(state), view=view2,
+        )
+
+    same_btn.callback = on_same
+    diff_btn.callback = on_diff
+    view.add_item(same_btn)
+    view.add_item(diff_btn)
+    step = "4/5" if state["clan"] in heritage.HERITAGE_TABLES else "3/5"
+    await interaction.response.edit_message(
+        content=f"**Step {step}** — Same-clan school or Different School?",
+        embed=_wizard_embed(state), view=view,
+    )
+
+
+class _SchoolClanSelect(discord.ui.Select):
+    def __init__(self, state: dict):
+        self.state = state
+        options = [discord.SelectOption(label=c) for c in _ALL_SCHOOL_CLANS]
+        super().__init__(placeholder="Pick school clan...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _show_school_select(interaction, self.state, self.values[0])
+
+
+async def _show_school_select(interaction: discord.Interaction, state: dict, school_clan: str) -> None:
+    basic_schools = [s for s in schools.by_clan(school_clan) if s.get("category", "basic") == "basic"]
+    if not basic_schools:
+        await interaction.response.edit_message(
+            content=f"No basic schools found for **{school_clan}**. Pick another.",
+            embed=_wizard_embed(state), view=interaction.message.view,
+        )
+        return
+    view = _WizardView(state)
+    view.add_item(_SchoolSelect(state, basic_schools))
+    await interaction.response.edit_message(
+        content=f"**Step 5/5** — Choose your School ({school_clan}).",
+        embed=_wizard_embed(state), view=view,
+    )
+
+
+class _SchoolSelect(discord.ui.Select):
+    def __init__(self, state: dict, school_list: list[dict]):
+        self.state = state
+        options = []
+        for s in school_list[:25]:
+            kw = ", ".join(s.get("keywords", []))
+            ben = s.get("benefit", "")[:50]
+            desc = f"{kw} — {ben}" if kw else ben
+            options.append(discord.SelectOption(label=s["name"][:100], description=desc[:100]))
+        super().__init__(placeholder="Choose your School...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        self.state["school_name"] = self.values[0]
+        await _show_confirmation(interaction, self.state)
+
+
+async def _show_confirmation(interaction: discord.Interaction, state: dict) -> None:
+    view = _WizardView(state)
+    create_btn = discord.ui.Button(label="Create Character", style=discord.ButtonStyle.success, emoji="✅")
+    cancel_btn = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.danger)
+
+    async def on_create(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        char = Character(name=state["name"], clan=state.get("clan", ""), family=state.get("family_name", ""),
+                         school="", school_type="Bushi")
+        family_entry = families.get(state["family_name"]) if state.get("family_name") else None
+        if family_entry:
+            families.apply_to_character(char, family_entry)
+            if not char.clan:
+                char.clan = family_entry["clan"]
+        applied = schools.get(state["school_name"])
+        report = schools.apply_to_character(char, applied) if applied else None
+        try:
+            record = store.create_character(state["guild_id"], state["user_id"], char)
+        except storage.DuplicateNameError:
+            await btn_inter.response.edit_message(
+                content=f"You already have a character named **{state['name']}**. Use a different name.",
+                embed=None, view=None,
+            )
+            return
+        store.set_active(state["guild_id"], state["user_id"], record.id)
+        bits = []
+        if applied:
+            bits.append(f"School **{applied['name']}**")
+        if report and report.get("benefit"):
+            bits.append(f"Benefit {report['benefit']}")
+        if report and report.get("skills"):
+            bits.append(f"{len(report['skills'])} school skills")
+        if report and report.get("wildcards"):
+            bits.append("choose: " + "; ".join(report["wildcards"]))
+        if state.get("different_school"):
+            bits.append("**Different School** advantage recorded")
+        if state.get("heritage_result"):
+            bits.append(f"Heritage: {state['heritage_result'][:80]}")
+        summary = ", ".join(bits) + "." if bits else ""
+        await btn_inter.response.edit_message(
+            content=f"Created **{state['name']}** and set as active. {summary}\n"
+                    f"Use `/school learn` to record your Rank-1 technique.",
+            embed=build_sheet_embed(record), view=None,
+        )
+
+    async def on_cancel(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await btn_inter.response.edit_message(content="Character creation cancelled.", embed=None, view=None)
+
+    create_btn.callback = on_create
+    cancel_btn.callback = on_cancel
+    view.add_item(create_btn)
+    view.add_item(cancel_btn)
+
+    preview_char = Character(name=state["name"], clan=state.get("clan", ""), family=state.get("family_name", ""),
+                             school="", school_type="Bushi")
+    family_entry = families.get(state["family_name"]) if state.get("family_name") else None
+    if family_entry:
+        families.apply_to_character(preview_char, family_entry)
+    applied = schools.get(state["school_name"])
+    if applied:
+        schools.apply_to_character(preview_char, applied)
+    preview_embed = _wizard_embed(state)
+    preview_embed.title = f"Confirm — {state['name']}"
+    preview_embed.color = discord.Color.green()
+    if state.get("heritage_result"):
+        preview_embed.add_field(name="Heritage", value=state["heritage_result"][:1024], inline=False)
+
+    await interaction.response.edit_message(
+        content="Review your character and confirm.",
+        embed=preview_embed, view=view,
+    )
+
+
+class _WizardView(discord.ui.View):
+    def __init__(self, state: dict):
+        super().__init__(timeout=300)
+        self.state = state
+
+    async def on_timeout(self) -> None:
+        pass
+
+
+@sheet.command(name="wizard", description="Step-by-step guided character creation.")
+@app_commands.describe(name="Your character's name.")
+async def sheet_wizard(
+    interaction: discord.Interaction,
+    name: app_commands.Range[str, 1, 64],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    state = {
+        "guild_id": str(interaction.guild_id),
+        "user_id": str(interaction.user.id),
+        "name": name,
+        "clan": "",
+        "family_name": "",
+        "heritage_result": None,
+        "different_school": False,
+        "school_name": "",
+    }
+    view = _WizardView(state)
+    view.add_item(_ClanSelect(state))
+    await interaction.response.send_message(
+        content="**Step 1/5** — Choose your Clan.",
+        embed=_wizard_embed(state), view=view,
+    )
+
+
 @sheet.command(name="view", description="View a character sheet (yours, or another player's if you are a DM).")
 @app_commands.describe(member="Whose active character to view (Fortune). Omit for your own.")
 async def sheet_view(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
