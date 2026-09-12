@@ -3521,7 +3521,7 @@ def _stance_effects(stance: str) -> str:
     return effects.get(stance, "")
 
 
-def _render_encounter(enc: encounter.Encounter) -> str:
+def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
     if not enc.combatants:
         return "No combatants yet. Add them with `/combat join` or `/combat add`."
     cur = enc.current()
@@ -3529,6 +3529,14 @@ def _render_encounter(enc: encounter.Encounter) -> str:
     for i, c in enumerate(enc.combatants):
         marker = "▶️ " if (enc.started and c is cur) else f"{i + 1}. "
         tag = " *(NPC)*" if c.is_npc else ""
+        wound_tag = ""
+        if guild_id:
+            rec = _resolve_combatant_record(guild_id, c)
+            if rec is not None:
+                pen = stats.wound_penalty(rec.character)
+                if pen:
+                    lvl = stats.wound_level_name(rec.character)
+                    wound_tag = f"  ⚠️{lvl}({pen})"
         detail = f"  ·  {c.initiative_detail}" if c.initiative_detail else ""
         stance_str = f"  ⚔️{c.stance.replace('_', ' ').title()}" if c.stance != "attack" else ""
         acts = f"  [{c.actions_used}/2 acts]" if enc.started and c.actions_used > 0 else ""
@@ -3537,7 +3545,7 @@ def _render_encounter(enc: encounter.Encounter) -> str:
         fd = f"  🛡️FD+{c.full_defense_bonus}" if c.full_defense_bonus else ""
         held = "  ⏸️HELD" if c.held else ""
         delayed = "  ⏳DELAYED" if c.delayed else ""
-        lines.append(f"{marker}**{c.name}**{tag}: init **{c.initiative}**{detail}{stance_str}{acts}{cond}{guard}{fd}{held}{delayed}")
+        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: init **{c.initiative}**{detail}{stance_str}{acts}{cond}{guard}{fd}{held}{delayed}")
     header = f"⚔️ **Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
@@ -3559,7 +3567,8 @@ async def combat_start(interaction: discord.Interaction) -> None:
     _save_encounter(guild, enc)
     await interaction.response.send_message(
         "⚔️ New encounter started. Add combatants with `/combat join` (your character) "
-        "or `/combat add` (an NPC), then `/combat next` to begin."
+        "or `/combat add` (an NPC), then `/combat next` to begin.\n"
+        "Players end their turn with `/combat turn done`."
     )
     await _combat_log(guild, "--- Encounter started ---")
 
@@ -3606,7 +3615,7 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
         reflexes=rec.character.reflexes,
     ))
     _save_encounter(guild, enc)
-    await interaction.response.send_message(_render_encounter(enc))
+    await interaction.response.send_message(_render_encounter(enc, guild))
     await _combat_log(guild, f"Joined: {rec.character.name} (Init {result.total})")
 
 
@@ -3641,7 +3650,7 @@ async def combat_add(
     ))
     guild = str(interaction.guild_id)
     _save_encounter(guild, enc)
-    await interaction.response.send_message(_render_encounter(enc))
+    await interaction.response.send_message(_render_encounter(enc, guild))
     await _combat_log(guild, f"Added NPC: {name} (Init {result.total})")
 
 
@@ -3665,7 +3674,7 @@ async def combat_next(interaction: discord.Interaction) -> None:
     reminders = condition_effects.condition_reminders(current.conditions)
     if reminders:
         parts.append("\n".join(reminders))
-    parts.append(_render_encounter(enc))
+    parts.append(_render_encounter(enc, guild))
     await interaction.response.send_message("\n\n".join(parts))
     if enc.round != prev_round:
         await _combat_log(guild, f"--- Round {enc.round} ---")
@@ -3684,7 +3693,7 @@ async def combat_status(interaction: discord.Interaction) -> None:
             "No encounter here. Start one with `/combat start`.", ephemeral=True
         )
         return
-    await interaction.response.send_message(_render_encounter(enc))
+    await interaction.response.send_message(_render_encounter(enc, str(interaction.guild_id)))
 
 
 @combat_group.command(name="remove", description="Remove a combatant from initiative.")
@@ -3698,8 +3707,9 @@ async def combat_remove(interaction: discord.Interaction, name: str) -> None:
     if enc is None or not enc.remove(name):
         await interaction.response.send_message(f"No combatant named **{name}** here.", ephemeral=True)
         return
-    _save_encounter(str(interaction.guild_id), enc)
-    await interaction.response.send_message(f"Removed **{name}**.\n\n{_render_encounter(enc)}")
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
+    await interaction.response.send_message(f"Removed **{name}**.\n\n{_render_encounter(enc, guild)}")
 
 
 @combat_group.command(name="end", description="End the encounter in this channel.")
@@ -3791,8 +3801,9 @@ async def combat_npc(interaction: discord.Interaction, name: str) -> None:
         is_npc=True,
         reflexes=rec.character.reflexes,
     ))
-    _save_encounter(str(interaction.guild_id), enc)
-    await interaction.response.send_message(_render_encounter(enc))
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
+    await interaction.response.send_message(_render_encounter(enc, guild))
 
 
 _CONDITION_CHOICES = [
@@ -3828,9 +3839,10 @@ async def combat_condition_set(
         await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
         return
     c.conditions.add(condition.value)
-    _save_encounter(str(interaction.guild_id), enc)
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
     await interaction.response.send_message(
-        f"**{c.name}** is now **{condition.name}**.\n\n{_render_encounter(enc)}"
+        f"**{c.name}** is now **{condition.name}**.\n\n{_render_encounter(enc, guild)}"
     )
     await _combat_log(str(interaction.guild_id), f"Condition: {c.name} +{condition.name}")
 
@@ -3862,9 +3874,10 @@ async def combat_condition_clear(
         await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
         return
     c.conditions.discard(condition.value)
-    _save_encounter(str(interaction.guild_id), enc)
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
     await interaction.response.send_message(
-        f"**{c.name}** is no longer **{condition.name}**.\n\n{_render_encounter(enc)}"
+        f"**{c.name}** is no longer **{condition.name}**.\n\n{_render_encounter(enc, guild)}"
     )
     await _combat_log(str(interaction.guild_id), f"Condition: {c.name} -{condition.name}")
 
@@ -6374,8 +6387,9 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
         is_npc=True,
         reflexes=rec.creature.air,
     ))
-    _save_encounter(str(interaction.guild_id), enc)
-    await interaction.response.send_message(_render_encounter(enc))
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
+    await interaction.response.send_message(_render_encounter(enc, guild))
 
 
 @combat_group.command(
@@ -6424,7 +6438,7 @@ async def combat_room(interaction: discord.Interaction) -> None:
         parts.append("Skipped (no active character): " + ", ".join(skipped))
     if not added and not skipped:
         parts.append("No members in this room.")
-    parts.append(_render_encounter(enc))
+    parts.append(_render_encounter(enc, guild))
     await interaction.response.send_message("\n".join(parts))
     for entry in added:
         await _combat_log(guild, f"Room join: {entry}")
@@ -8462,9 +8476,10 @@ async def combat_init(
         cur = enc.current()
         if cur is not None:
             enc.turn_index = enc.combatants.index(cur)
-    _save_encounter(str(interaction.guild_id), enc)
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
     await interaction.response.send_message(
-        f"**{cb.name}** initiative {old} → **{value}**\n{_render_encounter(enc)}"
+        f"**{cb.name}** initiative {old} → **{value}**\n{_render_encounter(enc, guild)}"
     )
 
 
@@ -8487,10 +8502,11 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
         return
     cb.held = not cb.held
-    _save_encounter(str(interaction.guild_id), enc)
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
     status = "holding" if cb.held else "no longer holding"
-    await interaction.response.send_message(f"**{cb.name}** is {status} their action.\n{_render_encounter(enc)}")
-    await _combat_log(str(interaction.guild_id), f"Hold: {cb.name} {'held' if cb.held else 'released'}")
+    await interaction.response.send_message(f"**{cb.name}** is {status} their action.\n{_render_encounter(enc, guild)}")
+    await _combat_log(guild, f"Hold: {cb.name} {'held' if cb.held else 'released'}")
 
 
 @combat_turn.command(name="delay", description="Mark a combatant as delaying (Fortune).")
@@ -8523,11 +8539,12 @@ async def combat_delay(
             cur = enc.current()
             if cur is not None:
                 enc.turn_index = enc.combatants.index(cur)
-    _save_encounter(str(interaction.guild_id), enc)
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
     status = "delaying" if cb.delayed else "no longer delaying"
     init_note = f" (init → {cb.initiative})" if new_initiative is not None and cb.delayed else ""
-    await interaction.response.send_message(f"**{cb.name}** is {status}{init_note}.\n{_render_encounter(enc)}")
-    await _combat_log(str(interaction.guild_id), f"Delay: {cb.name} {'delayed' if cb.delayed else 'released'}{init_note}")
+    await interaction.response.send_message(f"**{cb.name}** is {status}{init_note}.\n{_render_encounter(enc, guild)}")
+    await _combat_log(guild, f"Delay: {cb.name} {'delayed' if cb.delayed else 'released'}{init_note}")
 
 
 @combat_turn.command(name="act", description="A held/delayed combatant takes their action now (Fortune).")
@@ -8555,11 +8572,72 @@ async def combat_act(interaction: discord.Interaction, name: str) -> None:
     cb.held = False
     cb.delayed = False
     cb.actions_used = 0
-    _save_encounter(str(interaction.guild_id), enc)
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
     await interaction.response.send_message(
-        f"**{cb.name}** acts now (was {was}).\n{_render_encounter(enc)}"
+        f"**{cb.name}** acts now (was {was}).\n{_render_encounter(enc, guild)}"
     )
-    await _combat_log(str(interaction.guild_id), f"Act: {cb.name} (was {was})")
+    await _combat_log(guild, f"Act: {cb.name} (was {was})")
+
+
+@combat_turn.command(name="done", description="End your turn (or a named combatant's turn). Advances to the next combatant.")
+@app_commands.describe(name="Combatant whose turn to end (Fortune only). Omit to end your own character's turn.")
+@app_commands.autocomplete(name=_combatant_autocomplete)
+async def combat_turn_done(
+    interaction: discord.Interaction,
+    name: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None or not enc.combatants:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    if not enc.started:
+        await interaction.response.send_message("Encounter has not started yet. Use `/combat next` to begin.", ephemeral=True)
+        return
+    current = enc.current()
+    if current is None:
+        await interaction.response.send_message("No current combatant.", ephemeral=True)
+        return
+    is_dm = _is_dm(interaction)
+    if name is not None:
+        if not is_dm:
+            await interaction.response.send_message(
+                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to end another combatant's turn.", ephemeral=True
+            )
+            return
+        if current.name.lower() != name.lower():
+            await interaction.response.send_message(
+                f"It is not **{name}**'s turn. Current turn: **{current.name}**.", ephemeral=True
+            )
+            return
+    else:
+        uid = str(interaction.user.id)
+        if current.owner_id != uid and not is_dm:
+            await interaction.response.send_message(
+                f"It is not your turn. Current turn: **{current.name}**.", ephemeral=True
+            )
+            return
+    ended_name = current.name
+    prev_round = enc.round
+    next_cb = enc.advance()
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
+    mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
+    parts = [f"**{ended_name}**'s turn is done."]
+    parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
+    reminders = condition_effects.condition_reminders(next_cb.conditions)
+    if reminders:
+        parts.append("\n".join(reminders))
+    parts.append(_render_encounter(enc, guild))
+    await interaction.response.send_message("\n\n".join(parts))
+    if enc.round != prev_round:
+        await _combat_log(guild, f"--- Round {enc.round} ---")
+    await _combat_log(guild, f"Turn done: {ended_name}")
+    cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
+    await _combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
 
 
 @combat_turn.command(name="surprise", description="Toggle the surprise round flag on the current encounter (Fortune).")
@@ -8575,9 +8653,10 @@ async def combat_surprise(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     enc.surprise_round = not enc.surprise_round
-    _save_encounter(str(interaction.guild_id), enc)
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
     state = "ON" if enc.surprise_round else "OFF"
-    await interaction.response.send_message(f"Surprise round: **{state}**\n{_render_encounter(enc)}")
+    await interaction.response.send_message(f"Surprise round: **{state}**\n{_render_encounter(enc, guild)}")
 
 
 # ---------------------------------------------------------------------------
