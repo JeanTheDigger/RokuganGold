@@ -8658,7 +8658,7 @@ async def taint_command(
     c = rec.character
     if add is not None:
         old_taint = c.taint
-        c.taint = max(0.0, c.taint + add)
+        c.taint = max(0.0, c.taint + add * 0.1)
         store.save(rec)
         crossing = taint.check_threshold_crossing(old_taint, c.taint, c)
         embed = discord.Embed(title=f"Taint: {c.name}", color=discord.Color.dark_purple())

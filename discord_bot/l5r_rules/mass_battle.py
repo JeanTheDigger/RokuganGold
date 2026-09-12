@@ -18,10 +18,10 @@ from .dice import DiceEngine
 
 ENGAGEMENT_LEVELS = {
     "reserves": {"name": "Reserves", "description": "Safe behind the lines. No combat this round. No Glory gain."},
-    "disengaged": {"name": "Disengaged", "description": "Light skirmishing at the edges. Minor combat (1 opponent). Small Glory gain (+0.1)."},
-    "engaged": {"name": "Engaged", "description": "In the thick of battle. Full combat (2-3 opponents). Normal Glory gain (+0.3)."},
-    "heavily_engaged": {"name": "Heavily Engaged", "description": "Intense fighting against elite opponents. High risk (3-5 opponents). Significant Glory (+0.5)."},
-    "heroic": {"name": "Heroic Opportunity", "description": "Face-to-face with the enemy commander or a dramatic turning point. Glory (+1.0) if successful. Failure may mean death."},
+    "disengaged": {"name": "Disengaged", "description": "Light skirmishing at the edges. Minor combat (1 opponent). +1 Glory point."},
+    "engaged": {"name": "Engaged", "description": "In the thick of battle. Full combat (2-3 opponents). +3 Glory points."},
+    "heavily_engaged": {"name": "Heavily Engaged", "description": "Intense fighting against elite opponents. High risk (3-5 opponents). +5 Glory points."},
+    "heroic": {"name": "Heroic Opportunity", "description": "Face-to-face with the enemy commander or a dramatic turning point. +10 Glory points if successful. Failure may mean death."},
 }
 
 
