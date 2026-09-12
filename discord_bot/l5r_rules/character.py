@@ -98,6 +98,9 @@ class Character:
     #    DM refreshes via /dm new_day. Empty dict = not yet tracked. --
     spell_slots: dict[str, int] = field(default_factory=dict)
 
+    # -- Inventory (general items: traveling pack, clothing, scrolls, etc.) --
+    inventory: list[str] = field(default_factory=list)
+
     # -- Money --
     koku: float = 0.0
 

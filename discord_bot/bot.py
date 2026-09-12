@@ -241,6 +241,8 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         extras.append(f"**Taint:** {c.taint:g}")
     if c.koku:
         extras.append(f"**Koku:** {c.koku:g}")
+    if c.inventory:
+        extras.append("**Inventory:** " + ", ".join(c.inventory))
     if c.notes:
         extras.append(f"*{c.notes}*")
     if extras:
@@ -1728,6 +1730,19 @@ def _apply_numeric_field(c: Character, field: str, value: float) -> None:
         c.armor_reduction = max(0, int(value))
 
 
+def _check_insight_rank_advance(c: Character) -> str:
+    new_rank = stats.insight_rank(c)
+    if new_rank <= c.school_rank:
+        return ""
+    old = c.school_rank
+    c.school_rank = new_rank
+    return (
+        f"\n\U0001F393 **School Rank {old} → {new_rank}!** "
+        f"(Insight {stats.insight(c)}). "
+        f"Use `/sheet learn` to learn your Rank {new_rank} technique."
+    )
+
+
 # ===========================================================================
 # /sheet group
 # ===========================================================================
@@ -2058,6 +2073,8 @@ async def _show_confirmation(interaction: discord.Interaction, state: dict) -> N
             bits.append(f"{len(report['skills'])} school skills")
         if report and report.get("wildcards"):
             bits.append("choose: " + "; ".join(report["wildcards"]))
+        if report and report.get("outfit"):
+            bits.append(f"Outfit: {len(report['outfit'])} items")
         if state.get("different_school"):
             bits.append("**Different School** advantage recorded")
         if state.get("heritage_result"):
@@ -2065,7 +2082,7 @@ async def _show_confirmation(interaction: discord.Interaction, state: dict) -> N
         summary = ", ".join(bits) + "." if bits else ""
         await btn_inter.response.edit_message(
             content=f"Created **{state['name']}** and set as active. {summary}\n"
-                    f"Use `/school learn` to record your Rank-1 technique.",
+                    f"Use `/sheet learn` to record your Rank-1 technique.",
             embed=build_sheet_embed(record), view=None,
         )
 
@@ -2264,10 +2281,11 @@ async def sheet_trait(
         await interaction.response.send_message(err, ephemeral=True)
         return
     rec.character.set_trait(trait.value, value)
+    rank_msg = _check_insight_rank_advance(rec.character)
     store.save(rec)
     label = "Void" if trait.value == "void" else trait.value.capitalize()
     await interaction.response.send_message(
-        f"Set **{label}** to **{value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
+        f"Set **{label}** to **{value}** on **{rec.character.name}**.{rank_msg}", embed=build_sheet_embed(rec)
     )
 
 
@@ -2297,6 +2315,7 @@ async def sheet_skill(
     else:
         rec.character.skills[skill_name] = rank
         msg = f"Set **{skill_name}** to rank **{rank}** on **{rec.character.name}**."
+    msg += _check_insight_rank_advance(rec.character)
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
@@ -2442,6 +2461,35 @@ async def sheet_armor(
         c.armor_reduction = spec["reduction"]
         heavy = " (heavy)" if spec["is_heavy"] else ""
         msg = f"**{c.name}** equips **{a}**{heavy}: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+@sheet.command(name="item", description="Add or remove an item from your inventory (Traveling Pack, Jade, etc.).")
+@app_commands.describe(name="Item name.", remove="Remove it instead of adding.", member="Target player (Fortune).")
+async def sheet_item(
+    interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    item_name = name.strip()
+    if remove:
+        low = item_name.lower()
+        found = [i for i in c.inventory if i.lower() == low]
+        if not found:
+            await interaction.response.send_message(f"**{c.name}** doesn't have **{item_name}** in inventory.", ephemeral=True)
+            return
+        c.inventory.remove(found[0])
+        msg = f"Removed **{found[0]}** from **{c.name}**'s inventory."
+    else:
+        c.inventory.append(item_name)
+        msg = f"Added **{item_name}** to **{c.name}**'s inventory."
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
@@ -2790,6 +2838,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/check social / craft / lore", "Social, Craft, or Lore"),
         ("/check poison / medicine", "Poison resistance or Medicine"),
         ("/check horsemanship", "Mounted maneuver check"),
+        ("/check cooperative", "Cooperative check: helpers assist primary"),
     ]),
     ("\U0001fa78", "Damage, Healing & Taint", "Manage character health.", [
         ("/dm damage", "Apply damage to a character"),
@@ -4940,6 +4989,120 @@ async def skill_check(
 
 
 # ===========================================================================
+# /check cooperative — RAW L5R 4e cooperative/assisted skill checks
+# ===========================================================================
+@check.command(
+    name="cooperative",
+    description="Cooperative check: helpers roll Skill/Trait at TN+5; each success gives primary +1k0 (cap = Void Ring).",
+)
+@app_commands.describe(
+    name="Primary character making the check.",
+    trait="Trait for the roll (kept dice).",
+    skill="Skill name (e.g. 'Athletics').",
+    tn="Target Number for the primary check.",
+    helpers="Helper characters (comma-separated names, e.g. 'Akodo Toturi, Bayushi Shoju').",
+    member="Player making the check (uses their active character).",
+    is_npc="Primary character is an NPC.",
+    bonus="Flat bonus to the primary roll.",
+    reason="Label shown with the roll.",
+)
+@app_commands.choices(trait=_CONTEST_TRAITS)
+@app_commands.autocomplete(skill=_skill_autocomplete)
+async def check_cooperative(
+    interaction: discord.Interaction,
+    name: str,
+    trait: app_commands.Choice[str],
+    skill: str,
+    tn: app_commands.Range[int, 1, 200],
+    helpers: str,
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+    reason: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
+        return
+    c = rec.character
+    tv = _trait_value(c, trait.value)
+    sk = c.skills.get(skill, 0)
+    wp = stats.wound_penalty(c)
+    max_helpers = c.void_ring
+    helper_names = [h.strip() for h in helpers.split(",") if h.strip()]
+    if not helper_names:
+        await interaction.response.send_message("Provide at least one helper name.", ephemeral=True)
+        return
+    helper_tn = tn + 5
+    helper_lines: list[str] = []
+    successes = 0
+    for hname in helper_names:
+        hrec = _resolve_duelist(guild, interaction.channel_id, hname, False, None)
+        if hrec is None:
+            hrec = store.get_by_name(guild, NPC_OWNER, hname)
+        if hrec is None:
+            helper_lines.append(f"❌ **{hname}** — not found")
+            continue
+        hc = hrec.character
+        htv = _trait_value(hc, trait.value)
+        hsk = hc.skills.get(skill, 0)
+        hwp = stats.wound_penalty(hc)
+        hresult = combat.resolve_skill_check(htv, hsk, helper_tn, engine, bonus=hwp)
+        mark = "✅" if hresult["success"] else "❌"
+        helper_lines.append(
+            f"{mark} **{hc.name}** rolled **{hresult['total']}** vs TN {helper_tn} "
+            f"({hresult['rolled']}k{hresult['kept']})"
+        )
+        if hresult["success"]:
+            successes += 1
+    applied = min(successes, max_helpers)
+    extra_rolled = applied
+    result = combat.resolve_skill_check(tv + extra_rolled, sk, tn, engine, bonus=bonus + wp)
+    result["rolled"] = tv + sk + extra_rolled
+    result["kept"] = tv
+    skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
+    title = "\U0001F91D Cooperative Check"
+    if reason:
+        title += f" — {reason}"
+    embed = discord.Embed(
+        title=f"{title} — {c.name}",
+        color=discord.Color.green() if result["success"] else discord.Color.greyple(),
+    )
+    embed.add_field(
+        name="Helpers",
+        value="\n".join(helper_lines) + f"\n**{applied}** of {len(helper_names)} succeeded "
+              f"(cap {max_helpers} = Void Ring)",
+        inline=False,
+    )
+    wp_str = f" {wp}" if wp else ""
+    bonus_str = f" {bonus:+d}" if bonus else ""
+    coop_str = f" +{extra_rolled}k0 assist" if extra_rolled else ""
+    embed.add_field(
+        name="Primary Roll",
+        value=(
+            f"{skill_label}/{trait.name} ({result['rolled']}k{result['kept']}"
+            f"{wp_str}{bonus_str}{coop_str}) vs TN **{tn}**"
+        ),
+        inline=False,
+    )
+    embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
+    verdict = "✅ **Success!**" if result["success"] else "❌ **Failure.**"
+    embed.add_field(
+        name="Result",
+        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
 # /stealth — Stealth/Agility check (Phase 37)
 # ===========================================================================
 @check.command(
@@ -5311,6 +5474,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/sheet trait / skill / set", "Set Traits, skills, or numeric fields."),
         ("/sheet wound / heal", "Apply or heal wounds."),
         ("/sheet equip / wield / armor", "Manage gear and equipment."),
+        ("/sheet item", "Add or remove inventory items (Traveling Pack, Jade, etc.)."),
         ("/sheet advantage / disadvantage", "Record advantages or disadvantages."),
         ("/sheet kata learn / activate", "Record or activate Kata."),
         ("/sheet kiho learn / activate", "Record or activate Kiho."),
@@ -5344,6 +5508,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/check craft / lore", "Craft/Intelligence or Lore/Intelligence."),
         ("/check poison / medicine", "Poison resistance or Medicine check."),
         ("/check horsemanship", "Horsemanship/Agility (mounted maneuver)."),
+        ("/check cooperative", "Cooperative check: helpers roll at TN+5, success gives +1k0."),
     ]),
     ("Combat", [
         ("/combat attack", "Attack a character, NPC, or creature."),
@@ -6654,10 +6819,11 @@ async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[
     advancement.apply_trait_raise(c, trait.value)
     c.xp -= cost
     c.xp_spent += cost
+    rank_msg = _check_insight_rank_advance(c)
     store.save(rec)
     await interaction.response.send_message(
         f"\U0001F300 **{c.name}** raises **{label}** to rank **{new_rank}** for **{cost}** XP.\n"
-        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}", embed=build_sheet_embed(rec))
+        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}", embed=build_sheet_embed(rec))
 
 
 @sheet_xp.command(name="skill", description="Spend XP to raise or learn a Skill (RAW: new rank x1).")
@@ -6685,10 +6851,11 @@ async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[s
     advancement.apply_skill_raise(c, skill_name)
     c.xp -= cost
     c.xp_spent += cost
+    rank_msg = _check_insight_rank_advance(c)
     store.save(rec)
     await interaction.response.send_message(
         f"\U0001F4D8 **{c.name}** raises **{skill_name}** to rank **{new_rank}** for **{cost}** XP.\n"
-        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}", embed=build_sheet_embed(rec))
+        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}", embed=build_sheet_embed(rec))
 
 
 @sheet_xp.command(name="emphasis", description="Spend 2 XP to add a Skill Emphasis (max ceil(rank/2) per skill).")

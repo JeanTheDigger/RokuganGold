@@ -169,4 +169,34 @@ def apply_to_character(character, school: dict) -> dict:
                 lst.append(emph)
                 report["emphases"].append(f"{name} ({emph})")
     report["wildcards"] = wildcards
+
+    outfit_items = apply_outfit(character, school.get("outfit", ""))
+    report["outfit"] = outfit_items
     return report
+
+
+def apply_outfit(character, outfit: str) -> list[str]:
+    """Parse a school outfit string and apply items to the character.
+    Returns list of applied/recorded items for reporting."""
+    if not outfit or not outfit.strip():
+        return []
+    applied: list[str] = []
+    for raw in _split_commas(outfit):
+        item = raw.strip()
+        if not item:
+            continue
+        low = item.lower()
+        m_koku = re.match(r"(\d+(?:\.\d+)?)\s+koku", low)
+        if m_koku:
+            character.koku += float(m_koku.group(1))
+            applied.append(item)
+            continue
+        if low == "daisho":
+            for w in ("Katana", "Wakizashi"):
+                if w not in character.weapons:
+                    character.weapons.append(w)
+            applied.append("Daisho (Katana + Wakizashi)")
+            continue
+        character.inventory.append(item)
+        applied.append(item)
+    return applied
