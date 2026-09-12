@@ -1632,6 +1632,19 @@ async def attack(
     d_stance_explicit = defender_stance.value if defender_stance else None
     man = maneuver.value if maneuver else "none"
 
+    # Early encounter/combatant lookup for action economy enforcement.
+    enc = encounters.get(interaction.channel_id)
+    atk_combatant = enc.find(attacker_rec.character.name) if enc else None
+
+    # Action economy (s40): attack is a Complex Action — requires full action budget.
+    if atk_combatant is not None and atk_combatant.actions_used > 0:
+        await interaction.response.send_message(
+            f"**{atk_combatant.name}** has already used actions this turn ({atk_combatant.actions_used}/2). "
+            f"Use `/combat action reset` to override.",
+            ephemeral=True,
+        )
+        return
+
     if target_creature_rec is not None and man in ("disarm", "knockdown"):
         await interaction.response.send_message(
             "Disarm/Knockdown aren't supported against creatures yet: use a plain attack or Feint.",
@@ -1645,16 +1658,13 @@ async def attack(
         )
         return
     if man == "extra_attack":
-        enc = encounters.get(interaction.channel_id)
-        if enc:
-            atk_c = enc.find(attacker_rec.character.name)
-            if atk_c and "extra_attack" in atk_c.used_this_turn:
-                await interaction.response.send_message(
-                    "Extra Attack can only be used once per Turn.", ephemeral=True
-                )
-                return
-            if atk_c:
-                atk_c.used_this_turn.add("extra_attack")
+        if atk_combatant and "extra_attack" in atk_combatant.used_this_turn:
+            await interaction.response.send_message(
+                "Extra Attack can only be used once per Turn.", ephemeral=True
+            )
+            return
+        if atk_combatant:
+            atk_combatant.used_this_turn.add("extra_attack")
     maneuver_raises = combat.MANEUVER_RAISES.get(man, 0)
 
     # Void Point spend: +1k1 on the attack roll (decrement the pool now).
@@ -1677,8 +1687,6 @@ async def attack(
     kata_notes: list[str] = []          # effects auto-applied to this roll
     rl_used_notes: list[str] = []       # rate-limited effects already spent this Turn/Round
     attacker = attacker_rec.character
-    enc = encounters.get(interaction.channel_id)
-    atk_combatant = enc.find(attacker.name) if enc else None
     atk_init = atk_combatant.initiative if atk_combatant else None
     def_combatant = enc.find(target_rec.character.name) if (enc and target_rec is not None) else None
     def_init = def_combatant.initiative if def_combatant else None
@@ -1931,7 +1939,9 @@ async def attack(
             inline=False,
         )
 
-    if center_line and enc:
+    if atk_combatant is not None:
+        atk_combatant.actions_used = 2
+    if enc and atk_combatant is not None:
         _save_encounter(guild, enc)
 
     cs_raises = raises if man == "called_shot" else 0
@@ -4187,11 +4197,21 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
         }
         await interaction.response.send_message(f"**{g.name}**: {reasons[g.stance]}", ephemeral=True)
         return
+    if g.actions_used >= 2:
+        await interaction.response.send_message(
+            f"**{g.name}** has no actions remaining this turn ({g.actions_used}/2). "
+            f"Use `/combat action reset` to override.",
+            ephemeral=True,
+        )
+        return
     g.guarding = w.name
+    g.actions_used += 1
+    remaining = 2 - g.actions_used
     _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(
         f"🛡️ **{g.name}** is guarding **{w.name}**.\n"
         f"  Ward: +10 Armor TN · Guarder: −5 Armor TN\n"
+        f"  Simple Action ({remaining} action{'s' if remaining != 1 else ''} remaining).\n"
         f"  Expires at the start of {g.name}'s next turn."
     )
     await _combat_log(str(interaction.guild_id), f"Guard: {g.name} guards {w.name}")
@@ -4224,6 +4244,13 @@ async def combat_full_defense(
     if cb is None:
         await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
         return
+    if cb.actions_used > 0:
+        await interaction.response.send_message(
+            f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
+            f"Use `/combat action reset` to override.",
+            ephemeral=True,
+        )
+        return
     ref = reflexes
     def_sk = defense_skill
     if ref is None or def_sk is None:
@@ -4247,6 +4274,7 @@ async def combat_full_defense(
     result = combat.roll_full_defense(ref, def_sk, engine)
     cb.full_defense_bonus = result["bonus"]
     cb.stance = "full_defense"
+    cb.actions_used = 2
     _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(
         f"🛡️ **{cb.name}** enters **Full Defense**.\n"
