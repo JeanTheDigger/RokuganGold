@@ -1,4 +1,4 @@
-"""Derived character values — pure functions over a Character.
+"""Derived character values: pure functions over a Character.
 
 Faithful port of the relevant parts of `simulation/character_stats.gd` and
 `simulation/wound_system.gd`:
@@ -12,7 +12,7 @@ Faithful port of the relevant parts of `simulation/character_stats.gd` and
 
 Known simplifications vs the GDScript (documented, not silent):
   - PERMANENT_WOUND advantage floor (min NICKED) IS now applied in
-    wound_level_index() — characters with the disadvantage are always at
+    wound_level_index(): characters with the disadvantage are always at
     least at the Nicked wound level.
   - Insight omits the Skill Mastery / Courtier insight bonuses (no s24 mastery
     engine here). The core formula is exact.

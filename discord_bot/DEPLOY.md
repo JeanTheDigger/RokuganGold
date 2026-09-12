@@ -15,16 +15,16 @@ ssh root@96.30.196.68
 ```
 
 It will ask for the password from your Vultr dashboard. Type it (nothing shows
-while you type — that's normal) and press Enter.
+while you type: that's normal) and press Enter.
 
 Once you're in, get the bot code onto the server. **Pick one method:**
 
-**Method A — Clone from GitHub (if the repo is public or you have a token):**
+**Method A: Clone from GitHub (if the repo is public or you have a token):**
 ```bash
 git clone https://github.com/jeanthedigger/rokugangold.git /tmp/rokugangold
 ```
 
-**Method B — Upload from your computer (if the repo is private):**
+**Method B: Upload from your computer (if the repo is private):**
 
 Open a *second* terminal on your own computer (not the server) and run:
 ```bash
@@ -54,7 +54,7 @@ It will:
 - Set up daily database backups
 - Turn on the firewall
 
-When it says **"SUCCESS! The bot is running."** — you're done. Go to Discord
+When it says **"SUCCESS! The bot is running."**: you're done. Go to Discord
 and try `/ping`.
 
 ---
@@ -99,7 +99,7 @@ Start it again with `systemctl start rokugan-bot`.
 
 When you have new code to deploy:
 
-### Option A — If you cloned from GitHub
+### Option A: If you cloned from GitHub
 ```bash
 ssh root@96.30.196.68
 cd /home/rokugan/bot
@@ -109,7 +109,7 @@ sudo -u rokugan .venv/bin/pip install -r requirements.txt
 systemctl restart rokugan-bot
 ```
 
-### Option B — Upload new files
+### Option B: Upload new files
 From your computer:
 ```bash
 scp -r discord_bot/*.py root@96.30.196.68:/home/rokugan/bot/
@@ -172,9 +172,9 @@ systemctl status rokugan-bot
 journalctl -u rokugan-bot -n 50
 ```
 Common causes:
-- **Bad token** — check `.env` has the right token
-- **Server rebooted** — the bot should auto-start, but check with `systemctl status`
-- **Python error** — the logs will show the traceback
+- **Bad token**: check `.env` has the right token
+- **Server rebooted**: the bot should auto-start, but check with `systemctl status`
+- **Python error**: the logs will show the traceback
 
 ### "Commands aren't showing up"
 After the first deploy, Discord can take up to 1 hour to sync global commands.

@@ -98,7 +98,7 @@ def defender_armor_tn_mod(
 ) -> tuple[int, list[str]]:
     """(modifier, notes) added to the defender's normal Armor TN.
 
-    Separate from overrides — these stack with the normal formula."""
+    Separate from overrides: these stack with the normal formula."""
     mod = 0
     notes: list[str] = []
 

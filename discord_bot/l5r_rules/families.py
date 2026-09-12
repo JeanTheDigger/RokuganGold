@@ -1,4 +1,4 @@
-"""Access helpers for the family catalog — lookup, search, and apply to character."""
+"""Access helpers for the family catalog: lookup, search, and apply to character."""
 
 from __future__ import annotations
 

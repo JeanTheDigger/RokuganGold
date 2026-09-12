@@ -17,7 +17,7 @@ Auto-applied (12 effects across 10 entries):
 Reminder-only (not auto-applied):
   Quick (Initiative re-add needs Reactions Stage), Prodigy (school-skill
   detection not modelled), Sacred Weapons (weapon identity not tracked beyond
-  name), Crab Hands (unskilled fallback — edge case), Blind movement penalty,
+  name), Crab Hands (unskilled fallback: edge case), Blind movement penalty,
   Small movement penalty, Lame, Missing Limb, Weakness (trait-specific needs
   parameterised storage), Momoku/Consumed/Failure of Bushido (Void-spend
   restrictions need per-spend gating), Doubt (skill-specific needs parameterised
@@ -154,7 +154,7 @@ def post_kill_heal(attacker: Character) -> tuple[int, list[str]]:
 
 
 def permanent_wound_floor(character: Character) -> tuple[bool, str]:
-    """(True, note) if the character has Permanent Wound — their first wound
+    """(True, note) if the character has Permanent Wound: their first wound
     rank is always considered full, meaning they are always at least Nicked."""
     if _has_disadv(character, "Permanent Wound"):
         return True, "Permanent Wound: always at least Nicked"

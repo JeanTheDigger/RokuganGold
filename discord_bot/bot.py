@@ -1,8 +1,8 @@
-"""Rokugan L5R 4e Discord bot — entry point.
+"""Rokugan L5R 4e Discord bot: entry point.
 
 Permission model: two Discord roles gate access.
-  - **Fortune** — DM commands (combat, NPCs, encounters, skill checks, etc.)
-  - **Kami**    — everything Fortune can do + server admin (log channel, etc.)
+  - **Fortune**: DM commands (combat, NPCs, encounters, skill checks, etc.)
+  - **Kami**: everything Fortune can do + server admin (log channel, etc.)
 Players without either role can only manage their own character sheets and
 use reference commands (spells, weapons, schools).
 
@@ -179,11 +179,11 @@ def _format_traits(c: Character) -> str:
         return f"{a.capitalize()} {c.get_trait(a)} / {b.capitalize()} {c.get_trait(b)}"
 
     return (
-        f"🌪️ Air — {pair('reflexes', 'awareness')}\n"
-        f"⛰️ Earth — {pair('stamina', 'willpower')}\n"
-        f"🔥 Fire — {pair('agility', 'intelligence')}\n"
-        f"💧 Water — {pair('strength', 'perception')}\n"
-        f"🌀 Void — {c.void_ring}"
+        f"🌪️ Air: {pair('reflexes', 'awareness')}\n"
+        f"⛰️ Earth: {pair('stamina', 'willpower')}\n"
+        f"🔥 Fire: {pair('agility', 'intelligence')}\n"
+        f"💧 Water: {pair('strength', 'perception')}\n"
+        f"🌀 Void: {c.void_ring}"
     )
 
 
@@ -197,7 +197,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
 
     subtitle_bits = [b for b in (c.clan, c.family, c.school) if b]
     school_line = f"{c.school_type} School" + (f" (Rank {c.school_rank})" if c.school_rank else "")
-    header = " · ".join(subtitle_bits) if subtitle_bits else "—"
+    header = " · ".join(subtitle_bits) if subtitle_bits else " "
     npc_tag = "🎭 **NPC**\n" if c.is_npc else ""
     embed.description = f"{npc_tag}{header}\n{school_line}"
 
@@ -249,7 +249,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         inline=False,
     )
 
-    gear = f"Armor: {c.armor_name or '—'}  (TN +{c.armor_tn_bonus}, Reduction {c.armor_reduction})"
+    gear = f"Armor: {c.armor_name or ' '}  (TN +{c.armor_tn_bonus}, Reduction {c.armor_reduction})"
     if c.equipped_weapon:
         wield = c.equipped_weapon
         if c.off_hand_weapon:
@@ -284,33 +284,33 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
 
     extras = []
     if c.techniques:
-        extras.append("**Techniques:** " + ", ".join(c.techniques))
+        extras.append("**Techniques: ** " + ", ".join(c.techniques))
     if c.katas:
         act = (c.active_kata or "").lower()
-        extras.append("**Kata:** " + ", ".join(
+        extras.append("**Kata: ** " + ", ".join(
             (f"⚑{k}" if k.lower() == act else k) for k in c.katas))
     if c.kiho:
         active_kiho = [a.lower() for a in getattr(c, "active_kiho", [])]
-        extras.append("**Kiho:** " + ", ".join(
+        extras.append("**Kiho: ** " + ", ".join(
             (f"⚑{k}" if k.lower() in active_kiho else k) for k in c.kiho))
     if c.emphases:
-        extras.append("**Emphases:** " + ", ".join(
+        extras.append("**Emphases: ** " + ", ".join(
             f"{sk} ({', '.join(em)})" for sk, em in sorted(c.emphases.items()) if em))
     if c.spells_known:
-        extras.append("**Spells:** " + ", ".join(c.spells_known))
+        extras.append("**Spells: ** " + ", ".join(c.spells_known))
     if c.advantages:
-        extras.append("**Advantages:** " + ", ".join(c.advantages))
+        extras.append("**Advantages: ** " + ", ".join(c.advantages))
     if c.disadvantages:
-        extras.append("**Disadvantages:** " + ", ".join(c.disadvantages))
+        extras.append("**Disadvantages: ** " + ", ".join(c.disadvantages))
     if c.taint > 0:
-        extras.append(f"**Taint:** {c.taint:g}")
+        extras.append(f"**Taint: ** {c.taint:g}")
     if c.koku:
-        extras.append(f"**Koku:** {c.koku:g}")
+        extras.append(f"**Koku: ** {c.koku:g}")
     if c.inventory:
         inv_parts = []
         for iname, qty in sorted(c.inventory.items()):
             inv_parts.append(f"{iname} ×{qty}" if qty > 1 else iname)
-        extras.append("**Inventory:** " + ", ".join(inv_parts))
+        extras.append("**Inventory: ** " + ", ".join(inv_parts))
     if c.notes:
         extras.append(f"*{c.notes}*")
     if extras:
@@ -329,7 +329,7 @@ def build_creature_embed(record: storage.CreatureRecord) -> discord.Embed:
     )
     embed = discord.Embed(title=f"👹 {cr.name}", color=color)
     tags = f" · {', '.join(cr.tags)}" if cr.tags else ""
-    embed.description = f"Creature — *{cr.template_id}*{tags}"
+    embed.description = f"Creature: *{cr.template_id}*{tags}"
     embed.add_field(
         name="Rings",
         value=f"Air **{cr.air}** · Earth **{cr.earth}** · Fire **{cr.fire}** · Water **{cr.water}**",
@@ -346,10 +346,10 @@ def build_creature_embed(record: storage.CreatureRecord) -> discord.Embed:
         ),
         inline=False,
     )
-    thr = ", ".join(str(t) for t in cr.wound_thresholds) if cr.wound_thresholds else "—"
+    thr = ", ".join(str(t) for t in cr.wound_thresholds) if cr.wound_thresholds else " "
     embed.add_field(
         name="Wounds",
-        value=f"**{lvl}** — {cr.wounds_taken} / {cr.wounds_dead} (dead)\nthresholds: {thr}"
+        value=f"**{lvl}**: {cr.wounds_taken} / {cr.wounds_dead} (dead)\nthresholds: {thr}"
         + ("  💀 **SLAIN**" if dead else ""),
         inline=False,
     )
@@ -403,16 +403,16 @@ async def whoami(interaction: discord.Interaction) -> None:
     pen = stats.wound_penalty(c)
     cap = stats.total_wound_capacity(c)
     ring_str = " · ".join(f"{r.capitalize()} **{v}**" for r, v in rings.items())
-    wound_str = f"**{lvl}**" + (f" ({pen} penalty)" if pen else "") + f" — {c.wounds_taken}/{cap}"
+    wound_str = f"**{lvl}**" + (f" ({pen} penalty)" if pen else "") + f": {c.wounds_taken}/{cap}"
     if pen:
         wound_str = f"⚠️ {wound_str}"
     vp_str = f"{c.current_void_points}/{c.max_void_points} VP"
-    header = " · ".join(b for b in (c.clan, c.school) if b) or "—"
+    header = " · ".join(b for b in (c.clan, c.school) if b) or " "
     water = stats.water_ring(c)
     move_str = f"Move: {water * 5} ft (Free) / {water * 10} ft (Simple)"
     track = _wound_track(c)
     lines = [
-        f"**{c.name}** — {header} (Rank {stats.insight_rank(c)})",
+        f"**{c.name}**: {header} (Rank {stats.insight_rank(c)})",
         f"Rings: {ring_str}",
         f"Wounds: {wound_str}  ·  {vp_str}",
         track,
@@ -443,13 +443,13 @@ async def whoami(interaction: discord.Interaction) -> None:
         for cb in enc.combatants:
             if cb.owner_id == uid and cb.name.lower() == c.name.lower():
                 conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "none"
-                lines.append(f"In combat — conditions: {conds}")
+                lines.append(f"In combat: conditions: {conds}")
                 break
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
 def _format_dice(result: DiceResult) -> str:
-    kept = " + ".join(f"**{d}**" for d in result.kept_dice) or "—"
+    kept = " + ".join(f"**{d}**" for d in result.kept_dice) or " "
     total_kept = sum(result.kept_dice)
     line = f"[{kept}] = **{total_kept}**"
     if result.dropped_dice:
@@ -495,7 +495,7 @@ def _delete_encounter(channel_id: int) -> None:
     rolled="Number of dice to ROLL (the X in XkY).",
     kept="Number of dice to KEEP (the Y in XkY).",
     tn="Optional Target Number to test against.",
-    raises="Called Raises — each adds +5 to the TN (default 0).",
+    raises="Called Raises: each adds +5 to the TN (default 0).",
     bonus="Flat modifier added to the total (default 0).",
     emphasis="Emphasis: reroll any initial 1 once (default off).",
     unskilled="Unskilled roll: dice do NOT explode (default off).",
@@ -513,7 +513,7 @@ async def roll(
     reason: str | None = None,
 ) -> None:
     explodes = not unskilled
-    title = "🎲 Roll & Keep" + (f" — {reason}" if reason else "")
+    title = "🎲 Roll & Keep" + (f": {reason}" if reason else "")
 
     if tn is not None:
         outcome = engine.roll_check(rolled, kept, tn, raises, bonus, explodes, emphasis)
@@ -532,7 +532,7 @@ async def roll(
         verdict = "✅ **Success**" if success else "❌ **Failure**"
         embed.add_field(
             name="Total",
-            value=f"**{outcome['total']}** vs TN {outcome['tn']} — {verdict} (margin {outcome['margin']:+d})",
+            value=f"**{outcome['total']}** vs TN {outcome['tn']}: {verdict} (margin {outcome['margin']:+d})",
             inline=False,
         )
     else:
@@ -596,7 +596,7 @@ async def dice_quick(
     if rolled < 1 or rolled > 100 or kept < 1 or kept > 100:
         await interaction.response.send_message("Rolled and kept must be 1-100.", ephemeral=True)
         return
-    title = f"🎲 {rolled}k{kept}" + (f"{bonus:+d}" if bonus else "") + (f" — {reason}" if reason else "")
+    title = f"🎲 {rolled}k{kept}" + (f"{bonus:+d}" if bonus else "") + (f": {reason}" if reason else "")
     if tn is not None:
         outcome = engine.roll_check(rolled, kept, tn, 0, bonus, True, False)
         result = outcome["dice"]
@@ -608,7 +608,7 @@ async def dice_quick(
         verdict = "✅ **Success**" if success else "❌ **Failure**"
         embed.add_field(
             name="Total",
-            value=f"**{outcome['total']}** vs TN {outcome['tn']} — {verdict} (margin {outcome['margin']:+d})",
+            value=f"**{outcome['total']}** vs TN {outcome['tn']}: {verdict} (margin {outcome['margin']:+d})",
             inline=False,
         )
     else:
@@ -625,7 +625,7 @@ async def dice_quick(
 
 
 # ===========================================================================
-# /attack — combat with DM-authorized damage
+# /attack: combat with DM-authorized damage
 # ===========================================================================
 _ATTACKER_STANCES = [
     app_commands.Choice(name="Attack", value="attack"),
@@ -744,7 +744,7 @@ async def _school_autocomplete(
 async def _basic_school_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
-    """Starting Schools only — for character creation / NPC generation.
+    """Starting Schools only: for character creation / NPC generation.
     Advanced Schools and Alternate Paths are transitions, not starting Schools."""
     cur = current.lower().strip()
     out = [app_commands.Choice(name=s["name"], value=s["name"]) for s in schools.basic() if cur in s["name"].lower()]
@@ -945,7 +945,7 @@ class DamageView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
-            f"🛡️ {interaction.user.display_name} denied the effect — "
+            f"🛡️ {interaction.user.display_name} denied the effect:"
             f"no damage applied to **{self.target_name}**."
         )
 
@@ -1129,7 +1129,7 @@ class DamageView(discord.ui.View):
                 applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
                 void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
             elif void_reduce:
-                void_line = "\n🔮 No Void Points available — full damage applied"
+                void_line = "\n🔮 No Void Points available: full damage applied"
             store.save(target_rec)
             embed = discord.Embed(
                 title="🗡️ Disarm",
@@ -1232,7 +1232,7 @@ class DamageView(discord.ui.View):
             applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
             void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
         elif void_reduce:
-            void_line = "\n🔮 No Void Points available — full damage applied"
+            void_line = "\n🔮 No Void Points available: full damage applied"
         heal_line = ""
         if applied["is_dead"]:
             heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
@@ -1321,14 +1321,14 @@ class DamageView(discord.ui.View):
         outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, engine)
         hit = outcome["hit"]
         embed2 = discord.Embed(
-            title="⚔️ Extra Attack — 2nd strike",
+            title="⚔️ Extra Attack: 2nd strike",
             color=discord.Color.green() if hit else discord.Color.light_grey(),
         )
         embed2.add_field(
             name="Attack Roll",
             value=f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
                   f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
-                  f" — {'**HIT**' if hit else 'miss'}",
+                  f": {'**HIT**' if hit else 'miss'}",
             inline=False,
         )
         if hit:
@@ -1360,14 +1360,14 @@ class DamageView(discord.ui.View):
         outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, engine)
         hit = outcome["hit"]
         embed2 = discord.Embed(
-            title="⚔️ Extra Attack — 2nd strike",
+            title="⚔️ Extra Attack: 2nd strike",
             color=discord.Color.green() if hit else discord.Color.light_grey(),
         )
         embed2.add_field(
             name="Attack Roll",
             value=f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
                   f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
-                  f" — {'**HIT**' if hit else 'miss'}",
+                  f": {'**HIT**' if hit else 'miss'}",
             inline=False,
         )
         if hit:
@@ -1405,7 +1405,7 @@ class DamageView(discord.ui.View):
 def _rate_status(combatant, key: str, scope: str) -> str:
     """Gate a once-per-Turn/Round kata against the live encounter tracker.
 
-    Returns 'apply' (available — and marks it spent), 'used' (already spent this
+    Returns 'apply' (available: and marks it spent), 'used' (already spent this
     Turn/Round), or 'untracked' (no encounter is tracking this attacker, so the
     limit can't be enforced and the effect stays a DM-adjudicated reminder)."""
     if combatant is None:
@@ -1423,13 +1423,13 @@ def _active_ability_reminders(c: Character, role: str, drop_rate_limited: bool =
     kata_text = kata_effects.active_kata_reminder(c)
     if kata_text and not (drop_rate_limited and kata_effects.is_rate_limited(c.active_kata)):
         active = c.active_kata
-        lines.append(f"**{role.capitalize()} kata — {active}:** {kata_text}")
+        lines.append(f"**{role.capitalize()} kata: {active}: ** {kata_text}")
     for name in getattr(c, "active_kiho", []) or []:
         if kiho_effects.is_auto(name):
             continue
         rec = kiho.get(name)
         effect = rec["effect"] if rec else ""
-        lines.append(f"**{role.capitalize()} kiho — {name}:** {effect}")
+        lines.append(f"**{role.capitalize()} kiho: {name}: ** {effect}")
     return lines
 
 
@@ -1444,7 +1444,7 @@ _MANEUVER_CHOICES = [
 
 
 # ===========================================================================
-# /combat group — initiative tracker
+# /combat group: initiative tracker
 # ===========================================================================
 combat_group = app_commands.Group(name="combat", description="Track combat initiative and turn order.")
 combat_condition = app_commands.Group(name="condition", description="Apply, clear, or view conditions.", parent=combat_group)
@@ -1464,8 +1464,8 @@ combat_battle = app_commands.Group(name="battle", description="Mass Battle syste
     target_creature="Attack a spawned creature by name (instead of a player).",
     attacker_npc="Attack WITH a stored NPC instead of your own character (Fortune).",
     weapon="Weapon for this attack. Defaults to your wielded weapon (`/sheet wield`), else katana.",
-    raises="Called Raises — each adds +5 to the target's Armor TN.",
-    increased_damage="Increased Damage raises — each adds +5 TN AND +1 damage die on a hit.",
+    raises="Called Raises: each adds +5 to the target's Armor TN.",
+    increased_damage="Increased Damage raises: each adds +5 TN AND +1 damage die on a hit.",
     maneuver="A combat maneuver (its raise cost is added to the TN automatically).",
     spend_void="Spend a Void Point for +1k1 on the attack roll (RAW: not valid on damage).",
     attacker_stance="Your stance (Full Attack = +2k1 to hit).",
@@ -1558,7 +1558,7 @@ async def attack(
 
     if target_creature_rec is not None and man in ("disarm", "knockdown"):
         await interaction.response.send_message(
-            "Disarm/Knockdown aren't supported against creatures yet — use a plain attack or Feint.",
+            "Disarm/Knockdown aren't supported against creatures yet: use a plain attack or Feint.",
             ephemeral=True,
         )
         return
@@ -1614,7 +1614,7 @@ async def attack(
     rate_limited_handled = atk_combatant is not None and kata_effects.is_rate_limited(attacker.active_kata)
 
     # Defender's active kata + known Techniques: stance-conditional Armor TN
-    # bonus (players only — creatures use fixed stat blocks and carry neither).
+    # bonus (players only: creatures use fixed stat blocks and carry neither).
     def_kata_bonus = 0
     if target_creature_rec is None:
         def_kata_bonus, def_note = kata_effects.defender_armor_tn_bonus(
@@ -1665,7 +1665,7 @@ async def attack(
                 kata_notes.append(sia_note)
             elif status == "used":
                 rl_used_notes.append("Strength in Arms already used this Turn.")
-    # Technique trait override (Falcon's Strike: Perception for bow attacks) —
+    # Technique trait override (Falcon's Strike: Perception for bow attacks):
     # only if no kata already replaced the attack Trait.
     if trait_ovr is None:
         to_val, to_name, to_note = technique_effects.attacker_trait_override(attacker, atk_weapon_profile)
@@ -1807,11 +1807,11 @@ async def attack(
     verdict = "✅ **HIT**" if hit else "❌ **MISS**"
     embed.add_field(
         name="Result",
-        value=f"Total **{outcome['roll']}** vs {tn_note} — {verdict} (margin {outcome['margin']:+d})",
+        value=f"Total **{outcome['roll']}** vs {tn_note}: {verdict} (margin {outcome['margin']:+d})",
         inline=False,
     )
     if outcome["unskilled"]:
-        embed.set_footer(text=f"Unskilled in {outcome['skill_name']} — dice did not explode.")
+        embed.set_footer(text=f"Unskilled in {outcome['skill_name']}: dice did not explode.")
 
     if kata_notes:
         embed.add_field(name="⚑ Combat effects (auto-applied)", value=" · ".join(kata_notes)[:1024], inline=False)
@@ -1827,7 +1827,7 @@ async def attack(
     reminders += cond_reminders
     if reminders:
         embed.add_field(
-            name="Active abilities — DM adjudicates",
+            name="Active abilities: DM adjudicates",
             value="\n".join(reminders)[:1024],
             inline=False,
         )
@@ -1918,7 +1918,7 @@ _SET_CHOICES = [app_commands.Choice(name=f, value=f) for f in _SET_FIELDS]
 @sheet.command(name="create", description="Create a new character and make it your active one.")
 @app_commands.describe(
     name="Character name.",
-    school="School (start typing for the catalog — a match auto-fills Benefit, Skills, Honor).",
+    school="School (start typing for the catalog: a match auto-fills Benefit, Skills, Honor).",
     clan="Great/Minor Clan (optional; a catalog school sets this for you).",
     family="Family (optional).",
     school_type="School type (default Bushi; a catalog school sets this for you).",
@@ -1985,7 +1985,7 @@ async def sheet_create(
         if report["wildcards"]:
             bits.append("choose: " + "; ".join(report["wildcards"]))
         content = (
-            f"Created **{name}** ({applied['clan']} {applied['name']}) and set it active — "
+            f"Created **{name}** ({applied['clan']} {applied['name']}) and set it active:"
             + ", ".join(bits)
             + ". `/school learn` to record your Rank-1 technique."
         )
@@ -2001,7 +2001,7 @@ async def sheet_create(
 
 
 # ---------------------------------------------------------------------------
-# /sheet wizard — guided step-by-step character creation
+# /sheet wizard: guided step-by-step character creation
 # ---------------------------------------------------------------------------
 _GREAT_CLANS = ["Crab", "Crane", "Dragon", "Lion", "Mantis", "Phoenix", "Scorpion", "Unicorn"]
 _ALL_SCHOOL_CLANS = sorted({s["clan"] for s in schools.ALL if s.get("category", "basic") == "basic"})
@@ -2009,16 +2009,16 @@ _ALL_SCHOOL_CLANS = sorted({s["clan"] for s in schools.ALL if s.get("category", 
 
 def _wizard_embed(state: dict) -> discord.Embed:
     """Build a progress embed from the wizard state dict."""
-    embed = discord.Embed(title=f"Character Wizard — {state['name']}", color=discord.Color.gold())
+    embed = discord.Embed(title=f"Character Wizard: {state['name']}", color=discord.Color.gold())
     lines: list[str] = []
     if state.get("clan"):
-        lines.append(f"**Clan:** {state['clan']}")
+        lines.append(f"**Clan: ** {state['clan']}")
     if state.get("family_name"):
         fam = families.get(state["family_name"])
         bonus = f" (+1 {fam['bonus_trait'].capitalize()})" if fam else ""
-        lines.append(f"**Family:** {state['family_name']}{bonus}")
+        lines.append(f"**Family: ** {state['family_name']}{bonus}")
     if state.get("heritage_result"):
-        lines.append(f"**Heritage:** {state['heritage_result']}")
+        lines.append(f"**Heritage: ** {state['heritage_result']}")
     if state.get("different_school"):
         lines.append("**Different School** advantage (5 pts)")
     if state.get("school_name"):
@@ -2026,7 +2026,7 @@ def _wizard_embed(state: dict) -> discord.Embed:
         if sch:
             ben = schools.parse_benefit(sch.get("benefit", ""))
             ben_str = f" (+{ben[1]} {ben[0].capitalize()})" if ben else ""
-            lines.append(f"**School:** {sch['name']}{ben_str}")
+            lines.append(f"**School: ** {sch['name']}{ben_str}")
     embed.description = "\n".join(lines) if lines else "Starting..."
     return embed
 
@@ -2047,7 +2047,7 @@ class _ClanSelect(discord.ui.Select):
             view = _WizardView(self.state)
             view.add_item(_FamilySelect(self.state, clan_families))
             await interaction.response.edit_message(
-                content="**Step 2/5** — Choose your Family.",
+                content="**Step 2/5**: Choose your Family.",
                 embed=_wizard_embed(self.state), view=view,
             )
         else:
@@ -2084,7 +2084,7 @@ async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dic
                 await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
                 return
             result = heritage.roll_heritage(clan)
-            state["heritage_result"] = f"{result['name']} — {result['effect']}"
+            state["heritage_result"] = f"{result['name']}: {result['effect']}"
             await _go_to_school_choice(btn_inter, state)
 
         async def on_skip(btn_inter: discord.Interaction) -> None:
@@ -2098,7 +2098,7 @@ async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dic
         view.add_item(roll_btn)
         view.add_item(skip_btn)
         await interaction.response.edit_message(
-            content="**Step 3/5** — Heritage Roll (optional).",
+            content="**Step 3/5**: Heritage Roll (optional).",
             embed=_wizard_embed(state), view=view,
         )
     else:
@@ -2125,7 +2125,7 @@ async def _go_to_school_choice(interaction: discord.Interaction, state: dict) ->
         view2 = _WizardView(state)
         view2.add_item(_SchoolClanSelect(state))
         await btn_inter.response.edit_message(
-            content="**Step 4/5** — Pick the clan whose school you want to attend.",
+            content="**Step 4/5**: Pick the clan whose school you want to attend.",
             embed=_wizard_embed(state), view=view2,
         )
 
@@ -2135,7 +2135,7 @@ async def _go_to_school_choice(interaction: discord.Interaction, state: dict) ->
     view.add_item(diff_btn)
     step = "4/5" if state["clan"] in heritage.HERITAGE_TABLES else "3/5"
     await interaction.response.edit_message(
-        content=f"**Step {step}** — Same-clan school or Different School?",
+        content=f"**Step {step}**: Same-clan school or Different School?",
         embed=_wizard_embed(state), view=view,
     )
 
@@ -2164,7 +2164,7 @@ async def _show_school_select(interaction: discord.Interaction, state: dict, sch
     view = _WizardView(state)
     view.add_item(_SchoolSelect(state, basic_schools))
     await interaction.response.edit_message(
-        content=f"**Step 5/5** — Choose your School ({school_clan}).",
+        content=f"**Step 5/5**: Choose your School ({school_clan}).",
         embed=_wizard_embed(state), view=view,
     )
 
@@ -2176,7 +2176,7 @@ class _SchoolSelect(discord.ui.Select):
         for s in school_list[:25]:
             kw = ", ".join(s.get("keywords", []))
             ben = s.get("benefit", "")[:50]
-            desc = f"{kw} — {ben}" if kw else ben
+            desc = f"{kw}: {ben}" if kw else ben
             options.append(discord.SelectOption(label=s["name"][:100], description=desc[:100]))
         super().__init__(placeholder="Choose your School...", options=options)
 
@@ -2257,7 +2257,7 @@ async def _show_confirmation(interaction: discord.Interaction, state: dict) -> N
     if applied:
         schools.apply_to_character(preview_char, applied)
     preview_embed = _wizard_embed(state)
-    preview_embed.title = f"Confirm — {state['name']}"
+    preview_embed.title = f"Confirm: {state['name']}"
     preview_embed.color = discord.Color.green()
     if state.get("heritage_result"):
         preview_embed.add_field(name="Heritage", value=state["heritage_result"][:1024], inline=False)
@@ -2299,7 +2299,7 @@ async def sheet_wizard(
     view = _WizardView(state)
     view.add_item(_ClanSelect(state))
     await interaction.response.send_message(
-        content="**Step 1/5** — Choose your Clan.",
+        content="**Step 1/5**: Choose your Clan.",
         embed=_wizard_embed(state), view=view,
     )
 
@@ -2354,7 +2354,7 @@ async def sheet_list(interaction: discord.Interaction, member: discord.Member | 
         return
     lines = [
         f"{'▶️ ' if r.id == active_id else '• '}**{r.character.name}** "
-        f"— {r.character.clan or '—'} {r.character.school_type}"
+        f": {r.character.clan or ' '} {r.character.school_type}"
         for r in records
     ]
     await interaction.response.send_message(
@@ -2624,7 +2624,7 @@ async def sheet_equip(
     else:
         if w not in combat.WEAPON_CATALOG:
             await interaction.response.send_message(
-                f"Unknown weapon **{weapon}** — see `/weapon list`.", ephemeral=True
+                f"Unknown weapon **{weapon}**: see `/weapon list`.", ephemeral=True
             )
             return
         if w not in [x.lower() for x in c.weapons]:
@@ -2635,7 +2635,7 @@ async def sheet_equip(
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
-@sheet.command(name="wield", description="Set the weapon(s) you're wielding — /attack's default weapon and defender Kata gates (s30).")
+@sheet.command(name="wield", description="Set the weapon(s) you're wielding:/attack's default weapon and defender Kata gates (s30).")
 @app_commands.describe(
     weapon="Main-hand weapon (start typing for suggestions).",
     off_hand="Off-hand weapon, e.g. wakizashi for a daisho. Blank clears the off hand.",
@@ -2797,7 +2797,7 @@ async def sheet_koku(
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
-@sheet.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free — no XP).")
+@sheet.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free: no XP).")
 @app_commands.describe(name="Advantage name.", remove="Remove it instead.", member="Target player (Fortune).")
 @app_commands.autocomplete(name=_advantage_autocomplete)
 async def sheet_advantage(
@@ -2824,7 +2824,7 @@ async def sheet_advantage(
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
-@sheet.command(name="disadvantage", description="Record (or remove) a Disadvantage on your sheet (grants XP — DM /xp grant).")
+@sheet.command(name="disadvantage", description="Record (or remove) a Disadvantage on your sheet (grants XP: DM /xp grant).")
 @app_commands.describe(name="Disadvantage name.", remove="Remove it instead.", member="Target player (Fortune).")
 @app_commands.autocomplete(name=_disadvantage_autocomplete)
 async def sheet_disadvantage(
@@ -2846,13 +2846,13 @@ async def sheet_disadvantage(
     else:
         if canonical.lower() not in [x.lower() for x in c.disadvantages]:
             c.disadvantages.append(canonical)
-        grant = f" (grants {dis['points']} XP — a DM applies it with `/xp grant`)" if dis and dis["points"] else ""
+        grant = f" (grants {dis['points']} XP: a DM applies it with `/xp grant`)" if dis and dis["points"] else ""
         msg = f"**{c.name}** takes the disadvantage **{canonical}**{grant}."
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
-@sheet_kata_grp.command(name="learn", description="Record (or remove) a Kata on your sheet (free — no XP; use /sheet xp kata to buy).")
+@sheet_kata_grp.command(name="learn", description="Record (or remove) a Kata on your sheet (free: no XP; use /sheet xp kata to buy).")
 @app_commands.describe(name="Kata name.", remove="Remove it instead.", member="Target player (Fortune).")
 @app_commands.autocomplete(name=_kata_autocomplete)
 async def sheet_kata(
@@ -2879,7 +2879,7 @@ async def sheet_kata(
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
-@sheet_kiho_grp.command(name="learn", description="Record (or remove) a Kiho on your sheet (free — no XP; use /sheet xp kiho to buy).")
+@sheet_kiho_grp.command(name="learn", description="Record (or remove) a Kiho on your sheet (free: no XP; use /sheet xp kiho to buy).")
 @app_commands.describe(name="Kiho name.", remove="Remove it instead.", member="Target player (Fortune).")
 @app_commands.autocomplete(name=_kiho_autocomplete)
 async def sheet_kiho(
@@ -2906,7 +2906,7 @@ async def sheet_kiho(
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
-@sheet_kata_grp.command(name="activate", description="Set your active Kata (Simple Action; only one active — s30). Blank name drops it.")
+@sheet_kata_grp.command(name="activate", description="Set your active Kata (Simple Action; only one active: s30). Blank name drops it.")
 @app_commands.describe(
     name="A Kata your character knows. Leave blank to drop the active Kata.",
     member="Target player (Fortune).",
@@ -2936,7 +2936,7 @@ async def sheet_kata_activate(
     canonical = k["name"] if k else name.strip()
     if canonical.lower() not in [x.lower() for x in c.katas]:
         await interaction.response.send_message(
-            f"**{c.name}** hasn't learned the Kata **{canonical}** — add it with `/sheet kata` "
+            f"**{c.name}** hasn't learned the Kata **{canonical}**: add it with `/sheet kata` "
             f"or buy it with `/xp kata`.", ephemeral=True,
         )
         return
@@ -2944,14 +2944,14 @@ async def sheet_kata_activate(
     store.save(rec)
     note = (
         "" if kata_effects.is_auto(canonical)
-        else " *(its effect is DM-adjudicated — shown as a reminder on attacks.)*"
+        else " *(its effect is DM-adjudicated: shown as a reminder on attacks.)*"
     )
     await interaction.response.send_message(
         f"🥋 **{c.name}** assumes the Kata **{canonical}**.{note}", embed=build_sheet_embed(rec)
     )
 
 
-@sheet_kiho_grp.command(name="activate", description="Activate/deactivate a Kiho (one Internal/Kharmic/Mystical; Martial stacks — s38).")
+@sheet_kiho_grp.command(name="activate", description="Activate/deactivate a Kiho (one Internal/Kharmic/Mystical; Martial stacks: s38).")
 @app_commands.describe(
     name="A Kiho your character knows.",
     off="Deactivate it instead.",
@@ -2980,7 +2980,7 @@ async def sheet_kiho_activate(
         return
     if canonical.lower() not in [x.lower() for x in c.kiho]:
         await interaction.response.send_message(
-            f"**{c.name}** hasn't learned the Kiho **{canonical}** — add it with `/sheet kiho` "
+            f"**{c.name}** hasn't learned the Kiho **{canonical}**: add it with `/sheet kiho` "
             f"or buy it with `/xp kiho`.", ephemeral=True,
         )
         return
@@ -3003,7 +3003,7 @@ async def sheet_kiho_activate(
     tlabel = h["type"] if h and h.get("type") else "Kiho"
     await interaction.response.send_message(
         f"✋ **{c.name}** activates the {tlabel} Kiho **{canonical}**{replaced}. "
-        f"*(Activation cost — a Void Point or Meditation/Void roll — and duration are "
+        f"*(Activation cost: a Void Point or Meditation/Void roll: and duration are "
         f"DM-adjudicated; its combat effect is shown as a reminder on attacks.)*",
         embed=build_sheet_embed(rec),
     )
@@ -3071,14 +3071,14 @@ async def sheet_heal(
 # ===========================================================================
 # /dm group
 # ===========================================================================
-dm = app_commands.Group(name="dm", description="DM tools — requires the Fortune role (or Kami for admin commands).")
+dm = app_commands.Group(name="dm", description="DM tools: requires the Fortune role (or Kami for admin commands).")
 dm_creature = app_commands.Group(name="creature", description="Spawn and run bestiary creatures.", parent=dm)
 dm_npc = app_commands.Group(name="npc", description="Generate and manage NPC characters.", parent=dm)
 dm_room = app_commands.Group(name="room", description="Create private play rooms and invite people.", parent=dm)
 
 
 # ---------------------------------------------------------------------------
-# /dm wizard — interactive DM command menu
+# /dm wizard: interactive DM command menu
 # ---------------------------------------------------------------------------
 _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("\U0001f3ad", "Session & World", "Manage your game session and world state.", [
@@ -3191,7 +3191,7 @@ class _DmWizardCatSelect(discord.ui.Select):
         for cmd, hint in commands:
             lines.append(f"`{cmd}`\n {hint}")
         embed.add_field(name="Commands", value="\n".join(lines), inline=False)
-        embed.set_footer(text="Type any command in the chat bar — Discord will autocomplete the parameters.")
+        embed.set_footer(text="Type any command in the chat bar: Discord will autocomplete the parameters.")
         view = discord.ui.View(timeout=300)
         back_btn = discord.ui.Button(label="Back to categories", style=discord.ButtonStyle.secondary)
 
@@ -3213,7 +3213,7 @@ class _DmWizardCatSelect(discord.ui.Select):
         await interaction.response.edit_message(content=None, embed=embed, view=view)
 
 
-@dm.command(name="wizard", description="Interactive command menu — browse all Fortune and Kami actions by category.")
+@dm.command(name="wizard", description="Interactive command menu: browse all Fortune and Kami actions by category.")
 async def dm_wizard_cmd(interaction: discord.Interaction) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -3237,7 +3237,7 @@ async def dm_wizard_cmd(interaction: discord.Interaction) -> None:
     )
 
 
-@dm.command(name="party", description="DM overview — all active PCs on this server.")
+@dm.command(name="party", description="DM overview: all active PCs on this server.")
 async def party_overview(interaction: discord.Interaction) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -3258,9 +3258,9 @@ async def party_overview(interaction: discord.Interaction) -> None:
         lvl = stats.wound_level_name(c)
         pen = stats.wound_penalty(c)
         cap = stats.total_wound_capacity(c)
-        wound_str = f"{lvl}" + (f" ({pen})" if pen else "") + f" — {c.wounds_taken}/{cap}"
+        wound_str = f"{lvl}" + (f" ({pen})" if pen else "") + f": {c.wounds_taken}/{cap}"
         vp_str = f"VP {c.current_void_points}/{c.max_void_points}"
-        header = " · ".join(b for b in (c.clan, c.school) if b) or "—"
+        header = " · ".join(b for b in (c.clan, c.school) if b) or " "
         val_parts = [
             f"{header} (Rank {stats.insight_rank(c)})",
             f"Rings: {ring_str}",
@@ -3297,12 +3297,12 @@ async def dm_roles(interaction: discord.Interaction) -> None:
         members = [m.mention for m in kami_role.members]
         lines.append(f"**{ROLE_KAMI}** (admin): {', '.join(members) if members else 'nobody'}")
     else:
-        lines.append(f"**{ROLE_KAMI}** role not found — create it in Server Settings > Roles.")
+        lines.append(f"**{ROLE_KAMI}** role not found: create it in Server Settings > Roles.")
     if fortune_role:
         members = [m.mention for m in fortune_role.members]
         lines.append(f"**{ROLE_FORTUNE}** (DM): {', '.join(members) if members else 'nobody'}")
     else:
-        lines.append(f"**{ROLE_FORTUNE}** role not found — create it in Server Settings > Roles.")
+        lines.append(f"**{ROLE_FORTUNE}** role not found: create it in Server Settings > Roles.")
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
@@ -3347,7 +3347,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         )
         slots_str += f", Bonus {c.void_spell_bonus}"
         parts.append(f"slots: {slots_str}")
-        lines.append(f"**{c.name}** — {' · '.join(parts)}")
+        lines.append(f"**{c.name}**: {' · '.join(parts)}")
     embed = discord.Embed(
         title="New Day",
         description="\n".join(lines),
@@ -3417,7 +3417,7 @@ async def dm_damage(
     c = rec.character
     wl = stats.wound_level_name(c)
     embed = discord.Embed(
-        title=f"💥 Pending damage — {c.name}",
+        title=f"💥 Pending damage: {c.name}",
         color=discord.Color.orange(),
     )
     embed.add_field(
@@ -3474,7 +3474,7 @@ async def dm_heal(
         return
     wl = stats.wound_level_name(c)
     embed = discord.Embed(
-        title=f"💚 Pending healing — {c.name}",
+        title=f"💚 Pending healing: {c.name}",
         color=discord.Color.teal(),
     )
     embed.add_field(
@@ -3537,12 +3537,12 @@ def _render_encounter(enc: encounter.Encounter) -> str:
         fd = f"  🛡️FD+{c.full_defense_bonus}" if c.full_defense_bonus else ""
         held = "  ⏸️HELD" if c.held else ""
         delayed = "  ⏳DELAYED" if c.delayed else ""
-        lines.append(f"{marker}**{c.name}**{tag} — init **{c.initiative}**{detail}{stance_str}{acts}{cond}{guard}{fd}{held}{delayed}")
+        lines.append(f"{marker}**{c.name}**{tag}: init **{c.initiative}**{detail}{stance_str}{acts}{cond}{guard}{fd}{held}{delayed}")
     header = f"⚔️ **Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
     if not enc.started:
-        header = "⚔️ **Not started** — use `/combat next` to begin."
+        header = "⚔️ **Not started**: use `/combat next` to begin."
         if enc.surprise_round:
             header += " *(Surprise Round)*"
     return header + "\n" + "\n".join(lines)
@@ -3728,7 +3728,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    title = f"⚔️ Combat Summary — Round {enc.round}"
+    title = f"⚔️ Combat Summary: Round {enc.round}"
     if enc.surprise_round:
         title += " (Surprise)"
     embed = discord.Embed(title=title, color=discord.Color.dark_red())
@@ -3742,7 +3742,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             tn = combat.armor_tn(c, cb.stance)
             pen_str = f" ⚠️ **{pen} penalty**" if pen else ""
             vp = f"{c.current_void_points}/{c.max_void_points} VP"
-            conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "—"
+            conds = ", ".join(sorted(cb.conditions)) if cb.conditions else " "
             fd = f", FD+{cb.full_defense_bonus}" if cb.full_defense_bonus else ""
             guard = f", guarding {cb.guarding}" if cb.guarding else ""
             held = ", HELD" if cb.held else ""
@@ -3755,7 +3755,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
                 f"Conditions: {conds}{fd}{guard}{held}{delayed}"
             )
         else:
-            conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "—"
+            conds = ", ".join(sorted(cb.conditions)) if cb.conditions else " "
             value = f"*(no sheet)* · Conditions: {conds}"
         marker = "▶️ " if (enc.started and cb is enc.current()) else ""
         embed.add_field(
@@ -3987,14 +3987,14 @@ async def combat_full_defense(
         f"🛡️ **{cb.name}** enters **Full Defense**.\n"
         f"  Roll: {result['rolled']}k{result['kept']} → **{result['total']}** · "
         f"half (rounded up) = **+{result['bonus']} Armor TN**\n"
-        f"  Complex Action — only Free Actions until next turn.\n"
+        f"  Complex Action: only Free Actions until next turn.\n"
         f"  Expires at the start of {cb.name}'s next turn."
     )
     await _combat_log(str(interaction.guild_id), f"Full Defense: {cb.name} (+{result['bonus']} Armor TN)")
 
 
 # ===========================================================================
-# /grapple group — grappling subsystem (s40)
+# /grapple group: grappling subsystem (s40)
 # ===========================================================================
 
 
@@ -4090,7 +4090,7 @@ async def grapple_initiate(
     embed.add_field(
         name="Grapple Attack (Jiujutsu/Agility)",
         value=f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
-              f" — {'**GRAPPLED**' if hit else 'miss'}"
+              f": {'**GRAPPLED**' if hit else 'miss'}"
               f"\n({outcome['rolled']}k{outcome['kept']}, wound penalty {outcome['wound_penalty']})",
         inline=False,
     )
@@ -4159,7 +4159,7 @@ async def grapple_control(
         winner = "Tie (previous controller retains)"
         loser = ""
     embed = discord.Embed(
-        title="🤼 Grapple Control — Contested Jiujutsu/Strength",
+        title="🤼 Grapple Control: Contested Jiujutsu/Strength",
         color=discord.Color.blue(),
     )
     embed.add_field(
@@ -4218,7 +4218,7 @@ async def grapple_hit(
         await interaction.response.send_message(f"No character sheet for **{target}**.", ephemeral=True)
         return
     embed = discord.Embed(
-        title=f"🤼 Grapple Hit — {atk_cb.name} strikes {def_cb.name}",
+        title=f"🤼 Grapple Hit: {atk_cb.name} strikes {def_cb.name}",
         description="Unarmed damage, no attack roll (controller's action).",
         color=discord.Color.orange(),
     )
@@ -4299,7 +4299,7 @@ async def grapple_break(
 
 
 # ===========================================================================
-# /duel group — Iaijutsu dueling (s40)
+# /duel group: Iaijutsu dueling (s40)
 # ===========================================================================
 
 
@@ -4359,11 +4359,11 @@ async def duel_assess(
     elif diff_ab <= -10:
         focus_bonus = f"⚡ **{cb_char.name}** exceeded by {-diff_ab} → **+1k1** on Focus roll."
 
-    embed = discord.Embed(title=f"⚔️ Iaijutsu Duel — Assessment", color=discord.Color.gold())
+    embed = discord.Embed(title=f"⚔️ Iaijutsu Duel: Assessment", color=discord.Color.gold())
 
     def _reveal_text(res, opponent):
         if not res["success"]:
-            return "Failed — no information learned."
+            return "Failed: no information learned."
         reveals = res["reveals"]
         opponent_ir = stats.insight_rank(opponent)
         opponent_iaijutsu = opponent.skills.get("Iaijutsu", 0)
@@ -4375,24 +4375,24 @@ async def duel_assess(
             f"Void Points: **{opponent.current_void_points}**",
             f"Wound Level: **{stats.wound_level_name(opponent)}**",
         ]
-        chosen = available[:reveals]
+        chosen = available[: reveals]
         return "Learned " + str(reveals) + ":\n" + "\n".join(chosen)
 
     embed.add_field(
-        name=f"{ca.name} — Assessment",
+        name=f"{ca.name}: Assessment",
         value=(
             f"{res_a['rolled']}k{res_a['kept']} → **{res_a['total']}** vs TN **{res_a['tn']}**"
-            f" — {'**SUCCESS**' if res_a['success'] else '**FAILED**'}"
+            f": {'**SUCCESS**' if res_a['success'] else '**FAILED**'}"
             + (f" (wound penalty {wp_a})" if wp_a else "")
             + "\n" + _reveal_text(res_a, cb_char)
         ),
         inline=False,
     )
     embed.add_field(
-        name=f"{cb_char.name} — Assessment",
+        name=f"{cb_char.name}: Assessment",
         value=(
             f"{res_b['rolled']}k{res_b['kept']} → **{res_b['total']}** vs TN **{res_b['tn']}**"
-            f" — {'**SUCCESS**' if res_b['success'] else '**FAILED**'}"
+            f": {'**SUCCESS**' if res_b['success'] else '**FAILED**'}"
             + (f" (wound penalty {wp_b})" if wp_b else "")
             + "\n" + _reveal_text(res_b, ca)
         ),
@@ -4461,7 +4461,7 @@ async def duel_focus(
         extra_flat_a=wp_a, extra_flat_b=wp_b,
     )
 
-    embed = discord.Embed(title="⚔️ Iaijutsu Duel — Focus", color=discord.Color.dark_gold())
+    embed = discord.Embed(title="⚔️ Iaijutsu Duel: Focus", color=discord.Color.dark_gold())
     a_mods = []
     b_mods = []
     if a_focus_bonus:
@@ -4475,12 +4475,12 @@ async def duel_focus(
     a_notes = f" ({', '.join(a_mods)})" if a_mods else ""
     b_notes = f" ({', '.join(b_mods)})" if b_mods else ""
     embed.add_field(
-        name=f"{ca.name} — Focus (Iaijutsu/Void)",
+        name=f"{ca.name}: Focus (Iaijutsu/Void)",
         value=f"{result['a_rolled']}k{result['a_kept']}{a_notes} → **{result['a_total']}**",
         inline=True,
     )
     embed.add_field(
-        name=f"{cb_char.name} — Focus (Iaijutsu/Void)",
+        name=f"{cb_char.name}: Focus (Iaijutsu/Void)",
         value=f"{result['b_rolled']}k{result['b_kept']}{b_notes} → **{result['b_total']}**",
         inline=True,
     )
@@ -4489,7 +4489,7 @@ async def duel_focus(
     fs = result["first_striker"]
     if fs == "kharmic":
         outcome = (
-            f"Neither exceeds by 5 — **Kharmic Strike** (simultaneous).\n"
+            f"Neither exceeds by 5: **Kharmic Strike** (simultaneous).\n"
             f"Both attack at the same time; the cause is considered dropped."
         )
     else:
@@ -4505,7 +4505,7 @@ async def duel_focus(
     embed.set_footer(text="Proceed to: /duel strike")
     await interaction.response.send_message(embed=embed)
     if fs == "kharmic":
-        await _combat_log(str(interaction.guild_id), f"Duel Focus: {ca.name} vs {cb_char.name} — Kharmic Strike")
+        await _combat_log(str(interaction.guild_id), f"Duel Focus: {ca.name} vs {cb_char.name}: Kharmic Strike")
     else:
         winner = ca.name if fs == "a" else cb_char.name
         await _combat_log(str(interaction.guild_id), f"Duel Focus: {winner} strikes first (margin {diff})")
@@ -4571,7 +4571,7 @@ async def duel_strike(
     )
     roll_text = (
         f"Iaijutsu/Reflexes: {result['rolled']}k{result['kept']} → **{result['total']}**"
-        f" vs TN **{result['tn']}** — {'**HIT**' if hit else '**MISS**'}"
+        f" vs TN **{result['tn']}**: {'**HIT**' if hit else '**MISS**'}"
     )
     notes = []
     if wound_pen:
@@ -4604,7 +4604,7 @@ async def duel_strike(
 
 
 # ===========================================================================
-# /contest — contested skill checks
+# /contest: contested skill checks
 # ===========================================================================
 _CONTEST_TRAITS = [
     app_commands.Choice(name=("Void" if t == "void" else t.capitalize()), value=t)
@@ -4619,12 +4619,12 @@ def _trait_value(c: Character, name: str) -> int:
 
 
 # ===========================================================================
-# /check group — consolidated skill & trait checks
+# /check group: consolidated skill & trait checks
 # ===========================================================================
 check = app_commands.Group(name="check", description="Skill, Trait, and special checks (L5R 4e).")
 
 # ===========================================================================
-# /ref group — consolidated rules reference & catalog browser
+# /ref group: consolidated rules reference & catalog browser
 # ===========================================================================
 ref = app_commands.Group(name="ref", description="Browse L5R rules reference: weapons, armor, schools, and more.")
 ref_weapon = app_commands.Group(name="weapon", description="Weapon catalog (damage, skill, size).", parent=ref)
@@ -4648,7 +4648,7 @@ ref_heritage = app_commands.Group(name="heritage", description="Heritage table r
     name_b="Second participant name.",
     trait_b="Trait for B.",
     skill_b="Skill name for B.",
-    a_member="First participant (player — uses their active character).",
+    a_member="First participant (player: uses their active character).",
     b_member="Second participant (player).",
     a_is_npc="First participant is an NPC (look up by name, not encounter).",
     b_is_npc="Second participant is an NPC.",
@@ -4703,7 +4703,7 @@ async def contest(
     )
     title = "🎯 Contested Check"
     if reason:
-        title += f" — {reason}"
+        title += f": {reason}"
     if result["winner"] == "a":
         color = discord.Color.green()
         verdict = f"**{ca.name}** wins by {result['margin']}!"
@@ -4743,7 +4743,7 @@ async def contest(
 
 
 # ===========================================================================
-# /fear — Fear check (s40 / creature Fear ratings)
+# /fear: Fear check (s40 / creature Fear ratings)
 # ===========================================================================
 @check.command(
     name="fear",
@@ -4781,7 +4781,7 @@ async def fear_check(
     success = result["success"]
     tn = result["tn"]
     embed = discord.Embed(
-        title=f"😨 Fear Check — {c.name}",
+        title=f"😨 Fear Check: {c.name}",
         color=discord.Color.green() if success else discord.Color.dark_red(),
     )
     wp_str = f" {wp}" if wp else ""
@@ -4798,14 +4798,14 @@ async def fear_check(
     verdict = "✅ **Resists the Fear!**" if success else "❌ **Fails!** Must flee or cower."
     embed.add_field(
         name="Result",
-        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
     await interaction.response.send_message(embed=embed)
 
 
 # ===========================================================================
-# /honor_roll — Honor Roll (L5R 4e core p.214)
+# /honor_roll: Honor Roll (L5R 4e core p.214)
 # ===========================================================================
 @check.command(
     name="honor",
@@ -4842,7 +4842,7 @@ async def honor_roll(
     result = combat.resolve_honor_roll(hr, tn, engine, bonus=bonus)
     success = result["success"]
     embed = discord.Embed(
-        title=f"⚖️ Honor Roll — {c.name}",
+        title=f"⚖️ Honor Roll: {c.name}",
         color=discord.Color.gold() if success else discord.Color.dark_grey(),
     )
     bonus_str = f" {bonus:+d}" if bonus else ""
@@ -4858,14 +4858,14 @@ async def honor_roll(
     verdict = "✅ **Honor holds!**" if success else "❌ **Honor wavers.**"
     embed.add_field(
         name="Result",
-        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
     await interaction.response.send_message(embed=embed)
 
 
 # ===========================================================================
-# /void group — Void Point management
+# /void group: Void Point management
 # ===========================================================================
 
 
@@ -4992,7 +4992,7 @@ async def void_refresh(
             c.current_void_points = min(c.current_void_points + 1, c.max_void_points)
         store.save(rec)
         embed = discord.Embed(
-            title=f"🧘 Meditation — {c.name}",
+            title=f"🧘 Meditation: {c.name}",
             color=discord.Color.teal() if success else discord.Color.greyple(),
         )
         wp_str = f" {wp}" if wp else ""
@@ -5006,7 +5006,7 @@ async def void_refresh(
             embed.add_field(
                 name="Result",
                 value=(
-                    f"**{total}** vs TN {meditation_tn} — ✅ **Success!** Recovers 1 VP.\n"
+                    f"**{total}** vs TN {meditation_tn}: ✅ **Success!** Recovers 1 VP.\n"
                     f"VP: **{c.current_void_points}/{c.max_void_points}**"
                 ),
                 inline=False,
@@ -5015,7 +5015,7 @@ async def void_refresh(
             embed.add_field(
                 name="Result",
                 value=(
-                    f"**{total}** vs TN {meditation_tn} — ❌ **Fails.** No VP recovered.\n"
+                    f"**{total}** vs TN {meditation_tn}: ❌ **Fails.** No VP recovered.\n"
                     f"VP: **{c.current_void_points}/{c.max_void_points}**"
                 ),
                 inline=False,
@@ -5059,7 +5059,7 @@ async def void_status(
     bar_full = "🟣" * c.current_void_points
     bar_empty = "⚫" * (c.max_void_points - c.current_void_points)
     await interaction.response.send_message(
-        f"🌀 **{c.name}** — Void Points: **{c.current_void_points}/{c.max_void_points}**\n"
+        f"🌀 **{c.name}**: Void Points: **{c.current_void_points}/{c.max_void_points}**\n"
         f"  {bar_full}{bar_empty}\n"
         f"  Void Ring: **{c.void_ring}**",
         ephemeral=True,
@@ -5067,7 +5067,7 @@ async def void_status(
 
 
 # ===========================================================================
-# /poison — poison resistance checks
+# /poison: poison resistance checks
 # ===========================================================================
 @check.command(
     name="poison",
@@ -5106,7 +5106,7 @@ async def poison_resist(
     result = combat.resolve_poison_resist(c.stamina, strength, engine, bonus=bonus + wp)
     success = result["success"]
     tn = result["tn"]
-    title = f"☠️ Poison Resistance — {c.name}"
+    title = f"☠️ Poison Resistance: {c.name}"
     if poison_name:
         title += f" vs {poison_name}"
     embed = discord.Embed(
@@ -5127,14 +5127,14 @@ async def poison_resist(
     verdict = "✅ **Resists the poison!**" if success else "❌ **Succumbs!** Apply poison effects."
     embed.add_field(
         name="Result",
-        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
     await interaction.response.send_message(embed=embed)
 
 
 # ===========================================================================
-# /medicine — Medicine/Intelligence checks
+# /medicine: Medicine/Intelligence checks
 # ===========================================================================
 @check.command(
     name="medicine",
@@ -5175,9 +5175,9 @@ async def medicine_check(
     success = result["success"]
     title = "💊 Medicine Check"
     if reason:
-        title += f" — {reason}"
+        title += f": {reason}"
     embed = discord.Embed(
-        title=f"{title} — {c.name}",
+        title=f"{title}: {c.name}",
         color=discord.Color.green() if success else discord.Color.greyple(),
     )
     wp_str = f" {wp}" if wp else ""
@@ -5195,7 +5195,7 @@ async def medicine_check(
     verdict = "✅ **Treatment successful!**" if success else "❌ **Treatment fails.**"
     embed.add_field(
         name="Result",
-        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
     await interaction.response.send_message(embed=embed)
@@ -5217,7 +5217,7 @@ def _build_check_embed(
 ) -> discord.Embed:
     success = result["success"]
     embed = discord.Embed(
-        title=f"{title} — {c_name}",
+        title=f"{title}: {c_name}",
         color=discord.Color.green() if success else discord.Color.greyple(),
     )
     wp_str = f" {wp}" if wp else ""
@@ -5234,14 +5234,14 @@ def _build_check_embed(
     verdict = success_text if success else fail_text
     embed.add_field(
         name="Result",
-        value=f"**{result['total']}** vs TN {result['tn']} — {verdict} (margin {result['margin']:+d})",
+        value=f"**{result['total']}** vs TN {result['tn']}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
     return embed
 
 
 # ===========================================================================
-# /skillcheck — generic Skill/Trait check (Phase 37)
+# /skillcheck: generic Skill/Trait check (Phase 37)
 # ===========================================================================
 @check.command(
     name="skill",
@@ -5256,7 +5256,7 @@ def _build_check_embed(
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (Void Point, advantages, etc.).",
     reason="Label shown with the roll.",
-    secret="Secret roll — result shown only to you (the DM), not the channel.",
+    secret="Secret roll: result shown only to you (the DM), not the channel.",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
 @app_commands.autocomplete(skill=_skill_autocomplete)
@@ -5291,7 +5291,7 @@ async def skill_check(
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "🎯 Skill Check" + (" 🤫" if secret else "")
     if reason:
-        title += f" — {reason}"
+        title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus)
     if not secret:
         _log_roll(interaction.channel_id, c.name, f"{skill}/{trait.name} vs TN {tn}", result["total"])
@@ -5299,7 +5299,7 @@ async def skill_check(
 
 
 # ===========================================================================
-# /check cooperative — RAW L5R 4e cooperative/assisted skill checks
+# /check cooperative: RAW L5R 4e cooperative/assisted skill checks
 # ===========================================================================
 @check.command(
     name="cooperative",
@@ -5358,7 +5358,7 @@ async def check_cooperative(
         if hrec is None:
             hrec = store.get_by_name(guild, NPC_OWNER, hname)
         if hrec is None:
-            helper_lines.append(f"❌ **{hname}** — not found")
+            helper_lines.append(f"❌ **{hname}**: not found")
             continue
         hc = hrec.character
         htv = _trait_value(hc, trait.value)
@@ -5380,9 +5380,9 @@ async def check_cooperative(
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "\U0001F91D Cooperative Check"
     if reason:
-        title += f" — {reason}"
+        title += f": {reason}"
     embed = discord.Embed(
-        title=f"{title} — {c.name}",
+        title=f"{title}: {c.name}",
         color=discord.Color.green() if result["success"] else discord.Color.greyple(),
     )
     embed.add_field(
@@ -5406,14 +5406,14 @@ async def check_cooperative(
     verdict = "✅ **Success!**" if result["success"] else "❌ **Failure.**"
     embed.add_field(
         name="Result",
-        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
     await interaction.response.send_message(embed=embed)
 
 
 # ===========================================================================
-# /stealth — Stealth/Agility check (Phase 37)
+# /stealth: Stealth/Agility check (Phase 37)
 # ===========================================================================
 @check.command(
     name="stealth",
@@ -5426,7 +5426,7 @@ async def check_cooperative(
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (cover, darkness, distractions, etc.).",
     reason="Label (e.g. 'sneaking past the guards').",
-    secret="Secret roll — result shown only to you (the DM).",
+    secret="Secret roll: result shown only to you (the DM).",
 )
 async def stealth_check(
     interaction: discord.Interaction,
@@ -5456,7 +5456,7 @@ async def stealth_check(
     skill_label = f"Stealth {sk}" if sk > 0 else "Stealth (unskilled)"
     title = "🥷 Stealth Check" + (" 🤫" if secret else "")
     if reason:
-        title += f" — {reason}"
+        title += f": {reason}"
     embed = _build_check_embed(
         title, c.name, skill_label, "Agility", result, wp, bonus,
         success_text="✅ **Undetected!**",
@@ -5466,7 +5466,7 @@ async def stealth_check(
 
 
 # ===========================================================================
-# /investigate — Investigation/Perception check (Phase 37)
+# /investigate: Investigation/Perception check (Phase 37)
 # ===========================================================================
 _INVESTIGATION_EMPHASIS = [
     app_commands.Choice(name="Notice (passive alertness)", value="Notice"),
@@ -5482,12 +5482,12 @@ _INVESTIGATION_EMPHASIS = [
 @app_commands.describe(
     name="Character investigating.",
     tn="Target Number.",
-    emphasis="Investigation emphasis (display/reminder — DM adjudicates emphasis reroll).",
+    emphasis="Investigation emphasis (display/reminder: DM adjudicates emphasis reroll).",
     member="Player making the check (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, tools, etc.).",
     reason="Label (e.g. 'searching the crime scene').",
-    secret="Secret roll — result shown only to you (the DM).",
+    secret="Secret roll: result shown only to you (the DM).",
 )
 @app_commands.choices(emphasis=_INVESTIGATION_EMPHASIS)
 async def investigate_check(
@@ -5525,17 +5525,17 @@ async def investigate_check(
     if emp_name:
         title += f" ({emp_name})"
     if reason:
-        title += f" — {reason}"
+        title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, "Perception", result, wp, bonus)
     if has_emphasis:
-        embed.set_footer(text=f"Has {emp_name} emphasis — reroll 1s once (DM adjudicates).")
+        embed.set_footer(text=f"Has {emp_name} emphasis: reroll 1s once (DM adjudicates).")
     elif emp_name:
         embed.set_footer(text=f"No {emp_name} emphasis on sheet.")
     await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 
 # ===========================================================================
-# /social — Social skill checks (Phase 38)
+# /social: Social skill checks (Phase 38)
 # ===========================================================================
 _SOCIAL_SKILLS = [
     app_commands.Choice(name="Courtier (Awareness)", value="Courtier"),
@@ -5601,13 +5601,13 @@ async def social_check(
     trait_display = trait_attr.capitalize()
     title = "🗣️ Social Check"
     if reason:
-        title += f" — {reason}"
+        title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, trait_display, result, wp, bonus)
     await interaction.response.send_message(embed=embed)
 
 
 # ===========================================================================
-# /craft — Artisan & Craft skill checks (Phase 39)
+# /craft: Artisan & Craft skill checks (Phase 39)
 # ===========================================================================
 @check.command(
     name="craft",
@@ -5651,13 +5651,13 @@ async def craft_check(
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "🔨 Craft Check"
     if reason:
-        title += f" — {reason}"
+        title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus)
     await interaction.response.send_message(embed=embed)
 
 
 # ===========================================================================
-# /lore — Lore & Knowledge skill checks (Phase 40)
+# /lore: Lore & Knowledge skill checks (Phase 40)
 # ===========================================================================
 @check.command(
     name="lore",
@@ -5701,13 +5701,13 @@ async def lore_check(
     skill_label = f"{specialty} {sk}" if sk > 0 else f"{specialty} (unskilled)"
     title = "📚 Lore Check"
     if reason:
-        title += f" — {reason}"
+        title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus)
     await interaction.response.send_message(embed=embed)
 
 
 # ===========================================================================
-# /lookup — unified cross-catalog search
+# /lookup: unified cross-catalog search
 # ===========================================================================
 @ref.command(
     name="search",
@@ -5761,16 +5761,16 @@ async def lookup(
         await interaction.response.send_message(f"No results for **{query}**.", ephemeral=True)
         return
 
-    lines = [f"`{cat:10s}` **{name}** — {detail}" for cat, name, detail in results[:25]]
-    extra = f"\n*…{len(results) - 25} more — narrow your search.*" if len(results) > 25 else ""
+    lines = [f"`{cat:10s}` **{name}**: {detail}" for cat, name, detail in results[:25]]
+    extra = f"\n*…{len(results) - 25} more: narrow your search.*" if len(results) > 25 else ""
     await interaction.response.send_message(
-        f"🔎 **{len(results)} result(s) for `{query}`:**\n" + "\n".join(lines) + extra,
+        f"🔎 **{len(results)} result(s) for `{query}`: **\n" + "\n".join(lines) + extra,
         ephemeral=True,
     )
 
 
 # ===========================================================================
-# /help — categorized command reference
+# /help: categorized command reference
 # ===========================================================================
 
 _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
@@ -5803,7 +5803,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/sheet xp grant / balance / trait / skill / ...", "XP and advancement."),
     ]),
     ("DM Management (Fortune/Kami)", [
-        ("/dm wizard", "Interactive command menu — browse all DM actions by category."),
+        ("/dm wizard", "Interactive command menu: browse all DM actions by category."),
         ("/dm roles", "Show who has the Fortune and Kami roles."),
         ("/dm party", "Overview of all active PCs."),
         ("/dm new_day", "Advance to a new day: refresh spell slots & heal all PCs."),
@@ -5888,10 +5888,10 @@ async def help_command(
         for cat_name, cmds in _HELP_CATEGORIES:
             if cat_name == category.value:
                 embed = discord.Embed(
-                    title=f"Rokugan Bot — {cat_name}",
+                    title=f"Rokugan Bot: {cat_name}",
                     color=discord.Color.gold(),
                 )
-                lines = [f"`{cmd}` — {desc}" for cmd, desc in cmds]
+                lines = [f"`{cmd}`: {desc}" for cmd, desc in cmds]
                 embed.description = "\n".join(lines)
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
@@ -5899,7 +5899,7 @@ async def help_command(
         return
 
     embed = discord.Embed(
-        title="Rokugan Bot — Command Reference",
+        title="Rokugan Bot: Command Reference",
         description="Use `/help category:` to expand a section. All game math is L5R 4th Edition RAW.",
         color=discord.Color.gold(),
     )
@@ -5908,12 +5908,12 @@ async def help_command(
         if len(cmds) > 4:
             summary += f" *… +{len(cmds) - 4} more*"
         embed.add_field(name=f"{cat_name} ({len(cmds)})", value=summary, inline=False)
-    embed.set_footer(text="Tip: /help category:Combat — to see all combat commands.")
+    embed.set_footer(text="Tip: /help category:Combat to see all combat commands.")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ===========================================================================
-# /npc group — generate and manage NPC characters (s22.4 templates)
+# /npc group: generate and manage NPC characters (s22.4 templates)
 # ===========================================================================
 
 
@@ -5951,7 +5951,7 @@ async def npc_generate(
     school_skills = [s for s in skills.split(",")] if skills else None
     resolved_type = school_type.value if school_type else "Bushi"
     # A catalog school fills in the concrete skills, honor, clan, and type. The
-    # Benefit is NOT re-applied here — the s22.4 ring bands already reflect it.
+    # Benefit is NOT re-applied here: the s22.4 ring bands already reflect it.
     catalog = schools.get(school) if school else None
     if catalog:
         if not school_skills:
@@ -5979,9 +5979,9 @@ async def npc_generate(
             ephemeral=True,
         )
         return
-    note = f"🎭 Generated **{name}** — a Rank {insight_rank} {char.school_type} NPC (stats have random variance)."
+    note = f"🎭 Generated **{name}**: a Rank {insight_rank} {char.school_type} NPC (stats have random variance)."
     if not school_skills:
-        note += " No skills set — regenerate with `skills:` to give it school skills."
+        note += " No skills set: regenerate with `skills:` to give it school skills."
     await interaction.response.send_message(content=note, embed=build_sheet_embed(rec))
 
 
@@ -6011,11 +6011,11 @@ async def npc_list(interaction: discord.Interaction) -> None:
         )
         return
     lines = [
-        f"• **{r.character.name}** — {r.character.clan or '—'} {r.character.school_type} "
+        f"• **{r.character.name}**: {r.character.clan or ' '} {r.character.school_type} "
         f"(Rank {r.character.school_rank})"
         for r in recs
     ]
-    pages = _paginate(lines, "🎭 **NPCs on this server:**\n")
+    pages = _paginate(lines, "🎭 **NPCs on this server: **\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0])
     else:
@@ -6190,7 +6190,7 @@ async def npc_rename(
 
 
 # ===========================================================================
-# /room group — private-thread play rooms with invites
+# /room group: private-thread play rooms with invites
 # ===========================================================================
 
 
@@ -6240,7 +6240,7 @@ async def room_create(interaction: discord.Interaction, name: app_commands.Range
     )
     await thread.send(
         f"🏮 Welcome to **{name}**. {interaction.user.mention} is the host. "
-        f"Play happens here — `/sheet`, `/roll`, `/attack`, and `/combat` all work inside this room."
+        f"Play happens here:`/sheet`, `/roll`, `/attack`, and `/combat` all work inside this room."
     )
 
 
@@ -6302,9 +6302,9 @@ async def room_members(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(err, ephemeral=True)
         return
     ids = store.list_room_members(rec.id)
-    mentions = ", ".join(f"<@{uid}>" for uid in ids) if ids else "—"
+    mentions = ", ".join(f"<@{uid}>" for uid in ids) if ids else " "
     await interaction.response.send_message(
-        f"🏮 **{rec.name}** — host <@{rec.host_id}>\nMembers: {mentions}", ephemeral=True
+        f"🏮 **{rec.name}**: host <@{rec.host_id}>\nMembers: {mentions}", ephemeral=True
     )
 
 
@@ -6320,11 +6320,11 @@ async def room_list(interaction: discord.Interaction) -> None:
         )
         return
     lines = [
-        f"• <#{r.thread_id}> — **{r.name}** (host <@{r.host_id}>, "
+        f"• <#{r.thread_id}>: **{r.name}** (host <@{r.host_id}>, "
         f"{len(store.list_room_members(r.id))} members)"
         for r in rooms
     ]
-    await interaction.response.send_message("🏮 **Open rooms:**\n" + "\n".join(lines[:40]), ephemeral=True)
+    await interaction.response.send_message("🏮 **Open rooms: **\n" + "\n".join(lines[:40]), ephemeral=True)
 
 
 @dm_room.command(name="close", description="Close this room (archives the thread). Host or Fortune role required.")
@@ -6431,7 +6431,7 @@ async def combat_room(interaction: discord.Interaction) -> None:
 
 
 # ===========================================================================
-# /creature group — bestiary monsters and creature combat
+# /creature group: bestiary monsters and creature combat
 # ===========================================================================
 
 
@@ -6565,7 +6565,7 @@ class SpellDamageView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
-            f"🛡️ {interaction.user.display_name} denied — "
+            f"🛡️ {interaction.user.display_name} denied:"
             f"no spell damage applied to **{self.target_name}**."
         )
 
@@ -6586,11 +6586,11 @@ class SpellDamageView(discord.ui.View):
             applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
             void_line = f"\n🔮 Void Point: **−{void_saved}** wounds ({rec.character.current_void_points} VP left)"
         elif void_reduce:
-            void_line = "\n🔮 No Void Points available — full damage applied"
+            void_line = "\n🔮 No Void Points available: full damage applied"
         store.save(rec)
         c = rec.character
         embed = discord.Embed(
-            title=f"📜 {self.reason or 'Spell Damage'} — applied",
+            title=f"📜 {self.reason or 'Spell Damage'}: applied",
             color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.dark_magenta(),
         )
         embed.add_field(
@@ -6726,7 +6726,7 @@ class DmDamageView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
-            f"🛡️ {interaction.user.display_name} denied — "
+            f"🛡️ {interaction.user.display_name} denied:"
             f"no damage applied to **{self.target_name}**."
         )
 
@@ -6799,7 +6799,7 @@ class DmHealView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
-            f"❌ {interaction.user.display_name} denied — "
+            f"❌ {interaction.user.display_name} denied:"
             f"no healing applied to **{self.target_name}**."
         )
 
@@ -6844,11 +6844,11 @@ async def creature_catalog(interaction: discord.Interaction, search: str | None 
         await interaction.response.send_message(f"No templates match `{search}`.", ephemeral=True)
         return
     lines = [
-        f"• `{tid}` — **{t.name}** (atk {t.attack_rolled}k{t.attack_kept}, dmg "
+        f"• `{tid}`: **{t.name}** (atk {t.attack_rolled}k{t.attack_kept}, dmg "
         f"{t.damage_rolled}k{t.damage_kept}, TN {t.armor_tn}, red {t.reduction}, dead {t.wounds_dead})"
         for tid, t in matches
     ]
-    pages = _paginate(lines, f"👹 **{len(matches)} match(es) for `{search}`:**\n")
+    pages = _paginate(lines, f"👹 **{len(matches)} match(es) for `{search}`: **\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:
@@ -6899,11 +6899,11 @@ async def creature_list(interaction: discord.Interaction) -> None:
         )
         return
     lines = [
-        f"• **{r.creature.name}** — {creature.creature_wound_level(r.creature)} "
+        f"• **{r.creature.name}**: {creature.creature_wound_level(r.creature)} "
         f"({r.creature.wounds_taken}/{r.creature.wounds_dead})"
         for r in recs
     ]
-    pages = _paginate(lines, "👹 **Creatures:**\n")
+    pages = _paginate(lines, "👹 **Creatures: **\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0])
     else:
@@ -6977,7 +6977,7 @@ async def creature_heal(
     creature_name="The attacking creature.",
     target="The player to attack (their active character).",
     target_npc="Attack a stored NPC instead of a player.",
-    raises="Called Raises — each adds +5 to the target's Armor TN.",
+    raises="Called Raises: each adds +5 to the target's Armor TN.",
     bonus_tn="Situational +/- to the target's Armor TN.",
 )
 @app_commands.autocomplete(creature_name=_creature_instance_autocomplete, target_npc=_npc_autocomplete)
@@ -7034,7 +7034,7 @@ async def creature_attack_cmd(
     verdict = "✅ **HIT**" if hit else "❌ **MISS**"
     embed.add_field(
         name="Result",
-        value=f"Total **{outcome['total']}** vs Armor TN **{outcome['tn']}** — {verdict} "
+        value=f"Total **{outcome['total']}** vs Armor TN **{outcome['tn']}**: {verdict} "
         f"(margin {outcome['margin']:+d})",
         inline=False,
     )
@@ -7050,7 +7050,7 @@ async def creature_attack_cmd(
 
 
 # ===========================================================================
-# /xp group — Experience: DMs grant, players spend to advance (L5R 4e RAW)
+# /xp group: Experience: DMs grant, players spend to advance (L5R 4e RAW)
 # ===========================================================================
 
 
@@ -7238,7 +7238,7 @@ async def xp_kata(
     ml = mastery_level if mastery_level is not None else (rec["mastery"] if rec else None)
     if ml is None:
         await interaction.response.send_message(
-            f"**{name}** isn't in the catalog — give its `mastery_level:` too.", ephemeral=True
+            f"**{name}** isn't in the catalog: give its `mastery_level:` too.", ephemeral=True
         )
         return
     canonical = rec["name"] if rec else name.strip()
@@ -7264,7 +7264,7 @@ async def xp_kiho(
     ml = mastery_level if mastery_level is not None else (rec["mastery"] if rec else None)
     if ml is None:
         await interaction.response.send_message(
-            f"**{name}** isn't in the catalog — give its `mastery_level:` too.", ephemeral=True
+            f"**{name}** isn't in the catalog: give its `mastery_level:` too.", ephemeral=True
         )
         return
     canonical = rec["name"] if rec else name.strip()
@@ -7290,7 +7290,7 @@ async def xp_spell(
     ml = mastery_level if mastery_level is not None else (spell["mastery"] if spell else None)
     if ml is None:
         await interaction.response.send_message(
-            f"**{name}** isn't in the catalog — give its `mastery_level:` too.", ephemeral=True
+            f"**{name}** isn't in the catalog: give its `mastery_level:` too.", ephemeral=True
         )
         return
     canonical = spell["name"] if spell else name.strip()
@@ -7300,7 +7300,7 @@ async def xp_spell(
 @sheet_xp.command(name="advantage", description="Buy an Advantage with XP (cost = its point value).")
 @app_commands.describe(
     name="Advantage name.",
-    points="Point cost — required only for 'Variable'-cost advantages.",
+    points="Point cost: required only for 'Variable'-cost advantages.",
     member="Advance another player's character (Fortune).",
 )
 @app_commands.autocomplete(name=_advantage_autocomplete)
@@ -7320,13 +7320,13 @@ async def xp_advantage(
     adv = advantages.get(name, "advantage")
     if adv is None:
         await interaction.response.send_message(
-            f"No advantage named **{name}** — see `/advantage search`.", ephemeral=True
+            f"No advantage named **{name}**: see `/advantage search`.", ephemeral=True
         )
         return
     cost = points if points is not None else adv["points"]
     if cost is None:
         await interaction.response.send_message(
-            f"**{adv['name']}** has a Variable cost ({adv['cost_text']}) — pass `points:` to set it.",
+            f"**{adv['name']}** has a Variable cost ({adv['cost_text']}): pass `points:` to set it.",
             ephemeral=True,
         )
         return
@@ -7385,7 +7385,7 @@ async def xp_remove_disadvantage(
     base_cost = points if points is not None else (adv["points"] if adv else None)
     if base_cost is None:
         await interaction.response.send_message(
-            f"**{canonical}** has a Variable cost — pass `points:` to set its base value.", ephemeral=True
+            f"**{canonical}** has a Variable cost: pass `points:` to set its base value.", ephemeral=True
         )
         return
     cost = base_cost * 2
@@ -7415,7 +7415,7 @@ async def xp_costs(interaction: discord.Interaction) -> None:
         "learning-a-Technique roleplay are DM-adjudicated.", ephemeral=True)
 
 # ===========================================================================
-# /school group — schools & techniques (GDD s29)
+# /school group: schools & techniques (GDD s29)
 # ===========================================================================
 
 
@@ -7432,9 +7432,9 @@ def build_school_embed(s: dict) -> discord.Embed:
     embed.description = f"{s['clan']} {cat}"
     meta = []
     if s["benefit"]:
-        meta.append(f"**Benefit:** {s['benefit']}")
+        meta.append(f"**Benefit: ** {s['benefit']}")
     if s["honor"]:
-        meta.append(f"**Honor:** {s['honor']}")
+        meta.append(f"**Honor: ** {s['honor']}")
     if meta:
         embed.add_field(name="​", value="  ·  ".join(meta), inline=False)
     if s["skills"]:
@@ -7448,7 +7448,7 @@ def build_school_embed(s: dict) -> discord.Embed:
     # Techniques (each its own field; effect truncated to stay within limits).
     for t in s["techniques"][:12]:
         rank_label = f"Rank {t['rank']}" if t["rank"] else "Technique"
-        title = f"{rank_label} — {t['name']}" if t["name"] else rank_label
+        title = f"{rank_label}: {t['name']}" if t["name"] else rank_label
         embed.add_field(name=title[:256], value=t["effect"][:1024], inline=False)
     return embed
 
@@ -7467,8 +7467,8 @@ async def school_list(interaction: discord.Interaction, clan: str | None = None)
         for cat, label in (("basic", "Basic"), ("advanced", "Advanced"), ("alternate", "Alternate Paths")):
             names = [s["name"] for s in matches if s.get("category", "basic") == cat]
             if names:
-                lines.append(f"**{label} ({len(names)}):** " + ", ".join(names))
-        text = f"🏯 **{clan} — {len(matches)} schools/paths**\n" + "\n".join(lines)
+                lines.append(f"**{label} ({len(names)}): ** " + ", ".join(names))
+        text = f"🏯 **{clan}: {len(matches)} schools/paths**\n" + "\n".join(lines)
         await interaction.response.send_message(text[:1990], ephemeral=True)
         return
     from collections import Counter
@@ -7536,7 +7536,7 @@ async def school_learn(
     if s is None:
         await interaction.response.send_message(
             f"No school named **{lookup or '(unset)'}**. Set one with `school_name:` "
-            f"(or `/sheet set` isn't for this — pick from `/school search`).",
+            f"(or `/sheet set` isn't for this: pick from `/school search`).",
             ephemeral=True,
         )
         return
@@ -7548,7 +7548,7 @@ async def school_learn(
         return
     added = []
     for t in entitled:
-        label = f"{s['name']} — {t['name']}"
+        label = f"{s['name']}: {t['name']}"
         if not any(label.lower() == x.lower() or t["name"].lower() == x.lower() for x in c.techniques):
             c.techniques.append(label)
             added.append(f"R{t['rank']} {t['name']}")
@@ -7561,7 +7561,7 @@ async def school_learn(
 
 
 # ===========================================================================
-# /spell group — spells & elements (GDD s32–s37)
+# /spell group: spells & elements (GDD s32–s37)
 # ===========================================================================
 spell_group = app_commands.Group(name="spell", description="Browse spells by element and mastery (GDD s32-s37).")
 
@@ -7580,11 +7580,11 @@ def build_spell_embed(s: dict) -> discord.Embed:
     embed.description = f"**{s['element']} {s['mastery']}**{kw}"
     line = []
     if s["range"]:
-        line.append(f"**Range:** {s['range']}")
+        line.append(f"**Range: ** {s['range']}")
     if s["area"]:
-        line.append(f"**Area:** {s['area']}")
+        line.append(f"**Area: ** {s['area']}")
     if s["duration"]:
-        line.append(f"**Duration:** {s['duration']}")
+        line.append(f"**Duration: ** {s['duration']}")
     if line:
         embed.add_field(name="​", value="  ·  ".join(line), inline=False)
     if s["raises"]:
@@ -7615,8 +7615,8 @@ async def spell_list(interaction: discord.Interaction, element: str | None = Non
     by_ml: dict[int, list[str]] = {}
     for s in matches:
         by_ml.setdefault(s["mastery"], []).append(s["name"])
-    lines = [f"**ML {ml}:** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
-    pages = _paginate(lines, f"🔮 **{element} spells ({len(matches)}):**\n", per_page=10)
+    lines = [f"**ML {ml}: ** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
+    pages = _paginate(lines, f"🔮 **{element} spells ({len(matches)}): **\n", per_page=10)
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:
@@ -7632,7 +7632,7 @@ async def spell_search(interaction: discord.Interaction, query: str) -> None:
         await interaction.response.send_message(f"No spells match `{query}`.", ephemeral=True)
         return
     lines = [f"• **{s['name']}** ({s['element']} {s['mastery']})" for s in matches]
-    pages = _paginate(lines, f"🔮 **{len(matches)} spell(s) matching `{query}`:**\n")
+    pages = _paginate(lines, f"🔮 **{len(matches)} spell(s) matching `{query}`: **\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:
@@ -7774,7 +7774,7 @@ async def spell_cast(
         f"**{s['element']}** Ring {ring_val} + School Rank {result['effective_rank']}"
         f" → {result['rolled']}k{result['kept']}\n"
         f"Roll **{result['total']}** vs TN **{result['tn']}**"
-        f" — {'**SUCCESS**' if success else '**FAILED** (slot consumed)'}"
+        f": {'**SUCCESS**' if success else '**FAILED** (slot consumed)'}"
     )
     embed.add_field(name="Spell Casting Roll", value=roll_desc, inline=False)
     if conceal:
@@ -7849,7 +7849,7 @@ async def spell_resist(
     total = result.total + wound_pen
     success = total >= tn
     embed = discord.Embed(
-        title=f"🛡️ {c.name} — Spell Resistance",
+        title=f"🛡️ {c.name}: Spell Resistance",
         color=discord.Color.green() if success else discord.Color.red(),
     )
     notes = []
@@ -7860,7 +7860,7 @@ async def spell_resist(
     roll_desc = (
         f"Willpower {willpower} → {rolled}k{kept}\n"
         f"Roll **{total}** vs TN **{tn}**"
-        f" — {'**RESISTED** (spell has no effect)' if success else '**FAILED** (spell takes effect)'}"
+        f": {'**RESISTED** (spell has no effect)' if success else '**FAILED** (spell takes effect)'}"
     )
     embed.add_field(name="Resistance Roll", value=roll_desc, inline=False)
     if notes:
@@ -7909,7 +7909,7 @@ async def spell_interrupt(
     total = result.total + wound_pen
     success = total >= tn
     embed = discord.Embed(
-        title=f"⚡ {c.name} — Casting Interrupted",
+        title=f"⚡ {c.name}: Casting Interrupted",
         color=discord.Color.green() if success else discord.Color.orange(),
     )
     tn_reason = f"TN {tn} (5 + {damage} damage)" if damage > 0 else "TN 10 (distraction)"
@@ -7917,9 +7917,9 @@ async def spell_interrupt(
         f"Willpower {willpower}k{willpower} = **{total}** vs {tn_reason}\n"
     )
     if success:
-        roll_desc += "**MAINTAINED** — spell continues normally."
+        roll_desc += "**MAINTAINED**: spell continues normally."
     else:
-        roll_desc += "**DISRUPTED** — spell fails, but spell slot is refunded."
+        roll_desc += "**DISRUPTED**: spell fails, but spell slot is refunded."
         elem = element.lower().strip()
         if void_bonus:
             c.void_spell_bonus = min(c.void_spell_bonus + 1, stats.void_bonus_max(c))
@@ -8005,7 +8005,7 @@ async def spell_importune(
         return
     if ml > effective_rank:
         await interaction.response.send_message(
-            f"**{caster.name}** cannot importune a Mastery {ml} spell — "
+            f"**{caster.name}** cannot importune a Mastery {ml} spell:"
             f"effective School Rank is only {effective_rank}.",
             ephemeral=True,
         )
@@ -8032,11 +8032,11 @@ async def spell_importune(
     imp_desc = (
         f"{imp_notes} → {imp_rolled}k{imp_kept}\n"
         f"Roll **{imp_total}** vs TN **{imp_tn}**"
-        f" — {'**KAMI AGREE**' if imp_success else '**KAMI REFUSE**'}"
+        f": {'**KAMI AGREE**' if imp_success else '**KAMI REFUSE**'}"
     )
     if wound_pen:
         imp_desc += f" (wound penalty: {wound_pen})"
-    embed.add_field(name="Step 1 — Spellcraft (Importune)", value=imp_desc, inline=False)
+    embed.add_field(name="Step 1: Spellcraft (Importune)", value=imp_desc, inline=False)
     embed.add_field(
         name="Prerequisite",
         value=f"Requires successful Commune cast + {ml * 5} minutes of communion.",
@@ -8057,8 +8057,8 @@ async def spell_importune(
             slot_max = stats.spell_slot_max(caster, element)
             bonus_max = stats.void_bonus_max(caster)
             embed.add_field(
-                name="Step 2 — Casting",
-                value=f"No {element.title()} slots (0/{slot_max}) or bonus slots (0/{bonus_max}) — cannot attempt the cast.",
+                name="Step 2: Casting",
+                value=f"No {element.title()} slots (0/{slot_max}) or bonus slots (0/{bonus_max}): cannot attempt the cast.",
                 inline=False,
             )
             await interaction.response.send_message(embed=embed)
@@ -8067,7 +8067,7 @@ async def spell_importune(
     extra_kept = 1 if spend_void else 0
     if spend_void:
         if caster.current_void_points <= 0:
-            embed.add_field(name="Step 2 — Casting", value="No Void Points remaining — cannot spend VP.", inline=False)
+            embed.add_field(name="Step 2: Casting", value="No Void Points remaining: cannot spend VP.", inline=False)
             await interaction.response.send_message(embed=embed)
             return
         caster.current_void_points -= 1
@@ -8095,11 +8095,11 @@ async def spell_importune(
         f"Ring {ring_val} + School Rank {effective_rank} → {cast_rolled}k{cast_kept}\n"
         f"Roll **{cast_total}** vs TN **{cast_tn}** (importune TN: 15 + {ml}×5"
         + (f" + {raises}×5 raises" if raises else "") + ")\n"
-        f"{'**SUCCESS** — the kami grant the spell!' if cast_success else '**FAILED** (slot consumed)'}"
+        f"{'**SUCCESS**:the kami grant the spell!' if cast_success else '**FAILED** (slot consumed)'}"
     )
     if cast_notes:
         cast_desc += "\n" + " · ".join(cast_notes)
-    embed.add_field(name="Step 2 — Casting Roll", value=cast_desc, inline=False)
+    embed.add_field(name="Step 2: Casting Roll", value=cast_desc, inline=False)
     if cast_success:
         casting_time = max(1, ml - raises) if raises else ml
         spell_info = f"**Mastery {ml}** · Range: {s['range']} · Duration: {s['duration']}"
@@ -8113,7 +8113,7 @@ async def spell_importune(
 
 
 # ===========================================================================
-# /weapon and /armor groups — equipment reference (individual_combat.gd / armor_system.gd)
+# /weapon and /armor groups: equipment reference (individual_combat.gd / armor_system.gd)
 # ===========================================================================
 
 
@@ -8123,7 +8123,7 @@ async def weapon_list(interaction: discord.Interaction) -> None:
     by_skill: dict[str, list[str]] = {}
     for wid, w in combat.WEAPON_CATALOG.items():
         by_skill.setdefault(w["skill"], []).append(f"{wid} {w['rolled']}k{w['kept']}")
-    lines = [f"**{sk}:** " + ", ".join(sorted(v)) for sk, v in sorted(by_skill.items())]
+    lines = [f"**{sk}: ** " + ", ".join(sorted(v)) for sk, v in sorted(by_skill.items())]
     await interaction.response.send_message(
         f"⚔️ **{len(combat.WEAPON_CATALOG)} weapons** (name DR):\n" + "\n".join(lines), ephemeral=True
     )
@@ -8155,7 +8155,7 @@ async def weapon_view(interaction: discord.Interaction, name: str) -> None:
 @ref_armor.command(name="list", description="List all armor types.")
 async def armor_list(interaction: discord.Interaction) -> None:
     lines = [
-        f"• **{a}** — Armor TN +{s['tn_bonus']}, Reduction {s['reduction']}"
+        f"• **{a}**: Armor TN +{s['tn_bonus']}, Reduction {s['reduction']}"
         + (" · heavy" if s["is_heavy"] else "")
         for a, s in combat.ARMOR_CATALOG.items()
     ]
@@ -8165,7 +8165,7 @@ async def armor_list(interaction: discord.Interaction) -> None:
 
 
 # ===========================================================================
-# /advantage group — Advantages & Disadvantages (GDD s45)
+# /advantage group: Advantages & Disadvantages (GDD s45)
 # ===========================================================================
 
 
@@ -8207,7 +8207,7 @@ async def advantage_list(interaction: discord.Interaction, kind: app_commands.Ch
     pool = sorted(advantages.by_kind(kind.value), key=lambda r: r["name"])
     icon = '🌸' if kind.value == 'advantage' else '💢'
     lines = [f"• {icon} **{r['name']}** ({r['cost_text']})" for r in pool]
-    pages = _paginate(lines, f"{icon} **{kind.name} ({len(pool)}):**\n")
+    pages = _paginate(lines, f"{icon} **{kind.name} ({len(pool)}): **\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:
@@ -8226,7 +8226,7 @@ async def advantage_search(interaction: discord.Interaction, query: str) -> None
         f"{'🌸' if r['kind'] == 'advantage' else '💢'} **{r['name']}** ({r['cost_text']})"
         for r in matches
     ]
-    pages = _paginate(lines, f"**{len(matches)} match(es) for `{query}`:**\n")
+    pages = _paginate(lines, f"**{len(matches)} match(es) for `{query}`: **\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:
@@ -8246,7 +8246,7 @@ async def advantage_view(interaction: discord.Interaction, name: str) -> None:
 
 
 # ===========================================================================
-# /kata and /kiho groups — Kata (GDD s30) and Kiho (GDD s38) reference
+# /kata and /kiho groups: Kata (GDD s30) and Kiho (GDD s38) reference
 # ===========================================================================
 
 
@@ -8283,8 +8283,8 @@ async def kata_list(interaction: discord.Interaction, element: str | None = None
     by_ml: dict[int, list[str]] = {}
     for k in matches:
         by_ml.setdefault(k["mastery"], []).append(k["name"])
-    lines = [f"**ML {ml}:** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
-    text = f"\U0001F94B **{element} Kata ({len(matches)}):**\n" + "\n".join(lines)
+    lines = [f"**ML {ml}: ** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
+    text = f"\U0001F94B **{element} Kata ({len(matches)}): **\n" + "\n".join(lines)
     await interaction.response.send_message(text[:1990], ephemeral=True)
 
 
@@ -8350,8 +8350,8 @@ async def kiho_list(interaction: discord.Interaction, element: str | None = None
     by_ml: dict[int, list[str]] = {}
     for k in matches:
         by_ml.setdefault(k["mastery"], []).append(k["name"])
-    lines = [f"**ML {ml}:** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
-    text = f"✋ **{element} Kiho ({len(matches)}):**\n" + "\n".join(lines)
+    lines = [f"**ML {ml}: ** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
+    text = f"✋ **{element} Kiho ({len(matches)}): **\n" + "\n".join(lines)
     await interaction.response.send_message(text[:1990], ephemeral=True)
 
 
@@ -8381,7 +8381,7 @@ async def kiho_view(interaction: discord.Interaction, name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Stance Tracking (#1)
+# Phase 42: Stance Tracking (#1)
 # ---------------------------------------------------------------------------
 
 _STANCE_CHOICES = [
@@ -8581,7 +8581,7 @@ async def combat_surprise(interaction: discord.Interaction) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Heritage Tables (#4)
+# Phase 42: Heritage Tables (#4)
 # ---------------------------------------------------------------------------
 
 
@@ -8598,10 +8598,10 @@ async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
         return
     result = heritage.roll_heritage(clan)
     embed = discord.Embed(
-        title=f"Heritage Roll — {clan}",
+        title=f"Heritage Roll: {clan}",
         color=discord.Color.dark_teal(),
     )
-    embed.add_field(name=f"Roll: {result['roll']} — {result['name']}", value=result["effect"], inline=False)
+    embed.add_field(name=f"Roll: {result['roll']}: {result['name']}", value=result["effect"], inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -8612,13 +8612,13 @@ async def heritage_table(interaction: discord.Interaction, clan: str) -> None:
         await interaction.response.send_message("Use in a server channel.", ephemeral=True)
         return
     table = heritage.get_table(clan)
-    lines = [f"**{r['roll']}.** {r['name']} — {r['effect']}" for r in table]
-    embed = discord.Embed(title=f"Heritage Table — {clan}", description="\n".join(lines), color=discord.Color.dark_teal())
+    lines = [f"**{r['roll']}.** {r['name']}: {r['effect']}" for r in table]
+    embed = discord.Embed(title=f"Heritage Table: {clan}", description="\n".join(lines), color=discord.Color.dark_teal())
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Taint Progression (#14)
+# Phase 42: Taint Progression (#14)
 # ---------------------------------------------------------------------------
 
 @dm.command(name="taint", description="View or modify a character's Shadowlands Taint. Fortune role required.")
@@ -8661,7 +8661,7 @@ async def taint_command(
         c.taint = max(0.0, c.taint + add)
         store.save(rec)
         crossing = taint.check_threshold_crossing(old_taint, c.taint, c)
-        embed = discord.Embed(title=f"Taint — {c.name}", color=discord.Color.dark_purple())
+        embed = discord.Embed(title=f"Taint: {c.name}", color=discord.Color.dark_purple())
         embed.add_field(name="Taint", value=f"{old_taint:g} → **{c.taint:g}**", inline=True)
         embed.add_field(name="Taint Rank", value=f"**{taint.taint_rank(c)}**", inline=True)
         embed.add_field(name="Earth Ring", value=str(stats.earth_ring(c)), inline=True)
@@ -8676,7 +8676,7 @@ async def taint_command(
         await interaction.response.send_message(embed=embed)
     else:
         rank = taint.taint_rank(c)
-        embed = discord.Embed(title=f"Taint — {c.name}", color=discord.Color.dark_purple())
+        embed = discord.Embed(title=f"Taint: {c.name}", color=discord.Color.dark_purple())
         embed.add_field(name="Taint", value=f"**{c.taint:g}**", inline=True)
         embed.add_field(name="Taint Rank", value=f"**{rank}**", inline=True)
         embed.add_field(name="Earth Ring", value=str(stats.earth_ring(c)), inline=True)
@@ -8687,7 +8687,7 @@ async def taint_command(
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Mass Battle (#3)
+# Phase 42: Mass Battle (#3)
 # ---------------------------------------------------------------------------
 
 
@@ -8725,7 +8725,7 @@ async def battle_roll(
     result = mass_battle.resolve_battle_roll(c.perception, battle_skill, tn, engine, bonus + wp)
     info = result["engagement_info"]
     embed = discord.Embed(
-        title=f"Mass Battle — {c.name}",
+        title=f"Mass Battle: {c.name}",
         color=discord.Color.red() if result["engagement"] in ("heavily_engaged", "heroic") else discord.Color.orange(),
     )
     embed.add_field(name="Roll", value=f"({result['rolled']}k{result['kept']}) = **{result['total']}** vs TN {tn}", inline=False)
@@ -8758,9 +8758,9 @@ async def battle_damage(
         return
     result = mass_battle.resolve_battle_turn_damage(engagement.value, engine)
     if result["damage"] == 0:
-        await interaction.response.send_message(f"**{engagement.name}** — no incidental damage this round.")
+        await interaction.response.send_message(f"**{engagement.name}**: no incidental damage this round.")
         return
-    embed = discord.Embed(title=f"Mass Battle Damage — {engagement.name}", color=discord.Color.dark_red())
+    embed = discord.Embed(title=f"Mass Battle Damage: {engagement.name}", color=discord.Color.dark_red())
     embed.add_field(name="Damage", value=f"**{result['damage']}** ({result['rolled']}k{result['kept']})", inline=True)
     if result["dice"]:
         embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
@@ -8769,7 +8769,7 @@ async def battle_damage(
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Mounted Combat (#10)
+# Phase 42: Mounted Combat (#10)
 # ---------------------------------------------------------------------------
 
 @combat_group.command(name="mount", description="Mount or dismount (sets/clears Mounted condition). Fortune role required.")
@@ -8851,10 +8851,10 @@ async def horsemanship_check(
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Crafting Extended (#6)
+# Phase 42: Crafting Extended (#6)
 # ---------------------------------------------------------------------------
 
-@dm.command(name="craft_extended", description="Extended crafting roll — multi-step project with cumulative total. Fortune role required.")
+@dm.command(name="craft_extended", description="Extended crafting roll: multi-step project with cumulative total. Fortune role required.")
 @app_commands.describe(
     name="Character name.",
     skill="Craft/Artisan skill name.",
@@ -8890,7 +8890,7 @@ async def craft_extended(
     wp = stats.wound_penalty(c)
     result = combat.resolve_skill_check(c.intelligence, skill_rank, 10, engine, bonus + wp)
     embed = discord.Embed(
-        title=reason or f"Extended Crafting — {skill}",
+        title=reason or f"Extended Crafting: {skill}",
         color=discord.Color.teal(),
     )
     embed.add_field(name="Craftsman", value=c.name, inline=True)
@@ -8909,7 +8909,7 @@ async def craft_extended(
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Encumbrance (#11)
+# Phase 42: Encumbrance (#11)
 # ---------------------------------------------------------------------------
 
 @ref.command(name="encumbrance", description="Check a character's carrying capacity (Strength-based).")
@@ -8940,7 +8940,7 @@ async def encumbrance_check(
     c = rec.character
     cap = stats.encumbrance_capacity(c)
     water = stats.water_ring(c)
-    embed = discord.Embed(title=f"Encumbrance — {c.name}", color=discord.Color.greyple())
+    embed = discord.Embed(title=f"Encumbrance: {c.name}", color=discord.Color.greyple())
     embed.add_field(name="Strength", value=str(c.strength), inline=True)
     embed.add_field(name="Carry Capacity", value=f"**{cap}** items", inline=True)
     embed.add_field(name="Water Ring", value=str(water), inline=True)
@@ -8954,7 +8954,7 @@ async def encumbrance_check(
 
 @ref.command(name="atn", description="Show Armor TN breakdown for your active character.")
 @app_commands.describe(
-    target="Character name (Fortune — omit to see your own).",
+    target="Character name (Fortune: omit to see your own).",
 )
 async def atn_breakdown(interaction: discord.Interaction, target: str | None = None) -> None:
     if not _guild_ok(interaction):
@@ -9030,13 +9030,13 @@ async def atn_breakdown(interaction: discord.Interaction, target: str | None = N
             lines.append(f"**Total ATN = {total}**")
     else:
         lines.append(f"**Total ATN = {total}** (out of combat)")
-    embed = discord.Embed(title=f"🛡️ ATN Breakdown — {c.name}", color=discord.Color.blue())
+    embed = discord.Embed(title=f"🛡️ ATN Breakdown: {c.name}", color=discord.Color.blue())
     embed.description = "\n".join(lines)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Family catalog (#12)
+# Phase 42: Family catalog (#12)
 # ---------------------------------------------------------------------------
 
 
@@ -9053,8 +9053,8 @@ async def family_list(interaction: discord.Interaction, clan: str | None = None)
         if not fams:
             await interaction.response.send_message(f"No families found for clan **{clan}**.", ephemeral=True)
             return
-        lines = [f"**{f['name']}** — +1 {f['bonus_trait'].capitalize()}" for f in fams]
-        embed = discord.Embed(title=f"Families — {clan}", description="\n".join(lines), color=discord.Color.blue())
+        lines = [f"**{f['name']}**: +1 {f['bonus_trait'].capitalize()}" for f in fams]
+        embed = discord.Embed(title=f"Families: {clan}", description="\n".join(lines), color=discord.Color.blue())
     else:
         clans: dict[str, list[str]] = {}
         for f in families.ALL:
@@ -9075,13 +9075,13 @@ async def family_search(interaction: discord.Interaction, query: str) -> None:
     if not results:
         await interaction.response.send_message(f"No families matching **{query}**.", ephemeral=True)
         return
-    lines = [f"**{f['name']}** ({f['clan']}) — +1 {f['bonus_trait'].capitalize()}" for f in results[:25]]
-    embed = discord.Embed(title=f"Family Search — \"{query}\"", description="\n".join(lines), color=discord.Color.blue())
+    lines = [f"**{f['name']}** ({f['clan']}): +1 {f['bonus_trait'].capitalize()}" for f in results[:25]]
+    embed = discord.Embed(title=f"Family Search:\"{query}\"", description="\n".join(lines), color=discord.Color.blue())
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Spell Damage (#8 partial)
+# Phase 42: Spell Damage (#8 partial)
 # ---------------------------------------------------------------------------
 
 @spell_group.command(name="damage", description="Roll spell damage dice (for offensive spells). Fortune role required.")
@@ -9140,7 +9140,7 @@ async def spell_damage(
                 embed=embed, view=view,
             )
         else:
-            embed.set_footer(text=f"Target '{target}' not found — use exact character name.")
+            embed.set_footer(text=f"Target '{target}' not found: use exact character name.")
             await interaction.response.send_message(embed=embed)
     else:
         embed.set_footer(text="Add target: to route damage through the DM-approval gate.")
@@ -9148,7 +9148,7 @@ async def spell_damage(
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Multiple Attacks / Action Economy (#9)
+# Phase 42: Multiple Attacks / Action Economy (#9)
 # ---------------------------------------------------------------------------
 
 @combat_group.command(name="action", description="Track action usage this turn (Simple or Complex). Fortune role required.")
@@ -9185,7 +9185,7 @@ async def combat_action(
     if action_type.value == "reset":
         cb.actions_used = 0
         _save_encounter(str(interaction.guild_id), enc)
-        await interaction.response.send_message(f"**{cb.name}** — actions reset.")
+        await interaction.response.send_message(f"**{cb.name}**: actions reset.")
         return
     if action_type.value == "free":
         await interaction.response.send_message(f"**{cb.name}** takes a Free Action.")
@@ -9210,7 +9210,7 @@ async def combat_action(
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Ancestor Advantages effects reminder (#13)
+# Phase 42: Ancestor Advantages effects reminder (#13)
 # ---------------------------------------------------------------------------
 
 ANCESTOR_EFFECTS: dict[str, str] = {
@@ -9268,7 +9268,7 @@ async def ancestors_check(
     for adv in c.advantages:
         key = adv.lower().strip()
         if key in ANCESTOR_EFFECTS:
-            found.append(f"**{adv}** — {ANCESTOR_EFFECTS[key]}")
+            found.append(f"**{adv}**: {ANCESTOR_EFFECTS[key]}")
     if not found:
         await interaction.response.send_message(
             f"**{c.name}** has no Ancestor advantages recorded. Use `/sheet advantage` to add one.",
@@ -9276,7 +9276,7 @@ async def ancestors_check(
         )
         return
     embed = discord.Embed(
-        title=f"Ancestor Effects — {c.name}",
+        title=f"Ancestor Effects: {c.name}",
         description="\n".join(found),
         color=discord.Color.gold(),
     )
@@ -9285,7 +9285,7 @@ async def ancestors_check(
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Dual Wield reminder (#9 supplement)
+# Phase 42: Dual Wield reminder (#9 supplement)
 # ---------------------------------------------------------------------------
 
 @ref.command(name="dual_wield", description="Show dual-wielding rules and penalties for a character.")
@@ -9314,7 +9314,7 @@ async def dual_wield_info(
         await interaction.response.send_message("Character not found.", ephemeral=True)
         return
     c = rec.character
-    embed = discord.Embed(title=f"Dual Wielding — {c.name}", color=discord.Color.dark_blue())
+    embed = discord.Embed(title=f"Dual Wielding: {c.name}", color=discord.Color.dark_blue())
     if c.equipped_weapon and c.off_hand_weapon:
         main_w = combat.get_weapon_profile(c.equipped_weapon)
         off_w = combat.get_weapon_profile(c.off_hand_weapon)
@@ -9326,7 +9326,7 @@ async def dual_wield_info(
         elif off_size == "Medium":
             penalty = "−10 TN (Medium off-hand weapon)"
         else:
-            penalty = "−15 TN (Large off-hand weapon — not normally allowed)"
+            penalty = "−15 TN (Large off-hand weapon: not normally allowed)"
         embed.add_field(name="Off-hand Attack Penalty", value=penalty, inline=False)
         embed.add_field(
             name="Rules",
@@ -9346,7 +9346,7 @@ async def dual_wield_info(
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Courtier/Social Influence (#5)
+# Phase 42: Courtier/Social Influence (#5)
 # ---------------------------------------------------------------------------
 
 @dm.command(name="influence", description="Track Influence Points during a court scene. Fortune role required.")
@@ -9369,13 +9369,13 @@ async def influence_track(
         return
     embed = discord.Embed(title="Court Influence", color=discord.Color.purple())
     sign = "+" if change >= 0 else ""
-    embed.add_field(name=name, value=f"{sign}{change} Influence" + (f" — {reason}" if reason else ""), inline=False)
+    embed.add_field(name=name, value=f"{sign}{change} Influence" + (f": {reason}" if reason else ""), inline=False)
     embed.set_footer(text="DM: track cumulative influence totals for the court scene. Use /social for Courtier/Etiquette checks.")
     await interaction.response.send_message(embed=embed)
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Travel (#7)
+# Phase 42: Travel (#7)
 # ---------------------------------------------------------------------------
 
 TRAVEL_SPEEDS: dict[str, dict] = {
@@ -9432,7 +9432,7 @@ async def travel_calc(
 
 
 # ---------------------------------------------------------------------------
-# Phase 47 — Terrain/Range Modifiers Reference
+# Phase 47: Terrain/Range Modifiers Reference
 # ---------------------------------------------------------------------------
 
 TERRAIN_MODIFIERS: list[tuple[str, str]] = [
@@ -9459,9 +9459,9 @@ RANGE_INCREMENTS: list[tuple[str, str]] = [
 @ref.command(name="modifiers", description="Quick reference for terrain, range, and situational combat modifiers (L5R 4e).")
 async def modifiers_ref(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="⚔️ Combat Modifiers Reference", color=discord.Color.dark_gold())
-    terrain_lines = [f"**{name}** — {effect}" for name, effect in TERRAIN_MODIFIERS]
+    terrain_lines = [f"**{name}**: {effect}" for name, effect in TERRAIN_MODIFIERS]
     embed.add_field(name="Terrain & Situational", value="\n".join(terrain_lines), inline=False)
-    range_lines = [f"**{name}** — {effect}" for name, effect in RANGE_INCREMENTS]
+    range_lines = [f"**{name}**: {effect}" for name, effect in RANGE_INCREMENTS]
     embed.add_field(name="Range Increments (Ranged Weapons)", value="\n".join(range_lines), inline=False)
     embed.add_field(
         name="How to Apply",
@@ -9475,7 +9475,7 @@ async def modifiers_ref(interaction: discord.Interaction) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 47 — Called Shot Reference
+# Phase 47: Called Shot Reference
 # ---------------------------------------------------------------------------
 
 @ref.command(name="calledshot", description="Called Shot reference: raise costs and body part effects (L5R 4e).")
@@ -9483,30 +9483,30 @@ async def calledshot_ref(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="🎯 Called Shot Reference", color=discord.Color.dark_gold())
     parts_lines = []
     for raises, part in sorted(combat.CALLED_SHOT_PARTS.items()):
-        parts_lines.append(f"**{raises} raise{'s' if raises != 1 else ''}** — {part.title()}")
+        parts_lines.append(f"**{raises} raise{'s' if raises != 1 else ''}**: {part.title()}")
     embed.add_field(name="Raises → Target", value="\n".join(parts_lines), inline=False)
     embed.add_field(
         name="Effects",
         value=(
             "Called Shots use the standard Raise mechanic (+5 TN per raise). "
             "On a successful hit, the DM adjudicates the effect based on the body part:\n"
-            "• **Limb** — may disarm, hamper movement, or force a Stamina check\n"
-            "• **Hand/Foot** — may drop weapon, reduce movement\n"
-            "• **Head** — +1k1 bonus damage on this strike\n"
-            "• **Eye/Ear/Finger** — devastating: +1k1 damage, potential permanent injury"
+            "• **Limb**: may disarm, hamper movement, or force a Stamina check\n"
+            "• **Hand/Foot**: may drop weapon, reduce movement\n"
+            "• **Head**: +1k1 bonus damage on this strike\n"
+            "• **Eye/Ear/Finger**: devastating: +1k1 damage, potential permanent injury"
         ),
         inline=False,
     )
     embed.add_field(
         name="Usage",
-        value="Use `/attack maneuver: Called Shot raises: N` — the raise cost is added to TN automatically.",
+        value="Use `/attack maneuver: Called Shot raises: N`: the raise cost is added to TN automatically.",
         inline=False,
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
-# Phase 47 — Medicine Treatment (wound healing with DM gate)
+# Phase 47: Medicine Treatment (wound healing with DM gate)
 # ---------------------------------------------------------------------------
 
 class MedicineTreatView(discord.ui.View):
@@ -9571,7 +9571,7 @@ class MedicineTreatView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
-            f"🛡️ {interaction.user.display_name} denied — no healing applied to **{self.target_name}**."
+            f"🛡️ {interaction.user.display_name} denied: no healing applied to **{self.target_name}**."
         )
 
 
@@ -9665,7 +9665,7 @@ async def dm_treat(
     heal_amount = wounds_healed if wounds_healed is not None else hc.intelligence * 2
     treat_label = treatment.name.split(" (")[0]
     embed = discord.Embed(
-        title=f"💊 {treat_label} — {hc.name} treats {pc.name}",
+        title=f"💊 {treat_label}: {hc.name} treats {pc.name}",
         color=discord.Color.green() if success else discord.Color.greyple(),
     )
     wp_str = f" {wp}" if wp else ""
@@ -9683,7 +9683,7 @@ async def dm_treat(
     verdict = "✅ **Treatment successful!**" if success else "❌ **Treatment fails.**"
     embed.add_field(
         name="Result",
-        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
     if success and heal_amount > 0 and pc.wounds_taken > 0:
@@ -9711,7 +9711,7 @@ async def dm_treat(
 
 
 # ---------------------------------------------------------------------------
-# Phase 47 — Character Import/Export
+# Phase 47: Character Import/Export
 # ---------------------------------------------------------------------------
 
 @sheet.command(name="export", description="Export your active character sheet as JSON (for backup or sharing).")
@@ -9735,7 +9735,7 @@ async def sheet_export(
     payload = _json.dumps(data, indent=2, ensure_ascii=False)
     if len(payload) <= 1900:
         await interaction.response.send_message(
-            f"**{c.name}** — character sheet JSON:\n```json\n{payload}\n```",
+            f"**{c.name}**: character sheet JSON:\n```json\n{payload}\n```",
             ephemeral=True,
         )
     else:
@@ -9744,7 +9744,7 @@ async def sheet_export(
         fname = c.name.lower().replace(" ", "_").replace("'", "") + ".json"
         file = discord.File(buf, filename=fname)
         await interaction.response.send_message(
-            content=f"**{c.name}** — character sheet exported.",
+            content=f"**{c.name}**: character sheet exported.",
             file=file,
             ephemeral=True,
         )
@@ -9807,7 +9807,7 @@ async def sheet_import(
 
 
 # ===========================================================================
-# /macro — saved rolls
+# /macro: saved rolls
 # ===========================================================================
 
 macro_group = app_commands.Group(name="macro", description="Save and use frequently-rolled dice pools.")
@@ -9871,10 +9871,10 @@ async def macro_list(interaction: discord.Interaction) -> None:
     lines = []
     for m in macros:
         mod_str = f"+{m.modifier}" if m.modifier > 0 else (str(m.modifier) if m.modifier < 0 else "")
-        desc = f" — {m.label}" if m.label else ""
+        desc = f": {m.label}" if m.label else ""
         lines.append(f"• **{m.name}** → `{m.rolled}k{m.kept}{mod_str}`{desc}")
     await interaction.response.send_message(
-        f"💾 **Your macros ({len(macros)}):**\n" + "\n".join(lines), ephemeral=True
+        f"💾 **Your macros ({len(macros)}): **\n" + "\n".join(lines), ephemeral=True
     )
 
 
@@ -9894,7 +9894,7 @@ async def macro_roll(interaction: discord.Interaction, name: str) -> None:
     result = engine.roll_and_keep(m.rolled, m.kept)
     total = result.total + m.modifier
     mod_str = f"+{m.modifier}" if m.modifier > 0 else (str(m.modifier) if m.modifier < 0 else "")
-    title = f"🎲 {m.name}" + (f" — {m.label}" if m.label else "")
+    title = f"🎲 {m.name}" + (f": {m.label}" if m.label else "")
     embed = discord.Embed(title=title, color=discord.Color.teal())
     embed.add_field(
         name=f"{m.rolled}k{m.kept}{mod_str}",
@@ -9926,7 +9926,7 @@ client.tree.add_command(macro_group)
 
 
 # ===========================================================================
-# /compare — side-by-side character comparison
+# /compare: side-by-side character comparison
 # ===========================================================================
 
 @client.tree.command(name="compare", description="Compare two characters side-by-side (yours, another player's, or an NPC).")
@@ -10022,7 +10022,7 @@ async def compare_characters(
 
 
 # ===========================================================================
-# /history — recent roll log for this channel
+# /history: recent roll log for this channel
 # ===========================================================================
 
 @client.tree.command(name="history", description="Show recent dice rolls in this channel.")
@@ -10047,7 +10047,7 @@ async def roll_history(
             time_str = f"{int(ago / 60)}m ago"
         else:
             time_str = f"{int(ago / 3600)}h ago"
-        lines.append(f"• **{user}** — {desc} → **{total}** ({time_str})")
+        lines.append(f"• **{user}**: {desc} → **{total}** ({time_str})")
     await interaction.response.send_message(
         f"📜 **Recent rolls** (last {len(recent)}):\n" + "\n".join(lines),
         ephemeral=True,

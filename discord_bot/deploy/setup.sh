@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# Rokugan Discord Bot — One-Shot Server Setup
+# Rokugan Discord Bot: One-Shot Server Setup
 # ============================================================
 # Run as root on a fresh Ubuntu 24.04 LTS (Vultr or similar).
 #
@@ -13,14 +13,14 @@
 #   6. Asks you to paste your Discord bot token
 #   7. Installs a systemd service (auto-start on boot, auto-restart on crash)
 #   8. Sets up daily database backups (keeps 14 days)
-#   9. Enables the firewall (SSH only — the bot makes outbound connections)
+#   9. Enables the firewall (SSH only: the bot makes outbound connections)
 #
 # After this script finishes, the bot is running. You're done.
 # ============================================================
 set -euo pipefail
 
 echo ""
-echo "=== Rokugan Discord Bot — Server Setup ==="
+echo "=== Rokugan Discord Bot: Server Setup ==="
 echo ""
 
 # --- Must be root ---
@@ -54,7 +54,7 @@ if [ -d "$BOT_DIR" ]; then
     # Pull if it's a git checkout, otherwise just warn
     if [ -d "$BOT_DIR/.git" ]; then
         cd "$BOT_DIR"
-        sudo -u rokugan git pull || echo "  Git pull failed — you may need to update manually."
+        sudo -u rokugan git pull || echo "  Git pull failed: you may need to update manually."
         cd /root
     fi
 else
@@ -93,7 +93,7 @@ sudo -u rokugan .venv/bin/pip install -q -r requirements.txt
 # --- 6. Bot token ---
 echo "[6/9] Discord bot token setup..."
 if [ -f "$BOT_DIR/.env" ]; then
-    echo "  .env already exists — keeping it. Edit manually if you need to change the token:"
+    echo "  .env already exists: keeping it. Edit manually if you need to change the token:"
     echo "    nano /home/rokugan/bot/.env"
 else
     echo ""
@@ -149,10 +149,10 @@ if systemctl is-active --quiet rokugan-bot; then
     echo "============================================"
     echo ""
     echo "  Useful commands:"
-    echo "    systemctl status rokugan-bot    — is it running?"
-    echo "    journalctl -u rokugan-bot -f    — live log (Ctrl+C to stop watching)"
-    echo "    systemctl restart rokugan-bot   — restart after changes"
-    echo "    systemctl stop rokugan-bot      — stop the bot"
+    echo "    systemctl status rokugan-bot   : is it running?"
+    echo "    journalctl -u rokugan-bot -f   : live log (Ctrl+C to stop watching)"
+    echo "    systemctl restart rokugan-bot  : restart after changes"
+    echo "    systemctl stop rokugan-bot     : stop the bot"
     echo ""
     echo "  The bot auto-starts on boot and auto-restarts on crash."
     echo "  Database backups run daily at 04:00 UTC in /home/rokugan/backups/"

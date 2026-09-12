@@ -1,4 +1,4 @@
-"""Character advancement — players spend DM-granted Experience, at tabletop
+"""Character advancement: players spend DM-granted Experience, at tabletop
 L5R 4e RAW costs. No automatic faucet: a DM grants XP; players spend it.
 
 RAW costs (owner-confirmed):
@@ -13,7 +13,7 @@ RAW costs (owner-confirmed):
 RAW raises individual Traits (a Ring is min of its two Traits, derived in
 stats.py). Traits/Void cap at 5, Skills at 10. Insight and Insight Rank are
 derived and follow automatically. Prerequisites (school/ring gating for kata,
-kiho, spells) are left to the DM — the bot handles the XP economy and records
+kiho, spells) are left to the DM: the bot handles the XP economy and records
 what was bought.
 """
 
@@ -117,11 +117,11 @@ def misc_cost(mastery_level: int) -> int:
 
 def cost_table() -> str:
     return (
-        "**Traits** — new rank × 4 (3→4 = 16) · cap 5\n"
-        "**Void** — new rank × 6 (3→4 = 24) · cap 5\n"
-        "**Skills** — new rank × 1 (3→4 = 4) · cap 10\n"
-        "**Skill Emphasis** — flat 2 (max ⌈rank ÷ 2⌉ per skill)\n"
-        "**Kata / memorised Spell** — 1 × Mastery Level\n"
-        "**Kiho** — 1 × Mastery Level (Brotherhood); 1.5 × Mastery Level, "
+        "**Traits**: new rank × 4 (3→4 = 16) · cap 5\n"
+        "**Void**: new rank × 6 (3→4 = 24) · cap 5\n"
+        "**Skills**: new rank × 1 (3→4 = 4) · cap 10\n"
+        "**Skill Emphasis**: flat 2 (max ⌈rank ÷ 2⌉ per skill)\n"
+        "**Kata / memorised Spell**: 1 × Mastery Level\n"
+        "**Kiho**: 1 × Mastery Level (Brotherhood); 1.5 × Mastery Level, "
         "rounded up, for non-Brotherhood monks (s38a)"
     )

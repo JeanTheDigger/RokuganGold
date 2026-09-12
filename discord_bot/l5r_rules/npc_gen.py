@@ -1,5 +1,5 @@
-"""Procedural NPC samurai generation — a faithful, GENERIC port of GDD s22.4
-(Generation Templates — LOCKED).
+"""Procedural NPC samurai generation: a faithful, GENERIC port of GDD s22.4
+(Generation Templates: LOCKED).
 
 s22.4 builds a character from Clan + Family + School + Insight Rank. The
 school-specific pieces (which skills, which Trait bonuses, the outfit) live in
@@ -27,7 +27,7 @@ from .character import Character
 from .dice import DiceEngine
 from .enums import RING_TRAITS
 
-# (ring_min, ring_max, sum_min, sum_max) per Insight Rank — s22.4 "Ring value ranges".
+# (ring_min, ring_max, sum_min, sum_max) per Insight Rank: s22.4 "Ring value ranges".
 RANK_RINGS = {
     1: (2, 3, 11, 13),
     2: (2, 3, 13, 15),

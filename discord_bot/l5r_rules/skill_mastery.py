@@ -2,7 +2,7 @@
 
 Each weapon skill grants mastery abilities at Ranks 3, 5, and 7 (some skip a
 rank). This module evaluates the subset that `/attack` can compute faithfully
-from the character sheet, the weapon profile, and the encounter state — the
+from the character sheet, the weapon profile, and the encounter state: the
 same deterministic-auto-apply pattern used by kata_effects.py and
 technique_effects.py.
 
@@ -30,11 +30,11 @@ Auto-applied (18):
   War Fan R7: defender Armor TN +3
 
 Reminder-only (not auto-applied):
-  Polearms R3 (+5 Init first round — needs per-round tracker changes),
-  Spears R5/R7 (range / ready — not combat math), Staves R3 (armor doubling
-  not modeled), Knives R3/R7 and War Fan R3 (off-hand / extra attack — dual-
+  Polearms R3 (+5 Init first round: needs per-round tracker changes),
+  Spears R5/R7 (range / ready: not combat math), Staves R3 (armor doubling
+  not modeled), Knives R3/R7 and War Fan R3 (off-hand / extra attack: dual-
   wield not modeled), Chain Weapons R3/R5 (grapple not modeled), Kenjutsu R5
-  and Kyujutsu R3/R5 (ready / string / range — not combat math).
+  and Kyujutsu R3/R5 (ready / string / range: not combat math).
 """
 
 from __future__ import annotations
@@ -174,5 +174,5 @@ def initiative_reminder(character: Character, weapon_profile: dict) -> str | Non
     """A DM reminder for initiative-phase masteries the bot doesn't auto-apply.
     Polearms R3: +5 Initiative in the first round of a skirmish."""
     if _skill(weapon_profile) == "polearms" and _skill_rank(character, weapon_profile) >= 3:
-        return "Polearms R3: +5 Initiative in first round (not auto-applied — adjust manually)"
+        return "Polearms R3: +5 Initiative in first round (not auto-applied: adjust manually)"
     return None

@@ -2,11 +2,11 @@
 
 One Encounter per Discord channel. Combatants are ordered by initiative total
 (highest first); ties keep insertion order. This is ephemeral scratch state for
-running a fight's turn order — it is not persisted, so a bot restart clears any
+running a fight's turn order: it is not persisted, so a bot restart clears any
 in-progress encounters (acceptable for a turn tracker; sheets and wounds are in
 the database and survive).
 
-Pure Python — no Discord, no rules imports. The bot rolls initiative via
+Pure Python: no Discord, no rules imports. The bot rolls initiative via
 l5r_rules.combat.roll_initiative and hands the totals here.
 """
 
@@ -53,8 +53,8 @@ class Combatant:
     # L5R 4e: 1 Complex OR 2 Simple actions per turn.
     actions_used: int = 0  # 0=none, 1=one simple, 2=done (complex or 2 simples)
     # Held/delayed actions (s40): DM-managed.
-    held: bool = False      # holding action — acts later this round
-    delayed: bool = False   # delayed — moved to lower initiative
+    held: bool = False      # holding action: acts later this round
+    delayed: bool = False   # delayed: moved to lower initiative
 
     def consume_once(self, key: str, scope: str) -> bool:
         """Try to spend a once-per-`scope` ability ('turn' or 'round'). Returns

@@ -1,12 +1,12 @@
 """The playable L5R 4e character sheet.
 
-A deliberately SMALL subset of `shared/character_data.gd` — only the fields a
+A deliberately SMALL subset of `shared/character_data.gd`: only the fields a
 DM-in-the-loop tabletop bot needs (identity, the 8 Traits + Void, Void Points,
 skills, honor/glory/status/infamy, wounds, armor, taint, techniques, spells,
 koku). The full 600-field simulation sheet (Kolat, sleepers, ship drift, geisha
 intelligence, etc.) is persistent-world state the bot does not model.
 
-Every default value here is copied from the GDScript defaults — none invented:
+Every default value here is copied from the GDScript defaults: none invented:
 Traits/Void start at 2, Honor 3.5, Glory 1.0, Status 1.0, Infamy 0.0, Void
 Points 2/2, age 16.
 
@@ -106,7 +106,7 @@ class Character:
     # -- Money --
     koku: float = 0.0
 
-    # -- Experience — spendable XP (DM-granted) and lifetime total spent --
+    # -- Experience: spendable XP (DM-granted) and lifetime total spent --
     xp: float = 0.0
     xp_spent: float = 0.0
 

@@ -2,7 +2,7 @@
 
 One small local database file (default ``rokugan.db`` in this folder, override
 with the ``DB_PATH`` env var). SQLite means there is no separate database server
-to install or run — the whole store is a single file that is trivial to back up
+to install or run: the whole store is a single file that is trivial to back up
 (just copy it).
 
 Scope is per Discord server ("guild"): a character, an active-character choice,

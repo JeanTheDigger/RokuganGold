@@ -1,4 +1,4 @@
-"""Creatures / monsters — fixed stat blocks transcribed VERBATIM from the
+"""Creatures / monsters: fixed stat blocks transcribed VERBATIM from the
 Rokugan bestiaries (natural_creature_bestiary.gd, shadowlands_beast_bestiary.gd,
 undead_bestiary.gd, oni_bestiary.gd), using the SpiritCreatureData model.
 
@@ -7,7 +7,7 @@ FIXED Roll & Keep from its stat block, has an explicit Armor TN and Reduction,
 and dies at its `wounds_dead` total with wound levels read off `wound_thresholds`
 (the spirit-creature wound track from character_stats.gd `_spirit_wound_level`).
 
-Every number here is copied from the bestiary — nothing is invented. This is a
+Every number here is copied from the bestiary: nothing is invented. This is a
 starter roster (a few natural animals, low Shadowlands threats, a zombie, and
 two lesser oni); more can be transcribed the same way.
 """
@@ -71,7 +71,7 @@ def _build_catalog() -> dict[str, Creature]:
             continue
         d = dict(raw)
         # A creature stored with wounds_dead == 0 uses the human wound track
-        # ("human_wounds" tag): Earth ring x 2 per level, 8 levels to death —
+        # ("human_wounds" tag): Earth ring x 2 per level, 8 levels to death : 
         # the same LOCKED formula as PCs (character_stats.gd). Derive it here.
         if int(d.get("wounds_dead", 0)) <= 0:
             per = max(1, int(d.get("earth", 2))) * 2

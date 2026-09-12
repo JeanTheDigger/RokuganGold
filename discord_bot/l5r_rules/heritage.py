@@ -1,4 +1,4 @@
-"""L5R 4e Heritage Tables — random character background rolls.
+"""L5R 4e Heritage Tables: random character background rolls.
 
 Core Rulebook p.109-115: Each clan has a Heritage Table. Player rolls 1d10
 on their clan table, gaining a mixed-blessing result (some purely beneficial,
@@ -15,7 +15,7 @@ HERITAGE_TABLES: dict[str, list[dict]] = {
     "Crab": [
         {"roll": 1, "name": "Famous Deed", "effect": "Ancestor once performed a heroic defense of the Wall. +3 Glory."},
         {"roll": 2, "name": "Glorious Battle", "effect": "Ancestor died gloriously fighting the Shadowlands. +1 Honor Rank."},
-        {"roll": 3, "name": "Mixed Blessing — Jade Hand", "effect": "Ancestor was touched by jade. +1k0 vs Shadowlands creatures, but skin has a faint green tint (Social TN +5 outside Crab lands)."},
+        {"roll": 3, "name": "Mixed Blessing: Jade Hand", "effect": "Ancestor was touched by jade. +1k0 vs Shadowlands creatures, but skin has a faint green tint (Social TN +5 outside Crab lands)."},
         {"roll": 4, "name": "Tainted Past", "effect": "Ancestor fell to the Taint. Family is watched carefully. −0.5 Glory, +1 Willpower for Taint resistance."},
         {"roll": 5, "name": "Siege Master", "effect": "Ancestor designed a key section of the Wall. +1 rank in Engineering (free)."},
         {"roll": 6, "name": "Dark Secret", "effect": "Ancestor used maho to defend the Wall. If discovered: −3 Honor, −5 Glory."},

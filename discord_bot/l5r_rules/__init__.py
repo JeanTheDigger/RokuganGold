@@ -2,7 +2,7 @@
 
 This package is a standalone translation of the rules logic found in the
 Godot project's `/simulation/` and `/shared/` GDScript. It has NO dependency
-on Godot and NO dependency on Discord — it is plain, testable Python.
+on Godot and NO dependency on Discord: it is plain, testable Python.
 
 The GDScript remains the authoritative reference implementation; every module
 here names the GDScript file it was ported from so the two can be kept in sync

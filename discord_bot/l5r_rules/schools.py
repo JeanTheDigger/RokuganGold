@@ -40,7 +40,7 @@ def by_category(category: str) -> list[dict]:
 
 
 def basic() -> list[dict]:
-    """Starting Schools only — the ones a character can be created with."""
+    """Starting Schools only: the ones a character can be created with."""
     return [s for s in SCHOOLS_DATA if s.get("category", "basic") == "basic"]
 
 
@@ -93,8 +93,8 @@ def _split_commas(s: str) -> list[str]:
 def parse_skills(skills: str) -> tuple[list[tuple[str, int, str | None]], list[str]]:
     """Return (assigned, wildcards).
 
-    assigned: [(skill_name, rank, emphasis|None)] — concrete starting skills.
-    wildcards: ['any one Bugei Skill', ...] — player-choice slots, left for the DM.
+    assigned: [(skill_name, rank, emphasis|None)]: concrete starting skills.
+    wildcards: ['any one Bugei Skill', ...]: player-choice slots, left for the DM.
     """
     assigned: list[tuple[str, int, str | None]] = []
     wildcards: list[str] = []

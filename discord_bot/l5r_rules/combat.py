@@ -1,10 +1,10 @@
-"""L5R 4e individual combat — the core resolution, ported from
+"""L5R 4e individual combat: the core resolution, ported from
 `simulation/individual_combat.gd` (s40) and `simulation/wound_system.gd`.
 
 This is the CORE only. The GDScript layers on kata, kiho, mutations, advantages,
 spirit-creature stat blocks, void-point spends, dual-wielding, mounted combat,
 skill masteries (R3/R5/R7 damage bonuses and 9-explosions), and per-round
-participant state — all persistent-world combat features the bot does not model.
+participant state: all persistent-world combat features the bot does not model.
 What is reproduced here is exactly what the GDScript does with those layers
 inert:
 
@@ -20,7 +20,7 @@ Stances modelled: Attack (0), Full Attack (attacker +2k1 to hit / -10 own Armor
 TN), Defense (defender +Air ring + Defense skill to Armor TN), Center (0). Full
 Defense needs a roll and is left to the DM via a manual TN adjustment.
 
-No game values are invented — every number traces to the GDScript / GDD.
+No game values are invented: every number traces to the GDScript / GDD.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from .dice import DiceEngine
 # Weapon catalog subset (values verbatim from individual_combat.gd WEAPON_CATALOG).
 # Keys used by the bot: rolled, kept, strength_adds, skill, trait, melee, size,
 # and no_explode (shinai). Special keys (thrown/charge/armor_tn_mult/break/etc.)
-# are intentionally omitted — those maneuvers are not modelled at this phase.
+# are intentionally omitted: those maneuvers are not modelled at this phase.
 WEAPON_CATALOG: dict[str, dict] = {
     # Swords (Kenjutsu)
     "katana": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
@@ -89,7 +89,7 @@ WEAPON_CATALOG: dict[str, dict] = {
     "kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
     "manrikikusari": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
     # Thrown / ninja (Ninjutsu; no Strength to damage; damage does NOT explode
-    # by default — s24: "Rank 5: Damage dice explode normally (they do not
+    # by default: s24: "Rank 5: Damage dice explode normally (they do not
     # normally)"; Ninjutsu R5 mastery overrides this).
     "shuriken": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
     "tsubute": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
@@ -157,7 +157,7 @@ def roll_full_defense(
     }
 
 
-# individual_combat.gd DEFAULT_WEAPON — used for any unknown weapon name.
+# individual_combat.gd DEFAULT_WEAPON: used for any unknown weapon name.
 DEFAULT_WEAPON: dict = {
     "rolled": 2, "kept": 1, "strength_adds": True, "skill": "Kenjutsu",
     "trait": "agility", "melee": True, "size": "Medium",
@@ -382,7 +382,7 @@ def resolve_damage(
 ) -> dict:
     """Roll raw damage (before the target's armor reduction). `extra_rolled`/
     `extra_kept` are bonus damage dice from an active kata or School Technique
-    (e.g. Waves upon the Breakers' +1k0, The Hand of Thunder's +0k1) — added like
+    (e.g. Waves upon the Breakers' +1k0, The Hand of Thunder's +0k1): added like
     Increased Damage but with no TN cost. `extra_flat` is a flat bonus added to
     the damage total (e.g. Matsu's Lion's Roar +Honor Rank). `explode_9` makes
     damage dice explode on 9+ (Kenjutsu R7, Heavy Weapons R7). `force_explode`
@@ -670,7 +670,7 @@ def resolve_fear_check(
     bonus: int = 0,
 ) -> dict:
     """Fear check: Willpower roll vs TN 5 + (Fear Rank × 5).
-    Willpower is both rolled and kept (trait-only, no skill — never explodes).
+    Willpower is both rolled and kept (trait-only, no skill: never explodes).
     L5R 4e core: Fear rating gives a TN, character rolls raw Willpower."""
     tn = 5 + fear_rank * 5
     result = dice_engine.roll_and_keep(max(1, willpower), max(1, willpower), False)

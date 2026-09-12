@@ -34,14 +34,14 @@ MUTATIONS: list[str] = [
 ]
 
 MADNESS: list[str] = [
-    "Paranoia — trust no one",
-    "Bloodlust — urge to violence",
-    "Nightmares — Fatigue after rest (no VP refresh without Meditation TN 20)",
-    "Whispers — hears kansen speaking",
-    "Obsession — fixates on a single goal",
-    "Cruelty — enjoys others' suffering",
-    "Megalomania — believes self above mortals",
-    "Apathy — loses emotional connection",
+    "Paranoia: trust no one",
+    "Bloodlust: urge to violence",
+    "Nightmares: Fatigue after rest (no VP refresh without Meditation TN 20)",
+    "Whispers: hears kansen speaking",
+    "Obsession: fixates on a single goal",
+    "Cruelty: enjoys others' suffering",
+    "Megalomania: believes self above mortals",
+    "Apathy: loses emotional connection",
 ]
 
 

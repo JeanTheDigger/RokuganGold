@@ -1,4 +1,4 @@
-"""L5R 4e Family data — trait bonuses at character creation.
+"""L5R 4e Family data: trait bonuses at character creation.
 
 Each Great Clan family grants +1 to a specific Trait. Data from L5R 4e Core
 Rulebook Chapter 4 and Great Clans supplements.
