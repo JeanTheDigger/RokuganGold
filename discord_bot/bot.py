@@ -10952,6 +10952,42 @@ async def setup_server(interaction: discord.Interaction) -> None:
     await ooc_cat.create_text_channel("general")
     await ooc_cat.create_text_channel("off-topic")
 
+    # Announcements channel (read-only for players, DMs can post)
+    announce_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        approved_role: discord.PermissionOverwrite(
+            view_channel=True, send_messages=False, read_message_history=True,
+            add_reactions=True,
+        ),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_messages=True,
+            embed_links=True,
+        ),
+    }
+    for r in dm_roles:
+        announce_overwrites[r] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+            manage_messages=True,
+        )
+    announcements_ch = await ooc_cat.create_text_channel("announcements", overwrites=announce_overwrites)
+
+    # Rules reference channel (read-only for everyone, bot posts pinned embeds)
+    rules_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        approved_role: discord.PermissionOverwrite(
+            view_channel=True, send_messages=False, read_message_history=True,
+        ),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_messages=True,
+        ),
+    }
+    for r in dm_roles:
+        rules_overwrites[r] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+        )
+    rules_ch = await ooc_cat.create_text_channel("rules-reference", overwrites=rules_overwrites)
+    await _post_rules_reference(rules_ch)
+
     # --- 3. In Character (Approved + DMs only) ---
     ic_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
         everyone: discord.PermissionOverwrite(view_channel=False),
@@ -10998,15 +11034,258 @@ async def setup_server(interaction: discord.Interaction) -> None:
         f"• {approved_role.mention} — Approved player (green, basic access)\n\n"
         f"**Categories & Channels:**\n"
         f"• **Lobby** — {welcome_ch.mention}, #character-submission\n"
-        f"• **Out of Character** — #general, #off-topic (visible to {ROLE_APPROVED}+)\n"
+        f"• **Out of Character** — #general, #off-topic, {announcements_ch.mention} (DM-post only), "
+        f"{rules_ch.mention} (read-only reference)\n"
         f"• **In Character** — #in-character (visible to {ROLE_APPROVED}+)\n"
         f"• **Dungeon Masters** — {dm_discussion.mention}, {approvals_ch.mention} (DMs only)\n\n"
         f"**Approval channel** set to {approvals_ch.mention} — character submissions and "
         f"damage/healing approvals will be routed there.\n\n"
         f"Players use `/submit` in the lobby to apply. DMs approve or deny from {approvals_ch.mention}.\n"
-        f"Approved players get their nickname changed to their character name."
+        f"Approved players get their nickname changed to their character name.\n\n"
+        f"Use `/dm announce` to post events to {announcements_ch.mention}. "
+        f"Use `/roster` to see all approved characters."
     )
     await interaction.followup.send(summary, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+#  Rules reference — pinned embeds posted by /setup server
+# ---------------------------------------------------------------------------
+
+async def _post_rules_reference(channel: discord.TextChannel) -> None:
+    """Post and pin the L5R 4e quick-reference embeds."""
+    # 1. Wound Levels
+    wound_lines: list[str] = []
+    for lvl, pen in zip(enums.WOUND_LEVELS, enums.WOUND_PENALTIES):
+        pen_str = f" ({pen:+d} to all rolls)" if pen else ""
+        wound_lines.append(f"**{lvl}**{pen_str}")
+    wound_embed = discord.Embed(
+        title="Wound Levels",
+        color=0xC4A747,
+        description=(
+            "Each level holds (Earth Ring x 2) wounds.\n"
+            + "\n".join(wound_lines)
+            + "\n\n*Wound penalties apply to all rolls at that level.*"
+        ),
+    )
+    msg = await channel.send(embed=wound_embed)
+    await msg.pin()
+
+    # 2. Stances
+    stance_embed = discord.Embed(
+        title="Combat Stances",
+        color=0xC4A747,
+    )
+    stance_embed.add_field(
+        name="Attack",
+        value="Standard stance. No bonuses or penalties.",
+        inline=False,
+    )
+    stance_embed.add_field(
+        name="Full Attack",
+        value="+2k1 to attack rolls, but **-10 to your Armor TN** (reckless).",
+        inline=False,
+    )
+    stance_embed.add_field(
+        name="Defense",
+        value="+(Air Ring + Defense Skill) to your Armor TN. You may still attack normally.",
+        inline=False,
+    )
+    stance_embed.add_field(
+        name="Full Defense",
+        value="Roll Defense/Reflexes. Add half (rounded up) to your Armor TN until your next turn. **Cannot attack.**",
+        inline=False,
+    )
+    stance_embed.add_field(
+        name="Center",
+        value="No combat actions. On your *next* turn: +1k1+Void to your first roll.",
+        inline=False,
+    )
+    msg = await channel.send(embed=stance_embed)
+    await msg.pin()
+
+    # 3. Common TNs
+    tn_embed = discord.Embed(
+        title="Target Numbers (TN)",
+        color=0xC4A747,
+        description=(
+            "**5** — Mundane\n"
+            "**10** — Simple\n"
+            "**15** — Normal\n"
+            "**20** — Hard\n"
+            "**25** — Very Hard\n"
+            "**30** — Heroic\n"
+            "**40** — Legendary\n"
+            "**50+** — Impossible\n\n"
+            "**Raises:** voluntarily increase TN by +5 each for extra effects.\n"
+            "**Free Raises:** from mastery abilities or advantages; don't increase TN."
+        ),
+    )
+    msg = await channel.send(embed=tn_embed)
+    await msg.pin()
+
+    # 4. Maneuvers
+    maneuver_embed = discord.Embed(
+        title="Combat Maneuvers",
+        color=0xC4A747,
+    )
+    maneuver_embed.add_field(
+        name="Called Shot (0 Raises)",
+        value="Declare a specific hit location for narrative effect.",
+        inline=False,
+    )
+    maneuver_embed.add_field(
+        name="Feint (2 Raises)",
+        value="Ignore target's Armor TN bonus from armor on this attack. Margin of success matters.",
+        inline=False,
+    )
+    maneuver_embed.add_field(
+        name="Knockdown (2 Raises)",
+        value="Contested Strength roll. Loser is knocked prone.",
+        inline=False,
+    )
+    maneuver_embed.add_field(
+        name="Disarm (3 Raises)",
+        value="Contested attack vs. Reflexes roll. If you win, target drops their weapon.",
+        inline=False,
+    )
+    maneuver_embed.add_field(
+        name="Extra Attack (5 Raises)",
+        value="Make one additional attack this round.",
+        inline=False,
+    )
+    maneuver_embed.add_field(
+        name="Increased Damage (+1 Raise each)",
+        value="Each Raise adds +1k0 to your damage roll.",
+        inline=False,
+    )
+    msg = await channel.send(embed=maneuver_embed)
+    await msg.pin()
+
+    # 5. Rings & Traits
+    ring_embed = discord.Embed(
+        title="Rings & Traits",
+        color=0xC4A747,
+        description=(
+            "**Air** = min(Reflexes, Awareness)\n"
+            "**Earth** = min(Stamina, Willpower)\n"
+            "**Fire** = min(Agility, Intelligence)\n"
+            "**Water** = min(Strength, Perception)\n"
+            "**Void** = Void (standalone)\n\n"
+            "*Armor TN = Reflexes x 5 + 5 (+ armor bonus)*\n"
+            "*Initiative = Insight Rank + Reflexes, keep Reflexes*"
+        ),
+    )
+    msg = await channel.send(embed=ring_embed)
+    await msg.pin()
+
+
+# ---------------------------------------------------------------------------
+#  /dm announce — post an event to announcements with RSVP
+# ---------------------------------------------------------------------------
+
+@dm.command(name="announce", description="Post a session/event announcement with RSVP reactions (Fortune+).")
+@app_commands.describe(
+    title="Event title (e.g. 'Court of the Crane — Session 5').",
+    description="Event details (what, where, when, etc.).",
+    date="When the event takes place (e.g. 'Saturday, Sept 14 at 7pm EST').",
+    channel="Channel to post in (defaults to #announcements if it exists).",
+)
+async def dm_announce(
+    interaction: discord.Interaction,
+    title: app_commands.Range[str, 1, 256],
+    description: app_commands.Range[str, 1, 4000],
+    date: app_commands.Range[str, 1, 200] | None = None,
+    channel: discord.TextChannel | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to post announcements.",
+            ephemeral=True,
+        )
+        return
+    target_ch = channel
+    if target_ch is None:
+        for ch in interaction.guild.text_channels:
+            if ch.name == "announcements":
+                target_ch = ch
+                break
+    if target_ch is None:
+        await interaction.response.send_message(
+            "No announcements channel found. Either specify a channel or run `/setup server`.",
+            ephemeral=True,
+        )
+        return
+    embed = discord.Embed(
+        title=title,
+        color=0xC4A747,
+        description=description,
+    )
+    if date:
+        embed.add_field(name="When", value=date, inline=False)
+    embed.add_field(
+        name="RSVP",
+        value="React below:\n✅ Attending  ❔ Maybe  ❌ Can't make it",
+        inline=False,
+    )
+    embed.set_footer(text=f"Posted by {interaction.user.display_name}")
+    msg = await target_ch.send(embed=embed)
+    await msg.add_reaction("✅")
+    await msg.add_reaction("❔")
+    await msg.add_reaction("❌")
+    await interaction.response.send_message(
+        f"Announcement posted in {target_ch.mention}.", ephemeral=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+#  /roster — player character directory
+# ---------------------------------------------------------------------------
+
+@client.tree.command(name="roster", description="Show all approved player characters on this server.")
+async def roster(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    guild_id = str(interaction.guild_id)
+    pcs = store.list_active_pcs(guild_id)
+    if not pcs:
+        await interaction.response.send_message(
+            "No active player characters found on this server.", ephemeral=True,
+        )
+        return
+    embed = discord.Embed(
+        title="Player Character Roster",
+        color=0xC4A747,
+        description=f"**{len(pcs)}** active characters on this server.",
+    )
+    for owner_id, rec in pcs:
+        c = rec.character
+        clan_str = c.clan if c.clan else "—"
+        school_str = c.school if c.school else "—"
+        wl = stats.wound_level_name(c)
+        wound_icon = ""
+        if wl == "Dead":
+            wound_icon = " \U0001f480"
+        elif wl in ("Down", "Out"):
+            wound_icon = " \U0001f534"
+        elif wl in ("Hurt", "Injured", "Crippled"):
+            wound_icon = " \U0001f7e0"
+        elif wl == "Healthy":
+            wound_icon = " \U0001f7e2"
+        member = interaction.guild.get_member(int(owner_id))
+        player_str = member.mention if member else f"<@{owner_id}>"
+        embed.add_field(
+            name=f"{c.name}{wound_icon}",
+            value=f"{clan_str} • {school_str}\n{wl} ({c.wounds_taken} wounds) • Player: {player_str}",
+            inline=True,
+        )
+    if len(pcs) > 25:
+        embed.set_footer(text=f"Showing first 25 of {len(pcs)} characters.")
+    await interaction.response.send_message(embed=embed)
 
 
 client.tree.add_command(sheet)
