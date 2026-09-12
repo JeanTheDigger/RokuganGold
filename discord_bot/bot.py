@@ -5467,7 +5467,7 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
 
 @combat_group.command(
     name="room",
-    description="Add all room members' active characters to initiative (run inside a room thread). Fortune role required.",
+    description="Add all room members' active characters to initiative. Fortune role required.",
 )
 async def combat_room(interaction: discord.Interaction) -> None:
     if not _guild_ok(interaction):
