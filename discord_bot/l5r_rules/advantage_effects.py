@@ -332,6 +332,39 @@ def skill_check_modifiers(
     return rolled, kept, flat, notes
 
 
+# ---------------------------------------------------------------------------
+# Void Point spend restrictions (Momoku, Consumed: Determination, FoB)
+# ---------------------------------------------------------------------------
+
+
+def can_spend_void_on_roll(
+    character: Character,
+    *,
+    skill_name: str = "",
+    is_wound_reduction: bool = False,
+) -> tuple[bool, str]:
+    """Check if this character can spend a Void Point for the given purpose.
+
+    Returns (True, "") if allowed, or (False, reason) if blocked.
+    """
+    if _has_disadv(character, "Momoku"):
+        return False, "Momoku: may only spend VP on School Techniques"
+
+    if not is_wound_reduction:
+        if _has_disadv_containing(character, "consumed") and _has_disadv_containing(character, "determination"):
+            return False, "Consumed (Determination): cannot spend VP to enhance die rolls"
+
+    if is_wound_reduction:
+        if _has_disadv_containing(character, "failure of bushido") and _has_disadv_containing(character, "duty"):
+            return False, "Failure of Bushido (Duty): cannot spend VP to negate Wounds"
+
+    if skill_name.lower() == "sincerity":
+        if _has_disadv_containing(character, "failure of bushido") and _has_disadv_containing(character, "honesty"):
+            return False, "Failure of Bushido (Honesty): cannot spend VP on Sincerity"
+
+    return True, ""
+
+
 # Parameterised advantages that require a ": Parameter" suffix.
 PARAMETERISED_ADVANTAGES: dict[str, str] = {
     "Chosen by the Oracles": "Ring (Air, Earth, Fire, Water, Void)",

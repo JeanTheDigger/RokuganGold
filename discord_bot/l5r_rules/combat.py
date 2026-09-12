@@ -673,12 +673,16 @@ def resolve_fear_check(
     fear_rank: int,
     dice_engine: DiceEngine,
     bonus: int = 0,
+    extra_rolled: int = 0,
+    extra_kept: int = 0,
 ) -> dict:
     """Fear check: Willpower roll vs TN 5 + (Fear Rank × 5).
     Willpower is both rolled and kept (trait-only, no skill: never explodes).
     L5R 4e core: Fear rating gives a TN, character rolls raw Willpower."""
     tn = 5 + fear_rank * 5
-    result = dice_engine.roll_and_keep(max(1, willpower), max(1, willpower), False)
+    rolled = max(1, willpower + extra_rolled)
+    kept = max(1, willpower + extra_kept)
+    result = dice_engine.roll_and_keep(rolled, kept, False)
     total = result.total + bonus
     return {
         "success": total >= tn,
@@ -686,8 +690,8 @@ def resolve_fear_check(
         "tn": tn,
         "margin": total - tn,
         "dice": result,
-        "rolled": willpower,
-        "kept": willpower,
+        "rolled": rolled,
+        "kept": kept,
     }
 
 

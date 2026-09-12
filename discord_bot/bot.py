@@ -1177,17 +1177,21 @@ class DamageView(discord.ui.View):
             dis = combat.resolve_disarm(attacker, target, engine)
             applied = combat.apply_damage(target, dis["damage"], target.armor_reduction)
             void_line = ""
-            if void_reduce and target.current_void_points > 0:
-                void_saved = min(10, applied["final_damage"])
-                target.wounds_taken = max(0, target.wounds_taken - void_saved)
-                target.current_void_points -= 1
-                applied["final_damage"] -= void_saved
-                applied["new_wound_level"] = stats.wound_level_name(target)
-                applied["is_dead"] = stats.is_dead(target)
-                applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
-                void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
-            elif void_reduce:
-                void_line = "\n🔮 No Void Points available: full damage applied"
+            if void_reduce:
+                ok, reason_block = advantage_effects.can_spend_void_on_roll(target, is_wound_reduction=True)
+                if not ok:
+                    void_line = f"\n🔮 {reason_block}"
+                elif target.current_void_points > 0:
+                    void_saved = min(10, applied["final_damage"])
+                    target.wounds_taken = max(0, target.wounds_taken - void_saved)
+                    target.current_void_points -= 1
+                    applied["final_damage"] -= void_saved
+                    applied["new_wound_level"] = stats.wound_level_name(target)
+                    applied["is_dead"] = stats.is_dead(target)
+                    applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
+                    void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
+                else:
+                    void_line = "\n🔮 No Void Points available: full damage applied"
             store.save(target_rec)
             embed = discord.Embed(
                 title="🗡️ Disarm",
@@ -1280,17 +1284,21 @@ class DamageView(discord.ui.View):
         reduction = max(0, target.armor_reduction - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red)
         applied = combat.apply_damage(target, raw, reduction)
         void_line = ""
-        if void_reduce and target.current_void_points > 0:
-            void_saved = min(10, applied["final_damage"])
-            target.wounds_taken = max(0, target.wounds_taken - void_saved)
-            target.current_void_points -= 1
-            applied["final_damage"] -= void_saved
-            applied["new_wound_level"] = stats.wound_level_name(target)
-            applied["is_dead"] = stats.is_dead(target)
-            applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
-            void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
-        elif void_reduce:
-            void_line = "\n🔮 No Void Points available: full damage applied"
+        if void_reduce:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(target, is_wound_reduction=True)
+            if not ok:
+                void_line = f"\n🔮 {reason_block}"
+            elif target.current_void_points > 0:
+                void_saved = min(10, applied["final_damage"])
+                target.wounds_taken = max(0, target.wounds_taken - void_saved)
+                target.current_void_points -= 1
+                applied["final_damage"] -= void_saved
+                applied["new_wound_level"] = stats.wound_level_name(target)
+                applied["is_dead"] = stats.is_dead(target)
+                applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
+                void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
+            else:
+                void_line = "\n🔮 No Void Points available: full damage applied"
         heal_line = ""
         if applied["is_dead"]:
             heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
@@ -1653,7 +1661,10 @@ async def attack(
     bonus_rolled = bonus_kept = 0
     if spend_void:
         c = attacker_rec.character
-        if c.current_void_points > 0:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c)
+        if not ok:
+            void_line = f" · 🌀 {reason_block}"
+        elif c.current_void_points > 0:
             c.current_void_points -= 1
             bonus_rolled = bonus_kept = 1
             store.save(attacker_rec)
@@ -4860,8 +4871,10 @@ ref_heritage = app_commands.Group(name="heritage", description="Heritage table r
     b_member="Second participant (player).",
     a_is_npc="First participant is an NPC (look up by name, not encounter).",
     b_is_npc="Second participant is an NPC.",
-    bonus_a="Flat bonus for A (Void Point, situational).",
+    bonus_a="Flat bonus for A.",
     bonus_b="Flat bonus for B.",
+    void_a="A spends a Void Point for +1k1.",
+    void_b="B spends a Void Point for +1k1.",
     reason="Label shown with the roll.",
 )
 @app_commands.choices(trait_a=_CONTEST_TRAITS, trait_b=_CONTEST_TRAITS)
@@ -4879,6 +4892,8 @@ async def contest(
     b_is_npc: bool = False,
     bonus_a: app_commands.Range[int, -50, 50] = 0,
     bonus_b: app_commands.Range[int, -50, 50] = 0,
+    void_a: bool = False,
+    void_b: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -4910,13 +4925,41 @@ async def contest(
     adv_rb, adv_kb, adv_fb, adv_notes_b = advantage_effects.skill_check_modifiers(
         cb, skill_b, trait_b.value, is_contested=True, opponent_skill=skill_a,
     )
+    void_ra = void_ka = 0
+    void_line_a = ""
+    if void_a:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(ca, skill_name=skill_a)
+        if not ok:
+            void_line_a = f"🌀 {reason_block}"
+        elif ca.current_void_points <= 0:
+            void_line_a = f"🌀 no Void Points to spend (0/{ca.max_void_points})"
+        else:
+            ca.current_void_points -= 1
+            void_ra = void_ka = 1
+            void_line_a = f"🌀 Void +1k1 ({ca.current_void_points} VP left)"
+    void_rb = void_kb = 0
+    void_line_b = ""
+    if void_b:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(cb, skill_name=skill_b)
+        if not ok:
+            void_line_b = f"🌀 {reason_block}"
+        elif cb.current_void_points <= 0:
+            void_line_b = f"🌀 no Void Points to spend (0/{cb.max_void_points})"
+        else:
+            cb.current_void_points -= 1
+            void_rb = void_kb = 1
+            void_line_b = f"🌀 Void +1k1 ({cb.current_void_points} VP left)"
     result = combat.resolve_contested_check(
         tv_a, sk_a, tv_b, sk_b, engine,
         bonus_a=bonus_a + wp_a + adv_fa,
         bonus_b=bonus_b + wp_b + adv_fb,
-        extra_rolled_a=adv_ra, extra_kept_a=adv_ka,
-        extra_rolled_b=adv_rb, extra_kept_b=adv_kb,
+        extra_rolled_a=adv_ra + void_ra, extra_kept_a=adv_ka + void_ka,
+        extra_rolled_b=adv_rb + void_rb, extra_kept_b=adv_kb + void_kb,
     )
+    if void_a:
+        store.save(rec_a)
+    if void_b:
+        store.save(rec_b)
     title = "🎯 Contested Check"
     if reason:
         title += f": {reason}"
@@ -4936,26 +4979,24 @@ async def contest(
     b_wp_str = f" {wp_b}" if wp_b else ""
     a_bonus_str = f" {bonus_a:+d}" if bonus_a else ""
     b_bonus_str = f" {bonus_b:+d}" if bonus_b else ""
-    embed.add_field(
-        name=ca.name,
-        value=(
-            f"{a_label} ({result['rolled_a']}k{result['kept_a']}"
-            f"{a_wp_str}{a_bonus_str}) → **{result['total_a']}**\n"
-            f"{_format_dice(result['dice_a'])}"
-        ),
-        inline=False,
+    a_text = (
+        f"{a_label} ({result['rolled_a']}k{result['kept_a']}"
+        f"{a_wp_str}{a_bonus_str}) → **{result['total_a']}**\n"
+        f"{_format_dice(result['dice_a'])}"
     )
+    if void_line_a:
+        a_text += f"\n{void_line_a}"
+    embed.add_field(name=ca.name, value=a_text, inline=False)
     if adv_notes_a:
         embed.add_field(name=f"{ca.name} Adv/Disadv", value="\n".join(adv_notes_a), inline=False)
-    embed.add_field(
-        name=cb.name,
-        value=(
-            f"{b_label} ({result['rolled_b']}k{result['kept_b']}"
-            f"{b_wp_str}{b_bonus_str}) → **{result['total_b']}**\n"
-            f"{_format_dice(result['dice_b'])}"
-        ),
-        inline=False,
+    b_text = (
+        f"{b_label} ({result['rolled_b']}k{result['kept_b']}"
+        f"{b_wp_str}{b_bonus_str}) → **{result['total_b']}**\n"
+        f"{_format_dice(result['dice_b'])}"
     )
+    if void_line_b:
+        b_text += f"\n{void_line_b}"
+    embed.add_field(name=cb.name, value=b_text, inline=False)
     if adv_notes_b:
         embed.add_field(name=f"{cb.name} Adv/Disadv", value="\n".join(adv_notes_b), inline=False)
     embed.add_field(name="Result", value=verdict, inline=False)
@@ -4974,7 +5015,8 @@ async def contest(
     fear_rank="Fear Rank of the source (1-10, sets TN to 5 + rank x 5).",
     member="Player making the check (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
-    bonus="Flat bonus (Void Point, advantages, etc.).",
+    bonus="Flat bonus (advantages, etc.).",
+    spend_void="Spend a Void Point for +1k1.",
 )
 async def fear_check(
     interaction: discord.Interaction,
@@ -4983,6 +5025,7 @@ async def fear_check(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
+    spend_void: bool = False,
 ) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -4997,7 +5040,21 @@ async def fear_check(
         return
     c = rec.character
     wp = stats.wound_penalty(c)
-    result = combat.resolve_fear_check(c.willpower, fear_rank, engine, bonus=bonus + wp)
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c)
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_fear_check(c.willpower, fear_rank, engine, bonus=bonus + wp, extra_rolled=void_r, extra_kept=void_k)
+    if spend_void:
+        store.save(rec)
     success = result["success"]
     tn = result["tn"]
     embed = discord.Embed(
@@ -5006,14 +5063,13 @@ async def fear_check(
     )
     wp_str = f" {wp}" if wp else ""
     bonus_str = f" {bonus:+d}" if bonus else ""
-    embed.add_field(
-        name="Roll",
-        value=(
-            f"Willpower ({result['rolled']}k{result['kept']}{wp_str}{bonus_str})"
-            f" vs TN **{tn}** (Fear {fear_rank})"
-        ),
-        inline=False,
+    roll_text = (
+        f"Willpower ({result['rolled']}k{result['kept']}{wp_str}{bonus_str})"
+        f" vs TN **{tn}** (Fear {fear_rank})"
     )
+    if void_line:
+        roll_text += f"\n{void_line}"
+    embed.add_field(name="Roll", value=roll_text, inline=False)
     embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
     verdict = "✅ **Resists the Fear!**" if success else "❌ **Fails!** Must flee or cower."
     embed.add_field(
@@ -5299,6 +5355,7 @@ async def void_status(
     member="Player resisting (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, antidotes, etc.).",
+    spend_void="Spend a Void Point for +1k1.",
     poison_name="Name of the poison (for display).",
 )
 async def poison_resist(
@@ -5308,6 +5365,7 @@ async def poison_resist(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
+    spend_void: bool = False,
     poison_name: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -5324,7 +5382,21 @@ async def poison_resist(
     c = rec.character
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "poison_resist", "stamina")
-    result = combat.resolve_poison_resist(c.stamina, strength, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="poison_resist")
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_poison_resist(c.stamina, strength, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    if spend_void:
+        store.save(rec)
     success = result["success"]
     tn = result["tn"]
     title = f"☠️ Poison Resistance: {c.name}"
@@ -5336,14 +5408,13 @@ async def poison_resist(
     )
     wp_str = f" {wp}" if wp else ""
     bonus_str = f" {bonus:+d}" if bonus else ""
-    embed.add_field(
-        name="Roll",
-        value=(
-            f"Stamina ({result['rolled']}k{result['kept']}{wp_str}{bonus_str})"
-            f" vs TN **{tn}** (Strength {strength})"
-        ),
-        inline=False,
+    roll_text = (
+        f"Stamina ({result['rolled']}k{result['kept']}{wp_str}{bonus_str})"
+        f" vs TN **{tn}** (Strength {strength})"
     )
+    if void_line:
+        roll_text += f"\n{void_line}"
+    embed.add_field(name="Roll", value=roll_text, inline=False)
     embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
     verdict = "✅ **Resists the poison!**" if success else "❌ **Succumbs!** Apply poison effects."
     embed.add_field(
@@ -5369,6 +5440,7 @@ async def poison_resist(
     member="Player making the check (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, tools, etc.).",
+    spend_void="Spend a Void Point for +1k1.",
     reason="What is being treated (for display).",
 )
 async def medicine_check(
@@ -5378,6 +5450,7 @@ async def medicine_check(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
+    spend_void: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -5395,7 +5468,21 @@ async def medicine_check(
     medicine_skill = c.skills.get("Medicine", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Medicine", "intelligence")
-    result = combat.resolve_medicine_check(c.intelligence, medicine_skill, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Medicine")
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_medicine_check(c.intelligence, medicine_skill, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    if spend_void:
+        store.save(rec)
     success = result["success"]
     title = "💊 Medicine Check"
     if reason:
@@ -5407,14 +5494,13 @@ async def medicine_check(
     wp_str = f" {wp}" if wp else ""
     bonus_str = f" {bonus:+d}" if bonus else ""
     skill_label = f"Medicine {medicine_skill}" if medicine_skill > 0 else "Medicine (unskilled)"
-    embed.add_field(
-        name="Roll",
-        value=(
-            f"{skill_label}/Intelligence ({result['rolled']}k{result['kept']}"
-            f"{wp_str}{bonus_str}) vs TN **{tn}**"
-        ),
-        inline=False,
+    roll_text = (
+        f"{skill_label}/Intelligence ({result['rolled']}k{result['kept']}"
+        f"{wp_str}{bonus_str}) vs TN **{tn}**"
     )
+    if void_line:
+        roll_text += f"\n{void_line}"
+    embed.add_field(name="Roll", value=roll_text, inline=False)
     embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
     verdict = "✅ **Treatment successful!**" if success else "❌ **Treatment fails.**"
     embed.add_field(
@@ -5441,6 +5527,7 @@ def _build_check_embed(
     success_text: str = "✅ **Success!**",
     fail_text: str = "❌ **Failure.**",
     adv_notes: list[str] | None = None,
+    void_line: str = "",
 ) -> discord.Embed:
     success = result["success"]
     embed = discord.Embed(
@@ -5449,14 +5536,13 @@ def _build_check_embed(
     )
     wp_str = f" {wp}" if wp else ""
     bonus_str = f" {bonus:+d}" if bonus else ""
-    embed.add_field(
-        name="Roll",
-        value=(
-            f"{skill_label}/{trait_name} ({result['rolled']}k{result['kept']}"
-            f"{wp_str}{bonus_str}) vs TN **{result['tn']}**"
-        ),
-        inline=False,
+    roll_text = (
+        f"{skill_label}/{trait_name} ({result['rolled']}k{result['kept']}"
+        f"{wp_str}{bonus_str}) vs TN **{result['tn']}**"
     )
+    if void_line:
+        roll_text += f"\n{void_line}"
+    embed.add_field(name="Roll", value=roll_text, inline=False)
     embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
     verdict = success_text if success else fail_text
     embed.add_field(
@@ -5483,7 +5569,8 @@ def _build_check_embed(
     tn="Target Number.",
     member="Player making the check (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
-    bonus="Flat bonus (Void Point, advantages, etc.).",
+    bonus="Flat bonus (advantages, situational, etc.).",
+    spend_void="Spend a Void Point for +1k1.",
     reason="Label shown with the roll.",
     secret="Secret roll: result shown only to you (the DM), not the channel.",
 )
@@ -5498,6 +5585,7 @@ async def skill_check(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
+    spend_void: bool = False,
     reason: str | None = None,
     secret: bool = False,
 ) -> None:
@@ -5517,12 +5605,26 @@ async def skill_check(
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
-    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    if spend_void:
+        store.save(rec)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "🎯 Skill Check" + (" 🤫" if secret else "")
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus, adv_notes=adv_notes)
+    embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
     if not secret:
         _log_roll(interaction.channel_id, c.name, f"{skill}/{trait.name} vs TN {tn}", result["total"])
     await interaction.response.send_message(embed=embed, ephemeral=secret)
@@ -5544,6 +5646,7 @@ async def skill_check(
     member="Player making the check (uses their active character).",
     is_npc="Primary character is an NPC.",
     bonus="Flat bonus to the primary roll.",
+    spend_void="Spend a Void Point for +1k1 on the primary roll.",
     reason="Label shown with the roll.",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
@@ -5558,6 +5661,7 @@ async def check_cooperative(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
+    spend_void: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -5605,9 +5709,21 @@ async def check_cooperative(
     applied = min(successes, max_helpers)
     helper_rolled = applied
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
-    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=helper_rolled + adv_r, extra_kept=adv_k)
-    result["rolled"] = tv + sk + helper_rolled + adv_r
-    result["kept"] = tv + adv_k
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=helper_rolled + adv_r + void_r, extra_kept=adv_k + void_k)
+    result["rolled"] = tv + sk + helper_rolled + adv_r + void_r
+    result["kept"] = tv + adv_k + void_k
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "\U0001F91D Cooperative Check"
     if reason:
@@ -5624,15 +5740,14 @@ async def check_cooperative(
     )
     wp_str = f" {wp}" if wp else ""
     bonus_str = f" {bonus:+d}" if bonus else ""
-    coop_str = f" +{extra_rolled}k0 assist" if extra_rolled else ""
-    embed.add_field(
-        name="Primary Roll",
-        value=(
-            f"{skill_label}/{trait.name} ({result['rolled']}k{result['kept']}"
-            f"{wp_str}{bonus_str}{coop_str}) vs TN **{tn}**"
-        ),
-        inline=False,
+    coop_str = f" +{helper_rolled}k0 assist" if helper_rolled else ""
+    roll_text = (
+        f"{skill_label}/{trait.name} ({result['rolled']}k{result['kept']}"
+        f"{wp_str}{bonus_str}{coop_str}) vs TN **{tn}**"
     )
+    if void_line:
+        roll_text += f"\n{void_line}"
+    embed.add_field(name="Primary Roll", value=roll_text, inline=False)
     embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
     verdict = "✅ **Success!**" if result["success"] else "❌ **Failure.**"
     embed.add_field(
@@ -5642,6 +5757,8 @@ async def check_cooperative(
     )
     if adv_notes:
         embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
+    if spend_void:
+        store.save(rec)
     await interaction.response.send_message(embed=embed)
 
 
@@ -5658,6 +5775,7 @@ async def check_cooperative(
     member="Player making the check (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (cover, darkness, distractions, etc.).",
+    spend_void="Spend a Void Point for +1k1.",
     reason="Label (e.g. 'sneaking past the guards').",
     secret="Secret roll: result shown only to you (the DM).",
 )
@@ -5668,6 +5786,7 @@ async def stealth_check(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
+    spend_void: bool = False,
     reason: str | None = None,
     secret: bool = False,
 ) -> None:
@@ -5686,7 +5805,21 @@ async def stealth_check(
     sk = c.skills.get("Stealth", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Stealth", "agility")
-    result = combat.resolve_skill_check(c.agility, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Stealth")
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_skill_check(c.agility, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    if spend_void:
+        store.save(rec)
     skill_label = f"Stealth {sk}" if sk > 0 else "Stealth (unskilled)"
     title = "🥷 Stealth Check" + (" 🤫" if secret else "")
     if reason:
@@ -5696,6 +5829,7 @@ async def stealth_check(
         success_text="✅ **Undetected!**",
         fail_text="❌ **Spotted!**",
         adv_notes=adv_notes,
+        void_line=void_line,
     )
     await interaction.response.send_message(embed=embed, ephemeral=secret)
 
@@ -5721,6 +5855,7 @@ _INVESTIGATION_EMPHASIS = [
     member="Player making the check (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, tools, etc.).",
+    spend_void="Spend a Void Point for +1k1.",
     reason="Label (e.g. 'searching the crime scene').",
     secret="Secret roll: result shown only to you (the DM).",
 )
@@ -5733,6 +5868,7 @@ async def investigate_check(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
+    spend_void: bool = False,
     reason: str | None = None,
     secret: bool = False,
 ) -> None:
@@ -5754,7 +5890,21 @@ async def investigate_check(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(
         c, "Investigation", "perception", emphasis=emp_name,
     )
-    result = combat.resolve_skill_check(c.perception, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Investigation")
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_skill_check(c.perception, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    if spend_void:
+        store.save(rec)
     has_emphasis = emp_name and emp_name in c.emphases.get("Investigation", [])
     skill_label = f"Investigation {sk}" if sk > 0 else "Investigation (unskilled)"
     if emp_name:
@@ -5764,7 +5914,7 @@ async def investigate_check(
         title += f" ({emp_name})"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, "Perception", result, wp, bonus, adv_notes=adv_notes)
+    embed = _build_check_embed(title, c.name, skill_label, "Perception", result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
     if has_emphasis:
         embed.set_footer(text=f"Has {emp_name} emphasis: reroll 1s once (DM adjudicates).")
     elif emp_name:
@@ -5805,6 +5955,7 @@ _SOCIAL_TRAIT_MAP: dict[str, str] = {
     member="Player making the check (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (Status, Honor, Void Point, etc.).",
+    spend_void="Spend a Void Point for +1k1.",
     reason="Label (e.g. 'convincing the magistrate').",
 )
 @app_commands.choices(skill=_SOCIAL_SKILLS)
@@ -5816,6 +5967,7 @@ async def social_check(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
+    spend_void: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -5835,13 +5987,27 @@ async def social_check(
     sk = c.skills.get(skill.value, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill.value, trait_attr)
-    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill.value)
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    if spend_void:
+        store.save(rec)
     skill_label = f"{skill.value} {sk}" if sk > 0 else f"{skill.value} (unskilled)"
     trait_display = trait_attr.capitalize()
     title = "🗣️ Social Check"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, trait_display, result, wp, bonus, adv_notes=adv_notes)
+    embed = _build_check_embed(title, c.name, skill_label, trait_display, result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
     await interaction.response.send_message(embed=embed)
 
 
@@ -5859,6 +6025,7 @@ async def social_check(
     member="Player making the check (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (tools, workshop, etc.).",
+    spend_void="Spend a Void Point for +1k1.",
     reason="Label (e.g. 'forging a katana').",
 )
 @app_commands.autocomplete(skill=_skill_autocomplete)
@@ -5870,6 +6037,7 @@ async def craft_check(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
+    spend_void: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -5887,12 +6055,26 @@ async def craft_check(
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, "intelligence")
-    result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    if spend_void:
+        store.save(rec)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "🔨 Craft Check"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes)
+    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
     await interaction.response.send_message(embed=embed)
 
 
@@ -5910,6 +6092,7 @@ async def craft_check(
     member="Player making the check (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (library, scrolls, advantages, etc.).",
+    spend_void="Spend a Void Point for +1k1.",
     reason="Label (e.g. 'identifying the creature').",
 )
 @app_commands.autocomplete(specialty=_skill_autocomplete)
@@ -5921,6 +6104,7 @@ async def lore_check(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
+    spend_void: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -5938,12 +6122,26 @@ async def lore_check(
     sk = c.skills.get(specialty, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, specialty, "intelligence")
-    result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=specialty)
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    if spend_void:
+        store.save(rec)
     skill_label = f"{specialty} {sk}" if sk > 0 else f"{specialty} (unskilled)"
     title = "📚 Lore Check"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes)
+    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
     await interaction.response.send_message(embed=embed)
 
 
@@ -7008,17 +7206,21 @@ class SpellDamageView(discord.ui.View):
             return
         applied = combat.apply_damage(rec.character, self.raw_damage, rec.character.armor_reduction)
         void_line = ""
-        if void_reduce and rec.character.current_void_points > 0:
-            void_saved = min(10, applied["final_damage"])
-            rec.character.wounds_taken = max(0, rec.character.wounds_taken - void_saved)
-            rec.character.current_void_points -= 1
-            applied["final_damage"] -= void_saved
-            applied["new_wound_level"] = stats.wound_level_name(rec.character)
-            applied["is_dead"] = stats.is_dead(rec.character)
-            applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
-            void_line = f"\n🔮 Void Point: **−{void_saved}** wounds ({rec.character.current_void_points} VP left)"
-        elif void_reduce:
-            void_line = "\n🔮 No Void Points available: full damage applied"
+        if void_reduce:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(rec.character, is_wound_reduction=True)
+            if not ok:
+                void_line = f"\n🔮 {reason_block}"
+            elif rec.character.current_void_points > 0:
+                void_saved = min(10, applied["final_damage"])
+                rec.character.wounds_taken = max(0, rec.character.wounds_taken - void_saved)
+                rec.character.current_void_points -= 1
+                applied["final_damage"] -= void_saved
+                applied["new_wound_level"] = stats.wound_level_name(rec.character)
+                applied["is_dead"] = stats.is_dead(rec.character)
+                applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
+                void_line = f"\n🔮 Void Point: **−{void_saved}** wounds ({rec.character.current_void_points} VP left)"
+            else:
+                void_line = "\n🔮 No Void Points available: full damage applied"
         store.save(rec)
         c = rec.character
         embed = discord.Embed(
@@ -7149,6 +7351,10 @@ class DmDamageView(discord.ui.View):
             await interaction.response.send_message("Target no longer exists.", ephemeral=True)
             return
         c = rec.character
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, is_wound_reduction=True)
+        if not ok:
+            await interaction.response.send_message(f"🔮 {reason_block}", ephemeral=True)
+            return
         if c.current_void_points <= 0:
             await interaction.response.send_message(
                 f"**{c.name}** has no Void Points remaining.", ephemeral=True
@@ -8206,14 +8412,19 @@ async def spell_cast(
                 ephemeral=True,
             )
             return
-    extra_rolled = 1 if spend_void else 0
-    extra_kept = 1 if spend_void else 0
+    extra_rolled = 0
+    extra_kept = 0
     wound_pen = stats.wound_penalty(caster)
     if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(caster)
+        if not ok:
+            await interaction.response.send_message(f"🌀 {reason_block}", ephemeral=True)
+            return
         if caster.current_void_points <= 0:
             await interaction.response.send_message("No Void Points remaining.", ephemeral=True)
             return
         caster.current_void_points -= 1
+        extra_rolled = extra_kept = 1
     result = combat.resolve_spell_casting(
         ring_val, caster.school_rank, s["mastery"], engine,
         affinity=affinity, deficiency=deficiency,
@@ -8313,15 +8524,20 @@ async def spell_resist(
         return
     c = rec.character
     willpower = c.willpower
-    extra_rolled = 1 if spend_void else 0
-    extra_kept = 1 if spend_void else 0
+    extra_rolled = 0
+    extra_kept = 0
     if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c)
+        if not ok:
+            await interaction.response.send_message(f"🌀 {reason_block}", ephemeral=True)
+            return
         if c.current_void_points <= 0:
             await interaction.response.send_message(
                 f"**{c.name}** has no Void Points remaining.", ephemeral=True
             )
             return
         c.current_void_points -= 1
+        extra_rolled = extra_kept = 1
         store.save(rec)
     rolled = willpower + extra_rolled
     kept = willpower + extra_kept
@@ -8544,14 +8760,20 @@ async def spell_importune(
             )
             await interaction.response.send_message(embed=embed)
             return
-    extra_rolled = 1 if spend_void else 0
-    extra_kept = 1 if spend_void else 0
+    extra_rolled = 0
+    extra_kept = 0
     if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(caster)
+        if not ok:
+            embed.add_field(name="Step 2: Casting", value=f"🌀 {reason_block}", inline=False)
+            await interaction.response.send_message(embed=embed)
+            return
         if caster.current_void_points <= 0:
             embed.add_field(name="Step 2: Casting", value="No Void Points remaining: cannot spend VP.", inline=False)
             await interaction.response.send_message(embed=embed)
             return
         caster.current_void_points -= 1
+        extra_rolled = extra_kept = 1
     cast_rolled = ring_val + effective_rank + extra_rolled
     cast_kept = ring_val + extra_kept
     cast_base_tn = 15 + 5 * ml
@@ -9262,10 +9484,11 @@ async def battle_roll(
         await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to run mass battle rolls.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    c, _ = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
-    if c is None:
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
+    c = rec.character
     battle_skill = c.skills.get("Battle", 0)
     wp = stats.wound_penalty(c)
     result = mass_battle.resolve_battle_roll(c.perception, battle_skill, tn, engine, bonus + wp)
@@ -9364,6 +9587,7 @@ async def combat_mount(
     member="Player whose character to use.",
     is_npc="Target is an NPC.",
     bonus="Flat bonus.",
+    spend_void="Spend a Void Point for +1k1.",
     reason="Label (e.g. 'charge', 'leap obstacle', 'stay mounted').",
 )
 async def horsemanship_check(
@@ -9373,6 +9597,7 @@ async def horsemanship_check(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: int = 0,
+    spend_void: bool = False,
     reason: str = "",
 ) -> None:
     if not _guild_ok(interaction):
@@ -9382,18 +9607,33 @@ async def horsemanship_check(
         await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call Horsemanship checks.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    c, _ = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
-    if c is None:
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
+    c = rec.character
     skill_rank = c.skills.get("Horsemanship", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Horsemanship", "agility")
-    result = combat.resolve_skill_check(c.agility, skill_rank, tn, engine, bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Horsemanship")
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_skill_check(c.agility, skill_rank, tn, engine, bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    if spend_void:
+        store.save(rec)
     embed = _build_check_embed(
         reason or "Horsemanship Check", c.name, "Horsemanship", "Agility", result, wp, bonus,
         success_text="Maneuver succeeds!", fail_text="The rider falters!",
-        adv_notes=adv_notes,
+        adv_notes=adv_notes, void_line=void_line,
     )
     await interaction.response.send_message(embed=embed)
 
@@ -9410,6 +9650,7 @@ async def horsemanship_check(
     member="Player whose character to use.",
     is_npc="Target is an NPC.",
     bonus="Flat bonus (tools, workshop, etc.).",
+    spend_void="Spend a Void Point for +1k1.",
     reason="Label (e.g. 'forging a katana').",
 )
 @app_commands.autocomplete(skill=_skill_autocomplete)
@@ -9421,6 +9662,7 @@ async def craft_extended(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: int = 0,
+    spend_void: bool = False,
     reason: str = "",
 ) -> None:
     if not _guild_ok(interaction):
@@ -9430,20 +9672,38 @@ async def craft_extended(
         await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to run extended crafting.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    c, _ = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
-    if c is None:
+    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
+    c = rec.character
     skill_rank = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, "intelligence")
-    result = combat.resolve_skill_check(c.intelligence, skill_rank, 10, engine, bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
+    void_r = void_k = 0
+    void_line = ""
+    if spend_void:
+        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
+        if not ok:
+            void_line = f"🌀 {reason_block}"
+        elif c.current_void_points <= 0:
+            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    result = combat.resolve_skill_check(c.intelligence, skill_rank, 10, engine, bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    if spend_void:
+        store.save(rec)
     embed = discord.Embed(
         title=reason or f"Extended Crafting: {skill}",
         color=discord.Color.teal(),
     )
     embed.add_field(name="Craftsman", value=c.name, inline=True)
-    embed.add_field(name="Roll", value=f"({result['rolled']}k{result['kept']}) = **{result['total']}**", inline=True)
+    roll_text = f"({result['rolled']}k{result['kept']}) = **{result['total']}**"
+    if void_line:
+        roll_text += f"\n{void_line}"
+    embed.add_field(name="Roll", value=roll_text, inline=True)
     embed.add_field(name="Progress", value=f"+{result['total']} toward TN **{tn}**", inline=False)
     embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
     quality_thresholds = [
