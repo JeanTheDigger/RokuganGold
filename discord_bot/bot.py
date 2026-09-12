@@ -1373,6 +1373,7 @@ class DamageView(discord.ui.View):
         cond_def_mod, _ = condition_effects.defender_armor_tn_mod(def_conds, is_melee)
         guard_mod2 = 0
         fd_bonus2 = dc.full_defense_bonus if dc else 0
+        void_tn_bonus2 = dc.void_armor_tn_bonus if dc else 0
         if enc:
             for gc in enc.combatants:
                 if gc.guarding.lower() == target.name.lower():
@@ -1381,9 +1382,9 @@ class DamageView(discord.ui.View):
             if dc and dc.guarding:
                 guard_mod2 -= 5
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod2 + fd_bonus2
+            tn = cond_tn_ovr + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2
         else:
-            tn = combat.armor_tn(target, self.defender_stance) + cond_def_mod + guard_mod2 + fd_bonus2
+            tn = combat.armor_tn(target, self.defender_stance) + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2
         outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, engine)
         hit = outcome["hit"]
         embed2 = discord.Embed(
@@ -1527,6 +1528,7 @@ combat_turn = app_commands.Group(name="turn", description="Initiative adjustment
 combat_grapple = app_commands.Group(name="grapple", description="Grappling subsystem (s40).", parent=combat_group)
 combat_duel = app_commands.Group(name="duel", description="Iaijutsu dueling (s40).", parent=combat_group)
 combat_battle = app_commands.Group(name="battle", description="Mass Battle system.", parent=combat_group)
+combat_void = app_commands.Group(name="void", description="Round-level Void Point combat effects (s25).", parent=combat_group)
 
 
 @combat_group.command(
@@ -1831,6 +1833,12 @@ async def attack(
         fd_bonus = def_combatant.full_defense_bonus
         kata_notes.append(f"Full Defense: +{fd_bonus} Armor TN")
 
+    # Void Point Armor TN bonus (s25): +10 for one Round.
+    void_tn_bonus = 0
+    if def_combatant and def_combatant.void_armor_tn_bonus:
+        void_tn_bonus = def_combatant.void_armor_tn_bonus
+        kata_notes.append(f"Void Armor: +{void_tn_bonus} Armor TN")
+
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
         t_name = target_creature_rec.creature.name
@@ -1845,10 +1853,10 @@ async def attack(
             is_melee_attack,
         )
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + bonus_tn
+            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + bonus_tn
             kata_notes.extend(cond_tn_notes)
         else:
-            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus)
+            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus)
 
     outcome = combat.resolve_attack(
         attacker, weapon, tn, raises + maneuver_raises, engine,
@@ -3749,9 +3757,12 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         cond = f"  [{', '.join(sorted(c.conditions))}]" if c.conditions else ""
         guard = f"  🛡️→{c.guarding}" if c.guarding else ""
         fd = f"  🛡️FD+{c.full_defense_bonus}" if c.full_defense_bonus else ""
+        void_atn = f"  🌀ATN+{c.void_armor_tn_bonus}" if c.void_armor_tn_bonus else ""
+        void_init = f"  🌀Init+{c.void_initiative_boost}" if c.void_initiative_boost else ""
         held = "  ⏸️HELD" if c.held else ""
         delayed = "  ⏳DELAYED" if c.delayed else ""
-        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: init **{c.initiative}**{detail}{stance_str}{acts}{cond}{guard}{fd}{held}{delayed}")
+        init_val = c.effective_initiative
+        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{held}{delayed}")
     header = f"⚔️ **Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
@@ -3960,6 +3971,8 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             vp = f"{c.current_void_points}/{c.max_void_points} VP"
             conds = ", ".join(sorted(cb.conditions)) if cb.conditions else " "
             fd = f", FD+{cb.full_defense_bonus}" if cb.full_defense_bonus else ""
+            v_atn = f", 🌀ATN+{cb.void_armor_tn_bonus}" if cb.void_armor_tn_bonus else ""
+            v_init = f", 🌀Init+{cb.void_initiative_boost}" if cb.void_initiative_boost else ""
             guard = f", guarding {cb.guarding}" if cb.guarding else ""
             held = ", HELD" if cb.held else ""
             delayed = ", DELAYED" if cb.delayed else ""
@@ -3968,14 +3981,14 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             value = (
                 f"Wounds: {c.wounds_taken}/{cap} **{lvl}**{pen_str}\n"
                 f"ATN: **{tn}** · {vp} · Stance: **{stance_label}** · Acts: {acts_left}\n"
-                f"Conditions: {conds}{fd}{guard}{held}{delayed}"
+                f"Conditions: {conds}{fd}{v_atn}{v_init}{guard}{held}{delayed}"
             )
         else:
             conds = ", ".join(sorted(cb.conditions)) if cb.conditions else " "
             value = f"*(no sheet)* · Conditions: {conds}"
         marker = "▶️ " if (enc.started and cb is enc.current()) else ""
         embed.add_field(
-            name=f"{marker}{cb.name} (init {cb.initiative})",
+            name=f"{marker}{cb.name} (init {cb.effective_initiative})",
             value=value,
             inline=True,
         )
@@ -4210,6 +4223,168 @@ async def combat_full_defense(
         f"  Expires at the start of {cb.name}'s next turn."
     )
     await _combat_log(str(interaction.guild_id), f"Full Defense: {cb.name} (+{result['bonus']} Armor TN)")
+
+
+# ===========================================================================
+# /combat void group: round-level Void Point effects (GDD s25)
+# ===========================================================================
+
+
+@combat_void.command(name="armor", description="Spend a Void Point for +10 Armor TN for one Round (beginning of Round).")
+@app_commands.describe(combatant="The combatant spending the Void Point.")
+@app_commands.autocomplete(combatant=_combatant_autocomplete)
+async def combat_void_armor(interaction: discord.Interaction, combatant: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    cb = enc.find(combatant)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_combatant_record(guild, cb)
+    if rec is None:
+        await interaction.response.send_message(f"Cannot resolve character sheet for **{cb.name}**.", ephemeral=True)
+        return
+    c = rec.character
+    ok, reason = advantage_effects.can_spend_void_on_roll(c)
+    if not ok:
+        await interaction.response.send_message(f"🌀 {reason}", ephemeral=True)
+        return
+    if c.current_void_points <= 0:
+        await interaction.response.send_message(f"🌀 **{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
+        return
+    if not cb.consume_once("void_combat", "round"):
+        await interaction.response.send_message(f"🌀 **{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
+        return
+    c.current_void_points -= 1
+    cb.void_armor_tn_bonus += 10
+    store.save(rec)
+    _save_encounter(guild, enc)
+    await interaction.response.send_message(
+        f"🌀 **{cb.name}** spends a Void Point: **+10 Armor TN** for this Round.\n"
+        f"  Armor TN bonus: +{cb.void_armor_tn_bonus} · VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+        f"  Clears at the start of the next Round."
+    )
+    await _combat_log(guild, f"Void Armor: {cb.name} (+10 Armor TN, {c.current_void_points} VP left)")
+
+
+@combat_void.command(name="initiative", description="Spend a Void Point for +10 Initiative for the remainder of the skirmish.")
+@app_commands.describe(combatant="The combatant spending the Void Point.")
+@app_commands.autocomplete(combatant=_combatant_autocomplete)
+async def combat_void_initiative(interaction: discord.Interaction, combatant: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    cb = enc.find(combatant)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_combatant_record(guild, cb)
+    if rec is None:
+        await interaction.response.send_message(f"Cannot resolve character sheet for **{cb.name}**.", ephemeral=True)
+        return
+    c = rec.character
+    ok, reason = advantage_effects.can_spend_void_on_roll(c)
+    if not ok:
+        await interaction.response.send_message(f"🌀 {reason}", ephemeral=True)
+        return
+    if c.current_void_points <= 0:
+        await interaction.response.send_message(f"🌀 **{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
+        return
+    if not cb.consume_once("void_combat", "round"):
+        await interaction.response.send_message(f"🌀 **{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
+        return
+    c.current_void_points -= 1
+    cb.void_initiative_boost += 10
+    enc._sort()
+    store.save(rec)
+    _save_encounter(guild, enc)
+    await interaction.response.send_message(
+        f"🌀 **{cb.name}** spends a Void Point: **+10 Initiative** for the skirmish.\n"
+        f"  Effective initiative: **{cb.effective_initiative}** · VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+        f"  Persists until the encounter ends.\n\n"
+        f"{_render_encounter(enc, guild)}"
+    )
+    await _combat_log(guild, f"Void Initiative: {cb.name} (+10, now {cb.effective_initiative}, {c.current_void_points} VP left)")
+
+
+@combat_void.command(name="swap", description="Exchange Initiative with a willing target for the remainder of the skirmish (1 VP).")
+@app_commands.describe(
+    spender="The combatant spending the Void Point.",
+    target="The willing target to swap Initiative with.",
+)
+@app_commands.autocomplete(spender=_combatant_autocomplete, target=_combatant_autocomplete)
+async def combat_void_swap(interaction: discord.Interaction, spender: str, target: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        return
+    cb_s = enc.find(spender)
+    if cb_s is None:
+        await interaction.response.send_message(f"No combatant named **{spender}**.", ephemeral=True)
+        return
+    cb_t = enc.find(target)
+    if cb_t is None:
+        await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
+        return
+    if cb_s.name == cb_t.name:
+        await interaction.response.send_message("Cannot swap Initiative with yourself.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _resolve_combatant_record(guild, cb_s)
+    if rec is None:
+        await interaction.response.send_message(f"Cannot resolve character sheet for **{cb_s.name}**.", ephemeral=True)
+        return
+    c = rec.character
+    ok, reason = advantage_effects.can_spend_void_on_roll(c)
+    if not ok:
+        await interaction.response.send_message(f"🌀 {reason}", ephemeral=True)
+        return
+    if c.current_void_points <= 0:
+        await interaction.response.send_message(f"🌀 **{cb_s.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
+        return
+    if not cb_s.consume_once("void_combat", "round"):
+        await interaction.response.send_message(f"🌀 **{cb_s.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
+        return
+    c.current_void_points -= 1
+    old_s = cb_s.effective_initiative
+    old_t = cb_t.effective_initiative
+    cb_s.initiative, cb_t.initiative = cb_t.initiative, cb_s.initiative
+    cb_s.void_initiative_boost, cb_t.void_initiative_boost = cb_t.void_initiative_boost, cb_s.void_initiative_boost
+    enc._sort()
+    store.save(rec)
+    _save_encounter(guild, enc)
+    await interaction.response.send_message(
+        f"🌀 **{cb_s.name}** spends a Void Point to **exchange Initiative** with **{cb_t.name}**.\n"
+        f"  {cb_s.name}: {old_s} → **{cb_s.effective_initiative}** · "
+        f"{cb_t.name}: {old_t} → **{cb_t.effective_initiative}**\n"
+        f"  VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+        f"  Persists for the remainder of the skirmish.\n\n"
+        f"{_render_encounter(enc, guild)}"
+    )
+    await _combat_log(guild, f"Void Swap: {cb_s.name} ↔ {cb_t.name} initiative ({c.current_void_points} VP left)")
 
 
 # ===========================================================================

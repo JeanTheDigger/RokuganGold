@@ -55,6 +55,13 @@ class Combatant:
     # Held/delayed actions (s40): DM-managed.
     held: bool = False      # holding action: acts later this round
     delayed: bool = False   # delayed: moved to lower initiative
+    # Void Point combat effects (GDD s25).
+    void_armor_tn_bonus: int = 0   # +10 Armor TN for one Round; clears at round start
+    void_initiative_boost: int = 0 # +10 Initiative for the skirmish; persists until encounter ends
+
+    @property
+    def effective_initiative(self) -> int:
+        return self.initiative + self.void_initiative_boost
 
     def consume_once(self, key: str, scope: str) -> bool:
         """Try to spend a once-per-`scope` ability ('turn' or 'round'). Returns
@@ -82,6 +89,8 @@ class Combatant:
             "actions_used": self.actions_used,
             "held": self.held,
             "delayed": self.delayed,
+            "void_armor_tn_bonus": self.void_armor_tn_bonus,
+            "void_initiative_boost": self.void_initiative_boost,
         }
 
     @classmethod
@@ -102,6 +111,8 @@ class Combatant:
             actions_used=d.get("actions_used", 0),
             held=d.get("held", False),
             delayed=d.get("delayed", False),
+            void_armor_tn_bonus=d.get("void_armor_tn_bonus", 0),
+            void_initiative_boost=d.get("void_initiative_boost", 0),
         )
 
 
@@ -115,7 +126,7 @@ class Encounter:
     surprise_round: bool = False
 
     def _sort(self) -> None:
-        self.combatants.sort(key=lambda c: (c.initiative, c.reflexes), reverse=True)
+        self.combatants.sort(key=lambda c: (c.effective_initiative, c.reflexes), reverse=True)
 
     def add(self, combatant: Combatant) -> None:
         self.combatants.append(combatant)
@@ -165,6 +176,7 @@ class Encounter:
             self.round += 1
             for c in self.combatants:
                 c.used_this_round.clear()
+                c.void_armor_tn_bonus = 0
         if self.turn_index == 0 and self.round == 2 and self.surprise_round:
             self.surprise_round = False
         cur = self.current()
