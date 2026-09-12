@@ -41,6 +41,7 @@ NPC_OWNER = "npc"
 # Discord role names for permission gating.  Kami (server admin) > Fortune (DM).
 ROLE_KAMI = "Kami"
 ROLE_FORTUNE = "Fortune"
+ROLE_APPROVED = "Approved"
 
 # Rokugani calendar: 12 months (zodiac animals), 28 days each, 4 seasons.
 ROKUGANI_MONTHS: tuple[tuple[str, str], ...] = (
@@ -10604,12 +10605,288 @@ async def roll_history(
     )
 
 
+# ---------------------------------------------------------------------------
+#  Server setup (Kami-only) & character submission
+# ---------------------------------------------------------------------------
+
+class CharacterApprovalView(discord.ui.View):
+    """Lets a DM approve or deny a character submission from the lobby."""
+
+    def __init__(self, applicant_id: int, character_name: str, concept: str,
+                 lobby_channel_id: int) -> None:
+        super().__init__(timeout=None)
+        self.applicant_id = applicant_id
+        self.character_name = character_name
+        self.concept = concept
+        self.lobby_channel_id = lobby_channel_id
+
+    @discord.ui.button(label="Approve", style=discord.ButtonStyle.success, emoji="✅")
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message(
+                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to approve submissions.",
+                ephemeral=True,
+            )
+            return
+        guild = interaction.guild
+        if guild is None:
+            return
+        member = guild.get_member(self.applicant_id)
+        if member is None:
+            await interaction.response.send_message("That member is no longer in the server.", ephemeral=True)
+            return
+        approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
+        if approved_role is None:
+            await interaction.response.send_message(
+                f"The **{ROLE_APPROVED}** role doesn't exist. Run `/setup server` first.",
+                ephemeral=True,
+            )
+            return
+        await member.add_roles(approved_role, reason=f"Character '{self.character_name}' approved by {interaction.user.display_name}")
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+        await interaction.response.edit_message(view=self)
+        embed = discord.Embed(
+            title="✅ Character Approved",
+            color=discord.Color.green(),
+            description=(
+                f"**{member.mention}**'s character **{self.character_name}** has been approved.\n"
+                f"They now have the **{ROLE_APPROVED}** role and can access the server."
+            ),
+        )
+        embed.set_footer(text=f"Approved by {interaction.user.display_name}")
+        await interaction.followup.send(embed=embed)
+        lobby = client.get_channel(self.lobby_channel_id)
+        if lobby:
+            await lobby.send(
+                f"✅ {member.mention}, your character **{self.character_name}** has been approved! "
+                f"You now have access to the rest of the server. Welcome to Rokugan!"
+            )
+
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.danger, emoji="❌")
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message(
+                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to deny submissions.",
+                ephemeral=True,
+            )
+            return
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+        await interaction.response.edit_message(view=self)
+        guild = interaction.guild
+        member = guild.get_member(self.applicant_id) if guild else None
+        member_str = member.mention if member else f"User {self.applicant_id}"
+        embed = discord.Embed(
+            title="❌ Character Denied",
+            color=discord.Color.red(),
+            description=f"**{member_str}**'s character **{self.character_name}** was denied.",
+        )
+        embed.set_footer(text=f"Denied by {interaction.user.display_name}")
+        await interaction.followup.send(embed=embed)
+        lobby = client.get_channel(self.lobby_channel_id)
+        if lobby and member:
+            await lobby.send(
+                f"❌ {member.mention}, your character **{self.character_name}** was not approved. "
+                f"Please speak with a DM for details and feel free to submit again."
+            )
+
+
+@client.tree.command(name="submit", description="Submit a character concept for DM approval (use in the lobby).")
+@app_commands.describe(
+    character_name="Your character's full name (e.g. Bayushi Kachiko).",
+    concept="A short description of your character concept (clan, family, school, personality).",
+)
+async def submit_character(
+    interaction: discord.Interaction,
+    character_name: app_commands.Range[str, 1, 100],
+    concept: app_commands.Range[str, 1, 2000],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    approval_ch_id = store.get_approval_channel(guild)
+    if not approval_ch_id:
+        await interaction.response.send_message(
+            "No approval channel has been configured. A server admin needs to run `/setup server` first.",
+            ephemeral=True,
+        )
+        return
+    approval_ch = client.get_channel(int(approval_ch_id))
+    if approval_ch is None:
+        await interaction.response.send_message(
+            "The approval channel is no longer accessible. Ask a server admin to reconfigure it.",
+            ephemeral=True,
+        )
+        return
+    embed = discord.Embed(
+        title="📋 Character Submission",
+        color=0xC4A747,
+        description=f"A new character has been submitted for approval.",
+    )
+    embed.add_field(name="Player", value=interaction.user.mention, inline=True)
+    embed.add_field(name="Submitted from", value=f"<#{interaction.channel_id}>", inline=True)
+    embed.add_field(name="Character Name", value=character_name, inline=False)
+    embed.add_field(name="Concept", value=concept, inline=False)
+    view = CharacterApprovalView(
+        applicant_id=interaction.user.id,
+        character_name=character_name,
+        concept=concept,
+        lobby_channel_id=interaction.channel_id,
+    )
+    await approval_ch.send(embed=embed, view=view)
+    await interaction.response.send_message(
+        f"📋 Your character **{character_name}** has been submitted for DM review. "
+        f"You'll be notified here when a decision is made.",
+        ephemeral=True,
+    )
+
+
+setup_group = app_commands.Group(name="setup", description="Server setup commands (Kami only).")
+
+
+@setup_group.command(name="server", description="Create the server channel structure (Lobby, OOC, IC, DM categories). Kami only.")
+async def setup_server(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_kami(interaction):
+        await interaction.response.send_message(
+            f"Only the **{ROLE_KAMI}** role can run server setup.", ephemeral=True,
+        )
+        return
+    guild = interaction.guild
+    if guild is None:
+        return
+    await interaction.response.defer(ephemeral=True)
+    bot_member = guild.me
+    everyone = guild.default_role
+    approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
+    if approved_role is None:
+        approved_role = await guild.create_role(
+            name=ROLE_APPROVED, reason="Server setup: player access role",
+        )
+    fortune_role = discord.utils.get(guild.roles, name=ROLE_FORTUNE)
+    kami_role = discord.utils.get(guild.roles, name=ROLE_KAMI)
+    dm_roles: list[discord.Role] = []
+    if fortune_role:
+        dm_roles.append(fortune_role)
+    if kami_role:
+        dm_roles.append(kami_role)
+
+    # --- 1. Lobby (visible to everyone) ---
+    lobby_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+        ),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_channels=True,
+            manage_messages=True,
+        ),
+    }
+    lobby_cat = await guild.create_category("Lobby", overwrites=lobby_overwrites, reason="Server setup")
+    welcome_ch = await lobby_cat.create_text_channel("welcome")
+    await lobby_cat.create_text_channel("character-submission")
+    welcome_embed = discord.Embed(
+        title="Welcome to Rokugan",
+        color=0xC4A747,
+        description=(
+            "Welcome, traveler. This server hosts a persistent world set in "
+            "Rokugan, using **Legend of the Five Rings 4th Edition** rules.\n\n"
+            "**To gain access to the server:**\n"
+            "1. Go to the **#character-submission** channel\n"
+            "2. Use the `/submit` command with your character's name and concept\n"
+            "3. A Dungeon Master will review and approve your character\n"
+            "4. Once approved, you'll gain access to all channels\n\n"
+            "We look forward to your story."
+        ),
+    )
+    welcome_msg = await welcome_ch.send(embed=welcome_embed)
+    await welcome_msg.pin()
+
+    # --- 2. Out of Character (Approved + DMs only) ---
+    ooc_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        approved_role: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+        ),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_channels=True,
+            manage_messages=True,
+        ),
+    }
+    for r in dm_roles:
+        ooc_overwrites[r] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+        )
+    ooc_cat = await guild.create_category("Out of Character", overwrites=ooc_overwrites, reason="Server setup")
+    await ooc_cat.create_text_channel("general")
+    await ooc_cat.create_text_channel("off-topic")
+
+    # --- 3. In Character (Approved + DMs only) ---
+    ic_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        approved_role: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+        ),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_channels=True,
+            manage_messages=True, manage_threads=True,
+        ),
+    }
+    for r in dm_roles:
+        ic_overwrites[r] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+            manage_messages=True,
+        )
+    ic_cat = await guild.create_category("In Character", overwrites=ic_overwrites, reason="Server setup")
+    await ic_cat.create_text_channel("in-character")
+
+    # --- 4. DM Room (Fortune + Kami only) ---
+    dm_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_channels=True,
+            manage_messages=True,
+        ),
+    }
+    for r in dm_roles:
+        dm_overwrites[r] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+            manage_messages=True,
+        )
+    dm_cat = await guild.create_category("Dungeon Masters", overwrites=dm_overwrites, reason="Server setup")
+    dm_discussion = await dm_cat.create_text_channel("dm-discussion")
+    approvals_ch = await dm_cat.create_text_channel("approvals")
+
+    store.set_approval_channel(str(guild.id), str(approvals_ch.id))
+
+    summary = (
+        f"**Server setup complete!**\n\n"
+        f"**Roles:**\n"
+        f"• **{ROLE_APPROVED}** — assigned to players when their character is approved\n\n"
+        f"**Categories & Channels:**\n"
+        f"• **Lobby** — {welcome_ch.mention}, #character-submission\n"
+        f"• **Out of Character** — #general, #off-topic (visible to {ROLE_APPROVED}+)\n"
+        f"• **In Character** — #in-character (visible to {ROLE_APPROVED}+)\n"
+        f"• **Dungeon Masters** — {dm_discussion.mention}, {approvals_ch.mention} (DMs only)\n\n"
+        f"**Approval channel** set to {approvals_ch.mention} — character submissions and "
+        f"damage/healing approvals will be routed there.\n\n"
+        f"Players use `/submit` in the lobby to apply. DMs approve or deny from {approvals_ch.mention}."
+    )
+    await interaction.followup.send(summary, ephemeral=True)
+
+
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
 client.tree.add_command(combat_group)
 client.tree.add_command(spell_group)
 client.tree.add_command(check)
 client.tree.add_command(ref)
+client.tree.add_command(setup_group)
 
 
 def main() -> None:
