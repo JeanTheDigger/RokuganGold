@@ -2878,7 +2878,11 @@ async def sheet_koku(
 
 
 @sheet.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free: no XP).")
-@app_commands.describe(name="Advantage name.", remove="Remove it instead.", member="Target player (Fortune).")
+@app_commands.describe(
+    name="Advantage name. For parameterised advantages, include the parameter: 'Weakness: Willpower', 'Seven Fortunes' Blessing: Daikoku'.",
+    remove="Remove it instead.",
+    member="Target player (Fortune).",
+)
 @app_commands.autocomplete(name=_advantage_autocomplete)
 async def sheet_advantage(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
@@ -2890,8 +2894,13 @@ async def sheet_advantage(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
-    adv = advantages.get(name, "advantage")
-    canonical = adv["name"] if adv else name.strip()
+    input_name = name.strip()
+    base_name = input_name.split(":")[0].strip() if ":" in input_name else input_name
+    adv = advantages.get(base_name, "advantage")
+    canonical = adv["name"] if adv else base_name
+    if ":" in input_name:
+        param = input_name[input_name.index(":") + 1:].strip()
+        canonical = f"{canonical}: {param}"
     c = rec.character
     if remove:
         c.advantages = [x for x in c.advantages if x.lower() != canonical.lower()]
@@ -2900,12 +2909,19 @@ async def sheet_advantage(
         if canonical.lower() not in [x.lower() for x in c.advantages]:
             c.advantages.append(canonical)
         msg = f"**{c.name}** gains the advantage **{canonical}**."
+        param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(adv["name"] if adv else base_name)
+        if param_hint and ":" not in input_name:
+            msg += f"\n*Hint: this advantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
 @sheet.command(name="disadvantage", description="Record (or remove) a Disadvantage on your sheet (grants XP: DM /xp grant).")
-@app_commands.describe(name="Disadvantage name.", remove="Remove it instead.", member="Target player (Fortune).")
+@app_commands.describe(
+    name="Disadvantage name. For parameterised disadvantages, include the parameter: 'Weakness: Willpower', 'Doubt: Kenjutsu'.",
+    remove="Remove it instead.",
+    member="Target player (Fortune).",
+)
 @app_commands.autocomplete(name=_disadvantage_autocomplete)
 async def sheet_disadvantage(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
@@ -2917,8 +2933,13 @@ async def sheet_disadvantage(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
-    dis = advantages.get(name, "disadvantage")
-    canonical = dis["name"] if dis else name.strip()
+    input_name = name.strip()
+    base_name = input_name.split(":")[0].strip() if ":" in input_name else input_name
+    dis = advantages.get(base_name, "disadvantage")
+    canonical = dis["name"] if dis else base_name
+    if ":" in input_name:
+        param = input_name[input_name.index(":") + 1:].strip()
+        canonical = f"{canonical}: {param}"
     c = rec.character
     if remove:
         c.disadvantages = [x for x in c.disadvantages if x.lower() != canonical.lower()]
@@ -2928,6 +2949,9 @@ async def sheet_disadvantage(
             c.disadvantages.append(canonical)
         grant = f" (grants {dis['points']} XP: a DM applies it with `/xp grant`)" if dis and dis["points"] else ""
         msg = f"**{c.name}** takes the disadvantage **{canonical}**{grant}."
+        param_hint = advantage_effects.PARAMETERISED_DISADVANTAGES.get(dis["name"] if dis else base_name)
+        if param_hint and ":" not in input_name:
+            msg += f"\n*Hint: this disadvantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
@@ -4880,10 +4904,18 @@ async def contest(
     sk_b = cb.skills.get(skill_b, 0)
     wp_a = stats.wound_penalty(ca)
     wp_b = stats.wound_penalty(cb)
+    adv_ra, adv_ka, adv_fa, adv_notes_a = advantage_effects.skill_check_modifiers(
+        ca, skill_a, trait_a.value, is_contested=True, opponent_skill=skill_b,
+    )
+    adv_rb, adv_kb, adv_fb, adv_notes_b = advantage_effects.skill_check_modifiers(
+        cb, skill_b, trait_b.value, is_contested=True, opponent_skill=skill_a,
+    )
     result = combat.resolve_contested_check(
         tv_a, sk_a, tv_b, sk_b, engine,
-        bonus_a=bonus_a + wp_a,
-        bonus_b=bonus_b + wp_b,
+        bonus_a=bonus_a + wp_a + adv_fa,
+        bonus_b=bonus_b + wp_b + adv_fb,
+        extra_rolled_a=adv_ra, extra_kept_a=adv_ka,
+        extra_rolled_b=adv_rb, extra_kept_b=adv_kb,
     )
     title = "🎯 Contested Check"
     if reason:
@@ -4913,6 +4945,8 @@ async def contest(
         ),
         inline=False,
     )
+    if adv_notes_a:
+        embed.add_field(name=f"{ca.name} Adv/Disadv", value="\n".join(adv_notes_a), inline=False)
     embed.add_field(
         name=cb.name,
         value=(
@@ -4922,6 +4956,8 @@ async def contest(
         ),
         inline=False,
     )
+    if adv_notes_b:
+        embed.add_field(name=f"{cb.name} Adv/Disadv", value="\n".join(adv_notes_b), inline=False)
     embed.add_field(name="Result", value=verdict, inline=False)
     await interaction.response.send_message(embed=embed)
 
@@ -5287,7 +5323,8 @@ async def poison_resist(
         return
     c = rec.character
     wp = stats.wound_penalty(c)
-    result = combat.resolve_poison_resist(c.stamina, strength, engine, bonus=bonus + wp)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "poison_resist", "stamina")
+    result = combat.resolve_poison_resist(c.stamina, strength, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
     success = result["success"]
     tn = result["tn"]
     title = f"☠️ Poison Resistance: {c.name}"
@@ -5314,6 +5351,8 @@ async def poison_resist(
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
+    if adv_notes:
+        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -5355,7 +5394,8 @@ async def medicine_check(
     c = rec.character
     medicine_skill = c.skills.get("Medicine", 0)
     wp = stats.wound_penalty(c)
-    result = combat.resolve_medicine_check(c.intelligence, medicine_skill, tn, engine, bonus=bonus + wp)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Medicine", "intelligence")
+    result = combat.resolve_medicine_check(c.intelligence, medicine_skill, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
     success = result["success"]
     title = "💊 Medicine Check"
     if reason:
@@ -5382,6 +5422,8 @@ async def medicine_check(
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
+    if adv_notes:
+        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -5398,6 +5440,7 @@ def _build_check_embed(
     bonus: int,
     success_text: str = "✅ **Success!**",
     fail_text: str = "❌ **Failure.**",
+    adv_notes: list[str] | None = None,
 ) -> discord.Embed:
     success = result["success"]
     embed = discord.Embed(
@@ -5421,6 +5464,8 @@ def _build_check_embed(
         value=f"**{result['total']}** vs TN {result['tn']}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
+    if adv_notes:
+        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
     return embed
 
 
@@ -5471,12 +5516,13 @@ async def skill_check(
     tv = _trait_value(c, trait.value)
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
-    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
+    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "🎯 Skill Check" + (" 🤫" if secret else "")
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus)
+    embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus, adv_notes=adv_notes)
     if not secret:
         _log_roll(interaction.channel_id, c.name, f"{skill}/{trait.name} vs TN {tn}", result["total"])
     await interaction.response.send_message(embed=embed, ephemeral=secret)
@@ -5557,10 +5603,11 @@ async def check_cooperative(
         if hresult["success"]:
             successes += 1
     applied = min(successes, max_helpers)
-    extra_rolled = applied
-    result = combat.resolve_skill_check(tv + extra_rolled, sk, tn, engine, bonus=bonus + wp)
-    result["rolled"] = tv + sk + extra_rolled
-    result["kept"] = tv
+    helper_rolled = applied
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
+    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=helper_rolled + adv_r, extra_kept=adv_k)
+    result["rolled"] = tv + sk + helper_rolled + adv_r
+    result["kept"] = tv + adv_k
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "\U0001F91D Cooperative Check"
     if reason:
@@ -5593,6 +5640,8 @@ async def check_cooperative(
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
+    if adv_notes:
+        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -5636,7 +5685,8 @@ async def stealth_check(
     c = rec.character
     sk = c.skills.get("Stealth", 0)
     wp = stats.wound_penalty(c)
-    result = combat.resolve_skill_check(c.agility, sk, tn, engine, bonus=bonus + wp)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Stealth", "agility")
+    result = combat.resolve_skill_check(c.agility, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
     skill_label = f"Stealth {sk}" if sk > 0 else "Stealth (unskilled)"
     title = "🥷 Stealth Check" + (" 🤫" if secret else "")
     if reason:
@@ -5645,6 +5695,7 @@ async def stealth_check(
         title, c.name, skill_label, "Agility", result, wp, bonus,
         success_text="✅ **Undetected!**",
         fail_text="❌ **Spotted!**",
+        adv_notes=adv_notes,
     )
     await interaction.response.send_message(embed=embed, ephemeral=secret)
 
@@ -5699,8 +5750,11 @@ async def investigate_check(
     c = rec.character
     sk = c.skills.get("Investigation", 0)
     wp = stats.wound_penalty(c)
-    result = combat.resolve_skill_check(c.perception, sk, tn, engine, bonus=bonus + wp)
     emp_name = emphasis.value if emphasis else None
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(
+        c, "Investigation", "perception", emphasis=emp_name,
+    )
+    result = combat.resolve_skill_check(c.perception, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
     has_emphasis = emp_name and emp_name in c.emphases.get("Investigation", [])
     skill_label = f"Investigation {sk}" if sk > 0 else "Investigation (unskilled)"
     if emp_name:
@@ -5710,7 +5764,7 @@ async def investigate_check(
         title += f" ({emp_name})"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, "Perception", result, wp, bonus)
+    embed = _build_check_embed(title, c.name, skill_label, "Perception", result, wp, bonus, adv_notes=adv_notes)
     if has_emphasis:
         embed.set_footer(text=f"Has {emp_name} emphasis: reroll 1s once (DM adjudicates).")
     elif emp_name:
@@ -5780,13 +5834,14 @@ async def social_check(
     tv = _trait_value(c, trait_attr)
     sk = c.skills.get(skill.value, 0)
     wp = stats.wound_penalty(c)
-    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill.value, trait_attr)
+    result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
     skill_label = f"{skill.value} {sk}" if sk > 0 else f"{skill.value} (unskilled)"
     trait_display = trait_attr.capitalize()
     title = "🗣️ Social Check"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, trait_display, result, wp, bonus)
+    embed = _build_check_embed(title, c.name, skill_label, trait_display, result, wp, bonus, adv_notes=adv_notes)
     await interaction.response.send_message(embed=embed)
 
 
@@ -5831,12 +5886,13 @@ async def craft_check(
     c = rec.character
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
-    result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, "intelligence")
+    result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "🔨 Craft Check"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus)
+    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes)
     await interaction.response.send_message(embed=embed)
 
 
@@ -5881,12 +5937,13 @@ async def lore_check(
     c = rec.character
     sk = c.skills.get(specialty, 0)
     wp = stats.wound_penalty(c)
-    result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, specialty, "intelligence")
+    result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
     skill_label = f"{specialty} {sk}" if sk > 0 else f"{specialty} (unskilled)"
     title = "📚 Lore Check"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus)
+    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes)
     await interaction.response.send_message(embed=embed)
 
 
@@ -7728,12 +7785,18 @@ async def xp_advantage(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
-    adv = advantages.get(name, "advantage")
+    input_name = name.strip()
+    base_name = input_name.split(":")[0].strip() if ":" in input_name else input_name
+    adv = advantages.get(base_name, "advantage")
     if adv is None:
         await interaction.response.send_message(
-            f"No advantage named **{name}**: see `/advantage search`.", ephemeral=True
+            f"No advantage named **{base_name}**: see `/advantage search`.", ephemeral=True
         )
         return
+    canonical = adv["name"]
+    if ":" in input_name:
+        param = input_name[input_name.index(":") + 1:].strip()
+        canonical = f"{canonical}: {param}"
     cost = points if points is not None else adv["points"]
     if cost is None:
         await interaction.response.send_message(
@@ -7742,22 +7805,23 @@ async def xp_advantage(
         )
         return
     c = rec.character
-    if adv["name"].lower() in [x.lower() for x in c.advantages]:
-        await interaction.response.send_message(f"**{c.name}** already has **{adv['name']}**.", ephemeral=True)
+    if canonical.lower() in [x.lower() for x in c.advantages]:
+        await interaction.response.send_message(f"**{c.name}** already has **{canonical}**.", ephemeral=True)
         return
     if c.xp < cost:
         await interaction.response.send_message(
-            f"Not enough XP: **{adv['name']}** costs **{cost}**, but **{c.name}** has {c.xp:g}.", ephemeral=True
+            f"Not enough XP: **{canonical}** costs **{cost}**, but **{c.name}** has {c.xp:g}.", ephemeral=True
         )
         return
-    c.advantages.append(adv["name"])
+    c.advantages.append(canonical)
     c.xp -= cost
     c.xp_spent += cost
     store.save(rec)
-    await interaction.response.send_message(
-        f"🌸 **{c.name}** gains the advantage **{adv['name']}** for **{cost}** XP. XP left {c.xp:g}",
-        embed=build_sheet_embed(rec),
-    )
+    msg = f"🌸 **{c.name}** gains the advantage **{canonical}** for **{cost}** XP. XP left {c.xp:g}"
+    param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(adv["name"])
+    if param_hint and ":" not in input_name:
+        msg += f"\n*Hint: use `{adv['name']}: <{param_hint}>` to record the chosen option.*"
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
 @sheet_xp.command(name="remove_disadvantage", description="Buy off a Disadvantage with XP (cost = 2x its point value).")
@@ -7781,18 +7845,24 @@ async def xp_remove_disadvantage(
         await interaction.response.send_message(err, ephemeral=True)
         return
     c = rec.character
-    matched = [d for d in c.disadvantages if d.lower() == name.lower().strip()]
+    name_stripped = name.strip()
+    name_low = name_stripped.lower()
+    matched = [d for d in c.disadvantages if d.lower() == name_low]
     if not matched:
-        adv = advantages.get(name, "disadvantage")
-        canonical = adv["name"] if adv else name.strip()
+        base_name = name_stripped.split(":")[0].strip()
+        adv = advantages.get(name_stripped, "disadvantage") or advantages.get(base_name, "disadvantage")
+        canonical = adv["name"] if adv else base_name
         matched = [d for d in c.disadvantages if d.lower() == canonical.lower()]
+    if not matched:
+        matched = [d for d in c.disadvantages if d.lower().startswith(name_low.split(":")[0].strip())]
     if not matched:
         await interaction.response.send_message(
             f"**{c.name}** doesn't have the disadvantage **{name}**.", ephemeral=True
         )
         return
     canonical = matched[0]
-    adv = advantages.get(canonical, "disadvantage")
+    base_for_lookup = canonical.split(":")[0].strip()
+    adv = advantages.get(canonical, "disadvantage") or advantages.get(base_for_lookup, "disadvantage")
     base_cost = points if points is not None else (adv["points"] if adv else None)
     if base_cost is None:
         await interaction.response.send_message(
@@ -9318,10 +9388,12 @@ async def horsemanship_check(
         return
     skill_rank = c.skills.get("Horsemanship", 0)
     wp = stats.wound_penalty(c)
-    result = combat.resolve_skill_check(c.agility, skill_rank, tn, engine, bonus + wp)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Horsemanship", "agility")
+    result = combat.resolve_skill_check(c.agility, skill_rank, tn, engine, bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
     embed = _build_check_embed(
         reason or "Horsemanship Check", c.name, "Horsemanship", "Agility", result, wp, bonus,
         success_text="Maneuver succeeds!", fail_text="The rider falters!",
+        adv_notes=adv_notes,
     )
     await interaction.response.send_message(embed=embed)
 
@@ -9364,7 +9436,8 @@ async def craft_extended(
         return
     skill_rank = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
-    result = combat.resolve_skill_check(c.intelligence, skill_rank, 10, engine, bonus + wp)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, "intelligence")
+    result = combat.resolve_skill_check(c.intelligence, skill_rank, 10, engine, bonus + wp + adv_f, extra_rolled=adv_r, extra_kept=adv_k)
     embed = discord.Embed(
         title=reason or f"Extended Crafting: {skill}",
         color=discord.Color.teal(),
@@ -9380,6 +9453,8 @@ async def craft_extended(
     ]
     quality_lines = [f"TN {t}: {desc}" for t, desc in quality_thresholds]
     embed.add_field(name="Quality Tiers (cumulative total)", value="\n".join(quality_lines), inline=False)
+    if adv_notes:
+        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
     embed.set_footer(text="DM: track cumulative total across rolls. Each roll = one crafting period.")
     await interaction.response.send_message(embed=embed)
 

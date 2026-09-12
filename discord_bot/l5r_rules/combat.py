@@ -626,14 +626,19 @@ def resolve_contested_check(
     dice_engine: DiceEngine,
     bonus_a: int = 0,
     bonus_b: int = 0,
+    extra_rolled_a: int = 0,
+    extra_kept_a: int = 0,
+    extra_rolled_b: int = 0,
+    extra_kept_b: int = 0,
 ) -> dict:
     """Contested Skill/Trait roll. Each side rolls (trait + skill) keep trait;
     explodes only if skill > 0. bonus_a/bonus_b are flat modifiers (wound
-    penalties, Void Point bonuses, situational). Higher total wins; tie = 'tie'."""
-    rolled_a = trait_a + skill_a
-    kept_a = trait_a
-    rolled_b = trait_b + skill_b
-    kept_b = trait_b
+    penalties, Void Point bonuses, situational). extra_rolled/extra_kept add
+    dice from advantages without inflating both rolled and kept."""
+    rolled_a = trait_a + skill_a + extra_rolled_a
+    kept_a = trait_a + extra_kept_a
+    rolled_b = trait_b + skill_b + extra_rolled_b
+    kept_b = trait_b + extra_kept_b
     explodes_a = skill_a > 0
     explodes_b = skill_b > 0
     result_a = dice_engine.roll_and_keep(max(1, rolled_a), max(1, kept_a), explodes_a)
@@ -722,12 +727,15 @@ def resolve_poison_resist(
     poison_strength: int,
     dice_engine: DiceEngine,
     bonus: int = 0,
+    extra_rolled: int = 0,
+    extra_kept: int = 0,
 ) -> dict:
     """Poison resistance: Stamina roll vs TN (Poison Strength × 5).
     Stamina is trait-only (rolled = kept = Stamina, no explosion)."""
     tn = poison_strength * 5
-    rolled = max(1, stamina)
-    result = dice_engine.roll_and_keep(rolled, rolled, False)
+    rolled = max(1, stamina + extra_rolled)
+    kept = max(1, stamina + extra_kept)
+    result = dice_engine.roll_and_keep(rolled, kept, False)
     total = result.total + bonus
     return {
         "success": total >= tn,
@@ -736,7 +744,7 @@ def resolve_poison_resist(
         "margin": total - tn,
         "dice": result,
         "rolled": rolled,
-        "kept": rolled,
+        "kept": kept,
     }
 
 
@@ -750,11 +758,14 @@ def resolve_skill_check(
     tn: int,
     dice_engine: DiceEngine,
     bonus: int = 0,
+    extra_rolled: int = 0,
+    extra_kept: int = 0,
 ) -> dict:
     """Generic Skill/Trait check vs a TN. Roll (trait + skill) keep trait.
-    Explodes only if skilled (skill > 0)."""
-    rolled = trait + skill
-    kept = trait
+    Explodes only if skilled (skill > 0). extra_rolled/extra_kept add dice
+    from advantages without inflating both rolled and kept."""
+    rolled = trait + skill + extra_rolled
+    kept = trait + extra_kept
     explodes = skill > 0
     result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
     total = result.total + bonus
@@ -779,11 +790,13 @@ def resolve_medicine_check(
     tn: int,
     dice_engine: DiceEngine,
     bonus: int = 0,
+    extra_rolled: int = 0,
+    extra_kept: int = 0,
 ) -> dict:
     """Medicine/Intelligence check vs a TN. Used for treating poison, disease,
     wounds, etc. Explodes only if skilled."""
-    rolled = intelligence + medicine_skill
-    kept = intelligence
+    rolled = intelligence + medicine_skill + extra_rolled
+    kept = intelligence + extra_kept
     explodes = medicine_skill > 0
     result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
     total = result.total + bonus
