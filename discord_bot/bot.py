@@ -3130,7 +3130,8 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/dm new_day", "New day: refresh spells, natural healing"),
         ("/dm roles", "Show Fortune and Kami role holders"),
         ("/dm influence", "Track Influence Points (court scene)"),
-        ("/dm room create", "Create a private play room (thread)"),
+        ("/dm room create", "Create a private play room (thread, optional description)"),
+        ("/dm room describe", "Set or update the pinned room description"),
         ("/dm room invite / kick", "Add or remove room members"),
         ("/dm room list / members / close", "List, inspect, or close rooms"),
     ]),
@@ -6420,8 +6421,12 @@ async def _resolve_current_room(
 
 
 @dm_room.command(name="create", description="Create a private play room (a thread) and become its host.")
-@app_commands.describe(name="Room name.")
-async def room_create(interaction: discord.Interaction, name: app_commands.Range[str, 1, 90]) -> None:
+@app_commands.describe(name="Room name.", description="Optional location description (pinned at top of the room).")
+async def room_create(
+    interaction: discord.Interaction,
+    name: app_commands.Range[str, 1, 90],
+    description: app_commands.Range[str, 1, 4000] | None = None,
+) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
         return
@@ -6443,7 +6448,8 @@ async def room_create(interaction: discord.Interaction, name: app_commands.Range
         )
         return
     rec = store.create_room(
-        str(interaction.guild_id), str(interaction.channel_id), str(thread.id), name, str(interaction.user.id)
+        str(interaction.guild_id), str(interaction.channel_id), str(thread.id), name, str(interaction.user.id),
+        description=description or "",
     )
     await interaction.response.send_message(
         f"🏮 Room **{name}** created: {thread.mention} (host {interaction.user.mention}). "
@@ -6453,6 +6459,42 @@ async def room_create(interaction: discord.Interaction, name: app_commands.Range
         f"🏮 Welcome to **{name}**. {interaction.user.mention} is the host. "
         f"Play happens here:`/sheet`, `/roll`, `/attack`, and `/combat` all work inside this room."
     )
+    if description:
+        embed = discord.Embed(title=name, description=description, color=0xC4A747)
+        pin_msg = await thread.send(embed=embed)
+        await pin_msg.pin()
+
+
+@dm_room.command(name="describe", description="Set or update the room's pinned description (run inside the room).")
+@app_commands.describe(description="The new location description to pin.")
+async def room_describe(
+    interaction: discord.Interaction,
+    description: app_commands.Range[str, 1, 4000],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_current_room(interaction)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    if not _room_host_or_dm(interaction, rec):
+        await interaction.response.send_message("Only the room host or a DM can set the description.", ephemeral=True)
+        return
+    await interaction.response.send_message(f"📜 Updating description for **{rec.name}**...", ephemeral=True)
+    # Unpin any existing description embeds from the bot
+    try:
+        pinned = await interaction.channel.pins()
+        for msg in pinned:
+            if msg.author == interaction.client.user and msg.embeds and msg.embeds[0].color and msg.embeds[0].color.value == 0xC4A747:
+                await msg.unpin()
+                await msg.delete()
+    except discord.Forbidden:
+        pass
+    store.update_room_description(rec.id, description)
+    embed = discord.Embed(title=rec.name, description=description, color=0xC4A747)
+    pin_msg = await interaction.channel.send(embed=embed)
+    await pin_msg.pin()
 
 
 @dm_room.command(name="invite", description="Invite a member into this room (run inside the room's thread).")

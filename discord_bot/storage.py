@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS rooms (
     name              TEXT NOT NULL,
     host_id           TEXT NOT NULL,
     created_at        REAL NOT NULL,
-    closed            INTEGER NOT NULL DEFAULT 0
+    closed            INTEGER NOT NULL DEFAULT 0,
+    description       TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS room_members (
@@ -137,6 +138,7 @@ class RoomRecord:
     name: str
     host_id: str
     closed: bool
+    description: str = ""
 
 
 @dataclass
@@ -175,6 +177,10 @@ class Store:
         self._lock = threading.Lock()
         with self._lock, self._conn:
             self._conn.executescript(_SCHEMA)
+            try:
+                self._conn.execute("ALTER TABLE rooms ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+            except sqlite3.OperationalError:
+                pass
 
     # -- internal helpers ------------------------------------------------------
     def _row_to_record(self, row: sqlite3.Row) -> CharacterRecord:
@@ -320,23 +326,25 @@ class Store:
             name=row["name"],
             host_id=row["host_id"],
             closed=bool(row["closed"]),
+            description=row["description"] if "description" in row.keys() else "",
         )
 
     def create_room(
-        self, guild_id: str, parent_channel_id: str, thread_id: str, name: str, host_id: str
+        self, guild_id: str, parent_channel_id: str, thread_id: str, name: str, host_id: str,
+        description: str = "",
     ) -> RoomRecord:
         with self._lock, self._conn:
             cur = self._conn.execute(
                 "INSERT INTO rooms (guild_id, parent_channel_id, thread_id, name, host_id, "
-                "created_at, closed) VALUES (?, ?, ?, ?, ?, ?, 0)",
-                (guild_id, parent_channel_id, thread_id, name, host_id, time.time()),
+                "created_at, closed, description) VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
+                (guild_id, parent_channel_id, thread_id, name, host_id, time.time(), description),
             )
             room_id = cur.lastrowid
             self._conn.execute(
                 "INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)",
                 (room_id, host_id),
             )
-        return RoomRecord(room_id, guild_id, parent_channel_id, thread_id, name, host_id, False)
+        return RoomRecord(room_id, guild_id, parent_channel_id, thread_id, name, host_id, False, description)
 
     def get_room_by_thread(self, thread_id: str) -> RoomRecord | None:
         with self._lock:
@@ -357,6 +365,10 @@ class Store:
     def close_room(self, room_id: int) -> None:
         with self._lock, self._conn:
             self._conn.execute("UPDATE rooms SET closed = 1 WHERE id = ?", (room_id,))
+
+    def update_room_description(self, room_id: int, description: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("UPDATE rooms SET description = ? WHERE id = ?", (description, room_id))
 
     def add_room_member(self, room_id: int, user_id: str) -> None:
         with self._lock, self._conn:
