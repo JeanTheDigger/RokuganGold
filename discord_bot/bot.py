@@ -4251,35 +4251,33 @@ async def combat_full_defense(
             ephemeral=True,
         )
         return
+    guild = str(interaction.guild_id)
+    rec = _resolve_combatant_record(guild, cb)
     ref = reflexes
     def_sk = defense_skill
-    if ref is None or def_sk is None:
-        guild = str(interaction.guild_id)
-        rec = None
-        if cb.is_npc:
-            rec = store.get_by_name(guild, NPC_OWNER, cb.name)
-        elif cb.owner_id:
-            rec = store.get_active(guild, cb.owner_id)
-        if rec is not None:
-            if ref is None:
-                ref = rec.character.reflexes
-            if def_sk is None:
-                def_sk = rec.character.skills.get("Defense", 0)
+    if rec is not None:
+        if ref is None:
+            ref = rec.character.reflexes
+        if def_sk is None:
+            def_sk = rec.character.skills.get("Defense", 0)
     if ref is None or def_sk is None:
         await interaction.response.send_message(
             f"Cannot resolve stats for **{cb.name}**. Provide `reflexes:` and `defense_skill:` explicitly.",
             ephemeral=True,
         )
         return
-    result = combat.roll_full_defense(ref, def_sk, engine)
+    wp = stats.wound_penalty(rec.character) if rec is not None else 0
+    result = combat.roll_full_defense(ref, def_sk, engine, wound_penalty=wp)
     cb.full_defense_bonus = result["bonus"]
     cb.stance = "full_defense"
     cb.actions_used = 2
-    _save_encounter(str(interaction.guild_id), enc)
+    _save_encounter(guild, enc)
+    wp_note = f"  Wound penalty: **{wp}**\n" if wp != 0 else ""
     await interaction.response.send_message(
         f"🛡️ **{cb.name}** enters **Full Defense**.\n"
         f"  Roll: {result['rolled']}k{result['kept']} → **{result['total']}** · "
         f"half (rounded up) = **+{result['bonus']} Armor TN**\n"
+        f"{wp_note}"
         f"  Complex Action: only Free Actions until next turn.\n"
         f"  Expires at the start of {cb.name}'s next turn."
     )

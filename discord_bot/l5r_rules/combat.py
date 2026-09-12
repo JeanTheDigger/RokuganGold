@@ -140,6 +140,7 @@ def roll_full_defense(
     reflexes: int,
     defense_skill: int,
     dice_engine: DiceEngine,
+    wound_penalty: int = 0,
 ) -> dict:
     """Full Defense Stance (s40): Defense/Reflexes roll, add half (rounded up)
     to Armor TN until the character's next Turn. Complex Action."""
@@ -147,13 +148,15 @@ def roll_full_defense(
     kept = reflexes
     explodes = defense_skill > 0
     result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
-    bonus = math.ceil(result.total / 2)
+    total = result.total + wound_penalty
+    bonus = max(0, math.ceil(total / 2))
     return {
-        "total": result.total,
+        "total": total,
         "bonus": bonus,
         "rolled": rolled,
         "kept": kept,
         "dice": result,
+        "wound_penalty": wound_penalty,
     }
 
 
