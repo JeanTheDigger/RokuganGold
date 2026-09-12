@@ -14,7 +14,12 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
+import re
+import traceback
+from collections import defaultdict, deque
+from time import monotonic
 
 import discord
 from discord import app_commands
@@ -59,6 +64,13 @@ store = storage.Store(DB_PATH)
 # In-memory initiative encounters, keyed by Discord channel id (see encounter.py).
 encounters: dict[int, encounter.Encounter] = {}
 
+# In-memory roll history: channel_id → deque of (timestamp, user_display, description, total).
+_roll_history: dict[int, deque] = defaultdict(lambda: deque(maxlen=50))
+
+
+def _log_roll(channel_id: int, user: str, description: str, total: int | str) -> None:
+    _roll_history[channel_id].append((monotonic(), user, description, total))
+
 
 class RokuganBot(discord.Client):
     def __init__(self) -> None:
@@ -76,6 +88,7 @@ class RokuganBot(discord.Client):
             log.info("Synced %d global commands (may take up to ~1h to appear)", len(synced))
 
     async def on_ready(self) -> None:
+        self.tree.on_error = _on_app_command_error
         log.info("Logged in as %s (id=%s). Ready.", self.user, getattr(self.user, "id", "?"))
         for ch_id_str, data_json in store.load_all_encounters():
             try:
@@ -88,6 +101,41 @@ class RokuganBot(discord.Client):
 
 
 client = RokuganBot()
+
+
+# ===========================================================================
+# Global error handler
+# ===========================================================================
+async def _on_app_command_error(
+    interaction: discord.Interaction, error: app_commands.AppCommandError
+) -> None:
+    if isinstance(error, app_commands.CommandOnCooldown):
+        await interaction.response.send_message(
+            f"This command is on cooldown. Try again in **{error.retry_after:.0f}s**.",
+            ephemeral=True,
+        )
+        return
+    if isinstance(error, app_commands.CheckFailure):
+        await interaction.response.send_message(
+            "You don't have permission to use this command.", ephemeral=True
+        )
+        return
+    log.error("Unhandled error in /%s: %s", getattr(interaction.command, "qualified_name", "?"), error, exc_info=error)
+    embed = discord.Embed(
+        title="Something went wrong",
+        description=(
+            "An unexpected error occurred while running this command. "
+            "The error has been logged. Please try again or contact a DM."
+        ),
+        color=discord.Color.red(),
+    )
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+    except discord.HTTPException:
+        pass
 
 
 # ===========================================================================
@@ -182,6 +230,21 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
             f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) · "
             f"Void Points {c.current_void_points}/{c.max_void_points}\n"
             f"XP available: **{c.xp:g}** (spent {c.xp_spent:g})"
+        ),
+        inline=False,
+    )
+
+    base_atn = c.reflexes * 5 + 5 + c.armor_tn_bonus
+    init_rolled = c.reflexes + stats.insight_rank(c)
+    init_kept = c.reflexes
+    embed.add_field(
+        name="Derived",
+        value=(
+            f"Armor TN **{base_atn}** (Ref {c.reflexes}×5+5"
+            + (f"+{c.armor_tn_bonus} armor" if c.armor_tn_bonus else "")
+            + f") · Reduction **{c.armor_reduction}**"
+            f"\nInitiative **{init_rolled}k{init_kept}** · "
+            f"Healing Rate {c.stamina * 2}/day"
         ),
         inline=False,
     )
@@ -386,10 +449,12 @@ async def whoami(interaction: discord.Interaction) -> None:
 
 
 def _format_dice(result: DiceResult) -> str:
-    kept = ", ".join(str(d) for d in result.kept_dice) or "—"
-    line = f"**Kept:** {kept}"
+    kept = " + ".join(f"**{d}**" for d in result.kept_dice) or "—"
+    total_kept = sum(result.kept_dice)
+    line = f"[{kept}] = **{total_kept}**"
     if result.dropped_dice:
-        line += f"   ·   *dropped: {', '.join(str(d) for d in result.dropped_dice)}*"
+        dropped = ", ".join(f"~~{d}~~" for d in result.dropped_dice)
+        line += f"   ·   dropped: {dropped}"
     extras = []
     if result.explosions:
         extras.append(f"💥 {result.explosions} explosion{'s' if result.explosions != 1 else ''}")
@@ -492,6 +557,73 @@ async def roll(
     await interaction.response.send_message(embed=embed)
 
 
+_DICE_RE = re.compile(
+    r"^(\d{1,3})\s*k\s*(\d{1,3})"
+    r"(?:\s*([+-])\s*(\d{1,4}))?"
+    r"$",
+    re.IGNORECASE,
+)
+
+
+@client.tree.command(
+    name="dice",
+    description="Quick dice: type '5k3', '7k2+5', '4k2-3'. Shorthand for /roll.",
+)
+@app_commands.describe(
+    expression="Dice expression like 5k3, 7k2+5, 4k2-3.",
+    tn="Optional Target Number to test against.",
+    reason="Optional label shown with the roll.",
+)
+async def dice_quick(
+    interaction: discord.Interaction,
+    expression: str,
+    tn: app_commands.Range[int, 1, 200] | None = None,
+    reason: str | None = None,
+) -> None:
+    m = _DICE_RE.match(expression.strip())
+    if not m:
+        await interaction.response.send_message(
+            "Invalid format. Use `XkY` or `XkY+N` or `XkY-N`  (e.g. `5k3`, `7k2+5`).",
+            ephemeral=True,
+        )
+        return
+    rolled = int(m.group(1))
+    kept = int(m.group(2))
+    bonus = 0
+    if m.group(3):
+        val = int(m.group(4))
+        bonus = val if m.group(3) == "+" else -val
+    if rolled < 1 or rolled > 100 or kept < 1 or kept > 100:
+        await interaction.response.send_message("Rolled and kept must be 1-100.", ephemeral=True)
+        return
+    title = f"🎲 {rolled}k{kept}" + (f"{bonus:+d}" if bonus else "") + (f" — {reason}" if reason else "")
+    if tn is not None:
+        outcome = engine.roll_check(rolled, kept, tn, 0, bonus, True, False)
+        result = outcome["dice"]
+        success = outcome["success"]
+        embed = discord.Embed(
+            title=title, color=discord.Color.green() if success else discord.Color.red()
+        )
+        embed.add_field(name="Result", value=_format_dice(result), inline=False)
+        verdict = "✅ **Success**" if success else "❌ **Failure**"
+        embed.add_field(
+            name="Total",
+            value=f"**{outcome['total']}** vs TN {outcome['tn']} — {verdict} (margin {outcome['margin']:+d})",
+            inline=False,
+        )
+    else:
+        result = engine.roll_and_keep(rolled, kept, True, False)
+        total = result.total + bonus
+        embed = discord.Embed(title=title, color=discord.Color.blurple())
+        embed.add_field(name="Result", value=_format_dice(result), inline=False)
+        total_str = f"**{total}**"
+        if bonus:
+            total_str += f"  (dice {result.total} {'+' if bonus >= 0 else '−'} {abs(bonus)})"
+        embed.add_field(name="Total", value=total_str, inline=False)
+    _log_roll(interaction.channel_id, interaction.user.display_name, title, outcome["total"] if tn else total)
+    await interaction.response.send_message(embed=embed)
+
+
 # ===========================================================================
 # /attack — combat with DM-authorized damage
 # ===========================================================================
@@ -544,6 +676,17 @@ async def _disadvantage_autocomplete(interaction: discord.Interaction, current: 
 
 async def _anyadv_autocomplete(interaction: discord.Interaction, current: str):
     return _adv_choices(current, None)
+
+
+async def _own_character_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    if interaction.guild_id is None:
+        return []
+    cur = current.lower().strip()
+    recs = store.list_by_owner(str(interaction.guild_id), str(interaction.user.id))
+    names = [r.character.name for r in recs if cur in r.character.name.lower()]
+    return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
 
 async def _npc_autocomplete(
@@ -1336,6 +1479,7 @@ combat_battle = app_commands.Group(name="battle", description="Mass Battle syste
 @app_commands.choices(
     attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES, maneuver=_MANEUVER_CHOICES
 )
+@app_commands.checks.cooldown(1, 3.0)
 async def attack(
     interaction: discord.Interaction,
     target: discord.Member | None = None,
@@ -2160,19 +2304,14 @@ async def sheet_wizard(
     )
 
 
-@sheet.command(name="view", description="View a character sheet (yours, or another player's if you are a DM).")
-@app_commands.describe(member="Whose active character to view (Fortune). Omit for your own.")
+@sheet.command(name="view", description="View a character sheet (yours or another player's).")
+@app_commands.describe(member="Whose active character to view. Omit for your own.")
 async def sheet_view(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     if member is not None and member.id != interaction.user.id:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(
-                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view another player's sheet.", ephemeral=True
-            )
-            return
         rec = store.get_active(guild, str(member.id))
         if rec is None:
             await interaction.response.send_message(
@@ -2225,6 +2364,7 @@ async def sheet_list(interaction: discord.Interaction, member: discord.Member | 
 
 @sheet.command(name="activate", description="Set which of your characters is active.")
 @app_commands.describe(name="The character name to activate.")
+@app_commands.autocomplete(name=_own_character_autocomplete)
 async def sheet_activate(interaction: discord.Interaction, name: str) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -2245,6 +2385,7 @@ async def sheet_activate(interaction: discord.Interaction, name: str) -> None:
 
 @sheet.command(name="delete", description="Delete a character (yours, or a player's if you are a DM).")
 @app_commands.describe(name="Character name.", member="Owner of the character (Fortune).")
+@app_commands.autocomplete(name=_own_character_autocomplete)
 async def sheet_delete(
     interaction: discord.Interaction, name: str, member: discord.Member | None = None
 ) -> None:
@@ -2264,8 +2405,91 @@ async def sheet_delete(
     if rec is None:
         await interaction.response.send_message(f"No character named **{name}** found.", ephemeral=True)
         return
-    store.delete(rec.id)
-    await interaction.response.send_message(f"Deleted **{rec.character.name}**.", ephemeral=True)
+    view = _DeleteConfirmView(rec, interaction.user.id)
+    await interaction.response.send_message(
+        f"⚠️ Are you sure you want to **permanently delete** **{rec.character.name}**?\n"
+        f"This cannot be undone.",
+        view=view,
+        ephemeral=True,
+    )
+
+
+class _DeleteConfirmView(discord.ui.View):
+    def __init__(self, record: storage.CharacterRecord, user_id: int) -> None:
+        super().__init__(timeout=30)
+        self._record = record
+        self._user_id = user_id
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self._user_id:
+            await interaction.response.send_message("Not your confirmation.", ephemeral=True)
+            return
+        store.delete(self._record.id)
+        self.stop()
+        await interaction.response.edit_message(
+            content=f"🗑️ Deleted **{self._record.character.name}** permanently.", view=None
+        )
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self._user_id:
+            await interaction.response.send_message("Not your confirmation.", ephemeral=True)
+            return
+        self.stop()
+        await interaction.response.edit_message(content="Deletion cancelled.", view=None)
+
+    async def on_timeout(self) -> None:
+        pass
+
+
+class _PaginatorView(discord.ui.View):
+    """Reusable paginator for long text lists."""
+
+    def __init__(self, pages: list[str], user_id: int, *, timeout: float = 120) -> None:
+        super().__init__(timeout=timeout)
+        self._pages = pages
+        self._user_id = user_id
+        self._index = 0
+        self._update_buttons()
+
+    def _update_buttons(self) -> None:
+        self.prev_btn.disabled = self._index == 0
+        self.next_btn.disabled = self._index >= len(self._pages) - 1
+        self.prev_btn.label = f"◀ {self._index}" if self._index > 0 else "◀"
+        self.next_btn.label = f"▶ {self._index + 2}" if self._index < len(self._pages) - 1 else "▶"
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
+    async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self._user_id:
+            await interaction.response.send_message("Not your paginator.", ephemeral=True)
+            return
+        self._index = max(0, self._index - 1)
+        self._update_buttons()
+        await interaction.response.edit_message(content=self._pages[self._index], view=self)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
+    async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self._user_id:
+            await interaction.response.send_message("Not your paginator.", ephemeral=True)
+            return
+        self._index = min(len(self._pages) - 1, self._index + 1)
+        self._update_buttons()
+        await interaction.response.edit_message(content=self._pages[self._index], view=self)
+
+    async def on_timeout(self) -> None:
+        pass
+
+
+def _paginate(lines: list[str], header: str, *, per_page: int = 15) -> list[str]:
+    """Split lines into pages with a header and page indicator."""
+    total_pages = max(1, math.ceil(len(lines) / per_page))
+    pages = []
+    for i in range(total_pages):
+        chunk = lines[i * per_page : (i + 1) * per_page]
+        footer = f"\n*Page {i + 1}/{total_pages}*" if total_pages > 1 else ""
+        pages.append(header + "\n".join(chunk) + footer)
+    return pages
 
 
 @sheet.command(name="trait", description="Set a Trait (or Void) on the active character.")
@@ -2296,16 +2520,16 @@ async def sheet_trait(
     )
 
 
-@sheet.command(name="skill", description="Set a skill rank on the active character (rank 0 removes it).")
+@sheet.command(name="skill", description="Set skill ranks. Single: skill='Kenjutsu' rank=3. Bulk: skill='Kenjutsu 3, Courtier 2'.")
 @app_commands.describe(
-    skill="Skill name (free text, e.g. Kenjutsu, Courtier).",
-    rank="Rank 0-10 (0 removes the skill).",
+    skill="Skill name, or bulk list: 'Kenjutsu 3, Courtier 2, Etiquette 1'.",
+    rank="Rank 0-10 (0 removes). Omit when using bulk format.",
     member="Target player (Fortune). Omit for your own active character.",
 )
 async def sheet_skill(
     interaction: discord.Interaction,
-    skill: app_commands.Range[str, 1, 40],
-    rank: app_commands.Range[int, 0, 10],
+    skill: app_commands.Range[str, 1, 200],
+    rank: app_commands.Range[int, 0, 10] | None = None,
     member: discord.Member | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -2315,13 +2539,36 @@ async def sheet_skill(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
-    skill_name = skill.strip().title()
-    if rank == 0:
-        rec.character.skills.pop(skill_name, None)
-        msg = f"Removed **{skill_name}** from **{rec.character.name}**."
+    if rank is not None:
+        skill_name = skill.strip().title()
+        if rank == 0:
+            rec.character.skills.pop(skill_name, None)
+            msg = f"Removed **{skill_name}** from **{rec.character.name}**."
+        else:
+            rec.character.skills[skill_name] = rank
+            msg = f"Set **{skill_name}** to rank **{rank}** on **{rec.character.name}**."
     else:
-        rec.character.skills[skill_name] = rank
-        msg = f"Set **{skill_name}** to rank **{rank}** on **{rec.character.name}**."
+        parts = [p.strip() for p in skill.split(",") if p.strip()]
+        changes = []
+        for p in parts:
+            m = re.match(r"^(.+?)\s+(\d{1,2})$", p.strip())
+            if not m:
+                await interaction.response.send_message(
+                    f"Could not parse **{p}**. Use format: `Kenjutsu 3, Courtier 2`.", ephemeral=True
+                )
+                return
+            sname = m.group(1).strip().title()
+            srank = int(m.group(2))
+            if srank > 10:
+                await interaction.response.send_message(f"Rank for **{sname}** exceeds 10.", ephemeral=True)
+                return
+            if srank == 0:
+                rec.character.skills.pop(sname, None)
+                changes.append(f"removed **{sname}**")
+            else:
+                rec.character.skills[sname] = srank
+                changes.append(f"**{sname}** {srank}")
+        msg = f"Set on **{rec.character.name}**: {', '.join(changes)}."
     msg += _check_insight_rank_advance(rec.character)
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
@@ -3413,7 +3660,8 @@ async def combat_next(interaction: discord.Interaction) -> None:
     current = enc.advance()
     guild = str(interaction.guild_id)
     _save_encounter(guild, enc)
-    parts = [f"➡️ It is now **{current.name}**'s turn."]
+    mention = f"<@{current.owner_id}> " if current.owner_id and not current.is_npc else ""
+    parts = [f"➡️ {mention}It is now **{current.name}**'s turn."]
     reminders = condition_effects.condition_reminders(current.conditions)
     if reminders:
         parts.append("\n".join(reminders))
@@ -5008,6 +5256,7 @@ def _build_check_embed(
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (Void Point, advantages, etc.).",
     reason="Label shown with the roll.",
+    secret="Secret roll — result shown only to you (the DM), not the channel.",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
 @app_commands.autocomplete(skill=_skill_autocomplete)
@@ -5021,6 +5270,7 @@ async def skill_check(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     reason: str | None = None,
+    secret: bool = False,
 ) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -5039,11 +5289,13 @@ async def skill_check(
     wp = stats.wound_penalty(c)
     result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
-    title = "🎯 Skill Check"
+    title = "🎯 Skill Check" + (" 🤫" if secret else "")
     if reason:
         title += f" — {reason}"
     embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus)
-    await interaction.response.send_message(embed=embed)
+    if not secret:
+        _log_roll(interaction.channel_id, c.name, f"{skill}/{trait.name} vs TN {tn}", result["total"])
+    await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 
 # ===========================================================================
@@ -5174,6 +5426,7 @@ async def check_cooperative(
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (cover, darkness, distractions, etc.).",
     reason="Label (e.g. 'sneaking past the guards').",
+    secret="Secret roll — result shown only to you (the DM).",
 )
 async def stealth_check(
     interaction: discord.Interaction,
@@ -5183,6 +5436,7 @@ async def stealth_check(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     reason: str | None = None,
+    secret: bool = False,
 ) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -5200,7 +5454,7 @@ async def stealth_check(
     wp = stats.wound_penalty(c)
     result = combat.resolve_skill_check(c.agility, sk, tn, engine, bonus=bonus + wp)
     skill_label = f"Stealth {sk}" if sk > 0 else "Stealth (unskilled)"
-    title = "🥷 Stealth Check"
+    title = "🥷 Stealth Check" + (" 🤫" if secret else "")
     if reason:
         title += f" — {reason}"
     embed = _build_check_embed(
@@ -5208,7 +5462,7 @@ async def stealth_check(
         success_text="✅ **Undetected!**",
         fail_text="❌ **Spotted!**",
     )
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 
 # ===========================================================================
@@ -5233,6 +5487,7 @@ _INVESTIGATION_EMPHASIS = [
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, tools, etc.).",
     reason="Label (e.g. 'searching the crime scene').",
+    secret="Secret roll — result shown only to you (the DM).",
 )
 @app_commands.choices(emphasis=_INVESTIGATION_EMPHASIS)
 async def investigate_check(
@@ -5244,6 +5499,7 @@ async def investigate_check(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     reason: str | None = None,
+    secret: bool = False,
 ) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -5265,7 +5521,7 @@ async def investigate_check(
     skill_label = f"Investigation {sk}" if sk > 0 else "Investigation (unskilled)"
     if emp_name:
         skill_label += f" [{emp_name}]"
-    title = "🔍 Investigation"
+    title = "🔍 Investigation" + (" 🤫" if secret else "")
     if emp_name:
         title += f" ({emp_name})"
     if reason:
@@ -5275,7 +5531,7 @@ async def investigate_check(
         embed.set_footer(text=f"Has {emp_name} emphasis — reroll 1s once (DM adjudicates).")
     elif emp_name:
         embed.set_footer(text=f"No {emp_name} emphasis on sheet.")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 
 # ===========================================================================
@@ -5522,6 +5778,10 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/ping", "Check the bot is alive (shows gateway latency)."),
         ("/whoami", "Quick glance at your active character's status."),
         ("/roll", "Roll & Keep: XkY, optional TN, raises, emphasis, unskilled."),
+        ("/dice", "Quick shorthand: '5k3', '7k2+5'. Same as /roll but faster."),
+        ("/macro save / list / roll / delete", "Save and reuse frequent dice pools."),
+        ("/compare", "Side-by-side character comparison."),
+        ("/history", "Recent dice rolls in this channel."),
         ("/help", "Show all bot commands, organized by category."),
     ]),
     ("Character Sheets", [
@@ -5755,7 +6015,12 @@ async def npc_list(interaction: discord.Interaction) -> None:
         f"(Rank {r.character.school_rank})"
         for r in recs
     ]
-    await interaction.response.send_message("🎭 **NPCs on this server:**\n" + "\n".join(lines[:50]))
+    pages = _paginate(lines, "🎭 **NPCs on this server:**\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0])
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view)
 
 
 @dm_npc.command(name="delete", description="Delete a stored NPC. Fortune role required.")
@@ -6581,12 +6846,14 @@ async def creature_catalog(interaction: discord.Interaction, search: str | None 
     lines = [
         f"• `{tid}` — **{t.name}** (atk {t.attack_rolled}k{t.attack_kept}, dmg "
         f"{t.damage_rolled}k{t.damage_kept}, TN {t.armor_tn}, red {t.reduction}, dead {t.wounds_dead})"
-        for tid, t in matches[:40]
+        for tid, t in matches
     ]
-    extra = f"\n…and {len(matches) - 40} more — narrow your search." if len(matches) > 40 else ""
-    await interaction.response.send_message(
-        f"👹 **{len(matches)} match(es) for `{search}`:**\n" + "\n".join(lines) + extra, ephemeral=True
-    )
+    pages = _paginate(lines, f"👹 **{len(matches)} match(es) for `{search}`:**\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
 
 @dm_creature.command(name="spawn", description="Spawn a creature instance from a template. Fortune role required.")
@@ -6636,7 +6903,12 @@ async def creature_list(interaction: discord.Interaction) -> None:
         f"({r.creature.wounds_taken}/{r.creature.wounds_dead})"
         for r in recs
     ]
-    await interaction.response.send_message("👹 **Creatures:**\n" + "\n".join(lines[:50]))
+    pages = _paginate(lines, "👹 **Creatures:**\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0])
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view)
 
 
 @dm_creature.command(name="view", description="View a spawned creature.")
@@ -7344,8 +7616,12 @@ async def spell_list(interaction: discord.Interaction, element: str | None = Non
     for s in matches:
         by_ml.setdefault(s["mastery"], []).append(s["name"])
     lines = [f"**ML {ml}:** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
-    text = f"🔮 **{element} spells ({len(matches)}):**\n" + "\n".join(lines)
-    await interaction.response.send_message(text[:1990], ephemeral=True)
+    pages = _paginate(lines, f"🔮 **{element} spells ({len(matches)}):**\n", per_page=10)
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
 
 @spell_group.command(name="search", description="Search spells by name, element, or keyword.")
@@ -7355,9 +7631,13 @@ async def spell_search(interaction: discord.Interaction, query: str) -> None:
     if not matches:
         await interaction.response.send_message(f"No spells match `{query}`.", ephemeral=True)
         return
-    lines = [f"• **{s['name']}** ({s['element']} {s['mastery']})" for s in matches[:40]]
-    extra = f"\n…and {len(matches) - 40} more." if len(matches) > 40 else ""
-    await interaction.response.send_message("🔮 " + "\n".join(lines) + extra, ephemeral=True)
+    lines = [f"• **{s['name']}** ({s['element']} {s['mastery']})" for s in matches]
+    pages = _paginate(lines, f"🔮 **{len(matches)} spell(s) matching `{query}`:**\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
 
 @spell_group.command(name="view", description="Show a spell's element, mastery, range, and effect.")
@@ -7925,9 +8205,14 @@ async def advantage_list(interaction: discord.Interaction, kind: app_commands.Ch
         )
         return
     pool = sorted(advantages.by_kind(kind.value), key=lambda r: r["name"])
-    lines = [f"**{r['name']}** ({r['cost_text']})" for r in pool]
-    text = f"{'🌸' if kind.value == 'advantage' else '💢'} **{kind.name} ({len(pool)}):** " + " · ".join(lines)
-    await interaction.response.send_message(text[:1990], ephemeral=True)
+    icon = '🌸' if kind.value == 'advantage' else '💢'
+    lines = [f"• {icon} **{r['name']}** ({r['cost_text']})" for r in pool]
+    pages = _paginate(lines, f"{icon} **{kind.name} ({len(pool)}):**\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
 
 @ref_advantage.command(name="search", description="Search Advantages & Disadvantages by name or category.")
@@ -7939,10 +8224,14 @@ async def advantage_search(interaction: discord.Interaction, query: str) -> None
         return
     lines = [
         f"{'🌸' if r['kind'] == 'advantage' else '💢'} **{r['name']}** ({r['cost_text']})"
-        for r in matches[:40]
+        for r in matches
     ]
-    extra = f"\n…and {len(matches) - 40} more." if len(matches) > 40 else ""
-    await interaction.response.send_message("\n".join(lines) + extra, ephemeral=True)
+    pages = _paginate(lines, f"**{len(matches)} match(es) for `{query}`:**\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
 
 @ref_advantage.command(name="view", description="Show an Advantage or Disadvantage in full.")
@@ -9514,6 +9803,254 @@ async def sheet_import(
     await interaction.response.send_message(
         f"✅ Imported **{char.name}** and set as your active character.",
         embed=embed,
+    )
+
+
+# ===========================================================================
+# /macro — saved rolls
+# ===========================================================================
+
+macro_group = app_commands.Group(name="macro", description="Save and use frequently-rolled dice pools.")
+
+
+async def _macro_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    if interaction.guild_id is None:
+        return []
+    macros = store.list_macros(str(interaction.guild_id), str(interaction.user.id))
+    cur = current.lower().strip()
+    return [
+        app_commands.Choice(name=m.name, value=m.name)
+        for m in macros if cur in m.name.lower()
+    ][:25]
+
+
+@macro_group.command(name="save", description="Save a roll macro (e.g. /macro save name:attack rolled:7 kept:3 modifier:5).")
+@app_commands.describe(
+    name="Short name for this macro (e.g. 'attack', 'stealth').",
+    rolled="Number of dice rolled.",
+    kept="Number of dice kept.",
+    modifier="Flat modifier to add (default 0).",
+    label="Optional description (e.g. 'Kenjutsu / Agility').",
+)
+async def macro_save(
+    interaction: discord.Interaction,
+    name: app_commands.Range[str, 1, 30],
+    rolled: app_commands.Range[int, 1, 20],
+    kept: app_commands.Range[int, 1, 20],
+    modifier: int = 0,
+    label: str = "",
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec = store.save_macro(
+        str(interaction.guild_id), str(interaction.user.id),
+        name, rolled, kept, modifier, label,
+    )
+    mod_str = f"+{modifier}" if modifier > 0 else (str(modifier) if modifier < 0 else "")
+    await interaction.response.send_message(
+        f"💾 Saved macro **{rec.name}** → `{rolled}k{kept}{mod_str}`"
+        + (f" ({label})" if label else ""),
+        ephemeral=True,
+    )
+
+
+@macro_group.command(name="list", description="List your saved macros.")
+async def macro_list(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    macros = store.list_macros(str(interaction.guild_id), str(interaction.user.id))
+    if not macros:
+        await interaction.response.send_message(
+            "No saved macros. Use `/macro save` to create one.", ephemeral=True
+        )
+        return
+    lines = []
+    for m in macros:
+        mod_str = f"+{m.modifier}" if m.modifier > 0 else (str(m.modifier) if m.modifier < 0 else "")
+        desc = f" — {m.label}" if m.label else ""
+        lines.append(f"• **{m.name}** → `{m.rolled}k{m.kept}{mod_str}`{desc}")
+    await interaction.response.send_message(
+        f"💾 **Your macros ({len(macros)}):**\n" + "\n".join(lines), ephemeral=True
+    )
+
+
+@macro_group.command(name="roll", description="Roll a saved macro.")
+@app_commands.describe(name="Which macro to roll.")
+@app_commands.autocomplete(name=_macro_autocomplete)
+async def macro_roll(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    m = store.get_macro(str(interaction.guild_id), str(interaction.user.id), name)
+    if m is None:
+        await interaction.response.send_message(
+            f"No macro named **{name}**. See `/macro list`.", ephemeral=True
+        )
+        return
+    result = engine.roll_and_keep(m.rolled, m.kept)
+    total = result.total + m.modifier
+    mod_str = f"+{m.modifier}" if m.modifier > 0 else (str(m.modifier) if m.modifier < 0 else "")
+    title = f"🎲 {m.name}" + (f" — {m.label}" if m.label else "")
+    embed = discord.Embed(title=title, color=discord.Color.teal())
+    embed.add_field(
+        name=f"{m.rolled}k{m.kept}{mod_str}",
+        value=_format_dice(result) + (f"\n+{m.modifier} modifier = **{total}**" if m.modifier else ""),
+        inline=False,
+    )
+    embed.set_footer(text=f"Total: {total}")
+    _log_roll(interaction.channel_id, interaction.user.display_name, title, total)
+    await interaction.response.send_message(embed=embed)
+
+
+@macro_group.command(name="delete", description="Delete a saved macro.")
+@app_commands.describe(name="Which macro to delete.")
+@app_commands.autocomplete(name=_macro_autocomplete)
+async def macro_delete(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    deleted = store.delete_macro(str(interaction.guild_id), str(interaction.user.id), name)
+    if not deleted:
+        await interaction.response.send_message(
+            f"No macro named **{name}**. See `/macro list`.", ephemeral=True
+        )
+        return
+    await interaction.response.send_message(f"🗑️ Deleted macro **{name}**.", ephemeral=True)
+
+
+client.tree.add_command(macro_group)
+
+
+# ===========================================================================
+# /compare — side-by-side character comparison
+# ===========================================================================
+
+@client.tree.command(name="compare", description="Compare two characters side-by-side (yours, another player's, or an NPC).")
+@app_commands.describe(
+    name_a="First character name.",
+    name_b="Second character name.",
+    member_a="Owner of first character (omit for your own).",
+    member_b="Owner of second character (omit for your own).",
+)
+async def compare_characters(
+    interaction: discord.Interaction,
+    name_a: str,
+    name_b: str,
+    member_a: discord.Member | None = None,
+    member_b: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    owner_a = str(member_a.id) if member_a else str(interaction.user.id)
+    owner_b = str(member_b.id) if member_b else str(interaction.user.id)
+
+    rec_a = store.get_by_name(guild, owner_a, name_a)
+    if rec_a is None:
+        rec_a = store.get_by_name(guild, NPC_OWNER, name_a)
+    rec_b = store.get_by_name(guild, owner_b, name_b)
+    if rec_b is None:
+        rec_b = store.get_by_name(guild, NPC_OWNER, name_b)
+
+    if rec_a is None:
+        await interaction.response.send_message(f"Character **{name_a}** not found.", ephemeral=True)
+        return
+    if rec_b is None:
+        await interaction.response.send_message(f"Character **{name_b}** not found.", ephemeral=True)
+        return
+
+    a, b = rec_a.character, rec_b.character
+    rings_a, rings_b = stats.all_rings(a), stats.all_rings(b)
+
+    def _delta(va: int, vb: int) -> str:
+        d = va - vb
+        if d > 0:
+            return f" (+{d})"
+        if d < 0:
+            return f" ({d})"
+        return ""
+
+    trait_lines = []
+    for t in ("stamina", "willpower", "strength", "perception", "agility", "intelligence", "reflexes", "awareness"):
+        va, vb = a.get_trait(t), b.get_trait(t)
+        trait_lines.append(f"{t.capitalize():12s}  **{va}**{_delta(va, vb):6s}  vs  **{vb}**")
+    trait_lines.append(f"{'Void':12s}  **{a.void_ring}**{_delta(a.void_ring, b.void_ring):6s}  vs  **{b.void_ring}**")
+
+    ring_lines = []
+    for r in ("air", "earth", "fire", "water", "void"):
+        va, vb = rings_a[r], rings_b[r]
+        ring_lines.append(f"{r.capitalize():6s}  **{va}**{_delta(va, vb):6s}  vs  **{vb}**")
+
+    ins_a, ins_b = stats.insight(a), stats.insight(b)
+    ir_a, ir_b = stats.insight_rank(a), stats.insight_rank(b)
+    atn_a = a.reflexes * 5 + 5 + a.armor_tn_bonus
+    atn_b = b.reflexes * 5 + 5 + b.armor_tn_bonus
+
+    embed = discord.Embed(
+        title=f"⚖️ {a.name} vs {b.name}",
+        color=discord.Color.blue(),
+    )
+    embed.add_field(
+        name="Rings",
+        value="\n".join(ring_lines),
+        inline=False,
+    )
+    embed.add_field(
+        name="Traits",
+        value="\n".join(trait_lines),
+        inline=False,
+    )
+    embed.add_field(
+        name="Derived",
+        value=(
+            f"Insight: **{ins_a}** (R{ir_a}) vs **{ins_b}** (R{ir_b})\n"
+            f"Armor TN: **{atn_a}** vs **{atn_b}**\n"
+            f"Wounds: {a.wounds_taken}/{stats.total_wound_capacity(a)} "
+            f"({stats.wound_level_name(a)}) vs "
+            f"{b.wounds_taken}/{stats.total_wound_capacity(b)} "
+            f"({stats.wound_level_name(b)})\n"
+            f"Honor: {a.honor} vs {b.honor}"
+        ),
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+# ===========================================================================
+# /history — recent roll log for this channel
+# ===========================================================================
+
+@client.tree.command(name="history", description="Show recent dice rolls in this channel.")
+@app_commands.describe(count="How many entries to show (default 10, max 50).")
+async def roll_history(
+    interaction: discord.Interaction,
+    count: app_commands.Range[int, 1, 50] = 10,
+) -> None:
+    entries = list(_roll_history.get(interaction.channel_id, []))
+    if not entries:
+        await interaction.response.send_message("No rolls recorded in this channel yet.", ephemeral=True)
+        return
+    recent = entries[-count:]
+    recent.reverse()
+    now = monotonic()
+    lines = []
+    for ts, user, desc, total in recent:
+        ago = now - ts
+        if ago < 60:
+            time_str = f"{int(ago)}s ago"
+        elif ago < 3600:
+            time_str = f"{int(ago / 60)}m ago"
+        else:
+            time_str = f"{int(ago / 3600)}h ago"
+        lines.append(f"• **{user}** — {desc} → **{total}** ({time_str})")
+    await interaction.response.send_message(
+        f"📜 **Recent rolls** (last {len(recent)}):\n" + "\n".join(lines),
+        ephemeral=True,
     )
 
 

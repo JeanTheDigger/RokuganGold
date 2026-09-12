@@ -89,6 +89,19 @@ CREATE TABLE IF NOT EXISTS encounters (
     data       TEXT NOT NULL,
     updated_at REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS macros (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   TEXT NOT NULL,
+    user_id    TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    rolled     INTEGER NOT NULL,
+    kept       INTEGER NOT NULL,
+    modifier   INTEGER NOT NULL DEFAULT 0,
+    label      TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_macro_unique
+    ON macros (guild_id, user_id, name COLLATE NOCASE);
 """
 
 
@@ -122,6 +135,20 @@ class CreatureRecord:
     id: int
     guild_id: str
     creature: Creature
+
+
+@dataclass
+class MacroRecord:
+    """A saved roll macro."""
+
+    id: int
+    guild_id: str
+    user_id: str
+    name: str
+    rolled: int
+    kept: int
+    modifier: int
+    label: str
 
 
 class DuplicateNameError(Exception):
@@ -439,3 +466,63 @@ class Store:
         with self._lock:
             rows = self._conn.execute("SELECT channel_id, data FROM encounters").fetchall()
         return [(r["channel_id"], r["data"]) for r in rows]
+
+    # -- macros (saved rolls) ---------------------------------------------------
+    def save_macro(
+        self, guild_id: str, user_id: str, name: str,
+        rolled: int, kept: int, modifier: int = 0, label: str = "",
+    ) -> MacroRecord:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO macros (guild_id, user_id, name, rolled, kept, modifier, label) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(guild_id, user_id, name COLLATE NOCASE) "
+                "DO UPDATE SET rolled = excluded.rolled, kept = excluded.kept, "
+                "modifier = excluded.modifier, label = excluded.label",
+                (guild_id, user_id, name, rolled, kept, modifier, label),
+            )
+            row = self._conn.execute(
+                "SELECT * FROM macros WHERE guild_id = ? AND user_id = ? AND name = ? COLLATE NOCASE",
+                (guild_id, user_id, name),
+            ).fetchone()
+        return MacroRecord(
+            id=row["id"], guild_id=row["guild_id"], user_id=row["user_id"],
+            name=row["name"], rolled=row["rolled"], kept=row["kept"],
+            modifier=row["modifier"], label=row["label"],
+        )
+
+    def list_macros(self, guild_id: str, user_id: str) -> list[MacroRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM macros WHERE guild_id = ? AND user_id = ? ORDER BY name",
+                (guild_id, user_id),
+            ).fetchall()
+        return [
+            MacroRecord(
+                id=r["id"], guild_id=r["guild_id"], user_id=r["user_id"],
+                name=r["name"], rolled=r["rolled"], kept=r["kept"],
+                modifier=r["modifier"], label=r["label"],
+            )
+            for r in rows
+        ]
+
+    def get_macro(self, guild_id: str, user_id: str, name: str) -> MacroRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM macros WHERE guild_id = ? AND user_id = ? AND name = ? COLLATE NOCASE",
+                (guild_id, user_id, name),
+            ).fetchone()
+        if row is None:
+            return None
+        return MacroRecord(
+            id=row["id"], guild_id=row["guild_id"], user_id=row["user_id"],
+            name=row["name"], rolled=row["rolled"], kept=row["kept"],
+            modifier=row["modifier"], label=row["label"],
+        )
+
+    def delete_macro(self, guild_id: str, user_id: str, name: str) -> bool:
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM macros WHERE guild_id = ? AND user_id = ? AND name = ? COLLATE NOCASE",
+                (guild_id, user_id, name),
+            )
+        return cur.rowcount > 0
