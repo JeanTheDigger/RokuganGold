@@ -10678,6 +10678,11 @@ class CharacterApprovalView(discord.ui.View):
         store.set_active(guild_id, owner_id, record.id)
 
         await member.add_roles(approved_role, reason=f"Character '{self.character_name}' approved by {interaction.user.display_name}")
+        nick_note = ""
+        try:
+            await member.edit(nick=self.character_name, reason=f"Character approved: {self.character_name}")
+        except discord.Forbidden:
+            nick_note = "\n(Could not change nickname — the bot's role may be too low or the member is the server owner.)"
         for child in self.children:
             child.disabled = True
         self.stop()
@@ -10701,7 +10706,8 @@ class CharacterApprovalView(discord.ui.View):
             color=discord.Color.green(),
             description=(
                 f"**{member.mention}**'s character **{self.character_name}** has been approved.\n"
-                f"They now have the **{ROLE_APPROVED}** role and their character sheet has been created."
+                f"They now have the **{ROLE_APPROVED}** role, their nickname has been set, "
+                f"and their character sheet has been created.{nick_note}"
             ),
         )
         embed.add_field(name="Sheet Created", value=sheet_info, inline=False)
@@ -10827,9 +10833,12 @@ async def setup_server(interaction: discord.Interaction) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Use in a server channel.", ephemeral=True)
         return
-    if not _is_kami(interaction):
+    member = interaction.user
+    is_admin = isinstance(member, discord.Member) and member.guild_permissions.administrator
+    if not _is_kami(interaction) and not is_admin:
         await interaction.response.send_message(
-            f"Only the **{ROLE_KAMI}** role can run server setup.", ephemeral=True,
+            f"Only the **{ROLE_KAMI}** role (or server administrators) can run server setup.",
+            ephemeral=True,
         )
         return
     guild = interaction.guild
@@ -10838,18 +10847,61 @@ async def setup_server(interaction: discord.Interaction) -> None:
     await interaction.response.defer(ephemeral=True)
     bot_member = guild.me
     everyone = guild.default_role
+
+    # --- Roles (create if missing, update color/permissions if they exist) ---
+    kami_perms = discord.Permissions(
+        administrator=True,
+    )
+    kami_role = discord.utils.get(guild.roles, name=ROLE_KAMI)
+    if kami_role is None:
+        kami_role = await guild.create_role(
+            name=ROLE_KAMI, color=discord.Color.from_str("#E8B923"),
+            permissions=kami_perms, hoist=True,
+            reason="Server setup: admin role",
+        )
+    else:
+        await kami_role.edit(color=discord.Color.from_str("#E8B923"),
+                            permissions=kami_perms, hoist=True,
+                            reason="Server setup: update admin role")
+
+    fortune_perms = discord.Permissions(
+        manage_messages=True, manage_nicknames=True, manage_threads=True,
+        mute_members=True, deafen_members=True, move_members=True,
+        moderate_members=True, view_channel=True, send_messages=True,
+        read_message_history=True, attach_files=True, embed_links=True,
+        use_application_commands=True, connect=True, speak=True,
+    )
+    fortune_role = discord.utils.get(guild.roles, name=ROLE_FORTUNE)
+    if fortune_role is None:
+        fortune_role = await guild.create_role(
+            name=ROLE_FORTUNE, color=discord.Color.from_str("#9B59B6"),
+            permissions=fortune_perms, hoist=True,
+            reason="Server setup: DM role",
+        )
+    else:
+        await fortune_role.edit(color=discord.Color.from_str("#9B59B6"),
+                                permissions=fortune_perms, hoist=True,
+                                reason="Server setup: update DM role")
+
+    approved_perms = discord.Permissions(
+        view_channel=True, send_messages=True, read_message_history=True,
+        attach_files=True, embed_links=True, add_reactions=True,
+        use_application_commands=True, connect=True, speak=True,
+        use_voice_activation=True,
+    )
     approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
     if approved_role is None:
         approved_role = await guild.create_role(
-            name=ROLE_APPROVED, reason="Server setup: player access role",
+            name=ROLE_APPROVED, color=discord.Color.from_str("#2ECC71"),
+            permissions=approved_perms, hoist=True,
+            reason="Server setup: player access role",
         )
-    fortune_role = discord.utils.get(guild.roles, name=ROLE_FORTUNE)
-    kami_role = discord.utils.get(guild.roles, name=ROLE_KAMI)
-    dm_roles: list[discord.Role] = []
-    if fortune_role:
-        dm_roles.append(fortune_role)
-    if kami_role:
-        dm_roles.append(kami_role)
+    else:
+        await approved_role.edit(color=discord.Color.from_str("#2ECC71"),
+                                 permissions=approved_perms, hoist=True,
+                                 reason="Server setup: update player role")
+
+    dm_roles: list[discord.Role] = [fortune_role, kami_role]
 
     # --- 1. Lobby (visible to everyone) ---
     lobby_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
@@ -10940,8 +10992,10 @@ async def setup_server(interaction: discord.Interaction) -> None:
 
     summary = (
         f"**Server setup complete!**\n\n"
-        f"**Roles:**\n"
-        f"• **{ROLE_APPROVED}** — assigned to players when their character is approved\n\n"
+        f"**Roles created/updated:**\n"
+        f"• {kami_role.mention} — Server admin (gold, full permissions)\n"
+        f"• {fortune_role.mention} — Dungeon Master (purple, moderation tools)\n"
+        f"• {approved_role.mention} — Approved player (green, basic access)\n\n"
         f"**Categories & Channels:**\n"
         f"• **Lobby** — {welcome_ch.mention}, #character-submission\n"
         f"• **Out of Character** — #general, #off-topic (visible to {ROLE_APPROVED}+)\n"
@@ -10949,7 +11003,8 @@ async def setup_server(interaction: discord.Interaction) -> None:
         f"• **Dungeon Masters** — {dm_discussion.mention}, {approvals_ch.mention} (DMs only)\n\n"
         f"**Approval channel** set to {approvals_ch.mention} — character submissions and "
         f"damage/healing approvals will be routed there.\n\n"
-        f"Players use `/submit` in the lobby to apply. DMs approve or deny from {approvals_ch.mention}."
+        f"Players use `/submit` in the lobby to apply. DMs approve or deny from {approvals_ch.mention}.\n"
+        f"Approved players get their nickname changed to their character name."
     )
     await interaction.followup.send(summary, ephemeral=True)
 
