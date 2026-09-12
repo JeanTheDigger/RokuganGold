@@ -114,6 +114,13 @@ CREATE TABLE IF NOT EXISTS approval_channels (
     guild_id   TEXT NOT NULL PRIMARY KEY,
     channel_id TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS calendar (
+    guild_id TEXT NOT NULL PRIMARY KEY,
+    year     INTEGER NOT NULL,
+    month    INTEGER NOT NULL,
+    day      INTEGER NOT NULL
+);
 """
 
 
@@ -598,3 +605,23 @@ class Store:
                 (guild_id, user_id, name),
             )
         return cur.rowcount > 0
+
+    # -- calendar ---------------------------------------------------------------
+    def get_calendar(self, guild_id: str) -> tuple[int, int, int] | None:
+        """Return (year, month, day) or None if no date has been set."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT year, month, day FROM calendar WHERE guild_id = ?", (guild_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return (row["year"], row["month"], row["day"])
+
+    def set_calendar(self, guild_id: str, year: int, month: int, day: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO calendar (guild_id, year, month, day) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET year = excluded.year, "
+                "month = excluded.month, day = excluded.day",
+                (guild_id, year, month, day),
+            )

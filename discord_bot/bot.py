@@ -42,6 +42,23 @@ NPC_OWNER = "npc"
 ROLE_KAMI = "Kami"
 ROLE_FORTUNE = "Fortune"
 
+# Rokugani calendar: 12 months (zodiac animals), 28 days each, 4 seasons.
+ROKUGANI_MONTHS: tuple[tuple[str, str], ...] = (
+    ("Hare", "Spring"),
+    ("Dragon", "Spring"),
+    ("Serpent", "Spring"),
+    ("Horse", "Summer"),
+    ("Goat", "Summer"),
+    ("Monkey", "Summer"),
+    ("Rooster", "Autumn"),
+    ("Dog", "Autumn"),
+    ("Boar", "Autumn"),
+    ("Rat", "Winter"),
+    ("Ox", "Winter"),
+    ("Tiger", "Winter"),
+)
+DAYS_PER_MONTH = 28
+
 try:
     from dotenv import load_dotenv
 
@@ -450,6 +467,23 @@ async def whoami(interaction: discord.Interaction) -> None:
                 lines.append(f"In combat: conditions: {conds}")
                 break
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
+
+
+@client.tree.command(name="date", description="Show the current in-game Rokugani calendar date.")
+async def date_cmd(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    cal = store.get_calendar(str(interaction.guild_id))
+    if cal is None:
+        await interaction.response.send_message(
+            "No in-game date has been set yet. A DM can set it with `/dm setdate`.", ephemeral=True
+        )
+        return
+    year, month, day = cal
+    date_str = _format_rokugani_date(year, month, day)
+    embed = discord.Embed(title="Rokugani Calendar", description=date_str, color=0xC4A747)
+    await interaction.response.send_message(embed=embed)
 
 
 def _format_dice(result: DiceResult) -> str:
@@ -3128,6 +3162,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("\U0001f3ad", "Session & World", "Manage your game session and world state.", [
         ("/dm party", "Overview of all active PCs"),
         ("/dm new_day", "New day: refresh spells, natural healing"),
+        ("/dm setdate", "Set the Rokugani calendar date (year/month/day)"),
         ("/dm roles", "Show Fortune and Kami role holders"),
         ("/dm influence", "Track Influence Points (court scene)"),
         ("/dm room create", "Create a private play room (thread, optional description)"),
@@ -3401,6 +3436,46 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         color=discord.Color.green(),
     )
     embed.set_footer(text="Rest: full VP · Stamina x 2 healing · Spell slots: Ring + School Rank per element")
+    await interaction.response.send_message(embed=embed)
+
+
+def _format_rokugani_date(year: int, month: int, day: int) -> str:
+    """Format a Rokugani date as a human-readable string."""
+    month_name, season = ROKUGANI_MONTHS[month - 1]
+    return f"Day {day} of the Month of the {month_name}, {season} — Year {year} (Isawa Calendar)"
+
+
+@dm.command(name="setdate", description="Set the in-game Rokugani calendar date. Fortune role required.")
+@app_commands.describe(
+    year="Year number (Isawa Calendar).",
+    month="Month (1-12): Hare, Dragon, Serpent, Horse, Goat, Monkey, Rooster, Dog, Boar, Rat, Ox, Tiger.",
+    day="Day of the month (1-28).",
+)
+@app_commands.choices(month=[
+    app_commands.Choice(name=f"{i}. {ROKUGANI_MONTHS[i - 1][0]} ({ROKUGANI_MONTHS[i - 1][1]})", value=i)
+    for i in range(1, 13)
+])
+async def dm_setdate(
+    interaction: discord.Interaction,
+    year: app_commands.Range[int, 1, 9999],
+    month: app_commands.Range[int, 1, 12],
+    day: app_commands.Range[int, 1, 28],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to set the date.", ephemeral=True
+        )
+        return
+    store.set_calendar(str(interaction.guild_id), year, month, day)
+    date_str = _format_rokugani_date(year, month, day)
+    embed = discord.Embed(
+        title="Calendar Set",
+        description=date_str,
+        color=0xC4A747,
+    )
     await interaction.response.send_message(embed=embed)
 
 
@@ -5859,6 +5934,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
     ("Dice & Basics", [
         ("/ping", "Check the bot is alive (shows gateway latency)."),
         ("/whoami", "Quick glance at your active character's status."),
+        ("/date", "Show the current in-game Rokugani calendar date."),
         ("/roll", "Roll & Keep: XkY, optional TN, raises, emphasis, unskilled."),
         ("/dice", "Quick shorthand: '5k3', '7k2+5'. Same as /roll but faster."),
         ("/macro save / list / roll / delete", "Save and reuse frequent dice pools."),
@@ -5889,6 +5965,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/dm roles", "Show who has the Fortune and Kami roles."),
         ("/dm party", "Overview of all active PCs."),
         ("/dm new_day", "Advance to a new day: refresh spell slots & heal all PCs."),
+        ("/dm setdate", "Set the Rokugani calendar date."),
         ("/dm damage / heal / treat", "Apply damage, heal wounds, or run Medicine checks."),
         ("/dm taint", "View or modify a character's Shadowlands Taint."),
         ("/dm influence", "Track court Influence Points."),
