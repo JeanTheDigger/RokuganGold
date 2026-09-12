@@ -94,9 +94,11 @@ class Character:
     advantages: list[str] = field(default_factory=list)
     disadvantages: list[str] = field(default_factory=list)
 
-    # -- Spell slots per element (L5R 4e: max = Ring + School Rank per day).
+    # -- Spell slots per element (L5R 4e: max = Ring value per day).
+    #    Void bonus pool (= Void Ring) is shared across all elements.
     #    DM refreshes via /dm new_day. Empty dict = not yet tracked. --
     spell_slots: dict[str, int] = field(default_factory=dict)
+    void_spell_bonus: int = 0
 
     # -- Inventory: {item_name: quantity}. Quantity 0 means not carried. --
     inventory: dict[str, int] = field(default_factory=dict)

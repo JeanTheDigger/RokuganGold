@@ -118,8 +118,13 @@ def natural_healing_rate(c: Character) -> int:
 
 
 def spell_slot_max(c: Character, element: str) -> int:
-    """L5R 4e: per-element daily spell slots = Ring value + School Rank."""
-    return ring_value(c, element) + c.school_rank
+    """L5R 4e: per-element daily spell slots = Ring value."""
+    return ring_value(c, element)
+
+
+def void_bonus_max(c: Character) -> int:
+    """L5R 4e: bonus spell slots = Void Ring, usable for any element."""
+    return c.void_ring
 
 
 def encumbrance_capacity(c: Character) -> int:

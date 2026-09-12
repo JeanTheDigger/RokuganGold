@@ -203,6 +203,8 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
                 mx = stats.spell_slot_max(c, elem)
                 cur = c.spell_slots[elem]
                 slot_parts.append(f"{elem.capitalize()} **{cur}**/{mx}")
+        bonus_mx = stats.void_bonus_max(c)
+        slot_parts.append(f"Bonus **{c.void_spell_bonus}**/{bonus_mx}")
         if slot_parts:
             embed.add_field(name="Spell Slots", value=" · ".join(slot_parts), inline=False)
 
@@ -361,6 +363,8 @@ async def whoami(interaction: discord.Interaction) -> None:
                 mx = stats.spell_slot_max(c, elem)
                 cur = c.spell_slots[elem]
                 slot_parts.append(f"{elem.capitalize()} {cur}/{mx}")
+        bonus_mx = stats.void_bonus_max(c)
+        slot_parts.append(f"Bonus {c.void_spell_bonus}/{bonus_mx}")
         if slot_parts:
             lines.append(f"Spell Slots: {' · '.join(slot_parts)}")
     if c.equipped_weapon:
@@ -3089,10 +3093,12 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
             parts.append(f"VP {vp_old} → {c.max_void_points}/{c.max_void_points}")
         for element in SPELL_ELEMENTS:
             c.spell_slots[element] = stats.spell_slot_max(c, element)
+        c.void_spell_bonus = stats.void_bonus_max(c)
         store.save(rec)
         slots_str = ", ".join(
             f"{e.title()} {c.spell_slots[e]}" for e in SPELL_ELEMENTS
         )
+        slots_str += f", Bonus {c.void_spell_bonus}"
         parts.append(f"slots: {slots_str}")
         lines.append(f"**{c.name}** — {' · '.join(parts)}")
     embed = discord.Embed(
@@ -5579,8 +5585,10 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
 
     ("Spells", [
         ("/spell list / search / view", "Browse 287 spells."),
-        ("/spell cast", "Cast a spell: (Ring + School Rank) keep Ring."),
+        ("/spell cast", "Cast a spell: (Ring + School Rank) keep Ring. Conceal with Stealth."),
         ("/spell resist", "Spell resistance: Willpower roll vs TN (Fortune)."),
+        ("/spell interrupt", "Willpower check when caster is hit mid-cast (Fortune)."),
+        ("/spell importune", "Entreat kami for an unknown spell: Spellcraft + cast at higher TN."),
         ("/spell damage", "Roll spell damage dice (Fortune)."),
     ]),
     ("Reference (/ref)", [
@@ -7370,6 +7378,7 @@ async def spell_view(interaction: discord.Interaction, name: str) -> None:
     name="Spell name (auto-complete from the catalog).",
     raises="Called raises on the casting roll.",
     spend_void="Spend a Void Point for +1k1.",
+    conceal="Conceal the casting with Stealth/Agility (result = observers' detection TN).",
     attacker_npc="Cast as a stored NPC (Fortune).",
     member="Cast as another player's character (Fortune).",
 )
@@ -7379,6 +7388,7 @@ async def spell_cast(
     name: str,
     raises: int = 0,
     spend_void: bool = False,
+    conceal: bool = False,
     attacker_npc: str | None = None,
     member: discord.Member | None = None,
 ) -> None:
@@ -7419,16 +7429,22 @@ async def spell_cast(
     ring_val = stats.ring_value(caster, element)
     affinity = caster.affinity_element.lower() == element if caster.affinity_element else False
     deficiency = caster.deficiency_element.lower() == element if caster.deficiency_element else False
-    # Spell slot check: if slots are tracked, enforce the limit.
+    # Spell slot check with Void bonus fallback.
+    used_bonus_slot = False
     slot_remaining = caster.spell_slots.get(element)
     if slot_remaining is not None and slot_remaining <= 0:
-        slot_max = stats.spell_slot_max(caster, element)
-        await interaction.response.send_message(
-            f"**{caster.name}** has no **{element.title()}** spell slots remaining "
-            f"(0/{slot_max}). A DM must call `/dm new_day` to refresh slots.",
-            ephemeral=True,
-        )
-        return
+        if caster.void_spell_bonus > 0:
+            used_bonus_slot = True
+        else:
+            slot_max = stats.spell_slot_max(caster, element)
+            bonus_max = stats.void_bonus_max(caster)
+            await interaction.response.send_message(
+                f"**{caster.name}** has no **{element.title()}** spell slots remaining "
+                f"(0/{slot_max}) and no Void bonus slots (0/{bonus_max}). "
+                f"A DM must call `/dm new_day` to refresh slots.",
+                ephemeral=True,
+            )
+            return
     extra_rolled = 1 if spend_void else 0
     extra_kept = 1 if spend_void else 0
     wound_pen = stats.wound_penalty(caster)
@@ -7437,7 +7453,6 @@ async def spell_cast(
             await interaction.response.send_message("No Void Points remaining.", ephemeral=True)
             return
         caster.current_void_points -= 1
-        store.save(rec)
     result = combat.resolve_spell_casting(
         ring_val, caster.school_rank, s["mastery"], engine,
         affinity=affinity, deficiency=deficiency,
@@ -7450,9 +7465,11 @@ async def spell_cast(
         )
         return
     # Consume a spell slot (L5R 4e: consumed whether the roll succeeds or fails).
-    if element in caster.spell_slots:
+    if used_bonus_slot:
+        caster.void_spell_bonus = max(0, caster.void_spell_bonus - 1)
+    elif element in caster.spell_slots:
         caster.spell_slots[element] = max(0, caster.spell_slots[element] - 1)
-        store.save(rec)
+    store.save(rec)
     success = result["success"]
     embed = discord.Embed(
         title=f"📜 {caster.name} casts {s['name']}",
@@ -7467,7 +7484,10 @@ async def spell_cast(
         notes.append(f"Void Point: +1k1 ({caster.current_void_points} VP left)")
     if wound_pen:
         notes.append(f"Wound penalty: {wound_pen}")
-    if element in caster.spell_slots:
+    if used_bonus_slot:
+        bonus_max = stats.void_bonus_max(caster)
+        notes.append(f"Void bonus slot used ({caster.void_spell_bonus}/{bonus_max} left)")
+    elif element in caster.spell_slots:
         slot_max = stats.spell_slot_max(caster, element)
         notes.append(f"{element.title()} slots: {caster.spell_slots[element]}/{slot_max}")
     roll_desc = (
@@ -7477,6 +7497,21 @@ async def spell_cast(
         f" — {'**SUCCESS**' if success else '**FAILED** (slot consumed)'}"
     )
     embed.add_field(name="Spell Casting Roll", value=roll_desc, inline=False)
+    if conceal:
+        stealth_rank = caster.skills.get("Stealth", 0)
+        conceal_rolled = caster.agility + stealth_rank
+        conceal_kept = caster.agility
+        conceal_result = engine.roll_and_keep(max(1, conceal_rolled), max(1, conceal_kept))
+        conceal_total = conceal_result.total + wound_pen
+        embed.add_field(
+            name="Concealed Casting",
+            value=(
+                f"Stealth {stealth_rank} / Agility {caster.agility} → "
+                f"{conceal_rolled}k{conceal_kept} = **{conceal_total}**\n"
+                f"Observers must roll Perception (Investigation) ≥ {conceal_total} to notice."
+            ),
+            inline=False,
+        )
     if notes:
         embed.add_field(name="Modifiers", value=" · ".join(notes), inline=False)
     if success:
@@ -7555,6 +7590,245 @@ async def spell_resist(
         value="L5R 4e: target rolls raw Willpower (no skill, no explosion) vs the spell's TN.",
         inline=False,
     )
+    await interaction.response.send_message(embed=embed)
+
+
+@spell_group.command(name="interrupt", description="Willpower check when a caster is hit mid-cast. Disrupted = slot refunded. Fortune role required.")
+@app_commands.describe(
+    caster="Character being interrupted.",
+    element="Element of the spell being cast (for slot refund if disrupted).",
+    damage="Damage taken (0 = mere distraction, TN 10; >0 = TN 5 + damage).",
+    void_bonus="Refund goes to the Void bonus pool instead of the element pool.",
+)
+@app_commands.autocomplete(caster=_any_character_autocomplete)
+async def spell_interrupt(
+    interaction: discord.Interaction,
+    caster: str,
+    element: str,
+    damage: int = 0,
+    void_bonus: bool = False,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to interrupt a caster.", ephemeral=True
+        )
+        return
+    guild = str(interaction.guild_id)
+    rec = _find_any_character(guild, caster)
+    if rec is None:
+        await interaction.response.send_message(f"No character named **{caster}**.", ephemeral=True)
+        return
+    c = rec.character
+    tn = (5 + damage) if damage > 0 else 10
+    willpower = c.willpower
+    wound_pen = stats.wound_penalty(c)
+    result = engine.roll_and_keep(max(1, willpower), max(1, willpower), False)
+    total = result.total + wound_pen
+    success = total >= tn
+    embed = discord.Embed(
+        title=f"⚡ {c.name} — Casting Interrupted",
+        color=discord.Color.green() if success else discord.Color.orange(),
+    )
+    tn_reason = f"TN {tn} (5 + {damage} damage)" if damage > 0 else "TN 10 (distraction)"
+    roll_desc = (
+        f"Willpower {willpower}k{willpower} = **{total}** vs {tn_reason}\n"
+    )
+    if success:
+        roll_desc += "**MAINTAINED** — spell continues normally."
+    else:
+        roll_desc += "**DISRUPTED** — spell fails, but spell slot is refunded."
+        elem = element.lower().strip()
+        if void_bonus:
+            c.void_spell_bonus = min(c.void_spell_bonus + 1, stats.void_bonus_max(c))
+            roll_desc += f"\nVoid bonus slot refunded ({c.void_spell_bonus}/{stats.void_bonus_max(c)})."
+        elif elem in c.spell_slots:
+            c.spell_slots[elem] = min(c.spell_slots[elem] + 1, stats.spell_slot_max(c, elem))
+            roll_desc += f"\n{elem.title()} slot refunded ({c.spell_slots[elem]}/{stats.spell_slot_max(c, elem)})."
+        store.save(rec)
+    embed.add_field(name="Willpower Check", value=roll_desc, inline=False)
+    notes = []
+    if wound_pen:
+        notes.append(f"Wound penalty: {wound_pen}")
+    if notes:
+        embed.add_field(name="Modifiers", value=" · ".join(notes), inline=False)
+    embed.add_field(
+        name="Rule",
+        value="L5R 4e: interrupted caster rolls Willpower vs TN 10 (distraction) or TN 5 + damage. "
+              "Failure = spell disrupted but slot not consumed.",
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed)
+
+
+@spell_group.command(name="importune", description="Entreat the kami for a spell you don't have: Spellcraft/Ring, then cast at higher TN.")
+@app_commands.describe(
+    name="Spell name (auto-complete from the catalog).",
+    raises="Called raises on the casting roll (not the Spellcraft check).",
+    spend_void="Spend a Void Point for +1k1 on the casting roll.",
+    attacker_npc="Importune as a stored NPC (Fortune).",
+    member="Importune as another player's character (Fortune).",
+)
+@app_commands.autocomplete(name=_spell_autocomplete)
+async def spell_importune(
+    interaction: discord.Interaction,
+    name: str,
+    raises: int = 0,
+    spend_void: bool = False,
+    attacker_npc: str | None = None,
+    member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    s = spells.get(name)
+    if s is None:
+        await interaction.response.send_message(f"No spell named **{name}**. Try `/spell search`.", ephemeral=True)
+        return
+    # Resolve caster (same logic as /spell cast).
+    if attacker_npc:
+        if not _is_dm(interaction):
+            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to importune as an NPC.", ephemeral=True)
+            return
+        rec = store.get_by_name(guild, NPC_OWNER, attacker_npc)
+        if rec is None:
+            await interaction.response.send_message(f"No NPC named **{attacker_npc}**.", ephemeral=True)
+            return
+    elif member is not None and member.id != interaction.user.id:
+        if not _is_dm(interaction):
+            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True)
+            return
+        rec = store.get_active(guild, str(member.id))
+        if rec is None:
+            await interaction.response.send_message(f"{member.display_name} has no active character.", ephemeral=True)
+            return
+    else:
+        rec = store.get_active(guild, str(interaction.user.id))
+        if rec is None:
+            await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
+            return
+    caster = rec.character
+    element = s["element"].lower()
+    ring_val = stats.ring_value(caster, element)
+    ml = s["mastery"]
+    affinity = caster.affinity_element.lower() == element if caster.affinity_element else False
+    deficiency = caster.deficiency_element.lower() == element if caster.deficiency_element else False
+    effective_rank = caster.school_rank + (1 if affinity else 0) + (-1 if deficiency else 0)
+    if effective_rank <= 0:
+        await interaction.response.send_message(
+            f"**{caster.name}** cannot cast {element.title()} spells (Deficiency reduces effective rank to 0).",
+            ephemeral=True,
+        )
+        return
+    if ml > effective_rank:
+        await interaction.response.send_message(
+            f"**{caster.name}** cannot importune a Mastery {ml} spell — "
+            f"effective School Rank is only {effective_rank}.",
+            ephemeral=True,
+        )
+        return
+    wound_pen = stats.wound_penalty(caster)
+    # Step 1: Spellcraft (Importune) / Ring check.
+    spellcraft_rank = caster.skills.get("Spellcraft", 0)
+    has_importune = "Importune" in caster.emphases.get("Spellcraft", [])
+    importune_bonus = 1 if has_importune else 0
+    imp_rolled = ring_val + spellcraft_rank + importune_bonus
+    imp_kept = ring_val
+    imp_tn = 15 + 5 * ml
+    imp_result = engine.roll_and_keep(max(1, imp_rolled), max(1, imp_kept))
+    imp_total = imp_result.total + wound_pen
+    imp_success = imp_total >= imp_tn
+    embed = discord.Embed(
+        title=f"🙏 {caster.name} importunes for {s['name']}",
+        color=discord.Color.purple(),
+    )
+    imp_notes = f"Spellcraft {spellcraft_rank}"
+    if has_importune:
+        imp_notes += " (Importune emphasis: +1k0)"
+    imp_notes += f" / {s['element']} Ring {ring_val}"
+    imp_desc = (
+        f"{imp_notes} → {imp_rolled}k{imp_kept}\n"
+        f"Roll **{imp_total}** vs TN **{imp_tn}**"
+        f" — {'**KAMI AGREE**' if imp_success else '**KAMI REFUSE**'}"
+    )
+    if wound_pen:
+        imp_desc += f" (wound penalty: {wound_pen})"
+    embed.add_field(name="Step 1 — Spellcraft (Importune)", value=imp_desc, inline=False)
+    embed.add_field(
+        name="Prerequisite",
+        value=f"Requires successful Commune cast + {ml * 5} minutes of communion.",
+        inline=False,
+    )
+    if not imp_success:
+        embed.set_footer(text="The kami will not grant this prayer.")
+        await interaction.response.send_message(embed=embed)
+        return
+    # Step 2: Casting roll at importune TN (15 + 5×ML, not the normal 5 + 5×ML).
+    # Spell slot check with Void bonus fallback.
+    used_bonus_slot = False
+    slot_remaining = caster.spell_slots.get(element)
+    if slot_remaining is not None and slot_remaining <= 0:
+        if caster.void_spell_bonus > 0:
+            used_bonus_slot = True
+        else:
+            slot_max = stats.spell_slot_max(caster, element)
+            bonus_max = stats.void_bonus_max(caster)
+            embed.add_field(
+                name="Step 2 — Casting",
+                value=f"No {element.title()} slots (0/{slot_max}) or bonus slots (0/{bonus_max}) — cannot attempt the cast.",
+                inline=False,
+            )
+            await interaction.response.send_message(embed=embed)
+            return
+    extra_rolled = 1 if spend_void else 0
+    extra_kept = 1 if spend_void else 0
+    if spend_void:
+        if caster.current_void_points <= 0:
+            embed.add_field(name="Step 2 — Casting", value="No Void Points remaining — cannot spend VP.", inline=False)
+            await interaction.response.send_message(embed=embed)
+            return
+        caster.current_void_points -= 1
+    cast_rolled = ring_val + effective_rank + extra_rolled
+    cast_kept = ring_val + extra_kept
+    cast_base_tn = 15 + 5 * ml
+    cast_tn = cast_base_tn + raises * 5
+    cast_result = engine.roll_and_keep(max(1, cast_rolled), max(1, cast_kept))
+    cast_total = cast_result.total + wound_pen
+    cast_success = cast_total >= cast_tn
+    # Consume slot (pass or fail).
+    if used_bonus_slot:
+        caster.void_spell_bonus = max(0, caster.void_spell_bonus - 1)
+    elif element in caster.spell_slots:
+        caster.spell_slots[element] = max(0, caster.spell_slots[element] - 1)
+    store.save(rec)
+    cast_notes = []
+    if spend_void:
+        cast_notes.append(f"VP: +1k1 ({caster.current_void_points} left)")
+    if used_bonus_slot:
+        cast_notes.append(f"Void bonus slot used ({caster.void_spell_bonus}/{stats.void_bonus_max(caster)})")
+    elif element in caster.spell_slots:
+        cast_notes.append(f"{element.title()} slots: {caster.spell_slots[element]}/{stats.spell_slot_max(caster, element)}")
+    cast_desc = (
+        f"Ring {ring_val} + School Rank {effective_rank} → {cast_rolled}k{cast_kept}\n"
+        f"Roll **{cast_total}** vs TN **{cast_tn}** (importune TN: 15 + {ml}×5"
+        + (f" + {raises}×5 raises" if raises else "") + ")\n"
+        f"{'**SUCCESS** — the kami grant the spell!' if cast_success else '**FAILED** (slot consumed)'}"
+    )
+    if cast_notes:
+        cast_desc += "\n" + " · ".join(cast_notes)
+    embed.add_field(name="Step 2 — Casting Roll", value=cast_desc, inline=False)
+    if cast_success:
+        casting_time = max(1, ml - raises) if raises else ml
+        spell_info = f"**Mastery {ml}** · Range: {s['range']} · Duration: {s['duration']}"
+        if casting_time > 1:
+            spell_info += f"\n⏱️ **{casting_time} Complex Actions** to complete"
+        embed.add_field(name="Spell", value=spell_info, inline=False)
+        if s.get("effect"):
+            embed.add_field(name="Effect", value=s["effect"][:1024], inline=False)
+    embed.color = discord.Color.gold() if cast_success else discord.Color.greyple()
     await interaction.response.send_message(embed=embed)
 
 
