@@ -4718,6 +4718,8 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/sheet advantage / disadvantage", "Record advantages or disadvantages."),
         ("/sheet kata / kiho", "Record Kata or Kiho (free, no XP)."),
         ("/sheet kata_activate / kiho_activate", "Activate Kata (one) or Kiho (by type)."),
+        ("/sheet export", "Export character sheet as JSON for backup."),
+        ("/sheet import_sheet", "Import a character from JSON."),
     ]),
     ("DM Management", [
         ("/dm grant / revoke", "Grant or revoke DM status (admin only)."),
@@ -4725,6 +4727,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/dm new_day", "Advance to a new day: refresh spell slots & heal all PCs."),
         ("/dm damage", "Apply damage to a character (DM-approval gate)."),
         ("/dm heal", "Heal wounds on a character (DM-approval gate)."),
+        ("/dm treat", "Medicine treatment: healer rolls, DM approves healing."),
         ("/party", "Overview of all active PCs (DM only)."),
     ]),
     ("Combat", [
@@ -4830,6 +4833,8 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/craft_extended", "Multi-step extended crafting rolls with quality tiers."),
         ("/encumbrance", "Strength-based carrying capacity check."),
         ("/atn", "Armor TN breakdown (base, armor, stance, guard, conditions)."),
+        ("/modifiers", "Terrain, range, and situational combat modifier reference."),
+        ("/calledshot", "Called Shot raise costs and body part effects reference."),
         ("/horsemanship", "Horsemanship/Agility check."),
         ("/influence", "Track court influence points (DM)."),
         ("/travel", "Calculate travel time by mode and terrain."),
@@ -7978,6 +7983,344 @@ async def travel_calc(
     embed.add_field(name="Travel Time", value=f"**{days} day{'s' if days != 1 else ''}**", inline=True)
     embed.add_field(name="Notes", value=info["description"], inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Phase 47 — Terrain/Range Modifiers Reference
+# ---------------------------------------------------------------------------
+
+TERRAIN_MODIFIERS: list[tuple[str, str]] = [
+    ("Light Cover (foliage, fence)", "+10 Armor TN"),
+    ("Heavy Cover (wall, fortification)", "+20 Armor TN"),
+    ("Concealment (fog, darkness, smoke)", "+10 Armor TN (partial) / +20 (total)"),
+    ("Higher Ground (attacker above)", "+1k0 on attack rolls"),
+    ("Darkness (total)", "Blinded: all rolls −3k0, TN +10"),
+    ("Narrow Footing (bridge, ledge)", "Agility TN 20 or fall; no Full Attack"),
+    ("Mounted vs. Foot", "+1k0 to mounted attacker; unmounted −1k0 to attack"),
+    ("Prone Target (melee)", "−10 Armor TN"),
+    ("Prone Target (ranged)", "+10 Armor TN"),
+]
+
+RANGE_INCREMENTS: list[tuple[str, str]] = [
+    ("Within first increment", "Normal TN"),
+    ("2nd increment", "+10 TN"),
+    ("3rd increment", "+20 TN"),
+    ("4th increment", "+30 TN"),
+    ("5th increment", "+40 TN (maximum range)"),
+]
+
+
+@client.tree.command(name="modifiers", description="Quick reference for terrain, range, and situational combat modifiers (L5R 4e).")
+async def modifiers_ref(interaction: discord.Interaction) -> None:
+    embed = discord.Embed(title="⚔️ Combat Modifiers Reference", color=discord.Color.dark_gold())
+    terrain_lines = [f"**{name}** — {effect}" for name, effect in TERRAIN_MODIFIERS]
+    embed.add_field(name="Terrain & Situational", value="\n".join(terrain_lines), inline=False)
+    range_lines = [f"**{name}** — {effect}" for name, effect in RANGE_INCREMENTS]
+    embed.add_field(name="Range Increments (Ranged Weapons)", value="\n".join(range_lines), inline=False)
+    embed.add_field(
+        name="How to Apply",
+        value=(
+            "Use the `bonus_tn:` parameter on `/attack` for situational modifiers.\n"
+            "Positive = harder to hit (cover, range). Negative = easier (prone target in melee)."
+        ),
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Phase 47 — Called Shot Reference
+# ---------------------------------------------------------------------------
+
+@client.tree.command(name="calledshot", description="Called Shot reference: raise costs and body part effects (L5R 4e).")
+async def calledshot_ref(interaction: discord.Interaction) -> None:
+    embed = discord.Embed(title="🎯 Called Shot Reference", color=discord.Color.dark_gold())
+    parts_lines = []
+    for raises, part in sorted(combat.CALLED_SHOT_PARTS.items()):
+        parts_lines.append(f"**{raises} raise{'s' if raises != 1 else ''}** — {part.title()}")
+    embed.add_field(name="Raises → Target", value="\n".join(parts_lines), inline=False)
+    embed.add_field(
+        name="Effects",
+        value=(
+            "Called Shots use the standard Raise mechanic (+5 TN per raise). "
+            "On a successful hit, the DM adjudicates the effect based on the body part:\n"
+            "• **Limb** — may disarm, hamper movement, or force a Stamina check\n"
+            "• **Hand/Foot** — may drop weapon, reduce movement\n"
+            "• **Head** — +1k1 bonus damage on this strike\n"
+            "• **Eye/Ear/Finger** — devastating: +1k1 damage, potential permanent injury"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="Usage",
+        value="Use `/attack maneuver: Called Shot raises: N` — the raise cost is added to TN automatically.",
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Phase 47 — Medicine Treatment (wound healing with DM gate)
+# ---------------------------------------------------------------------------
+
+class MedicineTreatView(discord.ui.View):
+    """DM-approval gate for medicine treatment healing."""
+
+    def __init__(
+        self, healer_name: str, target_id: int, target_name: str,
+        wounds_healed: int, treatment_type: str, roll_result: dict,
+    ) -> None:
+        super().__init__(timeout=1800)
+        self.healer_name = healer_name
+        self.target_id = target_id
+        self.target_name = target_name
+        self.wounds_healed = wounds_healed
+        self.treatment_type = treatment_type
+        self.roll_result = roll_result
+
+    def _disable(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+
+    @discord.ui.button(label="Apply Healing", style=discord.ButtonStyle.success, emoji="💚")
+    async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can authorize this.", ephemeral=True)
+            return
+        rec = store.get_by_id(self.target_id)
+        if rec is None:
+            await interaction.response.send_message("Target no longer exists.", ephemeral=True)
+            return
+        c = rec.character
+        old_level = stats.wound_level_name(c)
+        c.wounds_taken = max(0, c.wounds_taken - self.wounds_healed)
+        store.save(rec)
+        new_level = stats.wound_level_name(c)
+        embed = discord.Embed(title="💚 Treatment Applied", color=discord.Color.green())
+        crossed = f" ({old_level} → **{new_level}**)" if old_level != new_level else ""
+        embed.add_field(
+            name="Result",
+            value=(
+                f"**{self.healer_name}** treats **{self.target_name}** ({self.treatment_type})\n"
+                f"Healed **{self.wounds_healed}** wounds → {c.wounds_taken} remaining{crossed}"
+            ),
+            inline=False,
+        )
+        embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(embed=embed)
+
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can resolve this.", ephemeral=True)
+            return
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            f"🛡️ {interaction.user.display_name} denied — no healing applied to **{self.target_name}**."
+        )
+
+
+MEDICINE_TN = {
+    "wound_treatment": 15,
+    "disease_diagnosis": 15,
+    "poison_treatment": 20,
+    "antidote_preparation": 20,
+}
+
+
+@dm.command(name="treat", description="Medicine treatment: healer rolls, DM approves healing. L5R 4e Medicine rules.")
+@app_commands.describe(
+    healer="Character performing the treatment.",
+    patient="Character being treated.",
+    treatment="Type of medical treatment.",
+    wounds_healed="Wounds healed on success (default: healer's Intelligence x 2).",
+    tn_override="Custom TN (overrides default for the treatment type).",
+    bonus="Flat bonus (tools, emphasis, etc.).",
+)
+@app_commands.autocomplete(healer=_any_character_autocomplete, patient=_any_character_autocomplete)
+@app_commands.choices(treatment=[
+    app_commands.Choice(name="Wound Treatment (TN 15)", value="wound_treatment"),
+    app_commands.Choice(name="Disease Diagnosis (TN 15)", value="disease_diagnosis"),
+    app_commands.Choice(name="Poison Treatment (TN 20)", value="poison_treatment"),
+    app_commands.Choice(name="Antidote Preparation (TN 20)", value="antidote_preparation"),
+])
+async def dm_treat(
+    interaction: discord.Interaction,
+    healer: str,
+    patient: str,
+    treatment: app_commands.Choice[str],
+    wounds_healed: app_commands.Range[int, 0, 999] | None = None,
+    tn_override: app_commands.Range[int, 1, 100] | None = None,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for treatment.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    healer_rec = _find_any_character(guild, healer)
+    if healer_rec is None:
+        await interaction.response.send_message(f"No character named **{healer}**.", ephemeral=True)
+        return
+    patient_rec = _find_any_character(guild, patient)
+    if patient_rec is None:
+        await interaction.response.send_message(f"No character named **{patient}**.", ephemeral=True)
+        return
+    hc = healer_rec.character
+    pc = patient_rec.character
+    tn = tn_override if tn_override is not None else MEDICINE_TN.get(treatment.value, 15)
+    medicine_skill = hc.skills.get("Medicine", 0)
+    wp = stats.wound_penalty(hc)
+    result = combat.resolve_medicine_check(hc.intelligence, medicine_skill, tn, engine, bonus=bonus + wp)
+    success = result["success"]
+    heal_amount = wounds_healed if wounds_healed is not None else hc.intelligence * 2
+    treat_label = treatment.name.split(" (")[0]
+    embed = discord.Embed(
+        title=f"💊 {treat_label} — {hc.name} treats {pc.name}",
+        color=discord.Color.green() if success else discord.Color.greyple(),
+    )
+    wp_str = f" {wp}" if wp else ""
+    bonus_str = f" {bonus:+d}" if bonus else ""
+    skill_label = f"Medicine {medicine_skill}" if medicine_skill > 0 else "Medicine (unskilled)"
+    embed.add_field(
+        name="Roll",
+        value=(
+            f"{skill_label}/Intelligence ({result['rolled']}k{result['kept']}"
+            f"{wp_str}{bonus_str}) vs TN **{tn}**"
+        ),
+        inline=False,
+    )
+    embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
+    verdict = "✅ **Treatment successful!**" if success else "❌ **Treatment fails.**"
+    embed.add_field(
+        name="Result",
+        value=f"**{result['total']}** vs TN {tn} — {verdict} (margin {result['margin']:+d})",
+        inline=False,
+    )
+    if success and heal_amount > 0 and pc.wounds_taken > 0:
+        effective_heal = min(heal_amount, pc.wounds_taken)
+        embed.add_field(
+            name="Healing",
+            value=f"**{effective_heal}** wounds to heal (Intelligence {hc.intelligence} × 2 = {hc.intelligence * 2})",
+            inline=False,
+        )
+        view = MedicineTreatView(
+            healer_name=hc.name, target_id=patient_rec.id, target_name=pc.name,
+            wounds_healed=effective_heal, treatment_type=treat_label, roll_result=result,
+        )
+        await interaction.response.send_message(
+            content="Treatment succeeded. A DM can authorize the healing below.",
+            embed=embed, view=view,
+        )
+    elif success:
+        if pc.wounds_taken <= 0:
+            embed.add_field(name="Note", value=f"**{pc.name}** has no wounds to heal.", inline=False)
+        await interaction.response.send_message(embed=embed)
+    else:
+        embed.set_footer(text="L5R 4e: a failed Medicine check cannot be re-attempted on the same patient until the next day.")
+        await interaction.response.send_message(embed=embed)
+
+
+# ---------------------------------------------------------------------------
+# Phase 47 — Character Import/Export
+# ---------------------------------------------------------------------------
+
+@sheet.command(name="export", description="Export your active character sheet as JSON (for backup or sharing).")
+@app_commands.describe(
+    member="Export another player's character (DM only).",
+)
+async def sheet_export(
+    interaction: discord.Interaction,
+    member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    data = c.to_dict()
+    import json as _json
+    payload = _json.dumps(data, indent=2, ensure_ascii=False)
+    if len(payload) <= 1900:
+        await interaction.response.send_message(
+            f"**{c.name}** — character sheet JSON:\n```json\n{payload}\n```",
+            ephemeral=True,
+        )
+    else:
+        import io
+        buf = io.BytesIO(payload.encode("utf-8"))
+        fname = c.name.lower().replace(" ", "_").replace("'", "") + ".json"
+        file = discord.File(buf, filename=fname)
+        await interaction.response.send_message(
+            content=f"**{c.name}** — character sheet exported.",
+            file=file,
+            ephemeral=True,
+        )
+
+
+@sheet.command(name="import_sheet", description="Import a character from JSON (paste the JSON or attach a .json file).")
+@app_commands.describe(
+    json_data="Paste the character JSON here (or attach a .json file instead).",
+)
+async def sheet_import(
+    interaction: discord.Interaction,
+    json_data: str | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    owner = str(interaction.user.id)
+    import json as _json
+
+    raw: str | None = json_data
+    if raw is None or raw.strip() == "":
+        await interaction.response.send_message(
+            "Paste your character JSON in the `json_data` parameter. "
+            "Get it from `/sheet export`.",
+            ephemeral=True,
+        )
+        return
+    try:
+        data = _json.loads(raw)
+    except _json.JSONDecodeError as exc:
+        await interaction.response.send_message(f"Invalid JSON: {exc}", ephemeral=True)
+        return
+    if not isinstance(data, dict):
+        await interaction.response.send_message("JSON must be an object (dictionary).", ephemeral=True)
+        return
+    if "name" not in data or not data["name"]:
+        await interaction.response.send_message("JSON must include a `name` field.", ephemeral=True)
+        return
+    try:
+        char = Character.from_dict(data)
+    except Exception as exc:
+        await interaction.response.send_message(f"Could not parse character: {exc}", ephemeral=True)
+        return
+    try:
+        rec = store.create_character(guild, owner, char)
+    except storage.DuplicateNameError:
+        await interaction.response.send_message(
+            f"You already have a character named **{char.name}**. "
+            "Rename or delete the existing one first.",
+            ephemeral=True,
+        )
+        return
+    store.set_active(guild, owner, rec.id)
+    embed = build_sheet_embed(rec)
+    await interaction.response.send_message(
+        f"✅ Imported **{char.name}** and set as your active character.",
+        embed=embed,
+    )
 
 
 client.tree.add_command(sheet)

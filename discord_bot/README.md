@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 46 — Stance Effects, Initiative Tiebreak, VP Combat, Wound Track
+## Status: Phase 47 — Terrain/Range, Called Shot, Medicine Treatment, Import/Export
 
 **Help & Navigation**
 
@@ -40,6 +40,8 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 | `/sheet skill` | Set a skill rank (0 removes it). |
 | `/sheet set` | Set a numeric field: honor, glory, status, infamy, taint, koku, age, school rank, void points, armor TN/reduction. |
 | `/sheet wound` / `/sheet heal` | Apply or heal wounds; shows the wound-level change. |
+| `/sheet export` | Export your active character as JSON (for backup or sharing between servers). |
+| `/sheet import_sheet` | Import a character from JSON (paste from `/sheet export`). |
 | `/sheet delete` | Delete a character. |
 
 **DM (game master) accounts**
@@ -51,6 +53,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 | `/dm new_day` | **DM** advances the in-game day: full VP refresh, natural healing (Stamina x 2 wounds), and spell slot refresh (Ring + School Rank per element) for all active PCs. No real-time connection — the DM decides when a new day dawns. |
 | `/dm damage` | **DM** applies raw damage to any PC or NPC — posts the pending effect publicly with Approve / Deny buttons. Damage respects Reduction. |
 | `/dm heal` | **DM** heals wounds on any PC or NPC — posts pending healing with Approve / Deny buttons. |
+| `/dm treat` | **DM** calls for a Medicine treatment: the healer rolls Medicine/Intelligence vs a TN (wound treatment TN 15, poison TN 20, etc.), and on success the DM authorizes the healing (Intelligence x 2 wounds by default). |
 | `/party` | DM-only roster of every active PC: school, rings, wounds, VP, honor/glory/status, wielded weapon. Gold embed with player mention. |
 
 A **DM** — a server admin, anyone with *Manage Server*, or a member granted via
@@ -70,6 +73,7 @@ Approve / Deny buttons that only a DM can click. This applies to:
 - **Creature attacks** (`/creature attack` → DM clicks "Apply Creature Damage" or "No Damage")
 - **Arbitrary damage** (`/dm damage` → DM clicks "Apply Damage" or "Deny")
 - **Healing** (`/dm heal` → DM clicks "Apply Healing" or "Deny")
+- **Medicine treatment** (`/dm treat` → roll, then DM clicks "Apply Healing" or "Deny")
 
 No damage, wounds, or healing are applied without DM authorization. There is no
 automatic connection between real time and in-game time — the DM pushes day
@@ -644,6 +648,21 @@ effects of each stance when declared. Initiative ties now break by **Reflexes**
 (L5R 4e rule). `/whoami` and `/sheet view` display a visual **wound track**
 (H → Ni → Gr → [**Hu**] → In → Cr → Dn → Ou → De with current level marked).
 `/dm damage` now includes a **Void Reduce (−10)** button.
+
+`/modifiers` is a quick-reference card for **terrain and range modifiers** — cover
+(+10/+20 TN), range increments (+10 TN each beyond the first), higher ground
+(+1k0), darkness, mounted vs foot, and prone targets — with a note on how to apply
+them via the `/attack bonus_tn:` parameter. `/calledshot` shows the Called Shot
+raise-cost table (1–4 raises → limb, hand/foot, head, eye/ear/finger) and DM-adjudicated
+effects for each body part. `/dm treat` adds a full **Medicine treatment workflow**:
+the DM picks a healer and patient, the healer rolls Medicine/Intelligence vs a TN
+(wound treatment TN 15, disease diagnosis TN 15, poison treatment TN 20, antidote
+TN 20), and on success the DM authorizes healing (Intelligence × 2 wounds by
+default, overridable). Failed treatment follows the L5R 4e rule that it cannot be
+re-attempted until the next day. `/sheet export` dumps the active character as JSON
+(inline for small sheets, as a `.json` file attachment for large ones), and
+`/sheet import_sheet` creates a character from pasted JSON — enabling backup,
+sharing between servers, and pre-built character loading.
 
 **Family bonuses** are auto-applied at `/sheet create` — pick a `family:` from
 the autocomplete and the character gets +1 to the family's Trait automatically
