@@ -32,6 +32,7 @@ class Combatant:
     initiative_detail: str = ""       # e.g. "kept [7, 4] = 11"
     owner_id: str | None = None       # Discord user id for a player character; None for NPCs
     is_npc: bool = False
+    reflexes: int = 0                 # L5R 4e: Reflexes breaks initiative ties
     # Keys of "once per Turn" / "once per Round" abilities already spent (L5R s30).
     # used_this_turn clears when this combatant's turn begins; used_this_round
     # clears at the top of each new Round. Used to enforce rate-limited kata.
@@ -75,8 +76,7 @@ class Encounter:
     surprise_round: bool = False
 
     def _sort(self) -> None:
-        # Stable sort by initiative descending keeps insertion order on ties.
-        self.combatants.sort(key=lambda c: c.initiative, reverse=True)
+        self.combatants.sort(key=lambda c: (c.initiative, c.reflexes), reverse=True)
 
     def add(self, combatant: Combatant) -> None:
         self.combatants.append(combatant)

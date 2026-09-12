@@ -143,9 +143,11 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     pen = stats.wound_penalty(c)
     cap = stats.total_wound_capacity(c)
     per = stats.wound_threshold_per_level(c)
+    track = _wound_track(c)
     wound_line = (
         f"**{lvl}**" + (f" ({pen} penalty)" if pen else "")
         + f"\n{c.wounds_taken} / {cap} wounds  ·  {per} per level"
+        + f"\n{track}"
     )
     embed.add_field(name="Wounds", value=wound_line, inline=True)
 
@@ -314,10 +316,12 @@ async def whoami(interaction: discord.Interaction) -> None:
     header = " · ".join(b for b in (c.clan, c.school) if b) or "—"
     water = stats.water_ring(c)
     move_str = f"Move: {water * 5} ft (Free) / {water * 10} ft (Simple)"
+    track = _wound_track(c)
     lines = [
         f"**{c.name}** — {header} (Rank {stats.insight_rank(c)})",
         f"Rings: {ring_str}",
         f"Wounds: {wound_str}  ·  {vp_str}",
+        track,
         f"Honor {c.honor:g} · Glory {c.glory:g} · Status {c.status:g}",
         move_str,
     ]
@@ -2603,6 +2607,31 @@ async def dm_heal(
 combat_group = app_commands.Group(name="combat", description="Track combat initiative and turn order.")
 
 
+def _wound_track(c) -> str:
+    """Visual wound track: shows each level with the current position marked."""
+    names = ["Healthy", "Nicked", "Grazed", "Hurt", "Injured", "Crippled", "Down", "Out", "Dead"]
+    short = ["H", "Ni", "Gr", "Hu", "In", "Cr", "Dn", "Ou", "De"]
+    idx = stats.wound_level_index(c)
+    parts = []
+    for i, s in enumerate(short):
+        if i == idx:
+            parts.append(f"[**{s}**]")
+        else:
+            parts.append(s)
+    return " → ".join(parts)
+
+
+def _stance_effects(stance: str) -> str:
+    effects = {
+        "attack": "",
+        "full_attack": "+2k1 attack rolls, −10 Armor TN. Cannot use Defense/Full Defense.",
+        "defense": "+Air Ring + Defense skill to Armor TN.",
+        "full_defense": "Defense/Reflexes roll → half (rounded up) added to ATN. Complex Action. Cannot attack.",
+        "center": "+Void Ring to Armor TN. Regain Void Point if not struck before next turn.",
+    }
+    return effects.get(stance, "")
+
+
 def _render_encounter(enc: encounter.Encounter) -> str:
     if not enc.combatants:
         return "No combatants yet. Add them with `/combat join` or `/combat add`."
@@ -2681,6 +2710,7 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
         initiative_detail=f"kept {result.kept_dice} = {result.total}",
         owner_id=str(owner.id),
         is_npc=False,
+        reflexes=rec.character.reflexes,
     ))
     await interaction.response.send_message(_render_encounter(enc))
 
@@ -2712,6 +2742,7 @@ async def combat_add(
         initiative_detail=f"kept {result.kept_dice} = {result.total}",
         owner_id=None,
         is_npc=True,
+        reflexes=reflexes,
     ))
     await interaction.response.send_message(_render_encounter(enc))
 
@@ -2848,6 +2879,7 @@ async def combat_npc(interaction: discord.Interaction, name: str) -> None:
         initiative_detail=f"kept {result.kept_dice} = {result.total}",
         owner_id=None,
         is_npc=True,
+        reflexes=rec.character.reflexes,
     ))
     await interaction.response.send_message(_render_encounter(enc))
 
@@ -4774,7 +4806,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
     ("Combat — Stances & Actions", [
         ("/combat stance", "Declare stance (Attack, Full Attack, Defense, Full Defense, Center)."),
         ("/combat action", "Track Simple/Complex action economy per turn."),
-        ("/combat init", "Adjust a combatant's initiative (DM only)."),
+        ("/combat init", "Adjust a combatant's initiative (DM only). Ties break by Reflexes."),
         ("/combat hold / delay", "Hold or delay a combatant's action (DM only)."),
         ("/combat surprise", "Toggle surprise round (DM only)."),
         ("/combat mount", "Mount or dismount (adds/removes Mounted condition)."),
@@ -5310,6 +5342,7 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
         initiative_detail=f"kept {result.kept_dice} = {result.total}",
         owner_id=None,
         is_npc=True,
+        reflexes=rec.creature.air,
     ))
     await interaction.response.send_message(_render_encounter(enc))
 
@@ -5507,6 +5540,7 @@ class DmDamageView(discord.ui.View):
         self.target_name = target_name
         self.amount = amount
         self.reason = reason
+        self.void_reduced = False
 
     def _disable(self) -> None:
         for child in self.children:
@@ -5553,6 +5587,34 @@ class DmDamageView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(embed=embed)
+
+    @discord.ui.button(label="Void Reduce (−10)", style=discord.ButtonStyle.primary, emoji="🔮")
+    async def void_reduce(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can authorize this.", ephemeral=True)
+            return
+        if self.void_reduced:
+            await interaction.response.send_message("Already Void-reduced once.", ephemeral=True)
+            return
+        rec = store.get_by_id(self.target_id)
+        if rec is None:
+            await interaction.response.send_message("Target no longer exists.", ephemeral=True)
+            return
+        c = rec.character
+        if c.current_void_points <= 0:
+            await interaction.response.send_message(
+                f"**{c.name}** has no Void Points remaining.", ephemeral=True
+            )
+            return
+        c.current_void_points -= 1
+        self.amount = max(0, self.amount - 10)
+        self.void_reduced = True
+        store.save(rec)
+        await interaction.response.send_message(
+            f"🔮 **{self.target_name}** spends 1 VP → damage reduced to **{self.amount}**. "
+            f"({c.current_void_points}/{c.max_void_points} VP left). "
+            f"DM: now click Apply Damage or Deny."
+        )
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -6958,7 +7020,11 @@ async def combat_stance(
         return
     cb.stance = stance.value
     label = stance.name
-    await interaction.response.send_message(f"**{cb.name}** adopts **{label}** stance.")
+    effects = _stance_effects(stance.value)
+    msg = f"**{cb.name}** adopts **{label}** stance."
+    if effects:
+        msg += f"\n{effects}"
+    await interaction.response.send_message(msg)
 
 
 @combat_group.command(name="init", description="Adjust a combatant's initiative value (DM only).")

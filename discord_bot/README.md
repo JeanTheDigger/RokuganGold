@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 45 — Quality-of-Life (ATN, Movement, Spell Slots, Conditions)
+## Status: Phase 46 — Stance Effects, Initiative Tiebreak, VP Combat, Wound Track
 
 **Help & Navigation**
 
@@ -639,7 +639,11 @@ own room.
 and **actions remaining** alongside initiative, conditions, guards, and Full
 Defense. `/combat next` now shows **condition reminders** when advancing to a
 combatant who has active conditions (Stunned: can't act, Dazed: Defense only,
-Entangled: break-free only, etc.).
+Entangled: break-free only, etc.). `/combat stance` now shows the mechanical
+effects of each stance when declared. Initiative ties now break by **Reflexes**
+(L5R 4e rule). `/whoami` and `/sheet view` display a visual **wound track**
+(H → Ni → Gr → [**Hu**] → In → Cr → Dn → Ou → De with current level marked).
+`/dm damage` now includes a **Void Reduce (−10)** button.
 
 **Family bonuses** are auto-applied at `/sheet create` — pick a `family:` from
 the autocomplete and the character gets +1 to the family's Trait automatically
