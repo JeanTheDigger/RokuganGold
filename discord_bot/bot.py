@@ -170,6 +170,23 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         gear += "\nWeapons: " + ", ".join(c.weapons)
     embed.add_field(name="Equipment", value=gear, inline=False)
 
+    if c.spell_slots:
+        slot_parts = []
+        for elem in ("air", "earth", "fire", "water", "void"):
+            if elem in c.spell_slots:
+                mx = stats.spell_slot_max(c, elem)
+                cur = c.spell_slots[elem]
+                slot_parts.append(f"{elem.capitalize()} **{cur}**/{mx}")
+        if slot_parts:
+            embed.add_field(name="Spell Slots", value=" · ".join(slot_parts), inline=False)
+
+    water = stats.water_ring(c)
+    embed.add_field(
+        name="Movement",
+        value=f"Free Move: {water * 5} ft · Simple Move: {water * 10} ft  (Water Ring {water})",
+        inline=False,
+    )
+
     if c.skills:
         skill_line = ", ".join(f"{name} {rank}" for name, rank in sorted(c.skills.items()))
         embed.add_field(name="Skills", value=skill_line[:1024], inline=False)
@@ -291,14 +308,28 @@ async def whoami(interaction: discord.Interaction) -> None:
     cap = stats.total_wound_capacity(c)
     ring_str = " · ".join(f"{r.capitalize()} **{v}**" for r, v in rings.items())
     wound_str = f"**{lvl}**" + (f" ({pen} penalty)" if pen else "") + f" — {c.wounds_taken}/{cap}"
+    if pen:
+        wound_str = f"⚠️ {wound_str}"
     vp_str = f"{c.current_void_points}/{c.max_void_points} VP"
     header = " · ".join(b for b in (c.clan, c.school) if b) or "—"
+    water = stats.water_ring(c)
+    move_str = f"Move: {water * 5} ft (Free) / {water * 10} ft (Simple)"
     lines = [
         f"**{c.name}** — {header} (Rank {stats.insight_rank(c)})",
         f"Rings: {ring_str}",
         f"Wounds: {wound_str}  ·  {vp_str}",
         f"Honor {c.honor:g} · Glory {c.glory:g} · Status {c.status:g}",
+        move_str,
     ]
+    if c.spell_slots:
+        slot_parts = []
+        for elem in ("air", "earth", "fire", "water", "void"):
+            if elem in c.spell_slots:
+                mx = stats.spell_slot_max(c, elem)
+                cur = c.spell_slots[elem]
+                slot_parts.append(f"{elem.capitalize()} {cur}/{mx}")
+        if slot_parts:
+            lines.append(f"Spell Slots: {' · '.join(slot_parts)}")
     if c.equipped_weapon:
         wield = c.equipped_weapon
         if c.off_hand_weapon:
@@ -2445,6 +2476,16 @@ async def _any_character_autocomplete(
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
 
+def _find_any_character(guild: str, name: str) -> storage.CharacterRecord | None:
+    rec = store.get_by_name(guild, NPC_OWNER, name)
+    if rec is not None:
+        return rec
+    for _, pc_rec in store.list_active_pcs(guild):
+        if pc_rec.character.name.lower() == name.lower():
+            return pc_rec
+    return None
+
+
 @dm.command(name="damage", description="Apply damage to a character (shows DM-approval buttons).")
 @app_commands.describe(
     target="Character name (PC or NPC).",
@@ -2687,9 +2728,12 @@ async def combat_next(interaction: discord.Interaction) -> None:
         )
         return
     current = enc.advance()
-    await interaction.response.send_message(
-        f"➡️ It is now **{current.name}**'s turn.\n\n{_render_encounter(enc)}"
-    )
+    parts = [f"➡️ It is now **{current.name}**'s turn."]
+    reminders = condition_effects.condition_reminders(current.conditions)
+    if reminders:
+        parts.append("\n".join(reminders))
+    parts.append(_render_encounter(enc))
+    await interaction.response.send_message("\n\n".join(parts))
 
 
 @combat_group.command(name="status", description="Show the current initiative order.")
@@ -2755,7 +2799,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             pen = stats.wound_penalty(c)
             cap = stats.total_wound_capacity(c)
             tn = combat.armor_tn(c, cb.stance)
-            pen_str = f" ({pen})" if pen else ""
+            pen_str = f" ⚠️ **{pen} penalty**" if pen else ""
             vp = f"{c.current_void_points}/{c.max_void_points} VP"
             conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "—"
             fd = f", FD+{cb.full_defense_bonus}" if cb.full_defense_bonus else ""
@@ -4718,6 +4762,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/school learn", "Record techniques up to your School Rank."),
         ("/spell list / search / view", "Browse 287 spells."),
         ("/spell cast", "Cast a spell: (Ring + School Rank) keep Ring."),
+        ("/spell resist", "Spell resistance: Willpower roll vs TN (DM only)."),
     ]),
     ("Equipment & Catalogs", [
         ("/weapon list / view", "Browse the 44 weapons."),
@@ -4752,6 +4797,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/spell_damage", "Roll spell damage dice (DM-approval gate to apply)."),
         ("/craft_extended", "Multi-step extended crafting rolls with quality tiers."),
         ("/encumbrance", "Strength-based carrying capacity check."),
+        ("/atn", "Armor TN breakdown (base, armor, stance, guard, conditions)."),
         ("/horsemanship", "Horsemanship/Agility check."),
         ("/influence", "Track court influence points (DM)."),
         ("/travel", "Calculate travel time by mode and terrain."),
@@ -6546,6 +6592,73 @@ async def spell_cast(
     await interaction.response.send_message(embed=embed)
 
 
+@spell_group.command(name="resist", description="Target resists a spell: Willpower roll vs TN. DM only.")
+@app_commands.describe(
+    target="Character resisting the spell.",
+    tn="Target Number for the resistance roll.",
+    spend_void="Target spends a Void Point for +1k1.",
+)
+@app_commands.autocomplete(target=_any_character_autocomplete)
+async def spell_resist(
+    interaction: discord.Interaction,
+    target: str,
+    tn: int,
+    spend_void: bool = False,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can call for spell resistance.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    rec = _find_any_character(guild, target)
+    if rec is None:
+        await interaction.response.send_message(f"No character named **{target}**.", ephemeral=True)
+        return
+    c = rec.character
+    willpower = c.willpower
+    extra_rolled = 1 if spend_void else 0
+    extra_kept = 1 if spend_void else 0
+    if spend_void:
+        if c.current_void_points <= 0:
+            await interaction.response.send_message(
+                f"**{c.name}** has no Void Points remaining.", ephemeral=True
+            )
+            return
+        c.current_void_points -= 1
+        store.save(rec)
+    rolled = willpower + extra_rolled
+    kept = willpower + extra_kept
+    result = engine.roll_and_keep(max(1, rolled), max(1, kept), False)
+    wound_pen = stats.wound_penalty(c)
+    total = result.total + wound_pen
+    success = total >= tn
+    embed = discord.Embed(
+        title=f"🛡️ {c.name} — Spell Resistance",
+        color=discord.Color.green() if success else discord.Color.red(),
+    )
+    notes = []
+    if spend_void:
+        notes.append(f"Void Point: +1k1 ({c.current_void_points} VP left)")
+    if wound_pen:
+        notes.append(f"Wound penalty: {wound_pen}")
+    roll_desc = (
+        f"Willpower {willpower} → {rolled}k{kept}\n"
+        f"Roll **{total}** vs TN **{tn}**"
+        f" — {'**RESISTED** (spell has no effect)' if success else '**FAILED** (spell takes effect)'}"
+    )
+    embed.add_field(name="Resistance Roll", value=roll_desc, inline=False)
+    if notes:
+        embed.add_field(name="Modifiers", value=" · ".join(notes), inline=False)
+    embed.add_field(
+        name="Rule",
+        value="L5R 4e: target rolls raw Willpower (no skill, no explosion) vs the spell's TN.",
+        inline=False,
+    )
+    await interaction.response.send_message(embed=embed)
+
+
 # ===========================================================================
 # /weapon and /armor groups — equipment reference (individual_combat.gd / armor_system.gd)
 # ===========================================================================
@@ -7323,6 +7436,89 @@ async def encumbrance_check(
         value=f"Beyond {cap} items: −{1}k0 to all physical rolls per {c.strength} items over capacity.",
         inline=False,
     )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@client.tree.command(name="atn", description="Show Armor TN breakdown for your active character.")
+@app_commands.describe(
+    target="Character name (DM only — omit to see your own).",
+)
+async def atn_breakdown(interaction: discord.Interaction, target: str | None = None) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    if target:
+        if not _is_dm(interaction):
+            await interaction.response.send_message("Only a DM can view another character's ATN.", ephemeral=True)
+            return
+        rec = _find_any_character(guild, target)
+        if rec is None:
+            await interaction.response.send_message(f"No character named **{target}**.", ephemeral=True)
+            return
+    else:
+        rec = store.get_active(guild, str(interaction.user.id))
+        if rec is None:
+            await interaction.response.send_message("No active character.", ephemeral=True)
+            return
+    c = rec.character
+    base = c.reflexes * 5 + 5
+    armor_bonus = c.armor_tn_bonus
+    armor_name = c.armor_name or "None"
+    reduction = c.armor_reduction
+    lines = [
+        f"Base (Reflexes {c.reflexes} × 5 + 5) = **{base}**",
+        f"Armor: {armor_name} (+{armor_bonus} TN, Reduction {reduction})",
+    ]
+    total = base + armor_bonus
+    enc = encounters.get(interaction.channel_id)
+    cb = None
+    if enc:
+        for comb in enc.combatants:
+            if comb.name.lower() == c.name.lower():
+                cb = comb
+                break
+    if cb is not None:
+        stance_mod = combat.STANCE_ARMOR_TN_BONUS.get(cb.stance, 0)
+        if cb.stance == "defense":
+            def_bonus = stats.ring_value(c, "air") + c.skills.get("Defense", 0)
+            lines.append(f"Defense Stance: +{def_bonus} (Air {stats.ring_value(c, 'air')} + Defense {c.skills.get('Defense', 0)})")
+            total += def_bonus
+        elif cb.stance == "center":
+            void_bonus = c.void_ring
+            lines.append(f"Center Stance: +{void_bonus} (Void Ring)")
+            total += void_bonus
+        elif stance_mod != 0:
+            stance_label = cb.stance.replace("_", " ").title()
+            lines.append(f"{stance_label} Stance: {stance_mod:+d}")
+            total += stance_mod
+        if cb.full_defense_bonus:
+            lines.append(f"Full Defense bonus: +{cb.full_defense_bonus}")
+            total += cb.full_defense_bonus
+        if cb.guarding:
+            lines.append(f"Guarding {cb.guarding}: −5")
+            total -= 5
+        for other in enc.combatants:
+            if other.guarding.lower() == c.name.lower():
+                lines.append(f"Guarded by {other.name}: +10")
+                total += 10
+                break
+        override, override_notes = condition_effects.defender_armor_tn_override(
+            cb.conditions, c.reflexes, armor_bonus, True,
+        )
+        cond_mod, cond_notes = condition_effects.defender_armor_tn_mod(cb.conditions, True)
+        if override is not None:
+            lines.append(f"Condition override: {override_notes[0]}")
+            lines.append(f"**Effective ATN = {override + cond_mod}** (overridden)")
+        else:
+            if cond_mod:
+                lines.append(f"Condition modifier: {cond_mod:+d} ({', '.join(cond_notes)})")
+                total += cond_mod
+            lines.append(f"**Total ATN = {total}**")
+    else:
+        lines.append(f"**Total ATN = {total}** (out of combat)")
+    embed = discord.Embed(title=f"🛡️ ATN Breakdown — {c.name}", color=discord.Color.blue())
+    embed.description = "\n".join(lines)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 

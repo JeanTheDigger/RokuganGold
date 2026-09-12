@@ -11,14 +11,14 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 44 — DM-Gated Effect Pipeline
+## Status: Phase 45 — Quality-of-Life (ATN, Movement, Spell Slots, Conditions)
 
 **Help & Navigation**
 
 | Command | What it does |
 |---|---|
 | `/help` | Categorized command reference — 13 categories, expandable. Shows a compact overview or drill into one category. Ephemeral (only you see it). |
-| `/whoami` | Quick glance at your active character: name, school, rings, wounds, VP, wielded weapon, active Kata, and combat conditions (if in an encounter). Ephemeral. |
+| `/whoami` | Quick glance at your active character: name, school, rings, wounds (with penalty warning), VP, movement speed, spell slots (if tracked), wielded weapon, active Kata, and combat conditions (if in an encounter). Ephemeral. |
 | `/lookup` | Unified search across **all** catalogs (spells, schools, kata, kiho, advantages, weapons, creatures). Find anything without knowing which command to use. Ephemeral. |
 
 **Dice**
@@ -628,6 +628,8 @@ own room.
 | `/spell_damage` | Roll spell damage dice (XkY), optionally auto-apply to a target. |
 | `/craft_extended` | Multi-step extended crafting roll (Craft or Artisan/Intelligence). Shows quality tier thresholds (Standard, Fine at 1.5×, Exceptional at 2×). |
 | `/encumbrance` | Check carrying capacity (Strength × 5 items). |
+| `/atn` | Armor TN breakdown: base (Reflexes × 5 + 5), armor, stance, guard, Full Defense, condition overrides. Shows in-combat context when applicable. |
+| `/spell resist` | Spell resistance: target rolls raw Willpower vs a DM-set TN. DM only. |
 | `/horsemanship` | Horsemanship/Agility check vs a TN. |
 | `/influence` | Track court influence points for a character (DM-managed). |
 | `/travel` | Calculate travel time by mode (foot, horse, forced march, cart, ship, river) and terrain (normal, rough, mountains). |
@@ -635,7 +637,9 @@ own room.
 
 `/combat status` and `/combat summary` now display each combatant's **stance**
 and **actions remaining** alongside initiative, conditions, guards, and Full
-Defense.
+Defense. `/combat next` now shows **condition reminders** when advancing to a
+combatant who has active conditions (Stunned: can't act, Dazed: Defense only,
+Entangled: break-free only, etc.).
 
 **Family bonuses** are auto-applied at `/sheet create` — pick a `family:` from
 the autocomplete and the character gets +1 to the family's Trait automatically
