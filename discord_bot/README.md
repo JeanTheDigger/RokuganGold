@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 47 — Terrain/Range, Called Shot, Medicine Treatment, Import/Export
+## Status: Phase 48 — Combat Log Channel
 
 **Help & Navigation**
 
@@ -54,6 +54,8 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 | `/dm damage` | **DM** applies raw damage to any PC or NPC — posts the pending effect publicly with Approve / Deny buttons. Damage respects Reduction. |
 | `/dm heal` | **DM** heals wounds on any PC or NPC — posts pending healing with Approve / Deny buttons. |
 | `/dm treat` | **DM** calls for a Medicine treatment: the healer rolls Medicine/Intelligence vs a TN (wound treatment TN 15, poison TN 20, etc.), and on success the DM authorizes the healing (Intelligence x 2 wounds by default). |
+| `/dm log_channel` | **DM** sets a text channel for automatic combat event logging. Attacks, damage, turn advances, conditions, stances, grapple/duel events are posted as compact one-line entries. |
+| `/dm clear_log` | **DM** removes the combat log channel — events stop being logged. |
 | `/party` | DM-only roster of every active PC: school, rings, wounds, VP, honor/glory/status, wielded weapon. Gold embed with player mention. |
 
 A **DM** — a server admin, anyone with *Manage Server*, or a member granted via
@@ -668,6 +670,13 @@ sharing between servers, and pre-built character loading.
 the autocomplete and the character gets +1 to the family's Trait automatically
 (e.g. Hida → +1 Strength, Doji → +1 Awareness). The `clan:` is auto-set from
 the family if not specified.
+
+`/dm log_channel` designates a text channel as the **combat log** — a compact,
+persistent record of combat events. Attacks (hit/miss), damage applied (with wound
+level and death), healing, turn/round advances, conditions set/cleared, stances,
+Guard, Full Defense, grapple events, duel stages, creature attacks, spell damage,
+and medicine treatments are all logged as one-line entries. `/dm clear_log` removes
+the setting. The log is per-server (guild-scoped) and stored in the database.
 
 Still to come: Vultr hosting (the one original wish-list item left).
 

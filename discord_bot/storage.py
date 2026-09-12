@@ -77,6 +77,11 @@ CREATE TABLE IF NOT EXISTS creatures (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_creature_unique
     ON creatures (guild_id, name COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS combat_log_channels (
+    guild_id   TEXT NOT NULL PRIMARY KEY,
+    channel_id TEXT NOT NULL
+);
 """
 
 
@@ -382,3 +387,26 @@ class Store:
     def delete_creature(self, creature_id: int) -> None:
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM creatures WHERE id = ?", (creature_id,))
+
+    # -- combat log channel ----------------------------------------------------
+    def set_log_channel(self, guild_id: str, channel_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO combat_log_channels (guild_id, channel_id) VALUES (?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
+                (guild_id, channel_id),
+            )
+
+    def get_log_channel(self, guild_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT channel_id FROM combat_log_channels WHERE guild_id = ?",
+                (guild_id,),
+            ).fetchone()
+        return row["channel_id"] if row else None
+
+    def clear_log_channel(self, guild_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM combat_log_channels WHERE guild_id = ?", (guild_id,)
+            )

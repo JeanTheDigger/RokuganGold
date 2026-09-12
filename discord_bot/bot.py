@@ -411,6 +411,20 @@ def _format_dice(result: DiceResult) -> str:
     return line
 
 
+async def _combat_log(guild_id: str, message: str) -> None:
+    """Post a compact line to the server's combat log channel, if configured."""
+    ch_id = store.get_log_channel(guild_id)
+    if ch_id is None:
+        return
+    channel = client.get_channel(int(ch_id))
+    if channel is None:
+        return
+    try:
+        await channel.send(message[:2000])
+    except Exception:
+        pass
+
+
 @client.tree.command(
     name="roll",
     description="Roll & Keep (L5R 4e). Example: rolled=7 kept=3, optionally against a TN.",
@@ -895,6 +909,12 @@ class DamageView(discord.ui.View):
             self._disable()
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(embed=embed)
+            dead_tag = " SLAIN" if applied["is_dead"] else ""
+            await _combat_log(
+                str(interaction.guild_id),
+                f"Damage: {self.attacker_name} → {self.target_name} ({self.weapon}) "
+                f"{applied['final_damage']} wounds [{applied['new_wound_level']}]{dead_tag}",
+            )
             if self.maneuver == "extra_attack" and not applied["is_dead"]:
                 await self._second_attack_creature(interaction, attacker_rec, cre_rec)
             return
@@ -937,6 +957,11 @@ class DamageView(discord.ui.View):
             self._disable()
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(embed=embed)
+            result_tag = "knocked prone" if kd["knocked_down"] else "resisted"
+            await _combat_log(
+                str(interaction.guild_id),
+                f"Knockdown: {self.attacker_name} → {self.target_name} ({result_tag})",
+            )
             return
 
         if self.maneuver == "disarm":
@@ -980,6 +1005,12 @@ class DamageView(discord.ui.View):
             self._disable()
             await interaction.response.edit_message(view=self)
             await interaction.followup.send(embed=embed)
+            disarm_tag = "disarmed" if dis["disarmed"] else "held"
+            await _combat_log(
+                str(interaction.guild_id),
+                f"Disarm: {self.attacker_name} → {self.target_name} ({disarm_tag}, "
+                f"{applied['final_damage']} wounds [{applied['new_wound_level']}])",
+            )
             return
 
         # Plain hit or Feint: weapon damage (+ feint bonus, + active-kata, Technique & Mastery mods).
@@ -1086,6 +1117,17 @@ class DamageView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(embed=embed)
+        dead_tag = " DEAD" if applied["is_dead"] else ""
+        man_tag = f" ({self.maneuver})" if self.maneuver not in ("none", "called_shot") else ""
+        cs_tag = ""
+        if self.maneuver == "called_shot" and self.called_shot_raises > 0:
+            part = combat.CALLED_SHOT_PARTS.get(min(self.called_shot_raises, 4), "specific part")
+            cs_tag = f" (Called Shot: {part})"
+        await _combat_log(
+            str(interaction.guild_id),
+            f"Damage: {self.attacker_name} → {self.target_name} ({self.weapon}){man_tag}{cs_tag} "
+            f"{applied['final_damage']} wounds [{applied['new_wound_level']}]{dead_tag}",
+        )
 
         if self.maneuver == "extra_attack" and not applied["is_dead"]:
             await self._second_attack(interaction, attacker_rec, target_rec)
@@ -1150,8 +1192,10 @@ class DamageView(discord.ui.View):
                 content="A DM can authorize the 2nd attack's damage below.",
                 embed=embed2, view=view2,
             )
+            await _combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
         else:
             await interaction.followup.send(embed=embed2)
+            await _combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) MISS")
 
     async def _second_attack_creature(
         self,
@@ -1187,8 +1231,10 @@ class DamageView(discord.ui.View):
                 content="A DM can authorize the 2nd attack's damage below.",
                 embed=embed2, view=view2,
             )
+            await _combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
         else:
             await interaction.followup.send(embed=embed2)
+            await _combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) MISS")
 
     @discord.ui.button(label="No Effect", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -1643,8 +1689,10 @@ async def attack(
             "knockdown": "A DM can resolve the knockdown below.",
         }.get(man, "A DM can authorize the damage below.")
         await interaction.response.send_message(content=prompt, embed=embed, view=view)
+        await _combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) HIT (roll {outcome['roll']} vs TN {outcome['target_tn']})")
     else:
         await interaction.response.send_message(embed=embed)
+        await _combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) MISS (roll {outcome['roll']} vs TN {outcome['target_tn']})")
 
 
 def _apply_numeric_field(c: Character, field: str, value: float) -> None:
@@ -2669,6 +2717,7 @@ async def combat_start(interaction: discord.Interaction) -> None:
         "⚔️ New encounter started. Add combatants with `/combat join` (your character) "
         "or `/combat add` (an NPC), then `/combat next` to begin."
     )
+    await _combat_log(str(interaction.guild_id), "--- Encounter started ---")
 
 
 def _get_or_create(channel_id: int) -> encounter.Encounter:
@@ -2713,6 +2762,7 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
         reflexes=rec.character.reflexes,
     ))
     await interaction.response.send_message(_render_encounter(enc))
+    await _combat_log(guild, f"Joined: {rec.character.name} (Init {result.total})")
 
 
 @combat_group.command(name="add", description="Add an NPC/monster to initiative by its Reflexes and Insight Rank.")
@@ -2745,6 +2795,7 @@ async def combat_add(
         reflexes=reflexes,
     ))
     await interaction.response.send_message(_render_encounter(enc))
+    await _combat_log(str(interaction.guild_id), f"Added NPC: {name} (Init {result.total})")
 
 
 @combat_group.command(name="next", description="Advance to the next combatant's turn.")
@@ -2758,6 +2809,7 @@ async def combat_next(interaction: discord.Interaction) -> None:
             "No encounter here. Start one with `/combat start`.", ephemeral=True
         )
         return
+    prev_round = enc.round
     current = enc.advance()
     parts = [f"➡️ It is now **{current.name}**'s turn."]
     reminders = condition_effects.condition_reminders(current.conditions)
@@ -2765,6 +2817,11 @@ async def combat_next(interaction: discord.Interaction) -> None:
         parts.append("\n".join(reminders))
     parts.append(_render_encounter(enc))
     await interaction.response.send_message("\n\n".join(parts))
+    guild = str(interaction.guild_id)
+    if enc.round != prev_round:
+        await _combat_log(guild, f"--- Round {enc.round} ---")
+    cond_str = f" [{', '.join(sorted(current.conditions))}]" if current.conditions else ""
+    await _combat_log(guild, f"Turn: {current.name}{cond_str}")
 
 
 @combat_group.command(name="status", description="Show the current initiative order.")
@@ -2803,6 +2860,7 @@ async def combat_end(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     await interaction.response.send_message("⚔️ Encounter ended.")
+    await _combat_log(str(interaction.guild_id), "--- Encounter ended ---")
 
 
 @combat_group.command(name="summary", description="Compact overview of all combatants' key stats. DM only.")
@@ -2919,6 +2977,7 @@ async def combat_condition_set(
     await interaction.response.send_message(
         f"**{c.name}** is now **{condition.name}**.\n\n{_render_encounter(enc)}"
     )
+    await _combat_log(str(interaction.guild_id), f"Condition: {c.name} +{condition.name}")
 
 
 @combat_group.command(name="condition_clear", description="Remove a condition from a combatant (DM only).")
@@ -2950,6 +3009,7 @@ async def combat_condition_clear(
     await interaction.response.send_message(
         f"**{c.name}** is no longer **{condition.name}**.\n\n{_render_encounter(enc)}"
     )
+    await _combat_log(str(interaction.guild_id), f"Condition: {c.name} -{condition.name}")
 
 
 @combat_group.command(name="conditions", description="Show a combatant's active conditions.")
@@ -3010,6 +3070,7 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
         f"  Ward: +10 Armor TN · Guarder: −5 Armor TN\n"
         f"  Expires at the start of {g.name}'s next turn."
     )
+    await _combat_log(str(interaction.guild_id), f"Guard: {g.name} guards {w.name}")
 
 
 @combat_group.command(name="full_defense", description="Full Defense: Defense/Reflexes roll, half (rounded up) added to Armor TN until next turn.")
@@ -3067,6 +3128,7 @@ async def combat_full_defense(
         f"  Complex Action — only Free Actions until next turn.\n"
         f"  Expires at the start of {cb.name}'s next turn."
     )
+    await _combat_log(str(interaction.guild_id), f"Full Defense: {cb.name} (+{result['bonus']} Armor TN)")
 
 
 # ===========================================================================
@@ -3180,6 +3242,8 @@ async def grapple_initiate(
             inline=False,
         )
     await interaction.response.send_message(embed=embed)
+    tag = "GRAPPLED" if hit else "MISS"
+    await _combat_log(guild, f"Grapple: {atk_cb.name} → {def_cb.name} {tag}")
 
 
 @grapple_group.command(name="control", description="Contested Jiujutsu/Strength roll for grapple control. DM only.")
@@ -3251,6 +3315,7 @@ async def grapple_control(
     else:
         embed.add_field(name="Control", value=f"**{winner}**", inline=False)
     await interaction.response.send_message(embed=embed)
+    await _combat_log(guild, f"Grapple Control: {winner} wins")
 
 
 @grapple_group.command(name="hit", description="Grapple Hit: unarmed damage on a grappled opponent (no attack roll). DM only.")
@@ -3340,6 +3405,7 @@ async def grapple_throw(
         f"  {target_cb.name} is now **Prone** and removed from the grapple.\n"
         f"  (Standing up is a Simple Action.)"
     )
+    await _combat_log(str(interaction.guild_id), f"Grapple Throw: {thrower_cb.name} throws {target_cb.name} (prone)")
 
 
 @grapple_group.command(name="break_free", description="Break free from a grapple (Simple Action for controller). DM only.")
@@ -3367,6 +3433,7 @@ async def grapple_break(
         f"🤼 **{cb.name}** breaks free from the grapple.\n"
         f"  (Grappled condition removed.)"
     )
+    await _combat_log(str(interaction.guild_id), f"Grapple Break: {cb.name} breaks free")
 
 
 # ===========================================================================
@@ -3473,6 +3540,7 @@ async def duel_assess(
         embed.add_field(name="Focus Bonus", value=focus_bonus.strip(), inline=False)
     embed.set_footer(text="Either duelist may concede after Assessment. Otherwise: /duel focus")
     await interaction.response.send_message(embed=embed)
+    await _combat_log(str(interaction.guild_id), f"Duel Assess: {ca.name} vs {cb_char.name}")
 
 
 @duel_group.command(name="focus", description="Focus stage: contested Iaijutsu(Focus)/Void roll. DM only.")
@@ -3574,6 +3642,11 @@ async def duel_focus(
     embed.add_field(name="Result", value=outcome, inline=False)
     embed.set_footer(text="Proceed to: /duel strike")
     await interaction.response.send_message(embed=embed)
+    if fs == "kharmic":
+        await _combat_log(str(interaction.guild_id), f"Duel Focus: {ca.name} vs {cb_char.name} — Kharmic Strike")
+    else:
+        winner = ca.name if fs == "a" else cb_char.name
+        await _combat_log(str(interaction.guild_id), f"Duel Focus: {winner} strikes first (margin {diff})")
 
 
 @duel_group.command(name="strike", description="Strike stage: Iaijutsu/Reflexes attack roll + damage. DM only.")
@@ -3664,6 +3737,8 @@ async def duel_strike(
         embed.set_footer(text="The strike misses.")
 
     await interaction.response.send_message(embed=embed, view=view)
+    tag = "HIT" if hit else "MISS"
+    await _combat_log(guild, f"Duel Strike: {atk.name} → {tgt.name} ({weapon}) {tag} (roll {result['total']} vs TN {result['tn']})")
 
 
 # ===========================================================================
@@ -4728,6 +4803,8 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/dm damage", "Apply damage to a character (DM-approval gate)."),
         ("/dm heal", "Heal wounds on a character (DM-approval gate)."),
         ("/dm treat", "Medicine treatment: healer rolls, DM approves healing."),
+        ("/dm log_channel", "Set a channel for automatic combat event logging."),
+        ("/dm clear_log", "Stop logging combat events."),
         ("/party", "Overview of all active PCs (DM only)."),
     ]),
     ("Combat", [
@@ -5417,6 +5494,12 @@ class CreatureAttackView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(embed=embed)
+        dead_tag = " DEAD" if applied["is_dead"] else ""
+        await _combat_log(
+            str(interaction.guild_id),
+            f"Creature Damage: {self.creature_name} → {self.target_name} "
+            f"{applied['final_damage']} wounds [{applied['new_wound_level']}]{dead_tag}",
+        )
 
     @discord.ui.button(label="No Damage", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -5533,6 +5616,13 @@ class SpellDamageView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(embed=embed)
+        dead_tag = " DEAD" if applied["is_dead"] else ""
+        reason_tag = f" ({self.reason})" if self.reason else ""
+        await _combat_log(
+            str(interaction.guild_id),
+            f"Spell Damage: {self.target_name}{reason_tag} "
+            f"{applied['final_damage']} wounds [{applied['new_wound_level']}]{dead_tag}",
+        )
 
 
 class DmDamageView(discord.ui.View):
@@ -5592,6 +5682,13 @@ class DmDamageView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(embed=embed)
+        dead_tag = " DEAD" if applied["is_dead"] else ""
+        reason_tag = f" ({self.reason})" if self.reason else ""
+        await _combat_log(
+            str(interaction.guild_id),
+            f"DM Damage: {self.target_name}{reason_tag} "
+            f"{applied['final_damage']} wounds [{applied['new_wound_level']}]{dead_tag}",
+        )
 
     @discord.ui.button(label="Void Reduce (−10)", style=discord.ButtonStyle.primary, emoji="🔮")
     async def void_reduce(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -5688,6 +5785,11 @@ class DmHealView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(embed=embed)
+        reason_tag = f" ({self.reason})" if self.reason else ""
+        await _combat_log(
+            str(interaction.guild_id),
+            f"Heal: {self.target_name}{reason_tag} {healed} wounds healed [{new_level}]",
+        )
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="❌")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -5934,8 +6036,10 @@ async def creature_attack_cmd(
         await interaction.response.send_message(
             content="A DM can apply the creature's damage below.", embed=embed, view=view
         )
+        await _combat_log(guild, f"Creature Attack: {cr.name} → {t_name} HIT (roll {outcome['total']} vs TN {outcome['tn']})")
     else:
         await interaction.response.send_message(embed=embed)
+        await _combat_log(guild, f"Creature Attack: {cr.name} → {t_name} MISS (roll {outcome['total']} vs TN {outcome['tn']})")
 
 
 # ===========================================================================
@@ -7030,6 +7134,7 @@ async def combat_stance(
     if effects:
         msg += f"\n{effects}"
     await interaction.response.send_message(msg)
+    await _combat_log(str(interaction.guild_id), f"Stance: {cb.name} → {label}")
 
 
 @combat_group.command(name="init", description="Adjust a combatant's initiative value (DM only).")
@@ -8111,6 +8216,11 @@ class MedicineTreatView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(embed=embed)
+        await _combat_log(
+            str(interaction.guild_id),
+            f"Medicine: {self.healer_name} treats {self.target_name} ({self.treatment_type}) "
+            f"{self.wounds_healed} wounds healed [{new_level}]",
+        )
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -8130,6 +8240,38 @@ MEDICINE_TN = {
     "poison_treatment": 20,
     "antidote_preparation": 20,
 }
+
+
+@dm.command(name="log_channel", description="Set the channel where combat events are logged (persistent record).")
+@app_commands.describe(channel="The text channel to post combat log entries to.")
+async def dm_log_channel(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can set the combat log channel.", ephemeral=True)
+        return
+    store.set_log_channel(str(interaction.guild_id), str(channel.id))
+    await interaction.response.send_message(
+        f"Combat log channel set to {channel.mention}. "
+        f"Attack outcomes, damage, healing, turn advances, and other combat events "
+        f"will be logged there automatically."
+    )
+
+
+@dm.command(name="clear_log", description="Stop logging combat events (removes the log channel setting).")
+async def dm_clear_log(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can clear the combat log channel.", ephemeral=True)
+        return
+    store.clear_log_channel(str(interaction.guild_id))
+    await interaction.response.send_message("Combat log channel cleared. Events will no longer be logged.")
 
 
 @dm.command(name="treat", description="Medicine treatment: healer rolls, DM approves healing. L5R 4e Medicine rules.")
