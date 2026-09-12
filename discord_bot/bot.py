@@ -242,7 +242,10 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     if c.koku:
         extras.append(f"**Koku:** {c.koku:g}")
     if c.inventory:
-        extras.append("**Inventory:** " + ", ".join(c.inventory))
+        inv_parts = []
+        for iname, qty in sorted(c.inventory.items()):
+            inv_parts.append(f"{iname} ×{qty}" if qty > 1 else iname)
+        extras.append("**Inventory:** " + ", ".join(inv_parts))
     if c.notes:
         extras.append(f"*{c.notes}*")
     if extras:
@@ -2465,10 +2468,15 @@ async def sheet_armor(
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
-@sheet.command(name="item", description="Add or remove an item from your inventory (Traveling Pack, Jade, etc.).")
-@app_commands.describe(name="Item name.", remove="Remove it instead of adding.", member="Target player (Fortune).")
+@sheet.command(name="item", description="Add or remove items from your inventory (quantity supported).")
+@app_commands.describe(
+    name="Item name.", quantity="How many (default 1).",
+    remove="Remove instead of adding.", member="Target player (Fortune).",
+)
 async def sheet_item(
-    interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
+    interaction: discord.Interaction, name: str,
+    quantity: app_commands.Range[int, 1, 9999] = 1,
+    remove: bool = False, member: discord.Member | None = None,
 ) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -2479,17 +2487,61 @@ async def sheet_item(
         return
     c = rec.character
     item_name = name.strip()
+    match_key = next((k for k in c.inventory if k.lower() == item_name.lower()), None)
     if remove:
-        low = item_name.lower()
-        found = [i for i in c.inventory if i.lower() == low]
-        if not found:
-            await interaction.response.send_message(f"**{c.name}** doesn't have **{item_name}** in inventory.", ephemeral=True)
+        if match_key is None:
+            await interaction.response.send_message(f"**{c.name}** doesn't have **{item_name}**.", ephemeral=True)
             return
-        c.inventory.remove(found[0])
-        msg = f"Removed **{found[0]}** from **{c.name}**'s inventory."
+        current = c.inventory[match_key]
+        remaining = current - quantity
+        if remaining <= 0:
+            del c.inventory[match_key]
+            msg = f"Removed all **{match_key}** from **{c.name}**'s inventory."
+        else:
+            c.inventory[match_key] = remaining
+            msg = f"Removed {quantity}× **{match_key}** from **{c.name}** ({remaining} left)."
     else:
-        c.inventory.append(item_name)
-        msg = f"Added **{item_name}** to **{c.name}**'s inventory."
+        key = match_key or item_name
+        c.inventory[key] = c.inventory.get(key, 0) + quantity
+        total = c.inventory[key]
+        msg = f"Added {quantity}× **{key}** to **{c.name}** (now {total})."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+@sheet.command(name="koku", description="Add or spend koku (money). Negative amount spends.")
+@app_commands.describe(
+    amount="Koku to add (positive) or spend (negative).",
+    reason="Why (e.g. 'bought katana', 'reward from lord').",
+    member="Target player (Fortune).",
+)
+async def sheet_koku(
+    interaction: discord.Interaction,
+    amount: float,
+    reason: str | None = None,
+    member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    if amount < 0 and c.koku + amount < 0:
+        await interaction.response.send_message(
+            f"**{c.name}** only has **{c.koku:g}** koku (tried to spend {abs(amount):g}).", ephemeral=True
+        )
+        return
+    c.koku += amount
+    c.koku = round(c.koku, 2)
+    if amount >= 0:
+        label = f"Received **{amount:g}** koku"
+    else:
+        label = f"Spent **{abs(amount):g}** koku"
+    why = f" ({reason})" if reason else ""
+    msg = f"\U0001F4B0 **{c.name}**: {label}{why}. Balance: **{c.koku:g}** koku."
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
@@ -5474,7 +5526,8 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/sheet trait / skill / set", "Set Traits, skills, or numeric fields."),
         ("/sheet wound / heal", "Apply or heal wounds."),
         ("/sheet equip / wield / armor", "Manage gear and equipment."),
-        ("/sheet item", "Add or remove inventory items (Traveling Pack, Jade, etc.)."),
+        ("/sheet item", "Add or remove inventory items with quantities."),
+        ("/sheet koku", "Add or spend koku (money management)."),
         ("/sheet advantage / disadvantage", "Record advantages or disadvantages."),
         ("/sheet kata learn / activate", "Record or activate Kata."),
         ("/sheet kiho learn / activate", "Record or activate Kiho."),

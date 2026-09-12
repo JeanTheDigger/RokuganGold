@@ -175,9 +175,79 @@ def apply_to_character(character, school: dict) -> dict:
     return report
 
 
+_ARMOR_KEYWORDS = {
+    "ashigaru": "ashigaru",
+    "light armor": "light",
+    "heavy armor": "heavy",
+    "tatami": "tatami",
+    "riding armor": "riding",
+    "bogu": "bogu",
+    "tetsu-do": "tetsu_do",
+}
+
+_WEAPON_KEYWORDS: dict[str, str] = {
+    "katana": "katana",
+    "wakizashi": "wakizashi",
+    "tanto": "tanto",
+    "knife": "tanto",
+    "kama": "kama",
+    "bo staff": "bo",
+    "bo": "bo",
+    "sword": "katana",
+    "bow": "yumi",
+    "yumi": "yumi",
+    "spear": "yari",
+    "yari": "yari",
+    "naginata": "naginata",
+}
+
+_WORD_NUMBERS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "twelve": 12, "fifteen": 15, "twenty": 20,
+}
+
+
+def _match_single_armor(text: str) -> str | None:
+    """If text names exactly one armor type (no 'or'), return catalog key."""
+    low = text.lower().strip()
+    if " or " in low:
+        return None
+    for phrase, key in _ARMOR_KEYWORDS.items():
+        if phrase in low:
+            return key
+    return None
+
+
+def _match_weapon(text: str) -> str | None:
+    """If text names exactly one weapon (no 'or'/'any'), return catalog key."""
+    low = text.lower().strip()
+    if " or " in low or low.startswith("any"):
+        return None
+    return _WEAPON_KEYWORDS.get(low)
+
+
+def _weapon_display(catalog_key: str) -> str:
+    """Catalog key → title-cased display name for c.weapons."""
+    return catalog_key.replace("_", " ").title()
+
+
+def _add_weapon(character, catalog_key: str) -> str:
+    """Add a weapon to character.weapons by catalog key; return display name."""
+    name = _weapon_display(catalog_key)
+    if name not in character.weapons:
+        character.weapons.append(name)
+    return name
+
+
+def _add_inventory(character, name: str, qty: int = 1) -> None:
+    character.inventory[name] = character.inventory.get(name, 0) + qty
+
+
 def apply_outfit(character, outfit: str) -> list[str]:
     """Parse a school outfit string and apply items to the character.
     Returns list of applied/recorded items for reporting."""
+    from .combat import ARMOR_CATALOG
     if not outfit or not outfit.strip():
         return []
     applied: list[str] = []
@@ -197,6 +267,52 @@ def apply_outfit(character, outfit: str) -> list[str]:
                     character.weapons.append(w)
             applied.append("Daisho (Katana + Wakizashi)")
             continue
-        character.inventory.append(item)
+        # Compound "X and Y" (e.g. "Bow and 20 Arrows")
+        if " and " in low and " or " not in low:
+            parts = item.split(" and ", 1)
+            left, right = parts[0].strip(), parts[1].strip()
+            wk = _match_weapon(left)
+            if wk:
+                wname = _add_weapon(character, wk)
+                m_rq = re.match(r"(\d+)\s+(.+)", right)
+                if m_rq:
+                    _add_inventory(character, m_rq.group(2).strip(), int(m_rq.group(1)))
+                else:
+                    _add_inventory(character, right)
+                label = f"{wname} + {right}" if left.lower() != wname.lower() else f"{wname} + {right}"
+                applied.append(label)
+                continue
+        armor_key = _match_single_armor(item)
+        if armor_key and armor_key in ARMOR_CATALOG:
+            spec = ARMOR_CATALOG[armor_key]
+            character.armor_name = armor_key
+            character.armor_tn_bonus = spec["tn_bonus"]
+            character.armor_reduction = spec["reduction"]
+            applied.append(f"{item} (TN +{spec['tn_bonus']}, Red {spec['reduction']})")
+            continue
+        weapon_key = _match_weapon(item)
+        if weapon_key:
+            wname = _add_weapon(character, weapon_key)
+            if low != wname.lower():
+                applied.append(f"{item} (equipped as {wname})")
+            else:
+                applied.append(wname)
+            continue
+        # "bundle of N items" (e.g. "bundle of ten nage-yari")
+        m_bundle = re.match(r"bundle of (\w+)\s+(.+)", low)
+        if m_bundle:
+            qty = _WORD_NUMBERS.get(m_bundle.group(1), 1)
+            name = m_bundle.group(2).strip()
+            name = " ".join(w.capitalize() for w in name.split())
+            _add_inventory(character, name, qty)
+            applied.append(f"{qty}x {name}")
+            continue
+        m_qty = re.match(r"(\d+)\s+(.+)", item)
+        if m_qty:
+            qty = int(m_qty.group(1))
+            name = m_qty.group(2).strip()
+            _add_inventory(character, name, qty)
+        else:
+            _add_inventory(character, item)
         applied.append(item)
     return applied
