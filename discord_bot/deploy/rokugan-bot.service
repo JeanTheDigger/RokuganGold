@@ -1,0 +1,20 @@
+[Unit]
+Description=Rokugan L5R 4e Discord Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rokugan
+Group=rokugan
+WorkingDirectory=/home/rokugan/bot
+ExecStart=/home/rokugan/bot/.venv/bin/python3 bot.py
+Restart=always
+RestartSec=10
+MemoryMax=512M
+TimeoutStopSec=10
+
+Environment=DB_PATH=/home/rokugan/bot/rokugan.db
+
+[Install]
+WantedBy=multi-user.target
