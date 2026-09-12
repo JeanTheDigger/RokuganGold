@@ -1636,6 +1636,14 @@ async def attack(
     enc = encounters.get(interaction.channel_id)
     atk_combatant = enc.find(attacker_rec.character.name) if enc else None
 
+    # Condition restrictions (GDD s40): some conditions prevent attacking entirely.
+    if atk_combatant is not None:
+        wpn_size = combat.get_weapon_profile(weapon).get("size", "Medium")
+        blocked, block_reason = condition_effects.cannot_attack(atk_combatant.conditions, wpn_size)
+        if blocked:
+            await interaction.response.send_message(f"**{atk_combatant.name}** cannot attack: {block_reason}", ephemeral=True)
+            return
+
     # Action economy (s40): attack is a Complex Action — requires full action budget.
     if atk_combatant is not None and atk_combatant.actions_used > 0:
         await interaction.response.send_message(
@@ -4189,6 +4197,10 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
     if g.name == w.name:
         await interaction.response.send_message("A combatant cannot guard themselves.", ephemeral=True)
         return
+    blocked, block_reason = condition_effects.cannot_act(g.conditions)
+    if blocked:
+        await interaction.response.send_message(f"**{g.name}** cannot act: {block_reason}", ephemeral=True)
+        return
     if g.stance in ("full_attack", "full_defense", "center"):
         reasons = {
             "full_attack": "Guard is not available in Full Attack Stance (s40).",
@@ -4243,6 +4255,10 @@ async def combat_full_defense(
     cb = enc.find(combatant)
     if cb is None:
         await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
+        return
+    blocked, block_reason = condition_effects.cannot_act(cb.conditions)
+    if blocked:
+        await interaction.response.send_message(f"**{cb.name}** cannot act: {block_reason}", ephemeral=True)
         return
     if cb.actions_used > 0:
         await interaction.response.send_message(
@@ -4510,6 +4526,10 @@ async def grapple_initiate(
     if def_cb is None:
         await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
         return
+    blocked, block_reason = condition_effects.cannot_act(atk_cb.conditions)
+    if blocked:
+        await interaction.response.send_message(f"**{atk_cb.name}** cannot act: {block_reason}", ephemeral=True)
+        return
     guild = str(interaction.guild_id)
     atk_rec = _resolve_combatant_record(guild, atk_cb)
     def_rec = _resolve_combatant_record(guild, def_cb)
@@ -4520,11 +4540,9 @@ async def grapple_initiate(
         return
     d_stance = defender_stance.value if defender_stance else "attack"
     tn = combat.grapple_initiate_tn(def_rec.character, d_stance, bonus_tn)
-    # Full Defense bonus and condition/guard modifiers still apply to the TN.
     extra_tn = 0
     if def_cb.full_defense_bonus:
         extra_tn += def_cb.full_defense_bonus
-    # Condition TN override (Stunned/Grappled replace formula).
     def_conds = def_cb.conditions
     cond_tn_ovr, cond_tn_notes = condition_effects.defender_armor_tn_override(
         def_conds, def_rec.character.reflexes, def_rec.character.armor_tn_bonus, True,
@@ -4693,6 +4711,10 @@ async def grapple_hit(
     if def_cb is None:
         await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
         return
+    blocked, block_reason = condition_effects.cannot_act(atk_cb.conditions)
+    if blocked:
+        await interaction.response.send_message(f"**{atk_cb.name}** cannot act: {block_reason}", ephemeral=True)
+        return
     if atk_cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{atk_cb.name}** has already used actions this turn ({atk_cb.actions_used}/2). "
@@ -4752,6 +4774,10 @@ async def grapple_throw(
     if target_cb is None:
         await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
         return
+    blocked, block_reason = condition_effects.cannot_act(thrower_cb.conditions)
+    if blocked:
+        await interaction.response.send_message(f"**{thrower_cb.name}** cannot act: {block_reason}", ephemeral=True)
+        return
     if thrower_cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{thrower_cb.name}** has already used actions this turn ({thrower_cb.actions_used}/2). "
@@ -4802,6 +4828,10 @@ async def grapple_pin(
     if tgt_cb is None:
         await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
         return
+    blocked, block_reason = condition_effects.cannot_act(ctrl_cb.conditions)
+    if blocked:
+        await interaction.response.send_message(f"**{ctrl_cb.name}** cannot act: {block_reason}", ephemeral=True)
+        return
     if ctrl_cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{ctrl_cb.name}** has already used actions this turn ({ctrl_cb.actions_used}/2). "
@@ -4843,6 +4873,10 @@ async def grapple_break(
     cb = enc.find(combatant)
     if cb is None:
         await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
+        return
+    if "stunned" in cb.conditions:
+        await interaction.response.send_message(
+            f"**{cb.name}** cannot act: **Stunned** (recovers Earth TN 20 at Reactions Stage)", ephemeral=True)
         return
     guild = str(interaction.guild_id)
 
@@ -9742,6 +9776,10 @@ async def combat_stance(
             ephemeral=True,
         )
         return
+    blocked, block_reason = condition_effects.invalid_stance(cb.conditions, stance.value)
+    if blocked:
+        await interaction.response.send_message(f"**{cb.name}** cannot use that stance: {block_reason}", ephemeral=True)
+        return
     cb.stance = stance.value
     if stance.value == "center":
         cb.center_bonus_available = False
@@ -9813,6 +9851,10 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
     if cb is None:
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
         return
+    blocked, block_reason = condition_effects.cannot_act(cb.conditions)
+    if blocked:
+        await interaction.response.send_message(f"**{cb.name}** cannot act: {block_reason}", ephemeral=True)
+        return
     guild = str(interaction.guild_id)
     current = enc.current()
     is_current = enc.started and current is not None and current.name.lower() == cb.name.lower()
@@ -9877,6 +9919,10 @@ async def combat_delay(
     cb = enc.find(name)
     if cb is None:
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    blocked, block_reason = condition_effects.cannot_act(cb.conditions)
+    if blocked:
+        await interaction.response.send_message(f"**{cb.name}** cannot act: {block_reason}", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     current = enc.current()

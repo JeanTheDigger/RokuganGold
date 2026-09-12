@@ -258,6 +258,21 @@ recovery rolls) in the DM-adjudicates section of the attack embed. Conditions
 are transient per-encounter state on the Combatant: they are cleared when the
 encounter ends, not persisted to the database.
 
+**Enforced condition restrictions**: the bot blocks commands when a condition
+forbids the action, with a clear error message explaining why:
+
+| Restriction | Blocked commands |
+|---|---|
+| **Stunned** — cannot take actions | attack, guard, full_defense, hold, delay, grapple initiate/hit/throw/pin/break_free |
+| **Pinned** — fully immobilized | attack, guard, full_defense, hold, delay, grapple initiate/hit/throw/pin (break_free is allowed) |
+| **Entangled** — can only break free | attack, guard, full_defense, hold, delay, grapple initiate/hit/throw/pin (break_free is allowed) |
+| **Grappled + Large weapon** — large weapons unusable | attack (with a Large weapon only) |
+| **Prone + Large weapon** — cannot attack with Large | attack (with a Large weapon only) |
+| **Dazed** — Defense/Full Defense only | stance set to Attack, Full Attack, or Center |
+| **Fatigued** — no Full Attack | stance set to Full Attack |
+| **Mounted** — no Full Attack | stance set to Full Attack |
+| **Grappled** — stances don't apply | any stance change |
+
 **Schools & Techniques** (all of **GDD s29**, transcribed verbatim)
 
 Every school **and path** and its techniques are in the bot: **347 entries**
