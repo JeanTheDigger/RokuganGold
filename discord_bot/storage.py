@@ -108,6 +108,11 @@ CREATE TABLE IF NOT EXISTS room_npcs (
     npc_name TEXT NOT NULL,
     PRIMARY KEY (room_id, npc_name)
 );
+
+CREATE TABLE IF NOT EXISTS approval_channels (
+    guild_id   TEXT NOT NULL PRIMARY KEY,
+    channel_id TEXT NOT NULL
+);
 """
 
 
@@ -475,6 +480,29 @@ class Store:
         with self._lock, self._conn:
             self._conn.execute(
                 "DELETE FROM combat_log_channels WHERE guild_id = ?", (guild_id,)
+            )
+
+    # -- DM approval channel ---------------------------------------------------
+    def set_approval_channel(self, guild_id: str, channel_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO approval_channels (guild_id, channel_id) VALUES (?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
+                (guild_id, channel_id),
+            )
+
+    def get_approval_channel(self, guild_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT channel_id FROM approval_channels WHERE guild_id = ?",
+                (guild_id,),
+            ).fetchone()
+        return row["channel_id"] if row else None
+
+    def clear_approval_channel(self, guild_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM approval_channels WHERE guild_id = ?", (guild_id,)
             )
 
     # -- encounter persistence -------------------------------------------------

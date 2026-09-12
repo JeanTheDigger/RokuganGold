@@ -866,6 +866,7 @@ class DamageView(discord.ui.View):
         defender_stance: str = "attack",
         called_shot_raises: int = 0,
         channel_id: int = 0,
+        source_channel_id: int = 0,
     ) -> None:
         super().__init__(timeout=1800)  # 30 min
         self.attacker_id = attacker_id
@@ -880,6 +881,7 @@ class DamageView(discord.ui.View):
         self.defender_stance = defender_stance
         self.called_shot_raises = called_shot_raises
         self.channel_id = channel_id
+        self.source_channel_id = source_channel_id
         # Relabel the primary button to match the maneuver, and hide the Void
         # button when it would be nonsensical (knockdown has no damage roll;
         # creature targets have no VP pool).
@@ -898,6 +900,16 @@ class DamageView(discord.ui.View):
             child.disabled = True
         self.stop()
 
+    async def _post_result(self, interaction: discord.Interaction, embed: discord.Embed, text: str = "") -> None:
+        """Post result to source channel when using approval routing, or inline."""
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(content=text or None, embed=embed)
+            await interaction.followup.send(f"Resolved in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(content=text or None, embed=embed)
+
     def _wound_status(self, target_rec: storage.CharacterRecord, applied: dict) -> str:
         c = target_rec.character
         if applied["level_changed"]:
@@ -915,7 +927,7 @@ class DamageView(discord.ui.View):
         """Enforce once-per-Turn/Round damage-side kata against the live tracker.
         Returns (scorpion_bonus, scorpion_note, tsunami_ignore, tsunami_note); an
         effect fires only while an encounter is tracking the attacker."""
-        enc = encounters.get(interaction.channel_id)
+        enc = encounters.get(self.channel_id)
         combatant = enc.find(attacker.name) if enc else None
         scorp_bonus, scorp_note = 0, ""
         val, note = kata_effects.scorpion_feint_damage(attacker, self.maneuver)
@@ -946,12 +958,19 @@ class DamageView(discord.ui.View):
         if not _is_dm(interaction):
             await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
             return
-        self._disable()
-        await interaction.response.edit_message(view=self)
-        await interaction.followup.send(
-            f"🛡️ {interaction.user.display_name} denied the effect:"
+        msg = (
+            f"🛡️ {interaction.user.display_name} denied the effect: "
             f"no damage applied to **{self.target_name}**."
         )
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(msg)
+            await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(msg)
 
     async def _resolve_damage(self, interaction: discord.Interaction, void_reduce: bool = False) -> None:
         """Shared damage resolution for both normal and Void-reduced paths."""
@@ -994,7 +1013,7 @@ class DamageView(discord.ui.View):
             ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
             t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
             ignore += t_ignore
-            enc = encounters.get(interaction.channel_id)
+            enc = encounters.get(self.channel_id)
             enc_round = enc.round if enc else None
             m_ignore, m_ign_notes = skill_mastery.attacker_reduction_ignored(attacker, wp, enc_round)
             ignore += m_ignore
@@ -1063,7 +1082,7 @@ class DamageView(discord.ui.View):
             embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
             self._disable()
             await interaction.response.edit_message(view=self)
-            await interaction.followup.send(embed=embed)
+            await self._post_result(interaction, embed)
             dead_tag = " SLAIN" if applied["is_dead"] else ""
             await _combat_log(
                 str(interaction.guild_id),
@@ -1088,7 +1107,7 @@ class DamageView(discord.ui.View):
         if self.maneuver == "knockdown":
             kd = combat.resolve_knockdown(attacker, target, engine)
             if kd["knocked_down"]:
-                enc = encounters.get(interaction.channel_id)
+                enc = encounters.get(self.channel_id)
                 if enc:
                     def_c = enc.find(target.name)
                     if def_c:
@@ -1111,7 +1130,7 @@ class DamageView(discord.ui.View):
             embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
             self._disable()
             await interaction.response.edit_message(view=self)
-            await interaction.followup.send(embed=embed)
+            await self._post_result(interaction, embed)
             result_tag = "knocked prone" if kd["knocked_down"] else "resisted"
             await _combat_log(
                 str(interaction.guild_id),
@@ -1159,7 +1178,7 @@ class DamageView(discord.ui.View):
             embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
             self._disable()
             await interaction.response.edit_message(view=self)
-            await interaction.followup.send(embed=embed)
+            await self._post_result(interaction, embed)
             disarm_tag = "disarmed" if dis["disarmed"] else "held"
             await _combat_log(
                 str(interaction.guild_id),
@@ -1194,7 +1213,7 @@ class DamageView(discord.ui.View):
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
         t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
         ignore += t_ignore
-        enc = encounters.get(interaction.channel_id)
+        enc = encounters.get(self.channel_id)
         enc_round = enc.round if enc else None
         m_ignore, m_ign_notes = skill_mastery.attacker_reduction_ignored(attacker, wp, enc_round)
         ignore += m_ignore
@@ -1271,7 +1290,7 @@ class DamageView(discord.ui.View):
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(embed=embed)
+        await self._post_result(interaction, embed)
         dead_tag = " DEAD" if applied["is_dead"] else ""
         man_tag = f" ({self.maneuver})" if self.maneuver not in ("none", "called_shot") else ""
         cs_tag = ""
@@ -1342,6 +1361,7 @@ class DamageView(discord.ui.View):
                 maneuver="none", attack_margin=outcome["margin"],
                 defender_stance=self.defender_stance,
                 channel_id=self.channel_id,
+                source_channel_id=self.source_channel_id,
             )
             await interaction.followup.send(
                 content="A DM can authorize the 2nd attack's damage below.",
@@ -1381,6 +1401,7 @@ class DamageView(discord.ui.View):
                 maneuver="none", attack_margin=outcome["margin"],
                 target_creature_id=cre_rec.id,
                 channel_id=self.channel_id,
+                source_channel_id=self.source_channel_id,
             )
             await interaction.followup.send(
                 content="A DM can authorize the 2nd attack's damage below.",
@@ -1398,12 +1419,19 @@ class DamageView(discord.ui.View):
                 f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this attack.", ephemeral=True
             )
             return
-        self._disable()
-        await interaction.response.edit_message(view=self)
-        await interaction.followup.send(
+        msg = (
             f"🛡️ {interaction.user.display_name} ruled **no effect** on "
             f"{self.attacker_name}'s hit against {self.target_name}."
         )
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(msg)
+            await interaction.followup.send(f"No effect — posted in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(msg)
 
 
 def _rate_status(combatant, key: str, scope: str) -> str:
@@ -1838,24 +1866,36 @@ async def attack(
 
     cs_raises = raises if man == "called_shot" else 0
     if hit:
+        approval_ch_id = store.get_approval_channel(guild)
+        approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
+        src_ch_id = interaction.channel_id if approval_ch else 0
         if target_creature_rec is not None:
             view = DamageView(
                 attacker_rec.id, None, weapon, increased_damage, a_name, t_name,
                 maneuver=man, attack_margin=outcome["margin"],
                 target_creature_id=target_creature_rec.id, defender_stance=d_stance,
                 called_shot_raises=cs_raises, channel_id=interaction.channel_id,
+                source_channel_id=src_ch_id,
             )
         else:
             view = DamageView(
                 attacker_rec.id, target_rec.id, weapon, increased_damage, a_name, t_name,
                 maneuver=man, attack_margin=outcome["margin"], defender_stance=d_stance,
                 called_shot_raises=cs_raises, channel_id=interaction.channel_id,
+                source_channel_id=src_ch_id,
             )
         prompt = {
             "disarm": "A DM can resolve the disarm below.",
             "knockdown": "A DM can resolve the knockdown below.",
         }.get(man, "A DM can authorize the damage below.")
-        await interaction.response.send_message(content=prompt, embed=embed, view=view)
+        if approval_ch:
+            embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=False)
+            await approval_ch.send(content=prompt, embed=embed, view=view)
+            await interaction.response.send_message(
+                f"⚔️ **{a_name}** hit **{t_name}** — damage approval pending in the DM channel."
+            )
+        else:
+            await interaction.response.send_message(content=prompt, embed=embed, view=view)
         await _combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) HIT (roll {outcome['roll']} vs TN {outcome['target_tn']})")
     else:
         await interaction.response.send_message(embed=embed)
@@ -3435,14 +3475,25 @@ async def dm_damage(
         ),
         inline=False,
     )
+    approval_ch_id = store.get_approval_channel(guild)
+    approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
+    src_ch_id = interaction.channel_id if approval_ch else 0
     view = DmDamageView(
         target_id=rec.id, target_name=c.name,
         amount=amount, reason=reason,
+        source_channel_id=src_ch_id,
     )
-    await interaction.response.send_message(
-        content="A DM can authorize the damage below.",
-        embed=embed, view=view,
-    )
+    if approval_ch:
+        embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=False)
+        await approval_ch.send(content="A DM can authorize the damage below.", embed=embed, view=view)
+        await interaction.response.send_message(
+            f"💥 Pending damage on **{c.name}** — approval routed to the DM channel."
+        )
+    else:
+        await interaction.response.send_message(
+            content="A DM can authorize the damage below.",
+            embed=embed, view=view,
+        )
 
 
 @dm.command(name="heal", description="Heal wounds on a character (shows DM-approval buttons).")
@@ -3492,14 +3543,25 @@ async def dm_heal(
         ),
         inline=False,
     )
+    approval_ch_id = store.get_approval_channel(guild)
+    approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
+    src_ch_id = interaction.channel_id if approval_ch else 0
     view = DmHealView(
         target_id=rec.id, target_name=c.name,
         amount=amount, reason=reason,
+        source_channel_id=src_ch_id,
     )
-    await interaction.response.send_message(
-        content="A DM can authorize the healing below.",
-        embed=embed, view=view,
-    )
+    if approval_ch:
+        embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=False)
+        await approval_ch.send(content="A DM can authorize the healing below.", embed=embed, view=view)
+        await interaction.response.send_message(
+            f"💚 Pending healing on **{c.name}** — approval routed to the DM channel."
+        )
+    else:
+        await interaction.response.send_message(
+            content="A DM can authorize the healing below.",
+            embed=embed, view=view,
+        )
 
 
 def _wound_track(c) -> str:
@@ -6787,13 +6849,15 @@ class DmDamageView(discord.ui.View):
     """DM-approval gate for /dm damage: shows pending damage and lets a DM
     confirm or deny before applying to the target's sheet."""
 
-    def __init__(self, target_id: int, target_name: str, amount: int, reason: str) -> None:
+    def __init__(self, target_id: int, target_name: str, amount: int, reason: str,
+                 source_channel_id: int = 0) -> None:
         super().__init__(timeout=1800)
         self.target_id = target_id
         self.target_name = target_name
         self.amount = amount
         self.reason = reason
         self.void_reduced = False
+        self.source_channel_id = source_channel_id
 
     def _disable(self) -> None:
         for child in self.children:
@@ -6839,7 +6903,13 @@ class DmDamageView(discord.ui.View):
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(embed=embed)
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(embed=embed)
+            await interaction.followup.send(f"Resolved in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(embed=embed)
         dead_tag = " DEAD" if applied["is_dead"] else ""
         reason_tag = f" ({self.reason})" if self.reason else ""
         await _combat_log(
@@ -6881,24 +6951,33 @@ class DmDamageView(discord.ui.View):
         if not _is_dm(interaction):
             await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
             return
-        self._disable()
-        await interaction.response.edit_message(view=self)
-        await interaction.followup.send(
-            f"🛡️ {interaction.user.display_name} denied:"
+        msg = (
+            f"🛡️ {interaction.user.display_name} denied: "
             f"no damage applied to **{self.target_name}**."
         )
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(msg)
+            await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(msg)
 
 
 class DmHealView(discord.ui.View):
     """DM-approval gate for /dm heal: shows pending healing and lets a DM
     confirm or deny before modifying the target's wound track."""
 
-    def __init__(self, target_id: int, target_name: str, amount: int, reason: str) -> None:
+    def __init__(self, target_id: int, target_name: str, amount: int, reason: str,
+                 source_channel_id: int = 0) -> None:
         super().__init__(timeout=1800)
         self.target_id = target_id
         self.target_name = target_name
         self.amount = amount
         self.reason = reason
+        self.source_channel_id = source_channel_id
 
     def _disable(self) -> None:
         for child in self.children:
@@ -6942,7 +7021,13 @@ class DmHealView(discord.ui.View):
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(embed=embed)
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(embed=embed)
+            await interaction.followup.send(f"Resolved in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(embed=embed)
         reason_tag = f" ({self.reason})" if self.reason else ""
         await _combat_log(
             str(interaction.guild_id),
@@ -6954,12 +7039,19 @@ class DmHealView(discord.ui.View):
         if not _is_dm(interaction):
             await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
             return
-        self._disable()
-        await interaction.response.edit_message(view=self)
-        await interaction.followup.send(
-            f"❌ {interaction.user.display_name} denied:"
+        msg = (
+            f"❌ {interaction.user.display_name} denied: "
             f"no healing applied to **{self.target_name}**."
         )
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(msg)
+            await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(msg)
 
 
 def _resolve_creature(
@@ -9836,6 +9928,38 @@ async def dm_clear_log(interaction: discord.Interaction) -> None:
         return
     store.clear_log_channel(str(interaction.guild_id))
     await interaction.response.send_message("Combat log channel cleared. Events will no longer be logged.")
+
+
+@dm.command(name="approval_channel", description="Set the DM channel where damage/healing approvals are routed (Kami only).")
+@app_commands.describe(channel="The DM-only text channel for approval requests.")
+async def dm_approval_channel(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_kami(interaction):
+        await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can set the approval channel.", ephemeral=True)
+        return
+    store.set_approval_channel(str(interaction.guild_id), str(channel.id))
+    await interaction.response.send_message(
+        f"DM approval channel set to {channel.mention}. "
+        f"Damage and healing requests will be routed there for DM review. "
+        f"Results will be posted back in the combat room."
+    )
+
+
+@dm.command(name="clear_approval", description="Stop routing approvals to a DM channel (Kami only).")
+async def dm_clear_approval(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_kami(interaction):
+        await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can clear the approval channel.", ephemeral=True)
+        return
+    store.clear_approval_channel(str(interaction.guild_id))
+    await interaction.response.send_message("Approval channel cleared. Damage approvals will appear inline.")
 
 
 @dm.command(name="treat", description="Medicine treatment: healer rolls, DM approves healing. L5R 4e Medicine rules.")
