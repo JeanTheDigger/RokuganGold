@@ -70,6 +70,7 @@ else
         cp "$DISCORD_BOT_DIR/requirements.txt" "$BOT_DIR/"
         cp "$DISCORD_BOT_DIR/.env.example" "$BOT_DIR/"
         [ -d "$DISCORD_BOT_DIR/deploy" ] && cp -r "$DISCORD_BOT_DIR/deploy" "$BOT_DIR/"
+        chown -R rokugan:rokugan "$BOT_DIR"
     else
         echo "  ERROR: Can't find bot.py. Run this script from inside the discord_bot/deploy/"
         echo "  directory, or clone the repo first and re-run."
