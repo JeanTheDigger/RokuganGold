@@ -1923,7 +1923,8 @@ async def attack(
             "knockdown": "A DM can resolve the knockdown below.",
         }.get(man, "A DM can authorize the damage below.")
         if approval_ch:
-            embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=False)
+            embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
+            embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
             await approval_ch.send(content=prompt, embed=embed, view=view)
             await interaction.response.send_message(
                 f"⚔️ **{a_name}** hit **{t_name}** — damage approval pending in the DM channel."
@@ -3583,7 +3584,8 @@ async def dm_damage(
         source_channel_id=src_ch_id,
     )
     if approval_ch:
-        embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=False)
+        embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
+        embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
         await approval_ch.send(content="A DM can authorize the damage below.", embed=embed, view=view)
         await interaction.response.send_message(
             f"💥 Pending damage on **{c.name}** — approval routed to the DM channel."
@@ -3651,7 +3653,8 @@ async def dm_heal(
         source_channel_id=src_ch_id,
     )
     if approval_ch:
-        embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=False)
+        embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
+        embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
         await approval_ch.send(content="A DM can authorize the healing below.", embed=embed, view=view)
         await interaction.response.send_message(
             f"💚 Pending healing on **{c.name}** — approval routed to the DM channel."
@@ -6889,6 +6892,7 @@ class SpellDamageView(discord.ui.View):
         rolled: int,
         kept: int,
         bonus: int,
+        source_channel_id: int = 0,
     ) -> None:
         super().__init__(timeout=1800)
         self.target_id = target_id
@@ -6899,6 +6903,7 @@ class SpellDamageView(discord.ui.View):
         self.rolled = rolled
         self.kept = kept
         self.bonus = bonus
+        self.source_channel_id = source_channel_id
 
     def _disable(self) -> None:
         for child in self.children:
@@ -6924,12 +6929,19 @@ class SpellDamageView(discord.ui.View):
         if not _is_dm(interaction):
             await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
             return
-        self._disable()
-        await interaction.response.edit_message(view=self)
-        await interaction.followup.send(
-            f"🛡️ {interaction.user.display_name} denied:"
+        msg = (
+            f"🛡️ {interaction.user.display_name} denied: "
             f"no spell damage applied to **{self.target_name}**."
         )
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(msg)
+            await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(msg)
 
     async def _resolve(self, interaction: discord.Interaction, void_reduce: bool) -> None:
         rec = store.get_by_id(self.target_id)
@@ -6977,7 +6989,13 @@ class SpellDamageView(discord.ui.View):
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(embed=embed)
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(embed=embed)
+            await interaction.followup.send(f"Resolved in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(embed=embed)
         dead_tag = " DEAD" if applied["is_dead"] else ""
         reason_tag = f" ({self.reason})" if self.reason else ""
         await _combat_log(
@@ -9587,15 +9605,27 @@ async def spell_damage(
                 value=f"Reduction {red} · Current: **{wl}** ({rec.character.wounds_taken} wounds)",
                 inline=False,
             )
+            approval_ch_id = store.get_approval_channel(guild)
+            approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
+            src_ch_id = interaction.channel_id if approval_ch else 0
             view = SpellDamageView(
                 target_id=rec.id, target_name=rec.character.name,
                 raw_damage=total, dice_text=_format_dice(result),
                 reason=reason, rolled=rolled, kept=kept, bonus=bonus,
+                source_channel_id=src_ch_id,
             )
-            await interaction.response.send_message(
-                content="A DM can authorize the spell damage below.",
-                embed=embed, view=view,
-            )
+            if approval_ch:
+                embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
+                embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
+                await approval_ch.send(content="A DM can authorize the spell damage below.", embed=embed, view=view)
+                await interaction.response.send_message(
+                    f"📜 Spell damage on **{rec.character.name}** — approval routed to the DM channel."
+                )
+            else:
+                await interaction.response.send_message(
+                    content="A DM can authorize the spell damage below.",
+                    embed=embed, view=view,
+                )
         else:
             embed.set_footer(text=f"Target '{target}' not found: use exact character name.")
             await interaction.response.send_message(embed=embed)
@@ -9972,6 +10002,7 @@ class MedicineTreatView(discord.ui.View):
     def __init__(
         self, healer_name: str, target_id: int, target_name: str,
         wounds_healed: int, treatment_type: str, roll_result: dict,
+        source_channel_id: int = 0,
     ) -> None:
         super().__init__(timeout=1800)
         self.healer_name = healer_name
@@ -9980,6 +10011,7 @@ class MedicineTreatView(discord.ui.View):
         self.wounds_healed = wounds_healed
         self.treatment_type = treatment_type
         self.roll_result = roll_result
+        self.source_channel_id = source_channel_id
 
     def _disable(self) -> None:
         for child in self.children:
@@ -10013,7 +10045,13 @@ class MedicineTreatView(discord.ui.View):
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(embed=embed)
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(embed=embed)
+            await interaction.followup.send(f"Resolved in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(embed=embed)
         await _combat_log(
             str(interaction.guild_id),
             f"Medicine: {self.healer_name} treats {self.target_name} ({self.treatment_type}) "
@@ -10025,11 +10063,19 @@ class MedicineTreatView(discord.ui.View):
         if not _is_dm(interaction):
             await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
             return
+        msg = (
+            f"🛡️ {interaction.user.display_name} denied: "
+            f"no healing applied to **{self.target_name}**."
+        )
         self._disable()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(
-            f"🛡️ {interaction.user.display_name} denied: no healing applied to **{self.target_name}**."
-        )
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(msg)
+            await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(msg)
 
 
 MEDICINE_TN = {
@@ -10182,14 +10228,29 @@ async def dm_treat(
             value=f"**{effective_heal}** wounds to heal (Intelligence {hc.intelligence} × 2 = {hc.intelligence * 2})",
             inline=False,
         )
+        approval_ch_id = store.get_approval_channel(guild)
+        approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
+        src_ch_id = interaction.channel_id if approval_ch else 0
         view = MedicineTreatView(
             healer_name=hc.name, target_id=patient_rec.id, target_name=pc.name,
             wounds_healed=effective_heal, treatment_type=treat_label, roll_result=result,
+            source_channel_id=src_ch_id,
         )
-        await interaction.response.send_message(
-            content="Treatment succeeded. A DM can authorize the healing below.",
-            embed=embed, view=view,
-        )
+        if approval_ch:
+            embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
+            embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
+            await approval_ch.send(
+                content="Treatment succeeded. A DM can authorize the healing below.",
+                embed=embed, view=view,
+            )
+            await interaction.response.send_message(
+                f"💊 Treatment on **{pc.name}** succeeded — healing approval routed to the DM channel."
+            )
+        else:
+            await interaction.response.send_message(
+                content="Treatment succeeded. A DM can authorize the healing below.",
+                embed=embed, view=view,
+            )
     elif success:
         if pc.wounds_taken <= 0:
             embed.add_field(name="Note", value=f"**{pc.name}** has no wounds to heal.", inline=False)
