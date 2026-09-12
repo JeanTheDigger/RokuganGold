@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 48 — Combat Log Channel
+## Status: Phase 49 — Held/Delayed Actions
 
 **Help & Navigation**
 
@@ -621,6 +621,7 @@ own room.
 | `/combat init` | **DM** adjusts a combatant's initiative mid-combat (covers re-rolls and delayed-action repositioning). |
 | `/combat hold` | **DM** toggles a combatant's held-action flag. Shown in the encounter display. |
 | `/combat delay` | **DM** toggles delayed status, with an optional new initiative value. |
+| `/combat act` | **DM** resolves a held/delayed combatant's action — clears the flag and resets action economy. |
 | `/combat surprise` | **DM** toggles the surprise-round flag. Auto-clears when Round 2 begins. |
 | `/combat mount` | Mount or dismount — toggles the Mounted condition on a combatant (DM only). |
 | `/dual_wield` | Show dual-wielding rules and off-hand penalties based on weapon size (Small −5, Medium −10, Large −15). |
@@ -677,6 +678,11 @@ level and death), healing, turn/round advances, conditions set/cleared, stances,
 Guard, Full Defense, grapple events, duel stages, creature attacks, spell damage,
 and medicine treatments are all logged as one-line entries. `/dm clear_log` removes
 the setting. The log is per-server (guild-scoped) and stored in the database.
+
+`/combat hold` and `/combat delay` let the DM mark a combatant as holding or
+delaying their action — the encounter display shows ⏸️HELD / ⏳DELAYED markers.
+`/combat act` resolves a held or delayed combatant's action: clears the flag,
+resets action economy, and logs the event to the combat log channel.
 
 Still to come: Vultr hosting (the one original wish-list item left).
 

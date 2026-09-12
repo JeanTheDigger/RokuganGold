@@ -4888,6 +4888,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/combat action", "Track Simple/Complex action economy per turn."),
         ("/combat init", "Adjust a combatant's initiative (DM only). Ties break by Reflexes."),
         ("/combat hold / delay", "Hold or delay a combatant's action (DM only)."),
+        ("/combat act", "A held/delayed combatant takes their action now (DM only)."),
         ("/combat surprise", "Toggle surprise round (DM only)."),
         ("/combat mount", "Mount or dismount (adds/removes Mounted condition)."),
         ("/combat full_defense", "Full Defense roll (Complex Action)."),
@@ -7192,7 +7193,8 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         return
     cb.held = not cb.held
     status = "holding" if cb.held else "no longer holding"
-    await interaction.response.send_message(f"**{cb.name}** is {status} their action.")
+    await interaction.response.send_message(f"**{cb.name}** is {status} their action.\n{_render_encounter(enc)}")
+    await _combat_log(str(interaction.guild_id), f"Hold: {cb.name} {'held' if cb.held else 'released'}")
 
 
 @combat_group.command(name="delay", description="Mark a combatant as delaying (DM only).")
@@ -7226,7 +7228,38 @@ async def combat_delay(
                 enc.turn_index = enc.combatants.index(cur)
     status = "delaying" if cb.delayed else "no longer delaying"
     init_note = f" (init → {cb.initiative})" if new_initiative is not None and cb.delayed else ""
-    await interaction.response.send_message(f"**{cb.name}** is {status}{init_note}.")
+    await interaction.response.send_message(f"**{cb.name}** is {status}{init_note}.\n{_render_encounter(enc)}")
+    await _combat_log(str(interaction.guild_id), f"Delay: {cb.name} {'delayed' if cb.delayed else 'released'}{init_note}")
+
+
+@combat_group.command(name="act", description="A held/delayed combatant takes their action now (DM only).")
+@app_commands.describe(name="Combatant name.")
+async def combat_act(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can resolve held/delayed actions.", ephemeral=True)
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    cb = enc.find(name)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    if not cb.held and not cb.delayed:
+        await interaction.response.send_message(f"**{cb.name}** is not held or delayed.", ephemeral=True)
+        return
+    was = "held" if cb.held else "delayed"
+    cb.held = False
+    cb.delayed = False
+    cb.actions_used = 0
+    await interaction.response.send_message(
+        f"**{cb.name}** acts now (was {was}).\n{_render_encounter(enc)}"
+    )
+    await _combat_log(str(interaction.guild_id), f"Act: {cb.name} (was {was})")
 
 
 @combat_group.command(name="surprise", description="Toggle the surprise round flag on the current encounter (DM only).")
