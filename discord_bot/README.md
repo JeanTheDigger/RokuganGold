@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 51: Arrow & Blowgun Specials (Armor TN Modifiers, Ninjutsu Scaling)
+## Status: Phase 52: Bow & Arrow Specials (Armor TN Modifiers, Bow Penalties, Ninjutsu Scaling)
 
 **Help & Navigation**
 

@@ -1856,6 +1856,12 @@ async def attack(
         atk_flat += armor_pen
         kata_notes.append(armor_note)
 
+    # Bow attack penalty (s39: Dai-kyu +10 on foot, Yumi/Han-kyu +10 mounted).
+    bow_pen, bow_pen_note = combat.bow_attack_penalty(weapon, "mounted" in atk_conds)
+    if bow_pen:
+        atk_flat += bow_pen
+        kata_notes.append(bow_pen_note)
+
     # Defender condition modifiers (Prone -10 Armor TN vs melee).
     # Kept separate from def_kata_bonus so it applies even when an override fires.
     def_conds = def_combatant.conditions if def_combatant else set()

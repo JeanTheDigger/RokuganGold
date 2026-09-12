@@ -34,7 +34,8 @@ from .dice import DiceEngine
 # Weapon catalog subset (values verbatim from individual_combat.gd WEAPON_CATALOG).
 # Keys used by the bot: rolled, kept, strength_adds, skill, trait, melee, size,
 # no_explode (shinai), double_reduction (bokken), armor_tn_mult (arrows/blowgun),
-# and half_range. Other special keys (thrown/charge/break/etc.) are intentionally
+# half_range, penalty_mounted, and penalty_on_foot (bows). Other special keys
+# (thrown/charge/break/etc.) are intentionally
 # omitted: those maneuvers are not modelled at this phase.
 WEAPON_CATALOG: dict[str, dict] = {
     # Swords (Kenjutsu)
@@ -72,10 +73,11 @@ WEAPON_CATALOG: dict[str, dict] = {
     "tonfa": {"rolled": 0, "kept": 3, "strength_adds": True, "skill": "Staves", "trait": "agility", "melee": True, "size": "Medium"},
     # War fan
     "war_fan": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "War Fan", "trait": "agility", "melee": True, "size": "Small"},
-    # Bows (Kyujutsu; Reflexes; no Strength to damage)
-    "yumi": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Large"},
-    "dai_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
-    "han_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
+    # Bows (Kyujutsu; Reflexes; no Strength to damage).
+    # penalty_mounted / penalty_on_foot: +N TN on attack rolls in that condition (s39).
+    "yumi": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Large", "penalty_mounted": 10},
+    "dai_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "penalty_on_foot": 10},
+    "han_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "penalty_mounted": 10},
     # Arrows (s39 ammunition — select as weapon to use a specific arrow type;
     # Kyujutsu / Reflexes same as bows; DR from the arrow, not the bow).
     # armor_tn_mult: multiplier on the target's armor TN bonus from armor.
@@ -348,6 +350,20 @@ def blowgun_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, in
     if ninjutsu >= 3:
         return 1, 0, "Blowgun DR 1k1 (Ninjutsu 3+)"
     return 0, 0, ""
+
+
+def bow_attack_penalty(weapon_name: str, is_mounted: bool) -> tuple[int, str]:
+    """Flat penalty from bow-specific restrictions (GDD s39).
+    Dai-kyu: +10 TN on foot. Han-kyu/Yumi: +10 TN on horseback.
+    Returns (flat_penalty, note). Penalty is negative (added to the attack roll)."""
+    wp = get_weapon_profile(weapon_name)
+    if wp.get("penalty_on_foot") and not is_mounted:
+        pen = wp["penalty_on_foot"]
+        return -pen, f"{weapon_name.replace('_', ' ').title()}: +{pen} TN (on foot, not mounted)"
+    if wp.get("penalty_mounted") and is_mounted:
+        pen = wp["penalty_mounted"]
+        return -pen, f"{weapon_name.replace('_', ' ').title()}: +{pen} TN (mounted)"
+    return 0, ""
 
 
 def resolve_attack(
