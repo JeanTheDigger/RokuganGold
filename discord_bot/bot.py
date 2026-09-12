@@ -1378,7 +1378,6 @@ class DamageView(discord.ui.View):
             for gc in enc.combatants:
                 if gc.guarding.lower() == target.name.lower():
                     guard_mod2 += 10
-                    break
             if dc and dc.guarding:
                 guard_mod2 -= 5
         if cond_tn_ovr is not None:
@@ -1814,7 +1813,7 @@ async def attack(
         maneuver_raises = max(0, maneuver_raises - mastery_free)
         kata_notes.extend(mastery_free_notes)
 
-    # Guard maneuver TN modifiers (s40): guarded target gets +10, guarder gets -5.
+    # Guard maneuver TN modifiers (s40): guarded target gets +10 per guarder, guarder gets -5.
     guard_mod = 0
     if enc and target_rec is not None:
         def_name_lower = target_rec.character.name.lower()
@@ -1822,7 +1821,6 @@ async def attack(
             if gc.guarding.lower() == def_name_lower:
                 guard_mod += 10
                 kata_notes.append(f"Guarded by {gc.name}: +10 Armor TN")
-                break
         if def_combatant and def_combatant.guarding:
             guard_mod -= 5
             kata_notes.append(f"Guarding {def_combatant.guarding}: −5 Armor TN")
@@ -4180,6 +4178,14 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
         return
     if g.name == w.name:
         await interaction.response.send_message("A combatant cannot guard themselves.", ephemeral=True)
+        return
+    if g.stance in ("full_attack", "full_defense", "center"):
+        reasons = {
+            "full_attack": "Guard is not available in Full Attack Stance (s40).",
+            "full_defense": "Only Free Actions allowed in Full Defense Stance.",
+            "center": "All Actions are forfeited in Center Stance.",
+        }
+        await interaction.response.send_message(f"**{g.name}**: {reasons[g.stance]}", ephemeral=True)
         return
     g.guarding = w.name
     _save_encounter(str(interaction.guild_id), enc)
