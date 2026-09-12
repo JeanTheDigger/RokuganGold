@@ -1,0 +1,13 @@
+# Secrets — NEVER commit the bot token.
+.env
+
+# Local database files (added in a later phase).
+*.db
+*.sqlite
+*.sqlite3
+
+# Python bytecode / virtualenv.
+__pycache__/
+*.pyc
+.venv/
+venv/
