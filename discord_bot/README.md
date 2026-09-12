@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 49: Held/Delayed Actions, Autocomplete, Encounter Persistence, Room Initiative
+## Status: Phase 50: Damage Type & Reduction (Creature Special Abilities, Bokken, Weapon Material)
 
 **Help & Navigation**
 
@@ -413,7 +413,8 @@ it lands, the DM authorizes the outcome."*
 
 `/attack` options: `weapon` (autocomplete), `raises` (+5 TN each),
 `increased_damage` (+5 TN and +1 damage die each), `maneuver`, `spend_void`,
-`attacker_stance`, `defender_stance`, and `bonus_tn` (DM situational modifier).
+`attacker_stance`, `defender_stance`, `bonus_tn` (DM situational modifier), and
+`weapon_material` (jade/crystal/obsidian/nemuranai — bypasses creature Invulnerability).
 
 **Maneuvers & Void** (the maneuver's raise cost is added to the TN automatically):
 
@@ -613,6 +614,24 @@ ningyo, and named antagonists (the Lost). Creatures whose sheet uses the human
 wound track (`Earth×2`) are handled correctly; one non-combat environmental
 hazard is excluded. `l5r_rules/creature_catalog.py` is generated: don't hand-edit
 it; re-run the extractor to refresh.
+
+**Creature Special Abilities (GDD s54.0)** — auto-applied when dealing damage to
+creatures via `/attack target_creature:`:
+
+| Tag | Effect | Bypassed by |
+|---|---|---|
+| `partial_invuln` | 1 Wound from normal attacks | jade/crystal/obsidian weapon, nemuranai, spells |
+| `superior_invuln` | 1 Wound from ALL attacks (spells too) | nothing (immune to everything) |
+| `partial_invuln_half_damage` | Half damage from normal attacks | jade/crystal/obsidian, nemuranai, spells |
+| `spirit` | Half damage from non-jade weapons and non-Jade/Crystal spells | jade/crystal/obsidian weapon (or Jade/Crystal spell) |
+| `undead` | No wound penalties; immune to Fear; functional until Dead | (DM reminder only) |
+
+Specify `weapon_material:` on `/attack` to indicate jade/crystal/obsidian/nemuranai.
+Creature spawn/view embeds now show "Special Abilities" for creatures with these tags.
+
+**Bokken weapon special** (GDD s39): targets hit by a bokken have their armor
+Reduction doubled before applying damage. Auto-applied in both PC-vs-PC and
+PC-vs-creature damage paths.
 
 **Rooms** (private play rooms: each is a Discord **private thread**)
 

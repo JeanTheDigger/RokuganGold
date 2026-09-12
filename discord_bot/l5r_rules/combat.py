@@ -40,7 +40,7 @@ WEAPON_CATALOG: dict[str, dict] = {
     "katana": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
     "wakizashi": {"rolled": 2, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Small"},
     "no_dachi": {"rolled": 3, "kept": 3, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Large"},
-    "bokken": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
+    "bokken": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium", "double_reduction": True},
     "ninja_to": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
     "parangu": {"rolled": 2, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
     "scimitar": {"rolled": 2, "kept": 3, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},

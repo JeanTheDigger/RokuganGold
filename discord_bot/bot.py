@@ -375,6 +375,9 @@ def build_creature_embed(record: storage.CreatureRecord) -> discord.Embed:
         + ("  💀 **SLAIN**" if dead else ""),
         inline=False,
     )
+    specials = creature.creature_special_notes(cr)
+    if specials:
+        embed.add_field(name="Special Abilities", value="\n".join(specials), inline=False)
     embed.set_footer(text=f"creature #{record.id}")
     return embed
 
@@ -902,6 +905,7 @@ class DamageView(discord.ui.View):
         called_shot_raises: int = 0,
         channel_id: int = 0,
         source_channel_id: int = 0,
+        weapon_material: str = "normal",
     ) -> None:
         super().__init__(timeout=1800)  # 30 min
         self.attacker_id = attacker_id
@@ -917,6 +921,7 @@ class DamageView(discord.ui.View):
         self.called_shot_raises = called_shot_raises
         self.channel_id = channel_id
         self.source_channel_id = source_channel_id
+        self.weapon_material = weapon_material
         # Relabel the primary button to match the maneuver, and hide the Void
         # button when it would be nonsensical (knockdown has no damage roll;
         # creature targets have no VP pool).
@@ -1071,9 +1076,15 @@ class DamageView(discord.ui.View):
                 feint_line = f"\nFeint bonus **+{fb}**"
             scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
             raw += scorp_bonus
-            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, *t_dmg_notes) if n)
-            reduction = max(0, cre_rec.creature.reduction - ignore - tsu_ignore)
-            applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction)
+            cre_base_red = cre_rec.creature.reduction
+            bokken_note = ""
+            if wp.get("double_reduction"):
+                bokken_note = f"Bokken: Reduction doubled ({cre_base_red} → {cre_base_red * 2})"
+                cre_base_red *= 2
+            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, *t_dmg_notes) if n)
+            reduction = max(0, cre_base_red - ignore - tsu_ignore)
+            bypasses = self.weapon_material in ("jade", "crystal", "obsidian", "nemuranai")
+            applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction, bypasses_invuln=bypasses)
             heal_line = ""
             if applied["is_dead"]:
                 heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
@@ -1089,6 +1100,10 @@ class DamageView(discord.ui.View):
                     min(self.called_shot_raises, 4), "specific part"
                 )
                 cre_cs_line = f"\n🎯 Called Shot: **{part}** ({self.called_shot_raises} raise{'s' if self.called_shot_raises != 1 else ''})"
+            mat_line = ""
+            if self.weapon_material != "normal":
+                mat_line = f"\n🔶 Weapon material: **{self.weapon_material.title()}**"
+            special_line = "".join(f"\n🛡️ {n}" for n in applied.get("special_notes", []))
             embed = discord.Embed(
                 title="⚔️ Damage applied",
                 color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
@@ -1097,9 +1112,9 @@ class DamageView(discord.ui.View):
                 name="Damage",
                 value=(
                     f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                    f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}{cre_cs_line}\n"
+                    f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}{cre_cs_line}{mat_line}\n"
                     f"Raw **{raw}** − reduction {applied['reduction']} = "
-                    f"**{applied['final_damage']}** wounds"
+                    f"**{applied['final_damage']}** wounds{special_line}"
                 ),
                 inline=False,
             )
@@ -1278,10 +1293,15 @@ class DamageView(discord.ui.View):
         kiho_red, kiho_red_notes = kiho_effects.defender_reduction_bonus(target)
         scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
         raw += scorp_bonus
+        base_red = target.armor_reduction
+        bokken_note = ""
+        if wp.get("double_reduction"):
+            bokken_note = f"Bokken: Reduction doubled ({base_red} → {base_red * 2})"
+            base_red *= 2
         kata_line = "".join(
-            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes) if n
+            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes) if n
         )
-        reduction = max(0, target.armor_reduction - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red)
+        reduction = max(0, base_red - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red)
         applied = combat.apply_damage(target, raw, reduction)
         void_line = ""
         if void_reduce:
@@ -1405,6 +1425,7 @@ class DamageView(discord.ui.View):
                 defender_stance=self.defender_stance,
                 channel_id=self.channel_id,
                 source_channel_id=self.source_channel_id,
+                weapon_material=self.weapon_material,
             )
             await interaction.followup.send(
                 content="A DM can authorize the 2nd attack's damage below.",
@@ -1445,6 +1466,7 @@ class DamageView(discord.ui.View):
                 target_creature_id=cre_rec.id,
                 channel_id=self.channel_id,
                 source_channel_id=self.source_channel_id,
+                weapon_material=self.weapon_material,
             )
             await interaction.followup.send(
                 content="A DM can authorize the 2nd attack's damage below.",
@@ -1517,6 +1539,14 @@ _MANEUVER_CHOICES = [
     app_commands.Choice(name="Extra Attack (5 raises → second attack)", value="extra_attack"),
 ]
 
+_WEAPON_MATERIAL_CHOICES = [
+    app_commands.Choice(name="Normal (steel/wood)", value="normal"),
+    app_commands.Choice(name="Jade", value="jade"),
+    app_commands.Choice(name="Crystal", value="crystal"),
+    app_commands.Choice(name="Obsidian", value="obsidian"),
+    app_commands.Choice(name="Nemuranai (magical)", value="nemuranai"),
+]
+
 
 # ===========================================================================
 # /combat group: initiative tracker
@@ -1547,13 +1577,15 @@ combat_void = app_commands.Group(name="void", description="Round-level Void Poin
     attacker_stance="Your stance (Full Attack = +2k1 to hit).",
     defender_stance="Target's stance (affects their Armor TN).",
     bonus_tn="Situational +/- to the target's Armor TN (DM discretion).",
+    weapon_material="Weapon material (jade/crystal/obsidian bypass Invulnerability; nemuranai too).",
 )
 @app_commands.autocomplete(
     weapon=_weapon_autocomplete, target_npc=_npc_autocomplete, attacker_npc=_npc_autocomplete,
     target_creature=_creature_instance_autocomplete,
 )
 @app_commands.choices(
-    attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES, maneuver=_MANEUVER_CHOICES
+    attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES, maneuver=_MANEUVER_CHOICES,
+    weapon_material=_WEAPON_MATERIAL_CHOICES,
 )
 @app_commands.checks.cooldown(1, 3.0)
 async def attack(
@@ -1570,6 +1602,7 @@ async def attack(
     attacker_stance: app_commands.Choice[str] | None = None,
     defender_stance: app_commands.Choice[str] | None = None,
     bonus_tn: app_commands.Range[int, -50, 50] = 0,
+    weapon_material: app_commands.Choice[str] | None = None,
 ) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -1896,6 +1929,7 @@ async def attack(
 
     a_name = attacker_rec.character.name
     hit = outcome["hit"]
+    mat = weapon_material.value if weapon_material else "normal"
     embed = discord.Embed(
         title=f"⚔️ {a_name} attacks {t_name}",
         color=discord.Color.green() if hit else discord.Color.greyple(),
@@ -1904,6 +1938,8 @@ async def attack(
         f"{outcome['skill_name']} {outcome['skill_rank']} / "
         f"{outcome['trait_name'].capitalize()} with **{weapon}**"
     )
+    if mat != "normal":
+        atk_desc += f"  ·  🔶 {mat.title()}"
     if a_stance != "attack":
         auto_tag = " *(enc)*" if (not a_stance_explicit and atk_combatant) else ""
         atk_desc += f"  ·  {a_stance.replace('_', ' ').title()}{auto_tag}"
@@ -1935,7 +1971,8 @@ async def attack(
     reminders = _active_ability_reminders(attacker, "attacker", drop_rate_limited=rate_limited_handled)
     if target_creature_rec is None:
         reminders += _active_ability_reminders(target_rec.character, "defender")
-    # Condition reminders for non-auto-applied effects (movement, stance limits, recovery).
+    if target_creature_rec is not None:
+        reminders += creature.creature_special_notes(target_creature_rec.creature)
     cond_reminders = condition_effects.condition_reminders(atk_conds)
     if def_conds:
         cond_reminders += condition_effects.condition_reminders(def_conds)
@@ -1963,14 +2000,14 @@ async def attack(
                 maneuver=man, attack_margin=outcome["margin"],
                 target_creature_id=target_creature_rec.id, defender_stance=d_stance,
                 called_shot_raises=cs_raises, channel_id=interaction.channel_id,
-                source_channel_id=src_ch_id,
+                source_channel_id=src_ch_id, weapon_material=mat,
             )
         else:
             view = DamageView(
                 attacker_rec.id, target_rec.id, weapon, increased_damage, a_name, t_name,
                 maneuver=man, attack_margin=outcome["margin"], defender_stance=d_stance,
                 called_shot_raises=cs_raises, channel_id=interaction.channel_id,
-                source_channel_id=src_ch_id,
+                source_channel_id=src_ch_id, weapon_material=mat,
             )
         prompt = {
             "disarm": "A DM can resolve the disarm below.",
