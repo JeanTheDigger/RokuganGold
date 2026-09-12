@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 49 — Held/Delayed Actions
+## Status: Phase 49 — Held/Delayed Actions, Autocomplete, Encounter Persistence, Room Initiative
 
 **Help & Navigation**
 
@@ -622,6 +622,7 @@ own room.
 | `/combat hold` | **DM** toggles a combatant's held-action flag. Shown in the encounter display. |
 | `/combat delay` | **DM** toggles delayed status, with an optional new initiative value. |
 | `/combat act` | **DM** resolves a held/delayed combatant's action — clears the flag and resets action economy. |
+| `/combat room` | **DM** adds all room members' active characters to initiative at once (run inside a room thread). |
 | `/combat surprise` | **DM** toggles the surprise-round flag. Auto-clears when Round 2 begins. |
 | `/combat mount` | Mount or dismount — toggles the Mounted condition on a combatant (DM only). |
 | `/dual_wield` | Show dual-wielding rules and off-hand penalties based on weapon size (Small −5, Medium −10, Large −15). |
@@ -683,6 +684,18 @@ the setting. The log is per-server (guild-scoped) and stored in the database.
 delaying their action — the encounter display shows ⏸️HELD / ⏳DELAYED markers.
 `/combat act` resolves a held or delayed combatant's action: clears the flag,
 resets action economy, and logs the event to the combat log channel.
+
+**Combatant autocomplete** — all combat commands that take a combatant name
+(`/combat stance`, `/combat condition_set`, `/combat guard`, etc.) now offer
+Discord autocomplete, so DMs pick from a dropdown rather than typing names.
+
+**Encounter persistence** — encounters are saved to the database on every state
+change and restored automatically on bot startup. A restart no longer loses an
+in-progress fight.
+
+**Room-scoped initiative** — `/combat room` (run inside a room thread) adds
+every room member's active character to initiative in one command. The DM can
+then add NPCs and creatures with `/combat npc` and `/combat creature`.
 
 Still to come: Vultr hosting (the one original wish-list item left).
 

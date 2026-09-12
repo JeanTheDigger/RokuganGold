@@ -65,6 +65,45 @@ class Combatant:
         bucket.add(key)
         return True
 
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "initiative": self.initiative,
+            "initiative_detail": self.initiative_detail,
+            "owner_id": self.owner_id,
+            "is_npc": self.is_npc,
+            "reflexes": self.reflexes,
+            "used_this_turn": list(self.used_this_turn),
+            "used_this_round": list(self.used_this_round),
+            "conditions": list(self.conditions),
+            "guarding": self.guarding,
+            "full_defense_bonus": self.full_defense_bonus,
+            "stance": self.stance,
+            "actions_used": self.actions_used,
+            "held": self.held,
+            "delayed": self.delayed,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Combatant":
+        return cls(
+            name=d["name"],
+            initiative=d["initiative"],
+            initiative_detail=d.get("initiative_detail", ""),
+            owner_id=d.get("owner_id"),
+            is_npc=d.get("is_npc", False),
+            reflexes=d.get("reflexes", 0),
+            used_this_turn=set(d.get("used_this_turn", [])),
+            used_this_round=set(d.get("used_this_round", [])),
+            conditions=set(d.get("conditions", [])),
+            guarding=d.get("guarding", ""),
+            full_defense_bonus=d.get("full_defense_bonus", 0),
+            stance=d.get("stance", "attack"),
+            actions_used=d.get("actions_used", 0),
+            held=d.get("held", False),
+            delayed=d.get("delayed", False),
+        )
+
 
 @dataclass
 class Encounter:
@@ -138,3 +177,25 @@ class Encounter:
             cur.held = False
             cur.delayed = False
         return cur
+
+    def to_dict(self) -> dict:
+        return {
+            "channel_id": self.channel_id,
+            "combatants": [c.to_dict() for c in self.combatants],
+            "round": self.round,
+            "turn_index": self.turn_index,
+            "started": self.started,
+            "surprise_round": self.surprise_round,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Encounter":
+        enc = cls(
+            channel_id=d["channel_id"],
+            round=d.get("round", 1),
+            turn_index=d.get("turn_index", 0),
+            started=d.get("started", False),
+            surprise_round=d.get("surprise_round", False),
+        )
+        enc.combatants = [Combatant.from_dict(c) for c in d.get("combatants", [])]
+        return enc

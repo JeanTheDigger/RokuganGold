@@ -82,6 +82,13 @@ CREATE TABLE IF NOT EXISTS combat_log_channels (
     guild_id   TEXT NOT NULL PRIMARY KEY,
     channel_id TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS encounters (
+    channel_id TEXT NOT NULL PRIMARY KEY,
+    guild_id   TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    updated_at REAL NOT NULL
+);
 """
 
 
@@ -410,3 +417,25 @@ class Store:
             self._conn.execute(
                 "DELETE FROM combat_log_channels WHERE guild_id = ?", (guild_id,)
             )
+
+    # -- encounter persistence -------------------------------------------------
+    def save_encounter(self, channel_id: str, guild_id: str, data: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO encounters (channel_id, guild_id, data, updated_at) "
+                "VALUES (?, ?, ?, ?) ON CONFLICT(channel_id) "
+                "DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
+                (channel_id, guild_id, data, time.time()),
+            )
+
+    def delete_encounter(self, channel_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM encounters WHERE channel_id = ?", (channel_id,)
+            )
+
+    def load_all_encounters(self) -> list[tuple[str, str]]:
+        """Return (channel_id, data_json) for every saved encounter."""
+        with self._lock:
+            rows = self._conn.execute("SELECT channel_id, data FROM encounters").fetchall()
+        return [(r["channel_id"], r["data"]) for r in rows]

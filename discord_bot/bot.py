@@ -11,6 +11,7 @@ Discord plumbing only. All game math lives in `l5r_rules/`; all persistence in
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 
@@ -71,6 +72,14 @@ class RokuganBot(discord.Client):
 
     async def on_ready(self) -> None:
         log.info("Logged in as %s (id=%s). Ready.", self.user, getattr(self.user, "id", "?"))
+        for ch_id_str, data_json in store.load_all_encounters():
+            try:
+                enc = encounter.Encounter.from_dict(json.loads(data_json))
+                encounters[int(ch_id_str)] = enc
+            except Exception:
+                log.warning("Failed to restore encounter for channel %s", ch_id_str)
+        if encounters:
+            log.info("Restored %d encounter(s) from database.", len(encounters))
 
 
 client = RokuganBot()
@@ -425,6 +434,14 @@ async def _combat_log(guild_id: str, message: str) -> None:
         pass
 
 
+def _save_encounter(guild_id: str, enc: encounter.Encounter) -> None:
+    store.save_encounter(str(enc.channel_id), guild_id, json.dumps(enc.to_dict()))
+
+
+def _delete_encounter(channel_id: int) -> None:
+    store.delete_encounter(str(channel_id))
+
+
 @client.tree.command(
     name="roll",
     description="Roll & Keep (L5R 4e). Example: rolled=7 kept=3, optionally against a TN.",
@@ -580,6 +597,17 @@ async def _creature_instance_autocomplete(
     recs = store.list_creatures(str(interaction.guild_id))
     names = [r.creature.name for r in recs if cur in r.creature.name.lower()]
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
+
+
+async def _combatant_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    enc = encounters.get(interaction.channel_id)
+    if enc is None or not enc.combatants:
+        return []
+    cur = current.lower().strip()
+    names = [c.name for c in enc.combatants if cur in c.name.lower()]
+    return [app_commands.Choice(name=n, value=n) for n in names[:25]]
 
 
 async def _school_autocomplete(
@@ -2712,12 +2740,15 @@ async def combat_start(interaction: discord.Interaction) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
         return
-    encounters[interaction.channel_id] = encounter.Encounter(channel_id=interaction.channel_id)
+    enc = encounter.Encounter(channel_id=interaction.channel_id)
+    encounters[interaction.channel_id] = enc
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
     await interaction.response.send_message(
         "⚔️ New encounter started. Add combatants with `/combat join` (your character) "
         "or `/combat add` (an NPC), then `/combat next` to begin."
     )
-    await _combat_log(str(interaction.guild_id), "--- Encounter started ---")
+    await _combat_log(guild, "--- Encounter started ---")
 
 
 def _get_or_create(channel_id: int) -> encounter.Encounter:
@@ -2761,6 +2792,7 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
         is_npc=False,
         reflexes=rec.character.reflexes,
     ))
+    _save_encounter(guild, enc)
     await interaction.response.send_message(_render_encounter(enc))
     await _combat_log(guild, f"Joined: {rec.character.name} (Init {result.total})")
 
@@ -2794,8 +2826,10 @@ async def combat_add(
         is_npc=True,
         reflexes=reflexes,
     ))
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
     await interaction.response.send_message(_render_encounter(enc))
-    await _combat_log(str(interaction.guild_id), f"Added NPC: {name} (Init {result.total})")
+    await _combat_log(guild, f"Added NPC: {name} (Init {result.total})")
 
 
 @combat_group.command(name="next", description="Advance to the next combatant's turn.")
@@ -2811,13 +2845,14 @@ async def combat_next(interaction: discord.Interaction) -> None:
         return
     prev_round = enc.round
     current = enc.advance()
+    guild = str(interaction.guild_id)
+    _save_encounter(guild, enc)
     parts = [f"➡️ It is now **{current.name}**'s turn."]
     reminders = condition_effects.condition_reminders(current.conditions)
     if reminders:
         parts.append("\n".join(reminders))
     parts.append(_render_encounter(enc))
     await interaction.response.send_message("\n\n".join(parts))
-    guild = str(interaction.guild_id)
     if enc.round != prev_round:
         await _combat_log(guild, f"--- Round {enc.round} ---")
     cond_str = f" [{', '.join(sorted(current.conditions))}]" if current.conditions else ""
@@ -2840,6 +2875,7 @@ async def combat_status(interaction: discord.Interaction) -> None:
 
 @combat_group.command(name="remove", description="Remove a combatant from initiative.")
 @app_commands.describe(name="The combatant name to remove.")
+@app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_remove(interaction: discord.Interaction, name: str) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -2848,6 +2884,7 @@ async def combat_remove(interaction: discord.Interaction, name: str) -> None:
     if enc is None or not enc.remove(name):
         await interaction.response.send_message(f"No combatant named **{name}** here.", ephemeral=True)
         return
+    _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(f"Removed **{name}**.\n\n{_render_encounter(enc)}")
 
 
@@ -2859,6 +2896,7 @@ async def combat_end(interaction: discord.Interaction) -> None:
     if encounters.pop(interaction.channel_id, None) is None:
         await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
+    _delete_encounter(interaction.channel_id)
     await interaction.response.send_message("⚔️ Encounter ended.")
     await _combat_log(str(interaction.guild_id), "--- Encounter ended ---")
 
@@ -2939,6 +2977,7 @@ async def combat_npc(interaction: discord.Interaction, name: str) -> None:
         is_npc=True,
         reflexes=rec.character.reflexes,
     ))
+    _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(_render_encounter(enc))
 
 
@@ -2954,6 +2993,7 @@ _CONDITION_CHOICES = [
     condition="The condition to apply.",
 )
 @app_commands.choices(condition=_CONDITION_CHOICES)
+@app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_condition_set(
     interaction: discord.Interaction,
     name: str,
@@ -2974,6 +3014,7 @@ async def combat_condition_set(
         await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
         return
     c.conditions.add(condition.value)
+    _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(
         f"**{c.name}** is now **{condition.name}**.\n\n{_render_encounter(enc)}"
     )
@@ -2986,6 +3027,7 @@ async def combat_condition_set(
     condition="The condition to remove.",
 )
 @app_commands.choices(condition=_CONDITION_CHOICES)
+@app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_condition_clear(
     interaction: discord.Interaction,
     name: str,
@@ -3006,6 +3048,7 @@ async def combat_condition_clear(
         await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
         return
     c.conditions.discard(condition.value)
+    _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(
         f"**{c.name}** is no longer **{condition.name}**.\n\n{_render_encounter(enc)}"
     )
@@ -3014,6 +3057,7 @@ async def combat_condition_clear(
 
 @combat_group.command(name="conditions", description="Show a combatant's active conditions.")
 @app_commands.describe(name="The combatant to check.")
+@app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_conditions(interaction: discord.Interaction, name: str) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -3042,6 +3086,7 @@ async def combat_conditions(interaction: discord.Interaction, name: str) -> None
     guarder="The combatant doing the guarding.",
     ward="The combatant being protected.",
 )
+@app_commands.autocomplete(guarder=_combatant_autocomplete, ward=_combatant_autocomplete)
 async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
@@ -3065,6 +3110,7 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
         await interaction.response.send_message("A combatant cannot guard themselves.", ephemeral=True)
         return
     g.guarding = w.name
+    _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(
         f"🛡️ **{g.name}** is guarding **{w.name}**.\n"
         f"  Ward: +10 Armor TN · Guarder: −5 Armor TN\n"
@@ -3079,6 +3125,7 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
     reflexes="Override Reflexes (for ad-hoc NPCs without a sheet).",
     defense_skill="Override Defense skill rank (for ad-hoc NPCs without a sheet).",
 )
+@app_commands.autocomplete(combatant=_combatant_autocomplete)
 async def combat_full_defense(
     interaction: discord.Interaction,
     combatant: str,
@@ -3121,6 +3168,7 @@ async def combat_full_defense(
         return
     result = combat.roll_full_defense(ref, def_sk, engine)
     cb.full_defense_bonus = result["bonus"]
+    _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(
         f"🛡️ **{cb.name}** enters **Full Defense**.\n"
         f"  Roll: {result['rolled']}k{result['kept']} → **{result['total']}** · "
@@ -4820,6 +4868,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/combat guard", "Guard another combatant (+10 TN ward)."),
         ("/combat full_defense", "Full Defense roll (Complex Action)."),
         ("/combat creature", "Add a spawned creature to initiative."),
+        ("/combat room", "Add all room members' active characters to initiative (DM)."),
         ("/combat npc", "Add a stored NPC to initiative."),
     ]),
     ("Grappling & Dueling", [
@@ -5427,7 +5476,60 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
         is_npc=True,
         reflexes=rec.creature.air,
     ))
+    _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(_render_encounter(enc))
+
+
+@combat_group.command(
+    name="room",
+    description="Add all room members' active characters to initiative (run inside a room thread). DM only.",
+)
+async def combat_room(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message("Only a DM can bulk-add room members.", ephemeral=True)
+        return
+    rec = store.get_room_by_thread(str(interaction.channel_id))
+    if rec is None:
+        await interaction.response.send_message(
+            "Run this inside a room's thread (open one with `/room create`).", ephemeral=True
+        )
+        return
+    guild = str(interaction.guild_id)
+    member_ids = store.list_room_members(rec.id)
+    enc = _get_or_create(interaction.channel_id)
+    added: list[str] = []
+    skipped: list[str] = []
+    for uid in member_ids:
+        char_rec = store.get_active(guild, uid)
+        if char_rec is None:
+            skipped.append(f"<@{uid}>")
+            continue
+        result = combat.roll_initiative(char_rec.character, engine)
+        enc.remove(char_rec.character.name)
+        enc.add(encounter.Combatant(
+            name=char_rec.character.name,
+            initiative=result.total,
+            initiative_detail=f"kept {result.kept_dice} = {result.total}",
+            owner_id=uid,
+            is_npc=False,
+            reflexes=char_rec.character.reflexes,
+        ))
+        added.append(f"**{char_rec.character.name}** (init {result.total})")
+    _save_encounter(guild, enc)
+    parts = []
+    if added:
+        parts.append("Added: " + ", ".join(added))
+    if skipped:
+        parts.append("Skipped (no active character): " + ", ".join(skipped))
+    if not added and not skipped:
+        parts.append("No members in this room.")
+    parts.append(_render_encounter(enc))
+    await interaction.response.send_message("\n".join(parts))
+    for entry in added:
+        await _combat_log(guild, f"Room join: {entry}")
 
 
 # ===========================================================================
@@ -7109,6 +7211,7 @@ _STANCE_CHOICES = [
     stance="Stance to adopt.",
 )
 @app_commands.choices(stance=_STANCE_CHOICES)
+@app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_stance(
     interaction: discord.Interaction,
     name: str,
@@ -7129,6 +7232,7 @@ async def combat_stance(
         await interaction.response.send_message("Invalid stance.", ephemeral=True)
         return
     cb.stance = stance.value
+    _save_encounter(str(interaction.guild_id), enc)
     label = stance.name
     effects = _stance_effects(stance.value)
     msg = f"**{cb.name}** adopts **{label}** stance."
@@ -7143,6 +7247,7 @@ async def combat_stance(
     name="Combatant name.",
     value="New initiative total.",
 )
+@app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_init(
     interaction: discord.Interaction,
     name: str,
@@ -7169,6 +7274,7 @@ async def combat_init(
         cur = enc.current()
         if cur is not None:
             enc.turn_index = enc.combatants.index(cur)
+    _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(
         f"**{cb.name}** initiative {old} → **{value}**\n{_render_encounter(enc)}"
     )
@@ -7176,6 +7282,7 @@ async def combat_init(
 
 @combat_group.command(name="hold", description="Mark a combatant as holding their action (DM only).")
 @app_commands.describe(name="Combatant name.")
+@app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_hold(interaction: discord.Interaction, name: str) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Use in a server channel.", ephemeral=True)
@@ -7192,6 +7299,7 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
         return
     cb.held = not cb.held
+    _save_encounter(str(interaction.guild_id), enc)
     status = "holding" if cb.held else "no longer holding"
     await interaction.response.send_message(f"**{cb.name}** is {status} their action.\n{_render_encounter(enc)}")
     await _combat_log(str(interaction.guild_id), f"Hold: {cb.name} {'held' if cb.held else 'released'}")
@@ -7199,6 +7307,7 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
 
 @combat_group.command(name="delay", description="Mark a combatant as delaying (DM only).")
 @app_commands.describe(name="Combatant name.", new_initiative="Optional new initiative value.")
+@app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_delay(
     interaction: discord.Interaction,
     name: str,
@@ -7226,6 +7335,7 @@ async def combat_delay(
             cur = enc.current()
             if cur is not None:
                 enc.turn_index = enc.combatants.index(cur)
+    _save_encounter(str(interaction.guild_id), enc)
     status = "delaying" if cb.delayed else "no longer delaying"
     init_note = f" (init → {cb.initiative})" if new_initiative is not None and cb.delayed else ""
     await interaction.response.send_message(f"**{cb.name}** is {status}{init_note}.\n{_render_encounter(enc)}")
@@ -7234,6 +7344,7 @@ async def combat_delay(
 
 @combat_group.command(name="act", description="A held/delayed combatant takes their action now (DM only).")
 @app_commands.describe(name="Combatant name.")
+@app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_act(interaction: discord.Interaction, name: str) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Use in a server channel.", ephemeral=True)
@@ -7256,6 +7367,7 @@ async def combat_act(interaction: discord.Interaction, name: str) -> None:
     cb.held = False
     cb.delayed = False
     cb.actions_used = 0
+    _save_encounter(str(interaction.guild_id), enc)
     await interaction.response.send_message(
         f"**{cb.name}** acts now (was {was}).\n{_render_encounter(enc)}"
     )
@@ -7275,6 +7387,7 @@ async def combat_surprise(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     enc.surprise_round = not enc.surprise_round
+    _save_encounter(str(interaction.guild_id), enc)
     state = "ON" if enc.surprise_round else "OFF"
     await interaction.response.send_message(f"Surprise round: **{state}**\n{_render_encounter(enc)}")
 
@@ -7476,6 +7589,7 @@ async def battle_damage(
     name="Combatant name.",
     dismount="Dismount instead of mounting.",
 )
+@app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_mount(
     interaction: discord.Interaction,
     name: str,
@@ -7497,9 +7611,11 @@ async def combat_mount(
         return
     if dismount:
         cb.conditions.discard("mounted")
+        _save_encounter(str(interaction.guild_id), enc)
         await interaction.response.send_message(f"**{cb.name}** dismounts.")
     else:
         cb.conditions.add("mounted")
+        _save_encounter(str(interaction.guild_id), enc)
         await interaction.response.send_message(
             f"**{cb.name}** mounts up. Mounted combat: +1k0 damage on melee "
             f"vs unmounted, +1 rolled die on Horsemanship checks. Mounted archery "
@@ -7858,6 +7974,7 @@ async def spell_damage(
     app_commands.Choice(name="Free Action (no cost)", value="free"),
     app_commands.Choice(name="Reset (undo)", value="reset"),
 ])
+@app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_action(
     interaction: discord.Interaction,
     name: str,
@@ -7879,6 +7996,7 @@ async def combat_action(
         return
     if action_type.value == "reset":
         cb.actions_used = 0
+        _save_encounter(str(interaction.guild_id), enc)
         await interaction.response.send_message(f"**{cb.name}** — actions reset.")
         return
     if action_type.value == "free":
@@ -7889,12 +8007,14 @@ async def combat_action(
             await interaction.response.send_message(f"**{cb.name}** has already used an action this turn.", ephemeral=True)
             return
         cb.actions_used = 2
+        _save_encounter(str(interaction.guild_id), enc)
         await interaction.response.send_message(f"**{cb.name}** takes a **Complex Action** (turn used).")
     else:
         if cb.actions_used >= 2:
             await interaction.response.send_message(f"**{cb.name}** has no actions remaining this turn.", ephemeral=True)
             return
         cb.actions_used += 1
+        _save_encounter(str(interaction.guild_id), enc)
         remaining = 2 - cb.actions_used
         await interaction.response.send_message(
             f"**{cb.name}** takes a **Simple Action** ({remaining} action{'s' if remaining != 1 else ''} remaining)."
