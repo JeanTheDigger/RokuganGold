@@ -2726,6 +2726,165 @@ dm_npc = app_commands.Group(name="npc", description="Generate and manage NPC cha
 dm_room = app_commands.Group(name="room", description="Create private play rooms and invite people.", parent=dm)
 
 
+# ---------------------------------------------------------------------------
+# /dm wizard — interactive DM command menu
+# ---------------------------------------------------------------------------
+_DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
+    ("\U0001f3ad", "Session & World", "Manage your game session and world state.", [
+        ("/dm party", "Overview of all active PCs"),
+        ("/dm new_day", "New day: refresh spells, natural healing"),
+        ("/dm roles", "Show Fortune and Kami role holders"),
+        ("/dm influence", "Track Influence Points (court scene)"),
+        ("/dm room create", "Create a private play room (thread)"),
+        ("/dm room invite / kick", "Add or remove room members"),
+        ("/dm room list / members / close", "List, inspect, or close rooms"),
+    ]),
+    ("\U0001f9d1‍⚖️", "NPCs", "Create and manage NPC samurai.", [
+        ("/dm npc generate", "Generate NPC from Clan/Family/School/Rank"),
+        ("/dm npc view / list", "View one NPC or list all on this server"),
+        ("/dm npc trait / skill / set", "Edit Traits, Skills, or numeric fields"),
+        ("/dm npc wound / heal", "Apply or heal wounds"),
+        ("/dm npc rename / delete", "Rename or remove an NPC"),
+    ]),
+    ("\U0001f409", "Creatures", "Bestiary creature management.", [
+        ("/dm creature catalog", "Search bestiary templates"),
+        ("/dm creature spawn", "Spawn a creature from a template"),
+        ("/dm creature view / list", "View or list spawned creatures"),
+        ("/dm creature attack", "Creature attacks a PC/NPC"),
+        ("/dm creature wound / heal", "Apply or heal creature wounds"),
+        ("/dm creature delete", "Remove a spawned creature"),
+    ]),
+    ("⚔️", "Combat", "Start encounters and manage combatants.", [
+        ("/combat start / end", "Start or end an encounter"),
+        ("/combat join / add", "Add PCs or custom combatants to initiative"),
+        ("/combat npc / creature", "Add a stored NPC or creature to initiative"),
+        ("/combat room", "Add all room members at once"),
+        ("/combat next / status / remove", "Advance turn, view tracker, remove"),
+        ("/combat summary", "Compact stat overview of all combatants"),
+        ("/combat attack", "Attack a character, NPC, or creature"),
+        ("/combat stance / guard / full_defense", "Set stance or declare defense"),
+        ("/combat mount", "Mount or dismount"),
+        ("/combat action", "Track Simple/Complex action usage"),
+    ]),
+    ("\U0001f504", "Conditions & Initiative", "Adjust conditions and turn order.", [
+        ("/combat condition set / clear", "Apply or remove a condition"),
+        ("/combat condition list", "List conditions on a combatant"),
+        ("/combat turn init", "Adjust a combatant's initiative value"),
+        ("/combat turn hold / delay / act", "Hold, delay, or resolve held action"),
+        ("/combat turn surprise", "Toggle the surprise round flag"),
+    ]),
+    ("\U0001f91c", "Grapple, Duel & Battle", "Subsystem combat mechanics.", [
+        ("/combat grapple initiate", "Start a grapple (Jiujutsu/Agility)"),
+        ("/combat grapple control", "Contested control (Jiujutsu/Strength)"),
+        ("/combat grapple hit / throw / break_free", "Grapple actions"),
+        ("/combat duel assess", "Assessment (Iaijutsu/Awareness)"),
+        ("/combat duel focus", "Focus (contested Iaijutsu/Void)"),
+        ("/combat duel strike", "Strike (Iaijutsu/Reflexes + damage)"),
+        ("/combat battle roll / damage", "Mass battle engagement and damage"),
+    ]),
+    ("\U0001f3af", "Skill Checks", "Roll skill and trait checks for characters.", [
+        ("/check skill", "Generic Skill/Trait vs TN"),
+        ("/check contest", "Contested roll between two characters"),
+        ("/check fear / honor", "Fear or Honor Roll"),
+        ("/check stealth / investigate", "Stealth or Investigation"),
+        ("/check social / craft / lore", "Social, Craft, or Lore"),
+        ("/check poison / medicine", "Poison resistance or Medicine"),
+        ("/check horsemanship", "Mounted maneuver check"),
+    ]),
+    ("\U0001fa78", "Damage, Healing & Taint", "Manage character health.", [
+        ("/dm damage", "Apply damage to a character"),
+        ("/dm heal", "Heal wounds on a character"),
+        ("/dm treat", "Medicine treatment roll"),
+        ("/dm taint", "View or modify Shadowlands Taint"),
+    ]),
+    ("✨", "Spells & Crafting", "Spell support and extended crafting.", [
+        ("/spell cast", "Cast a spell (Ring + School Rank)"),
+        ("/spell resist", "Target resists a spell (Willpower vs TN)"),
+        ("/spell damage", "Roll spell damage dice"),
+        ("/dm craft_extended", "Extended crafting (multi-step project)"),
+    ]),
+    ("\U0001f4b0", "XP & Advancement", "Grant and manage Experience Points.", [
+        ("/sheet xp grant", "Grant XP to a player"),
+        ("/sheet xp balance", "Show a character's available XP"),
+        ("/sheet xp costs", "XP cost reference table"),
+    ]),
+    ("\U0001f6e0️", "Admin (Kami Only)", "Server administration commands.", [
+        ("/dm log_channel", "Set combat event log channel"),
+        ("/dm clear_log", "Stop combat event logging"),
+    ]),
+]
+
+
+class _DmWizardCatSelect(discord.ui.Select):
+    def __init__(self) -> None:
+        options = [
+            discord.SelectOption(label=name, emoji=emoji, description=desc[:100])
+            for emoji, name, desc, _ in _DM_WIZARD_CATS
+        ]
+        super().__init__(placeholder="What do you need to do?", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        chosen = self.values[0]
+        cat = next((c for c in _DM_WIZARD_CATS if c[1] == chosen), None)
+        if cat is None:
+            await interaction.response.send_message("Category not found.", ephemeral=True)
+            return
+        emoji, name, desc, commands = cat
+        embed = discord.Embed(
+            title=f"{emoji} {name}",
+            description=desc,
+            color=discord.Color.dark_gold(),
+        )
+        lines: list[str] = []
+        for cmd, hint in commands:
+            lines.append(f"`{cmd}`\n {hint}")
+        embed.add_field(name="Commands", value="\n".join(lines), inline=False)
+        embed.set_footer(text="Type any command in the chat bar — Discord will autocomplete the parameters.")
+        view = discord.ui.View(timeout=300)
+        back_btn = discord.ui.Button(label="Back to categories", style=discord.ButtonStyle.secondary)
+
+        async def on_back(btn_inter: discord.Interaction) -> None:
+            view2 = discord.ui.View(timeout=300)
+            view2.add_item(_DmWizardCatSelect())
+            await btn_inter.response.edit_message(
+                content=None,
+                embed=discord.Embed(
+                    title="\U0001f3b2 DM Command Menu",
+                    description="Pick a category to see available commands.",
+                    color=discord.Color.dark_gold(),
+                ),
+                view=view2,
+            )
+
+        back_btn.callback = on_back
+        view.add_item(back_btn)
+        await interaction.response.edit_message(content=None, embed=embed, view=view)
+
+
+@dm.command(name="wizard", description="Interactive command menu — browse all Fortune and Kami actions by category.")
+async def dm_wizard_cmd(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to use the DM wizard.",
+            ephemeral=True,
+        )
+        return
+    view = discord.ui.View(timeout=300)
+    view.add_item(_DmWizardCatSelect())
+    await interaction.response.send_message(
+        embed=discord.Embed(
+            title="\U0001f3b2 DM Command Menu",
+            description="Pick a category to see available commands.",
+            color=discord.Color.dark_gold(),
+        ),
+        view=view,
+        ephemeral=True,
+    )
+
+
 @dm.command(name="party", description="DM overview — all active PCs on this server.")
 async def party_overview(interaction: discord.Interaction) -> None:
     if not _guild_ok(interaction):
@@ -5161,6 +5320,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/sheet xp grant / balance / trait / skill / ...", "XP and advancement."),
     ]),
     ("DM Management (Fortune/Kami)", [
+        ("/dm wizard", "Interactive command menu — browse all DM actions by category."),
         ("/dm roles", "Show who has the Fortune and Kami roles."),
         ("/dm party", "Overview of all active PCs."),
         ("/dm new_day", "Advance to a new day: refresh spell slots & heal all PCs."),
