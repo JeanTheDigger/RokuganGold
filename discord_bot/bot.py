@@ -3430,12 +3430,18 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         slots_str += f", Bonus {c.void_spell_bonus}"
         parts.append(f"slots: {slots_str}")
         lines.append(f"**{c.name}**: {' · '.join(parts)}")
+    date_str = _advance_calendar(guild)
     embed = discord.Embed(
         title="New Day",
         description="\n".join(lines),
         color=discord.Color.green(),
     )
-    embed.set_footer(text="Rest: full VP · Stamina x 2 healing · Spell slots: Ring + School Rank per element")
+    footer = "Rest: full VP · Stamina x 2 healing · Spell slots: Ring + School Rank per element"
+    if date_str:
+        embed.add_field(name="Calendar", value=date_str, inline=False)
+    else:
+        footer += " · Set the date with /dm setdate"
+    embed.set_footer(text=footer)
     await interaction.response.send_message(embed=embed)
 
 
@@ -3443,6 +3449,23 @@ def _format_rokugani_date(year: int, month: int, day: int) -> str:
     """Format a Rokugani date as a human-readable string."""
     month_name, season = ROKUGANI_MONTHS[month - 1]
     return f"Day {day} of the Month of the {month_name}, {season} — Year {year} (Isawa Calendar)"
+
+
+def _advance_calendar(guild_id: str) -> str | None:
+    """Advance the guild's calendar by 1 day. Returns the new date string, or None if no date set."""
+    cal = store.get_calendar(guild_id)
+    if cal is None:
+        return None
+    year, month, day = cal
+    day += 1
+    if day > DAYS_PER_MONTH:
+        day = 1
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    store.set_calendar(guild_id, year, month, day)
+    return _format_rokugani_date(year, month, day)
 
 
 @dm.command(name="setdate", description="Set the in-game Rokugani calendar date. Fortune role required.")
