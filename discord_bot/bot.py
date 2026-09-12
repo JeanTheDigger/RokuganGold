@@ -67,6 +67,10 @@ encounters: dict[int, encounter.Encounter] = {}
 # In-memory roll history: channel_id → deque of (timestamp, user_display, description, total).
 _roll_history: dict[int, deque] = defaultdict(lambda: deque(maxlen=50))
 
+# Cached Discord webhooks for NPC speech, keyed by parent channel id.
+_npc_webhooks: dict[int, discord.Webhook] = {}
+WEBHOOK_NAME = "Rokugan NPC"
+
 
 def _log_roll(channel_id: int, user: str, description: str, total: int | str) -> None:
     _roll_history[channel_id].append((monotonic(), user, description, total))
@@ -3096,6 +3100,8 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/dm npc trait / skill / set", "Edit Traits, Skills, or numeric fields"),
         ("/dm npc wound / heal", "Apply or heal wounds"),
         ("/dm npc rename / delete", "Rename or remove an NPC"),
+        ("/dm npc place / dismiss", "Place or remove an NPC in a room"),
+        ("/dm npc say", "Speak as an NPC (webhook — appears as their name)"),
     ]),
     ("\U0001f409", "Creatures", "Bestiary creature management.", [
         ("/dm creature catalog", "Search bestiary templates"),
@@ -5826,6 +5832,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/dm craft_extended", "Multi-step extended crafting rolls with quality tiers."),
         ("/dm log_channel / clear_log", "Combat event logging (Kami only)."),
         ("/dm npc generate / view / list / ...", "Generate and manage NPC samurai."),
+        ("/dm npc place / dismiss / say", "Place NPCs in rooms and speak as them."),
         ("/dm creature catalog / spawn / attack / ...", "Bestiary creature management."),
         ("/dm room create / invite / kick / ...", "Private play rooms."),
     ]),
@@ -6202,6 +6209,135 @@ async def npc_rename(
     )
 
 
+# -- NPC room placement & speech -------------------------------------------
+
+async def _get_npc_webhook(channel: discord.TextChannel) -> discord.Webhook:
+    """Get or create a reusable webhook on *channel* for NPC speech."""
+    cached = _npc_webhooks.get(channel.id)
+    if cached is not None:
+        return cached
+    for wh in await channel.webhooks():
+        if wh.name == WEBHOOK_NAME and wh.user == client.user:
+            _npc_webhooks[channel.id] = wh
+            return wh
+    wh = await channel.create_webhook(name=WEBHOOK_NAME)
+    _npc_webhooks[channel.id] = wh
+    return wh
+
+
+async def _room_npc_autocomplete(
+    interaction: discord.Interaction, current: str,
+) -> list[app_commands.Choice[str]]:
+    """Autocomplete listing NPCs placed in the current room."""
+    rec = store.get_room_by_thread(str(interaction.channel_id))
+    if rec is None:
+        return []
+    names = store.list_room_npcs(rec.id)
+    cur = current.lower().strip()
+    return [
+        app_commands.Choice(name=n, value=n)
+        for n in sorted(names) if cur in n.lower()
+    ][:25]
+
+
+@dm_npc.command(name="place", description="Place an NPC in this room (run inside a room thread). Fortune role required.")
+@app_commands.describe(name="NPC to place in the room.")
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_place(interaction: discord.Interaction, name: str) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    room = store.get_room_by_thread(str(interaction.channel_id))
+    if room is None:
+        await interaction.response.send_message(
+            "Run this inside a room's thread (open one with `/dm room create`).", ephemeral=True
+        )
+        return
+    store.place_npc_in_room(room.id, rec.character.name)
+    npcs = store.list_room_npcs(room.id)
+    npc_list = ", ".join(f"**{n}**" for n in sorted(npcs))
+    await interaction.response.send_message(
+        f"🎭 **{rec.character.name}** enters **{room.name}**.\n"
+        f"NPCs present: {npc_list}"
+    )
+
+
+@dm_npc.command(name="dismiss", description="Remove an NPC from this room. Fortune role required.")
+@app_commands.describe(name="NPC to remove from the room.")
+@app_commands.autocomplete(name=_room_npc_autocomplete)
+async def npc_dismiss(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True
+        )
+        return
+    room = store.get_room_by_thread(str(interaction.channel_id))
+    if room is None:
+        await interaction.response.send_message(
+            "Run this inside a room's thread (open one with `/dm room create`).", ephemeral=True
+        )
+        return
+    current = store.list_room_npcs(room.id)
+    matched = next((n for n in current if n.lower() == name.lower()), None)
+    if matched is None:
+        await interaction.response.send_message(
+            f"**{name}** is not in this room.", ephemeral=True
+        )
+        return
+    store.remove_npc_from_room(room.id, matched)
+    remaining = store.list_room_npcs(room.id)
+    npc_list = ", ".join(f"**{n}**" for n in sorted(remaining)) if remaining else "none"
+    await interaction.response.send_message(
+        f"🎭 **{matched}** leaves **{room.name}**.\nNPCs present: {npc_list}"
+    )
+
+
+@dm_npc.command(name="say", description="Speak as an NPC (posts as their name via webhook). Fortune role required.")
+@app_commands.describe(name="Which NPC speaks.", message="What they say.")
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_say(interaction: discord.Interaction, name: str, message: app_commands.Range[str, 1, 2000]) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True
+        )
+        return
+    guild = str(interaction.guild_id)
+    npc_rec = store.get_by_name(guild, NPC_OWNER, name)
+    if npc_rec is None:
+        await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
+        return
+    channel = interaction.channel
+    thread_target = None
+    if isinstance(channel, discord.Thread):
+        thread_target = channel
+        channel = channel.parent
+    if not isinstance(channel, discord.TextChannel):
+        await interaction.response.send_message(
+            "Webhook speech only works in text channels (or room threads).", ephemeral=True
+        )
+        return
+    try:
+        wh = await _get_npc_webhook(channel)
+        kwargs: dict = {"content": message, "username": npc_rec.character.name, "wait": True}
+        if thread_target is not None:
+            kwargs["thread"] = thread_target
+        await wh.send(**kwargs)
+        await interaction.response.send_message("✓", ephemeral=True, delete_after=1)
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "I need **Manage Webhooks** permission in this channel to speak as NPCs.", ephemeral=True
+        )
+    except discord.HTTPException as exc:
+        await interaction.response.send_message(f"Webhook failed: {exc}", ephemeral=True)
+
+
 # ===========================================================================
 # /room group: private-thread play rooms with invites
 # ===========================================================================
@@ -6315,9 +6451,12 @@ async def room_members(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(err, ephemeral=True)
         return
     ids = store.list_room_members(rec.id)
-    mentions = ", ".join(f"<@{uid}>" for uid in ids) if ids else " "
+    mentions = ", ".join(f"<@{uid}>" for uid in ids) if ids else "none"
+    npcs = store.list_room_npcs(rec.id)
+    npc_line = "\n🎭 NPCs: " + ", ".join(f"**{n}**" for n in sorted(npcs)) if npcs else ""
     await interaction.response.send_message(
-        f"🏮 **{rec.name}**: host <@{rec.host_id}>\nMembers: {mentions}", ephemeral=True
+        f"🏮 **{rec.name}**: host <@{rec.host_id}>\nMembers: {mentions}{npc_line}",
+        ephemeral=True,
     )
 
 
@@ -6332,11 +6471,15 @@ async def room_list(interaction: discord.Interaction) -> None:
             "No open rooms. Create one with `/room create`.", ephemeral=True
         )
         return
-    lines = [
-        f"• <#{r.thread_id}>: **{r.name}** (host <@{r.host_id}>, "
-        f"{len(store.list_room_members(r.id))} members)"
-        for r in rooms
-    ]
+    lines = []
+    for r in rooms:
+        n_members = len(store.list_room_members(r.id))
+        n_npcs = len(store.list_room_npcs(r.id))
+        npc_tag = f", {n_npcs} NPC{'s' if n_npcs != 1 else ''}" if n_npcs else ""
+        lines.append(
+            f"• <#{r.thread_id}>: **{r.name}** (host <@{r.host_id}>, "
+            f"{n_members} member{'s' if n_members != 1 else ''}{npc_tag})"
+        )
     await interaction.response.send_message("🏮 **Open rooms: **\n" + "\n".join(lines[:40]), ephemeral=True)
 
 
@@ -6354,6 +6497,7 @@ async def room_close(interaction: discord.Interaction) -> None:
             "Only the room host or a DM can close it.", ephemeral=True
         )
         return
+    store.clear_room_npcs(rec.id)
     store.close_room(rec.id)
     await interaction.response.send_message(f"🏮 Room **{rec.name}** closed. Archiving the thread.")
     try:

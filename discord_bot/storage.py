@@ -102,6 +102,12 @@ CREATE TABLE IF NOT EXISTS macros (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_macro_unique
     ON macros (guild_id, user_id, name COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS room_npcs (
+    room_id  INTEGER NOT NULL,
+    npc_name TEXT NOT NULL,
+    PRIMARY KEY (room_id, npc_name)
+);
 """
 
 
@@ -366,6 +372,32 @@ class Store:
                 "SELECT user_id FROM room_members WHERE room_id = ?", (room_id,)
             ).fetchall()
         return [r["user_id"] for r in rows]
+
+    # -- room NPCs -------------------------------------------------------------
+    def place_npc_in_room(self, room_id: int, npc_name: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO room_npcs (room_id, npc_name) VALUES (?, ?)",
+                (room_id, npc_name),
+            )
+
+    def remove_npc_from_room(self, room_id: int, npc_name: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM room_npcs WHERE room_id = ? AND npc_name = ?",
+                (room_id, npc_name),
+            )
+
+    def list_room_npcs(self, room_id: int) -> list[str]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT npc_name FROM room_npcs WHERE room_id = ?", (room_id,)
+            ).fetchall()
+        return [r["npc_name"] for r in rows]
+
+    def clear_room_npcs(self, room_id: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM room_npcs WHERE room_id = ?", (room_id,))
 
     # -- creatures -------------------------------------------------------------
     def _row_to_creature(self, row: sqlite3.Row) -> CreatureRecord:
