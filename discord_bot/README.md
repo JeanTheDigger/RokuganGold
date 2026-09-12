@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 50: Damage Type & Reduction (Creature Special Abilities, Bokken, Weapon Material)
+## Status: Phase 51: Arrow & Blowgun Specials (Armor TN Modifiers, Ninjutsu Scaling)
 
 **Help & Navigation**
 
@@ -632,6 +632,25 @@ Creature spawn/view embeds now show "Special Abilities" for creatures with these
 **Bokken weapon special** (GDD s39): targets hit by a bokken have their armor
 Reduction doubled before applying damage. Auto-applied in both PC-vs-PC and
 PC-vs-creature damage paths.
+
+**Arrow & blowgun specials** (GDD s39): select the arrow type as your weapon in
+`/attack` to apply its special effect. Arrow entries in the weapon catalog use
+Kyujutsu/Reflexes like bows.
+
+| Weapon | DR | Armor TN Effect | Other |
+|---|---|---|---|
+| `willow_leaf_arrow` | 2k2 | Normal (standard arrow) | — |
+| `armor_piercing_arrow` | 1k1 | **Ignores** armor TN bonus from armor | — |
+| `flesh_cutter_arrow` | 2k3 | **Doubles** armor TN bonus from armor | Half range |
+| `humming_bulb_arrow` | 0k1 | Normal | Whistles (flavor) |
+| `rope_cutter_arrow` | 1k1 | Normal | +2 raises vs inanimate (DM); half range |
+| `blowgun` | 0k1 | **Triples** armor TN bonus from armor | DR scales: 1k1 at Ninjutsu 3, 2k1 at Ninjutsu 7 |
+
+Armor TN modification is auto-applied in the attack roll against PC/NPC targets
+(creatures use flat Armor TN with no separable armor bonus). The adjustment
+appears in the "Combat effects" field. Blowgun damage scaling is auto-applied at
+damage time based on the attacker's Ninjutsu rank. "Half range" arrows display a
+DM reminder in the combat effects.
 
 **Rooms** (private play rooms: each is a Discord **private thread**)
 

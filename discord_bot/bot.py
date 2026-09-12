@@ -1030,8 +1030,12 @@ class DamageView(discord.ui.View):
             attacker = attacker_rec.character
             wp = combat.get_weapon_profile(self.weapon)
             extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
+            bg_roll, _, bg_note = combat.blowgun_damage_bonus(attacker, self.weapon)
+            extra_rolled += bg_roll
             t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
             extra_rolled += t_roll
+            if bg_note:
+                t_dmg_notes = [bg_note] + t_dmg_notes
             m_roll, m_kept, m_flat, m_dmg_notes = skill_mastery.attacker_damage(attacker, wp, self.weapon)
             extra_rolled += m_roll
             t_kept += m_kept
@@ -1244,8 +1248,12 @@ class DamageView(discord.ui.View):
         # Plain hit or Feint: weapon damage (+ feint bonus, + active-kata, Technique & Mastery mods).
         wp = combat.get_weapon_profile(self.weapon)
         extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
+        bg_roll, _, bg_note = combat.blowgun_damage_bonus(attacker, self.weapon)
+        extra_rolled += bg_roll
         t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
         extra_rolled += t_roll
+        if bg_note:
+            t_dmg_notes = [bg_note] + t_dmg_notes
         m_roll, m_kept, m_flat, m_dmg_notes = skill_mastery.attacker_damage(attacker, wp, self.weapon)
         extra_rolled += m_roll
         t_kept += m_kept
@@ -1400,10 +1408,11 @@ class DamageView(discord.ui.View):
                     guard_mod2 += 10
             if dc and dc.guarding:
                 guard_mod2 -= 5
+        arrow_tn_adj2, _ = combat.arrow_armor_tn_mod(self.weapon, target.armor_tn_bonus)
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2
+            tn = cond_tn_ovr + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + arrow_tn_adj2
         else:
-            tn = combat.armor_tn(target, self.defender_stance) + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2
+            tn = combat.armor_tn(target, self.defender_stance) + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + arrow_tn_adj2
         outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, engine)
         hit = outcome["hit"]
         embed2 = discord.Embed(
@@ -1886,6 +1895,15 @@ async def attack(
         void_tn_bonus = def_combatant.void_armor_tn_bonus
         kata_notes.append(f"Void Armor: +{void_tn_bonus} Armor TN")
 
+    # Arrow/blowgun Armor TN specials (GDD s39): modify the armor TN bonus contribution.
+    arrow_tn_adj = 0
+    if target_creature_rec is None:
+        arrow_tn_adj, arrow_tn_note = combat.arrow_armor_tn_mod(weapon, target_rec.character.armor_tn_bonus)
+        if arrow_tn_note:
+            kata_notes.append(arrow_tn_note)
+    if atk_weapon_profile.get("half_range"):
+        kata_notes.append("⚠️ Half range — verify target is within halved bow range")
+
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
         t_name = target_creature_rec.creature.name
@@ -1900,10 +1918,10 @@ async def attack(
             is_melee_attack,
         )
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + bonus_tn
+            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + bonus_tn + arrow_tn_adj
             kata_notes.extend(cond_tn_notes)
         else:
-            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus)
+            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + arrow_tn_adj)
 
     # Center Stance bonus (s40): +1k1 + Void Ring on one roll, from centering last Round.
     center_line = ""

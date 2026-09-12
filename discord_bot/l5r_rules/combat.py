@@ -33,8 +33,9 @@ from .dice import DiceEngine
 
 # Weapon catalog subset (values verbatim from individual_combat.gd WEAPON_CATALOG).
 # Keys used by the bot: rolled, kept, strength_adds, skill, trait, melee, size,
-# and no_explode (shinai). Special keys (thrown/charge/armor_tn_mult/break/etc.)
-# are intentionally omitted: those maneuvers are not modelled at this phase.
+# no_explode (shinai), double_reduction (bokken), armor_tn_mult (arrows/blowgun),
+# and half_range. Other special keys (thrown/charge/break/etc.) are intentionally
+# omitted: those maneuvers are not modelled at this phase.
 WEAPON_CATALOG: dict[str, dict] = {
     # Swords (Kenjutsu)
     "katana": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
@@ -75,6 +76,14 @@ WEAPON_CATALOG: dict[str, dict] = {
     "yumi": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Large"},
     "dai_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
     "han_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
+    # Arrows (s39 ammunition — select as weapon to use a specific arrow type;
+    # Kyujutsu / Reflexes same as bows; DR from the arrow, not the bow).
+    # armor_tn_mult: multiplier on the target's armor TN bonus from armor.
+    "willow_leaf_arrow": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
+    "armor_piercing_arrow": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "armor_tn_mult": 0},
+    "flesh_cutter_arrow": {"rolled": 2, "kept": 3, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "armor_tn_mult": 2, "half_range": True},
+    "humming_bulb_arrow": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
+    "rope_cutter_arrow": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "half_range": True},
     # Polearms (grappling)
     "sasumata": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
     "sadegarami": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
@@ -93,7 +102,7 @@ WEAPON_CATALOG: dict[str, dict] = {
     # normally)"; Ninjutsu R5 mastery overrides this).
     "shuriken": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
     "tsubute": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
-    "blowgun": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Medium", "no_explode": True},
+    "blowgun": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Medium", "no_explode": True, "armor_tn_mult": 3},
     # Unarmed
     "unarmed": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Jiujutsu", "trait": "agility", "melee": True, "size": "Small"},
 }
@@ -307,6 +316,38 @@ def armor_tn(target: Character, defender_stance: str = "attack", extra: int = 0)
     if defender_stance == "defense":
         base += stats.ring_value(target, "air") + target.skills.get("Defense", 0)
     return base + extra
+
+
+def arrow_armor_tn_mod(weapon_name: str, target_armor_tn_bonus: int) -> tuple[int, str]:
+    """Armor TN adjustment from arrow/blowgun specials (GDD s39).
+    Armor-Piercing ignores the bonus, Flesh Cutter doubles it, Blowgun triples it.
+    Returns (tn_modifier, note). Modifier is added to the target's Armor TN."""
+    wp = get_weapon_profile(weapon_name)
+    mult = wp.get("armor_tn_mult")
+    if mult is None:
+        return 0, ""
+    adj = target_armor_tn_bonus * (mult - 1)
+    if mult == 0:
+        return adj, f"Armor-Piercing: ignores armor TN bonus ({adj:+d})"
+    if mult == 2:
+        return adj, f"Flesh Cutter: doubles armor TN bonus ({adj:+d})"
+    if mult == 3:
+        return adj, f"Blowgun: triples armor TN bonus ({adj:+d})"
+    return adj, f"Arrow: armor TN ×{mult} ({adj:+d})"
+
+
+def blowgun_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, int, str]:
+    """Extra damage dice from blowgun Ninjutsu rank scaling (GDD s39).
+    Base 0k1; at Ninjutsu 3: 1k1 (+1k0); at Ninjutsu 7: 2k1 (+2k0).
+    Returns (extra_rolled, extra_kept, note)."""
+    if weapon_name.lower().strip() != "blowgun":
+        return 0, 0, ""
+    ninjutsu = attacker.skills.get("Ninjutsu", 0)
+    if ninjutsu >= 7:
+        return 2, 0, "Blowgun DR 2k1 (Ninjutsu 7+)"
+    if ninjutsu >= 3:
+        return 1, 0, "Blowgun DR 1k1 (Ninjutsu 3+)"
+    return 0, 0, ""
 
 
 def resolve_attack(
