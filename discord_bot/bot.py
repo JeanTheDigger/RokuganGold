@@ -9645,12 +9645,47 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
     if cb is None:
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
         return
-    cb.held = not cb.held
     guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    status = "holding" if cb.held else "no longer holding"
-    await interaction.response.send_message(f"**{cb.name}** is {status} their action.\n{_render_encounter(enc, guild)}")
-    await _combat_log(guild, f"Hold: {cb.name} {'held' if cb.held else 'released'}")
+    current = enc.current()
+    is_current = enc.started and current is not None and current.name.lower() == cb.name.lower()
+
+    if cb.held:
+        cb.held = False
+        _save_encounter(guild, enc)
+        await interaction.response.send_message(
+            f"**{cb.name}** is no longer holding their action.\n{_render_encounter(enc, guild)}"
+        )
+        await _combat_log(guild, f"Hold: {cb.name} released")
+        return
+
+    cb.held = True
+    if is_current:
+        prev_round = enc.round
+        next_cb = enc.advance()
+        _save_encounter(guild, enc)
+        mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
+        parts = [f"⏸️ **{cb.name}** holds their action."]
+        parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
+        if next_cb.center_bonus_available:
+            rec = _resolve_combatant_record(guild, next_cb)
+            vr = rec.character.void_ring if rec else "?"
+            parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
+        reminders = condition_effects.condition_reminders(next_cb.conditions)
+        if reminders:
+            parts.append("\n".join(reminders))
+        parts.append(_render_encounter(enc, guild))
+        await interaction.response.send_message("\n\n".join(parts))
+        if enc.round != prev_round:
+            await _combat_log(guild, f"--- Round {enc.round} ---")
+        await _combat_log(guild, f"Hold: {cb.name} held (auto-advance)")
+        cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
+        await _combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
+    else:
+        _save_encounter(guild, enc)
+        await interaction.response.send_message(
+            f"⏸️ **{cb.name}** is holding their action.\n{_render_encounter(enc, guild)}"
+        )
+        await _combat_log(guild, f"Hold: {cb.name} held")
 
 
 @combat_turn.command(name="delay", description="Mark a combatant as delaying (Fortune).")
@@ -9675,20 +9710,60 @@ async def combat_delay(
     if cb is None:
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
         return
-    cb.delayed = not cb.delayed
-    if new_initiative is not None and cb.delayed:
-        cb.initiative = new_initiative
-        enc._sort()
-        if enc.started:
-            cur = enc.current()
-            if cur is not None:
-                enc.turn_index = enc.combatants.index(cur)
     guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    status = "delaying" if cb.delayed else "no longer delaying"
-    init_note = f" (init → {cb.initiative})" if new_initiative is not None and cb.delayed else ""
-    await interaction.response.send_message(f"**{cb.name}** is {status}{init_note}.\n{_render_encounter(enc, guild)}")
-    await _combat_log(guild, f"Delay: {cb.name} {'delayed' if cb.delayed else 'released'}{init_note}")
+    current = enc.current()
+    is_current = enc.started and current is not None and current.name.lower() == cb.name.lower()
+
+    if cb.delayed:
+        cb.delayed = False
+        _save_encounter(guild, enc)
+        await interaction.response.send_message(
+            f"**{cb.name}** is no longer delaying.\n{_render_encounter(enc, guild)}"
+        )
+        await _combat_log(guild, f"Delay: {cb.name} released")
+        return
+
+    cb.delayed = True
+    init_note = ""
+
+    if is_current:
+        prev_round = enc.round
+        next_cb = enc.advance()
+        if new_initiative is not None:
+            cb.initiative = new_initiative
+            enc._sort()
+            enc.turn_index = enc.combatants.index(next_cb)
+            init_note = f" (init → {cb.initiative})"
+        _save_encounter(guild, enc)
+        mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
+        parts = [f"⏳ **{cb.name}** delays their action{init_note}."]
+        parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
+        if next_cb.center_bonus_available:
+            rec = _resolve_combatant_record(guild, next_cb)
+            vr = rec.character.void_ring if rec else "?"
+            parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
+        reminders = condition_effects.condition_reminders(next_cb.conditions)
+        if reminders:
+            parts.append("\n".join(reminders))
+        parts.append(_render_encounter(enc, guild))
+        await interaction.response.send_message("\n\n".join(parts))
+        if enc.round != prev_round:
+            await _combat_log(guild, f"--- Round {enc.round} ---")
+        await _combat_log(guild, f"Delay: {cb.name} delayed (auto-advance){init_note}")
+        cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
+        await _combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
+    else:
+        if new_initiative is not None:
+            cb.initiative = new_initiative
+            enc._sort()
+            if current is not None:
+                enc.turn_index = enc.combatants.index(current)
+            init_note = f" (init → {cb.initiative})"
+        _save_encounter(guild, enc)
+        await interaction.response.send_message(
+            f"⏳ **{cb.name}** is delaying{init_note}.\n{_render_encounter(enc, guild)}"
+        )
+        await _combat_log(guild, f"Delay: {cb.name} delayed{init_note}")
 
 
 @combat_turn.command(name="act", description="A held/delayed combatant takes their action now (Fortune).")

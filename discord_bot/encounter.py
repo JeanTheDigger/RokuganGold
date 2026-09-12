@@ -189,6 +189,8 @@ class Encounter:
                 c.void_armor_tn_bonus = 0
                 c.center_init_boost = 0
                 c.center_bonus_available = False
+                c.held = False
+                c.delayed = False
             for c in self.combatants:
                 if c.stance == "center":
                     c.center_init_boost = 10
