@@ -10613,12 +10613,16 @@ class CharacterApprovalView(discord.ui.View):
     """Lets a DM approve or deny a character submission from the lobby."""
 
     def __init__(self, applicant_id: int, character_name: str, concept: str,
-                 lobby_channel_id: int) -> None:
+                 lobby_channel_id: int, clan: str = "", family_name: str = "",
+                 school_name: str = "") -> None:
         super().__init__(timeout=None)
         self.applicant_id = applicant_id
         self.character_name = character_name
         self.concept = concept
         self.lobby_channel_id = lobby_channel_id
+        self.clan = clan
+        self.family_name = family_name
+        self.school_name = school_name
 
     @discord.ui.button(label="Approve", style=discord.ButtonStyle.success, emoji="✅")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -10642,25 +10646,72 @@ class CharacterApprovalView(discord.ui.View):
                 ephemeral=True,
             )
             return
+
+        guild_id = str(guild.id)
+        owner_id = str(self.applicant_id)
+        char = Character(
+            name=self.character_name,
+            clan=self.clan,
+            family=self.family_name,
+            school=self.school_name,
+            school_type="Bushi",
+        )
+        family_entry = families.get(self.family_name) if self.family_name else None
+        family_report = None
+        if family_entry:
+            family_report = families.apply_to_character(char, family_entry)
+            if not self.clan:
+                char.clan = family_entry["clan"]
+        applied = schools.get(self.school_name) if self.school_name else None
+        report = schools.apply_to_character(char, applied) if applied else None
+        if applied:
+            char.school_type = applied.get("type", "Bushi")
+        try:
+            record = store.create_character(guild_id, owner_id, char)
+        except storage.DuplicateNameError:
+            await interaction.response.send_message(
+                f"A character named **{self.character_name}** already exists for that player. "
+                f"Ask them to pick another name.",
+                ephemeral=True,
+            )
+            return
+        store.set_active(guild_id, owner_id, record.id)
+
         await member.add_roles(approved_role, reason=f"Character '{self.character_name}' approved by {interaction.user.display_name}")
         for child in self.children:
             child.disabled = True
         self.stop()
         await interaction.response.edit_message(view=self)
+
+        sheet_parts: list[str] = []
+        if applied:
+            sheet_parts.append(f"School: **{applied['name']}**")
+            if report and report["benefit"]:
+                sheet_parts.append(f"Benefit: {report['benefit']}")
+            if report and report["skills"]:
+                sheet_parts.append(f"{len(report['skills'])} school skills applied")
+            if report and report["wildcards"]:
+                sheet_parts.append("Wildcards to choose: " + "; ".join(report["wildcards"]))
+        if family_report:
+            sheet_parts.append(f"Family: **{family_entry['name']}** ({family_report})")
+        sheet_info = "\n".join(sheet_parts) if sheet_parts else "No school/family catalog match — sheet starts with base stats."
+
         embed = discord.Embed(
             title="✅ Character Approved",
             color=discord.Color.green(),
             description=(
                 f"**{member.mention}**'s character **{self.character_name}** has been approved.\n"
-                f"They now have the **{ROLE_APPROVED}** role and can access the server."
+                f"They now have the **{ROLE_APPROVED}** role and their character sheet has been created."
             ),
         )
+        embed.add_field(name="Sheet Created", value=sheet_info, inline=False)
         embed.set_footer(text=f"Approved by {interaction.user.display_name}")
         await interaction.followup.send(embed=embed)
         lobby = client.get_channel(self.lobby_channel_id)
         if lobby:
             await lobby.send(
                 f"✅ {member.mention}, your character **{self.character_name}** has been approved! "
+                f"Your character sheet has been created and set as active. "
                 f"You now have access to the rest of the server. Welcome to Rokugan!"
             )
 
@@ -10694,15 +10745,23 @@ class CharacterApprovalView(discord.ui.View):
             )
 
 
-@client.tree.command(name="submit", description="Submit a character concept for DM approval (use in the lobby).")
+@client.tree.command(name="submit", description="Submit a character for DM approval (use in the lobby).")
 @app_commands.describe(
     character_name="Your character's full name (e.g. Bayushi Kachiko).",
-    concept="A short description of your character concept (clan, family, school, personality).",
+    clan="Your character's Great Clan.",
+    family="Family name (start typing for suggestions).",
+    school="Starting school (start typing for suggestions).",
+    concept="A short description of your character concept and personality.",
 )
+@app_commands.choices(clan=[app_commands.Choice(name=c, value=c) for c in _GREAT_CLANS])
+@app_commands.autocomplete(family=_family_autocomplete, school=_basic_school_autocomplete)
 async def submit_character(
     interaction: discord.Interaction,
     character_name: app_commands.Range[str, 1, 100],
+    clan: app_commands.Choice[str],
     concept: app_commands.Range[str, 1, 2000],
+    family: str | None = None,
+    school: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Use in a server channel.", ephemeral=True)
@@ -10722,24 +10781,39 @@ async def submit_character(
             ephemeral=True,
         )
         return
+    clan_val = clan.value
+    family_val = family or ""
+    school_val = school or ""
     embed = discord.Embed(
         title="📋 Character Submission",
         color=0xC4A747,
-        description=f"A new character has been submitted for approval.",
+        description="A new character has been submitted for approval.",
     )
     embed.add_field(name="Player", value=interaction.user.mention, inline=True)
     embed.add_field(name="Submitted from", value=f"<#{interaction.channel_id}>", inline=True)
     embed.add_field(name="Character Name", value=character_name, inline=False)
+    embed.add_field(name="Clan", value=clan_val, inline=True)
+    if family_val:
+        fam_entry = families.get(family_val)
+        fam_display = f"{family_val} (+1 {fam_entry['bonus_trait'].capitalize()})" if fam_entry else family_val
+        embed.add_field(name="Family", value=fam_display, inline=True)
+    if school_val:
+        sch_entry = schools.get(school_val)
+        sch_display = f"{sch_entry['name']} ({sch_entry['clan']})" if sch_entry else school_val
+        embed.add_field(name="School", value=sch_display, inline=True)
     embed.add_field(name="Concept", value=concept, inline=False)
     view = CharacterApprovalView(
         applicant_id=interaction.user.id,
         character_name=character_name,
         concept=concept,
         lobby_channel_id=interaction.channel_id,
+        clan=clan_val,
+        family_name=family_val,
+        school_name=school_val,
     )
     await approval_ch.send(embed=embed, view=view)
     await interaction.response.send_message(
-        f"📋 Your character **{character_name}** has been submitted for DM review. "
+        f"📋 Your character **{character_name}** ({clan_val}) has been submitted for DM review. "
         f"You'll be notified here when a decision is made.",
         ephemeral=True,
     )
