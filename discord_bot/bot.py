@@ -5050,6 +5050,8 @@ ref_heritage = app_commands.Group(name="heritage", description="Heritage table r
     bonus_b="Flat bonus for B.",
     void_a="A spends a Void Point for +1k1.",
     void_b="B spends a Void Point for +1k1.",
+    void_unskilled_a="A spends a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
+    void_unskilled_b="B spends a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
     reason="Label shown with the roll.",
 )
 @app_commands.choices(trait_a=_CONTEST_TRAITS, trait_b=_CONTEST_TRAITS)
@@ -5069,6 +5071,8 @@ async def contest(
     bonus_b: app_commands.Range[int, -50, 50] = 0,
     void_a: bool = False,
     void_b: bool = False,
+    void_unskilled_a: bool = False,
+    void_unskilled_b: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -5076,6 +5080,12 @@ async def contest(
         return
     if not _is_dm(interaction):
         await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to run a contested check.", ephemeral=True)
+        return
+    if void_a and void_unskilled_a:
+        await interaction.response.send_message("A: cannot use both void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
+        return
+    if void_b and void_unskilled_b:
+        await interaction.response.send_message("B: cannot use both void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
@@ -5102,6 +5112,7 @@ async def contest(
     )
     void_ra = void_ka = 0
     void_line_a = ""
+    void_spent_a = False
     if void_a:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(ca, skill_name=skill_a)
         if not ok:
@@ -5111,9 +5122,25 @@ async def contest(
         else:
             ca.current_void_points -= 1
             void_ra = void_ka = 1
+            void_spent_a = True
             void_line_a = f"🌀 Void +1k1 ({ca.current_void_points} VP left)"
+    if void_unskilled_a and not void_a:
+        if sk_a > 0:
+            void_line_a = f"🌀 Already has {skill_a} {sk_a} — use void_a for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(ca, skill_name=skill_a)
+            if not ok:
+                void_line_a = f"🌀 {reason_block}"
+            elif ca.current_void_points <= 0:
+                void_line_a = f"🌀 no Void Points to spend (0/{ca.max_void_points})"
+            else:
+                ca.current_void_points -= 1
+                sk_a = 1
+                void_spent_a = True
+                void_line_a = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {ca.current_void_points} VP left)"
     void_rb = void_kb = 0
     void_line_b = ""
+    void_spent_b = False
     if void_b:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(cb, skill_name=skill_b)
         if not ok:
@@ -5123,7 +5150,22 @@ async def contest(
         else:
             cb.current_void_points -= 1
             void_rb = void_kb = 1
+            void_spent_b = True
             void_line_b = f"🌀 Void +1k1 ({cb.current_void_points} VP left)"
+    if void_unskilled_b and not void_b:
+        if sk_b > 0:
+            void_line_b = f"🌀 Already has {skill_b} {sk_b} — use void_b for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(cb, skill_name=skill_b)
+            if not ok:
+                void_line_b = f"🌀 {reason_block}"
+            elif cb.current_void_points <= 0:
+                void_line_b = f"🌀 no Void Points to spend (0/{cb.max_void_points})"
+            else:
+                cb.current_void_points -= 1
+                sk_b = 1
+                void_spent_b = True
+                void_line_b = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {cb.current_void_points} VP left)"
     result = combat.resolve_contested_check(
         tv_a, sk_a, tv_b, sk_b, engine,
         bonus_a=bonus_a + wp_a + adv_fa,
@@ -5131,9 +5173,9 @@ async def contest(
         extra_rolled_a=adv_ra + void_ra, extra_kept_a=adv_ka + void_ka,
         extra_rolled_b=adv_rb + void_rb, extra_kept_b=adv_kb + void_kb,
     )
-    if void_a:
+    if void_spent_a:
         store.save(rec_a)
-    if void_b:
+    if void_spent_b:
         store.save(rec_b)
     title = "🎯 Contested Check"
     if reason:
@@ -5616,6 +5658,7 @@ async def poison_resist(
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, tools, etc.).",
     spend_void="Spend a Void Point for +1k1.",
+    void_unskilled="Spend a Void Point to treat Medicine 0 as 1 (removes unskilled penalty).",
     reason="What is being treated (for display).",
 )
 async def medicine_check(
@@ -5626,6 +5669,7 @@ async def medicine_check(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
+    void_unskilled: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -5633,6 +5677,9 @@ async def medicine_check(
         return
     if not _is_dm(interaction):
         await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a Medicine check.", ephemeral=True)
+        return
+    if spend_void and void_unskilled:
+        await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -5645,6 +5692,7 @@ async def medicine_check(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Medicine", "intelligence")
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Medicine")
         if not ok:
@@ -5654,9 +5702,24 @@ async def medicine_check(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    if void_unskilled and not spend_void:
+        if medicine_skill > 0:
+            void_line = "🌀 Already has Medicine — use spend_void for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Medicine")
+            if not ok:
+                void_line = f"🌀 {reason_block}"
+            elif c.current_void_points <= 0:
+                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+            else:
+                c.current_void_points -= 1
+                medicine_skill = 1
+                void_spent = True
+                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     result = combat.resolve_medicine_check(c.intelligence, medicine_skill, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     success = result["success"]
     title = "💊 Medicine Check"
@@ -5746,6 +5809,7 @@ def _build_check_embed(
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, situational, etc.).",
     spend_void="Spend a Void Point for +1k1.",
+    void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
     reason="Label shown with the roll.",
     secret="Secret roll: result shown only to you (the DM), not the channel.",
 )
@@ -5761,6 +5825,7 @@ async def skill_check(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
+    void_unskilled: bool = False,
     reason: str | None = None,
     secret: bool = False,
 ) -> None:
@@ -5782,6 +5847,10 @@ async def skill_check(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
+    if spend_void and void_unskilled:
+        await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
+        return
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
         if not ok:
@@ -5791,9 +5860,24 @@ async def skill_check(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    if void_unskilled and not spend_void:
+        if sk > 0:
+            void_line = f"🌀 Already has {skill} {sk} — use spend_void for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
+            if not ok:
+                void_line = f"🌀 {reason_block}"
+            elif c.current_void_points <= 0:
+                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+            else:
+                c.current_void_points -= 1
+                sk = 1
+                void_spent = True
+                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "🎯 Skill Check" + (" 🤫" if secret else "")
@@ -5822,6 +5906,7 @@ async def skill_check(
     is_npc="Primary character is an NPC.",
     bonus="Flat bonus to the primary roll.",
     spend_void="Spend a Void Point for +1k1 on the primary roll.",
+    void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
     reason="Label shown with the roll.",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
@@ -5837,6 +5922,7 @@ async def check_cooperative(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
+    void_unskilled: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -5851,6 +5937,9 @@ async def check_cooperative(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if spend_void and void_unskilled:
+        await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
+        return
     tv = _trait_value(c, trait.value)
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
@@ -5886,6 +5975,7 @@ async def check_cooperative(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
         if not ok:
@@ -5895,7 +5985,22 @@ async def check_cooperative(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    if void_unskilled and not spend_void:
+        if sk > 0:
+            void_line = f"🌀 Already has {skill} {sk} — use spend_void for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
+            if not ok:
+                void_line = f"🌀 {reason_block}"
+            elif c.current_void_points <= 0:
+                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+            else:
+                c.current_void_points -= 1
+                sk = 1
+                void_spent = True
+                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=helper_rolled + adv_r + void_r, extra_kept=adv_k + void_k)
     result["rolled"] = tv + sk + helper_rolled + adv_r + void_r
     result["kept"] = tv + adv_k + void_k
@@ -5932,7 +6037,7 @@ async def check_cooperative(
     )
     if adv_notes:
         embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     await interaction.response.send_message(embed=embed)
 
@@ -5951,6 +6056,7 @@ async def check_cooperative(
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (cover, darkness, distractions, etc.).",
     spend_void="Spend a Void Point for +1k1.",
+    void_unskilled="Spend a Void Point to treat Stealth 0 as 1 (removes unskilled penalty).",
     reason="Label (e.g. 'sneaking past the guards').",
     secret="Secret roll: result shown only to you (the DM).",
 )
@@ -5962,6 +6068,7 @@ async def stealth_check(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
+    void_unskilled: bool = False,
     reason: str | None = None,
     secret: bool = False,
 ) -> None:
@@ -5970,6 +6077,9 @@ async def stealth_check(
         return
     if not _is_dm(interaction):
         await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a Stealth check.", ephemeral=True)
+        return
+    if spend_void and void_unskilled:
+        await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -5982,6 +6092,7 @@ async def stealth_check(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Stealth", "agility")
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Stealth")
         if not ok:
@@ -5991,9 +6102,24 @@ async def stealth_check(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    if void_unskilled and not spend_void:
+        if sk > 0:
+            void_line = "🌀 Already has Stealth — use spend_void for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Stealth")
+            if not ok:
+                void_line = f"🌀 {reason_block}"
+            elif c.current_void_points <= 0:
+                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+            else:
+                c.current_void_points -= 1
+                sk = 1
+                void_spent = True
+                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     result = combat.resolve_skill_check(c.agility, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     skill_label = f"Stealth {sk}" if sk > 0 else "Stealth (unskilled)"
     title = "🥷 Stealth Check" + (" 🤫" if secret else "")
@@ -6031,6 +6157,7 @@ _INVESTIGATION_EMPHASIS = [
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, tools, etc.).",
     spend_void="Spend a Void Point for +1k1.",
+    void_unskilled="Spend a Void Point to treat Investigation 0 as 1 (removes unskilled penalty).",
     reason="Label (e.g. 'searching the crime scene').",
     secret="Secret roll: result shown only to you (the DM).",
 )
@@ -6044,6 +6171,7 @@ async def investigate_check(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
+    void_unskilled: bool = False,
     reason: str | None = None,
     secret: bool = False,
 ) -> None:
@@ -6052,6 +6180,9 @@ async def investigate_check(
         return
     if not _is_dm(interaction):
         await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for an Investigation check.", ephemeral=True)
+        return
+    if spend_void and void_unskilled:
+        await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -6067,6 +6198,7 @@ async def investigate_check(
     )
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Investigation")
         if not ok:
@@ -6076,9 +6208,24 @@ async def investigate_check(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    if void_unskilled and not spend_void:
+        if sk > 0:
+            void_line = "🌀 Already has Investigation — use spend_void for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Investigation")
+            if not ok:
+                void_line = f"🌀 {reason_block}"
+            elif c.current_void_points <= 0:
+                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+            else:
+                c.current_void_points -= 1
+                sk = 1
+                void_spent = True
+                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     result = combat.resolve_skill_check(c.perception, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     has_emphasis = emp_name and emp_name in c.emphases.get("Investigation", [])
     skill_label = f"Investigation {sk}" if sk > 0 else "Investigation (unskilled)"
@@ -6131,6 +6278,7 @@ _SOCIAL_TRAIT_MAP: dict[str, str] = {
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (Status, Honor, Void Point, etc.).",
     spend_void="Spend a Void Point for +1k1.",
+    void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
     reason="Label (e.g. 'convincing the magistrate').",
 )
 @app_commands.choices(skill=_SOCIAL_SKILLS)
@@ -6143,6 +6291,7 @@ async def social_check(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
+    void_unskilled: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -6150,6 +6299,9 @@ async def social_check(
         return
     if not _is_dm(interaction):
         await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a social check.", ephemeral=True)
+        return
+    if spend_void and void_unskilled:
+        await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -6164,6 +6316,7 @@ async def social_check(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill.value, trait_attr)
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill.value)
         if not ok:
@@ -6173,9 +6326,24 @@ async def social_check(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    if void_unskilled and not spend_void:
+        if sk > 0:
+            void_line = f"🌀 Already has {skill.value} {sk} — use spend_void for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill.value)
+            if not ok:
+                void_line = f"🌀 {reason_block}"
+            elif c.current_void_points <= 0:
+                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+            else:
+                c.current_void_points -= 1
+                sk = 1
+                void_spent = True
+                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     result = combat.resolve_skill_check(tv, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     skill_label = f"{skill.value} {sk}" if sk > 0 else f"{skill.value} (unskilled)"
     trait_display = trait_attr.capitalize()
@@ -6201,6 +6369,7 @@ async def social_check(
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (tools, workshop, etc.).",
     spend_void="Spend a Void Point for +1k1.",
+    void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
     reason="Label (e.g. 'forging a katana').",
 )
 @app_commands.autocomplete(skill=_skill_autocomplete)
@@ -6213,6 +6382,7 @@ async def craft_check(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
+    void_unskilled: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -6220,6 +6390,9 @@ async def craft_check(
         return
     if not _is_dm(interaction):
         await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a Craft check.", ephemeral=True)
+        return
+    if spend_void and void_unskilled:
+        await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -6232,6 +6405,7 @@ async def craft_check(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, "intelligence")
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
         if not ok:
@@ -6241,9 +6415,24 @@ async def craft_check(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    if void_unskilled and not spend_void:
+        if sk > 0:
+            void_line = f"🌀 Already has {skill} {sk} — use spend_void for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
+            if not ok:
+                void_line = f"🌀 {reason_block}"
+            elif c.current_void_points <= 0:
+                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+            else:
+                c.current_void_points -= 1
+                sk = 1
+                void_spent = True
+                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "🔨 Craft Check"
@@ -6268,6 +6457,7 @@ async def craft_check(
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (library, scrolls, advantages, etc.).",
     spend_void="Spend a Void Point for +1k1.",
+    void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
     reason="Label (e.g. 'identifying the creature').",
 )
 @app_commands.autocomplete(specialty=_skill_autocomplete)
@@ -6280,6 +6470,7 @@ async def lore_check(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
+    void_unskilled: bool = False,
     reason: str | None = None,
 ) -> None:
     if not _guild_ok(interaction):
@@ -6287,6 +6478,9 @@ async def lore_check(
         return
     if not _is_dm(interaction):
         await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a Lore check.", ephemeral=True)
+        return
+    if spend_void and void_unskilled:
+        await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -6299,6 +6493,7 @@ async def lore_check(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, specialty, "intelligence")
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=specialty)
         if not ok:
@@ -6308,9 +6503,24 @@ async def lore_check(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    if void_unskilled and not spend_void:
+        if sk > 0:
+            void_line = f"🌀 Already has {specialty} {sk} — use spend_void for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=specialty)
+            if not ok:
+                void_line = f"🌀 {reason_block}"
+            elif c.current_void_points <= 0:
+                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+            else:
+                c.current_void_points -= 1
+                sk = 1
+                void_spent = True
+                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     result = combat.resolve_skill_check(c.intelligence, sk, tn, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     skill_label = f"{specialty} {sk}" if sk > 0 else f"{specialty} (unskilled)"
     title = "📚 Lore Check"
@@ -9763,6 +9973,7 @@ async def combat_mount(
     is_npc="Target is an NPC.",
     bonus="Flat bonus.",
     spend_void="Spend a Void Point for +1k1.",
+    void_unskilled="Spend a Void Point to treat Horsemanship 0 as 1 (removes unskilled penalty).",
     reason="Label (e.g. 'charge', 'leap obstacle', 'stay mounted').",
 )
 async def horsemanship_check(
@@ -9773,6 +9984,7 @@ async def horsemanship_check(
     is_npc: bool = False,
     bonus: int = 0,
     spend_void: bool = False,
+    void_unskilled: bool = False,
     reason: str = "",
 ) -> None:
     if not _guild_ok(interaction):
@@ -9787,11 +9999,15 @@ async def horsemanship_check(
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
     c = rec.character
+    if spend_void and void_unskilled:
+        await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
+        return
     skill_rank = c.skills.get("Horsemanship", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Horsemanship", "agility")
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Horsemanship")
         if not ok:
@@ -9801,9 +10017,24 @@ async def horsemanship_check(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    if void_unskilled and not spend_void:
+        if skill_rank > 0:
+            void_line = f"🌀 Already has Horsemanship {skill_rank} — use spend_void for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Horsemanship")
+            if not ok:
+                void_line = f"🌀 {reason_block}"
+            elif c.current_void_points <= 0:
+                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+            else:
+                c.current_void_points -= 1
+                skill_rank = 1
+                void_spent = True
+                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     result = combat.resolve_skill_check(c.agility, skill_rank, tn, engine, bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     embed = _build_check_embed(
         reason or "Horsemanship Check", c.name, "Horsemanship", "Agility", result, wp, bonus,
@@ -9826,6 +10057,7 @@ async def horsemanship_check(
     is_npc="Target is an NPC.",
     bonus="Flat bonus (tools, workshop, etc.).",
     spend_void="Spend a Void Point for +1k1.",
+    void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
     reason="Label (e.g. 'forging a katana').",
 )
 @app_commands.autocomplete(skill=_skill_autocomplete)
@@ -9838,6 +10070,7 @@ async def craft_extended(
     is_npc: bool = False,
     bonus: int = 0,
     spend_void: bool = False,
+    void_unskilled: bool = False,
     reason: str = "",
 ) -> None:
     if not _guild_ok(interaction):
@@ -9852,11 +10085,15 @@ async def craft_extended(
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
     c = rec.character
+    if spend_void and void_unskilled:
+        await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
+        return
     skill_rank = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, "intelligence")
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
         if not ok:
@@ -9866,9 +10103,24 @@ async def craft_extended(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    if void_unskilled and not spend_void:
+        if skill_rank > 0:
+            void_line = f"🌀 Already has {skill} {skill_rank} — use spend_void for +1k1 instead"
+        else:
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
+            if not ok:
+                void_line = f"🌀 {reason_block}"
+            elif c.current_void_points <= 0:
+                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
+            else:
+                c.current_void_points -= 1
+                skill_rank = 1
+                void_spent = True
+                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     result = combat.resolve_skill_check(c.intelligence, skill_rank, 10, engine, bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     embed = discord.Embed(
         title=reason or f"Extended Crafting: {skill}",
