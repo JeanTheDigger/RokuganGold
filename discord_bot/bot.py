@@ -1082,10 +1082,14 @@ class DamageView(discord.ui.View):
             raw += scorp_bonus
             cre_base_red = cre_rec.creature.reduction
             bokken_note = ""
-            if wp.get("double_reduction"):
+            bohiya_note = ""
+            if wp.get("ignore_all_reduction"):
+                bohiya_note = f"Bo-Hiya: ignores all Reduction ({cre_base_red} → 0)"
+                cre_base_red = 0
+            elif wp.get("double_reduction"):
                 bokken_note = f"Bokken: Reduction doubled ({cre_base_red} → {cre_base_red * 2})"
                 cre_base_red *= 2
-            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, *t_dmg_notes) if n)
+            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, bohiya_note, *t_dmg_notes) if n)
             reduction = max(0, cre_base_red - ignore - tsu_ignore)
             bypasses = self.weapon_material in ("jade", "crystal", "obsidian", "nemuranai")
             applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction, bypasses_invuln=bypasses)
@@ -1303,13 +1307,19 @@ class DamageView(discord.ui.View):
         raw += scorp_bonus
         base_red = target.armor_reduction
         bokken_note = ""
-        if wp.get("double_reduction"):
+        bohiya_note = ""
+        if wp.get("ignore_all_reduction"):
+            bohiya_note = f"Bo-Hiya: ignores all Reduction ({base_red} → 0)"
+            base_red = 0
+        elif wp.get("double_reduction"):
             bokken_note = f"Bokken: Reduction doubled ({base_red} → {base_red * 2})"
             base_red *= 2
         kata_line = "".join(
-            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes) if n
+            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes) if n
         )
         reduction = max(0, base_red - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red)
+        if wp.get("ignore_all_reduction"):
+            reduction = 0
         applied = combat.apply_damage(target, raw, reduction)
         void_line = ""
         if void_reduce:

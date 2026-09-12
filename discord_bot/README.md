@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 52: Bow & Arrow Specials (Armor TN Modifiers, Bow Penalties, Ninjutsu Scaling)
+## Status: Phase 53: Bow & Arrow Specials (Armor TN Modifiers, Bow Penalties, Bo-Hiya, Ninjutsu Scaling)
 
 **Help & Navigation**
 
@@ -644,13 +644,15 @@ Kyujutsu/Reflexes like bows.
 | `flesh_cutter_arrow` | 2k3 | **Doubles** armor TN bonus from armor | Half range |
 | `humming_bulb_arrow` | 0k1 | Normal | Whistles (flavor) |
 | `rope_cutter_arrow` | 1k1 | Normal | +2 raises vs inanimate (DM); half range |
+| `bo_hiya` | 3k3 | Normal | **Ignores ALL Reduction** (armor, kata, technique, natural) |
 | `blowgun` | 0k1 | **Triples** armor TN bonus from armor | DR scales: 1k1 at Ninjutsu 3, 2k1 at Ninjutsu 7 |
 
 Armor TN modification is auto-applied in the attack roll against PC/NPC targets
 (creatures use flat Armor TN with no separable armor bonus). The adjustment
 appears in the "Combat effects" field. Blowgun damage scaling is auto-applied at
-damage time based on the attacker's Ninjutsu rank. "Half range" arrows display a
-DM reminder in the combat effects.
+damage time based on the attacker's Ninjutsu rank. Bo-Hiya ignores all forms of
+Reduction at damage time (armor, kata bonuses, technique bonuses, natural
+toughness). "Half range" arrows display a DM reminder in the combat effects.
 
 **Rooms** (private play rooms: each is a Discord **private thread**)
 

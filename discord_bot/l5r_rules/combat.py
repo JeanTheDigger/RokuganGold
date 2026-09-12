@@ -34,7 +34,8 @@ from .dice import DiceEngine
 # Weapon catalog subset (values verbatim from individual_combat.gd WEAPON_CATALOG).
 # Keys used by the bot: rolled, kept, strength_adds, skill, trait, melee, size,
 # no_explode (shinai), double_reduction (bokken), armor_tn_mult (arrows/blowgun),
-# half_range, penalty_mounted, and penalty_on_foot (bows). Other special keys
+# half_range, penalty_mounted, penalty_on_foot (bows), and ignore_all_reduction
+# (bo-hiya). Other special keys
 # (thrown/charge/break/etc.) are intentionally
 # omitted: those maneuvers are not modelled at this phase.
 WEAPON_CATALOG: dict[str, dict] = {
@@ -86,6 +87,7 @@ WEAPON_CATALOG: dict[str, dict] = {
     "flesh_cutter_arrow": {"rolled": 2, "kept": 3, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "armor_tn_mult": 2, "half_range": True},
     "humming_bulb_arrow": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
     "rope_cutter_arrow": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "half_range": True},
+    "bo_hiya": {"rolled": 3, "kept": 3, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "ignore_all_reduction": True},
     # Polearms (grappling)
     "sasumata": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
     "sadegarami": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
