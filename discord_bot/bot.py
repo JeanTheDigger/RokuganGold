@@ -376,50 +376,6 @@ async def whoami(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
 
-@client.tree.command(name="party", description="DM overview — all active PCs on this server.")
-async def party_overview(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
-        return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view the party roster.", ephemeral=True)
-        return
-    guild = str(interaction.guild_id)
-    active = store.list_active_pcs(guild)
-    if not active:
-        await interaction.response.send_message("No active PCs on this server.", ephemeral=True)
-        return
-    embed = discord.Embed(title="Party Roster", color=discord.Color.gold())
-    for owner_id, rec in active:
-        c = rec.character
-        rings = stats.all_rings(c)
-        ring_str = " / ".join(f"{r[0].upper()}{v}" for r, v in rings.items())
-        lvl = stats.wound_level_name(c)
-        pen = stats.wound_penalty(c)
-        cap = stats.total_wound_capacity(c)
-        wound_str = f"{lvl}" + (f" ({pen})" if pen else "") + f" — {c.wounds_taken}/{cap}"
-        vp_str = f"VP {c.current_void_points}/{c.max_void_points}"
-        header = " · ".join(b for b in (c.clan, c.school) if b) or "—"
-        val_parts = [
-            f"{header} (Rank {stats.insight_rank(c)})",
-            f"Rings: {ring_str}",
-            f"Wounds: {wound_str}  ·  {vp_str}",
-            f"Honor {c.honor:g} · Glory {c.glory:g} · Status {c.status:g}",
-        ]
-        if c.equipped_weapon:
-            wield = c.equipped_weapon
-            if c.off_hand_weapon:
-                wield += f" + {c.off_hand_weapon}"
-            val_parts.append(f"Wielding: {wield}")
-        embed.add_field(
-            name=f"{c.name}  (<@{owner_id}>)",
-            value="\n".join(val_parts),
-            inline=False,
-        )
-    embed.set_footer(text=f"{len(active)} active PC{'s' if len(active) != 1 else ''}")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
 def _format_dice(result: DiceResult) -> str:
     kept = ", ".join(str(d) for d in result.kept_dice) or "—"
     line = f"**Kept:** {kept}"
@@ -2752,6 +2708,50 @@ async def sheet_heal(
 dm = app_commands.Group(name="dm", description="DM tools — requires the Fortune role (or Kami for admin commands).")
 
 
+@dm.command(name="party", description="DM overview — all active PCs on this server.")
+async def party_overview(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view the party roster.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    active = store.list_active_pcs(guild)
+    if not active:
+        await interaction.response.send_message("No active PCs on this server.", ephemeral=True)
+        return
+    embed = discord.Embed(title="Party Roster", color=discord.Color.gold())
+    for owner_id, rec in active:
+        c = rec.character
+        rings = stats.all_rings(c)
+        ring_str = " / ".join(f"{r[0].upper()}{v}" for r, v in rings.items())
+        lvl = stats.wound_level_name(c)
+        pen = stats.wound_penalty(c)
+        cap = stats.total_wound_capacity(c)
+        wound_str = f"{lvl}" + (f" ({pen})" if pen else "") + f" — {c.wounds_taken}/{cap}"
+        vp_str = f"VP {c.current_void_points}/{c.max_void_points}"
+        header = " · ".join(b for b in (c.clan, c.school) if b) or "—"
+        val_parts = [
+            f"{header} (Rank {stats.insight_rank(c)})",
+            f"Rings: {ring_str}",
+            f"Wounds: {wound_str}  ·  {vp_str}",
+            f"Honor {c.honor:g} · Glory {c.glory:g} · Status {c.status:g}",
+        ]
+        if c.equipped_weapon:
+            wield = c.equipped_weapon
+            if c.off_hand_weapon:
+                wield += f" + {c.off_hand_weapon}"
+            val_parts.append(f"Wielding: {wield}")
+        embed.add_field(
+            name=f"{c.name}  (<@{owner_id}>)",
+            value="\n".join(val_parts),
+            inline=False,
+        )
+    embed.set_footer(text=f"{len(active)} active PC{'s' if len(active) != 1 else ''}")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 @dm.command(name="roles", description="Show who has the Fortune and Kami roles on this server.")
 async def dm_roles(interaction: discord.Interaction) -> None:
     if not _guild_ok(interaction):
@@ -4092,7 +4092,26 @@ def _trait_value(c: Character, name: str) -> int:
     return getattr(c, name, 0)
 
 
-@client.tree.command(
+# ===========================================================================
+# /check group — consolidated skill & trait checks
+# ===========================================================================
+check = app_commands.Group(name="check", description="Skill, Trait, and special checks (L5R 4e).")
+
+# ===========================================================================
+# /ref group — consolidated rules reference & catalog browser
+# ===========================================================================
+ref = app_commands.Group(name="ref", description="Browse L5R rules reference: weapons, armor, schools, and more.")
+ref_weapon = app_commands.Group(name="weapon", description="Weapon catalog (damage, skill, size).", parent=ref)
+ref_armor = app_commands.Group(name="armor", description="Armor catalog (TN bonus, Reduction).", parent=ref)
+ref_advantage = app_commands.Group(name="advantage", description="Advantages & Disadvantages.", parent=ref)
+ref_kata = app_commands.Group(name="kata", description="Kata by element and mastery.", parent=ref)
+ref_kiho = app_commands.Group(name="kiho", description="Kiho by element and mastery.", parent=ref)
+ref_school = app_commands.Group(name="school", description="School catalog: benefit, skills, techniques.", parent=ref)
+ref_family = app_commands.Group(name="family", description="Family catalog (character creation bonuses).", parent=ref)
+ref_heritage = app_commands.Group(name="heritage", description="Heritage table rolls (L5R 4e).", parent=ref)
+
+
+@check.command(
     name="contest",
     description="Contested Skill/Trait roll between two characters. Fortune role required.",
 )
@@ -4200,7 +4219,7 @@ async def contest(
 # ===========================================================================
 # /fear — Fear check (s40 / creature Fear ratings)
 # ===========================================================================
-@client.tree.command(
+@check.command(
     name="fear",
     description="Fear check: Willpower vs TN 5 + (Fear Rank x 5). Fortune role required.",
 )
@@ -4262,8 +4281,8 @@ async def fear_check(
 # ===========================================================================
 # /honor_roll — Honor Roll (L5R 4e core p.214)
 # ===========================================================================
-@client.tree.command(
-    name="honor_roll",
+@check.command(
+    name="honor",
     description="Honor Roll: roll Honor Rank dice, keep 1, vs a TN. Fortune role required.",
 )
 @app_commands.describe(
@@ -4525,7 +4544,7 @@ async def void_status(
 # ===========================================================================
 # /poison — poison resistance checks
 # ===========================================================================
-@client.tree.command(
+@check.command(
     name="poison",
     description="Poison resistance: Stamina vs TN (Strength x 5). Fortune role required.",
 )
@@ -4592,7 +4611,7 @@ async def poison_resist(
 # ===========================================================================
 # /medicine — Medicine/Intelligence checks
 # ===========================================================================
-@client.tree.command(
+@check.command(
     name="medicine",
     description="Medicine/Intelligence check vs a TN (treat wounds, poison, disease). Fortune role required.",
 )
@@ -4699,8 +4718,8 @@ def _build_check_embed(
 # ===========================================================================
 # /skillcheck — generic Skill/Trait check (Phase 37)
 # ===========================================================================
-@client.tree.command(
-    name="skillcheck",
+@check.command(
+    name="skill",
     description="Generic Skill/Trait check vs a TN. DM picks the trait and skill. Fortune role required.",
 )
 @app_commands.describe(
@@ -4753,7 +4772,7 @@ async def skill_check(
 # ===========================================================================
 # /stealth — Stealth/Agility check (Phase 37)
 # ===========================================================================
-@client.tree.command(
+@check.command(
     name="stealth",
     description="Stealth/Agility check vs a TN. Fortune role required.",
 )
@@ -4811,7 +4830,7 @@ _INVESTIGATION_EMPHASIS = [
 ]
 
 
-@client.tree.command(
+@check.command(
     name="investigate",
     description="Investigation/Perception check vs a TN. Fortune role required.",
 )
@@ -4890,7 +4909,7 @@ _SOCIAL_TRAIT_MAP: dict[str, str] = {
 }
 
 
-@client.tree.command(
+@check.command(
     name="social",
     description="Social skill check vs a TN. Auto-selects the correct trait. Fortune role required.",
 )
@@ -4943,7 +4962,7 @@ async def social_check(
 # ===========================================================================
 # /craft — Artisan & Craft skill checks (Phase 39)
 # ===========================================================================
-@client.tree.command(
+@check.command(
     name="craft",
     description="Artisan or Craft skill / Intelligence check vs a TN. Fortune role required.",
 )
@@ -4993,7 +5012,7 @@ async def craft_check(
 # ===========================================================================
 # /lore — Lore & Knowledge skill checks (Phase 40)
 # ===========================================================================
-@client.tree.command(
+@check.command(
     name="lore",
     description="Lore/Intelligence check vs a TN. Fortune role required.",
 )
@@ -5043,8 +5062,8 @@ async def lore_check(
 # ===========================================================================
 # /lookup — unified cross-catalog search
 # ===========================================================================
-@client.tree.command(
-    name="lookup",
+@ref.command(
+    name="search",
     description="Search across all catalogs at once: spells, schools, kata, kiho, advantages, weapons, creatures.",
 )
 @app_commands.describe(
@@ -5106,158 +5125,112 @@ async def lookup(
 # ===========================================================================
 # /help — categorized command reference
 # ===========================================================================
+
 _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
     ("Dice & Basics", [
         ("/ping", "Check the bot is alive (shows gateway latency)."),
         ("/whoami", "Quick glance at your active character's status."),
         ("/roll", "Roll & Keep: XkY, optional TN, raises, emphasis, unskilled."),
-        ("/lookup", "Search all catalogs at once (spells, schools, kata, etc.)."),
+        ("/help", "Show all bot commands, organized by category."),
     ]),
     ("Character Sheets", [
+        ("/sheet wizard", "Step-by-step guided character creation."),
         ("/sheet create", "Create a character (optionally with a school)."),
         ("/sheet view", "View a sheet (yours or another player's if Fortune)."),
-        ("/sheet list", "List your characters."),
-        ("/sheet activate", "Switch your active character."),
-        ("/sheet delete", "Delete a character."),
-        ("/sheet trait", "Set a Trait or Void."),
-        ("/sheet skill", "Set a skill rank (0 removes)."),
-        ("/sheet set", "Set a numeric field (honor, glory, koku, etc.)."),
+        ("/sheet list / activate / delete", "Manage your characters."),
+        ("/sheet trait / skill / set", "Set Traits, skills, or numeric fields."),
         ("/sheet wound / heal", "Apply or heal wounds."),
-        ("/sheet equip", "Add/remove a weapon from gear."),
-        ("/sheet wield", "Set wielded weapon(s) for /attack."),
-        ("/sheet armor", "Equip armor (auto-sets TN bonus & Reduction)."),
+        ("/sheet equip / wield / armor", "Manage gear and equipment."),
         ("/sheet advantage / disadvantage", "Record advantages or disadvantages."),
         ("/sheet kata / kiho", "Record Kata or Kiho (free, no XP)."),
         ("/sheet kata_activate / kiho_activate", "Activate Kata (one) or Kiho (by type)."),
-        ("/sheet export", "Export character sheet as JSON for backup."),
-        ("/sheet import_sheet", "Import a character from JSON."),
+        ("/sheet learn", "Record techniques up to your School Rank."),
+        ("/sheet export / import_sheet", "Backup and restore characters."),
     ]),
-    ("DM Management", [
+    ("DM Management (Fortune/Kami)", [
         ("/dm roles", "Show who has the Fortune and Kami roles."),
-        ("/dm new_day", "Advance to a new day: refresh spell slots & heal all PCs (Fortune)."),
-        ("/dm damage", "Apply damage to a character (Fortune)."),
-        ("/dm heal", "Heal wounds on a character (Fortune)."),
-        ("/dm treat", "Medicine treatment: healer rolls, DM approves healing (Fortune)."),
-        ("/dm log_channel", "Set a channel for combat event logging (Kami)."),
-        ("/dm clear_log", "Stop logging combat events (Kami)."),
-        ("/party", "Overview of all active PCs (Fortune)."),
+        ("/dm party", "Overview of all active PCs."),
+        ("/dm new_day", "Advance to a new day: refresh spell slots & heal all PCs."),
+        ("/dm damage / heal / treat", "Apply damage, heal wounds, or run Medicine checks."),
+        ("/dm taint", "View or modify a character's Shadowlands Taint."),
+        ("/dm influence", "Track court Influence Points."),
+        ("/dm craft_extended", "Multi-step extended crafting rolls with quality tiers."),
+        ("/dm log_channel / clear_log", "Combat event logging (Kami only)."),
+    ]),
+    ("Checks (Fortune)", [
+        ("/check skill", "Generic Skill/Trait check (DM picks trait)."),
+        ("/check contest", "Contested Skill/Trait roll between two characters."),
+        ("/check fear", "Fear check: Willpower vs TN."),
+        ("/check honor", "Honor Roll: Honor Rank dice, keep 1."),
+        ("/check stealth", "Stealth/Agility vs TN."),
+        ("/check investigate", "Investigation/Perception vs TN."),
+        ("/check social", "Social skill (auto-selects trait)."),
+        ("/check craft / lore", "Craft/Intelligence or Lore/Intelligence."),
+        ("/check poison / medicine", "Poison resistance or Medicine check."),
+        ("/check horsemanship", "Horsemanship/Agility (mounted maneuver)."),
     ]),
     ("Combat", [
         ("/attack", "Attack a character, NPC, or creature."),
         ("/combat start / end", "Start or end an encounter in this channel."),
-        ("/combat join / add", "Add a PC or NPC to initiative."),
-        ("/combat next", "Advance to the next combatant's turn."),
-        ("/combat status", "Show initiative order."),
+        ("/combat join / add / npc / creature", "Add combatants to initiative."),
+        ("/combat next / status / remove", "Manage turn order."),
         ("/combat summary", "Compact stat overview of all combatants (Fortune)."),
-        ("/combat remove", "Remove a combatant."),
-        ("/combat condition_set / clear", "Apply or remove a condition (Fortune)."),
-        ("/combat conditions", "Show a combatant's active conditions."),
-        ("/combat guard", "Guard another combatant (+10 TN ward)."),
-        ("/combat full_defense", "Full Defense roll (Complex Action)."),
-        ("/combat creature", "Add a spawned creature to initiative."),
-        ("/combat room", "Add all room members' active characters to initiative (Fortune)."),
-        ("/combat npc", "Add a stored NPC to initiative."),
+        ("/combat stance", "Declare stance (Attack, Defense, etc.)."),
+        ("/combat condition_set / clear / conditions", "Manage conditions."),
+        ("/combat guard / full_defense", "Defensive actions."),
+        ("/combat init / hold / delay / act / surprise", "Advanced initiative (Fortune)."),
+        ("/combat action / mount / room", "Action tracking, mounting, room init."),
     ]),
-    ("Grappling & Dueling", [
-        ("/grapple initiate", "Start a grapple (Jiujutsu/Agility). Fortune role required."),
-        ("/grapple control", "Contested control roll. Fortune role required."),
-        ("/grapple hit / throw / break_free", "Grapple actions. Fortune role required."),
-        ("/duel assess", "Assessment stage. Fortune role required."),
-        ("/duel focus", "Focus stage (contested). Fortune role required."),
-        ("/duel strike", "Strike stage. Fortune role required."),
-    ]),
-    ("Checks & Rolls", [
-        ("/contest", "Contested Skill/Trait roll between two characters. Fortune role required."),
-        ("/fear", "Fear check: Willpower vs TN. Fortune role required."),
-        ("/honor_roll", "Honor Roll: Honor Rank dice, keep 1. Fortune role required."),
-        ("/skillcheck", "Generic Skill/Trait check (DM picks trait). Fortune role required."),
-        ("/stealth", "Stealth/Agility vs TN. Fortune role required."),
-        ("/investigate", "Investigation/Perception vs TN (with emphasis). Fortune role required."),
-        ("/social", "Social skill (auto-selects trait). Fortune role required."),
-        ("/craft", "Artisan or Craft / Intelligence. Fortune role required."),
-        ("/lore", "Lore specialty / Intelligence. Fortune role required."),
-        ("/poison", "Poison resistance: Stamina vs TN. Fortune role required."),
-        ("/medicine", "Medicine/Intelligence check. Fortune role required."),
+    ("Grappling & Dueling (Fortune)", [
+        ("/grapple initiate / control / hit / throw / break_free", "Grappling subsystem."),
+        ("/duel assess / focus / strike", "Iaijutsu dueling."),
     ]),
     ("Void Points", [
         ("/void spend", "Spend a VP with a reason label."),
         ("/void refresh", "Rest (full) or Meditation check (1 VP)."),
         ("/void status", "Show current VP bar."),
     ]),
-    ("NPCs", [
-        ("/npc generate", "Generate an NPC samurai (s22.4). Fortune role required."),
+    ("NPCs & Creatures", [
+        ("/npc generate", "Generate an NPC samurai. Fortune role required."),
         ("/npc view / list / delete", "View, roster, or remove NPCs."),
-        ("/npc trait / skill / set / wound / heal / rename", "Edit NPC fields. Fortune role required."),
-    ]),
-    ("Creatures", [
-        ("/creature catalog", "Search the bestiary (208 creatures)."),
-        ("/creature spawn", "Spawn a creature instance. Fortune role required."),
-        ("/creature list / view / delete", "Roster, view, or remove creatures."),
-        ("/creature wound / heal", "Adjust creature wounds. Fortune role required."),
-        ("/creature attack", "Creature attacks a PC/NPC (fixed stat block). Fortune role required."),
+        ("/npc trait / skill / set / wound / heal / rename", "Edit NPC fields."),
+        ("/creature catalog / spawn", "Search bestiary and spawn creatures."),
+        ("/creature list / view / delete / wound / heal", "Manage creatures."),
+        ("/creature attack", "Creature attacks a PC/NPC (Fortune)."),
     ]),
     ("XP & Advancement", [
-        ("/xp grant", "Give XP to a player. Fortune role required."),
-        ("/xp balance", "Show available/spent XP and Insight Rank."),
+        ("/xp grant / balance", "Give XP or show available XP."),
         ("/xp trait / skill / emphasis", "Spend XP on Traits, Skills, or Emphases."),
-        ("/xp kata / kiho / spell", "Learn Kata, Kiho, or memorise a Spell."),
-        ("/xp advantage", "Buy an Advantage with XP."),
-        ("/xp remove_disadvantage", "Buy off a Disadvantage (2x point cost)."),
-        ("/xp costs", "Show the RAW cost reference."),
+        ("/xp kata / kiho / spell / advantage", "Learn abilities with XP."),
+        ("/xp remove_disadvantage / costs", "Buy off Disadvantages or view cost reference."),
     ]),
-    ("Schools & Spells", [
-        ("/school list / search / view", "Browse 347 schools and their techniques."),
-        ("/school learn", "Record techniques up to your School Rank."),
+    ("Spells", [
         ("/spell list / search / view", "Browse 287 spells."),
         ("/spell cast", "Cast a spell: (Ring + School Rank) keep Ring."),
         ("/spell resist", "Spell resistance: Willpower roll vs TN (Fortune)."),
+        ("/spell damage", "Roll spell damage dice (Fortune)."),
     ]),
-    ("Equipment & Catalogs", [
-        ("/weapon list / view", "Browse the 44 weapons."),
-        ("/armor list", "Browse the 7 armor types."),
-        ("/advantage list / search / view", "Browse 149 advantages & disadvantages."),
-        ("/kata list / search / view", "Browse 43 Kata."),
-        ("/kiho list / search / view", "Browse 73 Kiho."),
-    ]),
-    ("Combat — Stances & Actions", [
-        ("/combat stance", "Declare stance (Attack, Full Attack, Defense, Full Defense, Center)."),
-        ("/combat action", "Track Simple/Complex action economy per turn."),
-        ("/combat init", "Adjust a combatant's initiative (Fortune). Ties break by Reflexes."),
-        ("/combat hold / delay", "Hold or delay a combatant's action (Fortune)."),
-        ("/combat act", "A held/delayed combatant takes their action now (Fortune)."),
-        ("/combat surprise", "Toggle surprise round (Fortune)."),
-        ("/combat mount", "Mount or dismount (adds/removes Mounted condition)."),
-        ("/combat full_defense", "Full Defense roll (Complex Action)."),
-        ("/dual_wield", "Dual-wielding rules and off-hand penalties."),
+    ("Reference (/ref)", [
+        ("/ref search", "Search all catalogs at once (spells, schools, kata, etc.)."),
+        ("/ref weapon list / view", "Browse the 44 weapons."),
+        ("/ref armor list", "Browse the 7 armor types."),
+        ("/ref school list / search / view", "Browse 347 schools and techniques."),
+        ("/ref advantage list / search / view", "Browse 149 advantages & disadvantages."),
+        ("/ref kata list / search / view", "Browse 43 Kata."),
+        ("/ref kiho list / search / view", "Browse 73 Kiho."),
+        ("/ref family list / search", "Browse 47 families and Trait bonuses."),
+        ("/ref heritage roll / table", "Heritage Table rolls (Great Clans)."),
+        ("/ref modifiers / calledshot", "Combat modifier and Called Shot reference."),
+        ("/ref atn / encumbrance", "Armor TN breakdown and carrying capacity."),
+        ("/ref ancestors / dual_wield / travel", "Other reference info."),
     ]),
     ("Mass Battle", [
         ("/battle roll", "Mass Battle engagement roll (Battle/Perception vs TN)."),
         ("/battle damage", "Incidental damage by engagement level."),
     ]),
-    ("Character Creation", [
-        ("/family list / search", "Browse 47 families and their Trait bonuses."),
-        ("/heritage roll / table", "Roll on clan Heritage tables."),
-        ("/ancestors", "Ancestor advantage mechanical effects."),
-    ]),
-    ("Taint & Corruption", [
-        ("/taint", "View or modify Shadowlands Taint (rank, mutations, madness)."),
-    ]),
-    ("Utility", [
-        ("/spell_damage", "Roll spell damage dice (DM-approval gate to apply)."),
-        ("/craft_extended", "Multi-step extended crafting rolls with quality tiers."),
-        ("/encumbrance", "Strength-based carrying capacity check."),
-        ("/atn", "Armor TN breakdown (base, armor, stance, guard, conditions)."),
-        ("/modifiers", "Terrain, range, and situational combat modifier reference."),
-        ("/calledshot", "Called Shot raise costs and body part effects reference."),
-        ("/horsemanship", "Horsemanship/Agility check."),
-        ("/influence", "Track court influence points (Fortune)."),
-        ("/travel", "Calculate travel time by mode and terrain."),
-    ]),
     ("Rooms", [
-        ("/room create", "Open a private play room (thread)."),
-        ("/room invite / kick", "Add or remove a member."),
-        ("/room members / list", "Who's here / all rooms."),
-        ("/room close", "Archive the room."),
+        ("/room create / invite / kick", "Create rooms and manage members."),
+        ("/room members / list / close", "View or close rooms."),
     ]),
 ]
 
@@ -6799,7 +6772,7 @@ async def xp_costs(interaction: discord.Interaction) -> None:
 # ===========================================================================
 # /school group — schools & techniques (GDD s29)
 # ===========================================================================
-school = app_commands.Group(name="school", description="Browse schools and their techniques (GDD s29).")
+
 
 
 _SCHOOL_CATEGORY_LABEL = {
@@ -6835,7 +6808,7 @@ def build_school_embed(s: dict) -> discord.Embed:
     return embed
 
 
-@school.command(name="list", description="List schools (optionally by clan).")
+@ref_school.command(name="list", description="List schools (optionally by clan).")
 @app_commands.describe(clan="Filter by clan (Crab, Crane, …). Omit for a summary.")
 async def school_list(interaction: discord.Interaction, clan: str | None = None) -> None:
     if clan:
@@ -6865,7 +6838,7 @@ async def school_list(interaction: discord.Interaction, clan: str | None = None)
     )
 
 
-@school.command(name="search", description="Search schools by name or clan.")
+@ref_school.command(name="search", description="Search schools by name or clan.")
 @app_commands.describe(query="Name or clan fragment.")
 async def school_search(interaction: discord.Interaction, query: str) -> None:
     matches = schools.search(query)
@@ -6881,7 +6854,7 @@ async def school_search(interaction: discord.Interaction, query: str) -> None:
     await interaction.response.send_message("🏯 " + "\n".join(lines) + extra, ephemeral=True)
 
 
-@school.command(name="view", description="Show a school's benefit, skills, outfit, and techniques.")
+@ref_school.command(name="view", description="Show a school's benefit, skills, outfit, and techniques.")
 @app_commands.describe(name="The school to view.")
 @app_commands.autocomplete(name=_school_autocomplete)
 async def school_view(interaction: discord.Interaction, name: str) -> None:
@@ -6894,7 +6867,7 @@ async def school_view(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(embed=build_school_embed(s))
 
 
-@school.command(name="learn", description="Record the techniques your school grants up to your School Rank.")
+@sheet.command(name="learn", description="Record the techniques your school grants up to your School Rank.")
 @app_commands.describe(
     school_name="School to learn from (defaults to your sheet's school).",
     member="Do this for another player (Fortune).",
@@ -7223,10 +7196,10 @@ async def spell_resist(
 # ===========================================================================
 # /weapon and /armor groups — equipment reference (individual_combat.gd / armor_system.gd)
 # ===========================================================================
-weapon_group = app_commands.Group(name="weapon", description="Browse the weapon catalog (damage, skill, size).")
 
 
-@weapon_group.command(name="list", description="List all weapons, grouped by skill.")
+
+@ref_weapon.command(name="list", description="List all weapons, grouped by skill.")
 async def weapon_list(interaction: discord.Interaction) -> None:
     by_skill: dict[str, list[str]] = {}
     for wid, w in combat.WEAPON_CATALOG.items():
@@ -7237,7 +7210,7 @@ async def weapon_list(interaction: discord.Interaction) -> None:
     )
 
 
-@weapon_group.command(name="view", description="Show a weapon's details.")
+@ref_weapon.command(name="view", description="Show a weapon's details.")
 @app_commands.describe(name="Weapon name.")
 @app_commands.autocomplete(name=_weapon_autocomplete)
 async def weapon_view(interaction: discord.Interaction, name: str) -> None:
@@ -7257,10 +7230,10 @@ async def weapon_view(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(embed=embed)
 
 
-armor_group = app_commands.Group(name="armor", description="Browse the armor catalog (TN bonus, Reduction).")
 
 
-@armor_group.command(name="list", description="List all armor types.")
+
+@ref_armor.command(name="list", description="List all armor types.")
 async def armor_list(interaction: discord.Interaction) -> None:
     lines = [
         f"• **{a}** — Armor TN +{s['tn_bonus']}, Reduction {s['reduction']}"
@@ -7275,7 +7248,7 @@ async def armor_list(interaction: discord.Interaction) -> None:
 # ===========================================================================
 # /advantage group — Advantages & Disadvantages (GDD s45)
 # ===========================================================================
-advantage_group = app_commands.Group(name="advantage", description="Browse Advantages & Disadvantages (GDD s45).")
+
 
 
 def build_advantage_embed(r: dict) -> discord.Embed:
@@ -7296,7 +7269,7 @@ def build_advantage_embed(r: dict) -> discord.Embed:
     return embed
 
 
-@advantage_group.command(name="list", description="List Advantages or Disadvantages.")
+@ref_advantage.command(name="list", description="List Advantages or Disadvantages.")
 @app_commands.describe(kind="advantages or disadvantages (default a summary).")
 @app_commands.choices(kind=[
     app_commands.Choice(name="advantages", value="advantage"),
@@ -7318,7 +7291,7 @@ async def advantage_list(interaction: discord.Interaction, kind: app_commands.Ch
     await interaction.response.send_message(text[:1990], ephemeral=True)
 
 
-@advantage_group.command(name="search", description="Search Advantages & Disadvantages by name or category.")
+@ref_advantage.command(name="search", description="Search Advantages & Disadvantages by name or category.")
 @app_commands.describe(query="Name or category fragment.")
 async def advantage_search(interaction: discord.Interaction, query: str) -> None:
     matches = advantages.search(query)
@@ -7333,7 +7306,7 @@ async def advantage_search(interaction: discord.Interaction, query: str) -> None
     await interaction.response.send_message("\n".join(lines) + extra, ephemeral=True)
 
 
-@advantage_group.command(name="view", description="Show an Advantage or Disadvantage in full.")
+@ref_advantage.command(name="view", description="Show an Advantage or Disadvantage in full.")
 @app_commands.describe(name="The entry to view.")
 @app_commands.autocomplete(name=_anyadv_autocomplete)
 async def advantage_view(interaction: discord.Interaction, name: str) -> None:
@@ -7347,7 +7320,7 @@ async def advantage_view(interaction: discord.Interaction, name: str) -> None:
 # ===========================================================================
 # /kata and /kiho groups — Kata (GDD s30) and Kiho (GDD s38) reference
 # ===========================================================================
-kata_group = app_commands.Group(name="kata", description="Browse Kata by element and mastery (GDD s30).")
+
 
 
 def build_kata_embed(k: dict) -> discord.Embed:
@@ -7361,7 +7334,7 @@ def build_kata_embed(k: dict) -> discord.Embed:
     return embed
 
 
-@kata_group.command(name="list", description="List Kata by element (or a summary).")
+@ref_kata.command(name="list", description="List Kata by element (or a summary).")
 @app_commands.describe(element="Air, Earth, Fire, Water, Void. Omit for a summary.")
 async def kata_list(interaction: discord.Interaction, element: str | None = None) -> None:
     if not element:
@@ -7387,7 +7360,7 @@ async def kata_list(interaction: discord.Interaction, element: str | None = None
     await interaction.response.send_message(text[:1990], ephemeral=True)
 
 
-@kata_group.command(name="search", description="Search Kata by name or element.")
+@ref_kata.command(name="search", description="Search Kata by name or element.")
 @app_commands.describe(query="Name or element fragment.")
 async def kata_search(interaction: discord.Interaction, query: str) -> None:
     matches = kata.search(query)
@@ -7399,7 +7372,7 @@ async def kata_search(interaction: discord.Interaction, query: str) -> None:
     await interaction.response.send_message("\U0001F94B " + "\n".join(lines) + extra, ephemeral=True)
 
 
-@kata_group.command(name="view", description="Show a Kata's element, mastery, schools, and effect.")
+@ref_kata.command(name="view", description="Show a Kata's element, mastery, schools, and effect.")
 @app_commands.describe(name="The Kata to view.")
 @app_commands.autocomplete(name=_kata_autocomplete)
 async def kata_view(interaction: discord.Interaction, name: str) -> None:
@@ -7412,7 +7385,7 @@ async def kata_view(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(embed=build_kata_embed(k))
 
 
-kiho_group = app_commands.Group(name="kiho", description="Browse Kiho by element and mastery (GDD s38).")
+
 
 
 def build_kiho_embed(k: dict) -> discord.Embed:
@@ -7428,7 +7401,7 @@ def build_kiho_embed(k: dict) -> discord.Embed:
     return embed
 
 
-@kiho_group.command(name="list", description="List Kiho by element (or a summary).")
+@ref_kiho.command(name="list", description="List Kiho by element (or a summary).")
 @app_commands.describe(element="Air, Earth, Fire, Water, Void. Omit for a summary.")
 async def kiho_list(interaction: discord.Interaction, element: str | None = None) -> None:
     if not element:
@@ -7454,7 +7427,7 @@ async def kiho_list(interaction: discord.Interaction, element: str | None = None
     await interaction.response.send_message(text[:1990], ephemeral=True)
 
 
-@kiho_group.command(name="search", description="Search Kiho by name, element, or type.")
+@ref_kiho.command(name="search", description="Search Kiho by name, element, or type.")
 @app_commands.describe(query="Name, element, or type fragment.")
 async def kiho_search(interaction: discord.Interaction, query: str) -> None:
     matches = kiho.search(query)
@@ -7466,7 +7439,7 @@ async def kiho_search(interaction: discord.Interaction, query: str) -> None:
     await interaction.response.send_message("✋ " + "\n".join(lines) + extra, ephemeral=True)
 
 
-@kiho_group.command(name="view", description="Show a Kiho's element, mastery, type, and effect.")
+@ref_kiho.command(name="view", description="Show a Kiho's element, mastery, type, and effect.")
 @app_commands.describe(name="The Kiho to view.")
 @app_commands.autocomplete(name=_kiho_autocomplete)
 async def kiho_view(interaction: discord.Interaction, name: str) -> None:
@@ -7683,10 +7656,10 @@ async def combat_surprise(interaction: discord.Interaction) -> None:
 # Phase 42 — Heritage Tables (#4)
 # ---------------------------------------------------------------------------
 
-heritage_group = app_commands.Group(name="heritage", description="Heritage table rolls (L5R 4e character creation).")
 
 
-@heritage_group.command(name="roll", description="Roll on a clan's Heritage Table (1d10). Fortune role required.")
+
+@ref_heritage.command(name="roll", description="Roll on a clan's Heritage Table (1d10). Fortune role required.")
 @app_commands.describe(clan="Clan name (Crab, Crane, Dragon, Lion, Mantis, Phoenix, Scorpion, Unicorn).")
 async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
     if not _guild_ok(interaction):
@@ -7704,7 +7677,7 @@ async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
     await interaction.response.send_message(embed=embed)
 
 
-@heritage_group.command(name="table", description="Show a clan's full Heritage Table.")
+@ref_heritage.command(name="table", description="Show a clan's full Heritage Table.")
 @app_commands.describe(clan="Clan name.")
 async def heritage_table(interaction: discord.Interaction, clan: str) -> None:
     if not _guild_ok(interaction):
@@ -7720,7 +7693,7 @@ async def heritage_table(interaction: discord.Interaction, clan: str) -> None:
 # Phase 42 — Taint Progression (#14)
 # ---------------------------------------------------------------------------
 
-@client.tree.command(name="taint", description="View or modify a character's Shadowlands Taint. Fortune role required.")
+@dm.command(name="taint", description="View or modify a character's Shadowlands Taint. Fortune role required.")
 @app_commands.describe(
     name="Character name.",
     add="Taint points to add (can be negative to remove).",
@@ -7910,7 +7883,7 @@ async def combat_mount(
         )
 
 
-@client.tree.command(name="horsemanship", description="Horsemanship/Agility check (mounted combat maneuver). Fortune role required.")
+@check.command(name="horsemanship", description="Horsemanship/Agility check (mounted combat maneuver). Fortune role required.")
 @app_commands.describe(
     name="Character name.",
     tn="Target Number.",
@@ -7953,7 +7926,7 @@ async def horsemanship_check(
 # Phase 42 — Crafting Extended (#6)
 # ---------------------------------------------------------------------------
 
-@client.tree.command(name="craft_extended", description="Extended crafting roll — multi-step project with cumulative total. Fortune role required.")
+@dm.command(name="craft_extended", description="Extended crafting roll — multi-step project with cumulative total. Fortune role required.")
 @app_commands.describe(
     name="Character name.",
     skill="Craft/Artisan skill name.",
@@ -8011,7 +7984,7 @@ async def craft_extended(
 # Phase 42 — Encumbrance (#11)
 # ---------------------------------------------------------------------------
 
-@client.tree.command(name="encumbrance", description="Check a character's carrying capacity (Strength-based).")
+@ref.command(name="encumbrance", description="Check a character's carrying capacity (Strength-based).")
 @app_commands.describe(
     member="Player whose character to check.",
     is_npc="Target is an NPC.",
@@ -8051,7 +8024,7 @@ async def encumbrance_check(
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@client.tree.command(name="atn", description="Show Armor TN breakdown for your active character.")
+@ref.command(name="atn", description="Show Armor TN breakdown for your active character.")
 @app_commands.describe(
     target="Character name (Fortune — omit to see your own).",
 )
@@ -8138,10 +8111,10 @@ async def atn_breakdown(interaction: discord.Interaction, target: str | None = N
 # Phase 42 — Family catalog (#12)
 # ---------------------------------------------------------------------------
 
-family_group = app_commands.Group(name="family", description="Family catalog (L5R 4e character creation bonuses).")
 
 
-@family_group.command(name="list", description="List families by clan.")
+
+@ref_family.command(name="list", description="List families by clan.")
 @app_commands.describe(clan="Filter by clan (optional).")
 async def family_list(interaction: discord.Interaction, clan: str | None = None) -> None:
     if not _guild_ok(interaction):
@@ -8164,7 +8137,7 @@ async def family_list(interaction: discord.Interaction, clan: str | None = None)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@family_group.command(name="search", description="Search families by name or clan.")
+@ref_family.command(name="search", description="Search families by name or clan.")
 @app_commands.describe(query="Name or clan to search for.")
 async def family_search(interaction: discord.Interaction, query: str) -> None:
     if not _guild_ok(interaction):
@@ -8183,7 +8156,7 @@ async def family_search(interaction: discord.Interaction, query: str) -> None:
 # Phase 42 — Spell Damage (#8 partial)
 # ---------------------------------------------------------------------------
 
-@client.tree.command(name="spell_damage", description="Roll spell damage dice (for offensive spells). Fortune role required.")
+@spell_group.command(name="damage", description="Roll spell damage dice (for offensive spells). Fortune role required.")
 @app_commands.describe(
     rolled="Number of dice to roll (from spell description, e.g. Fire Ring for Fires of Purity).",
     kept="Number of dice to keep.",
@@ -8337,7 +8310,7 @@ ANCESTOR_EFFECTS: dict[str, str] = {
 }
 
 
-@client.tree.command(name="ancestors", description="Show mechanical effects of Ancestor advantages on a character.")
+@ref.command(name="ancestors", description="Show mechanical effects of Ancestor advantages on a character.")
 @app_commands.describe(
     member="Player whose character to check.",
     is_npc="Target is an NPC.",
@@ -8387,7 +8360,7 @@ async def ancestors_check(
 # Phase 42 — Dual Wield reminder (#9 supplement)
 # ---------------------------------------------------------------------------
 
-@client.tree.command(name="dual_wield", description="Show dual-wielding rules and penalties for a character.")
+@ref.command(name="dual_wield", description="Show dual-wielding rules and penalties for a character.")
 @app_commands.describe(
     member="Player whose character to check.",
     name="NPC name.",
@@ -8448,7 +8421,7 @@ async def dual_wield_info(
 # Phase 42 — Courtier/Social Influence (#5)
 # ---------------------------------------------------------------------------
 
-@client.tree.command(name="influence", description="Track Influence Points during a court scene. Fortune role required.")
+@dm.command(name="influence", description="Track Influence Points during a court scene. Fortune role required.")
 @app_commands.describe(
     name="Character name.",
     change="Influence points to add (negative to subtract).",
@@ -8487,7 +8460,7 @@ TRAVEL_SPEEDS: dict[str, dict] = {
 }
 
 
-@client.tree.command(name="travel", description="Calculate travel time between locations.")
+@ref.command(name="travel", description="Calculate travel time between locations.")
 @app_commands.describe(
     distance="Distance in miles.",
     mode="Travel mode.",
@@ -8555,7 +8528,7 @@ RANGE_INCREMENTS: list[tuple[str, str]] = [
 ]
 
 
-@client.tree.command(name="modifiers", description="Quick reference for terrain, range, and situational combat modifiers (L5R 4e).")
+@ref.command(name="modifiers", description="Quick reference for terrain, range, and situational combat modifiers (L5R 4e).")
 async def modifiers_ref(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="⚔️ Combat Modifiers Reference", color=discord.Color.dark_gold())
     terrain_lines = [f"**{name}** — {effect}" for name, effect in TERRAIN_MODIFIERS]
@@ -8577,7 +8550,7 @@ async def modifiers_ref(interaction: discord.Interaction) -> None:
 # Phase 47 — Called Shot Reference
 # ---------------------------------------------------------------------------
 
-@client.tree.command(name="calledshot", description="Called Shot reference: raise costs and body part effects (L5R 4e).")
+@ref.command(name="calledshot", description="Called Shot reference: raise costs and body part effects (L5R 4e).")
 async def calledshot_ref(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="🎯 Called Shot Reference", color=discord.Color.dark_gold())
     parts_lines = []
@@ -8915,16 +8888,10 @@ client.tree.add_command(npc)
 client.tree.add_command(room)
 client.tree.add_command(creature_group)
 client.tree.add_command(xp)
-client.tree.add_command(school)
 client.tree.add_command(spell_group)
-client.tree.add_command(weapon_group)
-client.tree.add_command(armor_group)
-client.tree.add_command(advantage_group)
-client.tree.add_command(kata_group)
-client.tree.add_command(kiho_group)
-client.tree.add_command(heritage_group)
 client.tree.add_command(battle_group)
-client.tree.add_command(family_group)
+client.tree.add_command(check)
+client.tree.add_command(ref)
 
 
 def main() -> None:
