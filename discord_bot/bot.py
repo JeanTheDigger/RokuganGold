@@ -6487,10 +6487,26 @@ async def _location_area_autocomplete(
 
 
 @location_area_group.command(name="create", description="Create a new location area (Discord category). Fortune role required.")
-@app_commands.describe(name="Area name (becomes the Discord category name).")
+@app_commands.describe(
+    name="Area name (becomes the Discord category name).",
+    description="Description of the area (posted in a read-only #description channel).",
+    role="Restrict visibility to this role (plus Staff). Omit for all Approved players.",
+    member1="Grant access to this specific member.",
+    member2="Grant access to a second member.",
+    member3="Grant access to a third member.",
+    member4="Grant access to a fourth member.",
+    member5="Grant access to a fifth member.",
+)
 async def location_area_create(
     interaction: discord.Interaction,
     name: app_commands.Range[str, 1, 90],
+    description: app_commands.Range[str, 1, 4000] | None = None,
+    role: discord.Role | None = None,
+    member1: discord.Member | None = None,
+    member2: discord.Member | None = None,
+    member3: discord.Member | None = None,
+    member4: discord.Member | None = None,
+    member5: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -6514,7 +6530,11 @@ async def location_area_create(
             manage_messages=True, manage_threads=True,
         ),
     }
-    if approved_role:
+    if role:
+        overwrites[role] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+        )
+    elif approved_role:
         overwrites[approved_role] = discord.PermissionOverwrite(
             view_channel=True, send_messages=True, read_message_history=True,
         )
@@ -6524,6 +6544,11 @@ async def location_area_create(
                 view_channel=True, send_messages=True, read_message_history=True,
                 manage_messages=True,
             )
+    extra_members = [m for m in (member1, member2, member3, member4, member5) if m]
+    for m in extra_members:
+        overwrites[m] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+        )
     try:
         category = await guild.create_category(clean_name, overwrites=overwrites, reason=f"Location area by {interaction.user}")
     except discord.Forbidden:
@@ -6531,13 +6556,36 @@ async def location_area_create(
             "I need **Manage Channels** permission to create categories.", ephemeral=True,
         )
         return
+
+    if description:
+        desc_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+            everyone: discord.PermissionOverwrite(send_messages=False),
+            bot_member: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_messages=True,
+            ),
+        }
+        desc_ch = await category.create_text_channel("description", overwrites=desc_overwrites)
+        embed = discord.Embed(
+            title=clean_name, color=0xC4A747, description=description,
+        )
+        msg = await desc_ch.send(embed=embed)
+        await msg.pin()
+
     try:
         store.create_location_area(guild_id, str(category.id), clean_name, str(interaction.user.id))
     except storage.DuplicateNameError:
         await category.delete(reason="Duplicate area cleanup")
         await interaction.response.send_message(f"Area **{clean_name}** already exists.", ephemeral=True)
         return
-    await interaction.response.send_message(f"Created location area **{clean_name}**.")
+
+    parts = [f"Created location area **{clean_name}**."]
+    if role:
+        parts.append(f"Restricted to {role.mention}.")
+    if extra_members:
+        parts.append(f"Access granted to: {', '.join(m.mention for m in extra_members)}.")
+    if description:
+        parts.append("Description channel created.")
+    await interaction.response.send_message(" ".join(parts))
 
 
 @location_area_group.command(name="delete", description="Delete a location area and all its locations. Fortune role required.")
