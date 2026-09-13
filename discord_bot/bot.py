@@ -1087,7 +1087,8 @@ async def sheet_create(interaction: discord.Interaction) -> None:
 # /sheet wizard: guided step-by-step character creation
 # ---------------------------------------------------------------------------
 _GREAT_CLANS = ["Crab", "Crane", "Dragon", "Lion", "Mantis", "Phoenix", "Scorpion", "Unicorn",
-                "Ronin", "Imperial", "Minor Clan", "Spider"]
+                "Ronin", "Imperial", "Spider"]
+_MINOR_CLANS = ["Badger", "Bat", "Dragonfly", "Hare", "Monkey", "Oriole", "Ox", "Sparrow", "Tortoise"]
 _ALL_SCHOOL_CLANS = sorted({s["clan"] for s in schools.ALL if s.get("category", "basic") == "basic"})
 
 def _wizard_embed(state: dict) -> discord.Embed:
@@ -9171,10 +9172,18 @@ async def _setup_server_inner(
         "Spider": "#7F8C8D",
         "Ronin": "#95A5A6",
         "Imperial": "#DAA520",
-        "Minor Clan": "#8E7CC3",
+        "Badger": "#8B4513",
+        "Bat": "#4B0082",
+        "Dragonfly": "#6B8E23",
+        "Hare": "#CD853F",
+        "Monkey": "#D2691E",
+        "Oriole": "#FFD700",
+        "Ox": "#A0522D",
+        "Sparrow": "#DEB887",
+        "Tortoise": "#2E8B57",
     }
     clan_roles_created: list[discord.Role] = []
-    for clan_name in _GREAT_CLANS:
+    for clan_name in _GREAT_CLANS + _MINOR_CLANS:
         color_hex = _CLAN_COLORS.get(clan_name, "#95A5A6")
         role = discord.utils.get(guild.roles, name=clan_name)
         if role is None:
@@ -9214,6 +9223,14 @@ async def _setup_server_inner(
                 reason=f"Server setup: update {fam_clan} family role",
             )
         family_roles_created.append(role)
+
+    # --- Remove legacy "Minor Clan" role if present (replaced by individual minor clan roles) ---
+    legacy_minor = discord.utils.get(guild.roles, name="Minor Clan")
+    if legacy_minor:
+        try:
+            await legacy_minor.delete(reason="Server setup: replaced by individual minor clan roles")
+        except discord.Forbidden:
+            pass
 
     # --- Reorder: Approved below clan/family roles for color priority ---
     try:
