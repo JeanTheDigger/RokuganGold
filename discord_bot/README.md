@@ -1040,8 +1040,10 @@ You do this once, in a web browser. No Linux needed.
      uses slash commands, which don't require them.
 4. In the left sidebar, open **OAuth2 → URL Generator**:
    - Under **Scopes**, tick **`bot`** and **`applications.commands`**.
-   - Under **Bot Permissions**, tick **Send Messages**, **Embed Links**, and : 
-     for play rooms: **Create Private Threads**, **Send Messages in Threads**,
+   - Under **Bot Permissions**, tick **Administrator** (simplest), or at
+     minimum: **Manage Roles**, **Manage Channels**, **Manage Messages**,
+     **Send Messages**, **Embed Links**, **Manage Nicknames**, and for
+     play rooms: **Create Private Threads**, **Send Messages in Threads**,
      and **Manage Threads**.
    - Copy the generated URL at the bottom, open it in your browser, and pick
      the server you want to add the bot to. (You must have "Manage Server" on

@@ -1059,88 +1059,11 @@ _SET_FIELDS = [
 ]
 _SET_CHOICES = [app_commands.Choice(name=f, value=f) for f in _SET_FIELDS]
 
-@sheet.command(name="create", description="Create a new character and make it your active one.")
-@app_commands.describe(
-    name="Character name.",
-    school="School (start typing for the catalog: a match auto-fills Benefit, Skills, Honor).",
-    clan="Great/Minor Clan (optional; a catalog school sets this for you).",
-    family="Family (optional).",
-    school_type="School type (default Bushi; a catalog school sets this for you).",
-    age="Age (default 16).",
-)
-@app_commands.autocomplete(school=_basic_school_autocomplete, family=_family_autocomplete)
-@app_commands.choices(school_type=_SCHOOL_CHOICES)
-async def sheet_create(
-    interaction: discord.Interaction,
-    name: app_commands.Range[str, 1, 64],
-    school: str | None = None,
-    clan: str | None = None,
-    family: str | None = None,
-    school_type: app_commands.Choice[str] | None = None,
-    age: app_commands.Range[int, 0, 200] | None = None,
-) -> None:
+@sheet.command(name="create", description="Create a new character — opens a private wizard channel.")
+async def sheet_create(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
-    guild = str(interaction.guild_id)
-    owner = str(interaction.user.id)
-
-    char = Character(
-        name=name,
-        clan=clan or "",
-        family=family or "",
-        school=school or "",
-        school_type=(school_type.value if school_type else "Bushi"),
-    )
-    if age is not None:
-        char.age = age
-
-    # If the family matches a catalog entry, auto-apply its +1 Trait bonus.
-    family_entry = families.get(family) if family else None
-    family_report = None
-    if family_entry:
-        family_report = families.apply_to_character(char, family_entry)
-        if not clan:
-            char.clan = family_entry["clan"]
-
-    # If the school matches a catalog entry, auto-apply its Benefit/Skills/Honor.
-    applied = schools.get(school) if school else None
-    report = schools.apply_to_character(char, applied) if applied else None
-
-    try:
-        record = store.create_character(guild, owner, char)
-    except storage.DuplicateNameError:
-        await interaction.response.send_message(
-            f"You already have a character named **{name}**. Pick another name or "
-            f"`/sheet activate` the existing one.",
-            ephemeral=True,
-        )
-        return
-
-    store.set_active(guild, owner, record.id)
-    if report is not None:
-        bits = [f"applied **{applied['name']}**"]
-        if family_report:
-            bits.append(f"Family {family_entry['name']} ({family_report})")
-        if report["benefit"]:
-            bits.append(f"Benefit {report['benefit']}")
-        if report["skills"]:
-            bits.append(f"{len(report['skills'])} school skills")
-        if report["wildcards"]:
-            bits.append("choose: " + "; ".join(report["wildcards"]))
-        content = (
-            f"Created **{name}** ({applied['clan']} {applied['name']}) and set it active:"
-            + ", ".join(bits)
-            + ". `/school learn` to record your Rank-1 technique."
-        )
-    else:
-        fam_note = ""
-        if family_report:
-            fam_note = f" Family **{family_entry['name']}** applied ({family_report})."
-        content = (
-            f"Created **{name}** and set it as your active character. All Traits start at 2 "
-            f"(the L5R 4e baseline).{fam_note} Tip: pass a `school:` from the catalog to auto-fill it."
-        )
-    await interaction.response.send_message(content=content, embed=build_sheet_embed(record))
+    await _start_chargen_wizard(interaction)
 
 # ---------------------------------------------------------------------------
 # /sheet wizard: guided step-by-step character creation
@@ -1186,9 +1109,10 @@ class _ClanSelect(discord.ui.Select):
         if clan_families:
             view = _WizardView(self.state)
             view.add_item(_FamilySelect(self.state, clan_families))
+            total = "10" if self.state.get("full_wizard") else "5"
             await interaction.response.edit_message(
-                content="**Step 2/5**: Choose your Family.",
-                embed=_wizard_embed(self.state), view=view,
+                content=f"**Step 2/{total}**: Choose your Family.",
+                embed=_active_embed(self.state), view=view,
             )
         else:
             self.state["family_name"] = ""
@@ -1235,9 +1159,10 @@ async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dic
         skip_btn.callback = on_skip
         view.add_item(roll_btn)
         view.add_item(skip_btn)
+        total = "10" if state.get("full_wizard") else "5"
         await interaction.response.edit_message(
-            content="**Step 3/5**: Heritage Roll (optional).",
-            embed=_wizard_embed(state), view=view,
+            content=f"**Step 3/{total}**: Heritage Roll (optional).",
+            embed=_active_embed(state), view=view,
         )
     else:
         await _go_to_school_choice(interaction, state)
@@ -1261,19 +1186,22 @@ async def _go_to_school_choice(interaction: discord.Interaction, state: dict) ->
         state["different_school"] = True
         view2 = _WizardView(state)
         view2.add_item(_SchoolClanSelect(state))
+        total = "10" if state.get("full_wizard") else "5"
         await btn_inter.response.edit_message(
-            content="**Step 4/5**: Pick the clan whose school you want to attend.",
-            embed=_wizard_embed(state), view=view2,
+            content=f"**Step 4/{total}**: Pick the clan whose school you want to attend.",
+            embed=_active_embed(state), view=view2,
         )
 
     same_btn.callback = on_same
     diff_btn.callback = on_diff
     view.add_item(same_btn)
     view.add_item(diff_btn)
-    step = "4/5" if state["clan"] in heritage.HERITAGE_TABLES else "3/5"
+    total = "10" if state.get("full_wizard") else "5"
+    heritage_step = "4" if state["clan"] in heritage.HERITAGE_TABLES else "3"
+    step = f"{heritage_step}/{total}"
     await interaction.response.edit_message(
         content=f"**Step {step}**: Same-clan school or Different School?",
-        embed=_wizard_embed(state), view=view,
+        embed=_active_embed(state), view=view,
     )
 
 class _SchoolClanSelect(discord.ui.Select):
@@ -1293,14 +1221,15 @@ async def _show_school_select(interaction: discord.Interaction, state: dict, sch
     if not basic_schools:
         await interaction.response.edit_message(
             content=f"No basic schools found for **{school_clan}**. Pick another.",
-            embed=_wizard_embed(state), view=interaction.message.view,
+            embed=_active_embed(state), view=interaction.message.view,
         )
         return
     view = _WizardView(state)
     view.add_item(_SchoolSelect(state, basic_schools))
+    total = "10" if state.get("full_wizard") else "5"
     await interaction.response.edit_message(
-        content=f"**Step 5/5**: Choose your School ({school_clan}).",
-        embed=_wizard_embed(state), view=view,
+        content=f"**Step 4/{total}**: Choose your School ({school_clan}).",
+        embed=_active_embed(state), view=view,
     )
 
 class _SchoolSelect(discord.ui.Select):
@@ -1319,7 +1248,10 @@ class _SchoolSelect(discord.ui.Select):
             await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
             return
         self.state["school_name"] = self.values[0]
-        await _show_confirmation(interaction, self.state)
+        if self.state.get("full_wizard"):
+            await _chargen_traits(interaction, self.state)
+        else:
+            await _show_confirmation(interaction, self.state)
 
 async def _show_confirmation(interaction: discord.Interaction, state: dict) -> None:
     view = _WizardView(state)
@@ -1407,6 +1339,1031 @@ class _WizardView(discord.ui.View):
 
     async def on_timeout(self) -> None:
         pass
+
+# ---------------------------------------------------------------------------
+# Full character-creation wizard (runs in a private channel via /submit)
+# ---------------------------------------------------------------------------
+_CHARGEN_XP = 40
+_MAX_DISADVANTAGE_XP = 10
+
+_SKILL_CATEGORIES: dict[str, list[str]] = {
+    "Bugei": [
+        "Athletics", "Battle", "Defense", "Horsemanship", "Hunting",
+        "Iaijutsu", "Jiujutsu", "Kenjutsu", "Knives", "Kyujutsu",
+        "Naginatajutsu", "Polearms", "Spears", "Staves", "War Fan",
+        "Chain Weapons",
+    ],
+    "High": [
+        "Artisan", "Calligraphy", "Courtier", "Divination", "Etiquette",
+        "Games", "Investigation", "Lore", "Medicine", "Meditation",
+        "Perform", "Sincerity", "Spellcraft", "Tea Ceremony", "Theology",
+    ],
+    "Low": [
+        "Acting", "Commerce", "Engineering", "Forgery", "Intimidation",
+        "Locksmith", "Sleight of Hand", "Stealth", "Temptation",
+    ],
+    "Merchant": [
+        "Animal Handling", "Craft", "Sailing",
+    ],
+}
+
+_ALL_SKILLS_SORTED: list[str] = sorted(
+    s for cat in _SKILL_CATEGORIES.values() for s in cat
+)
+
+
+def _parse_spell_allotment(school: dict) -> dict[str, int] | None:
+    """Parse starting spell allotment from a shugenja school.
+
+    Returns {element: count} or None if not a shugenja school.
+    Sense/Commune/Summon are auto-granted and not counted here.
+    """
+    aff = school.get("affinity", "")
+    if not aff:
+        return None
+    if "|" in aff:
+        _, spell_part = aff.split("|", 1)
+        spell_part = spell_part.strip()
+        if spell_part.lower().startswith("starting spells:"):
+            spell_part = spell_part[len("Starting Spells:"):].strip()
+        allot: dict[str, int] = {}
+        for chunk in spell_part.split(","):
+            chunk = chunk.strip()
+            if chunk.lower() in ("sense", "commune", "summon"):
+                continue
+            parts = chunk.split(None, 1)
+            if len(parts) == 2 and parts[0].isdigit():
+                allot[parts[1]] = int(parts[0])
+        return allot if allot else None
+    elements = ["Air", "Earth", "Fire", "Water"]
+    aff_lower = aff.lower()
+    found: list[tuple[int, str]] = []
+    for el in elements:
+        pos = aff_lower.find(el.lower())
+        if pos >= 0:
+            found.append((pos, el))
+    if not found:
+        return None
+    found.sort()
+    affinity_el = found[0][1]
+    allot = {affinity_el: 3}
+    for el in elements:
+        if el != affinity_el:
+            allot[el] = 1
+    return allot
+
+
+def _build_base_char(state: dict) -> Character:
+    """Build a Character with family+school applied (no XP purchases)."""
+    char = Character(name=state["name"], clan=state.get("clan", ""),
+                     family=state.get("family_name", ""), school="", school_type="Bushi")
+    family_entry = families.get(state["family_name"]) if state.get("family_name") else None
+    if family_entry:
+        families.apply_to_character(char, family_entry)
+        if not char.clan:
+            char.clan = family_entry["clan"]
+    applied = schools.get(state["school_name"]) if state.get("school_name") else None
+    if applied:
+        schools.apply_to_character(char, applied)
+    return char
+
+
+def _calc_chargen_xp(state: dict) -> tuple[int, int]:
+    """Return (xp_spent, xp_remaining) from chargen purchases."""
+    spent = 0
+    if state.get("different_school"):
+        spent += 5
+    base_char = _build_base_char(state)
+    for trait, ranks in state.get("trait_purchases", {}).items():
+        base_val = base_char.void_ring if trait == "void" else base_char.get_trait(trait)
+        mult = advancement.VOID_XP_MULT if trait == "void" else advancement.TRAIT_XP_MULT
+        for i in range(ranks):
+            spent += (base_val + i + 1) * mult
+    for adv in state.get("advantages_chosen", []):
+        spent += adv["points"]
+    for skill, ranks in state.get("skill_purchases", {}).items():
+        base_val = base_char.skills.get(skill, 0)
+        for i in range(ranks):
+            spent += (base_val + i + 1) * advancement.SKILL_XP_MULT
+    disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+    disadv_xp = min(disadv_xp, _MAX_DISADVANTAGE_XP)
+    return spent, _CHARGEN_XP + disadv_xp - spent
+
+
+def _chargen_embed(state: dict) -> discord.Embed:
+    """Full-wizard progress embed showing all chargen state."""
+    spent, remaining = _calc_chargen_xp(state)
+    embed = discord.Embed(
+        title=f"Character Creation: {state['name']}",
+        color=discord.Color.gold(),
+    )
+    lines: list[str] = []
+    if state.get("clan"):
+        lines.append(f"**Clan:** {state['clan']}")
+    if state.get("family_name"):
+        fam = families.get(state["family_name"])
+        bonus = f" (+1 {fam['bonus_trait'].capitalize()})" if fam else ""
+        lines.append(f"**Family:** {state['family_name']}{bonus}")
+    if state.get("heritage_result"):
+        lines.append(f"**Heritage:** {state['heritage_result'][:80]}")
+    if state.get("different_school"):
+        lines.append("**Different School** (5 XP)")
+    if state.get("school_name"):
+        sch = schools.get(state["school_name"])
+        if sch:
+            ben = schools.parse_benefit(sch.get("benefit", ""))
+            ben_str = f" (+{ben[1]} {ben[0].capitalize()})" if ben else ""
+            lines.append(f"**School:** {sch['name']}{ben_str}")
+
+    if state.get("trait_purchases"):
+        tp = ", ".join(f"{t.capitalize()} +{r}" for t, r in state["trait_purchases"].items())
+        lines.append(f"**Trait Raises:** {tp}")
+    if state.get("advantages_chosen"):
+        al = ", ".join(f"{a['name']} ({a['points']})" for a in state["advantages_chosen"])
+        lines.append(f"**Advantages:** {al}")
+    if state.get("disadvantages_chosen"):
+        dl = ", ".join(f"{d['name']} ({d['points']})" for d in state["disadvantages_chosen"])
+        lines.append(f"**Disadvantages:** {dl}")
+    if state.get("skill_purchases"):
+        sl = ", ".join(f"{s} +{r}" for s, r in state["skill_purchases"].items())
+        lines.append(f"**Skill Purchases:** {sl}")
+    if state.get("chosen_spells"):
+        lines.append(f"**Spells:** {', '.join(state['chosen_spells'])}")
+
+    lines.append(f"\n**XP:** {remaining} remaining ({spent} spent of {_CHARGEN_XP}"
+                 + (f" + {min(sum(d['points'] for d in state.get('disadvantages_chosen', [])), _MAX_DISADVANTAGE_XP)} from disadv." if state.get("disadvantages_chosen") else "")
+                 + ")")
+    embed.description = "\n".join(lines) if lines else "Starting..."
+    return embed
+
+
+def _active_embed(state: dict) -> discord.Embed:
+    """Choose the right embed based on wizard mode."""
+    if state.get("full_wizard"):
+        return _chargen_embed(state)
+    return _wizard_embed(state)
+
+
+def _materialize_character(state: dict) -> Character:
+    """Build the final Character with all XP purchases applied."""
+    char = _build_base_char(state)
+
+    for trait, ranks in state.get("trait_purchases", {}).items():
+        for _ in range(ranks):
+            advancement.apply_trait_raise(char, trait)
+
+    for skill, ranks in state.get("skill_purchases", {}).items():
+        for _ in range(ranks):
+            advancement.apply_skill_raise(char, skill)
+
+    for adv in state.get("advantages_chosen", []):
+        if adv["name"] not in char.advantages:
+            char.advantages.append(adv["name"])
+
+    for dis in state.get("disadvantages_chosen", []):
+        if dis["name"] not in char.disadvantages:
+            char.disadvantages.append(dis["name"])
+
+    for spell_name in state.get("chosen_spells", []):
+        if spell_name not in char.spells_known:
+            char.spells_known.append(spell_name)
+
+    sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+    if sch and sch.get("affinity"):
+        allot = _parse_spell_allotment(sch)
+        if allot:
+            for base_spell in ("Sense", "Commune", "Summon"):
+                if base_spell not in char.spells_known:
+                    char.spells_known.insert(0, base_spell)
+
+    spent, _ = _calc_chargen_xp(state)
+    char.xp_spent = float(spent)
+    char.xp = 0.0
+
+    if state.get("concept"):
+        char.notes = state["concept"]
+
+    return char
+
+
+class _ChargenView(discord.ui.View):
+    def __init__(self, state: dict):
+        super().__init__(timeout=1800)
+        self.state = state
+
+    async def on_timeout(self) -> None:
+        pass
+
+
+# --- Step 5: Trait raises ---
+class _TraitRaiseSelect(discord.ui.Select):
+    def __init__(self, state: dict):
+        self.state = state
+        base = _build_base_char(state)
+        options = []
+        for t in advancement.TRAIT_NAMES:
+            cur = base.void_ring if t == "void" else base.get_trait(t)
+            bought = state.get("trait_purchases", {}).get(t, 0)
+            effective = cur + bought
+            cap = advancement.MAX_VOID_RANK if t == "void" else advancement.MAX_TRAIT_RANK
+            if effective >= cap:
+                continue
+            mult = advancement.VOID_XP_MULT if t == "void" else advancement.TRAIT_XP_MULT
+            cost = (effective + 1) * mult
+            options.append(discord.SelectOption(
+                label=f"{t.capitalize()} ({effective} → {effective + 1})",
+                value=t,
+                description=f"Cost: {cost} XP",
+            ))
+        if not options:
+            options = [discord.SelectOption(label="All traits maxed", value="__none__")]
+        super().__init__(placeholder="Raise a trait...", options=options[:25])
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        chosen = self.values[0]
+        if chosen == "__none__":
+            await interaction.response.defer()
+            return
+        purchases = self.state.setdefault("trait_purchases", {})
+        purchases[chosen] = purchases.get(chosen, 0) + 1
+        _, remaining = _calc_chargen_xp(self.state)
+        if remaining < 0:
+            purchases[chosen] -= 1
+            if purchases[chosen] <= 0:
+                del purchases[chosen]
+            await interaction.response.send_message("Not enough XP for that raise.", ephemeral=True)
+            return
+        await _chargen_traits(interaction, self.state)
+
+
+async def _chargen_traits(interaction: discord.Interaction, state: dict) -> None:
+    view = _ChargenView(state)
+    view.add_item(_TraitRaiseSelect(state))
+
+    undo_btn = discord.ui.Button(label="Undo Last", style=discord.ButtonStyle.secondary, row=2)
+    next_btn = discord.ui.Button(label="Next: Advantages", style=discord.ButtonStyle.primary, row=2)
+
+    async def on_undo(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        purchases = state.get("trait_purchases", {})
+        if purchases:
+            last_key = list(purchases.keys())[-1]
+            purchases[last_key] -= 1
+            if purchases[last_key] <= 0:
+                del purchases[last_key]
+        await _chargen_traits(btn_inter, state)
+
+    async def on_next(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_advantages(btn_inter, state)
+
+    undo_btn.callback = on_undo
+    next_btn.callback = on_next
+    view.add_item(undo_btn)
+    view.add_item(next_btn)
+
+    await interaction.response.edit_message(
+        content="**Step 5/10 — Trait Raises** · Select a trait to raise (costs XP). Press **Next** when done.",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+# --- Step 6: Advantages ---
+class _AdvantageSelect(discord.ui.Select):
+    def __init__(self, state: dict, category: str):
+        self.state = state
+        self.category = category
+        chosen_names = {a["name"] for a in state.get("advantages_chosen", [])}
+        advs = [a for a in advantages.by_kind("advantage")
+                if a.get("points") is not None and a["name"] not in chosen_names
+                and (a.get("category") or "") == category]
+        advs.sort(key=lambda a: a["name"])
+        options = []
+        for a in advs[:25]:
+            options.append(discord.SelectOption(
+                label=a["name"][:100],
+                description=f"{a['cost_text']} — {a.get('category', '')}",
+            ))
+        if not options:
+            options = [discord.SelectOption(label="(none available)", value="__none__")]
+        super().__init__(placeholder=f"{category} advantages...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        chosen = self.values[0]
+        if chosen == "__none__":
+            await interaction.response.defer()
+            return
+        adv = advantages.get(chosen, "advantage")
+        if not adv or adv.get("points") is None:
+            await interaction.response.send_message("That advantage has a variable cost; ask a DM.", ephemeral=True)
+            return
+        self.state.setdefault("advantages_chosen", []).append({"name": adv["name"], "points": adv["points"]})
+        _, remaining = _calc_chargen_xp(self.state)
+        if remaining < 0:
+            self.state["advantages_chosen"].pop()
+            await interaction.response.send_message("Not enough XP for that advantage.", ephemeral=True)
+            return
+        await _chargen_advantages(interaction, self.state)
+
+
+class _AdvCategorySelect(discord.ui.Select):
+    def __init__(self, state: dict):
+        self.state = state
+        cats = ["Mental", "Physical", "Social", "Spiritual", "Material"]
+        options = [discord.SelectOption(label=c) for c in cats]
+        super().__init__(placeholder="Pick a category to browse...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        cat = self.values[0]
+        view = _ChargenView(self.state)
+        view.add_item(_AdvantageSelect(self.state, cat))
+        back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
+
+        async def on_back(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(self.state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            await _chargen_advantages(btn_inter, self.state)
+
+        back_btn.callback = on_back
+        view.add_item(back_btn)
+        await interaction.response.edit_message(
+            content=f"**Step 6/10 — Advantages ({cat})** · Select an advantage to buy.",
+            embed=_chargen_embed(self.state), view=view,
+        )
+
+
+async def _chargen_advantages(interaction: discord.Interaction, state: dict) -> None:
+    view = _ChargenView(state)
+    view.add_item(_AdvCategorySelect(state))
+
+    undo_btn = discord.ui.Button(label="Undo Last", style=discord.ButtonStyle.secondary, row=2)
+    next_btn = discord.ui.Button(label="Next: Disadvantages", style=discord.ButtonStyle.primary, row=2)
+
+    async def on_undo(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        if state.get("advantages_chosen"):
+            state["advantages_chosen"].pop()
+        await _chargen_advantages(btn_inter, state)
+
+    async def on_next(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_disadvantages(btn_inter, state)
+
+    undo_btn.callback = on_undo
+    next_btn.callback = on_next
+    view.add_item(undo_btn)
+    view.add_item(next_btn)
+
+    await interaction.response.edit_message(
+        content="**Step 6/10 — Advantages** · Pick a category then select advantages. Press **Next** when done.",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+# --- Step 7: Disadvantages ---
+class _DisadvantageSelect(discord.ui.Select):
+    def __init__(self, state: dict, category: str):
+        self.state = state
+        chosen_names = {d["name"] for d in state.get("disadvantages_chosen", [])}
+        disadvs = [d for d in advantages.by_kind("disadvantage")
+                   if d.get("points") is not None and d["name"] not in chosen_names
+                   and (d.get("category") or "") == category]
+        disadvs.sort(key=lambda d: d["name"])
+        options = []
+        for d in disadvs[:25]:
+            options.append(discord.SelectOption(
+                label=d["name"][:100],
+                description=f"{d['cost_text']} — gives XP back",
+            ))
+        if not options:
+            options = [discord.SelectOption(label="(none available)", value="__none__")]
+        super().__init__(placeholder=f"{category} disadvantages...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        chosen = self.values[0]
+        if chosen == "__none__":
+            await interaction.response.defer()
+            return
+        dis = advantages.get(chosen, "disadvantage")
+        if not dis or dis.get("points") is None:
+            await interaction.response.send_message("That disadvantage has a variable cost; ask a DM.", ephemeral=True)
+            return
+        current_disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+        if current_disadv_xp >= _MAX_DISADVANTAGE_XP:
+            await interaction.response.send_message(
+                f"You've already reached the maximum {_MAX_DISADVANTAGE_XP} XP from disadvantages.",
+                ephemeral=True,
+            )
+            return
+        self.state.setdefault("disadvantages_chosen", []).append({"name": dis["name"], "points": dis["points"]})
+        await _chargen_disadvantages(interaction, self.state)
+
+
+class _DisadvCategorySelect(discord.ui.Select):
+    def __init__(self, state: dict):
+        self.state = state
+        cats = ["Mental", "Physical", "Social", "Spiritual"]
+        options = [discord.SelectOption(label=c) for c in cats]
+        super().__init__(placeholder="Pick a category to browse...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        cat = self.values[0]
+        view = _ChargenView(self.state)
+        view.add_item(_DisadvantageSelect(self.state, cat))
+        back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
+
+        async def on_back(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(self.state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            await _chargen_disadvantages(btn_inter, self.state)
+
+        back_btn.callback = on_back
+        view.add_item(back_btn)
+        disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+        await interaction.response.edit_message(
+            content=f"**Step 7/10 — Disadvantages ({cat})** · "
+                    f"Select a disadvantage ({disadv_xp}/{_MAX_DISADVANTAGE_XP} XP gained).",
+            embed=_chargen_embed(self.state), view=view,
+        )
+
+
+async def _chargen_disadvantages(interaction: discord.Interaction, state: dict) -> None:
+    view = _ChargenView(state)
+    view.add_item(_DisadvCategorySelect(state))
+
+    undo_btn = discord.ui.Button(label="Undo Last", style=discord.ButtonStyle.secondary, row=2)
+    next_btn = discord.ui.Button(label="Next: Skills", style=discord.ButtonStyle.primary, row=2)
+
+    async def on_undo(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        if state.get("disadvantages_chosen"):
+            state["disadvantages_chosen"].pop()
+        await _chargen_disadvantages(btn_inter, state)
+
+    async def on_next(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills(btn_inter, state)
+
+    undo_btn.callback = on_undo
+    next_btn.callback = on_next
+    view.add_item(undo_btn)
+    view.add_item(next_btn)
+
+    disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+    await interaction.response.edit_message(
+        content=f"**Step 7/10 — Disadvantages** · Pick a category to browse. "
+                f"({disadv_xp}/{_MAX_DISADVANTAGE_XP} XP gained). Press **Next** when done.",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+# --- Step 8: Skills ---
+class _SkillSelect(discord.ui.Select):
+    def __init__(self, state: dict, category: str):
+        self.state = state
+        self._category = category
+        skill_list = _SKILL_CATEGORIES.get(category, [])
+        base = _build_base_char(state)
+        options = []
+        for sk in skill_list:
+            base_rank = base.skills.get(sk, 0)
+            bought = state.get("skill_purchases", {}).get(sk, 0)
+            effective = base_rank + bought
+            if effective >= advancement.MAX_SKILL_RANK:
+                continue
+            cost = (effective + 1) * advancement.SKILL_XP_MULT
+            label = f"{sk} ({effective} → {effective + 1})" if effective > 0 else f"{sk} (0 → 1)"
+            options.append(discord.SelectOption(
+                label=label[:100], value=sk,
+                description=f"Cost: {cost} XP",
+            ))
+        if not options:
+            options = [discord.SelectOption(label="(none available)", value="__none__")]
+        super().__init__(placeholder=f"{category} skills...", options=options[:25])
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        chosen = self.values[0]
+        if chosen == "__none__":
+            await interaction.response.defer()
+            return
+        purchases = self.state.setdefault("skill_purchases", {})
+        purchases[chosen] = purchases.get(chosen, 0) + 1
+        _, remaining = _calc_chargen_xp(self.state)
+        if remaining < 0:
+            purchases[chosen] -= 1
+            if purchases[chosen] <= 0:
+                del purchases[chosen]
+            await interaction.response.send_message("Not enough XP for that skill rank.", ephemeral=True)
+            return
+        await _chargen_skills_category(interaction, self.state, self._category)
+
+
+class _SkillCategorySelect(discord.ui.Select):
+    def __init__(self, state: dict):
+        self.state = state
+        options = [discord.SelectOption(label=c) for c in _SKILL_CATEGORIES]
+        super().__init__(placeholder="Pick a skill category...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills_category(interaction, self.state, self.values[0])
+
+
+async def _chargen_skills_category(interaction: discord.Interaction, state: dict, category: str) -> None:
+    view = _ChargenView(state)
+    view.add_item(_SkillSelect(state, category))
+    back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills(btn_inter, state)
+
+    back_btn.callback = on_back
+    view.add_item(back_btn)
+    await interaction.response.edit_message(
+        content=f"**Step 8/10 — Skills ({category})** · Select a skill to buy/raise.",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+async def _chargen_skills(interaction: discord.Interaction, state: dict) -> None:
+    view = _ChargenView(state)
+    view.add_item(_SkillCategorySelect(state))
+
+    undo_btn = discord.ui.Button(label="Undo Last", style=discord.ButtonStyle.secondary, row=2)
+    next_btn = discord.ui.Button(label="Next: Spells", style=discord.ButtonStyle.primary, row=2)
+
+    async def on_undo(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        purchases = state.get("skill_purchases", {})
+        if purchases:
+            last_key = list(purchases.keys())[-1]
+            purchases[last_key] -= 1
+            if purchases[last_key] <= 0:
+                del purchases[last_key]
+        await _chargen_skills(btn_inter, state)
+
+    async def on_next(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+        if sch and sch.get("affinity"):
+            await _chargen_spells(btn_inter, state)
+        else:
+            await _chargen_review(btn_inter, state)
+
+    undo_btn.callback = on_undo
+    next_btn.callback = on_next
+    view.add_item(undo_btn)
+    view.add_item(next_btn)
+
+    await interaction.response.edit_message(
+        content="**Step 8/10 — Skills** · Pick a category then select skills to buy. Press **Next** when done.",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+# --- Step 9: Spells (shugenja only) ---
+class _SpellSelect(discord.ui.Select):
+    def __init__(self, state: dict, element: str, remaining: int):
+        self.state = state
+        self.element = element
+        chosen_names = set(state.get("chosen_spells", []))
+        available = [s for s in spells.by_element(element)
+                     if s["mastery"] == 1 and s["name"] not in chosen_names]
+        available.sort(key=lambda s: s["name"])
+        options = []
+        for s in available[:25]:
+            kw = s.get("keyword", "")
+            desc = kw[:100] if kw else s.get("range", "")[:100]
+            options.append(discord.SelectOption(
+                label=s["name"][:100], description=desc,
+            ))
+        if not options:
+            options = [discord.SelectOption(label="(none available)", value="__none__")]
+        super().__init__(
+            placeholder=f"{element} spells ({remaining} left to pick)...",
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        chosen = self.values[0]
+        if chosen == "__none__":
+            await interaction.response.defer()
+            return
+        self.state.setdefault("chosen_spells", []).append(chosen)
+        allot_tracking = self.state.setdefault("_spell_allot_remaining", {})
+        allot_tracking[self.element] = allot_tracking.get(self.element, 0) - 1
+        await _chargen_spells(interaction, self.state)
+
+
+async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None:
+    sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+    allot = _parse_spell_allotment(sch) if sch else None
+    if allot is None:
+        await _chargen_review(interaction, state)
+        return
+
+    if "_spell_allot_remaining" not in state:
+        state["_spell_allot_remaining"] = dict(allot)
+
+    remaining = state["_spell_allot_remaining"]
+    total_remaining = sum(max(0, v) for v in remaining.values())
+
+    if total_remaining <= 0:
+        await _chargen_review(interaction, state)
+        return
+
+    view = _ChargenView(state)
+
+    elements_with_slots = [(el, cnt) for el, cnt in remaining.items() if cnt > 0]
+    if len(elements_with_slots) == 1:
+        el, cnt = elements_with_slots[0]
+        view.add_item(_SpellSelect(state, el, cnt))
+    else:
+        el_select = discord.ui.Select(
+            placeholder="Pick an element...",
+            options=[discord.SelectOption(label=f"{el} ({cnt} remaining)", value=el)
+                     for el, cnt in elements_with_slots],
+        )
+
+        async def on_element(sel_inter: discord.Interaction) -> None:
+            if sel_inter.user.id != int(state["user_id"]):
+                await sel_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            el = sel_inter.values[0]
+            cnt = remaining.get(el, 0)
+            v2 = _ChargenView(state)
+            v2.add_item(_SpellSelect(state, el, cnt))
+            back_btn = discord.ui.Button(label="Back to Elements", style=discord.ButtonStyle.secondary, row=2)
+
+            async def on_back(btn_inter: discord.Interaction) -> None:
+                if btn_inter.user.id != int(state["user_id"]):
+                    await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                    return
+                await _chargen_spells(btn_inter, state)
+
+            back_btn.callback = on_back
+            v2.add_item(back_btn)
+            await sel_inter.response.edit_message(
+                content=f"**Step 9/10 — Spells ({el})** · Pick a Mastery 1 spell.",
+                embed=_chargen_embed(state), view=v2,
+            )
+
+        el_select.callback = on_element
+        view.add_item(el_select)
+
+    skip_btn = discord.ui.Button(label="Skip Remaining Spells", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_skip(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_review(btn_inter, state)
+
+    skip_btn.callback = on_skip
+    view.add_item(skip_btn)
+
+    slots_desc = ", ".join(f"{el}: {cnt}" for el, cnt in remaining.items() if cnt > 0)
+    await interaction.response.edit_message(
+        content=f"**Step 9/10 — Starting Spells** · Remaining slots: {slots_desc}. "
+                f"(Sense, Commune, Summon are auto-granted.)",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+# --- Step 10: Review & Submit ---
+async def _chargen_review(interaction: discord.Interaction, state: dict) -> None:
+    char = _materialize_character(state)
+    spent, remaining = _calc_chargen_xp(state)
+
+    embed = discord.Embed(
+        title=f"Review: {state['name']}",
+        color=discord.Color.green(),
+    )
+
+    lines: list[str] = []
+    lines.append(f"**Clan:** {char.clan}")
+    if char.family:
+        lines.append(f"**Family:** {char.family}")
+    lines.append(f"**School:** {char.school} ({char.school_type})")
+    if state.get("heritage_result"):
+        lines.append(f"**Heritage:** {state['heritage_result'][:80]}")
+    if state.get("concept"):
+        lines.append(f"**Concept:** {state['concept'][:200]}")
+    embed.description = "\n".join(lines)
+
+    rings = stats.all_rings(char)
+    trait_lines = (
+        f"Air: Ref {char.reflexes} / Awa {char.awareness} (Ring {rings['air']})\n"
+        f"Earth: Sta {char.stamina} / Wil {char.willpower} (Ring {rings['earth']})\n"
+        f"Fire: Agi {char.agility} / Int {char.intelligence} (Ring {rings['fire']})\n"
+        f"Water: Str {char.strength} / Per {char.perception} (Ring {rings['water']})\n"
+        f"Void: {char.void_ring}"
+    )
+    embed.add_field(name="Traits & Rings", value=trait_lines, inline=False)
+
+    if char.skills:
+        skill_str = ", ".join(f"{s} {r}" for s, r in sorted(char.skills.items()))
+        embed.add_field(name="Skills", value=skill_str[:1024], inline=False)
+
+    if char.advantages:
+        embed.add_field(name="Advantages", value=", ".join(char.advantages)[:1024], inline=False)
+    if char.disadvantages:
+        embed.add_field(name="Disadvantages", value=", ".join(char.disadvantages)[:1024], inline=False)
+
+    if char.spells_known:
+        embed.add_field(name="Spells", value=", ".join(char.spells_known)[:1024], inline=False)
+
+    embed.add_field(name="Honor", value=f"{char.honor:.1f}", inline=True)
+    embed.add_field(name="Insight", value=str(stats.insight(char)), inline=True)
+    embed.add_field(name="XP", value=f"{spent} spent, {remaining} unspent", inline=True)
+
+    if remaining > 0:
+        embed.set_footer(text=f"Warning: {remaining} XP unspent! Consider spending it before submitting.")
+
+    sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+    school_report = schools.apply_to_character(Character(), sch) if sch else None
+    wildcards = school_report.get("wildcards", []) if school_report else []
+    if wildcards:
+        embed.add_field(name="Wildcard Skills (DM assigns)",
+                        value="\n".join(f"- {w}" for w in wildcards)[:1024], inline=False)
+
+    view = _ChargenView(state)
+    submit_btn = discord.ui.Button(label="Submit for Approval", style=discord.ButtonStyle.success, emoji="📋", row=0)
+    back_traits_btn = discord.ui.Button(label="Back: Traits", style=discord.ButtonStyle.secondary, row=1)
+    back_skills_btn = discord.ui.Button(label="Back: Skills", style=discord.ButtonStyle.secondary, row=1)
+
+    async def on_submit(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _submit_for_approval(btn_inter, state)
+
+    async def on_back_traits(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_traits(btn_inter, state)
+
+    async def on_back_skills(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills(btn_inter, state)
+
+    submit_btn.callback = on_submit
+    back_traits_btn.callback = on_back_traits
+    back_skills_btn.callback = on_back_skills
+    view.add_item(submit_btn)
+    view.add_item(back_traits_btn)
+    view.add_item(back_skills_btn)
+
+    await interaction.response.edit_message(
+        content="**Step 10/10 — Review** · Check your character below, then submit for DM approval.",
+        embed=embed, view=view,
+    )
+
+
+async def _submit_for_approval(interaction: discord.Interaction, state: dict) -> None:
+    """Send the completed character to the approval channel for DM review."""
+    guild_id = state["guild_id"]
+    approval_ch_id = store.get_approval_channel(guild_id)
+    if not approval_ch_id:
+        await interaction.response.send_message(
+            "No approval channel configured. Ask an admin to run `/setup server`.",
+            ephemeral=True,
+        )
+        return
+    approval_ch = client.get_channel(int(approval_ch_id))
+    if approval_ch is None:
+        await interaction.response.send_message(
+            "The approval channel is no longer accessible.", ephemeral=True,
+        )
+        return
+
+    char = _materialize_character(state)
+    spent, remaining = _calc_chargen_xp(state)
+
+    embed = discord.Embed(
+        title="📋 Character Submission (Full Sheet)",
+        color=0xC4A747,
+    )
+    embed.add_field(name="Player", value=f"<@{state['user_id']}>", inline=True)
+    embed.add_field(name="Character Name", value=state["name"], inline=True)
+    embed.add_field(name="Clan / Family / School",
+                    value=f"{char.clan} / {char.family} / {char.school} ({char.school_type})",
+                    inline=False)
+
+    if state.get("concept"):
+        embed.add_field(name="Concept", value=state["concept"][:1024], inline=False)
+
+    rings = stats.all_rings(char)
+    trait_lines = (
+        f"Air: Ref {char.reflexes} / Awa {char.awareness} (Ring {rings['air']})\n"
+        f"Earth: Sta {char.stamina} / Wil {char.willpower} (Ring {rings['earth']})\n"
+        f"Fire: Agi {char.agility} / Int {char.intelligence} (Ring {rings['fire']})\n"
+        f"Water: Str {char.strength} / Per {char.perception} (Ring {rings['water']})\n"
+        f"Void: {char.void_ring}"
+    )
+    embed.add_field(name="Traits & Rings", value=trait_lines, inline=False)
+
+    if char.skills:
+        skill_str = ", ".join(f"{s} {r}" for s, r in sorted(char.skills.items()))
+        embed.add_field(name="Skills", value=skill_str[:1024], inline=False)
+
+    if char.advantages:
+        embed.add_field(name="Advantages", value=", ".join(char.advantages)[:1024], inline=False)
+    if char.disadvantages:
+        embed.add_field(name="Disadvantages", value=", ".join(char.disadvantages)[:1024], inline=False)
+    if char.spells_known:
+        embed.add_field(name="Spells", value=", ".join(char.spells_known)[:1024], inline=False)
+
+    embed.add_field(name="Honor", value=f"{char.honor:.1f}", inline=True)
+    embed.add_field(name="Insight", value=str(stats.insight(char)), inline=True)
+    embed.add_field(name="XP", value=f"{spent} spent, {remaining} unspent", inline=True)
+
+    if state.get("heritage_result"):
+        embed.add_field(name="Heritage", value=state["heritage_result"][:1024], inline=False)
+
+    view = _FullCharacterApprovalView(
+        applicant_id=int(state["user_id"]),
+        character_state=state,
+        lobby_channel_id=int(state.get("channel_id", interaction.channel_id)),
+    )
+    await approval_ch.send(embed=embed, view=view)
+
+    for child in interaction.message.view.children:
+        child.disabled = True
+    await interaction.response.edit_message(
+        content=f"📋 Your character **{state['name']}** has been submitted for DM review! "
+                f"You'll be notified when a decision is made.",
+        embed=None, view=None,
+    )
+
+
+class _FullCharacterApprovalView(discord.ui.View):
+    """DM approval view for fully-built character sheets from the wizard."""
+
+    def __init__(self, applicant_id: int, character_state: dict,
+                 lobby_channel_id: int) -> None:
+        super().__init__(timeout=None)
+        self.applicant_id = applicant_id
+        self.character_state = character_state
+        self.lobby_channel_id = lobby_channel_id
+
+    @discord.ui.button(label="Approve", style=discord.ButtonStyle.success, emoji="✅")
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await _require_dm_role(interaction):
+            return
+        guild = interaction.guild
+        if guild is None:
+            return
+        member = guild.get_member(self.applicant_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(self.applicant_id)
+            except discord.NotFound:
+                await interaction.response.send_message("That member is no longer in the server.", ephemeral=True)
+                return
+        approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
+        if approved_role is None:
+            await interaction.response.send_message(
+                f"The **{ROLE_APPROVED}** role doesn't exist. Run `/setup server` first.",
+                ephemeral=True,
+            )
+            return
+
+        guild_id = str(guild.id)
+        owner_id = str(self.applicant_id)
+        state = self.character_state
+        char = _materialize_character(state)
+
+        try:
+            record = store.create_character(guild_id, owner_id, char)
+        except storage.DuplicateNameError:
+            await interaction.response.send_message(
+                f"A character named **{state['name']}** already exists for that player.",
+                ephemeral=True,
+            )
+            return
+        store.set_active(guild_id, owner_id, record.id)
+
+        await member.add_roles(approved_role,
+                               reason=f"Character '{state['name']}' approved by {interaction.user.display_name}")
+        nick_note = ""
+        try:
+            await member.edit(nick=state["name"], reason=f"Character approved: {state['name']}")
+        except discord.Forbidden:
+            nick_note = ("\n(Could not change nickname — the bot's role may be too low "
+                         "or the member is the server owner.)")
+
+        creation_ch_id = store.get_creation_channel(guild_id, owner_id)
+        if creation_ch_id:
+            ch = client.get_channel(int(creation_ch_id))
+            if ch:
+                try:
+                    await ch.delete(reason=f"Character '{state['name']}' approved — wizard channel cleanup")
+                except discord.Forbidden:
+                    pass
+            store.delete_creation_channel(guild_id, owner_id)
+
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+        await interaction.response.edit_message(view=self)
+
+        embed = discord.Embed(
+            title="✅ Character Approved (Full Sheet)",
+            color=discord.Color.green(),
+            description=(
+                f"**{member.mention}**'s character **{state['name']}** has been approved.\n"
+                f"Full character sheet created with all traits, skills, advantages, "
+                f"and spells applied.{nick_note}"
+            ),
+        )
+        embed.set_footer(text=f"Approved by {interaction.user.display_name}")
+        await interaction.followup.send(embed=embed)
+
+        lobby = client.get_channel(self.lobby_channel_id)
+        if lobby:
+            await lobby.send(
+                f"✅ {member.mention}, your character **{state['name']}** has been approved! "
+                f"Your full character sheet is ready. Welcome to Rokugan!"
+            )
+
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.danger, emoji="❌")
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await _require_dm_role(interaction):
+            return
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+        await interaction.response.edit_message(view=self)
+        guild = interaction.guild
+        member = guild.get_member(self.applicant_id) if guild else None
+        if member is None and guild is not None:
+            try:
+                member = await guild.fetch_member(self.applicant_id)
+            except discord.NotFound:
+                member = None
+        member_str = member.mention if member else f"User {self.applicant_id}"
+        embed = discord.Embed(
+            title="❌ Character Denied",
+            color=discord.Color.red(),
+            description=f"**{member_str}**'s character **{self.character_state['name']}** was denied.",
+        )
+        embed.set_footer(text=f"Denied by {interaction.user.display_name}")
+        await interaction.followup.send(embed=embed)
+        lobby = client.get_channel(self.lobby_channel_id)
+        if lobby and member:
+            await lobby.send(
+                f"❌ {member.mention}, your character **{self.character_state['name']}** was not approved. "
+                f"Please speak with a DM for details and feel free to submit again."
+            )
+
 
 @sheet.command(name="wizard", description="Step-by-step guided character creation.")
 @app_commands.describe(name="Your character's name.")
@@ -2269,6 +3226,8 @@ npc_edit_group = app_commands.Group(name="npc-edit", description="Edit NPC stats
 creature_group = app_commands.Group(name="creature", description="Spawn and run bestiary creatures.")
 room_group = app_commands.Group(name="room", description="Create private play rooms and invite people.")
 category_group = app_commands.Group(name="category", description="Organise NPCs and creatures into named groups.")
+location_group = app_commands.Group(name="location", description="Create and manage in-character areas and locations.")
+location_area_group = app_commands.Group(name="area", description="Manage location areas (Discord categories). Fortune role required.", parent=location_group)
 
 # ---------------------------------------------------------------------------
 # /dm wizard: interactive DM command menu
@@ -5120,6 +6079,296 @@ async def category_spawn(interaction: discord.Interaction, category: str) -> Non
     )
 
 # ===========================================================================
+# /location group: IC areas (Discord categories) and locations (text channels)
+# ===========================================================================
+
+async def _location_area_autocomplete(
+    interaction: discord.Interaction, current: str,
+) -> list[app_commands.Choice[str]]:
+    if interaction.guild_id is None:
+        return []
+    areas = store.list_location_areas(str(interaction.guild_id))
+    cur = current.lower()
+    return [
+        app_commands.Choice(name=a.name, value=a.name)
+        for a in areas if cur in a.name.lower()
+    ][:25]
+
+
+@location_area_group.command(name="create", description="Create a new location area (Discord category). Fortune role required.")
+@app_commands.describe(name="Area name (becomes the Discord category name).")
+async def location_area_create(
+    interaction: discord.Interaction,
+    name: app_commands.Range[str, 1, 90],
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    guild = interaction.guild
+    guild_id = str(guild.id)
+    clean_name = name.strip()
+    if store.get_location_area(guild_id, clean_name):
+        await interaction.response.send_message(f"Area **{clean_name}** already exists.", ephemeral=True)
+        return
+    everyone = guild.default_role
+    bot_member = guild.me
+    approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
+    fortune_role = discord.utils.get(guild.roles, name=ROLE_FORTUNE)
+    kami_role = discord.utils.get(guild.roles, name=ROLE_KAMI)
+    overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_channels=True,
+            manage_messages=True, manage_threads=True,
+        ),
+    }
+    if approved_role:
+        overwrites[approved_role] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+        )
+    for r in (fortune_role, kami_role):
+        if r:
+            overwrites[r] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+                manage_messages=True,
+            )
+    try:
+        category = await guild.create_category(clean_name, overwrites=overwrites, reason=f"Location area by {interaction.user}")
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "I need **Manage Channels** permission to create categories.", ephemeral=True,
+        )
+        return
+    try:
+        store.create_location_area(guild_id, str(category.id), clean_name, str(interaction.user.id))
+    except storage.DuplicateNameError:
+        await category.delete(reason="Duplicate area cleanup")
+        await interaction.response.send_message(f"Area **{clean_name}** already exists.", ephemeral=True)
+        return
+    await interaction.response.send_message(f"Created location area **{clean_name}**.")
+
+
+@location_area_group.command(name="delete", description="Delete a location area and all its locations. Fortune role required.")
+@app_commands.describe(name="Area to delete.")
+@app_commands.autocomplete(name=_location_area_autocomplete)
+async def location_area_delete(
+    interaction: discord.Interaction, name: str,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    guild = interaction.guild
+    guild_id = str(guild.id)
+    area = store.get_location_area(guild_id, name)
+    if area is None:
+        await interaction.response.send_message(f"No area named **{name}**.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    locs = store.list_locations(area.id)
+    for loc in locs:
+        ch = guild.get_channel(int(loc.channel_id))
+        if ch:
+            try:
+                await ch.delete(reason=f"Area {area.name} deleted")
+            except discord.Forbidden:
+                pass
+        store.delete_location(loc.id)
+    cat_ch = guild.get_channel(int(area.category_id))
+    if cat_ch:
+        try:
+            await cat_ch.delete(reason=f"Location area deleted by {interaction.user}")
+        except discord.Forbidden:
+            pass
+    store.delete_location_area(area.id)
+    await interaction.followup.send(f"Deleted area **{area.name}** and {len(locs)} location(s).")
+
+
+@location_area_group.command(name="list", description="List all location areas on this server.")
+async def location_area_list(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
+        return
+    guild_id = str(interaction.guild_id)
+    areas = store.list_location_areas(guild_id)
+    if not areas:
+        await interaction.response.send_message(
+            "No location areas. A Fortune can create one with `/location area create`.", ephemeral=True,
+        )
+        return
+    lines = []
+    for a in areas:
+        n_locs = len(store.list_locations(a.id))
+        lines.append(f"• **{a.name}** ({n_locs} location{'s' if n_locs != 1 else ''})")
+    pages = _paginate(lines, "**Location Areas:**\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
+
+
+@location_group.command(name="create", description="Create a location (text channel) in an area. Approved role required.")
+@app_commands.describe(
+    area="Which area to create the location in.",
+    name="Location name (becomes the channel name).",
+    description="Optional location description (pinned at the top).",
+)
+@app_commands.autocomplete(area=_location_area_autocomplete)
+async def location_create(
+    interaction: discord.Interaction,
+    area: str,
+    name: app_commands.Range[str, 1, 90],
+    description: app_commands.Range[str, 1, 4000] | None = None,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not _has_role(interaction, ROLE_APPROVED) and not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_APPROVED}** role to create locations.", ephemeral=True,
+        )
+        return
+    guild = interaction.guild
+    guild_id = str(guild.id)
+    area_rec = store.get_location_area(guild_id, area)
+    if area_rec is None:
+        await interaction.response.send_message(f"No area named **{area}**.", ephemeral=True)
+        return
+    clean_name = name.strip()
+    cat_ch = guild.get_channel(int(area_rec.category_id))
+    if cat_ch is None or not isinstance(cat_ch, discord.CategoryChannel):
+        await interaction.response.send_message(
+            f"The Discord category for area **{area_rec.name}** no longer exists. "
+            "A Fortune should delete and recreate the area.",
+            ephemeral=True,
+        )
+        return
+    try:
+        channel = await cat_ch.create_text_channel(clean_name, reason=f"Location by {interaction.user}")
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "I need **Manage Channels** permission in this category.", ephemeral=True,
+        )
+        return
+    try:
+        loc = store.create_location(
+            guild_id, area_rec.id, str(channel.id), clean_name,
+            str(interaction.user.id), description=description or "",
+        )
+    except storage.DuplicateNameError:
+        await channel.delete(reason="Duplicate location cleanup")
+        await interaction.response.send_message(
+            f"A location named **{clean_name}** already exists in **{area_rec.name}**.", ephemeral=True,
+        )
+        return
+    await interaction.response.send_message(
+        f"Created location {channel.mention} in **{area_rec.name}**.",
+    )
+    if description:
+        embed = discord.Embed(title=clean_name, description=description, color=0xC4A747)
+        pin_msg = await channel.send(embed=embed)
+        await pin_msg.pin()
+
+
+@location_group.command(name="describe", description="Set or update a location's pinned description (run inside the location channel).")
+@app_commands.describe(description="The new location description to pin.")
+async def location_describe(
+    interaction: discord.Interaction,
+    description: app_commands.Range[str, 1, 4000],
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    loc = store.get_location_by_channel(str(interaction.channel_id))
+    if loc is None:
+        await interaction.response.send_message(
+            "Run this inside a location channel.", ephemeral=True,
+        )
+        return
+    if str(interaction.user.id) != loc.creator_id and not _is_dm(interaction):
+        await interaction.response.send_message(
+            "Only the location creator or a Fortune can change the description.", ephemeral=True,
+        )
+        return
+    await interaction.response.send_message(f"Updating description for **{loc.name}**...", ephemeral=True)
+    try:
+        pinned = await interaction.channel.pins()
+        for msg in pinned:
+            if msg.author == interaction.client.user and msg.embeds and msg.embeds[0].color and msg.embeds[0].color.value == 0xC4A747:
+                await msg.unpin()
+                await msg.delete()
+    except discord.Forbidden:
+        pass
+    store.update_location_description(loc.id, description)
+    embed = discord.Embed(title=loc.name, description=description, color=0xC4A747)
+    pin_msg = await interaction.channel.send(embed=embed)
+    await pin_msg.pin()
+
+
+@location_group.command(name="list", description="List locations in an area (or all areas if none specified).")
+@app_commands.describe(area="Filter to a specific area.")
+@app_commands.autocomplete(area=_location_area_autocomplete)
+async def location_list(
+    interaction: discord.Interaction,
+    area: str | None = None,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    guild_id = str(interaction.guild_id)
+    if area:
+        area_rec = store.get_location_area(guild_id, area)
+        if area_rec is None:
+            await interaction.response.send_message(f"No area named **{area}**.", ephemeral=True)
+            return
+        areas_to_show = [area_rec]
+    else:
+        areas_to_show = store.list_location_areas(guild_id)
+    if not areas_to_show:
+        await interaction.response.send_message(
+            "No location areas. A Fortune can create one with `/location area create`.",
+            ephemeral=True,
+        )
+        return
+    lines = []
+    for a in areas_to_show:
+        locs = store.list_locations(a.id)
+        lines.append(f"**{a.name}**")
+        if locs:
+            for loc in locs:
+                lines.append(f"  • <#{loc.channel_id}> — {loc.name}" + (f" (by <@{loc.creator_id}>)" if loc.creator_id else ""))
+        else:
+            lines.append("  *(no locations yet)*")
+    pages = _paginate(lines, "**Locations:**\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
+
+
+@location_group.command(name="close", description="Delete a location channel. Creator or Fortune required (run inside the channel).")
+async def location_close(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
+        return
+    loc = store.get_location_by_channel(str(interaction.channel_id))
+    if loc is None:
+        await interaction.response.send_message(
+            "Run this inside a location channel.", ephemeral=True,
+        )
+        return
+    if str(interaction.user.id) != loc.creator_id and not _is_dm(interaction):
+        await interaction.response.send_message(
+            "Only the location creator or a Fortune can close it.", ephemeral=True,
+        )
+        return
+    store.delete_location(loc.id)
+    await interaction.response.send_message(f"Closing location **{loc.name}**...")
+    try:
+        await interaction.channel.delete(reason=f"Location closed by {interaction.user}")
+    except discord.Forbidden:
+        pass
+
+
+# ===========================================================================
 # /xp group: Experience: DMs grant, players spend to advance (L5R 4e RAW)
 # ===========================================================================
 
@@ -6986,8 +8235,11 @@ class CharacterApprovalView(discord.ui.View):
             return
         member = guild.get_member(self.applicant_id)
         if member is None:
-            await interaction.response.send_message("That member is no longer in the server.", ephemeral=True)
-            return
+            try:
+                member = await guild.fetch_member(self.applicant_id)
+            except discord.NotFound:
+                await interaction.response.send_message("That member is no longer in the server.", ephemeral=True)
+                return
         approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
         if approved_role is None:
             await interaction.response.send_message(
@@ -7080,6 +8332,11 @@ class CharacterApprovalView(discord.ui.View):
         await interaction.response.edit_message(view=self)
         guild = interaction.guild
         member = guild.get_member(self.applicant_id) if guild else None
+        if member is None and guild is not None:
+            try:
+                member = await guild.fetch_member(self.applicant_id)
+            except discord.NotFound:
+                member = None
         member_str = member.mention if member else f"User {self.applicant_id}"
         embed = discord.Embed(
             title="❌ Character Denied",
@@ -7095,77 +8352,128 @@ class CharacterApprovalView(discord.ui.View):
                 f"Please speak with a DM for details and feel free to submit again."
             )
 
-@client.tree.command(name="submit", description="Submit a character for DM approval (use in the lobby).")
-@app_commands.describe(
-    character_name="Your character's full name (e.g. Bayushi Kachiko).",
-    clan="Your character's Great Clan.",
-    family="Family name (start typing for suggestions).",
-    school="Starting school (start typing for suggestions).",
-    concept="A short description of your character concept and personality.",
-)
-@app_commands.choices(clan=[app_commands.Choice(name=c, value=c) for c in _GREAT_CLANS])
-@app_commands.autocomplete(family=_family_autocomplete, school=_basic_school_autocomplete)
-async def submit_character(
-    interaction: discord.Interaction,
-    character_name: app_commands.Range[str, 1, 100],
-    clan: app_commands.Choice[str],
-    concept: app_commands.Range[str, 1, 2000],
-    family: str | None = None,
-    school: str | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    guild = str(interaction.guild_id)
-    approval_ch_id = store.get_approval_channel(guild)
+async def _start_chargen_wizard(interaction: discord.Interaction) -> None:
+    """Shared entry point: open a private channel and pop the name modal."""
+    guild = interaction.guild
+    guild_id = str(guild.id)
+    user_id = str(interaction.user.id)
+
+    approval_ch_id = store.get_approval_channel(guild_id)
     if not approval_ch_id:
         await interaction.response.send_message(
             "No approval channel has been configured. A server admin needs to run `/setup server` first.",
             ephemeral=True,
         )
         return
-    approval_ch = client.get_channel(int(approval_ch_id))
-    if approval_ch is None:
-        await interaction.response.send_message(
-            "The approval channel is no longer accessible. Ask a server admin to reconfigure it.",
+
+    existing_ch_id = store.get_creation_channel(guild_id, user_id)
+    if existing_ch_id:
+        existing_ch = client.get_channel(int(existing_ch_id))
+        if existing_ch:
+            await interaction.response.send_message(
+                f"You already have an active character creation channel: {existing_ch.mention}. "
+                f"Finish or cancel that one first.",
+                ephemeral=True,
+            )
+            return
+        store.delete_creation_channel(guild_id, user_id)
+
+    await interaction.response.send_modal(_ChargenNameModal(interaction))
+
+
+class _ChargenNameModal(discord.ui.Modal, title="Character Creation"):
+    char_name = discord.ui.TextInput(
+        label="Character Name",
+        placeholder="e.g. Bayushi Kachiko",
+        min_length=1, max_length=100,
+    )
+    concept = discord.ui.TextInput(
+        label="Concept (optional)",
+        placeholder="A short description of your character",
+        required=False, max_length=2000,
+        style=discord.TextStyle.paragraph,
+    )
+
+    def __init__(self, source_interaction: discord.Interaction) -> None:
+        super().__init__()
+        self._source_category = source_interaction.channel.category if source_interaction.channel else None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        guild = interaction.guild
+        guild_id = str(guild.id)
+        user_id = str(interaction.user.id)
+        character_name = self.char_name.value.strip()
+        concept_text = (self.concept.value or "").strip()
+
+        await interaction.response.defer(ephemeral=True)
+
+        bot_member = guild.me
+        dm_roles = [r for r in guild.roles if r.name in (ROLE_KAMI, ROLE_FORTUNE)]
+        everyone = guild.default_role
+
+        overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+            everyone: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+            ),
+            bot_member: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_channels=True,
+                manage_messages=True,
+            ),
+        }
+        for r in dm_roles:
+            overwrites[r] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+            )
+
+        channel_name = f"chargen-{interaction.user.display_name[:20].lower().replace(' ', '-')}"
+        priv_channel = await guild.create_text_channel(
+            channel_name,
+            category=self._source_category,
+            overwrites=overwrites,
+            reason=f"Character creation wizard for {interaction.user.display_name}",
+        )
+
+        store.set_creation_channel(guild_id, user_id, str(priv_channel.id))
+
+        state = {
+            "guild_id": guild_id,
+            "user_id": user_id,
+            "name": character_name,
+            "channel_id": priv_channel.id,
+            "full_wizard": True,
+            "clan": "",
+            "family_name": "",
+            "heritage_result": None,
+            "different_school": False,
+            "school_name": "",
+            "trait_purchases": {},
+            "advantages_chosen": [],
+            "disadvantages_chosen": [],
+            "skill_purchases": {},
+            "chosen_spells": [],
+            "concept": concept_text,
+        }
+        view = _WizardView(state)
+        view.add_item(_ClanSelect(state))
+        await priv_channel.send(
+            content=f"Welcome, {interaction.user.mention}! Let's build **{character_name}**.\n"
+                    f"**Step 1/10**: Choose your Clan.",
+            embed=_chargen_embed(state), view=view,
+        )
+
+        await interaction.followup.send(
+            f"Your private character creation channel has been created: {priv_channel.mention}\n"
+            f"Head there to build **{character_name}**!",
             ephemeral=True,
         )
+
+
+@client.tree.command(name="submit", description="Start character creation — opens a private wizard channel.")
+async def submit_character(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
         return
-    clan_val = clan.value
-    family_val = family or ""
-    school_val = school or ""
-    embed = discord.Embed(
-        title="📋 Character Submission",
-        color=0xC4A747,
-        description="A new character has been submitted for approval.",
-    )
-    embed.add_field(name="Player", value=interaction.user.mention, inline=True)
-    embed.add_field(name="Submitted from", value=f"<#{interaction.channel_id}>", inline=True)
-    embed.add_field(name="Character Name", value=character_name, inline=False)
-    embed.add_field(name="Clan", value=clan_val, inline=True)
-    if family_val:
-        fam_entry = families.get(family_val)
-        fam_display = f"{family_val} (+1 {fam_entry['bonus_trait'].capitalize()})" if fam_entry else family_val
-        embed.add_field(name="Family", value=fam_display, inline=True)
-    if school_val:
-        sch_entry = schools.get(school_val)
-        sch_display = f"{sch_entry['name']} ({sch_entry['clan']})" if sch_entry else school_val
-        embed.add_field(name="School", value=sch_display, inline=True)
-    embed.add_field(name="Concept", value=concept, inline=False)
-    view = CharacterApprovalView(
-        applicant_id=interaction.user.id,
-        character_name=character_name,
-        concept=concept,
-        lobby_channel_id=interaction.channel_id,
-        clan=clan_val,
-        family_name=family_val,
-        school_name=school_val,
-    )
-    await approval_ch.send(embed=embed, view=view)
-    await interaction.response.send_message(
-        f"📋 Your character **{character_name}** ({clan_val}) has been submitted for DM review. "
-        f"You'll be notified here when a decision is made.",
-        ephemeral=True,
-    )
+    await _start_chargen_wizard(interaction)
 
 setup_group = app_commands.Group(name="setup", description="Server setup commands (Kami only).")
 
@@ -7188,6 +8496,53 @@ async def setup_server(interaction: discord.Interaction) -> None:
     bot_member = guild.me
     everyone = guild.default_role
 
+    # --- Pre-flight: check the bot actually has the permissions it needs ---
+    bot_perms = bot_member.guild_permissions
+    missing: list[str] = []
+    if not bot_perms.manage_roles:
+        missing.append("Manage Roles")
+    if not bot_perms.manage_channels:
+        missing.append("Manage Channels")
+    if not bot_perms.send_messages:
+        missing.append("Send Messages")
+    if not bot_perms.manage_messages:
+        missing.append("Manage Messages")
+    if missing:
+        await interaction.followup.send(
+            "The bot is missing required permissions to set up the server:\n"
+            + "\n".join(f"• **{p}**" for p in missing)
+            + "\n\nGo to **Server Settings → Roles**, find the bot's role, "
+            "and enable those permissions — or re-invite the bot with "
+            "**Administrator** ticked.",
+            ephemeral=True,
+        )
+        return
+
+    try:
+        await _setup_server_inner(guild, bot_member, everyone, interaction)
+    except discord.Forbidden as exc:
+        await interaction.followup.send(
+            f"The bot was denied a permission by Discord: `{exc}`\n\n"
+            "Make sure the bot's role is **above** the roles it's trying to "
+            "create (Kami, Fortune, Approved) in **Server Settings → Roles**, "
+            "and that **Manage Roles** + **Manage Channels** are enabled.",
+            ephemeral=True,
+        )
+    except Exception as exc:
+        await interaction.followup.send(
+            f"Server setup failed with an unexpected error:\n```\n{exc}\n```\n"
+            "Please report this to the bot developer.",
+            ephemeral=True,
+        )
+
+
+async def _setup_server_inner(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    everyone: discord.Role,
+    interaction: discord.Interaction,
+) -> None:
+    """Core setup logic, extracted so the caller can wrap it in error handling."""
     # --- Roles (create if missing, update color/permissions if they exist) ---
     kami_perms = discord.Permissions(
         administrator=True,
@@ -7243,6 +8598,105 @@ async def setup_server(interaction: discord.Interaction) -> None:
 
     dm_roles: list[discord.Role] = [fortune_role, kami_role]
 
+    # --- Clan roles (cosmetic, hoisted to group members in sidebar) ---
+    _CLAN_COLORS: dict[str, str] = {
+        "Crab": "#4A6FA5",
+        "Crane": "#5DADE2",
+        "Dragon": "#27AE60",
+        "Lion": "#F1C40F",
+        "Mantis": "#1ABC9C",
+        "Phoenix": "#E67E22",
+        "Scorpion": "#E74C3C",
+        "Unicorn": "#9B59B6",
+        "Spider": "#7F8C8D",
+    }
+    clan_roles_created: list[discord.Role] = []
+    for clan_name in _GREAT_CLANS:
+        color_hex = _CLAN_COLORS.get(clan_name, "#95A5A6")
+        role = discord.utils.get(guild.roles, name=clan_name)
+        if role is None:
+            role = await guild.create_role(
+                name=clan_name,
+                color=discord.Color.from_str(color_hex),
+                hoist=True,
+                reason="Server setup: clan role",
+            )
+        else:
+            await role.edit(
+                color=discord.Color.from_str(color_hex),
+                hoist=True,
+                reason="Server setup: update clan role",
+            )
+        clan_roles_created.append(role)
+
+    # --- Family roles (cosmetic, not hoisted, colored to match clan) ---
+    from l5r_rules import families as _families_mod
+    family_roles_created: list[discord.Role] = []
+    for fam in _families_mod.ALL:
+        fam_name = fam["name"]
+        fam_clan = fam["clan"]
+        color_hex = _CLAN_COLORS.get(fam_clan, "#95A5A6")
+        role = discord.utils.get(guild.roles, name=fam_name)
+        if role is None:
+            role = await guild.create_role(
+                name=fam_name,
+                color=discord.Color.from_str(color_hex),
+                hoist=False,
+                reason=f"Server setup: {fam_clan} family role",
+            )
+        else:
+            await role.edit(
+                color=discord.Color.from_str(color_hex),
+                hoist=False,
+                reason=f"Server setup: update {fam_clan} family role",
+            )
+        family_roles_created.append(role)
+
+    # --- Cleanup helper: deduplicate categories, purge stray channels ---
+    _EXPECTED_CATEGORIES: dict[str, set[str]] = {
+        "Lobby": {"welcome", "character-submission"},
+        "Out of Character": {"general", "off-topic", "announcements", "rules-reference"},
+        "In Character": {"in-character"},
+        "Dungeon Masters": {"dm-discussion", "approvals"},
+    }
+    deleted_dupes: list[str] = []
+    deleted_channels: list[str] = []
+
+    for cat_name, expected_channels in _EXPECTED_CATEGORIES.items():
+        matches = [c for c in guild.categories if c.name == cat_name]
+        if len(matches) <= 1:
+            continue
+        matches.sort(key=lambda c: c.created_at)
+        keep = matches[0]
+        for dupe in matches[1:]:
+            for ch in dupe.channels:
+                try:
+                    await ch.delete(reason=f"Cleanup: duplicate {cat_name} category")
+                    deleted_channels.append(f"#{ch.name}")
+                except discord.Forbidden:
+                    pass
+            try:
+                await dupe.delete(reason=f"Cleanup: duplicate {cat_name} category")
+                deleted_dupes.append(cat_name)
+            except discord.Forbidden:
+                pass
+
+    for cat_name, expected_channels in _EXPECTED_CATEGORIES.items():
+        cat = discord.utils.get(guild.categories, name=cat_name)
+        if cat is None:
+            continue
+        for ch in list(cat.text_channels):
+            if ch.name not in expected_channels:
+                try:
+                    await ch.delete(reason=f"Cleanup: unexpected channel in {cat_name}")
+                    deleted_channels.append(f"#{ch.name}")
+                except discord.Forbidden:
+                    pass
+
+    # --- Ensure each category and its channels exist ---
+    created_items: list[str] = []
+    existing_items: list[str] = []
+
     # --- 1. Lobby (visible to everyone) ---
     lobby_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
         everyone: discord.PermissionOverwrite(
@@ -7253,25 +8707,36 @@ async def setup_server(interaction: discord.Interaction) -> None:
             manage_messages=True,
         ),
     }
-    lobby_cat = await guild.create_category("Lobby", overwrites=lobby_overwrites, reason="Server setup")
-    welcome_ch = await lobby_cat.create_text_channel("welcome")
-    await lobby_cat.create_text_channel("character-submission")
-    welcome_embed = discord.Embed(
-        title="Welcome to Rokugan",
-        color=0xC4A747,
-        description=(
-            "Welcome, traveler. This server hosts a persistent world set in "
-            "Rokugan, using **Legend of the Five Rings 4th Edition** rules.\n\n"
-            "**To gain access to the server:**\n"
-            "1. Go to the **#character-submission** channel\n"
-            "2. Use the `/submit` command with your character's name and concept\n"
-            "3. A Dungeon Master will review and approve your character\n"
-            "4. Once approved, you'll gain access to all channels\n\n"
-            "We look forward to your story."
-        ),
-    )
-    welcome_msg = await welcome_ch.send(embed=welcome_embed)
-    await welcome_msg.pin()
+    lobby_cat = discord.utils.get(guild.categories, name="Lobby")
+    if lobby_cat is None:
+        lobby_cat = await guild.create_category("Lobby", overwrites=lobby_overwrites, reason="Server setup")
+        created_items.append("Lobby category")
+    else:
+        await lobby_cat.edit(overwrites=lobby_overwrites, reason="Server setup: update permissions")
+        existing_items.append("Lobby")
+    existing_names = {ch.name for ch in lobby_cat.text_channels}
+    if "welcome" not in existing_names:
+        welcome_ch = await lobby_cat.create_text_channel("welcome")
+        welcome_embed = discord.Embed(
+            title="Welcome to Rokugan",
+            color=0xC4A747,
+            description=(
+                "Welcome, traveler. This server hosts a persistent world set in "
+                "Rokugan, using **Legend of the Five Rings 4th Edition** rules.\n\n"
+                "**To gain access to the server:**\n"
+                "1. Go to the **#character-submission** channel\n"
+                "2. Use the `/submit` command with your character's name and concept\n"
+                "3. A Dungeon Master will review and approve your character\n"
+                "4. Once approved, you'll gain access to all channels\n\n"
+                "We look forward to your story."
+            ),
+        )
+        welcome_msg = await welcome_ch.send(embed=welcome_embed)
+        await welcome_msg.pin()
+        created_items.append("#welcome")
+    if "character-submission" not in existing_names:
+        await lobby_cat.create_text_channel("character-submission")
+        created_items.append("#character-submission")
 
     # --- 2. Out of Character (Approved + DMs only) ---
     ooc_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
@@ -7288,45 +8753,56 @@ async def setup_server(interaction: discord.Interaction) -> None:
         ooc_overwrites[r] = discord.PermissionOverwrite(
             view_channel=True, send_messages=True, read_message_history=True,
         )
-    ooc_cat = await guild.create_category("Out of Character", overwrites=ooc_overwrites, reason="Server setup")
-    await ooc_cat.create_text_channel("general")
-    await ooc_cat.create_text_channel("off-topic")
-
-    # Announcements channel (read-only for players, DMs can post)
-    announce_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
-        everyone: discord.PermissionOverwrite(view_channel=False),
-        approved_role: discord.PermissionOverwrite(
-            view_channel=True, send_messages=False, read_message_history=True,
-            add_reactions=True,
-        ),
-        bot_member: discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, manage_messages=True,
-            embed_links=True,
-        ),
-    }
-    for r in dm_roles:
-        announce_overwrites[r] = discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, read_message_history=True,
-            manage_messages=True,
-        )
-    announcements_ch = await ooc_cat.create_text_channel("announcements", overwrites=announce_overwrites)
-
-    # Rules reference channel (read-only for everyone, bot posts pinned embeds)
-    rules_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
-        everyone: discord.PermissionOverwrite(view_channel=False),
-        approved_role: discord.PermissionOverwrite(
-            view_channel=True, send_messages=False, read_message_history=True,
-        ),
-        bot_member: discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, manage_messages=True,
-        ),
-    }
-    for r in dm_roles:
-        rules_overwrites[r] = discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, read_message_history=True,
-        )
-    rules_ch = await ooc_cat.create_text_channel("rules-reference", overwrites=rules_overwrites)
-    await _post_rules_reference(rules_ch)
+    ooc_cat = discord.utils.get(guild.categories, name="Out of Character")
+    if ooc_cat is None:
+        ooc_cat = await guild.create_category("Out of Character", overwrites=ooc_overwrites, reason="Server setup")
+        created_items.append("Out of Character category")
+    else:
+        await ooc_cat.edit(overwrites=ooc_overwrites, reason="Server setup: update permissions")
+        existing_items.append("Out of Character")
+    existing_names = {ch.name for ch in ooc_cat.text_channels}
+    if "general" not in existing_names:
+        await ooc_cat.create_text_channel("general")
+        created_items.append("#general")
+    if "off-topic" not in existing_names:
+        await ooc_cat.create_text_channel("off-topic")
+        created_items.append("#off-topic")
+    if "announcements" not in existing_names:
+        announce_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+            everyone: discord.PermissionOverwrite(view_channel=False),
+            approved_role: discord.PermissionOverwrite(
+                view_channel=True, send_messages=False, read_message_history=True,
+                add_reactions=True,
+            ),
+            bot_member: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_messages=True,
+                embed_links=True,
+            ),
+        }
+        for r in dm_roles:
+            announce_overwrites[r] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+                manage_messages=True,
+            )
+        await ooc_cat.create_text_channel("announcements", overwrites=announce_overwrites)
+        created_items.append("#announcements")
+    if "rules-reference" not in existing_names:
+        rules_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+            everyone: discord.PermissionOverwrite(view_channel=False),
+            approved_role: discord.PermissionOverwrite(
+                view_channel=True, send_messages=False, read_message_history=True,
+            ),
+            bot_member: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_messages=True,
+            ),
+        }
+        for r in dm_roles:
+            rules_overwrites[r] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+            )
+        rules_ch = await ooc_cat.create_text_channel("rules-reference", overwrites=rules_overwrites)
+        await _post_rules_reference(rules_ch)
+        created_items.append("#rules-reference")
 
     # --- 3. In Character (Approved + DMs only) ---
     ic_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
@@ -7344,8 +8820,17 @@ async def setup_server(interaction: discord.Interaction) -> None:
             view_channel=True, send_messages=True, read_message_history=True,
             manage_messages=True,
         )
-    ic_cat = await guild.create_category("In Character", overwrites=ic_overwrites, reason="Server setup")
-    await ic_cat.create_text_channel("in-character")
+    ic_cat = discord.utils.get(guild.categories, name="In Character")
+    if ic_cat is None:
+        ic_cat = await guild.create_category("In Character", overwrites=ic_overwrites, reason="Server setup")
+        created_items.append("In Character category")
+    else:
+        await ic_cat.edit(overwrites=ic_overwrites, reason="Server setup: update permissions")
+        existing_items.append("In Character")
+    existing_names = {ch.name for ch in ic_cat.text_channels}
+    if "in-character" not in existing_names:
+        await ic_cat.create_text_channel("in-character")
+        created_items.append("#in-character")
 
     # --- 4. DM Room (Fortune + Kami only) ---
     dm_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
@@ -7360,32 +8845,46 @@ async def setup_server(interaction: discord.Interaction) -> None:
             view_channel=True, send_messages=True, read_message_history=True,
             manage_messages=True,
         )
-    dm_cat = await guild.create_category("Dungeon Masters", overwrites=dm_overwrites, reason="Server setup")
-    dm_discussion = await dm_cat.create_text_channel("dm-discussion")
-    approvals_ch = await dm_cat.create_text_channel("approvals")
+    dm_cat = discord.utils.get(guild.categories, name="Dungeon Masters")
+    if dm_cat is None:
+        dm_cat = await guild.create_category("Dungeon Masters", overwrites=dm_overwrites, reason="Server setup")
+        created_items.append("Dungeon Masters category")
+    else:
+        await dm_cat.edit(overwrites=dm_overwrites, reason="Server setup: update permissions")
+        existing_items.append("Dungeon Masters")
+    existing_names = {ch.name for ch in dm_cat.text_channels}
+    if "dm-discussion" not in existing_names:
+        await dm_cat.create_text_channel("dm-discussion")
+        created_items.append("#dm-discussion")
+    if "approvals" not in existing_names:
+        await dm_cat.create_text_channel("approvals")
+        created_items.append("#approvals")
+    approvals_ch_disc = discord.utils.get(dm_cat.text_channels, name="approvals")
+    if approvals_ch_disc:
+        store.set_approval_channel(str(guild.id), str(approvals_ch_disc.id))
 
-    store.set_approval_channel(str(guild.id), str(approvals_ch.id))
-
-    summary = (
-        f"**Server setup complete!**\n\n"
-        f"**Roles created/updated:**\n"
-        f"• {kami_role.mention} — Server admin (gold, full permissions)\n"
-        f"• {fortune_role.mention} — Dungeon Master (purple, moderation tools)\n"
-        f"• {approved_role.mention} — Approved player (green, basic access)\n\n"
-        f"**Categories & Channels:**\n"
-        f"• **Lobby** — {welcome_ch.mention}, #character-submission\n"
-        f"• **Out of Character** — #general, #off-topic, {announcements_ch.mention} (DM-post only), "
-        f"{rules_ch.mention} (read-only reference)\n"
-        f"• **In Character** — #in-character (visible to {ROLE_APPROVED}+)\n"
-        f"• **Dungeon Masters** — {dm_discussion.mention}, {approvals_ch.mention} (DMs only)\n\n"
-        f"**Approval channel** set to {approvals_ch.mention} — character submissions and "
-        f"damage/healing approvals will be routed there.\n\n"
-        f"Players use `/submit` in the lobby to apply. DMs approve or deny from {approvals_ch.mention}.\n"
-        f"Approved players get their nickname changed to their character name.\n\n"
-        f"Use `/dm announce` to post events to {announcements_ch.mention}. "
-        f"Use `/roster` to see all approved characters."
+    # --- Summary ---
+    summary_parts = ["**Server setup complete!**\n"]
+    summary_parts.append(
+        f"**Roles:** {kami_role.mention} (admin), {fortune_role.mention} (DM), "
+        f"{approved_role.mention} (player), {len(clan_roles_created)} clan, "
+        f"{len(family_roles_created)} family roles"
     )
-    await interaction.followup.send(summary, ephemeral=True)
+    if deleted_dupes:
+        summary_parts.append(f"**Deleted duplicate categories:** {', '.join(deleted_dupes)}")
+    if deleted_channels:
+        summary_parts.append(f"**Deleted stray/duplicate channels:** {', '.join(deleted_channels)}")
+    if created_items:
+        summary_parts.append(f"**Created:** {', '.join(created_items)}")
+    if existing_items:
+        summary_parts.append(f"**Already existed (permissions updated):** {', '.join(existing_items)}")
+    if not deleted_dupes and not deleted_channels and not created_items:
+        summary_parts.append("Everything was already in order. Permissions refreshed.")
+    summary_parts.append(
+        f"\nPlayers use `/submit` in the lobby to apply. "
+        f"DMs approve or deny from the approvals channel."
+    )
+    await interaction.followup.send("\n".join(summary_parts), ephemeral=True)
 
 # ---------------------------------------------------------------------------
 #  Rules reference — pinned embeds posted by /setup server
@@ -7677,6 +9176,7 @@ client.tree.add_command(npc_edit_group)
 client.tree.add_command(creature_group)
 client.tree.add_command(room_group)
 client.tree.add_command(category_group)
+client.tree.add_command(location_group)
 client.tree.add_command(cog_combat.combat_group)
 client.tree.add_command(cog_combat.fight_group)
 client.tree.add_command(cog_combat.engage_group)
