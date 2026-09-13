@@ -1379,15 +1379,17 @@ async def attack(
             "disarm": "A DM can resolve the disarm below.",
             "knockdown": "A DM can resolve the knockdown below.",
         }.get(man, "A DM can authorize the damage below.")
+        target_owner_id = target_rec.owner_id if target_rec is not None else None
+        owner_ping = f" <@{target_owner_id}>" if target_owner_id and target_owner_id != _d.NPC_OWNER else ""
         if approval_ch:
             embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
             embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
             await approval_ch.send(content=prompt, embed=embed, view=view)
             await interaction.response.send_message(
-                f"⚔️ **{a_name}** hit **{t_name}** — damage approval pending in the DM channel."
+                f"⚔️ **{a_name}** hit **{t_name}** — damage approval pending in the DM channel.{owner_ping}"
             )
         else:
-            await interaction.response.send_message(content=prompt, embed=embed, view=view)
+            await interaction.response.send_message(content=f"{prompt}{owner_ping}", embed=embed, view=view)
         await _d.combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) HIT (roll {outcome['roll']} vs TN {outcome['target_tn']})")
     else:
         await interaction.response.send_message(embed=embed)

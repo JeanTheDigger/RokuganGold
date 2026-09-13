@@ -4179,16 +4179,17 @@ async def dm_damage(
         amount=amount, reason=reason,
         source_channel_id=src_ch_id,
     )
+    owner_ping = f" <@{rec.owner_id}>" if rec.owner_id != NPC_OWNER else ""
     if approval_ch:
         embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
         embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
         await approval_ch.send(content="A DM can authorize the damage below.", embed=embed, view=view)
         await interaction.response.send_message(
-            f"💥 Pending damage on **{c.name}** — approval routed to the DM channel."
+            f"💥 Pending damage on **{c.name}** — approval routed to the DM channel.{owner_ping}"
         )
     else:
         await interaction.response.send_message(
-            content="A DM can authorize the damage below.",
+            content=f"A DM can authorize the damage below.{owner_ping}",
             embed=embed, view=view,
         )
 
@@ -4243,16 +4244,17 @@ async def dm_heal(
         amount=amount, reason=reason,
         source_channel_id=src_ch_id,
     )
+    owner_ping = f" <@{rec.owner_id}>" if rec.owner_id != NPC_OWNER else ""
     if approval_ch:
         embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
         embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
         await approval_ch.send(content="A DM can authorize the healing below.", embed=embed, view=view)
         await interaction.response.send_message(
-            f"💚 Pending healing on **{c.name}** — approval routed to the DM channel."
+            f"💚 Pending healing on **{c.name}** — approval routed to the DM channel.{owner_ping}"
         )
     else:
         await interaction.response.send_message(
-            content="A DM can authorize the healing below.",
+            content=f"A DM can authorize the healing below.{owner_ping}",
             embed=embed, view=view,
         )
 
@@ -8214,16 +8216,17 @@ async def spell_damage(
                 reason=reason, rolled=rolled, kept=kept, bonus=bonus,
                 source_channel_id=src_ch_id,
             )
+            owner_ping = f" <@{rec.owner_id}>" if rec.owner_id != NPC_OWNER else ""
             if approval_ch:
                 embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
                 embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
                 await approval_ch.send(content="A DM can authorize the spell damage below.", embed=embed, view=view)
                 await interaction.response.send_message(
-                    f"📜 Spell damage on **{rec.character.name}** — approval routed to the DM channel."
+                    f"📜 Spell damage on **{rec.character.name}** — approval routed to the DM channel.{owner_ping}"
                 )
             else:
                 await interaction.response.send_message(
-                    content="A DM can authorize the spell damage below.",
+                    content=f"A DM can authorize the spell damage below.{owner_ping}",
                     embed=embed, view=view,
                 )
         else:
@@ -8549,6 +8552,7 @@ async def dm_treat(
             wounds_healed=effective_heal, treatment_type=treat_label, roll_result=result,
             source_channel_id=src_ch_id,
         )
+        owner_ping = f" <@{patient_rec.owner_id}>" if patient_rec.owner_id != NPC_OWNER else ""
         if approval_ch:
             embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
             embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
@@ -8557,11 +8561,11 @@ async def dm_treat(
                 embed=embed, view=view,
             )
             await interaction.response.send_message(
-                f"💊 Treatment on **{pc.name}** succeeded — healing approval routed to the DM channel."
+                f"💊 Treatment on **{pc.name}** succeeded — healing approval routed to the DM channel.{owner_ping}"
             )
         else:
             await interaction.response.send_message(
-                content="Treatment succeeded. A DM can authorize the healing below.",
+                content=f"Treatment succeeded. A DM can authorize the healing below.{owner_ping}",
                 embed=embed, view=view,
             )
     elif success:
