@@ -990,10 +990,16 @@ Distinct from existing `/dm creature view` (which shows a *spawned* instance wit
 | `/dm category rename` | Rename a category (same uniqueness rules). |
 | `/dm category add` | Add an NPC or creature to a category. Validates the entity exists before adding. |
 | `/dm category remove` | Remove an NPC or creature from a category. |
+| `/dm category bulk_add` | Add multiple NPCs or creatures at once (comma-separated names). Reports added, already-present, and not-found. |
+| `/dm category bulk_remove` | Remove multiple NPCs or creatures at once (comma-separated names). |
 | `/dm category list` | List all categories on this server with member counts. |
 | `/dm category view` | View all members of a category, grouped by type (NPCs / Creatures). |
+| `/dm category spawn` | Spawn all creature templates in a category as combat-ready instances. Skips already-spawned and unknown templates. |
+| `/combat category` | Add all NPCs and creatures in a category to the active encounter's initiative tracker. Rolls initiative for each, applies Swift bonus for NPCs with swift weapons. |
 
 Categories use **name-based** references rather than IDs, so entries survive creature delete/respawn cycles. Storage uses two tables (`categories` + `category_members`) with cascading deletes. Autocomplete on category names across all subcommands.
+
+Viewing an NPC (`/dm npc view`) or creature (`/dm creature view`) now shows which categories they belong to in a "Categories" field on the embed.
 
 ---
 

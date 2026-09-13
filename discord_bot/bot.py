@@ -340,6 +340,11 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     if extras:
         embed.add_field(name="Details", value="\n".join(extras)[:1024], inline=False)
 
+    if record.owner_id == NPC_OWNER:
+        cats = store.list_entity_categories(record.guild_id, "npc", c.name)
+        if cats:
+            embed.add_field(name="Categories", value=", ".join(cat.name for cat in cats), inline=False)
+
     embed.set_footer(text=f"Owner: player {record.owner_id} · sheet #{record.id}")
     return embed
 
@@ -380,6 +385,9 @@ def build_creature_embed(record: storage.CreatureRecord) -> discord.Embed:
     specials = creature.creature_special_notes(cr)
     if specials:
         embed.add_field(name="Special Abilities", value="\n".join(specials), inline=False)
+    cats = store.list_entity_categories(record.guild_id, "creature", cr.name)
+    if cats:
+        embed.add_field(name="Categories", value=", ".join(c.name for c in cats), inline=False)
     embed.set_footer(text=f"creature #{record.id}")
     return embed
 
@@ -3618,15 +3626,16 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/dm category create", "Create a named category"),
         ("/dm category delete", "Delete a category (members untouched)"),
         ("/dm category rename", "Rename a category"),
-        ("/dm category add", "Add an NPC or creature to a category"),
-        ("/dm category remove", "Remove an NPC or creature from a category"),
-        ("/dm category list", "List all categories on this server"),
-        ("/dm category view", "View all members of a category"),
+        ("/dm category add / remove", "Add or remove an NPC/creature"),
+        ("/dm category bulk_add / bulk_remove", "Add or remove multiple (comma-separated)"),
+        ("/dm category list / view", "List categories or view one"),
+        ("/dm category spawn", "Spawn all creature templates in a category"),
     ]),
     ("⚔️", "Combat", "Start encounters and manage combatants.", [
         ("/combat start / end", "Start or end an encounter"),
         ("/combat join / add", "Add PCs or custom combatants to initiative"),
         ("/combat npc / creature", "Add a stored NPC or creature to initiative"),
+        ("/combat category", "Add all NPCs/creatures in a category to initiative"),
         ("/combat room", "Add all room members at once"),
         ("/combat next / status / remove", "Advance turn, view tracker, remove"),
         ("/combat summary", "Compact stat overview of all combatants"),
@@ -8026,6 +8035,77 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
 
 
 @combat_group.command(
+    name="category",
+    description="Add all NPCs and creatures in a category to initiative. Fortune role required.",
+)
+@app_commands.describe(category="Which category to add.")
+@app_commands.autocomplete(category=_category_autocomplete)
+async def combat_category(interaction: discord.Interaction, category: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to add a category to initiative.",
+            ephemeral=True,
+        )
+        return
+    guild = str(interaction.guild_id)
+    cat = store.get_category(guild, category)
+    if cat is None:
+        await interaction.response.send_message(f"No category named **{category}**.", ephemeral=True)
+        return
+    members = store.list_category_members(cat.id)
+    if not members:
+        await interaction.response.send_message(f"**{cat.name}** is empty.", ephemeral=True)
+        return
+    enc = _get_or_create(interaction.channel_id)
+    added: list[str] = []
+    not_found: list[str] = []
+    for etype, ename in members:
+        if etype == "npc":
+            rec = store.get_by_name(guild, NPC_OWNER, ename)
+            if rec is None:
+                not_found.append(f"NPC {ename}")
+                continue
+            result = combat.roll_initiative(rec.character, engine)
+            swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
+            init_total = result.total + swift_bonus
+            swift_detail = f" +5 Swift" if swift_bonus else ""
+            enc.remove(rec.character.name)
+            enc.add(encounter.Combatant(
+                name=rec.character.name,
+                initiative=init_total,
+                initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
+                owner_id=None,
+                is_npc=True,
+                reflexes=rec.character.reflexes,
+            ))
+            added.append(rec.character.name)
+        else:
+            rec_c = store.get_creature_by_name(guild, ename)
+            if rec_c is None:
+                not_found.append(f"Creature {ename}")
+                continue
+            result = creature.roll_creature_initiative(rec_c.creature, engine)
+            enc.remove(rec_c.creature.name)
+            enc.add(encounter.Combatant(
+                name=rec_c.creature.name,
+                initiative=result.total,
+                initiative_detail=f"kept {result.kept_dice} = {result.total}",
+                owner_id=None,
+                is_npc=True,
+                reflexes=rec_c.creature.air,
+            ))
+            added.append(rec_c.creature.name)
+    _save_encounter(guild, enc)
+    parts = [_render_encounter(enc, guild)]
+    if not_found:
+        parts.append(f"Not found (skipped): {', '.join(not_found)}")
+    await interaction.response.send_message("\n".join(parts))
+
+
+@combat_group.command(
     name="room",
     description="Add all room members' active characters to initiative. Fortune role required.",
 )
@@ -9092,6 +9172,171 @@ async def category_view(interaction: discord.Interaction, category: str) -> None
     else:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
+
+
+@dm_category.command(name="bulk_add", description="Add multiple NPCs or creatures to a category at once. Fortune role required.")
+@app_commands.describe(
+    category="Which category.",
+    kind="NPC or creature.",
+    names="Comma-separated list of names to add.",
+)
+@app_commands.choices(kind=_ENTITY_TYPE_CHOICES)
+@app_commands.autocomplete(category=_category_autocomplete)
+async def category_bulk_add(
+    interaction: discord.Interaction,
+    category: str,
+    kind: app_commands.Choice[str],
+    names: str,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
+            ephemeral=True,
+        )
+        return
+    guild = str(interaction.guild_id)
+    cat = store.get_category(guild, category)
+    if cat is None:
+        await interaction.response.send_message(f"No category named **{category}**.", ephemeral=True)
+        return
+    parsed = [n.strip() for n in names.split(",") if n.strip()]
+    if not parsed:
+        await interaction.response.send_message("Provide at least one name (comma-separated).", ephemeral=True)
+        return
+    added: list[str] = []
+    skipped: list[str] = []
+    not_found: list[str] = []
+    for n in parsed:
+        if kind.value == "npc":
+            if store.get_by_name(guild, NPC_OWNER, n) is None:
+                not_found.append(n)
+                continue
+        else:
+            if store.get_creature_by_name(guild, n) is None:
+                not_found.append(n)
+                continue
+        if store.add_to_category(cat.id, kind.value, n):
+            added.append(n)
+        else:
+            skipped.append(n)
+    parts: list[str] = []
+    if added:
+        parts.append(f"Added: **{', '.join(added)}**")
+    if skipped:
+        parts.append(f"Already in category: {', '.join(skipped)}")
+    if not_found:
+        parts.append(f"Not found: {', '.join(not_found)}")
+    await interaction.response.send_message(
+        f"\U0001f4c1 **{cat.name}** — {kind.name} bulk add\n" + "\n".join(parts),
+        ephemeral=True,
+    )
+
+
+@dm_category.command(name="bulk_remove", description="Remove multiple NPCs or creatures from a category at once. Fortune role required.")
+@app_commands.describe(
+    category="Which category.",
+    kind="NPC or creature.",
+    names="Comma-separated list of names to remove.",
+)
+@app_commands.choices(kind=_ENTITY_TYPE_CHOICES)
+@app_commands.autocomplete(category=_category_autocomplete)
+async def category_bulk_remove(
+    interaction: discord.Interaction,
+    category: str,
+    kind: app_commands.Choice[str],
+    names: str,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
+            ephemeral=True,
+        )
+        return
+    cat = store.get_category(str(interaction.guild_id), category)
+    if cat is None:
+        await interaction.response.send_message(f"No category named **{category}**.", ephemeral=True)
+        return
+    parsed = [n.strip() for n in names.split(",") if n.strip()]
+    if not parsed:
+        await interaction.response.send_message("Provide at least one name (comma-separated).", ephemeral=True)
+        return
+    removed: list[str] = []
+    not_in: list[str] = []
+    for n in parsed:
+        if store.remove_from_category(cat.id, kind.value, n):
+            removed.append(n)
+        else:
+            not_in.append(n)
+    parts: list[str] = []
+    if removed:
+        parts.append(f"Removed: **{', '.join(removed)}**")
+    if not_in:
+        parts.append(f"Not in category: {', '.join(not_in)}")
+    await interaction.response.send_message(
+        f"\U0001f4c1 **{cat.name}** — {kind.name} bulk remove\n" + "\n".join(parts),
+        ephemeral=True,
+    )
+
+
+@dm_category.command(name="spawn", description="Spawn all creature templates in a category as instances. Fortune role required.")
+@app_commands.describe(category="Which category to spawn creatures from.")
+@app_commands.autocomplete(category=_category_autocomplete)
+async def category_spawn(interaction: discord.Interaction, category: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to spawn creatures.",
+            ephemeral=True,
+        )
+        return
+    guild = str(interaction.guild_id)
+    cat = store.get_category(guild, category)
+    if cat is None:
+        await interaction.response.send_message(f"No category named **{category}**.", ephemeral=True)
+        return
+    members = store.list_category_members(cat.id)
+    creatures_in_cat = [(etype, ename) for etype, ename in members if etype == "creature"]
+    if not creatures_in_cat:
+        await interaction.response.send_message(
+            f"**{cat.name}** has no creature members to spawn.", ephemeral=True,
+        )
+        return
+    spawned: list[str] = []
+    already_exist: list[str] = []
+    not_found: list[str] = []
+    for _, ename in creatures_in_cat:
+        tmpl = creature.CREATURE_CATALOG.get(ename)
+        if tmpl is None:
+            existing = store.get_creature_by_name(guild, ename)
+            if existing is not None:
+                tmpl = creature.CREATURE_CATALOG.get(existing.creature.template_id)
+        if tmpl is None:
+            not_found.append(ename)
+            continue
+        cr = creature.spawn(tmpl.template_id, ename)
+        try:
+            store.create_creature(guild, cr)
+            spawned.append(ename)
+        except storage.DuplicateNameError:
+            already_exist.append(ename)
+    parts: list[str] = []
+    if spawned:
+        parts.append(f"Spawned: **{', '.join(spawned)}**")
+    if already_exist:
+        parts.append(f"Already spawned: {', '.join(already_exist)}")
+    if not_found:
+        parts.append(f"Template not found: {', '.join(not_found)}")
+    await interaction.response.send_message(
+        f"👹 Category **{cat.name}** — spawn\n" + "\n".join(parts),
+    )
 
 
 # ===========================================================================
