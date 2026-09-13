@@ -2316,9 +2316,9 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/combat stance / guard / full_defense", "Set stance or declare defense"),
         ("/combat mount", "Mount or dismount"),
         ("/combat action", "Track Simple/Complex action usage"),
-        ("/combat cover", "Set cover/terrain Armor TN bonus on a combatant"),
-        ("/combat notes", "Set environment description for the encounter"),
-        ("/combat env_damage", "Apply environmental damage to multiple combatants"),
+        ("/combat env cover", "Set cover/terrain Armor TN bonus on a combatant"),
+        ("/combat env notes", "Set environment description for the encounter"),
+        ("/combat env damage", "Apply environmental damage to multiple combatants"),
     ]),
     ("\U0001f504", "Conditions & Initiative", "Adjust conditions and turn order.", [
         ("/combat condition set / clear", "Apply or remove a condition"),
@@ -3012,7 +3012,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/sheet kata learn / activate", "Record or activate Kata."),
         ("/sheet kiho learn / activate", "Record or activate Kiho."),
         ("/sheet learn", "Record techniques up to your School Rank."),
-        ("/sheet export / import_sheet", "Backup and restore characters."),
+        ("/sheet data export / import_sheet", "Backup and restore characters."),
         ("/sheet void spend / refresh / status", "Manage Void Points."),
         ("/sheet xp grant / balance / trait / skill / ...", "XP and advancement."),
     ]),
@@ -6602,7 +6602,7 @@ async def sheet_import(
     if raw is None or raw.strip() == "":
         await interaction.response.send_message(
             "Paste your character JSON in the `json_data` parameter. "
-            "Get it from `/sheet export`.",
+            "Get it from `/sheet data export`.",
             ephemeral=True,
         )
         return
