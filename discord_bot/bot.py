@@ -575,6 +575,21 @@ async def ping(interaction: discord.Interaction) -> None:
         f"🎋 Alive. Gateway latency {round(client.latency * 1000)} ms.", ephemeral=True
     )
 
+@client.tree.command(name="sync", description="Re-sync all slash commands with Discord (Kami only).")
+async def sync_commands(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not _is_kami(interaction):
+        await interaction.response.send_message(
+            f"Only the **{ROLE_KAMI}** role can sync commands.", ephemeral=True
+        )
+        return
+    await interaction.response.defer(ephemeral=True)
+    guild = discord.Object(id=interaction.guild_id)
+    client.tree.copy_global_to(guild=guild)
+    synced = await client.tree.sync(guild=guild)
+    await interaction.followup.send(f"Synced **{len(synced)}** commands to this server.")
+
 @client.tree.command(name="whoami", description="Quick glance at your active character's status.")
 async def whoami(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
