@@ -4115,6 +4115,9 @@ async def dm_heal(
         await interaction.response.send_message(f"No character named **{target}**.", ephemeral=True)
         return
     c = rec.character
+    if stats.is_dead(c):
+        await interaction.response.send_message(f"**{c.name}** is dead. PC death is permanent.", ephemeral=True)
+        return
     if c.wounds_taken <= 0:
         await interaction.response.send_message(f"**{c.name}** has no wounds to heal.", ephemeral=True)
         return
@@ -5955,6 +5958,7 @@ async def fear_check(
     wp = stats.wound_penalty(c)
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c)
         if not ok:
@@ -5964,9 +5968,10 @@ async def fear_check(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
     result = combat.resolve_fear_check(c.willpower, fear_rank, engine, bonus=bonus + wp, extra_rolled=void_r, extra_kept=void_k)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     success = result["success"]
     tn = result["tn"]
@@ -6297,6 +6302,7 @@ async def poison_resist(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "poison_resist", "stamina")
     void_r = void_k = 0
     void_line = ""
+    void_spent = False
     if spend_void:
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="poison_resist")
         if not ok:
@@ -6306,9 +6312,10 @@ async def poison_resist(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
+            void_spent = True
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
     result = combat.resolve_poison_resist(c.stamina, strength, engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
-    if spend_void:
+    if void_spent:
         store.save(rec)
     success = result["success"]
     tn = result["tn"]
@@ -8652,20 +8659,23 @@ class SpellDamageView(discord.ui.View):
         applied = combat.apply_damage(rec.character, self.raw_damage, rec.character.armor_reduction)
         void_line = ""
         if void_reduce:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(rec.character, is_wound_reduction=True)
-            if not ok:
-                void_line = f"\n🔮 {reason_block}"
-            elif rec.character.current_void_points > 0:
-                void_saved = min(10, applied["final_damage"])
-                rec.character.wounds_taken = max(0, rec.character.wounds_taken - void_saved)
-                rec.character.current_void_points -= 1
-                applied["final_damage"] -= void_saved
-                applied["new_wound_level"] = stats.wound_level_name(rec.character)
-                applied["is_dead"] = stats.is_dead(rec.character)
-                applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
-                void_line = f"\n🔮 Void Point: **−{void_saved}** wounds ({rec.character.current_void_points} VP left)"
+            if applied["final_damage"] <= 0:
+                void_line = "\n🔮 No damage to reduce (fully absorbed by armor)"
             else:
-                void_line = "\n🔮 No Void Points available: full damage applied"
+                ok, reason_block = advantage_effects.can_spend_void_on_roll(rec.character, is_wound_reduction=True)
+                if not ok:
+                    void_line = f"\n🔮 {reason_block}"
+                elif rec.character.current_void_points > 0:
+                    void_saved = min(10, applied["final_damage"])
+                    rec.character.wounds_taken = max(0, rec.character.wounds_taken - void_saved)
+                    rec.character.current_void_points -= 1
+                    applied["final_damage"] -= void_saved
+                    applied["new_wound_level"] = stats.wound_level_name(rec.character)
+                    applied["is_dead"] = stats.is_dead(rec.character)
+                    applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
+                    void_line = f"\n🔮 Void Point: **−{void_saved}** wounds ({rec.character.current_void_points} VP left)"
+                else:
+                    void_line = "\n🔮 No Void Points available: full damage applied"
         store.save(rec)
         c = rec.character
         embed = discord.Embed(
@@ -8820,10 +8830,17 @@ class DmDamageView(discord.ui.View):
         if not _is_dm(interaction):
             await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
             return
+        if self.void_reduced:
+            rec = store.get_by_id(self.target_id)
+            if rec is not None:
+                rec.character.current_void_points += 1
+                store.save(rec)
         msg = (
             f"🛡️ {interaction.user.display_name} denied: "
             f"no damage applied to **{self.target_name}**."
         )
+        if self.void_reduced:
+            msg += " 🔮 Void Point refunded."
         self._disable()
         await interaction.response.edit_message(view=self)
         if self.source_channel_id:
@@ -10657,7 +10674,7 @@ async def spell_importune(
         return
     if ml > effective_rank:
         await interaction.response.send_message(
-            f"**{caster.name}** cannot importune a Mastery {ml} spell:"
+            f"**{caster.name}** cannot importune a Mastery {ml} spell: "
             f"effective School Rank is only {effective_rank}.",
             ephemeral=True,
         )

@@ -49,6 +49,7 @@ from __future__ import annotations
 import math
 
 from .character import Character
+from . import stats
 
 
 def _has_adv(c: Character, name: str) -> bool:
@@ -137,7 +138,7 @@ def attacker_attack_dice(
             rolled -= 3; kept -= 3
             notes.append("Blind -3k3 (ranged attack)")
     if _has_adv_containing(attacker, "jigoku") and _has_adv_containing(attacker, "touch of the spirit"):
-        taint_rank = int(attacker.taint)
+        taint_rank = stats.taint_rank(attacker)
         if taint_rank > 0:
             flat += taint_rank
             notes.append(f"Touch of Jigoku +{taint_rank} attack (Taint Rank)")

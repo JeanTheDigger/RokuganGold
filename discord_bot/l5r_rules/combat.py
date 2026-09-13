@@ -157,7 +157,7 @@ def armor_attack_penalty(attacker: Character) -> tuple[int, str]:
     kind = prof.get("penalty_kind", "none")
     if kind not in ("agi_ref", "agi_ref_iron"):
         return 0, ""
-    known = {t.lower() for t in attacker.known_techniques}
+    known = {t.lower() for t in attacker.techniques}
     if "the way of the crab" in known:
         return 0, ""
     if kind == "agi_ref":
