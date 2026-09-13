@@ -765,7 +765,7 @@ async def skill_check_cmd(
 
 @check.command(
     name="cooperative",
-    description="Cooperative check: helpers roll Skill/Trait at TN+5; each success gives primary +1k0 (cap = Void Ring).",
+    description="Cooperative check: helpers roll at TN+5, each success gives primary +1k0 (cap Void).",
 )
 @app_commands.describe(
     name="Primary character making the check.",
