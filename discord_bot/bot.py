@@ -1782,7 +1782,7 @@ class _DisadvantageSelect(discord.ui.Select):
         if not dis or dis.get("points") is None:
             await interaction.response.send_message("That disadvantage has a variable cost; ask a DM.", ephemeral=True)
             return
-        current_disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+        current_disadv_xp = sum(d["points"] for d in self.state.get("disadvantages_chosen", []))
         if current_disadv_xp >= _MAX_DISADVANTAGE_XP:
             await interaction.response.send_message(
                 f"You've already reached the maximum {_MAX_DISADVANTAGE_XP} XP from disadvantages.",
@@ -1817,7 +1817,7 @@ class _DisadvCategorySelect(discord.ui.Select):
 
         back_btn.callback = on_back
         view.add_item(back_btn)
-        disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+        disadv_xp = sum(d["points"] for d in self.state.get("disadvantages_chosen", []))
         await interaction.response.edit_message(
             content=f"**Step 7/10 — Disadvantages ({cat})** · "
                     f"Select a disadvantage ({disadv_xp}/{_MAX_DISADVANTAGE_XP} XP gained).",
