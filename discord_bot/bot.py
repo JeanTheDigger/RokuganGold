@@ -1059,88 +1059,11 @@ _SET_FIELDS = [
 ]
 _SET_CHOICES = [app_commands.Choice(name=f, value=f) for f in _SET_FIELDS]
 
-@sheet.command(name="create", description="Create a new character and make it your active one.")
-@app_commands.describe(
-    name="Character name.",
-    school="School (start typing for the catalog: a match auto-fills Benefit, Skills, Honor).",
-    clan="Great/Minor Clan (optional; a catalog school sets this for you).",
-    family="Family (optional).",
-    school_type="School type (default Bushi; a catalog school sets this for you).",
-    age="Age (default 16).",
-)
-@app_commands.autocomplete(school=_basic_school_autocomplete, family=_family_autocomplete)
-@app_commands.choices(school_type=_SCHOOL_CHOICES)
-async def sheet_create(
-    interaction: discord.Interaction,
-    name: app_commands.Range[str, 1, 64],
-    school: str | None = None,
-    clan: str | None = None,
-    family: str | None = None,
-    school_type: app_commands.Choice[str] | None = None,
-    age: app_commands.Range[int, 0, 200] | None = None,
-) -> None:
+@sheet.command(name="create", description="Create a new character — opens a private wizard channel.")
+async def sheet_create(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
-    guild = str(interaction.guild_id)
-    owner = str(interaction.user.id)
-
-    char = Character(
-        name=name,
-        clan=clan or "",
-        family=family or "",
-        school=school or "",
-        school_type=(school_type.value if school_type else "Bushi"),
-    )
-    if age is not None:
-        char.age = age
-
-    # If the family matches a catalog entry, auto-apply its +1 Trait bonus.
-    family_entry = families.get(family) if family else None
-    family_report = None
-    if family_entry:
-        family_report = families.apply_to_character(char, family_entry)
-        if not clan:
-            char.clan = family_entry["clan"]
-
-    # If the school matches a catalog entry, auto-apply its Benefit/Skills/Honor.
-    applied = schools.get(school) if school else None
-    report = schools.apply_to_character(char, applied) if applied else None
-
-    try:
-        record = store.create_character(guild, owner, char)
-    except storage.DuplicateNameError:
-        await interaction.response.send_message(
-            f"You already have a character named **{name}**. Pick another name or "
-            f"`/sheet activate` the existing one.",
-            ephemeral=True,
-        )
-        return
-
-    store.set_active(guild, owner, record.id)
-    if report is not None:
-        bits = [f"applied **{applied['name']}**"]
-        if family_report:
-            bits.append(f"Family {family_entry['name']} ({family_report})")
-        if report["benefit"]:
-            bits.append(f"Benefit {report['benefit']}")
-        if report["skills"]:
-            bits.append(f"{len(report['skills'])} school skills")
-        if report["wildcards"]:
-            bits.append("choose: " + "; ".join(report["wildcards"]))
-        content = (
-            f"Created **{name}** ({applied['clan']} {applied['name']}) and set it active:"
-            + ", ".join(bits)
-            + ". `/school learn` to record your Rank-1 technique."
-        )
-    else:
-        fam_note = ""
-        if family_report:
-            fam_note = f" Family **{family_entry['name']}** applied ({family_report})."
-        content = (
-            f"Created **{name}** and set it as your active character. All Traits start at 2 "
-            f"(the L5R 4e baseline).{fam_note} Tip: pass a `school:` from the catalog to auto-fill it."
-        )
-    await interaction.response.send_message(content=content, embed=build_sheet_embed(record))
+    await _start_chargen_wizard(interaction)
 
 # ---------------------------------------------------------------------------
 # /sheet wizard: guided step-by-step character creation
@@ -8429,18 +8352,8 @@ class CharacterApprovalView(discord.ui.View):
                 f"Please speak with a DM for details and feel free to submit again."
             )
 
-@client.tree.command(name="submit", description="Start character creation — opens a private channel with the full wizard.")
-@app_commands.describe(
-    character_name="Your character's full name (e.g. Bayushi Kachiko).",
-    concept="A short description of your character concept and personality (optional).",
-)
-async def submit_character(
-    interaction: discord.Interaction,
-    character_name: app_commands.Range[str, 1, 100],
-    concept: app_commands.Range[str, 1, 2000] | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
+async def _start_chargen_wizard(interaction: discord.Interaction) -> None:
+    """Shared entry point: open a private channel and pop the name modal."""
     guild = interaction.guild
     guild_id = str(guild.id)
     user_id = str(interaction.user.id)
@@ -8465,70 +8378,102 @@ async def submit_character(
             return
         store.delete_creation_channel(guild_id, user_id)
 
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.send_modal(_ChargenNameModal(interaction))
 
-    lobby_cat = interaction.channel.category if interaction.channel else None
-    bot_member = guild.me
 
-    dm_roles = [r for r in guild.roles if r.name in (ROLE_KAMI, ROLE_FORTUNE)]
-    everyone = guild.default_role
+class _ChargenNameModal(discord.ui.Modal, title="Character Creation"):
+    char_name = discord.ui.TextInput(
+        label="Character Name",
+        placeholder="e.g. Bayushi Kachiko",
+        min_length=1, max_length=100,
+    )
+    concept = discord.ui.TextInput(
+        label="Concept (optional)",
+        placeholder="A short description of your character",
+        required=False, max_length=2000,
+        style=discord.TextStyle.paragraph,
+    )
 
-    overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
-        everyone: discord.PermissionOverwrite(view_channel=False),
-        interaction.user: discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, read_message_history=True,
-        ),
-        bot_member: discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, manage_channels=True,
-            manage_messages=True,
-        ),
-    }
-    for r in dm_roles:
-        overwrites[r] = discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, read_message_history=True,
+    def __init__(self, source_interaction: discord.Interaction) -> None:
+        super().__init__()
+        self._source_category = source_interaction.channel.category if source_interaction.channel else None
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        guild = interaction.guild
+        guild_id = str(guild.id)
+        user_id = str(interaction.user.id)
+        character_name = self.char_name.value.strip()
+        concept_text = (self.concept.value or "").strip()
+
+        await interaction.response.defer(ephemeral=True)
+
+        bot_member = guild.me
+        dm_roles = [r for r in guild.roles if r.name in (ROLE_KAMI, ROLE_FORTUNE)]
+        everyone = guild.default_role
+
+        overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+            everyone: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+            ),
+            bot_member: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_channels=True,
+                manage_messages=True,
+            ),
+        }
+        for r in dm_roles:
+            overwrites[r] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+            )
+
+        channel_name = f"chargen-{interaction.user.display_name[:20].lower().replace(' ', '-')}"
+        priv_channel = await guild.create_text_channel(
+            channel_name,
+            category=self._source_category,
+            overwrites=overwrites,
+            reason=f"Character creation wizard for {interaction.user.display_name}",
         )
 
-    channel_name = f"chargen-{interaction.user.display_name[:20].lower().replace(' ', '-')}"
-    priv_channel = await guild.create_text_channel(
-        channel_name,
-        category=lobby_cat,
-        overwrites=overwrites,
-        reason=f"Character creation wizard for {interaction.user.display_name}",
-    )
+        store.set_creation_channel(guild_id, user_id, str(priv_channel.id))
 
-    store.set_creation_channel(guild_id, user_id, str(priv_channel.id))
+        state = {
+            "guild_id": guild_id,
+            "user_id": user_id,
+            "name": character_name,
+            "channel_id": priv_channel.id,
+            "full_wizard": True,
+            "clan": "",
+            "family_name": "",
+            "heritage_result": None,
+            "different_school": False,
+            "school_name": "",
+            "trait_purchases": {},
+            "advantages_chosen": [],
+            "disadvantages_chosen": [],
+            "skill_purchases": {},
+            "chosen_spells": [],
+            "concept": concept_text,
+        }
+        view = _WizardView(state)
+        view.add_item(_ClanSelect(state))
+        await priv_channel.send(
+            content=f"Welcome, {interaction.user.mention}! Let's build **{character_name}**.\n"
+                    f"**Step 1/10**: Choose your Clan.",
+            embed=_chargen_embed(state), view=view,
+        )
 
-    state = {
-        "guild_id": guild_id,
-        "user_id": user_id,
-        "name": character_name,
-        "channel_id": priv_channel.id,
-        "full_wizard": True,
-        "clan": "",
-        "family_name": "",
-        "heritage_result": None,
-        "different_school": False,
-        "school_name": "",
-        "trait_purchases": {},
-        "advantages_chosen": [],
-        "disadvantages_chosen": [],
-        "skill_purchases": {},
-        "chosen_spells": [],
-        "concept": concept or "",
-    }
-    view = _WizardView(state)
-    view.add_item(_ClanSelect(state))
-    await priv_channel.send(
-        content=f"Welcome, {interaction.user.mention}! Let's build **{character_name}**.\n"
-                f"**Step 1/10**: Choose your Clan.",
-        embed=_chargen_embed(state), view=view,
-    )
+        await interaction.followup.send(
+            f"Your private character creation channel has been created: {priv_channel.mention}\n"
+            f"Head there to build **{character_name}**!",
+            ephemeral=True,
+        )
 
-    await interaction.followup.send(
-        f"Your private character creation channel has been created: {priv_channel.mention}\n"
-        f"Head there to build **{character_name}**!",
-        ephemeral=True,
-    )
+
+@client.tree.command(name="submit", description="Start character creation — opens a private wizard channel.")
+async def submit_character(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
+        return
+    await _start_chargen_wizard(interaction)
 
 setup_group = app_commands.Group(name="setup", description="Server setup commands (Kami only).")
 
