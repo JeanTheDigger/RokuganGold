@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 62: NPC Enhancements & Category System
+## Status: Phase 63: Combat Enhancements
 
 **Help & Navigation**
 
@@ -1012,6 +1012,18 @@ Viewing an NPC (`/dm npc view`) or creature (`/dm creature view`) now shows whic
 | `/dm npc equip` | Set an NPC's equipped weapon, off-hand weapon, and/or armor name. All three parameters are optional — provide whichever you're changing. Empty string clears the field. |
 | `/dm npc feature` | Add or remove from any list field: Advantage, Disadvantage, Technique, Kata, Kiho, Weapon (owned), Weapon Quality, or Emphasis (requires `skill:` parameter). Case-insensitive duplicate detection. |
 | `/dm npc affinity` | Set an NPC's shugenja affinity and/or deficiency element. Choice of Air/Earth/Fire/Water/Void/(clear). |
+
+**Phase 63: Combat Enhancements**
+
+Three new commands for managing terrain, environmental effects, and area damage during encounters:
+
+| Command | What it does |
+|---|---|
+| `/combat cover` | Set a combatant's cover/terrain Armor TN bonus (range -30 to +30). Persists until the DM changes it or the encounter ends. Automatically applied during attack resolution. Set to 0 to clear. |
+| `/combat notes` | Set or clear an environment description for the encounter (e.g. "Burning temple, dense smoke, slippery floor"). Shown in the initiative tracker and combat summary. Omit text to clear. |
+| `/combat env_damage` | Apply environmental damage (fire, falling, poison, etc.) to multiple combatants at once. Comma-separated names or "all". Handles both characters and creatures. Optional `ignore_reduction` flag bypasses armor reduction. Logged to combat log. |
+
+Cover bonus is wired into all attack resolution paths: main attacks, Extra Attack second strikes, and creature attacks. It stacks with Guard, Full Defense, Void Armor TN, and other modifiers. Displayed in both the initiative tracker and the `/combat summary` embed.
 
 ---
 

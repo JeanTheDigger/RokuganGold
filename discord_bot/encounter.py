@@ -61,6 +61,8 @@ class Combatant:
     # Center Stance (GDD s40): next-round benefits from centering.
     center_bonus_available: bool = False  # +1k1 + Void Ring on one roll; set at round boundary
     center_init_boost: int = 0           # +10 Initiative for one Round; clears at round boundary
+    # Cover/terrain bonus: DM-set Armor TN modifier. Persists until DM changes it.
+    cover_bonus: int = 0
 
     @property
     def effective_initiative(self) -> int:
@@ -96,6 +98,7 @@ class Combatant:
             "void_initiative_boost": self.void_initiative_boost,
             "center_bonus_available": self.center_bonus_available,
             "center_init_boost": self.center_init_boost,
+            "cover_bonus": self.cover_bonus,
         }
 
     @classmethod
@@ -120,6 +123,7 @@ class Combatant:
             void_initiative_boost=d.get("void_initiative_boost", 0),
             center_bonus_available=d.get("center_bonus_available", False),
             center_init_boost=d.get("center_init_boost", 0),
+            cover_bonus=d.get("cover_bonus", 0),
         )
 
 
@@ -131,6 +135,7 @@ class Encounter:
     turn_index: int = 0
     started: bool = False
     surprise_round: bool = False
+    notes: str = ""
 
     def _sort(self) -> None:
         self.combatants.sort(key=lambda c: (c.effective_initiative, c.reflexes), reverse=True)
@@ -220,6 +225,7 @@ class Encounter:
             "turn_index": self.turn_index,
             "started": self.started,
             "surprise_round": self.surprise_round,
+            "notes": self.notes,
         }
 
     @classmethod
@@ -230,6 +236,7 @@ class Encounter:
             turn_index=d.get("turn_index", 0),
             started=d.get("started", False),
             surprise_round=d.get("surprise_round", False),
+            notes=d.get("notes", ""),
         )
         enc.combatants = [Combatant.from_dict(c) for c in d.get("combatants", [])]
         return enc

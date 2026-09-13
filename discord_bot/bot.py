@@ -1609,6 +1609,7 @@ class DamageView(discord.ui.View):
         guard_mod2 = 0
         fd_bonus2 = dc.full_defense_bonus if dc else 0
         void_tn_bonus2 = dc.void_armor_tn_bonus if dc else 0
+        cover_mod2 = dc.cover_bonus if dc else 0
         if enc:
             for gc in enc.combatants:
                 if gc.guarding.lower() == target.name.lower():
@@ -1617,9 +1618,9 @@ class DamageView(discord.ui.View):
                 guard_mod2 -= 5
         arrow_tn_adj2, _ = combat.arrow_armor_tn_mod(self.weapon, target.armor_tn_bonus)
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + arrow_tn_adj2
+            tn = cond_tn_ovr + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + cover_mod2 + arrow_tn_adj2
         else:
-            tn = combat.armor_tn(target, self.defender_stance) + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + arrow_tn_adj2
+            tn = combat.armor_tn(target, self.defender_stance) + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + cover_mod2 + arrow_tn_adj2
         outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, engine)
         hit = outcome["hit"]
         embed2 = discord.Embed(
@@ -1660,7 +1661,9 @@ class DamageView(discord.ui.View):
     ) -> None:
         """Roll the free second attack against a creature (Extra Attack, s40)."""
         attacker = attacker_rec.character
-        tn = cre_rec.creature.armor_tn
+        enc2 = encounters.get(self.channel_id)
+        dc2 = enc2.find(cre_rec.creature.name) if enc2 else None
+        tn = cre_rec.creature.armor_tn + (dc2.cover_bonus if dc2 else 0)
         outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, engine)
         hit = outcome["hit"]
         embed2 = discord.Embed(
@@ -2123,6 +2126,12 @@ async def attack(
         void_tn_bonus = def_combatant.void_armor_tn_bonus
         kata_notes.append(f"Void Armor: +{void_tn_bonus} Armor TN")
 
+    # Cover/terrain bonus: DM-set persistent Armor TN modifier.
+    cover_mod = 0
+    if def_combatant and def_combatant.cover_bonus:
+        cover_mod = def_combatant.cover_bonus
+        kata_notes.append(f"Cover: {'+' if cover_mod > 0 else ''}{cover_mod} Armor TN")
+
     # Arrow/blowgun Armor TN specials (GDD s39): modify the armor TN bonus contribution.
     arrow_tn_adj = 0
     if target_creature_rec is None:
@@ -2135,7 +2144,7 @@ async def attack(
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
         t_name = target_creature_rec.creature.name
-        tn = target_creature_rec.creature.armor_tn + bonus_tn
+        tn = target_creature_rec.creature.armor_tn + bonus_tn + cover_mod
     else:
         t_name = target_rec.character.name
         # Condition Armor TN override (Stunned/Grappled/Blinded replace the formula).
@@ -2146,10 +2155,10 @@ async def attack(
             is_melee_attack,
         )
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + bonus_tn + arrow_tn_adj
+            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + bonus_tn + arrow_tn_adj
             kata_notes.extend(cond_tn_notes)
         else:
-            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + arrow_tn_adj)
+            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + arrow_tn_adj)
 
     # Center Stance bonus (s40): +1k1 + Void Ring on one roll, from centering last Round.
     center_line = ""
@@ -3651,6 +3660,9 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/combat stance / guard / full_defense", "Set stance or declare defense"),
         ("/combat mount", "Mount or dismount"),
         ("/combat action", "Track Simple/Complex action usage"),
+        ("/combat cover", "Set cover/terrain Armor TN bonus on a combatant"),
+        ("/combat notes", "Set environment description for the encounter"),
+        ("/combat env_damage", "Apply environmental damage to multiple combatants"),
     ]),
     ("\U0001f504", "Conditions & Initiative", "Adjust conditions and turn order.", [
         ("/combat condition set / clear", "Apply or remove a condition"),
@@ -4173,8 +4185,9 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         center_init = f"  🎯Init+{c.center_init_boost}" if c.center_init_boost else ""
         held = "  ⏸️HELD" if c.held else ""
         delayed = "  ⏳DELAYED" if c.delayed else ""
+        cover = f"  🪨Cover{'+' if c.cover_bonus > 0 else ''}{c.cover_bonus}" if c.cover_bonus else ""
         init_val = c.effective_initiative
-        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{held}{delayed}")
+        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{held}{delayed}")
     header = f"⚔️ **Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
@@ -4182,7 +4195,8 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         header = "⚔️ **Not started**: use `/combat next` to begin."
         if enc.surprise_round:
             header += " *(Surprise Round)*"
-    return header + "\n" + "\n".join(lines)
+    notes_line = f"\n📍 *{enc.notes}*" if enc.notes else ""
+    return header + notes_line + "\n" + "\n".join(lines)
 
 
 @combat_group.command(name="start", description="Start a fresh initiative tracker in this channel.")
@@ -4378,6 +4392,8 @@ async def combat_summary(interaction: discord.Interaction) -> None:
     if enc.surprise_round:
         title += " (Surprise)"
     embed = discord.Embed(title=title, color=discord.Color.dark_red())
+    if enc.notes:
+        embed.description = f"📍 *{enc.notes}*"
     for cb in enc.combatants:
         rec = _resolve_combatant_record(guild, cb)
         if rec is not None:
@@ -4395,6 +4411,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             c_bonus = ", 🎯Center+1k1" if cb.center_bonus_available else ""
             c_init = f", 🎯Init+{cb.center_init_boost}" if cb.center_init_boost else ""
             guard = f", guarding {cb.guarding}" if cb.guarding else ""
+            cover = f", Cover{'+' if cb.cover_bonus > 0 else ''}{cb.cover_bonus}" if cb.cover_bonus else ""
             held = ", HELD" if cb.held else ""
             delayed = ", DELAYED" if cb.delayed else ""
             stance_label = cb.stance.replace("_", " ").title()
@@ -4402,7 +4419,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             value = (
                 f"Wounds: {c.wounds_taken}/{cap} **{lvl}**{pen_str}\n"
                 f"ATN: **{tn}** · {vp} · Stance: **{stance_label}** · Acts: {acts_left}\n"
-                f"Conditions: {conds}{fd}{v_atn}{v_init}{c_bonus}{c_init}{guard}{held}{delayed}"
+                f"Conditions: {conds}{fd}{v_atn}{v_init}{c_bonus}{c_init}{guard}{cover}{held}{delayed}"
             )
         else:
             conds = ", ".join(sorted(cb.conditions)) if cb.conditions else " "
@@ -9210,7 +9227,10 @@ async def creature_attack_cmd(
         return
 
     cr = cre_rec.creature
-    tn = combat.armor_tn(target_rec.character, "attack", bonus_tn)
+    enc = encounters.get(interaction.channel_id)
+    def_cb = enc.find(target_rec.character.name) if enc else None
+    cre_cover = def_cb.cover_bonus if def_cb else 0
+    tn = combat.armor_tn(target_rec.character, "attack", bonus_tn + cre_cover)
     outcome = creature.creature_attack(cr, tn, engine, raises)
     hit = outcome["success"]
     t_name = target_rec.character.name
@@ -12137,6 +12157,177 @@ async def combat_action(
         await interaction.response.send_message(
             f"**{cb.name}** takes a **Simple Action** ({remaining} action{'s' if remaining != 1 else ''} remaining)."
         )
+
+
+# ---------------------------------------------------------------------------
+# Phase 63: Combat Enhancements — cover, notes, env_damage
+# ---------------------------------------------------------------------------
+
+@combat_group.command(name="cover", description="Set a combatant's cover/terrain Armor TN bonus. Fortune role required.")
+@app_commands.describe(
+    name="Combatant name.",
+    bonus="Armor TN modifier from cover/terrain (positive = harder to hit, 0 = clear).",
+)
+@app_commands.autocomplete(name=_combatant_autocomplete)
+async def combat_cover(
+    interaction: discord.Interaction,
+    name: str,
+    bonus: app_commands.Range[int, -30, 30],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to set cover.",
+            ephemeral=True,
+        )
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    cb = enc.find(name)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    cb.cover_bonus = bonus
+    _save_encounter(str(interaction.guild_id), enc)
+    if bonus == 0:
+        await interaction.response.send_message(
+            f"**{cb.name}**: cover cleared.\n\n{_render_encounter(enc, str(interaction.guild_id))}"
+        )
+    else:
+        sign = "+" if bonus > 0 else ""
+        await interaction.response.send_message(
+            f"**{cb.name}**: cover set to **{sign}{bonus}** Armor TN.\n\n"
+            f"{_render_encounter(enc, str(interaction.guild_id))}"
+        )
+
+
+@combat_group.command(name="notes", description="Set or clear environment notes for this encounter. Fortune role required.")
+@app_commands.describe(text="Environment description (leave blank to clear).")
+async def combat_notes(
+    interaction: discord.Interaction,
+    text: str = "",
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to set encounter notes.",
+            ephemeral=True,
+        )
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    enc.notes = text.strip()
+    _save_encounter(str(interaction.guild_id), enc)
+    if enc.notes:
+        await interaction.response.send_message(
+            f"📍 Environment: *{enc.notes}*\n\n{_render_encounter(enc, str(interaction.guild_id))}"
+        )
+    else:
+        await interaction.response.send_message(
+            f"📍 Environment notes cleared.\n\n{_render_encounter(enc, str(interaction.guild_id))}"
+        )
+
+
+@combat_group.command(name="env_damage", description="Apply environmental damage to combatants. Fortune role required.")
+@app_commands.describe(
+    amount="Raw damage to apply.",
+    targets='Comma-separated combatant names, or "all".',
+    reason="Source of damage (fire, falling, etc.).",
+    ignore_reduction="Skip armor reduction (default: no — reduction applies).",
+)
+async def combat_env_damage(
+    interaction: discord.Interaction,
+    amount: app_commands.Range[int, 1, 500],
+    targets: str,
+    reason: str = "",
+    ignore_reduction: bool = False,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to apply environmental damage.",
+            ephemeral=True,
+        )
+        return
+    enc = encounters.get(interaction.channel_id)
+    if enc is None:
+        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    if targets.strip().lower() == "all":
+        target_list = [cb.name for cb in enc.combatants]
+    else:
+        target_list = [t.strip() for t in targets.split(",") if t.strip()]
+    if not target_list:
+        await interaction.response.send_message("No targets specified.", ephemeral=True)
+        return
+
+    results: list[str] = []
+    not_found: list[str] = []
+    reason_tag = f" ({reason})" if reason else ""
+
+    for tname in target_list:
+        cb = enc.find(tname)
+        if cb is None:
+            not_found.append(tname)
+            continue
+        rec = _resolve_combatant_record(guild, cb)
+        if rec is not None:
+            reduction = 0 if ignore_reduction else rec.character.armor_reduction
+            applied = combat.apply_damage(rec.character, amount, reduction)
+            store.save(rec)
+            dead_tag = " 💀 **DEAD**" if applied["is_dead"] else ""
+            results.append(
+                f"**{cb.name}**: {amount} raw − {reduction} red = "
+                f"**{applied['final_damage']}** wounds → "
+                f"**{applied['new_wound_level']}** ({rec.character.wounds_taken}){dead_tag}"
+            )
+            await _combat_log(
+                guild,
+                f"Env Damage: {cb.name}{reason_tag} "
+                f"{applied['final_damage']} wounds [{applied['new_wound_level']}]"
+                f"{' DEAD' if applied['is_dead'] else ''}",
+            )
+        else:
+            cre_rec = store.get_creature_by_name(guild, tname)
+            if cre_rec is not None:
+                cr = cre_rec.creature
+                reduction = 0 if ignore_reduction else cr.reduction
+                final = max(0, amount - reduction)
+                cr.wounds_taken += final
+                is_dead = cr.wounds_taken >= cr.wounds_dead
+                store.save_creature(cre_rec)
+                dead_tag = " 💀 **DEAD**" if is_dead else ""
+                results.append(
+                    f"**{cb.name}**: {amount} raw − {reduction} red = "
+                    f"**{final}** wounds → {cr.wounds_taken}/{cr.wounds_dead}{dead_tag}"
+                )
+                await _combat_log(
+                    guild,
+                    f"Env Damage: {cb.name}{reason_tag} "
+                    f"{final} wounds [{cr.wounds_taken}/{cr.wounds_dead}]"
+                    f"{' DEAD' if is_dead else ''}",
+                )
+            else:
+                results.append(f"**{cb.name}**: *(no sheet — damage not tracked)*")
+
+    parts = [f"💥 **Environmental Damage**: {amount}{reason_tag}"]
+    if ignore_reduction:
+        parts[0] += " *(ignores reduction)*"
+    parts.extend(results)
+    if not_found:
+        parts.append(f"Not found: {', '.join(not_found)}")
+    await interaction.response.send_message("\n".join(parts))
 
 
 # ---------------------------------------------------------------------------
