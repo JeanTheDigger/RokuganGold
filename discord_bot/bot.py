@@ -9078,7 +9078,6 @@ async def _setup_server_inner(
         "Lobby": {"lore", "welcome", "character-submission"},
         "Out of Character": {"general", "off-topic", "announcements", "rules-reference"},
         "IC Information": {"calendar"},
-        "In Character": {"in-character"},
         "Staff Members": {"dm-discussion", "approvals"},
     }
     deleted_dupes: list[str] = []
@@ -9347,33 +9346,19 @@ async def _setup_server_inner(
         await msg.pin()
         store.set_date_channel(guild_id, str(cal_ch.id), str(msg.id))
 
-    # --- 4. In Character (Approved + DMs only) ---
-    ic_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
-        everyone: discord.PermissionOverwrite(view_channel=False),
-        approved_role: discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, read_message_history=True,
-        ),
-        bot_member: discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, manage_channels=True,
-            manage_messages=True, manage_threads=True,
-        ),
-    }
-    for r in dm_roles:
-        ic_overwrites[r] = discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, read_message_history=True,
-            manage_messages=True,
-        )
+    # --- 4. Remove legacy "In Character" category if present ---
     ic_cat = discord.utils.get(guild.categories, name="In Character")
-    if ic_cat is None:
-        ic_cat = await guild.create_category("In Character", overwrites=ic_overwrites, reason="Server setup")
-        created_items.append("In Character category")
-    else:
-        await ic_cat.edit(overwrites=ic_overwrites, reason="Server setup: update permissions")
-        existing_items.append("In Character")
-    existing_names = {ch.name for ch in ic_cat.text_channels}
-    if "in-character" not in existing_names:
-        await ic_cat.create_text_channel("in-character")
-        created_items.append("#in-character")
+    if ic_cat is not None:
+        for ch in list(ic_cat.channels):
+            try:
+                await ch.delete(reason="Server setup: removing unused In Character category")
+            except discord.Forbidden:
+                pass
+        try:
+            await ic_cat.delete(reason="Server setup: removing unused In Character category")
+            deleted_channels.append("In Character (category)")
+        except discord.Forbidden:
+            pass
 
     # --- 5. Staff Members (Fortune + Kami only) ---
     dm_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
