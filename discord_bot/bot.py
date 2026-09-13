@@ -3799,7 +3799,8 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ]),
     ("\U0001f6e0️", "Admin (Kami Only)", "Server administration commands.", [
         ("/dm log_channel / clear_log", "Set or clear combat event log channel"),
-        ("/dm approval_channel / clear_approval", "Route damage approvals to a Staff channel"),
+        ("/dm approval_channel / clear_approval", "Set character submission approval channel"),
+        ("/dm damage_channel / clear_damage_channel", "Set damage/healing approval channel"),
         ("/dm date_channel / clear_date_channel", "Set or clear the pinned date display"),
         ("/setup server", "Create full server structure (categories, channels, roles)"),
         ("/sync", "Re-sync slash commands with Discord"),
@@ -4170,7 +4171,7 @@ async def dm_damage(
         ),
         inline=False,
     )
-    approval_ch_id = store.get_approval_channel(guild)
+    approval_ch_id = store.get_damage_approval_channel(guild) or store.get_approval_channel(guild)
     approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
     src_ch_id = interaction.channel_id if approval_ch else 0
     view = DmDamageView(
@@ -4234,7 +4235,7 @@ async def dm_heal(
         ),
         inline=False,
     )
-    approval_ch_id = store.get_approval_channel(guild)
+    approval_ch_id = store.get_damage_approval_channel(guild) or store.get_approval_channel(guild)
     approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
     src_ch_id = interaction.channel_id if approval_ch else 0
     view = DmHealView(
@@ -4599,7 +4600,8 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/dm influence", "Track court Influence Points."),
         ("/dm craft_extended", "Multi-step extended crafting rolls with quality tiers."),
         ("/dm announce", "Post a session/event announcement with RSVP reactions."),
-        ("/dm approval_channel / clear_approval", "Route damage approvals to a Staff channel (Kami)."),
+        ("/dm approval_channel / clear_approval", "Set character submission approval channel (Kami)."),
+        ("/dm damage_channel / clear_damage_channel", "Set damage/healing approval channel (Kami)."),
         ("/dm log_channel / clear_log", "Set combat event log channel (Kami)."),
         ("/dm date_channel / clear_date_channel", "Set pinned date display channel (Kami)."),
         ("/location area create / delete / list", "Manage RP areas (Discord categories)."),
@@ -8203,7 +8205,7 @@ async def spell_damage(
                 value=f"Reduction {red} · Current: **{wl}** ({rec.character.wounds_taken} wounds)",
                 inline=False,
             )
-            approval_ch_id = store.get_approval_channel(guild)
+            approval_ch_id = store.get_damage_approval_channel(guild) or store.get_approval_channel(guild)
             approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
             src_ch_id = interaction.channel_id if approval_ch else 0
             view = SpellDamageView(
@@ -8408,8 +8410,8 @@ async def dm_clear_date_channel(interaction: discord.Interaction) -> None:
     store.clear_date_channel(str(interaction.guild_id))
     await interaction.response.send_message("Date channel cleared. The pinned message will no longer update.", ephemeral=True)
 
-@dm.command(name="approval_channel", description="Set the DM channel for damage/healing approvals (Kami only).")
-@app_commands.describe(channel="The DM-only text channel for approval requests.")
+@dm.command(name="approval_channel", description="Set the channel for character submission approvals (Kami only).")
+@app_commands.describe(channel="The DM-only text channel for character submissions.")
 async def dm_approval_channel(
     interaction: discord.Interaction,
     channel: discord.TextChannel,
@@ -8421,12 +8423,11 @@ async def dm_approval_channel(
         return
     store.set_approval_channel(str(interaction.guild_id), str(channel.id))
     await interaction.response.send_message(
-        f"DM approval channel set to {channel.mention}. "
-        f"Damage and healing requests will be routed there for DM review. "
-        f"Results will be posted back in the combat room."
+        f"Character approval channel set to {channel.mention}. "
+        f"Character submissions will be routed there for DM review."
     )
 
-@dm.command(name="clear_approval", description="Stop routing approvals to a DM channel (Kami only).")
+@dm.command(name="clear_approval", description="Stop routing character approvals to a DM channel (Kami only).")
 async def dm_clear_approval(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -8434,7 +8435,35 @@ async def dm_clear_approval(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can clear the approval channel.", ephemeral=True)
         return
     store.clear_approval_channel(str(interaction.guild_id))
-    await interaction.response.send_message("Approval channel cleared. Damage approvals will appear inline.", ephemeral=True)
+    await interaction.response.send_message("Character approval channel cleared.", ephemeral=True)
+
+@dm.command(name="damage_channel", description="Set the channel for damage/healing approvals (Kami only).")
+@app_commands.describe(channel="The DM-only text channel for damage approval requests.")
+async def dm_damage_channel(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not _is_kami(interaction):
+        await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can set the damage approval channel.", ephemeral=True)
+        return
+    store.set_damage_approval_channel(str(interaction.guild_id), str(channel.id))
+    await interaction.response.send_message(
+        f"Damage approval channel set to {channel.mention}. "
+        f"Damage, healing, and spell approvals will be routed there for DM review. "
+        f"Results will be posted back in the combat room."
+    )
+
+@dm.command(name="clear_damage_channel", description="Stop routing damage approvals to a separate channel (Kami only).")
+async def dm_clear_damage_channel(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not _is_kami(interaction):
+        await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can clear the damage approval channel.", ephemeral=True)
+        return
+    store.clear_damage_approval_channel(str(interaction.guild_id))
+    await interaction.response.send_message("Damage approval channel cleared. Damage approvals will fall back to the character approval channel.", ephemeral=True)
 
 @dm.command(name="treat", description="Medicine treatment: healer rolls, DM approves (L5R 4e).")
 @app_commands.describe(
@@ -8512,7 +8541,7 @@ async def dm_treat(
             value=f"**{effective_heal}** wounds to heal (Intelligence {hc.intelligence} × 2 = {hc.intelligence * 2})",
             inline=False,
         )
-        approval_ch_id = store.get_approval_channel(guild)
+        approval_ch_id = store.get_damage_approval_channel(guild) or store.get_approval_channel(guild)
         approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
         src_ch_id = interaction.channel_id if approval_ch else 0
         view = MedicineTreatView(
@@ -9708,10 +9737,16 @@ async def _setup_server_inner(
         created_items.append("#dm-discussion")
     if "approvals" not in existing_names:
         await dm_cat.create_text_channel("approvals")
-        created_items.append("#approvals")
+        created_items.append("#approvals (character submissions)")
     approvals_ch_disc = discord.utils.get(dm_cat.text_channels, name="approvals")
     if approvals_ch_disc:
         store.set_approval_channel(str(guild.id), str(approvals_ch_disc.id))
+    if "damage-approvals" not in existing_names:
+        await dm_cat.create_text_channel("damage-approvals")
+        created_items.append("#damage-approvals (combat/spell/healing)")
+    dmg_ch_disc = discord.utils.get(dm_cat.text_channels, name="damage-approvals")
+    if dmg_ch_disc:
+        store.set_damage_approval_channel(str(guild.id), str(dmg_ch_disc.id))
 
     # --- Position Player Support just above Staff Members, Staff Members always last ---
     max_pos = max((c.position for c in guild.categories), default=0)

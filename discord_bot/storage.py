@@ -175,6 +175,11 @@ CREATE TABLE IF NOT EXISTS approval_channels (
     channel_id TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS damage_approval_channels (
+    guild_id   TEXT NOT NULL PRIMARY KEY,
+    channel_id TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS calendar (
     guild_id TEXT NOT NULL PRIMARY KEY,
     year     INTEGER NOT NULL,
@@ -635,6 +640,29 @@ class Store:
         with self._lock, self._conn:
             self._conn.execute(
                 "DELETE FROM approval_channels WHERE guild_id = ?", (guild_id,)
+            )
+
+    # -- DM damage approval channel --------------------------------------------
+    def set_damage_approval_channel(self, guild_id: str, channel_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO damage_approval_channels (guild_id, channel_id) VALUES (?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
+                (guild_id, channel_id),
+            )
+
+    def get_damage_approval_channel(self, guild_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT channel_id FROM damage_approval_channels WHERE guild_id = ?",
+                (guild_id,),
+            ).fetchone()
+        return row["channel_id"] if row else None
+
+    def clear_damage_approval_channel(self, guild_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM damage_approval_channels WHERE guild_id = ?", (guild_id,)
             )
 
     # -- date display channel --------------------------------------------------

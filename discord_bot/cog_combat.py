@@ -1355,7 +1355,7 @@ async def attack(
 
     cs_raises = raises if man == "called_shot" else 0
     if hit:
-        approval_ch_id = _d.store.get_approval_channel(guild)
+        approval_ch_id = _d.store.get_damage_approval_channel(guild) or _d.store.get_approval_channel(guild)
         approval_ch = _d.bot_client.get_channel(int(approval_ch_id)) if approval_ch_id else None
         src_ch_id = interaction.channel_id if approval_ch else 0
         if target_creature_rec is not None:
