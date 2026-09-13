@@ -597,8 +597,7 @@ async def ping(interaction: discord.Interaction) -> None:
 
 @client.tree.command(name="whoami", description="Quick glance at your active character's status.")
 async def whoami(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     rec = store.get_active(guild, str(interaction.user.id))
@@ -662,8 +661,7 @@ async def whoami(interaction: discord.Interaction) -> None:
 
 @client.tree.command(name="date", description="Show the current in-game Rokugani calendar date.")
 async def date_cmd(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     cal = store.get_calendar(str(interaction.guild_id))
     if cal is None:
@@ -1172,22 +1170,19 @@ class DamageView(discord.ui.View):
 
     @discord.ui.button(label="Roll & Apply Damage", style=discord.ButtonStyle.danger, emoji="⚔️")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to authorize this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         await self._resolve_damage(interaction, void_reduce=False)
 
     @discord.ui.button(label="Void Reduce (−10 wounds)", style=discord.ButtonStyle.primary, emoji="🔮")
     async def void_reduce_apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to authorize this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         await self._resolve_damage(interaction, void_reduce=True)
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         msg = (
             f"🛡️ {interaction.user.display_name} denied the effect: "
@@ -1756,10 +1751,7 @@ class DamageView(discord.ui.View):
 
     @discord.ui.button(label="No Effect", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(
-                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this attack.", ephemeral=True
-            )
+        if not await _require_dm_role(interaction):
             return
         msg = (
             f"🛡️ {interaction.user.display_name} ruled **no effect** on "
@@ -1883,17 +1875,13 @@ async def attack(
     bonus_tn: app_commands.Range[int, -50, 50] = 0,
     weapon_material: app_commands.Choice[str] | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
 
     # Resolve the attacker: a stored NPC (Fortune) or the caller's active character.
     if attacker_npc:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(
-                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to attack with an NPC.", ephemeral=True
-            )
+        if not await _require_dm_role(interaction):
             return
         attacker_rec = store.get_by_name(guild, NPC_OWNER, attacker_npc)
         if attacker_rec is None:
@@ -2420,8 +2408,7 @@ async def sheet_create(
     school_type: app_commands.Choice[str] | None = None,
     age: app_commands.Range[int, 0, 200] | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     owner = str(interaction.user.id)
@@ -2768,8 +2755,7 @@ async def sheet_wizard(
     interaction: discord.Interaction,
     name: app_commands.Range[str, 1, 64],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     state = {
         "guild_id": str(interaction.guild_id),
@@ -2792,8 +2778,7 @@ async def sheet_wizard(
 @sheet.command(name="view", description="View a character sheet (yours or another player's).")
 @app_commands.describe(member="Whose active character to view. Omit for your own.")
 async def sheet_view(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if member is not None and member.id != interaction.user.id:
@@ -2816,8 +2801,7 @@ async def sheet_view(interaction: discord.Interaction, member: discord.Member | 
 @sheet.command(name="list", description="List your characters (or a player's, if you are a DM).")
 @app_commands.describe(member="Whose characters to list (Fortune). Omit for your own.")
 async def sheet_list(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     target = member or interaction.user
@@ -2851,8 +2835,7 @@ async def sheet_list(interaction: discord.Interaction, member: discord.Member | 
 @app_commands.describe(name="The character name to activate.")
 @app_commands.autocomplete(name=_own_character_autocomplete)
 async def sheet_activate(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     owner = str(interaction.user.id)
@@ -2874,16 +2857,12 @@ async def sheet_activate(interaction: discord.Interaction, name: str) -> None:
 async def sheet_delete(
     interaction: discord.Interaction, name: str, member: discord.Member | None = None
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     owner_target = interaction.user
     if member is not None and member.id != interaction.user.id:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(
-                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to delete another player's character.", ephemeral=True
-            )
+        if not await _require_dm_role(interaction):
             return
         owner_target = member
     rec = store.get_by_name(guild, str(owner_target.id), name)
@@ -3010,8 +2989,7 @@ async def sheet_trait(
     value: app_commands.Range[int, 0, 10],
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3038,8 +3016,7 @@ async def sheet_skill(
     rank: app_commands.Range[int, 0, 10] | None = None,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3092,8 +3069,7 @@ async def sheet_set(
     value: float,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3115,8 +3091,7 @@ async def sheet_equip(
     remove: bool = False,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3156,8 +3131,7 @@ async def sheet_wield(
     unwield: bool = False,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3195,8 +3169,7 @@ async def sheet_armor(
     armor: str,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3253,8 +3226,7 @@ async def sheet_quality(
     clear: bool = False,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3303,8 +3275,7 @@ async def sheet_item(
     quantity: app_commands.Range[int, 1, 9999] = 1,
     remove: bool = False, member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3346,8 +3317,7 @@ async def sheet_koku(
     reason: str | None = None,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3381,8 +3351,7 @@ async def sheet_koku(
 async def sheet_advantage(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3420,8 +3389,7 @@ async def sheet_advantage(
 async def sheet_disadvantage(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3456,8 +3424,7 @@ async def sheet_disadvantage(
 async def sheet_kata(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3483,8 +3450,7 @@ async def sheet_kata(
 async def sheet_kiho(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3513,8 +3479,7 @@ async def sheet_kiho(
 async def sheet_kata_activate(
     interaction: discord.Interaction, name: str | None = None, member: discord.Member | None = None
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3559,8 +3524,7 @@ async def sheet_kata_activate(
 async def sheet_kiho_activate(
     interaction: discord.Interaction, name: str, off: bool = False, member: discord.Member | None = None
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3617,8 +3581,7 @@ async def sheet_wound(
     amount: app_commands.Range[int, 1, 1000],
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3647,8 +3610,7 @@ async def sheet_heal(
     amount: app_commands.Range[int, 1, 1000],
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3845,14 +3807,9 @@ class _DmWizardCatSelect(discord.ui.Select):
 
 @dm.command(name="wizard", description="Interactive command menu: browse all Fortune and Kami actions by category.")
 async def dm_wizard_cmd(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to use the DM wizard.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     view = discord.ui.View(timeout=300)
     view.add_item(_DmWizardCatSelect())
@@ -3869,11 +3826,9 @@ async def dm_wizard_cmd(interaction: discord.Interaction) -> None:
 
 @dm.command(name="party", description="DM overview: all active PCs on this server.")
 async def party_overview(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view the party roster.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     active = store.list_active_pcs(guild)
@@ -3915,8 +3870,7 @@ async def party_overview(interaction: discord.Interaction) -> None:
 
 @dm.command(name="roles", description="Show who has the Fortune and Kami roles on this server.")
 async def dm_roles(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = interaction.guild
     if guild is None:
@@ -3943,11 +3897,9 @@ SPELL_ELEMENTS = ("air", "earth", "fire", "water", "void")
 
 @dm.command(name="new_day", description="Advance to a new day: refresh spell slots and apply natural healing for all active PCs.")
 async def dm_new_day(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to advance the day.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     active = store.list_active_pcs(guild)
@@ -4034,13 +3986,9 @@ async def dm_setdate(
     month: app_commands.Range[int, 1, 12],
     day: app_commands.Range[int, 1, 28],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to set the date.", ephemeral=True
-        )
+    if not await _require_dm_role(interaction):
         return
     store.set_calendar(str(interaction.guild_id), year, month, day)
     date_str = _format_rokugani_date(year, month, day)
@@ -4093,11 +4041,9 @@ async def dm_damage(
     amount: app_commands.Range[int, 1, 9999],
     reason: str = "",
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to use this.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = store.get_by_name(guild, NPC_OWNER, target)
@@ -4159,11 +4105,9 @@ async def dm_heal(
     amount: app_commands.Range[int, 1, 9999],
     reason: str = "",
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to use this.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = store.get_by_name(guild, NPC_OWNER, target)
@@ -4290,8 +4234,7 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
 
 @combat_group.command(name="start", description="Start a fresh initiative tracker in this channel.")
 async def combat_start(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     enc = encounter.Encounter(channel_id=interaction.channel_id)
     encounters[interaction.channel_id] = enc
@@ -4316,15 +4259,11 @@ def _get_or_create(channel_id: int) -> encounter.Encounter:
 @combat_group.command(name="join", description="Add a character to initiative (rolls initiative).")
 @app_commands.describe(member="Add another player's active character (Fortune). Omit for your own.")
 async def combat_join(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if member is not None and member.id != interaction.user.id:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(
-                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to add another player's character.", ephemeral=True
-            )
+        if not await _require_dm_role(interaction):
             return
         owner = member
     else:
@@ -4364,13 +4303,9 @@ async def combat_add(
     reflexes: app_commands.Range[int, 1, 10],
     insight_rank: app_commands.Range[int, 1, 10] = 1,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to add NPCs to initiative.", ephemeral=True
-        )
+    if not await _require_dm_role(interaction):
         return
     result = engine.roll_and_keep(reflexes + insight_rank, reflexes)
     enc = _get_or_create(interaction.channel_id)
@@ -4391,14 +4326,10 @@ async def combat_add(
 
 @combat_group.command(name="next", description="Advance to the next combatant's turn.")
 async def combat_next(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None or not enc.combatants:
-        await interaction.response.send_message(
-            "No encounter here. Start one with `/combat start`.", ephemeral=True
-        )
         return
     prev_round = enc.round
     current = enc.advance()
@@ -4426,14 +4357,10 @@ async def combat_next(interaction: discord.Interaction) -> None:
 
 @combat_group.command(name="status", description="Show the current initiative order.")
 async def combat_status(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message(
-            "No encounter here. Start one with `/combat start`.", ephemeral=True
-        )
         return
     await interaction.response.send_message(_render_encounter(enc, str(interaction.guild_id)))
 
@@ -4442,11 +4369,9 @@ async def combat_status(interaction: discord.Interaction) -> None:
 @app_commands.describe(name="The combatant name to remove.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_remove(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to remove combatants.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     enc = encounters.get(interaction.channel_id)
     if enc is None or not enc.remove(name):
@@ -4459,11 +4384,9 @@ async def combat_remove(interaction: discord.Interaction, name: str) -> None:
 
 @combat_group.command(name="end", description="End the encounter in this channel.")
 async def combat_end(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to end encounters.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     if encounters.pop(interaction.channel_id, None) is None:
         await interaction.response.send_message("No encounter here.", ephemeral=True)
@@ -4475,15 +4398,12 @@ async def combat_end(interaction: discord.Interaction) -> None:
 
 @combat_group.command(name="summary", description="Compact overview of all combatants' key stats. Fortune role required.")
 async def combat_summary(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view the combat summary.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None or not enc.combatants:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     title = f"⚔️ Combat Summary: Round {enc.round}"
@@ -4537,11 +4457,9 @@ async def combat_summary(interaction: discord.Interaction) -> None:
 @app_commands.describe(name="The NPC to add.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def combat_npc(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to add NPCs to initiative.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     rec = store.get_by_name(str(interaction.guild_id), NPC_OWNER, name)
     if rec is None:
@@ -4584,15 +4502,12 @@ async def combat_condition_set(
     name: str,
     condition: app_commands.Choice[str],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to set conditions.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     c = enc.find(name)
     if c is None:
@@ -4619,15 +4534,12 @@ async def combat_condition_clear(
     name: str,
     condition: app_commands.Choice[str],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to clear conditions.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     c = enc.find(name)
     if c is None:
@@ -4646,12 +4558,10 @@ async def combat_condition_clear(
 @app_commands.describe(name="The combatant to check.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_conditions(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     c = enc.find(name)
     if c is None:
@@ -4675,15 +4585,12 @@ async def combat_conditions(interaction: discord.Interaction, name: str) -> None
 )
 @app_commands.autocomplete(guarder=_combatant_autocomplete, ward=_combatant_autocomplete)
 async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to assign Guard.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     g = enc.find(guarder)
     if g is None:
@@ -4741,15 +4648,12 @@ async def combat_full_defense(
     reflexes: app_commands.Range[int, 1, 10] | None = None,
     defense_skill: app_commands.Range[int, 0, 10] | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to declare Full Defense.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     cb = enc.find(combatant)
     if cb is None:
@@ -4808,15 +4712,12 @@ async def combat_full_defense(
 @app_commands.describe(combatant="The combatant spending the Void Point.")
 @app_commands.autocomplete(combatant=_combatant_autocomplete)
 async def combat_void_armor(interaction: discord.Interaction, combatant: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     cb = enc.find(combatant)
     if cb is None:
@@ -4854,15 +4755,12 @@ async def combat_void_armor(interaction: discord.Interaction, combatant: str) ->
 @app_commands.describe(combatant="The combatant spending the Void Point.")
 @app_commands.autocomplete(combatant=_combatant_autocomplete)
 async def combat_void_initiative(interaction: discord.Interaction, combatant: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     cb = enc.find(combatant)
     if cb is None:
@@ -4908,15 +4806,12 @@ async def combat_void_initiative(interaction: discord.Interaction, combatant: st
 )
 @app_commands.autocomplete(spender=_combatant_autocomplete, target=_combatant_autocomplete)
 async def combat_void_swap(interaction: discord.Interaction, spender: str, target: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     cb_s = enc.find(spender)
     if cb_s is None:
@@ -5013,15 +4908,12 @@ async def grapple_initiate(
     bonus_tn: int = 0,
     defender_stance: app_commands.Choice[str] | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to initiate a grapple.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     atk_cb = enc.find(attacker)
     if atk_cb is None:
@@ -5135,15 +5027,12 @@ async def grapple_control(
     combatant_a: str,
     combatant_b: str,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to roll grapple control.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     cb_a = enc.find(combatant_a)
     cb_b = enc.find(combatant_b)
@@ -5207,15 +5096,12 @@ async def grapple_hit(
     attacker: str,
     target: str,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve a grapple hit.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     atk_cb = enc.find(attacker)
     def_cb = enc.find(target)
@@ -5270,15 +5156,12 @@ async def grapple_throw(
     thrower: str,
     target: str,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve a grapple throw.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     thrower_cb = enc.find(thrower)
     target_cb = enc.find(target)
@@ -5324,15 +5207,12 @@ async def grapple_pin(
     controller: str,
     target: str,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve a grapple pin.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     ctrl_cb = enc.find(controller)
     tgt_cb = enc.find(target)
@@ -5374,15 +5254,12 @@ async def grapple_break(
     combatant: str,
     opponent: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to break a grapple.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     cb = enc.find(combatant)
     if cb is None:
@@ -5493,11 +5370,9 @@ async def duel_assess(
     a_member: discord.Member | None = None,
     b_member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to run a duel.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
@@ -5598,11 +5473,9 @@ async def duel_focus(
     a_member: discord.Member | None = None,
     b_member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to run a duel.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
@@ -5706,11 +5579,9 @@ async def duel_strike(
     attacker_member: discord.Member | None = None,
     target_member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to run a duel strike.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
@@ -5852,11 +5723,9 @@ async def contest(
     void_unskilled_b: bool = False,
     reason: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to run a contested check.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     if void_a and void_unskilled_a:
         await interaction.response.send_message("A: cannot use both void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
@@ -6021,11 +5890,9 @@ async def fear_check(
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a Fear check.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -6098,11 +5965,9 @@ async def honor_roll(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for an Honor Roll.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -6153,13 +6018,11 @@ async def void_spend(
     member: discord.Member | None = None,
     npc_name: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if npc_name:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to spend VP for an NPC.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = store.get_by_name(guild, NPC_OWNER, npc_name)
         if rec is None:
@@ -6210,13 +6073,11 @@ async def void_refresh(
     npc_name: str | None = None,
     tn: app_commands.Range[int, 1, 100] | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if npc_name:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to refresh VP for an NPC.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = store.get_by_name(guild, NPC_OWNER, npc_name)
         if rec is None:
@@ -6305,13 +6166,11 @@ async def void_status(
     member: discord.Member | None = None,
     npc_name: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if npc_name:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to check NPC VP.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = store.get_by_name(guild, NPC_OWNER, npc_name)
         if rec is None:
@@ -6364,11 +6223,9 @@ async def poison_resist(
     spend_void: bool = False,
     poison_name: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a poison resistance check.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -6453,11 +6310,9 @@ async def medicine_check(
     void_unskilled: bool = False,
     reason: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a Medicine check.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
@@ -6610,11 +6465,9 @@ async def skill_check(
     reason: str | None = None,
     secret: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a skill check.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -6706,11 +6559,9 @@ async def check_cooperative(
     void_unskilled: bool = False,
     reason: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -6853,11 +6704,9 @@ async def stealth_check(
     reason: str | None = None,
     secret: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a Stealth check.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
@@ -6956,11 +6805,9 @@ async def investigate_check(
     reason: str | None = None,
     secret: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for an Investigation check.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
@@ -7075,11 +6922,9 @@ async def social_check(
     void_unskilled: bool = False,
     reason: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a social check.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
@@ -7166,11 +7011,9 @@ async def craft_check(
     void_unskilled: bool = False,
     reason: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a Craft check.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
@@ -7254,11 +7097,9 @@ async def lore_check(
     void_unskilled: bool = False,
     reason: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for a Lore check.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
@@ -7553,11 +7394,9 @@ async def npc_generate(
     skills: str | None = None,
     base_honor: app_commands.Range[float, 0.0, 10.0] | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to generate NPCs.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
 
     school_skills = [s for s in skills.split(",")] if skills else None
@@ -7601,8 +7440,7 @@ async def npc_generate(
 @app_commands.describe(name="The NPC to view.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_view(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec = store.get_by_name(str(interaction.guild_id), NPC_OWNER, name)
     if rec is None:
@@ -7613,8 +7451,7 @@ async def npc_view(interaction: discord.Interaction, name: str) -> None:
 
 @dm_npc.command(name="list", description="List the NPCs on this server.")
 async def npc_list(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     recs = store.list_by_owner(str(interaction.guild_id), NPC_OWNER)
     if not recs:
@@ -7639,11 +7476,9 @@ async def npc_list(interaction: discord.Interaction) -> None:
 @app_commands.describe(name="The NPC to delete.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_delete(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to delete NPCs.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     rec = store.get_by_name(str(interaction.guild_id), NPC_OWNER, name)
     if rec is None:
@@ -7859,13 +7694,9 @@ async def npc_place(interaction: discord.Interaction, name: str) -> None:
 @app_commands.describe(name="NPC to remove from the room.")
 @app_commands.autocomplete(name=_room_npc_autocomplete)
 async def npc_dismiss(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True
-        )
+    if not await _require_dm_role(interaction):
         return
     room = store.get_room_by_thread(str(interaction.channel_id))
     if room is None:
@@ -7892,13 +7723,9 @@ async def npc_dismiss(interaction: discord.Interaction, name: str) -> None:
 @app_commands.describe(name="Which NPC speaks.", message="What they say.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_say(interaction: discord.Interaction, name: str, message: app_commands.Range[str, 1, 2000]) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True
-        )
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     npc_rec = store.get_by_name(guild, NPC_OWNER, name)
@@ -8256,8 +8083,7 @@ async def room_create(
     name: app_commands.Range[str, 1, 90],
     description: app_commands.Range[str, 1, 4000] | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     if not isinstance(interaction.channel, discord.TextChannel):
         await interaction.response.send_message(
@@ -8300,8 +8126,7 @@ async def room_describe(
     interaction: discord.Interaction,
     description: app_commands.Range[str, 1, 4000],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_current_room(interaction)
     if err:
@@ -8329,8 +8154,7 @@ async def room_describe(
 @dm_room.command(name="invite", description="Invite a member into this room (run inside the room's thread).")
 @app_commands.describe(member="Who to invite.")
 async def room_invite(interaction: discord.Interaction, member: discord.Member) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_current_room(interaction)
     if err:
@@ -8353,8 +8177,7 @@ async def room_invite(interaction: discord.Interaction, member: discord.Member) 
 @dm_room.command(name="kick", description="Remove a member from this room (run inside the room's thread).")
 @app_commands.describe(member="Who to remove.")
 async def room_kick(interaction: discord.Interaction, member: discord.Member) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_current_room(interaction)
     if err:
@@ -8376,8 +8199,7 @@ async def room_kick(interaction: discord.Interaction, member: discord.Member) ->
 
 @dm_room.command(name="members", description="List who's in this room (run inside the room's thread).")
 async def room_members(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_current_room(interaction)
     if err:
@@ -8395,8 +8217,7 @@ async def room_members(interaction: discord.Interaction) -> None:
 
 @dm_room.command(name="list", description="List the open rooms on this server.")
 async def room_list(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rooms = store.list_rooms(str(interaction.guild_id))
     if not rooms:
@@ -8418,8 +8239,7 @@ async def room_list(interaction: discord.Interaction) -> None:
 
 @dm_room.command(name="close", description="Close this room (archives the thread). Host or Fortune role required.")
 async def room_close(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_current_room(interaction)
     if err:
@@ -8443,11 +8263,9 @@ async def room_close(interaction: discord.Interaction) -> None:
 @app_commands.describe(name="The creature to add.")
 @app_commands.autocomplete(name=_creature_instance_autocomplete)
 async def combat_creature(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to add creatures to initiative.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     rec = store.get_creature_by_name(str(interaction.guild_id), name)
     if rec is None:
@@ -8476,14 +8294,9 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
 @app_commands.describe(category="Which category to add.")
 @app_commands.autocomplete(category=_category_autocomplete)
 async def combat_category(interaction: discord.Interaction, category: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to add a category to initiative.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     cat = store.get_category(guild, category)
@@ -8545,11 +8358,9 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
     description="Add all room members' active characters to initiative. Fortune role required.",
 )
 async def combat_room(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to bulk-add room members.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     rec = store.get_room_by_thread(str(interaction.channel_id))
     if rec is None:
@@ -8617,8 +8428,7 @@ class CreatureAttackView(discord.ui.View):
 
     @discord.ui.button(label="Apply Creature Damage", style=discord.ButtonStyle.danger, emoji="👹")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to authorize this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         cre_rec = store.get_creature_by_id(self.creature_id)
         target_rec = store.get_by_id(self.target_char_id)
@@ -8668,8 +8478,7 @@ class CreatureAttackView(discord.ui.View):
 
     @discord.ui.button(label="No Damage", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         self._disable()
         await interaction.response.edit_message(view=self)
@@ -8712,22 +8521,19 @@ class SpellDamageView(discord.ui.View):
 
     @discord.ui.button(label="Apply Damage", style=discord.ButtonStyle.danger, emoji="📜")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to authorize this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         await self._resolve(interaction, void_reduce=False)
 
     @discord.ui.button(label="Void Reduce (−10)", style=discord.ButtonStyle.primary, emoji="🔮")
     async def void_reduce(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to authorize this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         await self._resolve(interaction, void_reduce=True)
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         msg = (
             f"🛡️ {interaction.user.display_name} denied: "
@@ -8833,8 +8639,7 @@ class DmDamageView(discord.ui.View):
 
     @discord.ui.button(label="Apply Damage", style=discord.ButtonStyle.danger, emoji="💥")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to authorize this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = store.get_by_id(self.target_id)
         if rec is None:
@@ -8887,8 +8692,7 @@ class DmDamageView(discord.ui.View):
 
     @discord.ui.button(label="Void Reduce (−10)", style=discord.ButtonStyle.primary, emoji="🔮")
     async def void_reduce(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to authorize this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         if self.void_reduced:
             await interaction.response.send_message("Already Void-reduced once.", ephemeral=True)
@@ -8919,8 +8723,7 @@ class DmDamageView(discord.ui.View):
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         if self.void_reduced:
             rec = store.get_by_id(self.target_id)
@@ -8964,8 +8767,7 @@ class DmHealView(discord.ui.View):
 
     @discord.ui.button(label="Apply Healing", style=discord.ButtonStyle.success, emoji="💚")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to authorize this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = store.get_by_id(self.target_id)
         if rec is None:
@@ -9019,8 +8821,7 @@ class DmHealView(discord.ui.View):
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="❌")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         msg = (
             f"❌ {interaction.user.display_name} denied: "
@@ -9092,14 +8893,9 @@ async def creature_catalog(interaction: discord.Interaction, search: str | None 
 @dm_creature.command(name="search", description="Search bestiary templates with detailed output. Fortune role required.")
 @app_commands.describe(query="Search by name, id, or tag (e.g. 'oni', 'bear', 'spirit').")
 async def creature_search(interaction: discord.Interaction, query: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to search creature templates.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     q = query.lower().strip()
     if len(q) < 2:
@@ -9154,14 +8950,9 @@ async def creature_search(interaction: discord.Interaction, query: str) -> None:
 @app_commands.describe(template="Which creature template to look up.")
 @app_commands.autocomplete(template=_creature_template_autocomplete)
 async def creature_info(interaction: discord.Interaction, template: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view creature templates.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     tmpl = creature.CREATURE_CATALOG.get(template)
     if tmpl is None:
@@ -9176,14 +8967,9 @@ async def creature_info(interaction: discord.Interaction, template: str) -> None
 @app_commands.describe(template_a="First creature template.", template_b="Second creature template.")
 @app_commands.autocomplete(template_a=_creature_template_autocomplete, template_b=_creature_template_autocomplete)
 async def creature_compare(interaction: discord.Interaction, template_a: str, template_b: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to compare creature templates.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     a = creature.CREATURE_CATALOG.get(template_a)
     b = creature.CREATURE_CATALOG.get(template_b)
@@ -9207,11 +8993,9 @@ async def creature_compare(interaction: discord.Interaction, template_a: str, te
 @app_commands.describe(template="Which creature template.", name="Instance name (default: the template's name).")
 @app_commands.autocomplete(template=_creature_template_autocomplete)
 async def creature_spawn(interaction: discord.Interaction, template: str, name: str | None = None) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to spawn creatures.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     tmpl = creature.CREATURE_CATALOG.get(template)
     if tmpl is None:
@@ -9236,8 +9020,7 @@ async def creature_spawn(interaction: discord.Interaction, template: str, name: 
 
 @dm_creature.command(name="list", description="List spawned creatures on this server.")
 async def creature_list(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     recs = store.list_creatures(str(interaction.guild_id))
     if not recs:
@@ -9336,11 +9119,9 @@ async def creature_attack_cmd(
     raises: app_commands.Range[int, 0, 10] = 0,
     bonus_tn: app_commands.Range[int, -50, 50] = 0,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to attack with a creature.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     cre_rec = store.get_creature_by_name(guild, creature_name)
@@ -9424,14 +9205,9 @@ async def _category_autocomplete(
 @dm_category.command(name="create", description="Create a new category. Fortune role required.")
 @app_commands.describe(name="Category name (e.g. 'Bandits', 'Town Guards', 'Wildlife').")
 async def category_create(interaction: discord.Interaction, name: app_commands.Range[str, 1, 64]) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     try:
         cat = store.create_category(str(interaction.guild_id), name.strip())
@@ -9445,14 +9221,9 @@ async def category_create(interaction: discord.Interaction, name: app_commands.R
 @app_commands.describe(name="Category to delete.")
 @app_commands.autocomplete(name=_category_autocomplete)
 async def category_delete(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     cat = store.get_category(str(interaction.guild_id), name)
     if cat is None:
@@ -9468,14 +9239,9 @@ async def category_delete(interaction: discord.Interaction, name: str) -> None:
 async def category_rename(
     interaction: discord.Interaction, name: str, new_name: app_commands.Range[str, 1, 64],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     cat = store.get_category(str(interaction.guild_id), name)
     if cat is None:
@@ -9501,14 +9267,9 @@ async def category_add(
     kind: app_commands.Choice[str],
     name: app_commands.Range[str, 1, 64],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     cat = store.get_category(guild, category)
@@ -9546,14 +9307,9 @@ async def category_remove(
     kind: app_commands.Choice[str],
     name: app_commands.Range[str, 1, 64],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     cat = store.get_category(str(interaction.guild_id), category)
     if cat is None:
@@ -9570,14 +9326,9 @@ async def category_remove(
 
 @dm_category.command(name="list", description="List all categories on this server.")
 async def category_list(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view categories.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     cats = store.list_categories(str(interaction.guild_id))
     if not cats:
@@ -9598,14 +9349,9 @@ async def category_list(interaction: discord.Interaction) -> None:
 @app_commands.describe(category="Which category to view.")
 @app_commands.autocomplete(category=_category_autocomplete)
 async def category_view(interaction: discord.Interaction, category: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view categories.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     cat = store.get_category(str(interaction.guild_id), category)
     if cat is None:
@@ -9641,14 +9387,9 @@ async def category_bulk_add(
     kind: app_commands.Choice[str],
     names: str,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     cat = store.get_category(guild, category)
@@ -9702,14 +9443,9 @@ async def category_bulk_remove(
     kind: app_commands.Choice[str],
     names: str,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     cat = store.get_category(str(interaction.guild_id), category)
     if cat is None:
@@ -9741,14 +9477,9 @@ async def category_bulk_remove(
 @app_commands.describe(category="Which category to spawn creatures from.")
 @app_commands.autocomplete(category=_category_autocomplete)
 async def category_spawn(interaction: discord.Interaction, category: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to spawn creatures.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     cat = store.get_category(guild, category)
@@ -9827,11 +9558,9 @@ async def _buy_named(interaction, member, name, mastery_level, attr, label, emoj
 @sheet_xp.command(name="grant", description="Grant (or correct) a player's Experience. Fortune role required.")
 @app_commands.describe(member="The player to grant XP to.", amount="XP amount (negative to correct).", reason="Optional note.")
 async def xp_grant(interaction: discord.Interaction, member: discord.Member, amount: app_commands.Range[float, -100000.0, 100000.0], reason: str | None = None) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to grant XP.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     rec = store.get_active(str(interaction.guild_id), str(member.id))
     if rec is None:
@@ -9848,13 +9577,11 @@ async def xp_grant(interaction: discord.Interaction, member: discord.Member, amo
 @sheet_xp.command(name="balance", description="Show a character's available Experience.")
 @app_commands.describe(member="Whose XP to show (Fortune). Omit for your own.")
 async def xp_balance(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if member is not None and member.id != interaction.user.id:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view another player's XP.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = store.get_active(guild, str(member.id))
     else:
@@ -9872,8 +9599,7 @@ async def xp_balance(interaction: discord.Interaction, member: discord.Member | 
 @app_commands.describe(trait="Which Trait (or Void) to raise.", member="Advance another player's character (Fortune).")
 @app_commands.choices(trait=_TRAIT_CHOICES)
 async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[str], member: discord.Member | None = None) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -9905,8 +9631,7 @@ async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[
 @sheet_xp.command(name="skill", description="Spend XP to raise or learn a Skill (RAW: new rank x1).")
 @app_commands.describe(skill="Skill name.", member="Advance another player's character (Fortune).")
 async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[str, 1, 40], member: discord.Member | None = None) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -9937,8 +9662,7 @@ async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[s
 @sheet_xp.command(name="emphasis", description="Spend 2 XP to add a Skill Emphasis (max ceil(rank/2) per skill).")
 @app_commands.describe(skill="The skill to add an Emphasis to.", emphasis="The Emphasis (e.g. Katana).", member="Advance another player's character (Fortune).")
 async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Range[str, 1, 40], emphasis: app_commands.Range[str, 1, 40], member: discord.Member | None = None) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -10053,8 +9777,7 @@ async def xp_advantage(
     points: app_commands.Range[int, 1, 20] | None = None,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -10112,8 +9835,7 @@ async def xp_remove_disadvantage(
     points: app_commands.Range[int, 1, 20] | None = None,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -10279,8 +10001,7 @@ async def school_learn(
     school_name: str | None = None,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -10428,8 +10149,7 @@ async def spell_cast(
     attacker_npc: str | None = None,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     s = spells.get(name)
@@ -10438,16 +10158,14 @@ async def spell_cast(
         return
     # Resolve caster.
     if attacker_npc:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to cast as an NPC.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = store.get_by_name(guild, NPC_OWNER, attacker_npc)
         if rec is None:
             await interaction.response.send_message(f"No NPC named **{attacker_npc}**.", ephemeral=True)
             return
     elif member is not None and member.id != interaction.user.id:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to cast for another player.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = store.get_active(guild, str(member.id))
         if rec is None:
@@ -10580,11 +10298,9 @@ async def spell_resist(
     tn: int,
     spend_void: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for spell resistance.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = _find_any_character(guild, target)
@@ -10654,13 +10370,9 @@ async def spell_interrupt(
     damage: int = 0,
     void_bonus: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to interrupt a caster.", ephemeral=True
-        )
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = _find_any_character(guild, caster)
@@ -10726,8 +10438,7 @@ async def spell_importune(
     attacker_npc: str | None = None,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     s = spells.get(name)
@@ -10736,16 +10447,14 @@ async def spell_importune(
         return
     # Resolve caster (same logic as /spell cast).
     if attacker_npc:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to importune as an NPC.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = store.get_by_name(guild, NPC_OWNER, attacker_npc)
         if rec is None:
             await interaction.response.send_message(f"No NPC named **{attacker_npc}**.", ephemeral=True)
             return
     elif member is not None and member.id != interaction.user.id:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = store.get_active(guild, str(member.id))
         if rec is None:
@@ -11232,18 +10941,12 @@ async def combat_stance(
     name: str,
     stance: app_commands.Choice[str],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to change stances.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     cb = enc.find(name)
     if cb is None:
@@ -11288,15 +10991,12 @@ async def combat_init(
     name: str,
     value: app_commands.Range[int, -100, 200],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to adjust initiative.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     cb = enc.find(name)
     if cb is None:
@@ -11320,15 +11020,12 @@ async def combat_init(
 @app_commands.describe(name="Combatant name.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_hold(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage held actions.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     cb = enc.find(name)
     if cb is None:
@@ -11389,15 +11086,12 @@ async def combat_delay(
     name: str,
     new_initiative: app_commands.Range[int, -100, 200] | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage delayed actions.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     cb = enc.find(name)
     if cb is None:
@@ -11467,15 +11161,12 @@ async def combat_delay(
 @app_commands.describe(name="Combatant name.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_act(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve held/delayed actions.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     cb = enc.find(name)
     if cb is None:
@@ -11503,12 +11194,10 @@ async def combat_turn_done(
     interaction: discord.Interaction,
     name: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None or not enc.combatants:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     if not enc.started:
         await interaction.response.send_message("Encounter has not started yet. Use `/combat next` to begin.", ephemeral=True)
@@ -11562,15 +11251,12 @@ async def combat_turn_done(
 
 @combat_turn.command(name="surprise", description="Toggle the surprise round flag on the current encounter (Fortune).")
 async def combat_surprise(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to toggle the surprise round.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     enc.surprise_round = not enc.surprise_round
     guild = str(interaction.guild_id)
@@ -11589,11 +11275,9 @@ async def combat_surprise(interaction: discord.Interaction) -> None:
 @ref_heritage.command(name="roll", description="Roll on a clan's Heritage Table (1d10). Fortune role required.")
 @app_commands.describe(clan="Clan name (Crab, Crane, Dragon, Lion, Mantis, Phoenix, Scorpion, Unicorn).")
 async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to roll heritage.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     result = heritage.roll_heritage(clan)
     embed = discord.Embed(
@@ -11607,8 +11291,7 @@ async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
 @ref_heritage.command(name="table", description="Show a clan's full Heritage Table.")
 @app_commands.describe(clan="Clan name.")
 async def heritage_table(interaction: discord.Interaction, clan: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     table = heritage.get_table(clan)
     lines = [f"**{r['roll']}.** {r['name']}: {r['effect']}" for r in table]
@@ -11634,8 +11317,7 @@ async def taint_command(
     member: discord.Member | None = None,
     is_npc: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if add is not None and not _is_dm(interaction):
@@ -11708,11 +11390,9 @@ async def battle_roll(
     is_npc: bool = False,
     bonus: int = 0,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to run mass battle rolls.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -11750,11 +11430,9 @@ async def battle_damage(
     interaction: discord.Interaction,
     engagement: app_commands.Choice[str],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to roll battle damage.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     result = mass_battle.resolve_battle_turn_damage(engagement.value, engine)
     if result["damage"] == 0:
@@ -11783,15 +11461,12 @@ async def combat_mount(
     name: str,
     dismount: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to mount/dismount combatants.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     cb = enc.find(name)
     if cb is None:
@@ -11833,11 +11508,9 @@ async def horsemanship_check(
     void_unskilled: bool = False,
     reason: str = "",
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call Horsemanship checks.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -11919,11 +11592,9 @@ async def craft_extended(
     void_unskilled: bool = False,
     reason: str = "",
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to run extended crafting.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
@@ -12008,8 +11679,7 @@ async def encumbrance_check(
     member: discord.Member | None = None,
     is_npc: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if is_npc and name:
@@ -12041,13 +11711,11 @@ async def encumbrance_check(
     target="Character name (Fortune: omit to see your own).",
 )
 async def atn_breakdown(interaction: discord.Interaction, target: str | None = None) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if target:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view another character's ATN.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = _find_any_character(guild, target)
         if rec is None:
@@ -12129,8 +11797,7 @@ async def atn_breakdown(interaction: discord.Interaction, target: str | None = N
 @ref_family.command(name="list", description="List families by clan.")
 @app_commands.describe(clan="Filter by clan (optional).")
 async def family_list(interaction: discord.Interaction, clan: str | None = None) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     if clan:
         fams = families.by_clan(clan)
@@ -12152,8 +11819,7 @@ async def family_list(interaction: discord.Interaction, clan: str | None = None)
 @ref_family.command(name="search", description="Search families by name or clan.")
 @app_commands.describe(query="Name or clan to search for.")
 async def family_search(interaction: discord.Interaction, query: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     results = families.search(query)
     if not results:
@@ -12184,11 +11850,9 @@ async def spell_damage(
     target: str | None = None,
     reason: str = "",
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to roll spell damage.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     result = engine.roll_and_keep(rolled, kept)
     total = result.total + bonus
@@ -12264,15 +11928,12 @@ async def combat_action(
     name: str,
     action_type: app_commands.Choice[str],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to track actions.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     cb = enc.find(name)
     if cb is None:
@@ -12320,18 +11981,12 @@ async def combat_cover(
     name: str,
     bonus: app_commands.Range[int, -30, 30],
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to set cover.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     cb = enc.find(name)
     if cb is None:
@@ -12357,18 +12012,12 @@ async def combat_notes(
     interaction: discord.Interaction,
     text: str = "",
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to set encounter notes.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     enc.notes = text.strip()
     _save_encounter(str(interaction.guild_id), enc)
@@ -12396,18 +12045,12 @@ async def combat_env_damage(
     reason: str = "",
     ignore_reduction: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to apply environmental damage.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
-    enc = encounters.get(interaction.channel_id)
+    enc = await _require_encounter(interaction)
     if enc is None:
-        await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     if targets.strip().lower() == "all":
@@ -12517,8 +12160,7 @@ async def ancestors_check(
     member: discord.Member | None = None,
     is_npc: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if is_npc and name:
@@ -12567,8 +12209,7 @@ async def dual_wield_info(
     member: discord.Member | None = None,
     is_npc: bool = False,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if is_npc and name:
@@ -12628,11 +12269,9 @@ async def influence_track(
     change: int,
     reason: str = "",
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to track influence.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     embed = discord.Embed(title="Court Influence", color=discord.Color.purple())
     sign = "+" if change >= 0 else ""
@@ -12675,8 +12314,7 @@ async def travel_calc(
     mode: app_commands.Choice[str],
     terrain: app_commands.Choice[str] | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     info = TRAVEL_SPEEDS[mode.value]
     speed = info["miles_per_day"]
@@ -12800,8 +12438,7 @@ class MedicineTreatView(discord.ui.View):
 
     @discord.ui.button(label="Apply Healing", style=discord.ButtonStyle.success, emoji="💚")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to authorize this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         rec = store.get_by_id(self.target_id)
         if rec is None:
@@ -12840,8 +12477,7 @@ class MedicineTreatView(discord.ui.View):
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to resolve this.", ephemeral=True)
+        if not await _require_dm_role(interaction):
             return
         msg = (
             f"🛡️ {interaction.user.display_name} denied: "
@@ -12872,8 +12508,7 @@ async def dm_log_channel(
     interaction: discord.Interaction,
     channel: discord.TextChannel,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     if not _is_kami(interaction):
         await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can set the combat log channel.", ephemeral=True)
@@ -12888,8 +12523,7 @@ async def dm_log_channel(
 
 @dm.command(name="clear_log", description="Stop logging combat events (Kami only).")
 async def dm_clear_log(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     if not _is_kami(interaction):
         await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can clear the combat log channel.", ephemeral=True)
@@ -12904,8 +12538,7 @@ async def dm_approval_channel(
     interaction: discord.Interaction,
     channel: discord.TextChannel,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     if not _is_kami(interaction):
         await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can set the approval channel.", ephemeral=True)
@@ -12920,8 +12553,7 @@ async def dm_approval_channel(
 
 @dm.command(name="clear_approval", description="Stop routing approvals to a DM channel (Kami only).")
 async def dm_clear_approval(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     if not _is_kami(interaction):
         await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can clear the approval channel.", ephemeral=True)
@@ -12955,11 +12587,9 @@ async def dm_treat(
     tn_override: app_commands.Range[int, 1, 100] | None = None,
     bonus: app_commands.Range[int, -50, 50] = 0,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to call for treatment.", ephemeral=True)
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     healer_rec = _find_any_character(guild, healer)
@@ -13052,8 +12682,7 @@ async def sheet_export(
     interaction: discord.Interaction,
     member: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -13088,8 +12717,7 @@ async def sheet_import(
     interaction: discord.Interaction,
     json_data: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     owner = str(interaction.user.id)
@@ -13172,8 +12800,7 @@ async def macro_save(
     modifier: int = 0,
     label: str = "",
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     rec = store.save_macro(
         str(interaction.guild_id), str(interaction.user.id),
@@ -13189,8 +12816,7 @@ async def macro_save(
 
 @macro_group.command(name="list", description="List your saved macros.")
 async def macro_list(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     macros = store.list_macros(str(interaction.guild_id), str(interaction.user.id))
     if not macros:
@@ -13212,8 +12838,7 @@ async def macro_list(interaction: discord.Interaction) -> None:
 @app_commands.describe(name="Which macro to roll.")
 @app_commands.autocomplete(name=_macro_autocomplete)
 async def macro_roll(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     m = store.get_macro(str(interaction.guild_id), str(interaction.user.id), name)
     if m is None:
@@ -13240,8 +12865,7 @@ async def macro_roll(interaction: discord.Interaction, name: str) -> None:
 @app_commands.describe(name="Which macro to delete.")
 @app_commands.autocomplete(name=_macro_autocomplete)
 async def macro_delete(interaction: discord.Interaction, name: str) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     deleted = store.delete_macro(str(interaction.guild_id), str(interaction.user.id), name)
     if not deleted:
@@ -13273,8 +12897,7 @@ async def compare_characters(
     member_a: discord.Member | None = None,
     member_b: discord.Member | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     owner_a = str(member_a.id) if member_a else str(interaction.user.id)
@@ -13405,11 +13028,7 @@ class CharacterApprovalView(discord.ui.View):
 
     @discord.ui.button(label="Approve", style=discord.ButtonStyle.success, emoji="✅")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(
-                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to approve submissions.",
-                ephemeral=True,
-            )
+        if not await _require_dm_role(interaction):
             return
         guild = interaction.guild
         if guild is None:
@@ -13502,11 +13121,7 @@ class CharacterApprovalView(discord.ui.View):
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.danger, emoji="❌")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _is_dm(interaction):
-            await interaction.response.send_message(
-                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to deny submissions.",
-                ephemeral=True,
-            )
+        if not await _require_dm_role(interaction):
             return
         for child in self.children:
             child.disabled = True
@@ -13548,8 +13163,7 @@ async def submit_character(
     family: str | None = None,
     school: str | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     approval_ch_id = store.get_approval_channel(guild)
@@ -13609,8 +13223,7 @@ setup_group = app_commands.Group(name="setup", description="Server setup command
 
 @setup_group.command(name="server", description="Create the server channel structure (Lobby, OOC, IC, DM categories). Kami only.")
 async def setup_server(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     member = interaction.user
     is_admin = isinstance(member, discord.Member) and member.guild_permissions.administrator
@@ -13977,14 +13590,9 @@ async def dm_announce(
     date: app_commands.Range[str, 1, 200] | None = None,
     channel: discord.TextChannel | None = None,
 ) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to post announcements.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     target_ch = channel
     if target_ch is None:
@@ -14026,8 +13634,7 @@ async def dm_announce(
 
 @client.tree.command(name="roster", description="Show all approved player characters on this server.")
 async def roster(interaction: discord.Interaction) -> None:
-    if not _guild_ok(interaction):
-        await interaction.response.send_message("Use in a server channel.", ephemeral=True)
+    if not await _require_guild(interaction):
         return
     guild_id = str(interaction.guild_id)
     pcs = store.list_active_pcs(guild_id)
