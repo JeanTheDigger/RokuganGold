@@ -276,6 +276,8 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         wield = c.equipped_weapon
         if c.off_hand_weapon:
             wield += f" + {c.off_hand_weapon} (off)"
+        if c.weapon_qualities:
+            wield += f" [{', '.join(c.weapon_qualities)}]"
         gear += f"\nWielding: {wield}"
     if c.weapons:
         gear += "\nWeapons: " + ", ".join(c.weapons)
@@ -459,6 +461,8 @@ async def whoami(interaction: discord.Interaction) -> None:
         wield = c.equipped_weapon
         if c.off_hand_weapon:
             wield += f" + {c.off_hand_weapon}"
+        if c.weapon_qualities:
+            wield += f" [{', '.join(c.weapon_qualities)}]"
         lines.append(f"Wielding: {wield}")
     if c.active_kata:
         lines.append(f"Active Kata: {c.active_kata}")
@@ -1108,9 +1112,16 @@ class DamageView(discord.ui.View):
             elif wp.get("double_reduction"):
                 bokken_note = f"Bokken: Reduction doubled ({cre_base_red} → {cre_base_red * 2})"
                 cre_base_red *= 2
-            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, *t_dmg_notes) if n)
+            true_note = ""
+            if combat.has_weapon_quality(attacker, self.weapon, "true") and cre_base_red > 0:
+                true_sub = min(cre_base_red, attacker.strength)
+                if true_sub > 0:
+                    true_note = f"True: Reduction −{true_sub} (wielder Strength {attacker.strength})"
+                    cre_base_red = max(0, cre_base_red - attacker.strength)
+            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, *t_dmg_notes) if n)
             reduction = max(0, cre_base_red - ignore - tsu_ignore)
-            bypasses = self.weapon_material in ("jade", "crystal", "obsidian", "nemuranai")
+            radiant = combat.has_weapon_quality(attacker, self.weapon, "radiant")
+            bypasses = radiant or self.weapon_material in ("jade", "crystal", "obsidian", "nemuranai")
             applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction, bypasses_invuln=bypasses)
             heal_line = ""
             if applied["is_dead"]:
@@ -1130,11 +1141,16 @@ class DamageView(discord.ui.View):
             mat_line = ""
             if self.weapon_material != "normal":
                 mat_line = f"\n🔶 Weapon material: **{self.weapon_material.title()}**"
+            if radiant:
+                mat_line += "\n🔶 Radiant: counts as Jade (bypasses Invulnerability)"
             special_line = "".join(f"\n🛡️ {n}" for n in applied.get("special_notes", []))
             break_line = ""
             brk = wp.get("break_threshold")
             if brk and raw >= brk:
-                break_line = f"\n💥 **WEAPON BROKEN** — {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
+                if combat.has_weapon_quality(attacker, self.weapon, "unbreakable"):
+                    break_line = f"\n🛡️ Unbreakable: weapon survives {raw} damage (threshold {brk})"
+                else:
+                    break_line = f"\n💥 **WEAPON BROKEN** — {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
             embed = discord.Embed(
                 title="⚔️ Damage applied",
                 color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
@@ -1354,8 +1370,14 @@ class DamageView(discord.ui.View):
         elif wp.get("double_reduction"):
             bokken_note = f"Bokken: Reduction doubled ({base_red} → {base_red * 2})"
             base_red *= 2
+        true_note = ""
+        if combat.has_weapon_quality(attacker, self.weapon, "true") and base_red > 0:
+            true_sub = min(base_red, attacker.strength)
+            if true_sub > 0:
+                true_note = f"True: Reduction −{true_sub} (wielder Strength {attacker.strength})"
+                base_red = max(0, base_red - attacker.strength)
         kata_line = "".join(
-            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes) if n
+            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes) if n
         )
         reduction = max(0, base_red - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red)
         if wp.get("ignore_all_reduction"):
@@ -1395,7 +1417,10 @@ class DamageView(discord.ui.View):
         break_line = ""
         brk = wp.get("break_threshold")
         if brk and raw >= brk:
-            break_line = f"\n💥 **WEAPON BROKEN** — {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
+            if combat.has_weapon_quality(attacker, self.weapon, "unbreakable"):
+                break_line = f"\n🛡️ Unbreakable: weapon survives {raw} damage (threshold {brk})"
+            else:
+                break_line = f"\n💥 **WEAPON BROKEN** — {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
 
         embed = discord.Embed(
             title="⚔️ Damage applied",
@@ -1925,6 +1950,11 @@ async def attack(
     if stance_pen:
         atk_flat += stance_pen
         kata_notes.append(stance_pen_note)
+
+    # Extraordinary weapon quality: Balanced (+1k0 attack, s39 crafting).
+    if combat.has_weapon_quality(attacker, weapon, "balanced"):
+        bonus_rolled += 1
+        kata_notes.append("Balanced: +1k0 attack")
 
     # Defender condition modifiers (Prone -10 Armor TN vs melee).
     # Kept separate from def_kata_bonus so it applies even when an override fires.
@@ -2979,6 +3009,71 @@ async def sheet_armor(
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
+_QUALITY_CHOICES = [
+    app_commands.Choice(name=q.title(), value=q) for q in sorted(combat.WEAPON_QUALITIES)
+]
+
+
+async def _quality_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    low = current.lower()
+    return [c for c in _QUALITY_CHOICES if low in c.value][:25]
+
+
+@sheet.command(name="quality", description="Set extraordinary weapon qualities on the equipped weapon (s39 crafting).")
+@app_commands.describe(
+    qualities="Comma-separated qualities: balanced, radiant, signature, swift, true, unbreakable.",
+    clear="Remove all weapon qualities.",
+    member="Target player (Fortune).",
+)
+@app_commands.autocomplete(qualities=_quality_autocomplete)
+async def sheet_quality(
+    interaction: discord.Interaction,
+    qualities: str | None = None,
+    clear: bool = False,
+    member: discord.Member | None = None,
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    if clear:
+        c.weapon_qualities = []
+        store.save(rec)
+        await interaction.response.send_message(
+            f"Cleared all weapon qualities from **{c.name}**.", embed=build_sheet_embed(rec)
+        )
+        return
+    if not qualities:
+        current = ", ".join(c.weapon_qualities) if c.weapon_qualities else "none"
+        await interaction.response.send_message(
+            f"**{c.name}** weapon qualities: {current}\n"
+            f"Valid: {', '.join(sorted(combat.WEAPON_QUALITIES))}",
+            ephemeral=True,
+        )
+        return
+    parsed = [q.strip().lower() for q in qualities.split(",") if q.strip()]
+    invalid = [q for q in parsed if q not in combat.WEAPON_QUALITIES]
+    if invalid:
+        await interaction.response.send_message(
+            f"Unknown qualities: {', '.join(invalid)}. Valid: {', '.join(sorted(combat.WEAPON_QUALITIES))}.",
+            ephemeral=True,
+        )
+        return
+    c.weapon_qualities = sorted(set(parsed))
+    store.save(rec)
+    q_list = ", ".join(c.weapon_qualities)
+    wpn = c.equipped_weapon or "(no weapon equipped)"
+    await interaction.response.send_message(
+        f"**{c.name}** weapon qualities set: **{q_list}** (on {wpn}).", embed=build_sheet_embed(rec)
+    )
+
+
 @sheet.command(name="item", description="Add or remove items from your inventory (quantity supported).")
 @app_commands.describe(
     name="Item name.", quantity="How many (default 1).",
@@ -3559,6 +3654,8 @@ async def party_overview(interaction: discord.Interaction) -> None:
             wield = c.equipped_weapon
             if c.off_hand_weapon:
                 wield += f" + {c.off_hand_weapon}"
+            if c.weapon_qualities:
+                wield += f" [{', '.join(c.weapon_qualities)}]"
             val_parts.append(f"Wielding: {wield}")
         embed.add_field(
             name=f"{c.name}  (<@{owner_id}>)",
@@ -3984,19 +4081,22 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
         return
 
     result = combat.roll_initiative(rec.character, engine)
+    swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
+    init_total = result.total + swift_bonus
+    swift_detail = f" +5 Swift" if swift_bonus else ""
     enc = _get_or_create(interaction.channel_id)
     enc.remove(rec.character.name)  # re-join re-rolls
     enc.add(encounter.Combatant(
         name=rec.character.name,
-        initiative=result.total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}",
+        initiative=init_total,
+        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
         owner_id=str(owner.id),
         is_npc=False,
         reflexes=rec.character.reflexes,
     ))
     _save_encounter(guild, enc)
     await interaction.response.send_message(_render_encounter(enc, guild))
-    await _combat_log(guild, f"Joined: {rec.character.name} (Init {result.total})")
+    await _combat_log(guild, f"Joined: {rec.character.name} (Init {init_total})")
 
 
 @combat_group.command(name="add", description="Add an NPC/monster to initiative by its Reflexes and Insight Rank.")
@@ -4179,12 +4279,15 @@ async def combat_npc(interaction: discord.Interaction, name: str) -> None:
         await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
         return
     result = combat.roll_initiative(rec.character, engine)
+    swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
+    init_total = result.total + swift_bonus
+    swift_detail = f" +5 Swift" if swift_bonus else ""
     enc = _get_or_create(interaction.channel_id)
     enc.remove(rec.character.name)
     enc.add(encounter.Combatant(
         name=rec.character.name,
-        initiative=result.total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}",
+        initiative=init_total,
+        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
         owner_id=None,
         is_npc=True,
         reflexes=rec.character.reflexes,
@@ -7015,7 +7118,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/sheet list / activate / delete", "Manage your characters."),
         ("/sheet trait / skill / set", "Set Traits, skills, or numeric fields."),
         ("/sheet wound / heal", "Apply or heal wounds."),
-        ("/sheet equip / wield / armor", "Manage gear and equipment."),
+        ("/sheet equip / wield / armor / quality", "Manage gear, equipment, and weapon qualities."),
         ("/sheet item", "Add or remove inventory items with quantities."),
         ("/sheet koku", "Add or spend koku (money management)."),
         ("/sheet advantage / disadvantage", "Record advantages or disadvantages."),
@@ -7811,16 +7914,19 @@ async def combat_room(interaction: discord.Interaction) -> None:
             skipped.append(f"<@{uid}>")
             continue
         result = combat.roll_initiative(char_rec.character, engine)
+        swift_bonus = 5 if "swift" in char_rec.character.weapon_qualities else 0
+        init_total = result.total + swift_bonus
+        swift_detail = f" +5 Swift" if swift_bonus else ""
         enc.remove(char_rec.character.name)
         enc.add(encounter.Combatant(
             name=char_rec.character.name,
-            initiative=result.total,
-            initiative_detail=f"kept {result.kept_dice} = {result.total}",
+            initiative=init_total,
+            initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
             owner_id=uid,
             is_npc=False,
             reflexes=char_rec.character.reflexes,
         ))
-        added.append(f"**{char_rec.character.name}** (init {result.total})")
+        added.append(f"**{char_rec.character.name}** (init {init_total})")
     _save_encounter(guild, enc)
     parts = []
     if added:

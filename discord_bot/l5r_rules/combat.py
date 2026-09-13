@@ -39,6 +39,9 @@ from .dice import DiceEngine
 # Reduction only), ignore_creature_reduction (hand-cannon: zeroes natural toughness),
 # break_threshold (kumade/lance/parangu/ninja-to), void_damage (katana: VP for +1k1),
 # grapple_capable (sasumata/sodegarami: can initiate grapple while armed).
+# Extraordinary weapon qualities (s39 crafting): balanced (+1k0 attack), radiant
+# (jade for invuln), swift (+5 init), true (−Strength Reduction), unbreakable
+# (can't break). Stored on Character.weapon_qualities; checked via has_weapon_quality().
 WEAPON_CATALOG: dict[str, dict] = {
     # Swords (Kenjutsu)
     "katana": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium", "void_damage": True},
@@ -372,6 +375,17 @@ def blowgun_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, in
 FIREARM_WEAPONS: frozenset[str] = frozenset({
     "kakiyari", "hand_cannon", "bajozutsu", "teppo",
 })
+
+WEAPON_QUALITIES: frozenset[str] = frozenset({
+    "balanced", "radiant", "signature", "swift", "true", "unbreakable",
+})
+
+
+def has_weapon_quality(character: Character, weapon_used: str, quality: str) -> bool:
+    """True if the weapon being used is the character's equipped weapon and has the given quality."""
+    if not character.weapon_qualities or quality not in character.weapon_qualities:
+        return False
+    return weapon_used.lower().strip() == character.equipped_weapon.lower().strip()
 
 
 def teppoudo_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, int, str]:

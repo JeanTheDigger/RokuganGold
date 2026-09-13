@@ -86,6 +86,7 @@ class Character:
     # Crane/Dragon, s30). "" = that hand is empty.
     equipped_weapon: str = ""
     off_hand_weapon: str = ""
+    weapon_qualities: list[str] = field(default_factory=list)
 
     # -- Shadowlands Taint --
     taint: float = 0.0

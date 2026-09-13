@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 58: Full s39 Weapon Specials (Grapple Polearms, Thrown, Firearms, Katana Void, All Prior)
+## Status: Phase 59: Extraordinary Weapon Qualities (s39 Crafting Specials)
 
 **Help & Navigation**
 
@@ -737,6 +737,42 @@ use Intelligence (the Teppoudo skill trait), not Agility or Reflexes.
 Firearms do not add Strength to damage. The DM may optionally rule that
 Perception adds to damage (comparable to Strength for melee) — use
 `increased_damage` raises to represent this if desired.
+
+**Extraordinary Weapon Qualities** (GDD s39 — Crafting Specials)
+
+Master crafters in Rokugan can forge weapons with exceptional properties. These
+are managed per-character via `/sheet quality` (the qualities belong to the
+character's currently-equipped weapon, not to a weapon type). When attacking,
+qualities apply only if the weapon used matches the character's `equipped_weapon`.
+
+| Command | What it does |
+|---|---|
+| `/sheet quality qualities:"balanced, swift"` | Set qualities on the equipped weapon (comma-separated). |
+| `/sheet quality clear:True` | Remove all weapon qualities. |
+| `/sheet quality` | View current weapon qualities. |
+
+| Quality | Effect | Auto-applied? |
+|---|---|---|
+| **Balanced** | +1k0 to attack rolls | Yes — added to rolled dice in `/attack` |
+| **Radiant** | Counts as jade (bypasses creature Invulnerability) | Yes — treated as jade material in creature damage path |
+| **Signature** | Bears the creator's personal stamp (flavor only) | N/A — no mechanical effect |
+| **Swift** | +5 Initiative | Yes — added at `/combat join`/`npc`/`room` time |
+| **True** | Subtract wielder's Strength from target's Reduction | Yes — applied in both creature and PC/NPC damage paths |
+| **Unbreakable** | Cannot be broken by damage exceeding break threshold | Yes — suppresses weapon breakage |
+
+Quality names are validated against `WEAPON_QUALITIES` in `combat.py`. Invalid
+names are rejected. Qualities are displayed as `[balanced, swift]` after the
+weapon name in `/sheet view`, `/whoami`, and `/party`.
+
+**True** subtracts the wielder's Strength from the target's Reduction (both
+armor-based and creature natural Reduction). The subtraction happens after
+ignore-armor and double-reduction checks, so if Reduction is already zeroed by
+another effect, True has no additional impact. The subtraction cannot reduce
+Reduction below 0.
+
+**Swift** adds +5 to the initiative total at join time (baked into the
+Combatant's base initiative), so it flows through `effective_initiative`
+alongside Void and Center Stance bonuses.
 
 **Rooms** (private play rooms: each is a Discord **private thread**)
 
