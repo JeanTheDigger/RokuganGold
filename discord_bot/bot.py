@@ -2825,24 +2825,6 @@ async def sheet_list(interaction: discord.Interaction, member: discord.Member | 
         f"Characters for {target.display_name}:\n" + "\n".join(lines), ephemeral=True
     )
 
-@sheet.command(name="activate", description="Set which of your characters is active.")
-@app_commands.describe(name="The character name to activate.")
-@app_commands.autocomplete(name=_own_character_autocomplete)
-async def sheet_activate(interaction: discord.Interaction, name: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    guild = str(interaction.guild_id)
-    owner = str(interaction.user.id)
-    rec = store.get_by_name(guild, owner, name)
-    if rec is None:
-        await interaction.response.send_message(
-            f"You have no character named **{name}**.", ephemeral=True
-        )
-        return
-    store.set_active(guild, owner, rec.id)
-    await interaction.response.send_message(
-        f"**{rec.character.name}** is now your active character.", ephemeral=True
-    )
 
 @sheet.command(name="delete", description="Delete a character (yours, or a player's if you are a DM).")
 @app_commands.describe(name="Character name.", member="Owner of the character (Fortune).")
@@ -4435,7 +4417,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/sheet wizard", "Step-by-step guided character creation."),
         ("/sheet create", "Create a character (optionally with a school)."),
         ("/sheet view", "View a sheet (yours or another player's if Fortune)."),
-        ("/sheet list / activate / delete", "Manage your characters."),
+        ("/sheet list / delete", "Manage your character."),
         ("/stat trait / skill / set", "Set Traits, skills, or numeric fields."),
         ("/sheet wound / heal", "Apply or heal wounds."),
         ("/stat equip / wield / armor / quality", "Manage gear, equipment, and weapon qualities."),
