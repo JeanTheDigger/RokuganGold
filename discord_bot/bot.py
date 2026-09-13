@@ -8742,6 +8742,20 @@ async def _setup_server_inner(
                 ),
             }
             await sub_ch.edit(overwrites=sub_overwrites_upd, reason="Server setup: lock character-submission")
+            await sub_ch.purge(limit=200, reason="Server setup: reset character-submission")
+            sub_embed = discord.Embed(
+                title="Character Submission",
+                color=0xC4A747,
+                description=(
+                    "Ready to enter Rokugan? Press the button below to begin "
+                    "creating your character.\n\n"
+                    "A private channel will open where you can build your character "
+                    "step by step. Once complete, a Dungeon Master will review and "
+                    "approve your submission.\n\n"
+                    "After approval, you'll gain access to the rest of the server."
+                ),
+            )
+            await sub_ch.send(embed=sub_embed, view=_ChargenButtonView())
 
     # --- 2. Out of Character (Approved + DMs only) ---
     ooc_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
