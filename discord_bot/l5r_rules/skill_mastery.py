@@ -29,11 +29,15 @@ Auto-applied (18):
   War Fan R5: defender Armor TN +1
   War Fan R7: defender Armor TN +3
 
+Auto-applied (off-hand):
+  Knives R3: no off-hand penalty with knives
+  War Fan R3: no off-hand penalty with war fan
+
 Reminder-only (not auto-applied):
   Polearms R3 (+5 Init first round: needs per-round tracker changes),
   Spears R5/R7 (range / ready: not combat math), Staves R3 (armor doubling
-  not modeled), Knives R3/R7 and War Fan R3 (off-hand / extra attack: dual-
-  wield not modeled), Chain Weapons R3/R5 (grapple not modeled), Kenjutsu R5
+  not modeled), Knives R7 (extra attack: not modeled),
+  Chain Weapons R3/R5 (grapple not modeled), Kenjutsu R5
   and Kyujutsu R3/R5 (ready / string / range: not combat math).
 """
 
@@ -168,6 +172,21 @@ def maneuver_free_raises(
         if skill == "chain weapons" and rank >= 7:
             free += 1; notes.append("Chain Weapons R7: free raise for Disarm")
     return free, notes
+
+
+def off_hand_penalty_removed(
+    attacker: Character, weapon_profile: dict,
+) -> tuple[bool, str]:
+    """(True, note) if the attacker's skill mastery removes off-hand penalties.
+    Knives R3: no off-hand penalties with knives.
+    War Fan R3: no off-hand penalties with war fan."""
+    skill = _skill(weapon_profile)
+    rank = _skill_rank(attacker, weapon_profile)
+    if skill == "knives" and rank >= 3:
+        return True, "Knives R3: off-hand penalty removed"
+    if skill == "war fan" and rank >= 3:
+        return True, "War Fan R3: off-hand penalty removed"
+    return False, ""
 
 
 def initiative_reminder(character: Character, weapon_profile: dict) -> str | None:

@@ -17,6 +17,7 @@ from discord import app_commands
 from l5r_rules import (
     advantages, combat, creature, enums, families,
     heritage, kata, kiho, schools, spells, stats,
+    tattoo_catalog,
 )
 from l5r_rules.character import Character
 
@@ -94,6 +95,7 @@ ref_kiho = app_commands.Group(name="kiho", description="Kiho by element and mast
 ref_school = app_commands.Group(name="school", description="School catalog: benefit, skills, techniques.", parent=ref)
 ref_family = app_commands.Group(name="family", description="Family catalog (character creation bonuses).", parent=ref)
 ref_heritage = app_commands.Group(name="heritage", description="Heritage table rolls (L5R 4e).", parent=ref)
+ref_tattoo = app_commands.Group(name="tattoo", description="Togashi tattoo abilities (s57.25).", parent=ref)
 
 
 # ---------------------------------------------------------------------------
@@ -918,13 +920,23 @@ async def dual_wield_info(
             penalty = "−10 TN (Medium off-hand weapon)"
         else:
             penalty = "−15 TN (Large off-hand weapon: not normally allowed)"
-        embed.add_field(name="Off-hand Attack Penalty", value=penalty, inline=False)
+        # Check skill mastery off-hand penalty removal (Knives R3, War Fan R3).
+        off_skill = off_w.get("skill", "")
+        off_rank = c.skills.get(off_skill, 0)
+        mastery_note = ""
+        if off_skill.lower() == "knives" and off_rank >= 3:
+            mastery_note = "\n✓ **Knives R3**: off-hand penalty removed"
+        elif off_skill.lower() == "war fan" and off_rank >= 3:
+            mastery_note = "\n✓ **War Fan R3**: off-hand penalty removed"
+        embed.add_field(name="Off-hand Attack Penalty", value=penalty + mastery_note, inline=False)
+        embed.add_field(name="Dominant-hand Penalty", value="−5 to main-hand attacks while holding an off-hand weapon", inline=False)
+        ir = stats.insight_rank(c)
+        embed.add_field(name="Armor TN Bonus", value=f"+{ir} (Insight Rank {ir}) — dual-wielding covers more area", inline=False)
         embed.add_field(
-            name="Rules",
+            name="Usage",
             value=(
-                "• Main-hand attack: normal (Simple Action)\n"
-                "• Off-hand attack: Simple Action with penalty above\n"
-                "• Both attacks in one turn use both Simple Actions\n"
+                "• `/fight attack` — main-hand attack (dominant-hand penalty auto-applied)\n"
+                "• `/fight attack off_hand:True` — off-hand attack with penalty above\n"
                 "• Mirumoto Two-Heavens / Niten Mastery may reduce penalties"
             ),
             inline=False,
@@ -1033,3 +1045,58 @@ async def calledshot_ref(interaction: discord.Interaction) -> None:
         inline=False,
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# /ref tattoo — Togashi tattoo abilities
+# ---------------------------------------------------------------------------
+
+@ref_tattoo.command(name="list", description="List all Togashi tattoo abilities.")
+async def tattoo_list(interaction: discord.Interaction) -> None:
+    names = tattoo_catalog.tattoo_names()
+    lines: list[str] = []
+    for n in names:
+        t = tattoo_catalog.TATTOO_CATALOG[n]
+        tag = " (passive)" if t["passive"] else ""
+        lines.append(f"• **{t['name']}**{tag}")
+    text = f"🐉 **{len(names)} Togashi Tattoos** (s57.25):\n" + "\n".join(lines)
+    await interaction.response.send_message(text[:1990], ephemeral=True)
+
+
+@ref_tattoo.command(name="view", description="View a specific tattoo ability's effect.")
+@app_commands.describe(name="Tattoo name (e.g. bamboo, crane, dragon).")
+async def tattoo_view(interaction: discord.Interaction, name: str) -> None:
+    t = tattoo_catalog.get_tattoo(name)
+    if t is None:
+        await interaction.response.send_message(
+            f"No tattoo named **{name}**. Use `/ref tattoo list` to see all.", ephemeral=True
+        )
+        return
+    embed = discord.Embed(title=f"Tattoo: {t['name']}", color=discord.Color.dark_green())
+    embed.add_field(name="Effect", value=t["effect"], inline=False)
+    act = t["activation"].replace("_", " ").title()
+    dur = t["duration"].replace("_", " ").title()
+    layer = t["layer"].replace("_", " ").title()
+    embed.add_field(name="Activation", value=act, inline=True)
+    embed.add_field(name="Duration", value=dur, inline=True)
+    embed.add_field(name="Layer", value=layer, inline=True)
+    if t["passive"]:
+        embed.set_footer(text="This tattoo is always active and does not block other tattoos.")
+    else:
+        embed.set_footer(text="Standard duration: 2 x School Rank rounds. Only one active tattoo at a time.")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@ref_tattoo.command(name="search", description="Search tattoos by keyword.")
+@app_commands.describe(query="Keyword to search (name or effect text).")
+async def tattoo_search(interaction: discord.Interaction, query: str) -> None:
+    q = query.lower()
+    matches = [
+        t for t in tattoo_catalog.TATTOO_CATALOG.values()
+        if q in t["name"].lower() or q in t["effect"].lower()
+    ]
+    if not matches:
+        await interaction.response.send_message(f"No tattoos match `{query}`.", ephemeral=True)
+        return
+    lines = [f"• **{t['name']}**: {t['effect'][:80]}..." for t in matches]
+    await interaction.response.send_message("🐉 " + "\n".join(lines), ephemeral=True)

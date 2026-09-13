@@ -915,6 +915,7 @@ combat_battle = app_commands.Group(name="battle", description="Mass Battle syste
     defender_stance="Target's stance (affects their Armor TN).",
     bonus_tn="Situational +/- to the target's Armor TN (DM discretion).",
     weapon_material="Weapon material (jade/crystal/obsidian bypass Invulnerability; nemuranai too).",
+    off_hand="Attack with your off-hand weapon instead of main hand (applies off-hand penalty per s40).",
 )
 @app_commands.choices(
     attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES, maneuver=_MANEUVER_CHOICES,
@@ -937,6 +938,7 @@ async def attack(
     defender_stance: app_commands.Choice[str] | None = None,
     bonus_tn: app_commands.Range[int, -50, 50] = 0,
     weapon_material: app_commands.Choice[str] | None = None,
+    off_hand: bool = False,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -960,8 +962,16 @@ async def attack(
             )
             return
 
-    # Weapon: explicit choice, else the attacker's wielded weapon, else katana.
-    weapon = (weapon or "").strip() or attacker_rec.character.equipped_weapon or "katana"
+    # Weapon: off_hand flag overrides to off-hand weapon; else explicit, else wielded, else katana.
+    if off_hand:
+        if not attacker_rec.character.off_hand_weapon:
+            await interaction.response.send_message(
+                "No off-hand weapon equipped. Set one with `/stat wield off_hand:`.", ephemeral=True
+            )
+            return
+        weapon = attacker_rec.character.off_hand_weapon
+    else:
+        weapon = (weapon or "").strip() or attacker_rec.character.equipped_weapon or "katana"
 
     # Resolve the target: a spawned creature, a stored NPC, or a player's character.
     target_rec = None
@@ -1185,6 +1195,21 @@ async def attack(
         atk_flat += armor_pen
         kata_notes.append(armor_note)
 
+    # Off-hand / dual-wield penalties (GDD s40).
+    if off_hand:
+        off_size = atk_weapon_profile.get("size", "Medium")
+        off_pen_map = {"Small": -5, "Medium": -10, "Large": -15}
+        off_pen = off_pen_map.get(off_size, -10)
+        removed, rem_note = skill_mastery.off_hand_penalty_removed(attacker, atk_weapon_profile)
+        if removed:
+            kata_notes.append(rem_note)
+        else:
+            atk_flat += off_pen
+            kata_notes.append(f"Off-hand penalty ({off_size}): {off_pen}")
+    elif attacker.off_hand_weapon:
+        atk_flat -= 5
+        kata_notes.append("Dominant-hand penalty (dual-wielding): −5")
+
     # Weapon stance penalty (s39: bows/lance mounted/foot restrictions).
     stance_pen, stance_pen_note = combat.weapon_stance_penalty(weapon, "mounted" in atk_conds)
     if stance_pen:
@@ -1241,6 +1266,15 @@ async def attack(
         cover_mod = def_combatant.cover_bonus
         kata_notes.append(f"Cover: {'+' if cover_mod > 0 else ''}{cover_mod} Armor TN")
 
+    # Dual-wield Armor TN bonus (s40): defender wielding two weapons adds Insight Rank.
+    dw_def_bonus = 0
+    if target_creature_rec is None and target_rec is not None:
+        def_char = target_rec.character
+        if def_char.equipped_weapon and def_char.off_hand_weapon:
+            dw_def_bonus = stats.insight_rank(def_char)
+            if dw_def_bonus:
+                kata_notes.append(f"Dual-wield defense: +{dw_def_bonus} Armor TN (Insight Rank)")
+
     # Arrow/blowgun Armor TN specials (GDD s39): modify the armor TN bonus contribution.
     arrow_tn_adj = 0
     if target_creature_rec is None:
@@ -1264,10 +1298,10 @@ async def attack(
             is_melee_attack,
         )
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + bonus_tn + arrow_tn_adj
+            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + bonus_tn + arrow_tn_adj + dw_def_bonus
             kata_notes.extend(cond_tn_notes)
         else:
-            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + arrow_tn_adj)
+            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + arrow_tn_adj + dw_def_bonus)
 
     # Center Stance bonus (s40): +1k1 + Void Ring on one roll, from centering last Round.
     center_line = ""

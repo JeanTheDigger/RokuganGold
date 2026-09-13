@@ -377,6 +377,10 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         active_kiho = [a.lower() for a in getattr(c, "active_kiho", [])]
         extras.append("**Kiho: ** " + ", ".join(
             (f"⚑{k}" if k.lower() in active_kiho else k) for k in c.kiho))
+    if c.tattoos:
+        act_t = (c.active_tattoo or "").lower()
+        extras.append("**Tattoos: ** " + ", ".join(
+            (f"⚑{t}" if t.lower() == act_t else t) for t in c.tattoos))
     if c.emphases:
         extras.append("**Emphases: ** " + ", ".join(
             f"{sk} ({', '.join(em)})" for sk, em in sorted(c.emphases.items()) if em))
@@ -986,6 +990,17 @@ async def _kiho_autocomplete(
     ]
     return out[:25]
 
+
+async def _tattoo_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    from l5r_rules import tattoo_catalog
+    return [
+        app_commands.Choice(name=t["name"], value=key)
+        for key, t in tattoo_catalog.TATTOO_CATALOG.items() if cur in key
+    ][:25]
+
 async def _skill_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -1062,6 +1077,7 @@ sheet = app_commands.Group(name="sheet", description="Create and manage L5R 4e c
 sheet_void = app_commands.Group(name="void", description="Void Point management: spend, refresh, status.", parent=sheet)
 sheet_kata_grp = app_commands.Group(name="kata", description="Record and activate Kata.", parent=sheet)
 sheet_kiho_grp = app_commands.Group(name="kiho", description="Record and activate Kiho.", parent=sheet)
+sheet_tattoo_grp = app_commands.Group(name="tattoo", description="Manage Togashi tattoos (s57.25).", parent=sheet)
 sheet_data = app_commands.Group(name="data", description="Export / import character sheets.", parent=sheet)
 stat_group = app_commands.Group(name="stat", description="Set traits, skills, equipment, and inventory on your character.")
 xp_group = app_commands.Group(name="xp", description="Grant and spend Experience to advance characters.")
@@ -3628,6 +3644,125 @@ async def sheet_kiho_activate(
         embed=build_sheet_embed(rec),
     )
 
+
+# ---------------------------------------------------------------------------
+# /sheet tattoo — Togashi tattoo management (s57.25)
+# ---------------------------------------------------------------------------
+
+@sheet_tattoo_grp.command(name="add", description="Grant a Togashi tattoo ability to a character. Fortune role required.")
+@app_commands.describe(name="Tattoo name (e.g. bamboo, crab, mountain).", member="Target player (Fortune).")
+@app_commands.autocomplete(name=_tattoo_autocomplete)
+async def sheet_tattoo_add(
+    interaction: discord.Interaction, name: str, member: discord.Member | None = None,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    from l5r_rules import tattoo_catalog
+    t = tattoo_catalog.get_tattoo(name)
+    key = name.lower().strip()
+    label = t["name"] if t else key.title()
+    c = rec.character
+    if key in [x.lower() for x in c.tattoos]:
+        await interaction.response.send_message(
+            f"**{c.name}** already has the **{label}** tattoo.", ephemeral=True
+        )
+        return
+    c.tattoos.append(label if t else key)
+    store.save(rec)
+    effect = f"\n> {t['effect']}" if t else ""
+    await interaction.response.send_message(
+        f"🐉 **{c.name}** receives the **{label}** tattoo.{effect}",
+        embed=build_sheet_embed(rec),
+    )
+
+
+@sheet_tattoo_grp.command(name="remove", description="Remove a tattoo from a character. Fortune role required.")
+@app_commands.describe(name="Tattoo to remove.", member="Target player (Fortune).")
+@app_commands.autocomplete(name=_tattoo_autocomplete)
+async def sheet_tattoo_remove(
+    interaction: discord.Interaction, name: str, member: discord.Member | None = None,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    key = name.lower().strip()
+    before = len(c.tattoos)
+    c.tattoos = [x for x in c.tattoos if x.lower() != key]
+    if len(c.tattoos) == before:
+        await interaction.response.send_message(
+            f"**{c.name}** doesn't have a **{name}** tattoo.", ephemeral=True
+        )
+        return
+    if c.active_tattoo.lower() == key:
+        c.active_tattoo = ""
+    store.save(rec)
+    await interaction.response.send_message(
+        f"Removed **{name}** tattoo from **{c.name}**.", embed=build_sheet_embed(rec)
+    )
+
+
+@sheet_tattoo_grp.command(name="activate", description="Set the active tattoo (only one at a time, except Mantis/Ocean passive).")
+@app_commands.describe(
+    name="Tattoo to activate.",
+    off="Deactivate the current tattoo.",
+    member="Target player (Fortune).",
+)
+@app_commands.autocomplete(name=_tattoo_autocomplete)
+async def sheet_tattoo_activate(
+    interaction: discord.Interaction, name: str | None = None, off: bool = False,
+    member: discord.Member | None = None,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    if off:
+        old = c.active_tattoo or "(none)"
+        c.active_tattoo = ""
+        store.save(rec)
+        await interaction.response.send_message(
+            f"**{c.name}** deactivates the **{old}** tattoo.", embed=build_sheet_embed(rec)
+        )
+        return
+    if not name:
+        await interaction.response.send_message(
+            "Provide a `name:` to activate, or `off:true` to deactivate.", ephemeral=True
+        )
+        return
+    key = name.lower().strip()
+    if key not in [x.lower() for x in c.tattoos]:
+        await interaction.response.send_message(
+            f"**{c.name}** doesn't have a **{name}** tattoo. Grant it with `/sheet tattoo add`.",
+            ephemeral=True,
+        )
+        return
+    from l5r_rules import tattoo_catalog
+    t = tattoo_catalog.get_tattoo(key)
+    label = t["name"] if t else key.title()
+    c.active_tattoo = label
+    store.save(rec)
+    effect = f"\n> {t['effect']}" if t else ""
+    await interaction.response.send_message(
+        f"🐉 **{c.name}** activates the **{label}** tattoo.{effect}",
+        embed=build_sheet_embed(rec),
+    )
+
+
 @sheet.command(name="wound", description="Apply wounds to the active character (raw, no armor reduction here).")
 @app_commands.describe(
     amount="Wounds to apply.",
@@ -4541,6 +4676,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/stat advantage / disadvantage", "Record advantages or disadvantages."),
         ("/sheet kata learn / activate", "Record or activate Kata."),
         ("/sheet kiho learn / activate", "Record or activate Kiho."),
+        ("/sheet tattoo add / remove / activate", "Manage Togashi tattoos (s57.25)."),
         ("/sheet void spend / refresh / status", "Manage Void Points."),
     ]),
     ("XP & Advancement", [
@@ -4639,6 +4775,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/ref advantage list / search / view", "Browse 149 advantages & disadvantages."),
         ("/ref kata list / search / view", "Browse 43 Kata."),
         ("/ref kiho list / search / view", "Browse 73 Kiho."),
+        ("/ref tattoo list / view / search", "Browse 25 Togashi tattoos (s57.25)."),
         ("/ref family list / search", "Browse 47 families and Trait bonuses."),
         ("/ref heritage roll / table", "Heritage Table rolls (Great Clans)."),
         ("/ref modifiers / calledshot", "Combat modifier and Called Shot reference."),

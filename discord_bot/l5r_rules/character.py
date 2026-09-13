@@ -91,6 +91,10 @@ class Character:
     # -- Shadowlands Taint --
     taint: float = 0.0
 
+    # -- Togashi Tattoos (s57.25) --
+    tattoos: list[str] = field(default_factory=list)
+    active_tattoo: str = ""
+
     # -- Advantages / Disadvantages (names only at this phase) --
     advantages: list[str] = field(default_factory=list)
     disadvantages: list[str] = field(default_factory=list)
