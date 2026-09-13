@@ -384,6 +384,77 @@ def build_creature_embed(record: storage.CreatureRecord) -> discord.Embed:
     return embed
 
 
+_RING_TRAITS: dict[str, tuple[str, str]] = {
+    "air": ("reflexes", "awareness"),
+    "earth": ("stamina", "willpower"),
+    "fire": ("agility", "intelligence"),
+    "water": ("strength", "perception"),
+}
+
+_CR_WOUND_LEVELS = ["Healthy", "Nicked", "Grazed", "Hurt", "Injured", "Crippled", "Down", "Out"]
+
+
+def _build_creature_template_embed(cr: creature.Creature) -> discord.Embed:
+    embed = discord.Embed(title=f"\U0001f479 {cr.name}", color=discord.Color.dark_purple())
+    embed.description = f"Template: `{cr.template_id}`"
+
+    ring_parts: list[str] = []
+    for ring_name, (trait_a, trait_b) in _RING_TRAITS.items():
+        ring_val = getattr(cr, ring_name)
+        overrides: list[str] = []
+        if trait_a in cr.traits:
+            overrides.append(f"{trait_a.capitalize()} {cr.traits[trait_a]}")
+        if trait_b in cr.traits:
+            overrides.append(f"{trait_b.capitalize()} {cr.traits[trait_b]}")
+        label = ring_name.capitalize()
+        if overrides:
+            ring_parts.append(f"{label} **{ring_val}** ({', '.join(overrides)})")
+        else:
+            ring_parts.append(f"{label} **{ring_val}**")
+    embed.add_field(name="Rings", value=" · ".join(ring_parts), inline=False)
+
+    atk = f"**{cr.attack_rolled}k{cr.attack_kept}**"
+    if cr.attack_flat:
+        atk += f"+{cr.attack_flat}"
+    dmg = f"**{cr.damage_rolled}k{cr.damage_kept}**"
+    if cr.damage_flat:
+        dmg += f"+{cr.damage_flat}"
+    combat_lines = [
+        f"Initiative: {cr.initiative_rolled}k{cr.initiative_kept}",
+        f"{cr.attack_name or 'Attack'}: attack {atk}, damage {dmg}",
+        f"Armor TN **{cr.armor_tn}** · Reduction **{cr.reduction}**",
+    ]
+    if cr.fear > 0:
+        combat_lines.append(f"Fear **{cr.fear}**")
+    embed.add_field(name="Combat", value="\n".join(combat_lines), inline=False)
+
+    if cr.wound_thresholds:
+        parts: list[str] = []
+        prev_upper = 0
+        for i, threshold in enumerate(cr.wound_thresholds):
+            level_name = _CR_WOUND_LEVELS[i] if i < len(_CR_WOUND_LEVELS) else f"Level {i}"
+            low = prev_upper + 1 if prev_upper > 0 else 0
+            parts.append(f"{level_name} {low}–{threshold}")
+            prev_upper = threshold
+        remaining_idx = len(cr.wound_thresholds)
+        if remaining_idx < len(_CR_WOUND_LEVELS) and prev_upper + 1 < cr.wounds_dead:
+            parts.append(f"{_CR_WOUND_LEVELS[remaining_idx]} {prev_upper + 1}–{cr.wounds_dead - 1}")
+        parts.append(f"Dead {cr.wounds_dead}")
+        wound_text = " · ".join(parts)
+    else:
+        wound_text = f"Dead at **{cr.wounds_dead}** wounds"
+    embed.add_field(name="Wound Track", value=wound_text, inline=False)
+
+    specials = creature.creature_special_notes(cr)
+    if specials:
+        embed.add_field(name="Special Abilities", value="\n".join(specials), inline=False)
+
+    if cr.tags:
+        embed.add_field(name="Tags", value=", ".join(f"`{t}`" for t in cr.tags), inline=False)
+
+    return embed
+
+
 async def _resolve_active_for_edit(
     interaction: discord.Interaction, member: discord.Member | None
 ) -> tuple[storage.CharacterRecord | None, str | None]:
@@ -3485,6 +3556,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ]),
     ("\U0001f409", "Creatures", "Bestiary creature management.", [
         ("/dm creature catalog", "Search bestiary templates"),
+        ("/dm creature info", "Full stat block of a template"),
         ("/dm creature spawn", "Spawn a creature from a template"),
         ("/dm creature view / list", "View or list spawned creatures"),
         ("/dm creature attack", "Creature attacks a PC/NPC"),
@@ -8425,6 +8497,28 @@ async def creature_catalog(interaction: discord.Interaction, search: str | None 
     else:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
+
+
+@dm_creature.command(name="info", description="View the full stat block of a bestiary template (without spawning). Fortune role required.")
+@app_commands.describe(template="Which creature template to look up.")
+@app_commands.autocomplete(template=_creature_template_autocomplete)
+async def creature_info(interaction: discord.Interaction, template: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view creature templates.",
+            ephemeral=True,
+        )
+        return
+    tmpl = creature.CREATURE_CATALOG.get(template)
+    if tmpl is None:
+        await interaction.response.send_message(
+            f"Unknown template `{template}`. Use `/dm creature catalog` to search.", ephemeral=True,
+        )
+        return
+    await interaction.response.send_message(embed=_build_creature_template_embed(tmpl), ephemeral=True)
 
 
 @dm_creature.command(name="spawn", description="Spawn a creature instance from a template. Fortune role required.")

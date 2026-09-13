@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 60: Armor Catalog (s39 Armor Reference)
+## Status: Phase 61: Creature Template Info (Bestiary Viewer)
 
 **Help & Navigation**
 
@@ -963,6 +963,21 @@ check the rules engine on their own with no bot and no internet:
 ```bash
 python3 l5r_rules/dice.py     # runs a built-in validation of the dice rules
 ```
+
+**Phase 61: Creature Template Info (Bestiary Viewer)**
+
+| Command | What it does |
+|---|---|
+| `/dm creature info` | Full stat block of a bestiary template: rings with overridden traits, initiative, attack/damage (including flat bonuses), Armor TN, Reduction, Fear, wound track with level ranges, special abilities (invulnerability, spirit, undead, fear), and all tags. Ephemeral, DM-only. Uses existing template autocomplete. |
+
+The embed shows:
+- **Rings** — e.g. "Air **1** (Reflexes 3) · Earth **2** · Fire **1** (Agility 3) · Water **3**" — trait overrides in parentheses, non-overridden rings shown clean
+- **Combat** — initiative, named attack with roll/keep + flat bonus, damage roll/keep + flat bonus, Armor TN, Reduction, Fear (if > 0)
+- **Wound Track** — level ranges derived from thresholds, e.g. "Healthy 0–16 · Nicked 17–31 · Dead 32"; proportional fallback for creatures with no explicit thresholds
+- **Special Abilities** — generated from tags (undead immunities, invulnerability type, spirit half-damage, fear penalty)
+- **Tags** — full tag list as inline code
+
+Distinct from existing `/dm creature view` (which shows a *spawned* instance with current wounds). This is a reference lookup — no instance needed.
 
 ---
 
