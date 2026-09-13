@@ -2988,6 +2988,26 @@ class _DeleteConfirmView(discord.ui.View):
     async def on_timeout(self) -> None:
         pass
 
+
+@sheet.command(name="owner", description="Show who owns a character (PC owner or NPC).")
+@app_commands.describe(name="Character name.")
+@app_commands.autocomplete(name=_any_character_autocomplete)
+async def sheet_owner(interaction: discord.Interaction, name: str) -> None:
+    if not await _require_guild(interaction):
+        return
+    guild = str(interaction.guild_id)
+    rec = store.get_by_name_guild(guild, name)
+    if rec is None:
+        await interaction.response.send_message(f"No character named **{name}** found.", ephemeral=True)
+        return
+    if rec.owner_id == NPC_OWNER:
+        await interaction.response.send_message(f"**{rec.character.name}** is an NPC.", ephemeral=True)
+    else:
+        await interaction.response.send_message(
+            f"**{rec.character.name}** belongs to <@{rec.owner_id}>.", ephemeral=True,
+        )
+
+
 class _PaginatorView(discord.ui.View):
     """Reusable paginator for long text lists."""
 
@@ -4506,6 +4526,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/sheet view", "View a sheet (yours, or another player's if Fortune)."),
         ("/sheet list", "List your characters (or a player's if Fortune)."),
         ("/sheet delete", "Delete a character (yours, or a player's if Fortune)."),
+        ("/sheet owner", "Show who owns a character (PC player or NPC)."),
         ("/sheet wound / heal", "Apply or heal wounds on your character."),
         ("/sheet learn", "Record techniques up to your School Rank."),
         ("/sheet data export / import_sheet", "Backup and restore characters as JSON."),
