@@ -819,7 +819,7 @@ async def _weapon_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
     cur = current.lower().strip()
-    names = [w for w in combat.WEAPON_CATALOG if cur in w]
+    names = [w for w in combat.WEAPON_CATALOG if cur in w.lower()]
     return [app_commands.Choice(name=w, value=w) for w in sorted(names)[:25]]
 
 
@@ -3722,7 +3722,9 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ]),
     ("✨", "Spells & Crafting", "Spell support and extended crafting.", [
         ("/spell cast", "Cast a spell (Ring + School Rank)"),
+        ("/spell importune", "Importune the kami (Spellcraft check + cast)"),
         ("/spell resist", "Target resists a spell (Willpower vs TN)"),
+        ("/spell interrupt", "Interrupt a spell (contested Reflexes)"),
         ("/spell damage", "Roll spell damage dice"),
         ("/dm craft_extended", "Extended crafting (multi-step project)"),
     ]),
@@ -3734,6 +3736,8 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("\U0001f6e0️", "Admin (Kami Only)", "Server administration commands.", [
         ("/dm log_channel", "Set combat event log channel"),
         ("/dm clear_log", "Stop combat event logging"),
+        ("/dm approval_channel", "Set DM-approval channel for damage/healing"),
+        ("/dm clear_approval", "Stop routing approvals to a channel"),
     ]),
 ]
 
@@ -4224,8 +4228,8 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
             header += " *(Surprise Round)*"
     notes_line = f"\n📍 *{enc.notes}*" if enc.notes else ""
     result = header + notes_line + "\n" + "\n".join(lines)
-    if len(result) > 1950:
-        result = result[:1950] + "\n*(truncated — use `/combat summary` for full view)*"
+    if len(result) > 1700:
+        result = result[:1700] + "\n*(truncated — use `/combat summary` for full view)*"
     return result
 
 
@@ -4273,7 +4277,7 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
     rec = store.get_active(guild, str(owner.id))
     if rec is None:
         who = "You have" if owner.id == interaction.user.id else f"{owner.display_name} has"
-        await interaction.response.send_message(f"{who} no active character.", ephemeral=True)
+        await interaction.response.send_message(f"{who} no active character. Use `/sheet create` first.", ephemeral=True)
         return
 
     result = combat.roll_initiative(rec.character, engine)
@@ -4599,14 +4603,14 @@ async def combat_conditions(interaction: discord.Interaction, name: str) -> None
         await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
         return
     if not c.conditions:
-        await interaction.response.send_message(f"**{c.name}** has no active conditions.")
+        await interaction.response.send_message(f"**{c.name}** has no active conditions.", ephemeral=True)
         return
     cond_list = ", ".join(sorted(c.conditions))
     reminders = condition_effects.condition_reminders(c.conditions)
     lines = f"**{c.name}** conditions: {cond_list}"
     if reminders:
         lines += "\n" + "\n".join(reminders)
-    await interaction.response.send_message(lines)
+    await interaction.response.send_message(lines, ephemeral=True)
 
 
 @combat_group.command(name="guard", description="Guard another combatant (+10 Armor TN to ward, −5 to you). Lasts until your next turn.")
@@ -6117,7 +6121,7 @@ async def void_spend(
     else:
         rec = store.get_active(guild, str(interaction.user.id))
         if rec is None:
-            await interaction.response.send_message("You have no active character. Use `/sheet activate`.", ephemeral=True)
+            await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
             return
     c = rec.character
     if c.current_void_points <= 0:
@@ -6174,7 +6178,7 @@ async def void_refresh(
     else:
         rec = store.get_active(guild, str(interaction.user.id))
         if rec is None:
-            await interaction.response.send_message("You have no active character. Use `/sheet activate`.", ephemeral=True)
+            await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
             return
     c = rec.character
     if mode.value == "rest":
@@ -6266,7 +6270,7 @@ async def void_status(
     else:
         rec = store.get_active(guild, str(interaction.user.id))
         if rec is None:
-            await interaction.response.send_message("You have no active character. Use `/sheet activate`.", ephemeral=True)
+            await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
             return
     c = rec.character
     bar_full = "🟣" * c.current_void_points
@@ -9801,7 +9805,7 @@ async def xp_balance(interaction: discord.Interaction, member: discord.Member | 
     else:
         rec = store.get_active(guild, str(interaction.user.id))
     if rec is None:
-        await interaction.response.send_message("No active character. Use `/sheet create` first.", ephemeral=True)
+        await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
         return
     c = rec.character
     await interaction.response.send_message(
@@ -11191,7 +11195,8 @@ async def combat_stance(
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
         return
     if stance.value not in encounter.VALID_STANCES:
-        await interaction.response.send_message("Invalid stance.", ephemeral=True)
+        valid = ", ".join(s.replace("_", " ").title() for s in sorted(encounter.VALID_STANCES))
+        await interaction.response.send_message(f"Invalid stance. Valid: {valid}.", ephemeral=True)
         return
     if stance.value == "full_defense":
         await interaction.response.send_message(
@@ -11996,7 +12001,7 @@ async def atn_breakdown(interaction: discord.Interaction, target: str | None = N
     else:
         rec = store.get_active(guild, str(interaction.user.id))
         if rec is None:
-            await interaction.response.send_message("No active character.", ephemeral=True)
+            await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
             return
     c = rec.character
     base = c.reflexes * 5 + 5
@@ -12835,7 +12840,7 @@ async def dm_clear_log(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can clear the combat log channel.", ephemeral=True)
         return
     store.clear_log_channel(str(interaction.guild_id))
-    await interaction.response.send_message("Combat log channel cleared. Events will no longer be logged.")
+    await interaction.response.send_message("Combat log channel cleared. Events will no longer be logged.", ephemeral=True)
 
 
 @dm.command(name="approval_channel", description="Set the DM channel where damage/healing approvals are routed (Kami only).")
@@ -12867,7 +12872,7 @@ async def dm_clear_approval(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can clear the approval channel.", ephemeral=True)
         return
     store.clear_approval_channel(str(interaction.guild_id))
-    await interaction.response.send_message("Approval channel cleared. Damage approvals will appear inline.")
+    await interaction.response.send_message("Approval channel cleared. Damage approvals will appear inline.", ephemeral=True)
 
 
 @dm.command(name="treat", description="Medicine treatment: healer rolls, DM approves healing. L5R 4e Medicine rules.")
