@@ -1,4 +1,4 @@
-"""Derived character values — pure functions over a Character.
+"""Derived character values: pure functions over a Character.
 
 Faithful port of the relevant parts of `simulation/character_stats.gd` and
 `simulation/wound_system.gd`:
@@ -12,7 +12,7 @@ Faithful port of the relevant parts of `simulation/character_stats.gd` and
 
 Known simplifications vs the GDScript (documented, not silent):
   - PERMANENT_WOUND advantage floor (min NICKED) IS now applied in
-    wound_level_index() — characters with the disadvantage are always at
+    wound_level_index(): characters with the disadvantage are always at
     least at the Nicked wound level.
   - Insight omits the Skill Mastery / Courtier insight bonuses (no s24 mastery
     engine here). The core formula is exact.
@@ -118,8 +118,44 @@ def natural_healing_rate(c: Character) -> int:
 
 
 def spell_slot_max(c: Character, element: str) -> int:
-    """L5R 4e: per-element daily spell slots = Ring value + School Rank."""
-    return ring_value(c, element) + c.school_rank
+    """L5R 4e: per-element daily spell slots = Ring value."""
+    return ring_value(c, element)
+
+
+def void_bonus_max(c: Character) -> int:
+    """L5R 4e: bonus spell slots = Void Ring, usable for any element."""
+    return c.void_ring
+
+
+def trait_value(c: Character, name: str) -> int:
+    """Return a trait value by name, including Void."""
+    if name.lower() == "void":
+        return c.void_ring
+    return c.get_trait(name)
+
+
+def wound_track(c: Character) -> str:
+    """Visual wound track: shows each level with the current position marked."""
+    short = ["H", "Ni", "Gr", "Hu", "In", "Cr", "Dn", "Ou", "De"]
+    idx = wound_level_index(c)
+    parts = []
+    for i, s in enumerate(short):
+        if i == idx:
+            parts.append(f"[**{s}**]")
+        else:
+            parts.append(s)
+    return " → ".join(parts)
+
+
+def check_insight_rank_advance(c: Character) -> tuple[int, int] | None:
+    """If insight qualifies for a higher school rank, update it and return
+    (old_rank, new_rank). Otherwise return None."""
+    new_rank = insight_rank(c)
+    if new_rank <= c.school_rank:
+        return None
+    old = c.school_rank
+    c.school_rank = new_rank
+    return old, new_rank
 
 
 def encumbrance_capacity(c: Character) -> int:

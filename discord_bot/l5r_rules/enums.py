@@ -1,7 +1,7 @@
 """L5R 4e constants shared by the rules layer.
 
 Values transcribed from `shared/enums.gd` (Ring / Trait / WoundLevel enums,
-RING_TRAITS, WOUND_PENALTIES). Nothing here is invented — it mirrors the
+RING_TRAITS, WOUND_PENALTIES). Nothing here is invented: it mirrors the
 GDScript so the bot and the game agree on the numbers.
 """
 

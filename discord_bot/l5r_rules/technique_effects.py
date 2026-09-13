@@ -2,19 +2,19 @@
 (GDD s29).
 
 Unlike kata (one active at a time), a character carries every Technique their
-School grants up to their School Rank — recorded on the sheet via `/school learn`
-— and they are passive and always in force. So these effects STACK and are keyed
+School grants up to their School Rank: recorded on the sheet via `/school learn`
+:  and they are passive and always in force. So these effects STACK and are keyed
 by technique name against `character.techniques`.
 
 This module is the COMPLETE auto-apply set: it wires every s29 Technique whose
 effect the single-shot `/attack` (with the initiative tracker and `/sheet wield`)
-can evaluate deterministically — a modifier gated only on stance, the weapon,
+can evaluate deterministically: a modifier gated only on stance, the weapon,
 armour worn, an Initiative comparison, an Honor comparison, or a trait scalar.
 The remaining ~600 Techniques turn on things the bot has no way to know (target
-type — "vs Shadowlands / unaware", mounted, duels, grapples, terrain, multiple
+type: "vs Shadowlands / unaware", mounted, duels, grapples, terrain, multiple
 opponents, allies), are reactive/Void-gated/"once per X", need player choice, or
 need systems the bot does not model (spells, tattoos, mass battle, conditions,
-kiho). Those stay DM-adjudicated — their full text is on the sheet via
+kiho). Those stay DM-adjudicated: their full text is on the sheet via
 `/school view`. Per CLAUDE 'do not invent mechanics': every value here is read
 verbatim from the s29 LOCKED text; nothing is auto-applied on a condition the
 engine cannot actually check.

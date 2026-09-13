@@ -98,7 +98,7 @@ def defender_armor_tn_mod(
 ) -> tuple[int, list[str]]:
     """(modifier, notes) added to the defender's normal Armor TN.
 
-    Separate from overrides — these stack with the normal formula."""
+    Separate from overrides: these stack with the normal formula."""
     mod = 0
     notes: list[str] = []
 
@@ -117,6 +117,42 @@ def entangled_cannot_act(conditions: set[str]) -> bool:
     return "entangled" in conditions
 
 
+def cannot_act(conditions: set[str]) -> tuple[bool, str]:
+    """(blocked, reason) — conditions that completely prevent taking actions."""
+    if "stunned" in conditions:
+        return True, "**Stunned:** cannot take actions (recovers Earth TN 20 at Reactions Stage)"
+    if "pinned" in conditions:
+        return True, "**Pinned:** fully immobilized (can only speak or cast verbal-only Mastery 1 spells)"
+    if "entangled" in conditions:
+        return True, "**Entangled:** can only attempt to break free (Strength, TN set by DM)"
+    return False, ""
+
+
+def cannot_attack(conditions: set[str], weapon_size: str) -> tuple[bool, str]:
+    """(blocked, reason) — conditions that prevent attacking specifically."""
+    blocked, reason = cannot_act(conditions)
+    if blocked:
+        return True, reason
+    if "grappled" in conditions and weapon_size.lower() == "large":
+        return True, "**Grappled:** large weapons are unusable while grappled"
+    if "prone" in conditions and weapon_size.lower() == "large":
+        return True, "**Prone:** cannot attack with Large weapons while prone"
+    return False, ""
+
+
+def invalid_stance(conditions: set[str], stance: str) -> tuple[bool, str]:
+    """(blocked, reason) — conditions that forbid a specific stance."""
+    if "grappled" in conditions:
+        return True, "**Grappled:** stances do not apply while grappled"
+    if "dazed" in conditions and stance not in ("defense", "full_defense"):
+        return True, "**Dazed:** only Defense and Full Defense stances are allowed"
+    if "fatigued" in conditions and stance == "full_attack":
+        return True, "**Fatigued:** Full Attack Stance is not available while fatigued"
+    if "mounted" in conditions and stance == "full_attack":
+        return True, "**Mounted:** Full Attack Stance is not available while mounted"
+    return False, ""
+
+
 def condition_reminders(conditions: set[str]) -> list[str]:
     """DM reminder lines for conditions with non-auto-applied effects."""
     lines: list[str] = []
@@ -126,6 +162,10 @@ def condition_reminders(conditions: set[str]) -> list[str]:
         lines.append("**Dazed:** Defense/Full Defense stances only; recovers Earth TN 20 at Reactions Stage")
     if "entangled" in conditions:
         lines.append("**Entangled:** can only attempt to break free (Strength, TN set by DM)")
+    if "grappled" in conditions:
+        lines.append("**Grappled:** ATN = 5+armor; large weapons unusable; stances don't apply")
+    if "pinned" in conditions:
+        lines.append("**Pinned (Grapple):** fully immobilized; can only speak or cast verbal Mastery 1 spells")
     if "fatigued" in conditions:
         lines.append("**Fatigued:** cannot use Full Attack Stance; +5 TN stacks per extra day")
     if "prone" in conditions:

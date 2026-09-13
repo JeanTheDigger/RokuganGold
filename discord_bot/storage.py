@@ -2,7 +2,7 @@
 
 One small local database file (default ``rokugan.db`` in this folder, override
 with the ``DB_PATH`` env var). SQLite means there is no separate database server
-to install or run — the whole store is a single file that is trivial to back up
+to install or run: the whole store is a single file that is trivial to back up
 (just copy it).
 
 Scope is per Discord server ("guild"): a character, an active-character choice,
@@ -25,6 +25,19 @@ from dataclasses import dataclass
 from l5r_rules.character import Character
 from l5r_rules.creature import Creature
 
+_VERSION_TABLE = """\
+CREATE TABLE IF NOT EXISTS schema_version (
+    id      INTEGER PRIMARY KEY CHECK (id = 1),
+    version INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 0);
+"""
+
+_MIGRATIONS: list[str] = [
+    # 1: add description column to rooms
+    "ALTER TABLE rooms ADD COLUMN description TEXT NOT NULL DEFAULT '';",
+]
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS characters (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +55,8 @@ CREATE TABLE IF NOT EXISTS active_characters (
     guild_id     TEXT NOT NULL,
     user_id      TEXT NOT NULL,
     character_id INTEGER NOT NULL,
-    PRIMARY KEY (guild_id, user_id)
+    PRIMARY KEY (guild_id, user_id),
+    FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS dm_users (
@@ -59,13 +73,15 @@ CREATE TABLE IF NOT EXISTS rooms (
     name              TEXT NOT NULL,
     host_id           TEXT NOT NULL,
     created_at        REAL NOT NULL,
-    closed            INTEGER NOT NULL DEFAULT 0
+    closed            INTEGER NOT NULL DEFAULT 0,
+    description       TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS room_members (
     room_id INTEGER NOT NULL,
     user_id TEXT NOT NULL,
-    PRIMARY KEY (room_id, user_id)
+    PRIMARY KEY (room_id, user_id),
+    FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS creatures (
@@ -88,6 +104,54 @@ CREATE TABLE IF NOT EXISTS encounters (
     guild_id   TEXT NOT NULL,
     data       TEXT NOT NULL,
     updated_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS macros (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   TEXT NOT NULL,
+    user_id    TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    rolled     INTEGER NOT NULL,
+    kept       INTEGER NOT NULL,
+    modifier   INTEGER NOT NULL DEFAULT 0,
+    label      TEXT NOT NULL DEFAULT ''
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_macro_unique
+    ON macros (guild_id, user_id, name COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS room_npcs (
+    room_id  INTEGER NOT NULL,
+    npc_name TEXT NOT NULL,
+    PRIMARY KEY (room_id, npc_name),
+    FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS approval_channels (
+    guild_id   TEXT NOT NULL PRIMARY KEY,
+    channel_id TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS calendar (
+    guild_id TEXT NOT NULL PRIMARY KEY,
+    year     INTEGER NOT NULL,
+    month    INTEGER NOT NULL,
+    day      INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS categories (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    name     TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_category_unique
+    ON categories (guild_id, name COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS category_members (
+    category_id INTEGER NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_name TEXT NOT NULL,
+    PRIMARY KEY (category_id, entity_type, entity_name COLLATE NOCASE),
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
 );
 """
 
@@ -113,6 +177,7 @@ class RoomRecord:
     name: str
     host_id: str
     closed: bool
+    description: str = ""
 
 
 @dataclass
@@ -122,6 +187,29 @@ class CreatureRecord:
     id: int
     guild_id: str
     creature: Creature
+
+
+@dataclass
+class CategoryRecord:
+    """A named grouping for NPCs and/or creatures."""
+
+    id: int
+    guild_id: str
+    name: str
+
+
+@dataclass
+class MacroRecord:
+    """A saved roll macro."""
+
+    id: int
+    guild_id: str
+    user_id: str
+    name: str
+    rolled: int
+    kept: int
+    modifier: int
+    label: str
 
 
 class DuplicateNameError(Exception):
@@ -134,9 +222,25 @@ class Store:
         # loop, but this keeps us safe if a call ever lands off-thread.
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA foreign_keys = ON")
+        self._conn.execute("PRAGMA journal_mode = WAL")
         self._lock = threading.Lock()
         with self._lock, self._conn:
             self._conn.executescript(_SCHEMA)
+            self._conn.executescript(_VERSION_TABLE)
+            self._run_migrations()
+
+    # -- migrations ------------------------------------------------------------
+    def _run_migrations(self) -> None:
+        row = self._conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
+        current = row["version"]
+        for i in range(current, len(_MIGRATIONS)):
+            version = i + 1
+            try:
+                self._conn.executescript(_MIGRATIONS[i])
+            except sqlite3.OperationalError:
+                pass
+            self._conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (version,))
 
     # -- internal helpers ------------------------------------------------------
     def _row_to_record(self, row: sqlite3.Row) -> CharacterRecord:
@@ -206,10 +310,8 @@ class Store:
 
     def delete(self, character_id: int) -> None:
         with self._lock, self._conn:
+            # active_characters FK CASCADE handles cleanup automatically
             self._conn.execute("DELETE FROM characters WHERE id = ?", (character_id,))
-            self._conn.execute(
-                "DELETE FROM active_characters WHERE character_id = ?", (character_id,)
-            )
 
     # -- active-character link -------------------------------------------------
     def set_active(self, guild_id: str, user_id: str, character_id: int) -> None:
@@ -282,23 +384,25 @@ class Store:
             name=row["name"],
             host_id=row["host_id"],
             closed=bool(row["closed"]),
+            description=row["description"] if "description" in row.keys() else "",
         )
 
     def create_room(
-        self, guild_id: str, parent_channel_id: str, thread_id: str, name: str, host_id: str
+        self, guild_id: str, parent_channel_id: str, thread_id: str, name: str, host_id: str,
+        description: str = "",
     ) -> RoomRecord:
         with self._lock, self._conn:
             cur = self._conn.execute(
                 "INSERT INTO rooms (guild_id, parent_channel_id, thread_id, name, host_id, "
-                "created_at, closed) VALUES (?, ?, ?, ?, ?, ?, 0)",
-                (guild_id, parent_channel_id, thread_id, name, host_id, time.time()),
+                "created_at, closed, description) VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
+                (guild_id, parent_channel_id, thread_id, name, host_id, time.time(), description),
             )
             room_id = cur.lastrowid
             self._conn.execute(
                 "INSERT OR IGNORE INTO room_members (room_id, user_id) VALUES (?, ?)",
                 (room_id, host_id),
             )
-        return RoomRecord(room_id, guild_id, parent_channel_id, thread_id, name, host_id, False)
+        return RoomRecord(room_id, guild_id, parent_channel_id, thread_id, name, host_id, False, description)
 
     def get_room_by_thread(self, thread_id: str) -> RoomRecord | None:
         with self._lock:
@@ -320,6 +424,10 @@ class Store:
         with self._lock, self._conn:
             self._conn.execute("UPDATE rooms SET closed = 1 WHERE id = ?", (room_id,))
 
+    def update_room_description(self, room_id: int, description: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("UPDATE rooms SET description = ? WHERE id = ?", (description, room_id))
+
     def add_room_member(self, room_id: int, user_id: str) -> None:
         with self._lock, self._conn:
             self._conn.execute(
@@ -339,6 +447,32 @@ class Store:
                 "SELECT user_id FROM room_members WHERE room_id = ?", (room_id,)
             ).fetchall()
         return [r["user_id"] for r in rows]
+
+    # -- room NPCs -------------------------------------------------------------
+    def place_npc_in_room(self, room_id: int, npc_name: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO room_npcs (room_id, npc_name) VALUES (?, ?)",
+                (room_id, npc_name),
+            )
+
+    def remove_npc_from_room(self, room_id: int, npc_name: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM room_npcs WHERE room_id = ? AND npc_name = ?",
+                (room_id, npc_name),
+            )
+
+    def list_room_npcs(self, room_id: int) -> list[str]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT npc_name FROM room_npcs WHERE room_id = ?", (room_id,)
+            ).fetchall()
+        return [r["npc_name"] for r in rows]
+
+    def clear_room_npcs(self, room_id: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM room_npcs WHERE room_id = ?", (room_id,))
 
     # -- creatures -------------------------------------------------------------
     def _row_to_creature(self, row: sqlite3.Row) -> CreatureRecord:
@@ -418,6 +552,29 @@ class Store:
                 "DELETE FROM combat_log_channels WHERE guild_id = ?", (guild_id,)
             )
 
+    # -- DM approval channel ---------------------------------------------------
+    def set_approval_channel(self, guild_id: str, channel_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO approval_channels (guild_id, channel_id) VALUES (?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
+                (guild_id, channel_id),
+            )
+
+    def get_approval_channel(self, guild_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT channel_id FROM approval_channels WHERE guild_id = ?",
+                (guild_id,),
+            ).fetchone()
+        return row["channel_id"] if row else None
+
+    def clear_approval_channel(self, guild_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM approval_channels WHERE guild_id = ?", (guild_id,)
+            )
+
     # -- encounter persistence -------------------------------------------------
     def save_encounter(self, channel_id: str, guild_id: str, data: str) -> None:
         with self._lock, self._conn:
@@ -439,3 +596,177 @@ class Store:
         with self._lock:
             rows = self._conn.execute("SELECT channel_id, data FROM encounters").fetchall()
         return [(r["channel_id"], r["data"]) for r in rows]
+
+    # -- macros (saved rolls) ---------------------------------------------------
+    def save_macro(
+        self, guild_id: str, user_id: str, name: str,
+        rolled: int, kept: int, modifier: int = 0, label: str = "",
+    ) -> MacroRecord:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO macros (guild_id, user_id, name, rolled, kept, modifier, label) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(guild_id, user_id, name COLLATE NOCASE) "
+                "DO UPDATE SET rolled = excluded.rolled, kept = excluded.kept, "
+                "modifier = excluded.modifier, label = excluded.label",
+                (guild_id, user_id, name, rolled, kept, modifier, label),
+            )
+            row = self._conn.execute(
+                "SELECT * FROM macros WHERE guild_id = ? AND user_id = ? AND name = ? COLLATE NOCASE",
+                (guild_id, user_id, name),
+            ).fetchone()
+        return MacroRecord(
+            id=row["id"], guild_id=row["guild_id"], user_id=row["user_id"],
+            name=row["name"], rolled=row["rolled"], kept=row["kept"],
+            modifier=row["modifier"], label=row["label"],
+        )
+
+    def list_macros(self, guild_id: str, user_id: str) -> list[MacroRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM macros WHERE guild_id = ? AND user_id = ? ORDER BY name",
+                (guild_id, user_id),
+            ).fetchall()
+        return [
+            MacroRecord(
+                id=r["id"], guild_id=r["guild_id"], user_id=r["user_id"],
+                name=r["name"], rolled=r["rolled"], kept=r["kept"],
+                modifier=r["modifier"], label=r["label"],
+            )
+            for r in rows
+        ]
+
+    def get_macro(self, guild_id: str, user_id: str, name: str) -> MacroRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM macros WHERE guild_id = ? AND user_id = ? AND name = ? COLLATE NOCASE",
+                (guild_id, user_id, name),
+            ).fetchone()
+        if row is None:
+            return None
+        return MacroRecord(
+            id=row["id"], guild_id=row["guild_id"], user_id=row["user_id"],
+            name=row["name"], rolled=row["rolled"], kept=row["kept"],
+            modifier=row["modifier"], label=row["label"],
+        )
+
+    def delete_macro(self, guild_id: str, user_id: str, name: str) -> bool:
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM macros WHERE guild_id = ? AND user_id = ? AND name = ? COLLATE NOCASE",
+                (guild_id, user_id, name),
+            )
+        return cur.rowcount > 0
+
+    # -- calendar ---------------------------------------------------------------
+    def get_calendar(self, guild_id: str) -> tuple[int, int, int] | None:
+        """Return (year, month, day) or None if no date has been set."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT year, month, day FROM calendar WHERE guild_id = ?", (guild_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return (row["year"], row["month"], row["day"])
+
+    def set_calendar(self, guild_id: str, year: int, month: int, day: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO calendar (guild_id, year, month, day) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET year = excluded.year, "
+                "month = excluded.month, day = excluded.day",
+                (guild_id, year, month, day),
+            )
+
+    # -- categories ---------------------------------------------------------------
+    def create_category(self, guild_id: str, name: str) -> CategoryRecord:
+        try:
+            with self._lock, self._conn:
+                cur = self._conn.execute(
+                    "INSERT INTO categories (guild_id, name) VALUES (?, ?)",
+                    (guild_id, name),
+                )
+                return CategoryRecord(cur.lastrowid, guild_id, name)
+        except sqlite3.IntegrityError as exc:
+            raise DuplicateNameError(name) from exc
+
+    def get_category(self, guild_id: str, name: str) -> CategoryRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM categories WHERE guild_id = ? AND name = ? COLLATE NOCASE",
+                (guild_id, name),
+            ).fetchone()
+        if row is None:
+            return None
+        return CategoryRecord(row["id"], row["guild_id"], row["name"])
+
+    def list_categories(self, guild_id: str) -> list[CategoryRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM categories WHERE guild_id = ? ORDER BY name COLLATE NOCASE",
+                (guild_id,),
+            ).fetchall()
+        return [CategoryRecord(r["id"], r["guild_id"], r["name"]) for r in rows]
+
+    def delete_category(self, category_id: int) -> None:
+        with self._lock, self._conn:
+            # category_members FK CASCADE handles cleanup automatically
+            self._conn.execute("DELETE FROM categories WHERE id = ?", (category_id,))
+
+    def rename_category(self, category_id: int, new_name: str) -> None:
+        try:
+            with self._lock, self._conn:
+                self._conn.execute(
+                    "UPDATE categories SET name = ? WHERE id = ?",
+                    (new_name, category_id),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise DuplicateNameError(new_name) from exc
+
+    def add_to_category(self, category_id: int, entity_type: str, entity_name: str) -> bool:
+        try:
+            with self._lock, self._conn:
+                self._conn.execute(
+                    "INSERT INTO category_members (category_id, entity_type, entity_name) "
+                    "VALUES (?, ?, ?)",
+                    (category_id, entity_type, entity_name),
+                )
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def remove_from_category(self, category_id: int, entity_type: str, entity_name: str) -> bool:
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM category_members "
+                "WHERE category_id = ? AND entity_type = ? AND entity_name = ? COLLATE NOCASE",
+                (category_id, entity_type, entity_name),
+            )
+        return cur.rowcount > 0
+
+    def list_category_members(self, category_id: int) -> list[tuple[str, str]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT entity_type, entity_name FROM category_members "
+                "WHERE category_id = ? ORDER BY entity_type, entity_name COLLATE NOCASE",
+                (category_id,),
+            ).fetchall()
+        return [(r["entity_type"], r["entity_name"]) for r in rows]
+
+    def category_count(self, category_id: int) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COUNT(*) AS cnt FROM category_members WHERE category_id = ?",
+                (category_id,),
+            ).fetchone()
+        return row["cnt"]
+
+    def list_entity_categories(self, guild_id: str, entity_type: str, entity_name: str) -> list[CategoryRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT c.* FROM categories c "
+                "JOIN category_members m ON c.id = m.category_id "
+                "WHERE c.guild_id = ? AND m.entity_type = ? AND m.entity_name = ? COLLATE NOCASE "
+                "ORDER BY c.name COLLATE NOCASE",
+                (guild_id, entity_type, entity_name),
+            ).fetchall()
+        return [CategoryRecord(r["id"], r["guild_id"], r["name"]) for r in rows]

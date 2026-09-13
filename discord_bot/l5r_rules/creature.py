@@ -1,4 +1,4 @@
-"""Creatures / monsters — fixed stat blocks transcribed VERBATIM from the
+"""Creatures / monsters: fixed stat blocks transcribed VERBATIM from the
 Rokugan bestiaries (natural_creature_bestiary.gd, shadowlands_beast_bestiary.gd,
 undead_bestiary.gd, oni_bestiary.gd), using the SpiritCreatureData model.
 
@@ -7,7 +7,7 @@ FIXED Roll & Keep from its stat block, has an explicit Armor TN and Reduction,
 and dies at its `wounds_dead` total with wound levels read off `wound_thresholds`
 (the spirit-creature wound track from character_stats.gd `_spirit_wound_level`).
 
-Every number here is copied from the bestiary — nothing is invented. This is a
+Every number here is copied from the bestiary: nothing is invented. This is a
 starter roster (a few natural animals, low Shadowlands threats, a zombie, and
 two lesser oni); more can be transcribed the same way.
 """
@@ -71,7 +71,7 @@ def _build_catalog() -> dict[str, Creature]:
             continue
         d = dict(raw)
         # A creature stored with wounds_dead == 0 uses the human wound track
-        # ("human_wounds" tag): Earth ring x 2 per level, 8 levels to death —
+        # ("human_wounds" tag): Earth ring x 2 per level, 8 levels to death : 
         # the same LOCKED formula as PCs (character_stats.gd). Derive it here.
         if int(d.get("wounds_dead", 0)) <= 0:
             per = max(1, int(d.get("earth", 2))) * 2
@@ -93,6 +93,31 @@ def spawn(template_id: str, instance_name: str) -> Creature | None:
     cr.name = instance_name
     cr.wounds_taken = 0
     return cr
+
+
+# --- Creature special abilities (GDD s54.0) --------------------------------
+
+def creature_special_notes(cr: Creature) -> list[str]:
+    """DM reminder lines for creature special abilities relevant to combat."""
+    notes: list[str] = []
+    tags = set(cr.tags)
+    if "undead" in tags:
+        notes.append("**Undead:** no Wound penalties; immune to Fear; functional until Dead")
+    if "superior_invuln" in tags:
+        notes.append("**Superior Invulnerability:** 1 Wound from all attacks (immune to spells, jade, crystal, obsidian)")
+    elif "partial_invuln" in tags:
+        notes.append("**Invulnerability:** 1 Wound from normal attacks; full damage from jade/crystal/obsidian/spells/nemuranai")
+    elif "partial_invuln_half_damage" in tags:
+        notes.append("**Partial Invulnerability:** half damage from normal attacks; full from jade/crystal/obsidian/spells")
+    if "spirit" in tags:
+        notes.append("**Spirit:** half damage from non-jade/crystal/obsidian weapons and non-Jade/Crystal spells")
+    if cr.fear > 0:
+        notes.append(f"**Fear {cr.fear}:** opponents must resist or suffer −{cr.fear}k0 to all rolls")
+    return notes
+
+
+def is_undead(cr: Creature) -> bool:
+    return "undead" in cr.tags
 
 
 # --- Combat math (fixed stat block) ----------------------------------------
@@ -131,10 +156,42 @@ def creature_damage(cr: Creature, dice: DiceEngine) -> dict:
     return res
 
 
-def apply_damage_to_creature(cr: Creature, raw_damage: int, reduction: int | None = None) -> dict:
+def apply_damage_to_creature(
+    cr: Creature,
+    raw_damage: int,
+    reduction: int | None = None,
+    bypasses_invuln: bool = False,
+    is_spell: bool = False,
+    is_jade_spell: bool = False,
+) -> dict:
+    """Apply damage with creature special abilities (GDD s54.0).
+
+    bypasses_invuln: weapon is jade, crystal, obsidian, or nemuranai.
+    is_spell: damage is from a spell (bypasses standard Invulnerability).
+    is_jade_spell: spell has the Jade or Crystal quality (bypasses Spirit half-damage).
+    """
     if reduction is None:
         reduction = cr.reduction
     final = max(0, raw_damage - reduction)
+    notes: list[str] = []
+    tags = set(cr.tags)
+    can_bypass = bypasses_invuln or is_spell
+    if "superior_invuln" in tags and not bypasses_invuln:
+        final = min(final, 1)
+        notes.append("Superior Invulnerability: 1 Wound max (immune to spells too)")
+    elif "partial_invuln" in tags and not can_bypass:
+        final = min(final, 1)
+        notes.append("Invulnerability: 1 Wound (need jade/crystal/obsidian/spell)")
+    elif "partial_invuln_half_damage" in tags and not can_bypass:
+        final = final // 2
+        notes.append("Partial Invulnerability: half damage (need jade/crystal/obsidian/spell)")
+    if "spirit" in tags and not bypasses_invuln:
+        if is_spell and not is_jade_spell:
+            final = final // 2
+            notes.append("Spirit: half damage from non-Jade/Crystal spell")
+        elif not is_spell:
+            final = final // 2
+            notes.append("Spirit: half damage (need jade/crystal/obsidian weapon)")
     old = creature_wound_level(cr)
     cr.wounds_taken += final
     new = creature_wound_level(cr)
@@ -142,4 +199,5 @@ def apply_damage_to_creature(cr: Creature, raw_damage: int, reduction: int | Non
         "raw_damage": raw_damage, "reduction": reduction, "final_damage": final,
         "old_wound_level": old, "new_wound_level": new,
         "is_dead": creature_is_dead(cr), "level_changed": old != new,
+        "special_notes": notes,
     }

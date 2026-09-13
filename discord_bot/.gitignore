@@ -1,4 +1,4 @@
-# Secrets — NEVER commit the bot token.
+# Secrets: NEVER commit the bot token.
 .env
 
 # Local database files (added in a later phase).

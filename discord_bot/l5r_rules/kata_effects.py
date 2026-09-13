@@ -6,17 +6,17 @@ faithfully are auto-applied here:
   - unconditional / weapon-conditional attack- and damage-roll modifiers
     (attacker side)
 that depend solely on the sheet, the chosen stance, the maneuver, and the
-weapon profile — all of which `/attack` already knows.
+weapon profile: all of which `/attack` already knows.
 
 Everything else in s30 is deliberately NOT auto-applied and stays DM-adjudicated:
-  - rate-limited effects ("once per Turn/Round") — the stateless `/attack` has
+  - rate-limited effects ("once per Turn/Round"): the stateless `/attack` has
     no round/turn tracking, so applying them every swing would change the rule;
   - player-choice tradeoffs ("reduce Armor TN by *up to* Earth Ring …");
   - Initiative, movement, mount, ally, guard and other off-`/attack` effects.
 The caller surfaces those as a reminder (see `active_kata_reminder`).
 
 Per CLAUDE 'do not invent mechanics': every value below is read verbatim from
-the s30 LOCKED text — no thresholds or defaults are invented. Only a PC sheet
+the s30 LOCKED text: no thresholds or defaults are invented. Only a PC sheet
 carries an `active_kata`; NPCs/creatures simply have none unless a DM sets one.
 """
 
@@ -71,7 +71,7 @@ def defender_armor_tn_bonus(defender: Character, defender_stance: str) -> tuple[
     Returns (bonus, note). Note is a short human-readable tag, "" when nothing
     applies. Stance keys match the bot: attack / full_attack / defense / center.
     (The bot has no separate Full Defense stance, so Lee of the Stone's
-    Full-Defense branch is unreachable here — Defense is honoured.)
+    Full-Defense branch is unreachable here: Defense is honoured.)
     """
     k = _active(defender)
     if not k:

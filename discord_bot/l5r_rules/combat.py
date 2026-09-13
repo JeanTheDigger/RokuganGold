@@ -1,10 +1,10 @@
-"""L5R 4e individual combat — the core resolution, ported from
+"""L5R 4e individual combat: the core resolution, ported from
 `simulation/individual_combat.gd` (s40) and `simulation/wound_system.gd`.
 
 This is the CORE only. The GDScript layers on kata, kiho, mutations, advantages,
 spirit-creature stat blocks, void-point spends, dual-wielding, mounted combat,
 skill masteries (R3/R5/R7 damage bonuses and 9-explosions), and per-round
-participant state — all persistent-world combat features the bot does not model.
+participant state: all persistent-world combat features the bot does not model.
 What is reproduced here is exactly what the GDScript does with those layers
 inert:
 
@@ -20,7 +20,7 @@ Stances modelled: Attack (0), Full Attack (attacker +2k1 to hit / -10 own Armor
 TN), Defense (defender +Air ring + Defense skill to Armor TN), Center (0). Full
 Defense needs a roll and is left to the DM via a manual TN adjustment.
 
-No game values are invented — every number traces to the GDScript / GDD.
+No game values are invented: every number traces to the GDScript / GDD.
 """
 
 from __future__ import annotations
@@ -33,16 +33,23 @@ from .dice import DiceEngine
 
 # Weapon catalog subset (values verbatim from individual_combat.gd WEAPON_CATALOG).
 # Keys used by the bot: rolled, kept, strength_adds, skill, trait, melee, size,
-# and no_explode (shinai). Special keys (thrown/charge/armor_tn_mult/break/etc.)
-# are intentionally omitted — those maneuvers are not modelled at this phase.
+# no_explode (shinai), double_reduction (bokken), armor_tn_mult (arrows/blowgun/
+# firearms), half_range, penalty_mounted, penalty_on_foot (bows/lance),
+# ignore_all_reduction (bo-hiya), ignore_armor_reduction (firearms: zeroes armor
+# Reduction only), ignore_creature_reduction (hand-cannon: zeroes natural toughness),
+# break_threshold (kumade/lance/parangu/ninja-to), void_damage (katana: VP for +1k1),
+# grapple_capable (sasumata/sodegarami: can initiate grapple while armed).
+# Extraordinary weapon qualities (s39 crafting): balanced (+1k0 attack), radiant
+# (jade for invuln), swift (+5 init), true (−Strength Reduction), unbreakable
+# (can't break). Stored on Character.weapon_qualities; checked via has_weapon_quality().
 WEAPON_CATALOG: dict[str, dict] = {
     # Swords (Kenjutsu)
-    "katana": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
+    "katana": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium", "void_damage": True},
     "wakizashi": {"rolled": 2, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Small"},
     "no_dachi": {"rolled": 3, "kept": 3, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Large"},
-    "bokken": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
-    "ninja_to": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
-    "parangu": {"rolled": 2, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
+    "bokken": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium", "double_reduction": True},
+    "ninja_to": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium", "break_threshold": 40},
+    "parangu": {"rolled": 2, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium", "break_threshold": 30},
     "scimitar": {"rolled": 2, "kept": 3, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
     "shinai": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium", "no_explode": True},
     # Knives
@@ -62,7 +69,7 @@ WEAPON_CATALOG: dict[str, dict] = {
     "nagamaki": {"rolled": 2, "kept": 3, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
     # Spears
     "yari": {"rolled": 2, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large"},
-    "lance": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large"},
+    "lance": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large", "break_threshold": 30, "penalty_on_foot": 10, "penalty_mounted": 5},
     "nage_yari": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large"},
     # Staves
     "bo": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Staves", "trait": "agility", "melee": True, "size": "Large"},
@@ -71,42 +78,65 @@ WEAPON_CATALOG: dict[str, dict] = {
     "tonfa": {"rolled": 0, "kept": 3, "strength_adds": True, "skill": "Staves", "trait": "agility", "melee": True, "size": "Medium"},
     # War fan
     "war_fan": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "War Fan", "trait": "agility", "melee": True, "size": "Small"},
-    # Bows (Kyujutsu; Reflexes; no Strength to damage)
-    "yumi": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Large"},
-    "dai_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
-    "han_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
+    # Bows (Kyujutsu; Reflexes; no Strength to damage).
+    # penalty_mounted / penalty_on_foot: +N TN on attack rolls in that condition (s39).
+    "yumi": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Large", "penalty_mounted": 10},
+    "dai_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "penalty_on_foot": 10},
+    "han_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "penalty_mounted": 10},
+    # Arrows (s39 ammunition — select as weapon to use a specific arrow type;
+    # Kyujutsu / Reflexes same as bows; DR from the arrow, not the bow).
+    # armor_tn_mult: multiplier on the target's armor TN bonus from armor.
+    "willow_leaf_arrow": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
+    "armor_piercing_arrow": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "armor_tn_mult": 0},
+    "flesh_cutter_arrow": {"rolled": 2, "kept": 3, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "armor_tn_mult": 2, "half_range": True},
+    "humming_bulb_arrow": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
+    "rope_cutter_arrow": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "half_range": True},
+    "bo_hiya": {"rolled": 3, "kept": 3, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "ignore_all_reduction": True},
     # Polearms (grappling)
-    "sasumata": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
-    "sadegarami": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
+    "sasumata": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large", "grapple_capable": True},
+    "sodegarami": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large", "grapple_capable": True},
     # More spears
-    "kumade": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large"},
+    "kumade": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large", "break_threshold": 25},
     "mai_chong": {"rolled": 0, "kept": 3, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large"},
     # More staves
     "machi_kanshisha": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Staves", "trait": "agility", "melee": True, "size": "Medium"},
     "sang_kauw": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Staves", "trait": "agility", "melee": True, "size": "Medium"},
     # Chain weapons
     "kusarigama": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
-    "kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
+    "kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large", "armor_tn_mult": 2},
     "manrikikusari": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
     # Thrown / ninja (Ninjutsu; no Strength to damage; damage does NOT explode
-    # by default — s24: "Rank 5: Damage dice explode normally (they do not
+    # by default: s24: "Rank 5: Damage dice explode normally (they do not
     # normally)"; Ninjutsu R5 mastery overrides this).
     "shuriken": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
     "tsubute": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
-    "blowgun": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Medium", "no_explode": True},
+    "blowgun": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Medium", "no_explode": True, "armor_tn_mult": 3},
+    # Thrown variants — same weapon used as a ranged attack (Reflexes, not Agility).
+    # Select the _thrown entry when the weapon is hurled instead of wielded in melee.
+    "wakizashi_thrown": {"rolled": 2, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "reflexes", "melee": False, "size": "Small"},
+    "yari_thrown": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "reflexes", "melee": False, "size": "Large"},
+    "nage_yari_thrown": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "reflexes", "melee": False, "size": "Large"},
+    "mai_chong_thrown": {"rolled": 0, "kept": 3, "strength_adds": True, "skill": "Spears", "trait": "reflexes", "melee": False, "size": "Large"},
     # Unarmed
     "unarmed": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Jiujutsu", "trait": "agility", "melee": True, "size": "Small"},
+    # Firearms (Teppoudo / Intelligence). General rule: ignore armor TN + armor Reduction.
+    # Kakiyari can be used as a yari in melee (DR 1k1) — select "yari" for that mode.
+    "kakiyari": {"rolled": 3, "kept": 2, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Large", "armor_tn_mult": 0, "ignore_armor_reduction": True},
+    # Hand-Cannon: also ignores natural toughness Reduction. Can be used as tetsubo in melee.
+    "hand_cannon": {"rolled": 4, "kept": 3, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Large", "armor_tn_mult": 0, "ignore_armor_reduction": True, "ignore_creature_reduction": True},
+    "bajozutsu": {"rolled": 3, "kept": 2, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Small", "armor_tn_mult": 0, "ignore_armor_reduction": True},
+    "teppo": {"rolled": 3, "kept": 3, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Large", "armor_tn_mult": 0, "ignore_armor_reduction": True},
 }
 
-# Armor catalog (verbatim from simulation/armor_system.gd ARMOR_CATALOG).
+# Armor catalog (verbatim from GDD s39 and simulation/armor_system.gd).
 ARMOR_CATALOG: dict[str, dict] = {
-    "bogu": {"tn_bonus": 0, "reduction": 1, "is_heavy": False, "penalty_kind": "none"},
-    "ashigaru": {"tn_bonus": 3, "reduction": 1, "is_heavy": False, "penalty_kind": "none"},
-    "tatami": {"tn_bonus": 4, "reduction": 1, "is_heavy": False, "penalty_kind": "none"},
-    "light": {"tn_bonus": 5, "reduction": 3, "is_heavy": False, "penalty_kind": "athletics_stealth"},
-    "heavy": {"tn_bonus": 10, "reduction": 5, "is_heavy": True, "penalty_kind": "agi_ref"},
-    "tetsu_do": {"tn_bonus": 13, "reduction": 8, "is_heavy": True, "penalty_kind": "agi_ref_iron"},
-    "riding": {"tn_bonus": 4, "reduction": 4, "is_heavy": False, "penalty_kind": "agi_ref_not_mounted"},
+    "bogu": {"tn_bonus": 0, "reduction": 1, "is_heavy": False, "penalty_kind": "none", "cost": 1, "special": ""},
+    "ashigaru": {"tn_bonus": 3, "reduction": 1, "is_heavy": False, "penalty_kind": "none", "cost": 5, "special": ""},
+    "tatami": {"tn_bonus": 4, "reduction": 1, "is_heavy": False, "penalty_kind": "none", "cost": 10, "special": ""},
+    "light": {"tn_bonus": 5, "reduction": 3, "is_heavy": False, "penalty_kind": "athletics_stealth", "cost": 25, "special": "Increases TN of Athletics and Stealth rolls by +5."},
+    "heavy": {"tn_bonus": 10, "reduction": 5, "is_heavy": True, "penalty_kind": "agi_ref", "cost": 40, "special": "Increases TN of all Agility and Reflexes skill rolls by +5."},
+    "tetsu_do": {"tn_bonus": 13, "reduction": 8, "is_heavy": True, "penalty_kind": "agi_ref_iron", "cost": 100, "special": "Counts as Heavy Armor. Increases TN of all Agility/Reflexes skill rolls by +10 (+5 if Strength 5+)."},
+    "riding": {"tn_bonus": 4, "reduction": 4, "is_heavy": False, "penalty_kind": "agi_ref_not_mounted", "cost": 55, "tn_bonus_mounted": 12, "special": "Armor TN +12 on horseback, +4 otherwise. Increases TN of Agility/Reflexes skill rolls by +5 except when mounted."},
 }
 
 
@@ -127,7 +157,7 @@ def armor_attack_penalty(attacker: Character) -> tuple[int, str]:
     kind = prof.get("penalty_kind", "none")
     if kind not in ("agi_ref", "agi_ref_iron"):
         return 0, ""
-    known = {t.lower() for t in attacker.known_techniques}
+    known = {t.lower() for t in attacker.techniques}
     if "the way of the crab" in known:
         return 0, ""
     if kind == "agi_ref":
@@ -140,6 +170,7 @@ def roll_full_defense(
     reflexes: int,
     defense_skill: int,
     dice_engine: DiceEngine,
+    wound_penalty: int = 0,
 ) -> dict:
     """Full Defense Stance (s40): Defense/Reflexes roll, add half (rounded up)
     to Armor TN until the character's next Turn. Complex Action."""
@@ -147,17 +178,19 @@ def roll_full_defense(
     kept = reflexes
     explodes = defense_skill > 0
     result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
-    bonus = math.ceil(result.total / 2)
+    total = result.total + wound_penalty
+    bonus = max(0, math.ceil(total / 2))
     return {
-        "total": result.total,
+        "total": total,
         "bonus": bonus,
         "rolled": rolled,
         "kept": kept,
         "dice": result,
+        "wound_penalty": wound_penalty,
     }
 
 
-# individual_combat.gd DEFAULT_WEAPON — used for any unknown weapon name.
+# individual_combat.gd DEFAULT_WEAPON: used for any unknown weapon name.
 DEFAULT_WEAPON: dict = {
     "rolled": 2, "kept": 1, "strength_adds": True, "skill": "Kenjutsu",
     "trait": "agility", "melee": True, "size": "Medium",
@@ -303,9 +336,85 @@ def armor_tn(target: Character, defender_stance: str = "attack", extra: int = 0)
     base += STANCE_ARMOR_TN_BONUS.get(defender_stance, 0)
     if defender_stance == "defense":
         base += stats.ring_value(target, "air") + target.skills.get("Defense", 0)
-    elif defender_stance == "center":
-        base += target.void_ring
     return base + extra
+
+
+def arrow_armor_tn_mod(weapon_name: str, target_armor_tn_bonus: int) -> tuple[int, str]:
+    """Armor TN adjustment from arrow/blowgun/firearm specials (GDD s39).
+    armor_tn_mult 0 = ignores bonus, 2 = doubles, 3 = triples.
+    Returns (tn_modifier, note). Modifier is added to the target's Armor TN."""
+    wp = get_weapon_profile(weapon_name)
+    mult = wp.get("armor_tn_mult")
+    if mult is None:
+        return 0, ""
+    label = weapon_name.replace("_", " ").title()
+    adj = target_armor_tn_bonus * (mult - 1)
+    if mult == 0:
+        return adj, f"{label}: ignores armor TN bonus ({adj:+d})"
+    if mult == 2:
+        return adj, f"{label}: doubles armor TN bonus ({adj:+d})"
+    if mult == 3:
+        return adj, f"{label}: triples armor TN bonus ({adj:+d})"
+    return adj, f"{label}: armor TN ×{mult} ({adj:+d})"
+
+
+def blowgun_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, int, str]:
+    """Extra damage dice from blowgun Ninjutsu rank scaling (GDD s39).
+    Base 0k1; at Ninjutsu 3: 1k1 (+1k0); at Ninjutsu 7: 2k1 (+2k0).
+    Returns (extra_rolled, extra_kept, note)."""
+    if weapon_name.lower().strip() != "blowgun":
+        return 0, 0, ""
+    ninjutsu = attacker.skills.get("Ninjutsu", 0)
+    if ninjutsu >= 7:
+        return 2, 0, "Blowgun DR 2k1 (Ninjutsu 7+)"
+    if ninjutsu >= 3:
+        return 1, 0, "Blowgun DR 1k1 (Ninjutsu 3+)"
+    return 0, 0, ""
+
+
+FIREARM_WEAPONS: frozenset[str] = frozenset({
+    "kakiyari", "hand_cannon", "bajozutsu", "teppo",
+})
+
+WEAPON_QUALITIES: frozenset[str] = frozenset({
+    "balanced", "radiant", "signature", "swift", "true", "unbreakable",
+})
+
+
+def has_weapon_quality(character: Character, weapon_used: str, quality: str) -> bool:
+    """True if the weapon being used is the character's equipped weapon and has the given quality."""
+    if not character.weapon_qualities or quality not in character.weapon_qualities:
+        return False
+    return weapon_used.lower().strip() == character.equipped_weapon.lower().strip()
+
+
+def teppoudo_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, int, str]:
+    """Extra damage dice from Teppoudo mastery ranks (GDD s39).
+    Mastery 3: +1k0; Mastery 7: additionally +0k1 (cumulative = +1k1).
+    Returns (extra_rolled, extra_kept, note)."""
+    if weapon_name.lower().strip() not in FIREARM_WEAPONS:
+        return 0, 0, ""
+    teppoudo = attacker.skills.get("Teppoudo", 0)
+    if teppoudo >= 7:
+        return 1, 1, "Teppoudo R7: +1k1 damage (R3 +1k0, R7 +0k1)"
+    if teppoudo >= 3:
+        return 1, 0, "Teppoudo R3: +1k0 damage"
+    return 0, 0, ""
+
+
+def weapon_stance_penalty(weapon_name: str, is_mounted: bool) -> tuple[int, str]:
+    """Flat penalty from weapon-specific stance restrictions (GDD s39).
+    Bows: Dai-kyu +10 on foot, Yumi/Han-kyu +10 mounted.
+    Lance: +10 on foot, +5 mounted (no charge modeled yet; full DR 3k4 requires charge).
+    Returns (flat_penalty, note). Penalty is negative (added to the attack roll)."""
+    wp = get_weapon_profile(weapon_name)
+    if wp.get("penalty_on_foot") and not is_mounted:
+        pen = wp["penalty_on_foot"]
+        return -pen, f"{weapon_name.replace('_', ' ').title()}: +{pen} TN (on foot, not mounted)"
+    if wp.get("penalty_mounted") and is_mounted:
+        pen = wp["penalty_mounted"]
+        return -pen, f"{weapon_name.replace('_', ' ').title()}: +{pen} TN (mounted)"
+    return 0, ""
 
 
 def resolve_attack(
@@ -332,8 +441,8 @@ def resolve_attack(
     skill_name = weapon.get("skill", "Kenjutsu")
     skill_rank = attacker.skills.get(skill_name, 0)
 
-    trait_name = "reflexes" if weapon.get("trait") == "reflexes" else "agility"
-    trait_value = attacker.reflexes if trait_name == "reflexes" else attacker.agility
+    trait_name = weapon.get("trait", "agility")
+    trait_value = getattr(attacker, trait_name, attacker.agility)
     if trait_override is not None:
         # An active kata replaces the normal Trait with a Ring (e.g. Iron Forest
         # Style: Air Ring instead of Agility for spear/polearm attack rolls, s30).
@@ -382,7 +491,7 @@ def resolve_damage(
 ) -> dict:
     """Roll raw damage (before the target's armor reduction). `extra_rolled`/
     `extra_kept` are bonus damage dice from an active kata or School Technique
-    (e.g. Waves upon the Breakers' +1k0, The Hand of Thunder's +0k1) — added like
+    (e.g. Waves upon the Breakers' +1k0, The Hand of Thunder's +0k1): added like
     Increased Damage but with no TN cost. `extra_flat` is a flat bonus added to
     the damage total (e.g. Matsu's Lion's Roar +Honor Rank). `explode_9` makes
     damage dice explode on 9+ (Kenjutsu R7, Heavy Weapons R7). `force_explode`
@@ -626,14 +735,19 @@ def resolve_contested_check(
     dice_engine: DiceEngine,
     bonus_a: int = 0,
     bonus_b: int = 0,
+    extra_rolled_a: int = 0,
+    extra_kept_a: int = 0,
+    extra_rolled_b: int = 0,
+    extra_kept_b: int = 0,
 ) -> dict:
     """Contested Skill/Trait roll. Each side rolls (trait + skill) keep trait;
     explodes only if skill > 0. bonus_a/bonus_b are flat modifiers (wound
-    penalties, Void Point bonuses, situational). Higher total wins; tie = 'tie'."""
-    rolled_a = trait_a + skill_a
-    kept_a = trait_a
-    rolled_b = trait_b + skill_b
-    kept_b = trait_b
+    penalties, Void Point bonuses, situational). extra_rolled/extra_kept add
+    dice from advantages without inflating both rolled and kept."""
+    rolled_a = trait_a + skill_a + extra_rolled_a
+    kept_a = trait_a + extra_kept_a
+    rolled_b = trait_b + skill_b + extra_rolled_b
+    kept_b = trait_b + extra_kept_b
     explodes_a = skill_a > 0
     explodes_b = skill_b > 0
     result_a = dice_engine.roll_and_keep(max(1, rolled_a), max(1, kept_a), explodes_a)
@@ -668,12 +782,16 @@ def resolve_fear_check(
     fear_rank: int,
     dice_engine: DiceEngine,
     bonus: int = 0,
+    extra_rolled: int = 0,
+    extra_kept: int = 0,
 ) -> dict:
     """Fear check: Willpower roll vs TN 5 + (Fear Rank × 5).
-    Willpower is both rolled and kept (trait-only, no skill — never explodes).
+    Willpower is both rolled and kept (trait-only, no skill: never explodes).
     L5R 4e core: Fear rating gives a TN, character rolls raw Willpower."""
     tn = 5 + fear_rank * 5
-    result = dice_engine.roll_and_keep(max(1, willpower), max(1, willpower), False)
+    rolled = max(1, willpower + extra_rolled)
+    kept = max(1, willpower + extra_kept)
+    result = dice_engine.roll_and_keep(rolled, kept, False)
     total = result.total + bonus
     return {
         "success": total >= tn,
@@ -681,8 +799,8 @@ def resolve_fear_check(
         "tn": tn,
         "margin": total - tn,
         "dice": result,
-        "rolled": willpower,
-        "kept": willpower,
+        "rolled": rolled,
+        "kept": kept,
     }
 
 
@@ -722,12 +840,15 @@ def resolve_poison_resist(
     poison_strength: int,
     dice_engine: DiceEngine,
     bonus: int = 0,
+    extra_rolled: int = 0,
+    extra_kept: int = 0,
 ) -> dict:
     """Poison resistance: Stamina roll vs TN (Poison Strength × 5).
     Stamina is trait-only (rolled = kept = Stamina, no explosion)."""
     tn = poison_strength * 5
-    rolled = max(1, stamina)
-    result = dice_engine.roll_and_keep(rolled, rolled, False)
+    rolled = max(1, stamina + extra_rolled)
+    kept = max(1, stamina + extra_kept)
+    result = dice_engine.roll_and_keep(rolled, kept, False)
     total = result.total + bonus
     return {
         "success": total >= tn,
@@ -736,7 +857,7 @@ def resolve_poison_resist(
         "margin": total - tn,
         "dice": result,
         "rolled": rolled,
-        "kept": rolled,
+        "kept": kept,
     }
 
 
@@ -750,11 +871,14 @@ def resolve_skill_check(
     tn: int,
     dice_engine: DiceEngine,
     bonus: int = 0,
+    extra_rolled: int = 0,
+    extra_kept: int = 0,
 ) -> dict:
     """Generic Skill/Trait check vs a TN. Roll (trait + skill) keep trait.
-    Explodes only if skilled (skill > 0)."""
-    rolled = trait + skill
-    kept = trait
+    Explodes only if skilled (skill > 0). extra_rolled/extra_kept add dice
+    from advantages without inflating both rolled and kept."""
+    rolled = trait + skill + extra_rolled
+    kept = trait + extra_kept
     explodes = skill > 0
     result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
     total = result.total + bonus
@@ -779,11 +903,13 @@ def resolve_medicine_check(
     tn: int,
     dice_engine: DiceEngine,
     bonus: int = 0,
+    extra_rolled: int = 0,
+    extra_kept: int = 0,
 ) -> dict:
     """Medicine/Intelligence check vs a TN. Used for treating poison, disease,
     wounds, etc. Explodes only if skilled."""
-    rolled = intelligence + medicine_skill
-    kept = intelligence
+    rolled = intelligence + medicine_skill + extra_rolled
+    kept = intelligence + extra_kept
     explodes = medicine_skill > 0
     result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
     total = result.total + bonus
@@ -796,3 +922,17 @@ def resolve_medicine_check(
         "rolled": rolled,
         "kept": kept,
     }
+
+
+STANCE_EFFECTS: dict[str, str] = {
+    "attack": "",
+    "full_attack": "+2k1 attack rolls, −10 own Armor TN. May only attack; no ranged attacks. Cannot use while mounted.",
+    "defense": "+Air Ring + Defense skill to Armor TN. May not attack.",
+    "full_defense": "Defense/Reflexes roll → half (rounded up) added to ATN. Complex Action; only Free Actions allowed.",
+    "center": "Forfeit all Actions. Next Round: +1k1 + Void Ring on one roll, +10 Initiative.",
+}
+
+
+def stance_effects(stance: str) -> str:
+    """Return the rules description for a combat stance."""
+    return STANCE_EFFECTS.get(stance, "")

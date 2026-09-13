@@ -1,7 +1,7 @@
 """Deterministic combat modifiers from a character's ACTIVE kiho (GDD s38).
 
 Only kiho whose effect the bot can compute faithfully from the sheet are
-auto-applied here — passive modifiers gated on the active kiho list, the
+auto-applied here: passive modifiers gated on the active kiho list, the
 equipped weapon, and character stats.
 
 Auto-applied (6 effects across 6 kiho):

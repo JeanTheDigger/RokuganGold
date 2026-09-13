@@ -250,7 +250,7 @@ class DiceEngine:
 # ---------------------------------------------------------------------------
 # Self-test: run `python3 dice.py` to validate the rules logic against the
 # GDScript's invariants. This is NOT a unit-test file (the project forbids
-# adding those) — it is a hand-runnable validator, deleted from CI concerns.
+# adding those): it is a hand-runnable validator, deleted from CI concerns.
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     eng = DiceEngine(seed=12345)
