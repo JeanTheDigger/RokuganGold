@@ -8628,7 +8628,7 @@ async def _setup_server_inner(
         "Lobby": {"welcome", "character-submission", "calendar"},
         "Out of Character": {"general", "off-topic", "announcements", "rules-reference"},
         "In Character": {"in-character"},
-        "Dungeon Masters": {"dm-discussion", "approvals"},
+        "Staff Members": {"dm-discussion", "approvals"},
     }
     deleted_dupes: list[str] = []
     deleted_channels: list[str] = []
@@ -8722,7 +8722,7 @@ async def _setup_server_inner(
                 "Ready to enter Rokugan? Press the button below to begin "
                 "creating your character.\n\n"
                 "A private channel will open where you can build your character "
-                "step by step. Once complete, a Dungeon Master will review and "
+                "step by step. Once complete, a Staff Member will review and "
                 "approve your submission.\n\n"
                 "After approval, you'll gain access to the rest of the server."
             ),
@@ -8750,7 +8750,7 @@ async def _setup_server_inner(
                     "Ready to enter Rokugan? Press the button below to begin "
                     "creating your character.\n\n"
                     "A private channel will open where you can build your character "
-                    "step by step. Once complete, a Dungeon Master will review and "
+                    "step by step. Once complete, a Staff Member will review and "
                     "approve your submission.\n\n"
                     "After approval, you'll gain access to the rest of the server."
                 ),
@@ -8892,13 +8892,15 @@ async def _setup_server_inner(
             view_channel=True, send_messages=True, read_message_history=True,
             manage_messages=True,
         )
-    dm_cat = discord.utils.get(guild.categories, name="Dungeon Masters")
+    dm_cat = discord.utils.get(guild.categories, name="Staff Members")
     if dm_cat is None:
-        dm_cat = await guild.create_category("Dungeon Masters", overwrites=dm_overwrites, reason="Server setup")
-        created_items.append("Dungeon Masters category")
+        dm_cat = discord.utils.get(guild.categories, name="Dungeon Masters")
+    if dm_cat is None:
+        dm_cat = await guild.create_category("Staff Members", overwrites=dm_overwrites, reason="Server setup")
+        created_items.append("Staff Members category")
     else:
-        await dm_cat.edit(overwrites=dm_overwrites, reason="Server setup: update permissions")
-        existing_items.append("Dungeon Masters")
+        await dm_cat.edit(name="Staff Members", overwrites=dm_overwrites, reason="Server setup: rename to Staff Members")
+        existing_items.append("Staff Members")
     existing_names = {ch.name for ch in dm_cat.text_channels}
     if "dm-discussion" not in existing_names:
         await dm_cat.create_text_channel("dm-discussion")
