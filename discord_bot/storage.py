@@ -351,6 +351,15 @@ class Store:
             ).fetchone()
         return self._row_to_record(row) if row else None
 
+    def get_by_name_guild(self, guild_id: str, name: str) -> CharacterRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM characters WHERE guild_id = ? "
+                "AND name = ? COLLATE NOCASE",
+                (guild_id, name),
+            ).fetchone()
+        return self._row_to_record(row) if row else None
+
     def list_by_owner(self, guild_id: str, owner_id: str) -> list[CharacterRecord]:
         with self._lock:
             rows = self._conn.execute(
