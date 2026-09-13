@@ -293,7 +293,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     pen = stats.wound_penalty(c)
     cap = stats.total_wound_capacity(c)
     per = stats.wound_threshold_per_level(c)
-    track = _wound_track(c)
+    track = stats.wound_track(c)
     wound_line = (
         f"**{lvl}**" + (f" ({pen} penalty)" if pen else "")
         + f"\n{c.wounds_taken} / {cap} wounds  ·  {per} per level"
@@ -619,7 +619,7 @@ async def whoami(interaction: discord.Interaction) -> None:
     header = " · ".join(b for b in (c.clan, c.school) if b) or " "
     water = stats.water_ring(c)
     move_str = f"Move: {water * 5} ft (Free) / {water * 10} ft (Simple)"
-    track = _wound_track(c)
+    track = stats.wound_track(c)
     lines = [
         f"**{c.name}**: {header} (Rank {stats.insight_rank(c)})",
         f"Rings: {ring_str}",
@@ -2355,11 +2355,10 @@ def _apply_numeric_field(c: Character, field: str, value: float) -> None:
 
 
 def _check_insight_rank_advance(c: Character) -> str:
-    new_rank = stats.insight_rank(c)
-    if new_rank <= c.school_rank:
+    result = stats.check_insight_rank_advance(c)
+    if result is None:
         return ""
-    old = c.school_rank
-    c.school_rank = new_rank
+    old, new_rank = result
     return (
         f"\n\U0001F393 **School Rank {old} → {new_rank}!** "
         f"(Insight {stats.insight(c)}). "
@@ -4162,31 +4161,6 @@ async def dm_heal(
         )
 
 
-def _wound_track(c) -> str:
-    """Visual wound track: shows each level with the current position marked."""
-    names = ["Healthy", "Nicked", "Grazed", "Hurt", "Injured", "Crippled", "Down", "Out", "Dead"]
-    short = ["H", "Ni", "Gr", "Hu", "In", "Cr", "Dn", "Ou", "De"]
-    idx = stats.wound_level_index(c)
-    parts = []
-    for i, s in enumerate(short):
-        if i == idx:
-            parts.append(f"[**{s}**]")
-        else:
-            parts.append(s)
-    return " → ".join(parts)
-
-
-def _stance_effects(stance: str) -> str:
-    effects = {
-        "attack": "",
-        "full_attack": "+2k1 attack rolls, −10 own Armor TN. May only attack; no ranged attacks. Cannot use while mounted.",
-        "defense": "+Air Ring + Defense skill to Armor TN. May not attack.",
-        "full_defense": "Defense/Reflexes roll → half (rounded up) added to ATN. Complex Action; only Free Actions allowed.",
-        "center": "Forfeit all Actions. Next Round: +1k1 + Void Ring on one roll, +10 Initiative.",
-    }
-    return effects.get(stance, "")
-
-
 def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
     if not enc.combatants:
         return "No combatants yet. Add them with `/combat join` or `/combat add`."
@@ -5654,11 +5628,6 @@ _CONTEST_TRAITS = [
 ]
 
 
-def _trait_value(c: Character, name: str) -> int:
-    if name == "void":
-        return c.void_ring
-    return getattr(c, name, 0)
-
 
 # ===========================================================================
 # /check group: consolidated skill & trait checks
@@ -5744,8 +5713,8 @@ async def contest(
         await interaction.response.send_message(f"No character found for **{name_b}**.", ephemeral=True)
         return
     ca, cb = rec_a.character, rec_b.character
-    tv_a = _trait_value(ca, trait_a.value)
-    tv_b = _trait_value(cb, trait_b.value)
+    tv_a = stats.trait_value(ca, trait_a.value)
+    tv_b = stats.trait_value(cb, trait_b.value)
     sk_a = ca.skills.get(skill_a, 0)
     sk_b = cb.skills.get(skill_b, 0)
     wp_a = stats.wound_penalty(ca)
@@ -6475,7 +6444,7 @@ async def skill_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    tv = _trait_value(c, trait.value)
+    tv = stats.trait_value(c, trait.value)
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
@@ -6572,7 +6541,7 @@ async def check_cooperative(
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
-    tv = _trait_value(c, trait.value)
+    tv = stats.trait_value(c, trait.value)
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     max_helpers = c.void_ring
@@ -6591,7 +6560,7 @@ async def check_cooperative(
             helper_lines.append(f"❌ **{hname}**: not found")
             continue
         hc = hrec.character
-        htv = _trait_value(hc, trait.value)
+        htv = stats.trait_value(hc, trait.value)
         hsk = hc.skills.get(skill, 0)
         hwp = stats.wound_penalty(hc)
         hresult = combat.resolve_skill_check(htv, hsk, helper_tn, engine, bonus=hwp)
@@ -6936,7 +6905,7 @@ async def social_check(
         return
     c = rec.character
     trait_attr = _SOCIAL_TRAIT_MAP[skill.value]
-    tv = _trait_value(c, trait_attr)
+    tv = stats.trait_value(c, trait_attr)
     sk = c.skills.get(skill.value, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill.value, trait_attr)
@@ -10972,7 +10941,7 @@ async def combat_stance(
         cb.center_init_boost = 0
     _save_encounter(str(interaction.guild_id), enc)
     label = stance.name
-    effects = _stance_effects(stance.value)
+    effects = combat.stance_effects(stance.value)
     msg = f"**{cb.name}** adopts **{label}** stance."
     if effects:
         msg += f"\n{effects}"

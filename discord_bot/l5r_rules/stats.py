@@ -127,6 +127,37 @@ def void_bonus_max(c: Character) -> int:
     return c.void_ring
 
 
+def trait_value(c: Character, name: str) -> int:
+    """Return a trait value by name, including Void."""
+    if name.lower() == "void":
+        return c.void_ring
+    return c.get_trait(name)
+
+
+def wound_track(c: Character) -> str:
+    """Visual wound track: shows each level with the current position marked."""
+    short = ["H", "Ni", "Gr", "Hu", "In", "Cr", "Dn", "Ou", "De"]
+    idx = wound_level_index(c)
+    parts = []
+    for i, s in enumerate(short):
+        if i == idx:
+            parts.append(f"[**{s}**]")
+        else:
+            parts.append(s)
+    return " → ".join(parts)
+
+
+def check_insight_rank_advance(c: Character) -> tuple[int, int] | None:
+    """If insight qualifies for a higher school rank, update it and return
+    (old_rank, new_rank). Otherwise return None."""
+    new_rank = insight_rank(c)
+    if new_rank <= c.school_rank:
+        return None
+    old = c.school_rank
+    c.school_rank = new_rank
+    return old, new_rank
+
+
 def encumbrance_capacity(c: Character) -> int:
     """L5R 4e: a character can carry Strength x 5 items without penalty.
     Beyond that, TN penalties apply. This returns the threshold."""

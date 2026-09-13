@@ -922,3 +922,17 @@ def resolve_medicine_check(
         "rolled": rolled,
         "kept": kept,
     }
+
+
+STANCE_EFFECTS: dict[str, str] = {
+    "attack": "",
+    "full_attack": "+2k1 attack rolls, −10 own Armor TN. May only attack; no ranged attacks. Cannot use while mounted.",
+    "defense": "+Air Ring + Defense skill to Armor TN. May not attack.",
+    "full_defense": "Defense/Reflexes roll → half (rounded up) added to ATN. Complex Action; only Free Actions allowed.",
+    "center": "Forfeit all Actions. Next Round: +1k1 + Void Ring on one roll, +10 Initiative.",
+}
+
+
+def stance_effects(stance: str) -> str:
+    """Return the rules description for a combat stance."""
+    return STANCE_EFFECTS.get(stance, "")
