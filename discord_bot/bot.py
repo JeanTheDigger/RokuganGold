@@ -8625,8 +8625,9 @@ async def _setup_server_inner(
 
     # --- Cleanup helper: deduplicate categories, purge stray channels ---
     _EXPECTED_CATEGORIES: dict[str, set[str]] = {
-        "Lobby": {"welcome", "character-submission", "calendar"},
+        "Lobby": {"welcome", "character-submission"},
         "Out of Character": {"general", "off-topic", "announcements", "rules-reference"},
+        "IC Information": {"calendar"},
         "In Character": {"in-character"},
         "Staff Members": {"dm-discussion", "approvals"},
     }
@@ -8757,34 +8758,6 @@ async def _setup_server_inner(
             )
             await sub_ch.send(embed=sub_embed, view=_ChargenButtonView())
 
-    # Calendar channel (read-only, bot maintains the current date)
-    cal_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
-        everyone: discord.PermissionOverwrite(
-            view_channel=True, send_messages=False, read_message_history=True,
-        ),
-        bot_member: discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, manage_channels=True,
-            manage_messages=True,
-        ),
-    }
-    if "calendar" not in existing_names:
-        cal_ch = await lobby_cat.create_text_channel(
-            "calendar", overwrites=cal_overwrites,
-        )
-        created_items.append("#calendar")
-    else:
-        cal_ch = discord.utils.get(lobby_cat.text_channels, name="calendar")
-        if cal_ch:
-            await cal_ch.edit(overwrites=cal_overwrites, reason="Server setup: lock calendar")
-            await cal_ch.purge(limit=200, reason="Server setup: reset calendar")
-    guild_id = str(guild.id)
-    cal = store.get_calendar(guild_id)
-    if cal is not None and cal_ch is not None:
-        date_str = _format_rokugani_date(*cal)
-        msg = await cal_ch.send(embed=_date_embed(date_str))
-        await msg.pin()
-        store.set_date_channel(guild_id, str(cal_ch.id), str(msg.id))
-
     # --- 2. Out of Character (Approved + DMs only) ---
     ooc_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
         everyone: discord.PermissionOverwrite(view_channel=False),
@@ -8851,7 +8824,47 @@ async def _setup_server_inner(
         await _post_rules_reference(rules_ch)
         created_items.append("#rules-reference")
 
-    # --- 3. In Character (Approved + DMs only) ---
+    # --- 3. IC Information (Approved + DMs, read-only) ---
+    icinfo_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        approved_role: discord.PermissionOverwrite(
+            view_channel=True, send_messages=False, read_message_history=True,
+        ),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_channels=True,
+            manage_messages=True,
+        ),
+    }
+    for r in dm_roles:
+        icinfo_overwrites[r] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+            manage_messages=True,
+        )
+    icinfo_cat = discord.utils.get(guild.categories, name="IC Information")
+    if icinfo_cat is None:
+        icinfo_cat = await guild.create_category("IC Information", overwrites=icinfo_overwrites, reason="Server setup")
+        created_items.append("IC Information category")
+    else:
+        await icinfo_cat.edit(overwrites=icinfo_overwrites, reason="Server setup: update permissions")
+        existing_items.append("IC Information")
+    existing_names = {ch.name for ch in icinfo_cat.text_channels}
+    cal_ch: discord.TextChannel | None = None
+    if "calendar" not in existing_names:
+        cal_ch = await icinfo_cat.create_text_channel("calendar")
+        created_items.append("#calendar")
+    else:
+        cal_ch = discord.utils.get(icinfo_cat.text_channels, name="calendar")
+        if cal_ch:
+            await cal_ch.purge(limit=200, reason="Server setup: reset calendar")
+    guild_id = str(guild.id)
+    cal = store.get_calendar(guild_id)
+    if cal is not None and cal_ch is not None:
+        date_str = _format_rokugani_date(*cal)
+        msg = await cal_ch.send(embed=_date_embed(date_str))
+        await msg.pin()
+        store.set_date_channel(guild_id, str(cal_ch.id), str(msg.id))
+
+    # --- 4. In Character (Approved + DMs only) ---
     ic_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
         everyone: discord.PermissionOverwrite(view_channel=False),
         approved_role: discord.PermissionOverwrite(
@@ -8879,7 +8892,7 @@ async def _setup_server_inner(
         await ic_cat.create_text_channel("in-character")
         created_items.append("#in-character")
 
-    # --- 4. DM Room (Fortune + Kami only) ---
+    # --- 5. Staff Members (Fortune + Kami only) ---
     dm_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
         everyone: discord.PermissionOverwrite(view_channel=False),
         bot_member: discord.PermissionOverwrite(
