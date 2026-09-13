@@ -360,14 +360,6 @@ class Store:
             ).fetchall()
         return [self._row_to_record(r) for r in rows]
 
-    def list_by_guild(self, guild_id: str) -> list[CharacterRecord]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT * FROM characters WHERE guild_id = ? ORDER BY name COLLATE NOCASE",
-                (guild_id,),
-            ).fetchall()
-        return [self._row_to_record(r) for r in rows]
-
     def save(self, record: CharacterRecord) -> None:
         payload = json.dumps(record.character.to_dict())
         with self._lock, self._conn:
@@ -434,13 +426,6 @@ class Store:
                 (guild_id, user_id),
             ).fetchone()
         return row is not None
-
-    def list_dms(self, guild_id: str) -> list[str]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT user_id FROM dm_users WHERE guild_id = ?", (guild_id,)
-            ).fetchall()
-        return [r["user_id"] for r in rows]
 
     # -- rooms -----------------------------------------------------------------
     def _row_to_room(self, row: sqlite3.Row) -> RoomRecord:
@@ -718,6 +703,13 @@ class Store:
         return [(r["channel_id"], r["data"]) for r in rows]
 
     # -- macros (saved rolls) ---------------------------------------------------
+    def _row_to_macro(self, row: sqlite3.Row) -> MacroRecord:
+        return MacroRecord(
+            id=row["id"], guild_id=row["guild_id"], user_id=row["user_id"],
+            name=row["name"], rolled=row["rolled"], kept=row["kept"],
+            modifier=row["modifier"], label=row["label"],
+        )
+
     def save_macro(
         self, guild_id: str, user_id: str, name: str,
         rolled: int, kept: int, modifier: int = 0, label: str = "",
@@ -734,11 +726,7 @@ class Store:
                 "SELECT * FROM macros WHERE guild_id = ? AND user_id = ? AND name = ? COLLATE NOCASE",
                 (guild_id, user_id, name),
             ).fetchone()
-        return MacroRecord(
-            id=row["id"], guild_id=row["guild_id"], user_id=row["user_id"],
-            name=row["name"], rolled=row["rolled"], kept=row["kept"],
-            modifier=row["modifier"], label=row["label"],
-        )
+        return self._row_to_macro(row)
 
     def list_macros(self, guild_id: str, user_id: str) -> list[MacroRecord]:
         with self._lock:
@@ -746,14 +734,7 @@ class Store:
                 "SELECT * FROM macros WHERE guild_id = ? AND user_id = ? ORDER BY name",
                 (guild_id, user_id),
             ).fetchall()
-        return [
-            MacroRecord(
-                id=r["id"], guild_id=r["guild_id"], user_id=r["user_id"],
-                name=r["name"], rolled=r["rolled"], kept=r["kept"],
-                modifier=r["modifier"], label=r["label"],
-            )
-            for r in rows
-        ]
+        return [self._row_to_macro(r) for r in rows]
 
     def get_macro(self, guild_id: str, user_id: str, name: str) -> MacroRecord | None:
         with self._lock:
@@ -763,11 +744,7 @@ class Store:
             ).fetchone()
         if row is None:
             return None
-        return MacroRecord(
-            id=row["id"], guild_id=row["guild_id"], user_id=row["user_id"],
-            name=row["name"], rolled=row["rolled"], kept=row["kept"],
-            modifier=row["modifier"], label=row["label"],
-        )
+        return self._row_to_macro(row)
 
     def delete_macro(self, guild_id: str, user_id: str, name: str) -> bool:
         with self._lock, self._conn:
@@ -892,6 +869,9 @@ class Store:
         return [CategoryRecord(r["id"], r["guild_id"], r["name"]) for r in rows]
 
     # -- location areas (Discord categories representing places) ----------------
+    def _row_to_location_area(self, row: sqlite3.Row) -> LocationAreaRecord:
+        return LocationAreaRecord(row["id"], row["guild_id"], row["category_id"], row["name"], row["creator_id"])
+
     def create_location_area(
         self, guild_id: str, category_id: str, name: str, creator_id: str,
     ) -> LocationAreaRecord:
@@ -914,17 +894,7 @@ class Store:
             ).fetchone()
         if row is None:
             return None
-        return LocationAreaRecord(row["id"], row["guild_id"], row["category_id"], row["name"], row["creator_id"])
-
-    def get_location_area_by_category(self, category_id: str) -> LocationAreaRecord | None:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT * FROM location_areas WHERE category_id = ?",
-                (category_id,),
-            ).fetchone()
-        if row is None:
-            return None
-        return LocationAreaRecord(row["id"], row["guild_id"], row["category_id"], row["name"], row["creator_id"])
+        return self._row_to_location_area(row)
 
     def list_location_areas(self, guild_id: str) -> list[LocationAreaRecord]:
         with self._lock:
@@ -932,16 +902,19 @@ class Store:
                 "SELECT * FROM location_areas WHERE guild_id = ? ORDER BY name COLLATE NOCASE",
                 (guild_id,),
             ).fetchall()
-        return [
-            LocationAreaRecord(r["id"], r["guild_id"], r["category_id"], r["name"], r["creator_id"])
-            for r in rows
-        ]
+        return [self._row_to_location_area(r) for r in rows]
 
     def delete_location_area(self, area_id: int) -> None:
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM location_areas WHERE id = ?", (area_id,))
 
     # -- locations (text channels within an area) --------------------------------
+    def _row_to_location(self, row: sqlite3.Row) -> LocationRecord:
+        return LocationRecord(
+            row["id"], row["guild_id"], row["area_id"], row["channel_id"],
+            row["name"], row["creator_id"], row["description"],
+        )
+
     def create_location(
         self, guild_id: str, area_id: int, channel_id: str, name: str, creator_id: str,
         description: str = "",
@@ -965,10 +938,7 @@ class Store:
             ).fetchone()
         if row is None:
             return None
-        return LocationRecord(
-            row["id"], row["guild_id"], row["area_id"], row["channel_id"],
-            row["name"], row["creator_id"], row["description"],
-        )
+        return self._row_to_location(row)
 
     def get_location_by_channel(self, channel_id: str) -> LocationRecord | None:
         with self._lock:
@@ -977,10 +947,7 @@ class Store:
             ).fetchone()
         if row is None:
             return None
-        return LocationRecord(
-            row["id"], row["guild_id"], row["area_id"], row["channel_id"],
-            row["name"], row["creator_id"], row["description"],
-        )
+        return self._row_to_location(row)
 
     def list_locations(self, area_id: int) -> list[LocationRecord]:
         with self._lock:
@@ -988,13 +955,7 @@ class Store:
                 "SELECT * FROM locations WHERE area_id = ? ORDER BY name COLLATE NOCASE",
                 (area_id,),
             ).fetchall()
-        return [
-            LocationRecord(
-                r["id"], r["guild_id"], r["area_id"], r["channel_id"],
-                r["name"], r["creator_id"], r["description"],
-            )
-            for r in rows
-        ]
+        return [self._row_to_location(r) for r in rows]
 
     def update_location_description(self, location_id: int, description: str) -> None:
         with self._lock, self._conn:

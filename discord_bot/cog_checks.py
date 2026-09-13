@@ -99,6 +99,48 @@ _SOCIAL_TRAIT_MAP: dict[str, str] = {
 # Check-only helpers
 # ---------------------------------------------------------------------------
 
+def _try_spend_void(
+    c, spend_void: bool, *,
+    skill_name: str = "", sk: int = -1,
+    void_unskilled: bool = False,
+    void_param_label: str = "spend_void",
+) -> tuple[int, int, bool, str, int]:
+    """Handle Void Point spending for rolls.
+
+    Returns (extra_rolled, extra_kept, spent, status_line, new_sk).
+    *new_sk* only differs from *sk* when void_unskilled succeeds.
+    """
+    void_r = void_k = 0
+    void_line = ""
+    void_spent = False
+    if spend_void:
+        ok, reason = advantage_effects.can_spend_void_on_roll(c, skill_name=skill_name) if skill_name else advantage_effects.can_spend_void_on_roll(c)
+        if not ok:
+            void_line = f"\U0001f300 {reason}"
+        elif c.current_void_points <= 0:
+            void_line = f"\U0001f300 no Void Points to spend (0/{c.max_void_points})"
+        else:
+            c.current_void_points -= 1
+            void_r = void_k = 1
+            void_spent = True
+            void_line = f"\U0001f300 Void +1k1 ({c.current_void_points} VP left)"
+    if void_unskilled and not spend_void:
+        if sk > 0:
+            void_line = f"\U0001f300 Already has {skill_name} {sk} — use {void_param_label} for +1k1 instead"
+        else:
+            ok, reason = advantage_effects.can_spend_void_on_roll(c, skill_name=skill_name)
+            if not ok:
+                void_line = f"\U0001f300 {reason}"
+            elif c.current_void_points <= 0:
+                void_line = f"\U0001f300 no Void Points to spend (0/{c.max_void_points})"
+            else:
+                c.current_void_points -= 1
+                sk = 1
+                void_spent = True
+                void_line = f"\U0001f300 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
+    return void_r, void_k, void_spent, void_line, sk
+
+
 def _build_check_embed(
     title: str,
     c_name: str,
@@ -228,62 +270,14 @@ async def contest(
     adv_rb, adv_kb, adv_fb, adv_notes_b = advantage_effects.skill_check_modifiers(
         cb, skill_b, trait_b.value, is_contested=True, opponent_skill=skill_a,
     )
-    void_ra = void_ka = 0
-    void_line_a = ""
-    void_spent_a = False
-    if void_a:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(ca, skill_name=skill_a)
-        if not ok:
-            void_line_a = f"🌀 {reason_block}"
-        elif ca.current_void_points <= 0:
-            void_line_a = f"🌀 no Void Points to spend (0/{ca.max_void_points})"
-        else:
-            ca.current_void_points -= 1
-            void_ra = void_ka = 1
-            void_spent_a = True
-            void_line_a = f"🌀 Void +1k1 ({ca.current_void_points} VP left)"
-    if void_unskilled_a and not void_a:
-        if sk_a > 0:
-            void_line_a = f"🌀 Already has {skill_a} {sk_a} — use void_a for +1k1 instead"
-        else:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(ca, skill_name=skill_a)
-            if not ok:
-                void_line_a = f"🌀 {reason_block}"
-            elif ca.current_void_points <= 0:
-                void_line_a = f"🌀 no Void Points to spend (0/{ca.max_void_points})"
-            else:
-                ca.current_void_points -= 1
-                sk_a = 1
-                void_spent_a = True
-                void_line_a = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {ca.current_void_points} VP left)"
-    void_rb = void_kb = 0
-    void_line_b = ""
-    void_spent_b = False
-    if void_b:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(cb, skill_name=skill_b)
-        if not ok:
-            void_line_b = f"🌀 {reason_block}"
-        elif cb.current_void_points <= 0:
-            void_line_b = f"🌀 no Void Points to spend (0/{cb.max_void_points})"
-        else:
-            cb.current_void_points -= 1
-            void_rb = void_kb = 1
-            void_spent_b = True
-            void_line_b = f"🌀 Void +1k1 ({cb.current_void_points} VP left)"
-    if void_unskilled_b and not void_b:
-        if sk_b > 0:
-            void_line_b = f"🌀 Already has {skill_b} {sk_b} — use void_b for +1k1 instead"
-        else:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(cb, skill_name=skill_b)
-            if not ok:
-                void_line_b = f"🌀 {reason_block}"
-            elif cb.current_void_points <= 0:
-                void_line_b = f"🌀 no Void Points to spend (0/{cb.max_void_points})"
-            else:
-                cb.current_void_points -= 1
-                sk_b = 1
-                void_spent_b = True
-                void_line_b = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {cb.current_void_points} VP left)"
+    void_ra, void_ka, void_spent_a, void_line_a, sk_a = _try_spend_void(
+        ca, void_a, skill_name=skill_a, sk=sk_a,
+        void_unskilled=void_unskilled_a, void_param_label="void_a",
+    )
+    void_rb, void_kb, void_spent_b, void_line_b, sk_b = _try_spend_void(
+        cb, void_b, skill_name=skill_b, sk=sk_b,
+        void_unskilled=void_unskilled_b, void_param_label="void_b",
+    )
     result = combat.resolve_contested_check(
         tv_a, sk_a, tv_b, sk_b, _d.engine,
         bonus_a=bonus_a + wp_a + adv_fa,
@@ -374,20 +368,7 @@ async def fear_check(
         return
     c = rec.character
     wp = stats.wound_penalty(c)
-    void_r = void_k = 0
-    void_line = ""
-    void_spent = False
-    if spend_void:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c)
-        if not ok:
-            void_line = f"🌀 {reason_block}"
-        elif c.current_void_points <= 0:
-            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-        else:
-            c.current_void_points -= 1
-            void_r = void_k = 1
-            void_spent = True
-            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    void_r, void_k, void_spent, void_line, _ = _try_spend_void(c, spend_void)
     result = combat.resolve_fear_check(c.willpower, fear_rank, _d.engine, bonus=bonus + wp, extra_rolled=void_r, extra_kept=void_k)
     if void_spent:
         _d.store.save(rec)
@@ -514,20 +495,7 @@ async def poison_resist(
     c = rec.character
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "poison_resist", "stamina")
-    void_r = void_k = 0
-    void_line = ""
-    void_spent = False
-    if spend_void:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="poison_resist")
-        if not ok:
-            void_line = f"🌀 {reason_block}"
-        elif c.current_void_points <= 0:
-            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-        else:
-            c.current_void_points -= 1
-            void_r = void_k = 1
-            void_spent = True
-            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
+    void_r, void_k, void_spent, void_line, _ = _try_spend_void(c, spend_void, skill_name="poison_resist")
     result = combat.resolve_poison_resist(c.stamina, strength, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
     if void_spent:
         _d.store.save(rec)
@@ -606,34 +574,9 @@ async def medicine_check(
     medicine_skill = c.skills.get("Medicine", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Medicine", "intelligence")
-    void_r = void_k = 0
-    void_line = ""
-    void_spent = False
-    if spend_void:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Medicine")
-        if not ok:
-            void_line = f"🌀 {reason_block}"
-        elif c.current_void_points <= 0:
-            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-        else:
-            c.current_void_points -= 1
-            void_r = void_k = 1
-            void_spent = True
-            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
-    if void_unskilled and not spend_void:
-        if medicine_skill > 0:
-            void_line = "🌀 Already has Medicine — use spend_void for +1k1 instead"
-        else:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Medicine")
-            if not ok:
-                void_line = f"🌀 {reason_block}"
-            elif c.current_void_points <= 0:
-                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-            else:
-                c.current_void_points -= 1
-                medicine_skill = 1
-                void_spent = True
-                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
+    void_r, void_k, void_spent, void_line, medicine_skill = _try_spend_void(
+        c, spend_void, skill_name="Medicine", sk=medicine_skill, void_unskilled=void_unskilled,
+    )
     result = combat.resolve_medicine_check(c.intelligence, medicine_skill, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
     if void_spent:
         _d.store.save(rec)
@@ -717,42 +660,17 @@ async def skill_check_cmd(
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
-    void_r = void_k = 0
-    void_line = ""
-    void_spent = False
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
-    if spend_void:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
-        if not ok:
-            void_line = f"🌀 {reason_block}"
-        elif c.current_void_points <= 0:
-            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-        else:
-            c.current_void_points -= 1
-            void_r = void_k = 1
-            void_spent = True
-            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
-    if void_unskilled and not spend_void:
-        if sk > 0:
-            void_line = f"🌀 Already has {skill} {sk} — use spend_void for +1k1 instead"
-        else:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
-            if not ok:
-                void_line = f"🌀 {reason_block}"
-            elif c.current_void_points <= 0:
-                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-            else:
-                c.current_void_points -= 1
-                sk = 1
-                void_spent = True
-                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
+    void_r, void_k, void_spent, void_line, sk = _try_spend_void(
+        c, spend_void, skill_name=skill, sk=sk, void_unskilled=void_unskilled,
+    )
     result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
     if void_spent:
         _d.store.save(rec)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
-    title = "🎯 Skill Check" + (" 🤫" if secret else "")
+    title = "\U0001f3af Skill Check" + (" \U0001f92b" if secret else "")
     if reason:
         title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
@@ -843,34 +761,9 @@ async def check_cooperative(
     applied = min(successes, max_helpers)
     helper_rolled = applied
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
-    void_r = void_k = 0
-    void_line = ""
-    void_spent = False
-    if spend_void:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
-        if not ok:
-            void_line = f"🌀 {reason_block}"
-        elif c.current_void_points <= 0:
-            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-        else:
-            c.current_void_points -= 1
-            void_r = void_k = 1
-            void_spent = True
-            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
-    if void_unskilled and not spend_void:
-        if sk > 0:
-            void_line = f"🌀 Already has {skill} {sk} — use spend_void for +1k1 instead"
-        else:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
-            if not ok:
-                void_line = f"🌀 {reason_block}"
-            elif c.current_void_points <= 0:
-                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-            else:
-                c.current_void_points -= 1
-                sk = 1
-                void_spent = True
-                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
+    void_r, void_k, void_spent, void_line, sk = _try_spend_void(
+        c, spend_void, skill_name=skill, sk=sk, void_unskilled=void_unskilled,
+    )
     result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=helper_rolled + adv_r + void_r, extra_kept=adv_k + void_k)
     result["rolled"] = tv + sk + helper_rolled + adv_r + void_r
     result["kept"] = tv + adv_k + void_k
@@ -959,34 +852,9 @@ async def stealth_check(
     sk = c.skills.get("Stealth", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Stealth", "agility")
-    void_r = void_k = 0
-    void_line = ""
-    void_spent = False
-    if spend_void:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Stealth")
-        if not ok:
-            void_line = f"🌀 {reason_block}"
-        elif c.current_void_points <= 0:
-            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-        else:
-            c.current_void_points -= 1
-            void_r = void_k = 1
-            void_spent = True
-            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
-    if void_unskilled and not spend_void:
-        if sk > 0:
-            void_line = "🌀 Already has Stealth — use spend_void for +1k1 instead"
-        else:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Stealth")
-            if not ok:
-                void_line = f"🌀 {reason_block}"
-            elif c.current_void_points <= 0:
-                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-            else:
-                c.current_void_points -= 1
-                sk = 1
-                void_spent = True
-                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
+    void_r, void_k, void_spent, void_line, sk = _try_spend_void(
+        c, spend_void, skill_name="Stealth", sk=sk, void_unskilled=void_unskilled,
+    )
     result = combat.resolve_skill_check(c.agility, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
     if void_spent:
         _d.store.save(rec)
@@ -1057,34 +925,9 @@ async def investigate_check(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(
         c, "Investigation", "perception", emphasis=emp_name,
     )
-    void_r = void_k = 0
-    void_line = ""
-    void_spent = False
-    if spend_void:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Investigation")
-        if not ok:
-            void_line = f"🌀 {reason_block}"
-        elif c.current_void_points <= 0:
-            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-        else:
-            c.current_void_points -= 1
-            void_r = void_k = 1
-            void_spent = True
-            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
-    if void_unskilled and not spend_void:
-        if sk > 0:
-            void_line = "🌀 Already has Investigation — use spend_void for +1k1 instead"
-        else:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Investigation")
-            if not ok:
-                void_line = f"🌀 {reason_block}"
-            elif c.current_void_points <= 0:
-                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-            else:
-                c.current_void_points -= 1
-                sk = 1
-                void_spent = True
-                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
+    void_r, void_k, void_spent, void_line, sk = _try_spend_void(
+        c, spend_void, skill_name="Investigation", sk=sk, void_unskilled=void_unskilled,
+    )
     result = combat.resolve_skill_check(c.perception, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
     if void_spent:
         _d.store.save(rec)
@@ -1155,34 +998,9 @@ async def social_check(
     sk = c.skills.get(skill.value, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill.value, trait_attr)
-    void_r = void_k = 0
-    void_line = ""
-    void_spent = False
-    if spend_void:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill.value)
-        if not ok:
-            void_line = f"🌀 {reason_block}"
-        elif c.current_void_points <= 0:
-            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-        else:
-            c.current_void_points -= 1
-            void_r = void_k = 1
-            void_spent = True
-            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
-    if void_unskilled and not spend_void:
-        if sk > 0:
-            void_line = f"🌀 Already has {skill.value} {sk} — use spend_void for +1k1 instead"
-        else:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill.value)
-            if not ok:
-                void_line = f"🌀 {reason_block}"
-            elif c.current_void_points <= 0:
-                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-            else:
-                c.current_void_points -= 1
-                sk = 1
-                void_spent = True
-                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
+    void_r, void_k, void_spent, void_line, sk = _try_spend_void(
+        c, spend_void, skill_name=skill.value, sk=sk, void_unskilled=void_unskilled,
+    )
     result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
     if void_spent:
         _d.store.save(rec)
@@ -1242,34 +1060,9 @@ async def craft_check(
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, "intelligence")
-    void_r = void_k = 0
-    void_line = ""
-    void_spent = False
-    if spend_void:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
-        if not ok:
-            void_line = f"🌀 {reason_block}"
-        elif c.current_void_points <= 0:
-            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-        else:
-            c.current_void_points -= 1
-            void_r = void_k = 1
-            void_spent = True
-            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
-    if void_unskilled and not spend_void:
-        if sk > 0:
-            void_line = f"🌀 Already has {skill} {sk} — use spend_void for +1k1 instead"
-        else:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
-            if not ok:
-                void_line = f"🌀 {reason_block}"
-            elif c.current_void_points <= 0:
-                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-            else:
-                c.current_void_points -= 1
-                sk = 1
-                void_spent = True
-                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
+    void_r, void_k, void_spent, void_line, sk = _try_spend_void(
+        c, spend_void, skill_name=skill, sk=sk, void_unskilled=void_unskilled,
+    )
     result = combat.resolve_skill_check(c.intelligence, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
     if void_spent:
         _d.store.save(rec)
@@ -1328,34 +1121,9 @@ async def lore_check(
     sk = c.skills.get(specialty, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, specialty, "intelligence")
-    void_r = void_k = 0
-    void_line = ""
-    void_spent = False
-    if spend_void:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=specialty)
-        if not ok:
-            void_line = f"🌀 {reason_block}"
-        elif c.current_void_points <= 0:
-            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-        else:
-            c.current_void_points -= 1
-            void_r = void_k = 1
-            void_spent = True
-            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
-    if void_unskilled and not spend_void:
-        if sk > 0:
-            void_line = f"🌀 Already has {specialty} {sk} — use spend_void for +1k1 instead"
-        else:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=specialty)
-            if not ok:
-                void_line = f"🌀 {reason_block}"
-            elif c.current_void_points <= 0:
-                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-            else:
-                c.current_void_points -= 1
-                sk = 1
-                void_spent = True
-                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
+    void_r, void_k, void_spent, void_line, sk = _try_spend_void(
+        c, spend_void, skill_name=specialty, sk=sk, void_unskilled=void_unskilled,
+    )
     result = combat.resolve_skill_check(c.intelligence, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
     if void_spent:
         _d.store.save(rec)
@@ -1409,34 +1177,9 @@ async def horsemanship_check(
     skill_rank = c.skills.get("Horsemanship", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Horsemanship", "agility")
-    void_r = void_k = 0
-    void_line = ""
-    void_spent = False
-    if spend_void:
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Horsemanship")
-        if not ok:
-            void_line = f"🌀 {reason_block}"
-        elif c.current_void_points <= 0:
-            void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-        else:
-            c.current_void_points -= 1
-            void_r = void_k = 1
-            void_spent = True
-            void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
-    if void_unskilled and not spend_void:
-        if skill_rank > 0:
-            void_line = f"🌀 Already has Horsemanship {skill_rank} — use spend_void for +1k1 instead"
-        else:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name="Horsemanship")
-            if not ok:
-                void_line = f"🌀 {reason_block}"
-            elif c.current_void_points <= 0:
-                void_line = f"🌀 no Void Points to spend (0/{c.max_void_points})"
-            else:
-                c.current_void_points -= 1
-                skill_rank = 1
-                void_spent = True
-                void_line = f"🌀 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
+    void_r, void_k, void_spent, void_line, skill_rank = _try_spend_void(
+        c, spend_void, skill_name="Horsemanship", sk=skill_rank, void_unskilled=void_unskilled,
+    )
     result = combat.resolve_skill_check(c.agility, skill_rank, tn, _d.engine, bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
     if void_spent:
         _d.store.save(rec)

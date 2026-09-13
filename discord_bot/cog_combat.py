@@ -29,6 +29,7 @@ class _Deps:
     engine: object  # DiceEngine
     encounters: dict
     NPC_OWNER: str
+    bot_client: discord.Client
     require_guild: object
     require_dm_role: object
     require_encounter: object
@@ -53,6 +54,7 @@ def init(
     engine: object,
     encounters: dict,
     npc_owner: str,
+    bot_client: discord.Client,
     require_guild,
     require_dm_role,
     require_encounter,
@@ -71,6 +73,7 @@ def init(
     _d.engine = engine
     _d.encounters = encounters
     _d.NPC_OWNER = npc_owner
+    _d.bot_client = bot_client
     _d.require_guild = require_guild
     _d.require_dm_role = require_dm_role
     _d.require_encounter = require_encounter
@@ -194,7 +197,7 @@ class DamageView(discord.ui.View):
     async def _post_result(self, interaction: discord.Interaction, embed: discord.Embed, text: str = "") -> None:
         """Post result to source channel when using approval routing, or inline."""
         if self.source_channel_id:
-            src = client.get_channel(self.source_channel_id)
+            src = _d.bot_client.get_channel(self.source_channel_id)
             if src:
                 await src.send(content=text or None, embed=embed)
             await interaction.followup.send(f"Resolved in <#{self.source_channel_id}>.")
@@ -253,7 +256,7 @@ class DamageView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         if self.source_channel_id:
-            src = client.get_channel(self.source_channel_id)
+            src = _d.bot_client.get_channel(self.source_channel_id)
             if src:
                 await src.send(msg)
             await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
@@ -822,7 +825,7 @@ class DamageView(discord.ui.View):
         self._disable()
         await interaction.response.edit_message(view=self)
         if self.source_channel_id:
-            src = client.get_channel(self.source_channel_id)
+            src = _d.bot_client.get_channel(self.source_channel_id)
             if src:
                 await src.send(msg)
             await interaction.followup.send(f"No effect — posted in <#{self.source_channel_id}>.")
@@ -1353,7 +1356,7 @@ async def attack(
     cs_raises = raises if man == "called_shot" else 0
     if hit:
         approval_ch_id = _d.store.get_approval_channel(guild)
-        approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
+        approval_ch = _d.bot_client.get_channel(int(approval_ch_id)) if approval_ch_id else None
         src_ch_id = interaction.channel_id if approval_ch else 0
         if target_creature_rec is not None:
             view = DamageView(

@@ -18,7 +18,6 @@ import logging
 import math
 import os
 import re
-import traceback
 from collections import defaultdict, deque
 from time import monotonic
 
@@ -63,6 +62,7 @@ ROKUGANI_MONTHS: tuple[tuple[str, str], ...] = (
     ("Tiger", "Winter"),
 )
 DAYS_PER_MONTH = 28
+SPELL_ELEMENTS = ("air", "earth", "fire", "water", "void")
 
 try:
     from dotenv import load_dotenv
@@ -126,6 +126,16 @@ class RokuganBot(discord.Client):
 
 client = RokuganBot()
 
+
+class _DisableableView(discord.ui.View):
+    """Base View that provides a shared _disable() method."""
+
+    def _disable(self) -> None:
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+
+
 # ===========================================================================
 # Global error handler
 # ===========================================================================
@@ -177,9 +187,6 @@ def _is_dm(interaction: discord.Interaction) -> bool:
 def _is_kami(interaction: discord.Interaction) -> bool:
     """True if the member has the Kami role."""
     return _has_role(interaction, ROLE_KAMI)
-
-def _guild_ok(interaction: discord.Interaction) -> bool:
-    return interaction.guild_id is not None
 
 async def _require_guild(interaction: discord.Interaction) -> bool:
     """Send an error if not in a server channel. Returns True if OK."""
@@ -330,7 +337,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
 
     if c.spell_slots:
         slot_parts = []
-        for elem in ("air", "earth", "fire", "water", "void"):
+        for elem in SPELL_ELEMENTS:
             if elem in c.spell_slots:
                 mx = stats.spell_slot_max(c, elem)
                 cur = c.spell_slots[elem]
@@ -626,7 +633,7 @@ async def whoami(interaction: discord.Interaction) -> None:
     ]
     if c.spell_slots:
         slot_parts = []
-        for elem in ("air", "earth", "fire", "water", "void"):
+        for elem in SPELL_ELEMENTS:
             if elem in c.spell_slots:
                 mx = stats.spell_slot_max(c, elem)
                 cur = c.spell_slots[elem]
@@ -1367,11 +1374,6 @@ _SKILL_CATEGORIES: dict[str, list[str]] = {
         "Animal Handling", "Craft", "Sailing",
     ],
 }
-
-_ALL_SKILLS_SORTED: list[str] = sorted(
-    s for cat in _SKILL_CATEGORIES.values() for s in cat
-)
-
 
 def _parse_spell_allotment(school: dict) -> dict[str, int] | None:
     """Parse starting spell allotment from a shugenja school.
@@ -2245,7 +2247,7 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
     )
 
 
-class _FullCharacterApprovalView(discord.ui.View):
+class _FullCharacterApprovalView(_DisableableView):
     """DM approval view for fully-built character sheets from the wizard."""
 
     def __init__(self, applicant_id: int, character_state: dict,
@@ -2311,9 +2313,7 @@ class _FullCharacterApprovalView(discord.ui.View):
                     pass
             store.delete_creation_channel(guild_id, owner_id)
 
-        for child in self.children:
-            child.disabled = True
-        self.stop()
+        self._disable()
         await interaction.response.edit_message(view=self)
 
         embed = discord.Embed(
@@ -2339,9 +2339,7 @@ class _FullCharacterApprovalView(discord.ui.View):
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
             return
-        for child in self.children:
-            child.disabled = True
-        self.stop()
+        self._disable()
         await interaction.response.edit_message(view=self)
         guild = interaction.guild
         member = guild.get_member(self.applicant_id) if guild else None
@@ -2882,25 +2880,10 @@ async def sheet_item(
         await interaction.response.send_message(err, ephemeral=True)
         return
     c = rec.character
-    item_name = name.strip()
-    match_key = next((k for k in c.inventory if k.lower() == item_name.lower()), None)
-    if remove:
-        if match_key is None:
-            await interaction.response.send_message(f"**{c.name}** doesn't have **{item_name}**.", ephemeral=True)
-            return
-        current = c.inventory[match_key]
-        remaining = current - quantity
-        if remaining <= 0:
-            del c.inventory[match_key]
-            msg = f"Removed all **{match_key}** from **{c.name}**'s inventory."
-        else:
-            c.inventory[match_key] = remaining
-            msg = f"Removed {quantity}× **{match_key}** from **{c.name}** ({remaining} left)."
-    else:
-        key = match_key or item_name
-        c.inventory[key] = c.inventory.get(key, 0) + quantity
-        total = c.inventory[key]
-        msg = f"Added {quantity}× **{key}** to **{c.name}** (now {total})."
+    ok, msg = _modify_inventory(c.inventory, c.name, name.strip(), quantity, remove)
+    if not ok:
+        await interaction.response.send_message(msg, ephemeral=True)
+        return
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
@@ -2955,13 +2938,7 @@ async def sheet_advantage(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
-    input_name = name.strip()
-    base_name = input_name.split(":")[0].strip() if ":" in input_name else input_name
-    adv = advantages.get(base_name, "advantage")
-    canonical = adv["name"] if adv else base_name
-    if ":" in input_name:
-        param = input_name[input_name.index(":") + 1:].strip()
-        canonical = f"{canonical}: {param}"
+    adv, canonical = _parse_advdis_name(name, "advantage")
     c = rec.character
     if remove:
         c.advantages = [x for x in c.advantages if x.lower() != canonical.lower()]
@@ -2970,8 +2947,9 @@ async def sheet_advantage(
         if canonical.lower() not in [x.lower() for x in c.advantages]:
             c.advantages.append(canonical)
         msg = f"**{c.name}** gains the advantage **{canonical}**."
-        param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(adv["name"] if adv else base_name)
-        if param_hint and ":" not in input_name:
+        base = adv["name"] if adv else name.strip().split(":")[0].strip()
+        param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(base)
+        if param_hint and ":" not in name:
             msg += f"\n*Hint: this advantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
@@ -2992,13 +2970,7 @@ async def sheet_disadvantage(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
-    input_name = name.strip()
-    base_name = input_name.split(":")[0].strip() if ":" in input_name else input_name
-    dis = advantages.get(base_name, "disadvantage")
-    canonical = dis["name"] if dis else base_name
-    if ":" in input_name:
-        param = input_name[input_name.index(":") + 1:].strip()
-        canonical = f"{canonical}: {param}"
+    dis, canonical = _parse_advdis_name(name, "disadvantage")
     c = rec.character
     if remove:
         c.disadvantages = [x for x in c.disadvantages if x.lower() != canonical.lower()]
@@ -3008,8 +2980,9 @@ async def sheet_disadvantage(
             c.disadvantages.append(canonical)
         grant = f" (grants {dis['points']} XP: a DM applies it with `/xp grant`)" if dis and dis["points"] else ""
         msg = f"**{c.name}** takes the disadvantage **{canonical}**{grant}."
-        param_hint = advantage_effects.PARAMETERISED_DISADVANTAGES.get(dis["name"] if dis else base_name)
-        if param_hint and ":" not in input_name:
+        base = dis["name"] if dis else name.strip().split(":")[0].strip()
+        param_hint = advantage_effects.PARAMETERISED_DISADVANTAGES.get(base)
+        if param_hint and ":" not in name:
             msg += f"\n*Hint: this disadvantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
@@ -3480,8 +3453,6 @@ async def dm_roles(interaction: discord.Interaction) -> None:
         lines.append(f"**{ROLE_FORTUNE}** role not found: create it in Server Settings > Roles.")
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
-SPELL_ELEMENTS = ("air", "earth", "fire", "water", "void")
-
 @dm.command(name="new_day", description="Advance one day: heal, refresh VP and spell slots for all PCs.")
 async def dm_new_day(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
@@ -3639,6 +3610,47 @@ def _find_any_character(guild: str, name: str) -> storage.CharacterRecord | None
             return pc_rec
     return None
 
+
+def _parse_advdis_name(raw: str, kind: str) -> tuple[dict | None, str]:
+    """Parse an advantage/disadvantage name with optional parameter.
+
+    Returns (lookup_entry, canonical_name).
+    """
+    input_name = raw.strip()
+    base_name = input_name.split(":")[0].strip() if ":" in input_name else input_name
+    entry = advantages.get(base_name, kind)
+    canonical = entry["name"] if entry else base_name
+    if ":" in input_name:
+        param = input_name[input_name.index(":") + 1:].strip()
+        canonical = f"{canonical}: {param}"
+    return entry, canonical
+
+
+def _modify_inventory(
+    inventory: dict[str, int], char_name: str,
+    item_name: str, quantity: int, remove: bool,
+) -> tuple[bool, str]:
+    """Add or remove items from an inventory dict.
+
+    Returns (ok, message).  When ok is False the caller should send the
+    message as an ephemeral error and skip saving.
+    """
+    match_key = next((k for k in inventory if k.lower() == item_name.lower()), None)
+    if remove:
+        if match_key is None:
+            return False, f"**{char_name}** doesn't have **{item_name}**."
+        remaining = inventory[match_key] - quantity
+        if remaining <= 0:
+            del inventory[match_key]
+            return True, f"Removed all **{match_key}** from **{char_name}**'s inventory."
+        inventory[match_key] = remaining
+        return True, f"Removed {quantity}× **{match_key}** from **{char_name}** ({remaining} left)."
+    key = match_key or item_name
+    inventory[key] = inventory.get(key, 0) + quantity
+    total = inventory[key]
+    return True, f"Added {quantity}× **{key}** to **{char_name}** (now {total})."
+
+
 @dm.command(name="damage", description="Apply damage to a character (shows DM-approval buttons).")
 @app_commands.describe(
     target="Character name (PC or NPC).",
@@ -3657,12 +3669,7 @@ async def dm_damage(
     if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
-    rec = store.get_by_name(guild, NPC_OWNER, target)
-    if rec is None:
-        for _, pc_rec in store.list_active_pcs(guild):
-            if pc_rec.character.name.lower() == target.lower():
-                rec = pc_rec
-                break
+    rec = _find_any_character(guild, target)
     if rec is None:
         await interaction.response.send_message(f"No character named **{target}**.", ephemeral=True)
         return
@@ -3720,12 +3727,7 @@ async def dm_heal(
     if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
-    rec = store.get_by_name(guild, NPC_OWNER, target)
-    if rec is None:
-        for _, pc_rec in store.list_active_pcs(guild):
-            if pc_rec.character.name.lower() == target.lower():
-                rec = pc_rec
-                break
+    rec = _find_any_character(guild, target)
     if rec is None:
         await interaction.response.send_message(f"No character named **{target}**.", ephemeral=True)
         return
@@ -4254,7 +4256,7 @@ async def npc_delete(interaction: discord.Interaction, name: str) -> None:
 def _resolve_npc(
     interaction: discord.Interaction, name: str
 ) -> tuple[storage.CharacterRecord | None, str | None]:
-    if not _guild_ok(interaction):
+    if interaction.guild_id is None:
         return None, "Please use this in a server channel."
     if not _is_dm(interaction):
         return None, f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to edit NPCs."
@@ -4525,25 +4527,10 @@ async def npc_item(
         await interaction.response.send_message(err, ephemeral=True)
         return
     c = rec.character
-    item_name = item.strip()
-    match_key = next((k for k in c.inventory if k.lower() == item_name.lower()), None)
-    if remove:
-        if match_key is None:
-            await interaction.response.send_message(f"**{c.name}** doesn't have **{item_name}**.", ephemeral=True)
-            return
-        current = c.inventory[match_key]
-        remaining = current - quantity
-        if remaining <= 0:
-            del c.inventory[match_key]
-            msg = f"Removed all **{match_key}** from **{c.name}**'s inventory."
-        else:
-            c.inventory[match_key] = remaining
-            msg = f"Removed {quantity}× **{match_key}** from **{c.name}** ({remaining} left)."
-    else:
-        key = match_key or item_name
-        c.inventory[key] = c.inventory.get(key, 0) + quantity
-        total = c.inventory[key]
-        msg = f"Added {quantity}× **{key}** to **{c.name}** (now {total})."
+    ok, msg = _modify_inventory(c.inventory, c.name, item.strip(), quantity, remove)
+    if not ok:
+        await interaction.response.send_message(msg, ephemeral=True)
+        return
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
@@ -4995,7 +4982,7 @@ async def room_close(interaction: discord.Interaction) -> None:
 # /creature group: bestiary monsters and creature combat
 # ===========================================================================
 
-class CreatureAttackView(discord.ui.View):
+class CreatureAttackView(_DisableableView):
     """DM-only button: apply a creature's fixed damage to a character it hit."""
 
     def __init__(self, creature_id: int, target_char_id: int, creature_name: str, target_name: str) -> None:
@@ -5004,11 +4991,6 @@ class CreatureAttackView(discord.ui.View):
         self.target_char_id = target_char_id
         self.creature_name = creature_name
         self.target_name = target_name
-
-    def _disable(self) -> None:
-        for child in self.children:
-            child.disabled = True
-        self.stop()
 
     @discord.ui.button(label="Apply Creature Damage", style=discord.ButtonStyle.danger, emoji="👹")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -5070,7 +5052,7 @@ class CreatureAttackView(discord.ui.View):
             f"🛡️ {interaction.user.display_name} ruled no damage from {self.creature_name}."
         )
 
-class SpellDamageView(discord.ui.View):
+class SpellDamageView(_DisableableView):
     """DM-approval gate for spell damage: shows the rolled damage and lets
     the DM approve, void-reduce, or deny before touching the target's sheet."""
 
@@ -5096,11 +5078,6 @@ class SpellDamageView(discord.ui.View):
         self.kept = kept
         self.bonus = bonus
         self.source_channel_id = source_channel_id
-
-    def _disable(self) -> None:
-        for child in self.children:
-            child.disabled = True
-        self.stop()
 
     @discord.ui.button(label="Apply Damage", style=discord.ButtonStyle.danger, emoji="📜")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -5200,7 +5177,7 @@ class SpellDamageView(discord.ui.View):
             f"{applied['final_damage']} wounds [{applied['new_wound_level']}]{dead_tag}",
         )
 
-class DmDamageView(discord.ui.View):
+class DmDamageView(_DisableableView):
     """DM-approval gate for /dm damage: shows pending damage and lets a DM
     confirm or deny before applying to the target's sheet."""
 
@@ -5213,11 +5190,6 @@ class DmDamageView(discord.ui.View):
         self.reason = reason
         self.void_reduced = False
         self.source_channel_id = source_channel_id
-
-    def _disable(self) -> None:
-        for child in self.children:
-            child.disabled = True
-        self.stop()
 
     @discord.ui.button(label="Apply Damage", style=discord.ButtonStyle.danger, emoji="💥")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -5328,7 +5300,7 @@ class DmDamageView(discord.ui.View):
         else:
             await interaction.followup.send(msg)
 
-class DmHealView(discord.ui.View):
+class DmHealView(_DisableableView):
     """DM-approval gate for /dm heal: shows pending healing and lets a DM
     confirm or deny before modifying the target's wound track."""
 
@@ -5340,11 +5312,6 @@ class DmHealView(discord.ui.View):
         self.amount = amount
         self.reason = reason
         self.source_channel_id = source_channel_id
-
-    def _disable(self) -> None:
-        for child in self.children:
-            child.disabled = True
-        self.stop()
 
     @discord.ui.button(label="Apply Healing", style=discord.ButtonStyle.success, emoji="💚")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -5421,7 +5388,7 @@ class DmHealView(discord.ui.View):
 def _resolve_creature(
     interaction: discord.Interaction, name: str, require_dm: bool = True
 ) -> tuple[storage.CreatureRecord | None, str | None]:
-    if not _guild_ok(interaction):
+    if interaction.guild_id is None:
         return None, "Please use this in a server channel."
     if require_dm and not _is_dm(interaction):
         return None, f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to do that with creatures."
@@ -7523,12 +7490,7 @@ async def spell_damage(
     embed.add_field(name="Dice", value=_format_dice(result), inline=False)
     if target:
         guild = str(interaction.guild_id)
-        rec = store.get_by_name(guild, NPC_OWNER, target)
-        if rec is None:
-            for _, pc_rec in store.list_active_pcs(guild):
-                if pc_rec.character.name.lower() == target.lower():
-                    rec = pc_rec
-                    break
+        rec = _find_any_character(guild, target)
         if rec:
             red = rec.character.armor_reduction
             wl = stats.wound_level_name(rec.character)
@@ -7595,7 +7557,7 @@ async def influence_track(
 # Phase 47: Medicine Treatment (wound healing with DM gate)
 # ---------------------------------------------------------------------------
 
-class MedicineTreatView(discord.ui.View):
+class MedicineTreatView(_DisableableView):
     """DM-approval gate for medicine treatment healing."""
 
     def __init__(
@@ -7611,11 +7573,6 @@ class MedicineTreatView(discord.ui.View):
         self.treatment_type = treatment_type
         self.roll_result = roll_result
         self.source_channel_id = source_channel_id
-
-    def _disable(self) -> None:
-        for child in self.children:
-            child.disabled = True
-        self.stop()
 
     @discord.ui.button(label="Apply Healing", style=discord.ButtonStyle.success, emoji="💚")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -8138,7 +8095,7 @@ async def compare_characters(
     trait_lines.append(f"{'Void':12s}  **{a.void_ring}**{_delta(a.void_ring, b.void_ring):6s}  vs  **{b.void_ring}**")
 
     ring_lines = []
-    for r in ("air", "earth", "fire", "water", "void"):
+    for r in SPELL_ELEMENTS:
         va, vb = rings_a[r], rings_b[r]
         ring_lines.append(f"{r.capitalize():6s}  **{va}**{_delta(va, vb):6s}  vs  **{vb}**")
 
@@ -8212,7 +8169,7 @@ async def roll_history(
 #  Server setup (Kami-only) & character submission
 # ---------------------------------------------------------------------------
 
-class CharacterApprovalView(discord.ui.View):
+class CharacterApprovalView(_DisableableView):
     """Lets a DM approve or deny a character submission from the lobby."""
 
     def __init__(self, applicant_id: int, character_name: str, concept: str,
@@ -8285,9 +8242,7 @@ class CharacterApprovalView(discord.ui.View):
             await member.edit(nick=self.character_name, reason=f"Character approved: {self.character_name}")
         except discord.Forbidden:
             nick_note = "\n(Could not change nickname — the bot's role may be too low or the member is the server owner.)"
-        for child in self.children:
-            child.disabled = True
-        self.stop()
+        self._disable()
         await interaction.response.edit_message(view=self)
 
         sheet_parts: list[str] = []
@@ -8327,9 +8282,7 @@ class CharacterApprovalView(discord.ui.View):
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
             return
-        for child in self.children:
-            child.disabled = True
-        self.stop()
+        self._disable()
         await interaction.response.edit_message(view=self)
         guild = interaction.guild
         member = guild.get_member(self.applicant_id) if guild else None
@@ -9186,6 +9139,7 @@ cog_combat.init(
     engine=engine,
     encounters=encounters,
     npc_owner=NPC_OWNER,
+    bot_client=client,
     require_guild=_require_guild,
     require_dm_role=_require_dm_role,
     require_encounter=_require_encounter,
