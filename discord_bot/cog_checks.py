@@ -142,7 +142,9 @@ def _build_check_embed(
 # Group definition
 # ---------------------------------------------------------------------------
 
-check = app_commands.Group(name="check", description="Skill, Trait, and special checks (L5R 4e).")
+check = app_commands.Group(name="check", description="Skill, contested, and cooperative checks (L5R 4e).")
+assess = app_commands.Group(name="assess", description="Fear, honor, stealth, investigation, and social checks.")
+examine = app_commands.Group(name="examine", description="Craft, lore, horsemanship, poison, and medicine checks.")
 
 
 # ---------------------------------------------------------------------------
@@ -337,10 +339,10 @@ async def contest(
 
 
 # ---------------------------------------------------------------------------
-# /check fear
+# /assess fear
 # ---------------------------------------------------------------------------
 
-@check.command(
+@assess.command(
     name="fear",
     description="Fear check: Willpower vs TN 5 + (Fear Rank x 5). Fortune role required.",
 )
@@ -415,10 +417,10 @@ async def fear_check(
 
 
 # ---------------------------------------------------------------------------
-# /check honor
+# /assess honor
 # ---------------------------------------------------------------------------
 
-@check.command(
+@assess.command(
     name="honor",
     description="Honor Roll: roll Honor Rank dice, keep 1, vs a TN. Fortune role required.",
 )
@@ -474,10 +476,10 @@ async def honor_roll(
 
 
 # ---------------------------------------------------------------------------
-# /check poison
+# /examine poison
 # ---------------------------------------------------------------------------
 
-@check.command(
+@examine.command(
     name="poison",
     description="Poison resistance: Stamina vs TN (Strength x 5). Fortune role required.",
 )
@@ -560,10 +562,10 @@ async def poison_resist(
 
 
 # ---------------------------------------------------------------------------
-# /check medicine
+# /examine medicine
 # ---------------------------------------------------------------------------
 
-@check.command(
+@examine.command(
     name="medicine",
     description="Medicine/Intelligence check vs a TN (treat wounds, poison, disease). Fortune role required.",
 )
@@ -911,10 +913,10 @@ async def check_cooperative(
 
 
 # ---------------------------------------------------------------------------
-# /check stealth
+# /assess stealth
 # ---------------------------------------------------------------------------
 
-@check.command(
+@assess.command(
     name="stealth",
     description="Stealth/Agility check vs a TN. Fortune role required.",
 )
@@ -1003,10 +1005,10 @@ async def stealth_check(
 
 
 # ---------------------------------------------------------------------------
-# /check investigate
+# /assess investigate
 # ---------------------------------------------------------------------------
 
-@check.command(
+@assess.command(
     name="investigate",
     description="Investigation/Perception check vs a TN. Fortune role required.",
 )
@@ -1104,10 +1106,10 @@ async def investigate_check(
 
 
 # ---------------------------------------------------------------------------
-# /check social
+# /assess social
 # ---------------------------------------------------------------------------
 
-@check.command(
+@assess.command(
     name="social",
     description="Social skill check vs a TN. Auto-selects the correct trait. Fortune role required.",
 )
@@ -1194,10 +1196,10 @@ async def social_check(
 
 
 # ---------------------------------------------------------------------------
-# /check craft
+# /examine craft
 # ---------------------------------------------------------------------------
 
-@check.command(
+@examine.command(
     name="craft",
     description="Artisan or Craft skill / Intelligence check vs a TN. Fortune role required.",
 )
@@ -1280,10 +1282,10 @@ async def craft_check(
 
 
 # ---------------------------------------------------------------------------
-# /check lore
+# /examine lore
 # ---------------------------------------------------------------------------
 
-@check.command(
+@examine.command(
     name="lore",
     description="Lore/Intelligence check vs a TN. Fortune role required.",
 )
@@ -1366,10 +1368,10 @@ async def lore_check(
 
 
 # ---------------------------------------------------------------------------
-# /check horsemanship
+# /examine horsemanship
 # ---------------------------------------------------------------------------
 
-@check.command(name="horsemanship", description="Horsemanship/Agility check (mounted combat maneuver). Fortune role required.")
+@examine.command(name="horsemanship", description="Horsemanship/Agility check (mounted combat maneuver). Fortune role required.")
 @app_commands.describe(
     name="Character name.",
     tn="Target Number.",

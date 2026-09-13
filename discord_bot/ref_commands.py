@@ -248,7 +248,7 @@ RANGE_INCREMENTS: list[tuple[str, str]] = [
 
 @ref.command(
     name="search",
-    description="Search all catalogs: spells, schools, kata, kiho, advantages, weapons, armor, creatures.",
+    description="Search all catalogs: spells, schools, kata, advantages, weapons, and more.",
 )
 @app_commands.describe(
     query="Search term (matches names, elements, categories).",
@@ -662,7 +662,7 @@ async def heritage_table(interaction: discord.Interaction, clan: str) -> None:
 # /ref encumbrance — carrying capacity check
 # ---------------------------------------------------------------------------
 
-@ref.command(name="encumbrance", description="Check a character's carrying capacity (Strength-based).")
+@ref.command(name="encumbrance", description="Check carrying capacity (Strength-based).")
 @app_commands.describe(
     member="Player whose character to check.",
     is_npc="Target is an NPC.",
@@ -986,7 +986,7 @@ async def travel_calc(
 # /ref modifiers — combat modifiers reference
 # ---------------------------------------------------------------------------
 
-@ref.command(name="modifiers", description="Quick reference for terrain, range, and situational combat modifiers (L5R 4e).")
+@ref.command(name="modifiers", description="Terrain, range, and situational combat modifiers (L5R 4e).")
 async def modifiers_ref(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="⚔️ Combat Modifiers Reference", color=discord.Color.dark_gold())
     terrain_lines = [f"**{name}**: {effect}" for name, effect in TERRAIN_MODIFIERS]
@@ -1008,7 +1008,7 @@ async def modifiers_ref(interaction: discord.Interaction) -> None:
 # /ref calledshot — called shot reference
 # ---------------------------------------------------------------------------
 
-@ref.command(name="calledshot", description="Called Shot reference: raise costs and body part effects (L5R 4e).")
+@ref.command(name="calledshot", description="Called Shot: raise costs and body part effects (L5R 4e).")
 async def calledshot_ref(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="\U0001f3af Called Shot Reference", color=discord.Color.dark_gold())
     parts_lines = []

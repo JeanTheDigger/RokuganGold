@@ -44,7 +44,7 @@ class Combatant:
     # Ward gets +10 Armor TN, guarder gets -5 Armor TN. Clears on guarder's turn.
     guarding: str = ""
     # Full Defense (s40): Defense/Reflexes roll bonus added to Armor TN.
-    # Set by /combat full_defense; clears on combatant's next turn.
+    # Set by /fight full_defense; clears on combatant's next turn.
     full_defense_bonus: int = 0
     # Stance declared for this round (L5R 4e: Attack, Full Attack, Defense,
     # Full Defense, Center). Defaults to "attack". Resets on turn advance.
