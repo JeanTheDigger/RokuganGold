@@ -1180,6 +1180,15 @@ async def attack(
     atk_flat += t_flat
     kata_notes.extend(t_notes)
 
+    # Tattoo attack-roll modifiers (Lion: +SR rolled dice with chosen Bugei skill).
+    tat_atk_rolled, tat_atk_kept, tat_atk_flat, tat_atk_notes = tattoo_effects.attacker_attack_dice(
+        attacker, atk_weapon_profile
+    )
+    bonus_rolled += tat_atk_rolled
+    bonus_kept += tat_atk_kept
+    atk_flat += tat_atk_flat
+    kata_notes.extend(tat_atk_notes)
+
     # Advantage/disadvantage attack-roll modifiers (Bad Eyesight, Blind, Touch of Jigoku).
     adv_rolled, adv_kept, adv_flat, adv_notes = advantage_effects.attacker_attack_dice(
         attacker, atk_weapon_profile
@@ -1224,19 +1233,27 @@ async def attack(
         kata_notes.append(armor_note)
 
     # Off-hand / dual-wield penalties (GDD s40).
+    tech_oh_off, tech_oh_dom, tech_oh_notes = technique_effects.off_hand_penalty_removed(
+        attacker, atk_weapon_profile, weapon
+    )
     if off_hand:
         off_size = atk_weapon_profile.get("size", "Medium")
         off_pen_map = {"Small": -5, "Medium": -10, "Large": -15}
         off_pen = off_pen_map.get(off_size, -10)
         removed, rem_note = skill_mastery.off_hand_penalty_removed(attacker, atk_weapon_profile)
-        if removed:
+        if tech_oh_off:
+            kata_notes.extend(tech_oh_notes)
+        elif removed:
             kata_notes.append(rem_note)
         else:
             atk_flat += off_pen
             kata_notes.append(f"Off-hand penalty ({off_size}): {off_pen}")
     elif attacker.off_hand_weapon:
-        atk_flat -= 5
-        kata_notes.append("Dominant-hand penalty (dual-wielding): −5")
+        if tech_oh_dom:
+            kata_notes.extend(tech_oh_notes)
+        else:
+            atk_flat -= 5
+            kata_notes.append("Dominant-hand penalty (dual-wielding): −5")
 
     # Weapon stance penalty (s39: bows/lance mounted/foot restrictions).
     stance_pen, stance_pen_note = combat.weapon_stance_penalty(weapon, "mounted" in atk_conds)

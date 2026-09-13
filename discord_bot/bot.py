@@ -3717,11 +3717,19 @@ async def sheet_tattoo_remove(
 @app_commands.describe(
     name="Tattoo to activate.",
     off="Deactivate the current tattoo.",
+    choice="Bear only: 'stamina' (+SR Stamina) or 'strength' (+ceil(SR/2) Strength).",
+    skill="Lion only: Bugei skill to boost by +SR ranks (e.g. Kenjutsu, Heavy Weapons).",
     member="Target player (Fortune).",
 )
+@app_commands.choices(choice=[
+    app_commands.Choice(name="Stamina (+School Rank)", value="stamina"),
+    app_commands.Choice(name="Strength (+ceil(SR/2))", value="strength"),
+])
 @app_commands.autocomplete(name=_tattoo_autocomplete)
 async def sheet_tattoo_activate(
     interaction: discord.Interaction, name: str | None = None, off: bool = False,
+    choice: app_commands.Choice[str] | None = None,
+    skill: str | None = None,
     member: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
@@ -3734,6 +3742,8 @@ async def sheet_tattoo_activate(
     if off:
         old = c.active_tattoo or "(none)"
         c.active_tattoo = ""
+        c.bear_tattoo_choice = ""
+        c.lion_tattoo_skill = ""
         store.save(rec)
         await interaction.response.send_message(
             f"**{c.name}** deactivates the **{old}** tattoo.", embed=build_sheet_embed(rec)
@@ -3751,14 +3761,49 @@ async def sheet_tattoo_activate(
             ephemeral=True,
         )
         return
+    if key == "bear" and not choice:
+        await interaction.response.send_message(
+            "Bear Tattoo requires `choice:` — pick **Stamina** (+SR) or **Strength** (+ceil(SR/2)).",
+            ephemeral=True,
+        )
+        return
+    _BUGEI_SKILLS = {
+        "athletics", "battle", "defense", "horsemanship", "hunting", "iaijutsu",
+        "jiujutsu", "kenjutsu", "kyujutsu", "spears", "polearms", "heavy weapons",
+        "knives", "war fan", "chain weapons", "staves",
+    }
+    if key == "lion":
+        if not skill:
+            await interaction.response.send_message(
+                "Lion Tattoo requires `skill:` — name one Bugei skill to boost by +SR ranks "
+                "(e.g. Kenjutsu, Heavy Weapons, Jiujutsu).", ephemeral=True,
+            )
+            return
+        if skill.lower().strip() not in _BUGEI_SKILLS:
+            await interaction.response.send_message(
+                f"**{skill}** is not a Bugei skill. Valid: {', '.join(sorted(_BUGEI_SKILLS))}.",
+                ephemeral=True,
+            )
+            return
     from l5r_rules import tattoo_catalog
     t = tattoo_catalog.get_tattoo(key)
     label = t["name"] if t else key.title()
     c.active_tattoo = label
+    c.bear_tattoo_choice = choice.value if choice and key == "bear" else ""
+    c.lion_tattoo_skill = skill.strip() if skill and key == "lion" else ""
     store.save(rec)
     effect = f"\n> {t['effect']}" if t else ""
+    extra = ""
+    if key == "bear" and choice:
+        if choice.value == "stamina":
+            extra = f"\n> Choice: **Stamina +{c.school_rank}** (locked for duration)"
+        else:
+            import math as _m
+            extra = f"\n> Choice: **Strength +{_m.ceil(c.school_rank / 2)}** (locked for duration)"
+    elif key == "lion" and skill:
+        extra = f"\n> Skill: **{skill.strip().title()} +{c.school_rank}** ranks (locked for duration)"
     await interaction.response.send_message(
-        f"🐉 **{c.name}** activates the **{label}** tattoo.{effect}",
+        f"🐉 **{c.name}** activates the **{label}** tattoo.{effect}{extra}",
         embed=build_sheet_embed(rec),
     )
 

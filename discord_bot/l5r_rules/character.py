@@ -94,6 +94,8 @@ class Character:
     # -- Togashi Tattoos (s57.25) --
     tattoos: list[str] = field(default_factory=list)
     active_tattoo: str = ""
+    bear_tattoo_choice: str = ""
+    lion_tattoo_skill: str = ""
 
     # -- Advantages / Disadvantages (names only at this phase) --
     advantages: list[str] = field(default_factory=list)

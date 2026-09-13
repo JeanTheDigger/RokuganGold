@@ -33,6 +33,11 @@ from .character import Character
 
 _SPEAR_POLEARM = frozenset({"spears", "polearms"})
 _IGNORE_ALL = 999  # sentinel: reduce the target's Reduction to zero
+_PEASANT_WEAPONS = frozenset({
+    "bo", "jo", "nunchaku", "tonfa", "machi_kanshisha", "sang_kauw",
+    "kusarigama", "kyoketsu_shogi", "manrikikusari",
+    "kama", "sai", "jitte", "ono",
+})
 
 
 def _known(character: Character) -> set[str]:
@@ -103,6 +108,8 @@ def attacker_attack_dice(
         rolled += 2; notes.append("Speed of Lightning +2k0 attack (target lower Initiative)")
     if "fast and furious" in known and target_lower:
         rolled += 2; kept += 2; notes.append("Fast and Furious +2k2 attack (target lower Initiative)")
+    if "the way of the mantis" in known:
+        rolled += 1; notes.append("The Way of the Mantis +1k0 attack")
     return rolled, kept, flat, notes
 
 
@@ -203,6 +210,12 @@ def defender_armor_tn_bonus(
     if "purity of chi" in known and attacker is not None and \
             stats.honor_rank(attacker) < stats.honor_rank(defender):
         bonus += 5; notes.append("Purity of Chi +5 Armor TN (attacker lower Honor)")
+    if "folds of the iron fan" in known:
+        wfr = defender.skills.get("War Fan", defender.skills.get("war fan", 0))
+        main_wf = defender.equipped_weapon.lower().strip() == "war_fan"
+        off_wf = (getattr(defender, "off_hand_weapon", "") or "").lower().strip() == "war_fan"
+        if (main_wf or off_wf) and wfr:
+            bonus += wfr; notes.append(f"Folds of the Iron Fan +{wfr} Armor TN (War Fan rank)")
     return bonus, notes
 
 
@@ -225,3 +238,30 @@ def defender_reduction_bonus(defender: Character) -> tuple[int, list[str]]:
         v = max(1, defender.school_rank) + 2
         bonus += v; notes.append(f"Aligned With the Elements +{v} Reduction (sword, no armour)")
     return bonus, notes
+
+
+def off_hand_penalty_removed(
+    attacker: Character, weapon_profile: dict, weapon_name: str,
+) -> tuple[bool, bool, list[str]]:
+    """(off_hand_removed, dominant_hand_removed, notes).
+    School techniques that remove dual-wielding penalties (s29)."""
+    known = _known(attacker)
+    wname = weapon_name.lower().strip()
+    main = (getattr(attacker, "equipped_weapon", "") or "").lower().strip()
+    off = (getattr(attacker, "off_hand_weapon", "") or "").lower().strip()
+
+    if "way of the dragon" in known and {main, off} == {"katana", "wakizashi"}:
+        return True, True, ["Way of the Dragon: no dual-wielding penalties (daishō)"]
+
+    if "the way of the mantis" in known and wname in _PEASANT_WEAPONS:
+        size = str(weapon_profile.get("size", "")).lower()
+        if size in ("small", "medium"):
+            return True, False, [f"Way of the Mantis: no off-hand penalty ({wname}, Peasant)"]
+
+    if "deny the horde" in known and wname in ("masakari", "masakiri"):
+        return True, False, ["Deny the Horde: no off-hand penalty (masakari)"]
+
+    if "folds of the iron fan" in known and wname == "war_fan":
+        return True, False, ["Folds of the Iron Fan: no off-hand penalty (war fan)"]
+
+    return False, False, []

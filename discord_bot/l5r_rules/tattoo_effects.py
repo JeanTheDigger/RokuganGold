@@ -4,25 +4,28 @@ Only tattoos whose effect the bot can compute faithfully from the sheet are
 auto-applied here: passive modifiers gated on the active tattoo, character
 stats, and weapon profile — the same pattern as kata_effects.py / kiho_effects.py.
 
-Auto-applied (7):
+Auto-applied (9):
   Bamboo: Armor TN += (2 x School Rank) + 5 (defender, no armor)
-  Crab: Reduction += Earth Ring (defender)
-  Mountain: wound penalties reduced by (School Rank + 2) (attacker)
+  Bear: Stamina +SR or Strength +ceil(SR/2) (choice locked at activation)
   Blaze: unarmed damage +Fire Ring +School Rank flat (attacker)
-  Storm: Knockdown costs 1 Raise instead of standard (attacker free raise)
+  Crab: Reduction += Earth Ring (defender)
+  Lion: +SR rolled dice on attack rolls with chosen Bugei skill (attacker)
   Mantis: Fear immunity (passive, always on — wired into /assess fear)
+  Mountain: wound penalties reduced by (School Rank + 2) (attacker)
   Phoenix: reactive heal at Down/Out (reminder on damage resolution)
+  Storm: Knockdown costs 1 Raise instead of standard (attacker free raise)
 
 Reminder-only (not auto-applied):
-  Balance (spell TN mod), Bear (choice-locked stat boost), Cloud (re-roll),
-  Crane (social pool), Dragon (breath attack), Hawk (leap), Ki-Rin (re-roll
-  per round), Lion (choice-locked skill boost), Ocean (rest/VP), Scorpion
-  (auto-Daze on exploding unarmed: DM adjudicated), Volcano (defensive
-  reaction), Wave (Knockdown contested roll bonus), and world-map-only
-  tattoos (Centipede, Whisper, Wind, Wolf).
+  Balance (spell TN mod), Cloud (re-roll), Crane (social pool), Dragon
+  (breath attack), Hawk (leap), Ki-Rin (re-roll per round), Ocean (rest/VP),
+  Scorpion (auto-Daze on exploding unarmed: DM adjudicated), Volcano
+  (defensive reaction), Wave (Knockdown contested roll bonus), and
+  world-map-only tattoos (Centipede, Whisper, Wind, Wolf).
 """
 
 from __future__ import annotations
+
+import math
 
 from . import stats
 from .character import Character
@@ -68,7 +71,40 @@ def defender_reduction_bonus(defender: Character) -> tuple[int, list[str]]:
         v = stats.ring_value(defender, "earth")
         bonus += v
         notes.append(f"Crab Tattoo +{v} Reduction (Earth Ring)")
+    if active == "bear":
+        choice = (getattr(defender, "bear_tattoo_choice", "") or "").lower()
+        if choice == "stamina":
+            sr = defender.school_rank
+            boosted_stam = defender.stamina + sr
+            effective_earth = min(boosted_stam, defender.willpower)
+            base_earth = min(defender.stamina, defender.willpower)
+            earth_delta = effective_earth - base_earth
+            if earth_delta > 0:
+                bonus += earth_delta
+                notes.append(f"Bear Tattoo +{earth_delta} Reduction (Earth Ring {base_earth}→{effective_earth} via +{sr} Stamina)")
     return bonus, notes
+
+
+# ---------------------------------------------------------------------------
+# Attacker: Attack dice bonus
+# ---------------------------------------------------------------------------
+
+def attacker_attack_dice(
+    attacker: Character, weapon_profile: dict,
+) -> tuple[int, int, int, list[str]]:
+    """(bonus_rolled, bonus_kept, flat_bonus, notes) added to the attack roll.
+    Lion: +SR rolled dice when attacking with the chosen Bugei skill."""
+    active = _active(attacker)
+    rolled = kept = flat = 0
+    notes: list[str] = []
+    if active == "lion":
+        chosen = (getattr(attacker, "lion_tattoo_skill", "") or "").lower().strip()
+        wpn_skill = str(weapon_profile.get("skill", "")).lower()
+        if chosen and chosen == wpn_skill:
+            sr = attacker.school_rank
+            rolled += sr
+            notes.append(f"Lion Tattoo +{sr}k0 attack (+SR ranks in {chosen.title()})")
+    return rolled, kept, flat, notes
 
 
 # ---------------------------------------------------------------------------
@@ -93,13 +129,23 @@ def attacker_damage(
     attacker: Character, weapon_name: str,
 ) -> tuple[int, int, int, list[str]]:
     """(extra_rolled, extra_kept, flat_bonus, notes) for the damage roll.
-    Blaze: unarmed strikes deal additional fire damage = Fire Ring + School Rank."""
+    Blaze: unarmed fire damage = Fire Ring + School Rank (flat).
+    Bear (Strength): +ceil(SR/2) rolled melee damage dice."""
     active = _active(attacker)
+    rolled = kept = flat = 0
+    notes: list[str] = []
     if active == "blaze" and weapon_name.lower().strip() == "unarmed":
         fire = stats.ring_value(attacker, "fire")
         v = fire + attacker.school_rank
-        return 0, 0, v, [f"Blaze Tattoo +{v} fire damage (Fire {fire} + SR {attacker.school_rank})"]
-    return 0, 0, 0, []
+        flat += v
+        notes.append(f"Blaze Tattoo +{v} fire damage (Fire {fire} + SR {attacker.school_rank})")
+    if active == "bear":
+        choice = (getattr(attacker, "bear_tattoo_choice", "") or "").lower()
+        if choice == "strength":
+            v = math.ceil(attacker.school_rank / 2)
+            rolled += v
+            notes.append(f"Bear Tattoo +{v}k0 melee damage (+{v} Strength)")
+    return rolled, kept, flat, notes
 
 
 # ---------------------------------------------------------------------------
@@ -145,10 +191,8 @@ def phoenix_heal_reminder(character: Character) -> str | None:
 
 _COMBAT_REMINDERS: dict[str, str] = {
     "balance": "Spells targeting you: TN ±(2×SR + 5)",
-    "bear": "Stamina +SR or Strength +ceil(SR/2) (choice locked at activation)",
     "cloud": "Attackers must re-roll hits; cannot attack while active",
     "ki-rin": "Re-roll one roll per round (keeping higher)",
-    "lion": "Temporary +SR ranks in one Bugei skill (choice locked at activation)",
     "scorpion": "Unarmed attacks auto-Daze on any exploding damage die",
     "volcano": "Wood weapons: Reduction 5 + destroyed; Metal: Contested Fire or disarm",
     "wave": "+IR k0 on Contested Strength for Knockdown (attack and defense)",
@@ -160,6 +204,22 @@ def active_tattoo_reminder(character: Character) -> str | None:
     active = _active(character)
     if not active:
         return None
+    if active == "bear":
+        choice = (getattr(character, "bear_tattoo_choice", "") or "").lower()
+        if choice == "stamina":
+            sr = character.school_rank
+            boosted = min(character.stamina + sr, character.willpower)
+            base = min(character.stamina, character.willpower)
+            delta = boosted - base
+            thresh = delta * 2
+            if thresh > 0:
+                return f"⚑ Bear Tattoo (Stamina +{sr}): wound threshold +{thresh} per level (Earth {base}→{boosted})"
+        return None
+    if active == "lion":
+        chosen = (getattr(character, "lion_tattoo_skill", "") or "")
+        if chosen:
+            return None
+        return "⚑ Lion Tattoo: no Bugei skill chosen — use `/sheet tattoo activate Lion skill:` to set one"
     text = _COMBAT_REMINDERS.get(active)
     if text:
         sr = character.school_rank
