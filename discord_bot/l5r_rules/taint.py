@@ -47,11 +47,7 @@ MADNESS: list[str] = [
 
 def taint_rank(character: Character) -> int:
     """Taint Rank = floor(Taint / Earth Ring). Capped at 5 (lost)."""
-    earth = stats.earth_ring(character)
-    if earth <= 0:
-        return 5 if character.taint > 0 else 0
-    rank = int(character.taint // earth)
-    return min(rank, 5)
+    return stats.taint_rank(character)
 
 
 def taint_description(rank: int) -> str:
@@ -74,16 +70,16 @@ def social_penalty(character: Character) -> int:
     return 0
 
 
-def mutation_roll() -> str:
+def mutation_roll(rng: "random.Random | None" = None) -> str:
     """Roll a random mutation (d10 on the mutations table)."""
     import random
-    return random.choice(MUTATIONS)
+    return (rng or random).choice(MUTATIONS)
 
 
-def madness_roll() -> str:
+def madness_roll(rng: "random.Random | None" = None) -> str:
     """Roll a random madness effect."""
     import random
-    return random.choice(MADNESS)
+    return (rng or random).choice(MADNESS)
 
 
 def check_threshold_crossing(old_taint: float, new_taint: float, character: Character) -> dict | None:

@@ -106,7 +106,6 @@ def apply_emphasis(character: Character, skill: str, emphasis: str) -> None:
 
 def kiho_cost(mastery_level: int, non_brotherhood: bool = False) -> int:
     """Kiho: 1 x Mastery Level; non-Brotherhood monks pay 1.5x (ceil) per s38a."""
-    import math
     return math.ceil(mastery_level * 1.5) if non_brotherhood else max(1, mastery_level)
 
 

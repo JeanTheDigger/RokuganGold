@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS active_characters (
     guild_id     TEXT NOT NULL,
     user_id      TEXT NOT NULL,
     character_id INTEGER NOT NULL,
-    PRIMARY KEY (guild_id, user_id)
+    PRIMARY KEY (guild_id, user_id),
+    FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS dm_users (
@@ -66,7 +67,8 @@ CREATE TABLE IF NOT EXISTS rooms (
 CREATE TABLE IF NOT EXISTS room_members (
     room_id INTEGER NOT NULL,
     user_id TEXT NOT NULL,
-    PRIMARY KEY (room_id, user_id)
+    PRIMARY KEY (room_id, user_id),
+    FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS creatures (
@@ -107,7 +109,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_macro_unique
 CREATE TABLE IF NOT EXISTS room_npcs (
     room_id  INTEGER NOT NULL,
     npc_name TEXT NOT NULL,
-    PRIMARY KEY (room_id, npc_name)
+    PRIMARY KEY (room_id, npc_name),
+    FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS approval_channels (
@@ -207,6 +210,7 @@ class Store:
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON")
+        self._conn.execute("PRAGMA journal_mode = WAL")
         self._lock = threading.Lock()
         with self._lock, self._conn:
             self._conn.executescript(_SCHEMA)
@@ -283,10 +287,8 @@ class Store:
 
     def delete(self, character_id: int) -> None:
         with self._lock, self._conn:
+            # active_characters FK CASCADE handles cleanup automatically
             self._conn.execute("DELETE FROM characters WHERE id = ?", (character_id,))
-            self._conn.execute(
-                "DELETE FROM active_characters WHERE character_id = ?", (character_id,)
-            )
 
     # -- active-character link -------------------------------------------------
     def set_active(self, guild_id: str, user_id: str, character_id: int) -> None:
@@ -684,7 +686,7 @@ class Store:
 
     def delete_category(self, category_id: int) -> None:
         with self._lock, self._conn:
-            self._conn.execute("DELETE FROM category_members WHERE category_id = ?", (category_id,))
+            # category_members FK CASCADE handles cleanup automatically
             self._conn.execute("DELETE FROM categories WHERE id = ?", (category_id,))
 
     def rename_category(self, category_id: int, new_name: str) -> None:

@@ -186,6 +186,61 @@ def _guild_ok(interaction: discord.Interaction) -> bool:
     return interaction.guild_id is not None
 
 
+async def _require_guild(interaction: discord.Interaction) -> bool:
+    """Send an error if not in a server channel. Returns True if OK."""
+    if interaction.guild_id is not None:
+        return True
+    await interaction.response.send_message(
+        "Please use this in a server channel.", ephemeral=True
+    )
+    return False
+
+
+async def _require_dm_role(interaction: discord.Interaction) -> bool:
+    """Send an error if the user lacks the Fortune/Kami role. Returns True if OK."""
+    if _is_dm(interaction):
+        return True
+    await interaction.response.send_message(
+        f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to use this command.",
+        ephemeral=True,
+    )
+    return False
+
+
+async def _require_encounter(interaction: discord.Interaction) -> encounter.Encounter | None:
+    """Return the channel's encounter, or send an error and return None."""
+    enc = encounters.get(interaction.channel_id)
+    if enc is not None:
+        return enc
+    await interaction.response.send_message(
+        "No encounter here. Start one with `/combat start`.", ephemeral=True
+    )
+    return None
+
+
+async def _resolve_active(
+    interaction: discord.Interaction, member: discord.Member | None
+) -> storage.CharacterRecord | None:
+    """Return the active character record, or send an error and return None.
+    Unlike _resolve_active_for_edit, this does NOT require DM to view others."""
+    guild = str(interaction.guild_id)
+    if member is not None and member.id != interaction.user.id:
+        rec = store.get_active(guild, str(member.id))
+        if rec is None:
+            await interaction.response.send_message(
+                f"{member.display_name} has no active character.", ephemeral=True
+            )
+            return None
+        return rec
+    rec = store.get_active(guild, str(interaction.user.id))
+    if rec is None:
+        await interaction.response.send_message(
+            "You have no active character. Use `/sheet create` first.", ephemeral=True
+        )
+        return None
+    return rec
+
+
 def _wound_color(record: storage.CharacterRecord) -> discord.Color:
     idx = stats.wound_level_index(record.character)
     if idx == 0:
