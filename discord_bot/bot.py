@@ -6571,6 +6571,14 @@ async def location_area_create(
         msg = await desc_ch.send(embed=embed)
         await msg.pin()
 
+    # Position above Staff Members so it stays at the bottom
+    staff_cat = discord.utils.get(guild.categories, name="Staff Members")
+    if staff_cat and category.position >= staff_cat.position:
+        try:
+            await category.edit(position=staff_cat.position, reason="Place above Staff Members")
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
     try:
         store.create_location_area(guild_id, str(category.id), clean_name, str(interaction.user.id))
     except storage.DuplicateNameError:
@@ -6647,11 +6655,17 @@ async def location_area_list(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
 
-@location_group.command(name="create", description="Create a location (text channel) in an area. Approved role required.")
+@location_group.command(name="create", description="Create a location (text channel) in an area. Fortune role required.")
 @app_commands.describe(
     area="Which area to create the location in.",
     name="Location name (becomes the channel name).",
     description="Optional location description (pinned at the top).",
+    private="If True, only listed members can see the channel. Default: public (inherits area visibility).",
+    member1="Grant access to this member (required for private locations).",
+    member2="Grant access to a second member.",
+    member3="Grant access to a third member.",
+    member4="Grant access to a fourth member.",
+    member5="Grant access to a fifth member.",
 )
 @app_commands.autocomplete(area=_location_area_autocomplete)
 async def location_create(
@@ -6659,13 +6673,16 @@ async def location_create(
     area: str,
     name: app_commands.Range[str, 1, 90],
     description: app_commands.Range[str, 1, 4000] | None = None,
+    private: bool = False,
+    member1: discord.Member | None = None,
+    member2: discord.Member | None = None,
+    member3: discord.Member | None = None,
+    member4: discord.Member | None = None,
+    member5: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
-    if not _has_role(interaction, ROLE_APPROVED) and not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_APPROVED}** role to create locations.", ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     guild = interaction.guild
     guild_id = str(guild.id)
@@ -6682,13 +6699,43 @@ async def location_create(
             ephemeral=True,
         )
         return
+    extra_members = [m for m in (member1, member2, member3, member4, member5) if m]
+    ch_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] | None = None
+    if private:
+        everyone = guild.default_role
+        bot_member = guild.me
+        fortune_role = discord.utils.get(guild.roles, name=ROLE_FORTUNE)
+        kami_role = discord.utils.get(guild.roles, name=ROLE_KAMI)
+        ch_overwrites = {
+            everyone: discord.PermissionOverwrite(view_channel=False),
+            bot_member: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_channels=True,
+                manage_messages=True,
+            ),
+        }
+        for r in (fortune_role, kami_role):
+            if r:
+                ch_overwrites[r] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, read_message_history=True,
+                    manage_messages=True,
+                )
+        for m in extra_members:
+            ch_overwrites[m] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+            )
     try:
-        channel = await cat_ch.create_text_channel(clean_name, reason=f"Location by {interaction.user}")
+        channel = await cat_ch.create_text_channel(
+            clean_name, overwrites=ch_overwrites or {}, reason=f"Location by {interaction.user}",
+        )
     except discord.Forbidden:
         await interaction.response.send_message(
             "I need **Manage Channels** permission in this category.", ephemeral=True,
         )
         return
+    if not private and extra_members:
+        for m in extra_members:
+            await channel.set_permissions(m, view_channel=True, send_messages=True,
+                                          read_message_history=True, reason="Extra member access")
     try:
         loc = store.create_location(
             guild_id, area_rec.id, str(channel.id), clean_name,
@@ -6700,9 +6747,12 @@ async def location_create(
             f"A location named **{clean_name}** already exists in **{area_rec.name}**.", ephemeral=True,
         )
         return
-    await interaction.response.send_message(
-        f"Created location {channel.mention} in **{area_rec.name}**.",
-    )
+    parts = [f"Created location {channel.mention} in **{area_rec.name}**."]
+    if private:
+        parts.append("(Private)")
+    if extra_members:
+        parts.append(f"Access: {', '.join(m.mention for m in extra_members)}.")
+    await interaction.response.send_message(" ".join(parts))
     if description:
         embed = discord.Embed(title=clean_name, description=description, color=0xC4A747)
         pin_msg = await channel.send(embed=embed)
@@ -9440,6 +9490,14 @@ async def _setup_server_inner(
     approvals_ch_disc = discord.utils.get(dm_cat.text_channels, name="approvals")
     if approvals_ch_disc:
         store.set_approval_channel(str(guild.id), str(approvals_ch_disc.id))
+
+    # --- Push Staff Members to the very bottom ---
+    max_pos = max((c.position for c in guild.categories), default=0)
+    if dm_cat.position < max_pos:
+        try:
+            await dm_cat.edit(position=max_pos + 1, reason="Server setup: Staff Members always last")
+        except (discord.Forbidden, discord.HTTPException):
+            pass
 
     # --- Summary ---
     summary_parts = ["**Server setup complete!**\n"]
