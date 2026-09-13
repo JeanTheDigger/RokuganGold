@@ -8707,6 +8707,13 @@ async def _setup_server_inner(
             )
         family_roles_created.append(role)
 
+    # --- Helper: find existing category by name, or create it ---
+    def _find_category(name: str) -> discord.CategoryChannel | None:
+        return discord.utils.get(guild.categories, name=name)
+
+    created_channels: list[str] = []
+    skipped_channels: list[str] = []
+
     # --- 1. Lobby (visible to everyone) ---
     lobby_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
         everyone: discord.PermissionOverwrite(
@@ -8717,25 +8724,31 @@ async def _setup_server_inner(
             manage_messages=True,
         ),
     }
-    lobby_cat = await guild.create_category("Lobby", overwrites=lobby_overwrites, reason="Server setup")
-    welcome_ch = await lobby_cat.create_text_channel("welcome")
-    await lobby_cat.create_text_channel("character-submission")
-    welcome_embed = discord.Embed(
-        title="Welcome to Rokugan",
-        color=0xC4A747,
-        description=(
-            "Welcome, traveler. This server hosts a persistent world set in "
-            "Rokugan, using **Legend of the Five Rings 4th Edition** rules.\n\n"
-            "**To gain access to the server:**\n"
-            "1. Go to the **#character-submission** channel\n"
-            "2. Use the `/submit` command with your character's name and concept\n"
-            "3. A Dungeon Master will review and approve your character\n"
-            "4. Once approved, you'll gain access to all channels\n\n"
-            "We look forward to your story."
-        ),
-    )
-    welcome_msg = await welcome_ch.send(embed=welcome_embed)
-    await welcome_msg.pin()
+    lobby_cat = _find_category("Lobby")
+    if lobby_cat is None:
+        lobby_cat = await guild.create_category("Lobby", overwrites=lobby_overwrites, reason="Server setup")
+        welcome_ch = await lobby_cat.create_text_channel("welcome")
+        await lobby_cat.create_text_channel("character-submission")
+        welcome_embed = discord.Embed(
+            title="Welcome to Rokugan",
+            color=0xC4A747,
+            description=(
+                "Welcome, traveler. This server hosts a persistent world set in "
+                "Rokugan, using **Legend of the Five Rings 4th Edition** rules.\n\n"
+                "**To gain access to the server:**\n"
+                "1. Go to the **#character-submission** channel\n"
+                "2. Use the `/submit` command with your character's name and concept\n"
+                "3. A Dungeon Master will review and approve your character\n"
+                "4. Once approved, you'll gain access to all channels\n\n"
+                "We look forward to your story."
+            ),
+        )
+        welcome_msg = await welcome_ch.send(embed=welcome_embed)
+        await welcome_msg.pin()
+        created_channels.append("Lobby")
+    else:
+        await lobby_cat.edit(overwrites=lobby_overwrites, reason="Server setup: update permissions")
+        skipped_channels.append("Lobby")
 
     # --- 2. Out of Character (Approved + DMs only) ---
     ooc_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
@@ -8752,45 +8765,49 @@ async def _setup_server_inner(
         ooc_overwrites[r] = discord.PermissionOverwrite(
             view_channel=True, send_messages=True, read_message_history=True,
         )
-    ooc_cat = await guild.create_category("Out of Character", overwrites=ooc_overwrites, reason="Server setup")
-    await ooc_cat.create_text_channel("general")
-    await ooc_cat.create_text_channel("off-topic")
+    ooc_cat = _find_category("Out of Character")
+    if ooc_cat is None:
+        ooc_cat = await guild.create_category("Out of Character", overwrites=ooc_overwrites, reason="Server setup")
+        await ooc_cat.create_text_channel("general")
+        await ooc_cat.create_text_channel("off-topic")
 
-    # Announcements channel (read-only for players, DMs can post)
-    announce_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
-        everyone: discord.PermissionOverwrite(view_channel=False),
-        approved_role: discord.PermissionOverwrite(
-            view_channel=True, send_messages=False, read_message_history=True,
-            add_reactions=True,
-        ),
-        bot_member: discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, manage_messages=True,
-            embed_links=True,
-        ),
-    }
-    for r in dm_roles:
-        announce_overwrites[r] = discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, read_message_history=True,
-            manage_messages=True,
-        )
-    announcements_ch = await ooc_cat.create_text_channel("announcements", overwrites=announce_overwrites)
+        announce_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+            everyone: discord.PermissionOverwrite(view_channel=False),
+            approved_role: discord.PermissionOverwrite(
+                view_channel=True, send_messages=False, read_message_history=True,
+                add_reactions=True,
+            ),
+            bot_member: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_messages=True,
+                embed_links=True,
+            ),
+        }
+        for r in dm_roles:
+            announce_overwrites[r] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+                manage_messages=True,
+            )
+        await ooc_cat.create_text_channel("announcements", overwrites=announce_overwrites)
 
-    # Rules reference channel (read-only for everyone, bot posts pinned embeds)
-    rules_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
-        everyone: discord.PermissionOverwrite(view_channel=False),
-        approved_role: discord.PermissionOverwrite(
-            view_channel=True, send_messages=False, read_message_history=True,
-        ),
-        bot_member: discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, manage_messages=True,
-        ),
-    }
-    for r in dm_roles:
-        rules_overwrites[r] = discord.PermissionOverwrite(
-            view_channel=True, send_messages=True, read_message_history=True,
-        )
-    rules_ch = await ooc_cat.create_text_channel("rules-reference", overwrites=rules_overwrites)
-    await _post_rules_reference(rules_ch)
+        rules_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+            everyone: discord.PermissionOverwrite(view_channel=False),
+            approved_role: discord.PermissionOverwrite(
+                view_channel=True, send_messages=False, read_message_history=True,
+            ),
+            bot_member: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_messages=True,
+            ),
+        }
+        for r in dm_roles:
+            rules_overwrites[r] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+            )
+        rules_ch = await ooc_cat.create_text_channel("rules-reference", overwrites=rules_overwrites)
+        await _post_rules_reference(rules_ch)
+        created_channels.append("Out of Character")
+    else:
+        await ooc_cat.edit(overwrites=ooc_overwrites, reason="Server setup: update permissions")
+        skipped_channels.append("Out of Character")
 
     # --- 3. In Character (Approved + DMs only) ---
     ic_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
@@ -8808,8 +8825,14 @@ async def _setup_server_inner(
             view_channel=True, send_messages=True, read_message_history=True,
             manage_messages=True,
         )
-    ic_cat = await guild.create_category("In Character", overwrites=ic_overwrites, reason="Server setup")
-    await ic_cat.create_text_channel("in-character")
+    ic_cat = _find_category("In Character")
+    if ic_cat is None:
+        ic_cat = await guild.create_category("In Character", overwrites=ic_overwrites, reason="Server setup")
+        await ic_cat.create_text_channel("in-character")
+        created_channels.append("In Character")
+    else:
+        await ic_cat.edit(overwrites=ic_overwrites, reason="Server setup: update permissions")
+        skipped_channels.append("In Character")
 
     # --- 4. DM Room (Fortune + Kami only) ---
     dm_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
@@ -8824,36 +8847,35 @@ async def _setup_server_inner(
             view_channel=True, send_messages=True, read_message_history=True,
             manage_messages=True,
         )
-    dm_cat = await guild.create_category("Dungeon Masters", overwrites=dm_overwrites, reason="Server setup")
-    dm_discussion = await dm_cat.create_text_channel("dm-discussion")
-    approvals_ch = await dm_cat.create_text_channel("approvals")
+    dm_cat = _find_category("Dungeon Masters")
+    if dm_cat is None:
+        dm_cat = await guild.create_category("Dungeon Masters", overwrites=dm_overwrites, reason="Server setup")
+        await dm_cat.create_text_channel("dm-discussion")
+        approvals_ch = await dm_cat.create_text_channel("approvals")
+        store.set_approval_channel(str(guild.id), str(approvals_ch.id))
+        created_channels.append("Dungeon Masters")
+    else:
+        await dm_cat.edit(overwrites=dm_overwrites, reason="Server setup: update permissions")
+        approvals_ch_disc = discord.utils.get(dm_cat.text_channels, name="approvals")
+        if approvals_ch_disc:
+            store.set_approval_channel(str(guild.id), str(approvals_ch_disc.id))
+        skipped_channels.append("Dungeon Masters")
 
-    store.set_approval_channel(str(guild.id), str(approvals_ch.id))
-
-    clan_list = ", ".join(r.mention for r in clan_roles_created)
-    family_list = ", ".join(r.mention for r in family_roles_created)
-    summary = (
-        f"**Server setup complete!**\n\n"
-        f"**Staff Roles:**\n"
-        f"• {kami_role.mention} — Server admin (gold, full permissions)\n"
-        f"• {fortune_role.mention} — Dungeon Master (purple, moderation tools)\n"
-        f"• {approved_role.mention} — Approved player (green, basic access)\n\n"
-        f"**Clan Roles ({len(clan_roles_created)}):** {clan_list}\n\n"
-        f"**Family Roles ({len(family_roles_created)}):** {family_list}\n\n"
-        f"**Categories & Channels:**\n"
-        f"• **Lobby** — {welcome_ch.mention}, #character-submission\n"
-        f"• **Out of Character** — #general, #off-topic, {announcements_ch.mention} (DM-post only), "
-        f"{rules_ch.mention} (read-only reference)\n"
-        f"• **In Character** — #in-character (visible to {ROLE_APPROVED}+)\n"
-        f"• **Dungeon Masters** — {dm_discussion.mention}, {approvals_ch.mention} (DMs only)\n\n"
-        f"**Approval channel** set to {approvals_ch.mention} — character submissions and "
-        f"damage/healing approvals will be routed there.\n\n"
-        f"Players use `/submit` in the lobby to apply. DMs approve or deny from {approvals_ch.mention}.\n"
-        f"Approved players get their nickname changed to their character name.\n\n"
-        f"Use `/dm announce` to post events to {announcements_ch.mention}. "
-        f"Use `/roster` to see all approved characters."
+    summary_parts = ["**Server setup complete!**\n"]
+    summary_parts.append(
+        f"**Roles:** {kami_role.mention} (admin), {fortune_role.mention} (DM), "
+        f"{approved_role.mention} (player), {len(clan_roles_created)} clan, "
+        f"{len(family_roles_created)} family roles"
     )
-    await interaction.followup.send(summary, ephemeral=True)
+    if created_channels:
+        summary_parts.append(f"**Created:** {', '.join(created_channels)}")
+    if skipped_channels:
+        summary_parts.append(f"**Already existed (permissions updated):** {', '.join(skipped_channels)}")
+    summary_parts.append(
+        f"\nPlayers use `/submit` in the lobby to apply. "
+        f"DMs approve or deny from the approvals channel."
+    )
+    await interaction.followup.send("\n".join(summary_parts), ephemeral=True)
 
 # ---------------------------------------------------------------------------
 #  Rules reference — pinned embeds posted by /setup server
