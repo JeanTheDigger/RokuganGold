@@ -728,6 +728,8 @@ async def roll(
     if flags:
         embed.set_footer(text=" · ".join(flags))
 
+    log_total = outcome["total"] if tn is not None else total
+    _log_roll(interaction.channel_id, interaction.user.display_name, title, log_total)
     await interaction.response.send_message(embed=embed)
 
 
@@ -3117,13 +3119,13 @@ async def sheet_wield(
         return
     if weapon is not None and weapon.strip():
         c.equipped_weapon = weapon.lower().strip()
-    c.off_hand_weapon = off_hand.lower().strip() if off_hand and off_hand.strip() else ""
-    store.save(rec)
     if not c.equipped_weapon:
         await interaction.response.send_message(
             "Give a `weapon:` to wield, or `unwield:true` to go unarmed.", ephemeral=True
         )
         return
+    c.off_hand_weapon = off_hand.lower().strip() if off_hand and off_hand.strip() else ""
+    store.save(rec)
     off = f" + **{c.off_hand_weapon}** (off hand)" if c.off_hand_weapon else ""
     await interaction.response.send_message(
         f"🗡️ **{c.name}** wields **{c.equipped_weapon}**{off}.", embed=build_sheet_embed(rec)
@@ -4353,7 +4355,10 @@ async def combat_next(interaction: discord.Interaction) -> None:
     if reminders:
         parts.append("\n".join(reminders))
     parts.append(_render_encounter(enc, guild))
-    await interaction.response.send_message("\n\n".join(parts))
+    msg = "\n\n".join(parts)
+    if len(msg) > 2000:
+        msg = msg[:1997] + "..."
+    await interaction.response.send_message(msg)
     if enc.round != prev_round:
         await _combat_log(guild, f"--- Round {enc.round} ---")
     cond_str = f" [{', '.join(sorted(current.conditions))}]" if current.conditions else ""
@@ -4381,6 +4386,9 @@ async def combat_remove(interaction: discord.Interaction, name: str) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
         return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to remove combatants.", ephemeral=True)
+        return
     enc = encounters.get(interaction.channel_id)
     if enc is None or not enc.remove(name):
         await interaction.response.send_message(f"No combatant named **{name}** here.", ephemeral=True)
@@ -4394,6 +4402,9 @@ async def combat_remove(interaction: discord.Interaction, name: str) -> None:
 async def combat_end(interaction: discord.Interaction) -> None:
     if not _guild_ok(interaction):
         await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to end encounters.", ephemeral=True)
         return
     if encounters.pop(interaction.channel_id, None) is None:
         await interaction.response.send_message("No encounter here.", ephemeral=True)
@@ -4422,7 +4433,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title=title, color=discord.Color.dark_red())
     if enc.notes:
         embed.description = f"📍 *{enc.notes}*"
-    for cb in enc.combatants:
+    for cb in enc.combatants[:25]:
         rec = _resolve_combatant_record(guild, cb)
         if rec is not None:
             c = rec.character
@@ -4458,6 +4469,8 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             value=value,
             inline=True,
         )
+    if len(enc.combatants) > 25:
+        embed.set_footer(text=f"Showing 25 of {len(enc.combatants)} combatants.")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -4814,7 +4827,10 @@ async def combat_void_initiative(interaction: discord.Interaction, combatant: st
         return
     c.current_void_points -= 1
     cb.void_initiative_boost += 10
+    cur_before = enc.current() if enc.started else None
     enc._sort()
+    if cur_before is not None:
+        enc.turn_index = enc.combatants.index(cur_before)
     store.save(rec)
     _save_encounter(guild, enc)
     await interaction.response.send_message(
@@ -4875,7 +4891,10 @@ async def combat_void_swap(interaction: discord.Interaction, spender: str, targe
     old_t = cb_t.effective_initiative
     cb_s.initiative, cb_t.initiative = cb_t.initiative, cb_s.initiative
     cb_s.void_initiative_boost, cb_t.void_initiative_boost = cb_t.void_initiative_boost, cb_s.void_initiative_boost
+    cur_before = enc.current() if enc.started else None
     enc._sort()
+    if cur_before is not None:
+        enc.turn_index = enc.combatants.index(cur_before)
     store.save(rec)
     _save_encounter(guild, enc)
     await interaction.response.send_message(
@@ -7999,8 +8018,22 @@ async def npc_equip(
         c.off_hand_weapon = off_hand.strip()
         changes.append(f"Off-hand: **{c.off_hand_weapon or '(none)'}**")
     if armor is not None:
-        c.armor_name = armor.strip()
-        changes.append(f"Armor: **{c.armor_name or '(none)'}**")
+        a = armor.lower().strip()
+        if a in ("none", "", "remove"):
+            c.armor_name = ""
+            c.armor_tn_bonus = 0
+            c.armor_reduction = 0
+            changes.append("Armor: **(none)**")
+        else:
+            spec = combat.get_armor(a)
+            if spec is not None:
+                c.armor_name = a
+                c.armor_tn_bonus = spec["tn_bonus"]
+                c.armor_reduction = spec["reduction"]
+                changes.append(f"Armor: **{a}** (ATN+{spec['tn_bonus']}, Red {spec['reduction']})")
+            else:
+                c.armor_name = a
+                changes.append(f"Armor: **{a}** (custom — set ATN/Reduction manually)")
     if not changes:
         await interaction.response.send_message(
             "Provide at least one of `weapon:`, `off_hand:`, or `armor:`.", ephemeral=True,
@@ -8880,6 +8913,11 @@ class DmHealView(discord.ui.View):
             await interaction.response.send_message("Target no longer exists.", ephemeral=True)
             return
         c = rec.character
+        if stats.is_dead(c):
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(f"**{c.name}** is dead. PC death is permanent.", ephemeral=True)
+            return
         old_wounds = c.wounds_taken
         old_level = stats.wound_level_name(c)
         c.wounds_taken = max(0, c.wounds_taken - self.amount)
