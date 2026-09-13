@@ -8707,12 +8707,50 @@ async def _setup_server_inner(
             )
         family_roles_created.append(role)
 
-    # --- Helper: find existing category by name, or create it ---
-    def _find_category(name: str) -> discord.CategoryChannel | None:
-        return discord.utils.get(guild.categories, name=name)
+    # --- Cleanup helper: deduplicate categories, purge stray channels ---
+    _EXPECTED_CATEGORIES: dict[str, set[str]] = {
+        "Lobby": {"welcome", "character-submission"},
+        "Out of Character": {"general", "off-topic", "announcements", "rules-reference"},
+        "In Character": {"in-character"},
+        "Dungeon Masters": {"dm-discussion", "approvals"},
+    }
+    deleted_dupes: list[str] = []
+    deleted_channels: list[str] = []
 
-    created_channels: list[str] = []
-    skipped_channels: list[str] = []
+    for cat_name, expected_channels in _EXPECTED_CATEGORIES.items():
+        matches = [c for c in guild.categories if c.name == cat_name]
+        if len(matches) <= 1:
+            continue
+        matches.sort(key=lambda c: c.created_at)
+        keep = matches[0]
+        for dupe in matches[1:]:
+            for ch in dupe.channels:
+                try:
+                    await ch.delete(reason=f"Cleanup: duplicate {cat_name} category")
+                    deleted_channels.append(f"#{ch.name}")
+                except discord.Forbidden:
+                    pass
+            try:
+                await dupe.delete(reason=f"Cleanup: duplicate {cat_name} category")
+                deleted_dupes.append(cat_name)
+            except discord.Forbidden:
+                pass
+
+    for cat_name, expected_channels in _EXPECTED_CATEGORIES.items():
+        cat = discord.utils.get(guild.categories, name=cat_name)
+        if cat is None:
+            continue
+        for ch in list(cat.text_channels):
+            if ch.name not in expected_channels:
+                try:
+                    await ch.delete(reason=f"Cleanup: unexpected channel in {cat_name}")
+                    deleted_channels.append(f"#{ch.name}")
+                except discord.Forbidden:
+                    pass
+
+    # --- Ensure each category and its channels exist ---
+    created_items: list[str] = []
+    existing_items: list[str] = []
 
     # --- 1. Lobby (visible to everyone) ---
     lobby_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
@@ -8724,11 +8762,16 @@ async def _setup_server_inner(
             manage_messages=True,
         ),
     }
-    lobby_cat = _find_category("Lobby")
+    lobby_cat = discord.utils.get(guild.categories, name="Lobby")
     if lobby_cat is None:
         lobby_cat = await guild.create_category("Lobby", overwrites=lobby_overwrites, reason="Server setup")
+        created_items.append("Lobby category")
+    else:
+        await lobby_cat.edit(overwrites=lobby_overwrites, reason="Server setup: update permissions")
+        existing_items.append("Lobby")
+    existing_names = {ch.name for ch in lobby_cat.text_channels}
+    if "welcome" not in existing_names:
         welcome_ch = await lobby_cat.create_text_channel("welcome")
-        await lobby_cat.create_text_channel("character-submission")
         welcome_embed = discord.Embed(
             title="Welcome to Rokugan",
             color=0xC4A747,
@@ -8745,10 +8788,10 @@ async def _setup_server_inner(
         )
         welcome_msg = await welcome_ch.send(embed=welcome_embed)
         await welcome_msg.pin()
-        created_channels.append("Lobby")
-    else:
-        await lobby_cat.edit(overwrites=lobby_overwrites, reason="Server setup: update permissions")
-        skipped_channels.append("Lobby")
+        created_items.append("#welcome")
+    if "character-submission" not in existing_names:
+        await lobby_cat.create_text_channel("character-submission")
+        created_items.append("#character-submission")
 
     # --- 2. Out of Character (Approved + DMs only) ---
     ooc_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
@@ -8765,12 +8808,21 @@ async def _setup_server_inner(
         ooc_overwrites[r] = discord.PermissionOverwrite(
             view_channel=True, send_messages=True, read_message_history=True,
         )
-    ooc_cat = _find_category("Out of Character")
+    ooc_cat = discord.utils.get(guild.categories, name="Out of Character")
     if ooc_cat is None:
         ooc_cat = await guild.create_category("Out of Character", overwrites=ooc_overwrites, reason="Server setup")
+        created_items.append("Out of Character category")
+    else:
+        await ooc_cat.edit(overwrites=ooc_overwrites, reason="Server setup: update permissions")
+        existing_items.append("Out of Character")
+    existing_names = {ch.name for ch in ooc_cat.text_channels}
+    if "general" not in existing_names:
         await ooc_cat.create_text_channel("general")
+        created_items.append("#general")
+    if "off-topic" not in existing_names:
         await ooc_cat.create_text_channel("off-topic")
-
+        created_items.append("#off-topic")
+    if "announcements" not in existing_names:
         announce_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
             everyone: discord.PermissionOverwrite(view_channel=False),
             approved_role: discord.PermissionOverwrite(
@@ -8788,7 +8840,8 @@ async def _setup_server_inner(
                 manage_messages=True,
             )
         await ooc_cat.create_text_channel("announcements", overwrites=announce_overwrites)
-
+        created_items.append("#announcements")
+    if "rules-reference" not in existing_names:
         rules_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
             everyone: discord.PermissionOverwrite(view_channel=False),
             approved_role: discord.PermissionOverwrite(
@@ -8804,10 +8857,7 @@ async def _setup_server_inner(
             )
         rules_ch = await ooc_cat.create_text_channel("rules-reference", overwrites=rules_overwrites)
         await _post_rules_reference(rules_ch)
-        created_channels.append("Out of Character")
-    else:
-        await ooc_cat.edit(overwrites=ooc_overwrites, reason="Server setup: update permissions")
-        skipped_channels.append("Out of Character")
+        created_items.append("#rules-reference")
 
     # --- 3. In Character (Approved + DMs only) ---
     ic_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
@@ -8825,14 +8875,17 @@ async def _setup_server_inner(
             view_channel=True, send_messages=True, read_message_history=True,
             manage_messages=True,
         )
-    ic_cat = _find_category("In Character")
+    ic_cat = discord.utils.get(guild.categories, name="In Character")
     if ic_cat is None:
         ic_cat = await guild.create_category("In Character", overwrites=ic_overwrites, reason="Server setup")
-        await ic_cat.create_text_channel("in-character")
-        created_channels.append("In Character")
+        created_items.append("In Character category")
     else:
         await ic_cat.edit(overwrites=ic_overwrites, reason="Server setup: update permissions")
-        skipped_channels.append("In Character")
+        existing_items.append("In Character")
+    existing_names = {ch.name for ch in ic_cat.text_channels}
+    if "in-character" not in existing_names:
+        await ic_cat.create_text_channel("in-character")
+        created_items.append("#in-character")
 
     # --- 4. DM Room (Fortune + Kami only) ---
     dm_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
@@ -8847,30 +8900,41 @@ async def _setup_server_inner(
             view_channel=True, send_messages=True, read_message_history=True,
             manage_messages=True,
         )
-    dm_cat = _find_category("Dungeon Masters")
+    dm_cat = discord.utils.get(guild.categories, name="Dungeon Masters")
     if dm_cat is None:
         dm_cat = await guild.create_category("Dungeon Masters", overwrites=dm_overwrites, reason="Server setup")
-        await dm_cat.create_text_channel("dm-discussion")
-        approvals_ch = await dm_cat.create_text_channel("approvals")
-        store.set_approval_channel(str(guild.id), str(approvals_ch.id))
-        created_channels.append("Dungeon Masters")
+        created_items.append("Dungeon Masters category")
     else:
         await dm_cat.edit(overwrites=dm_overwrites, reason="Server setup: update permissions")
-        approvals_ch_disc = discord.utils.get(dm_cat.text_channels, name="approvals")
-        if approvals_ch_disc:
-            store.set_approval_channel(str(guild.id), str(approvals_ch_disc.id))
-        skipped_channels.append("Dungeon Masters")
+        existing_items.append("Dungeon Masters")
+    existing_names = {ch.name for ch in dm_cat.text_channels}
+    if "dm-discussion" not in existing_names:
+        await dm_cat.create_text_channel("dm-discussion")
+        created_items.append("#dm-discussion")
+    if "approvals" not in existing_names:
+        await dm_cat.create_text_channel("approvals")
+        created_items.append("#approvals")
+    approvals_ch_disc = discord.utils.get(dm_cat.text_channels, name="approvals")
+    if approvals_ch_disc:
+        store.set_approval_channel(str(guild.id), str(approvals_ch_disc.id))
 
+    # --- Summary ---
     summary_parts = ["**Server setup complete!**\n"]
     summary_parts.append(
         f"**Roles:** {kami_role.mention} (admin), {fortune_role.mention} (DM), "
         f"{approved_role.mention} (player), {len(clan_roles_created)} clan, "
         f"{len(family_roles_created)} family roles"
     )
-    if created_channels:
-        summary_parts.append(f"**Created:** {', '.join(created_channels)}")
-    if skipped_channels:
-        summary_parts.append(f"**Already existed (permissions updated):** {', '.join(skipped_channels)}")
+    if deleted_dupes:
+        summary_parts.append(f"**Deleted duplicate categories:** {', '.join(deleted_dupes)}")
+    if deleted_channels:
+        summary_parts.append(f"**Deleted stray/duplicate channels:** {', '.join(deleted_channels)}")
+    if created_items:
+        summary_parts.append(f"**Created:** {', '.join(created_items)}")
+    if existing_items:
+        summary_parts.append(f"**Already existed (permissions updated):** {', '.join(existing_items)}")
+    if not deleted_dupes and not deleted_channels and not created_items:
+        summary_parts.append("Everything was already in order. Permissions refreshed.")
     summary_parts.append(
         f"\nPlayers use `/submit` in the lobby to apply. "
         f"DMs approve or deny from the approvals channel."
