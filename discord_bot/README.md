@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 55: Weapon Specials (Armor TN, Stance Penalties, Bo-Hiya, Breakage, Lance, Ninjutsu Scaling)
+## Status: Phase 56: Full s39 Weapon Specials (Firearms, Katana Void, Kyoketsu-shogi, All Prior)
 
 **Help & Navigation**
 
@@ -679,6 +679,35 @@ removal of the weapon from play.
 Lance uses DR 1k2 (non-charging). Full DR 3k4 requires a mounted charge,
 which is not yet modeled — the DM can use `bonus_tn:` to remove the penalty
 and override DR manually for a charge.
+
+**Katana Void Damage** (GDD s39): pass `void_damage:True` on `/attack` with a
+katana. The VP is spent at damage resolution time (not attack time), adding
+**+1k1** to the damage roll. If the attacker has no VP when damage resolves, a
+"no Void Points" note appears and no bonus is applied. Only the katana catalog
+entry has the `void_damage` flag — other weapons are rejected with an error.
+
+**Kyoketsu-shogi** (GDD s39): doubles the target's armor TN bonus (same
+`armor_tn_mult: 2` mechanic as flesh cutter arrows). Auto-applied.
+
+**Firearms** (GDD s39 — Teppoudo / Intelligence)
+
+All firearms ignore armor effects on both Armor TN and Reduction. Attack rolls
+use Intelligence (the Teppoudo skill trait), not Agility or Reflexes.
+
+| Weapon | DR | Skill | Armor TN | Reduction Effect | Other |
+|---|---|---|---|---|---|
+| `kakiyari` | 3k2 | Teppoudo | Ignores armor TN bonus | Ignores armor Reduction | Can use as `yari` in melee (DR 1k1) |
+| `hand_cannon` | 4k3 | Teppoudo | Ignores armor TN bonus | Ignores armor + natural toughness Reduction | Can use as `tetsubo` in melee |
+| `bajozutsu` | 3k2 | Teppoudo | Ignores armor TN bonus | Ignores armor Reduction | Can be drawn with Iaijutsu (DM) |
+| `teppo` | 3k3 | Teppoudo | Ignores armor TN bonus | Ignores armor Reduction | At half range: also ignores natural toughness (DM) |
+
+**Teppoudo mastery damage bonuses** (auto-applied at damage time):
+- Rank 3: +1k0 to all firearm damage rolls
+- Rank 7: additionally +0k1 (cumulative +1k1)
+
+Firearms do not add Strength to damage. The DM may optionally rule that
+Perception adds to damage (comparable to Strength for melee) — use
+`increased_damage` raises to represent this if desired.
 
 **Rooms** (private play rooms: each is a Discord **private thread**)
 

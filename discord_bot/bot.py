@@ -906,6 +906,7 @@ class DamageView(discord.ui.View):
         channel_id: int = 0,
         source_channel_id: int = 0,
         weapon_material: str = "normal",
+        void_damage: bool = False,
     ) -> None:
         super().__init__(timeout=1800)  # 30 min
         self.attacker_id = attacker_id
@@ -922,6 +923,7 @@ class DamageView(discord.ui.View):
         self.channel_id = channel_id
         self.source_channel_id = source_channel_id
         self.weapon_material = weapon_material
+        self.void_damage = void_damage
         # Relabel the primary button to match the maneuver, and hide the Void
         # button when it would be nonsensical (knockdown has no damage roll;
         # creature targets have no VP pool).
@@ -1032,10 +1034,15 @@ class DamageView(discord.ui.View):
             extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
             bg_roll, _, bg_note = combat.blowgun_damage_bonus(attacker, self.weapon)
             extra_rolled += bg_roll
+            tp_roll, tp_kept, tp_note = combat.teppoudo_damage_bonus(attacker, self.weapon)
+            extra_rolled += tp_roll
             t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
             extra_rolled += t_roll
+            t_kept += tp_kept
             if bg_note:
                 t_dmg_notes = [bg_note] + t_dmg_notes
+            if tp_note:
+                t_dmg_notes = [tp_note] + t_dmg_notes
             m_roll, m_kept, m_flat, m_dmg_notes = skill_mastery.attacker_damage(attacker, wp, self.weapon)
             extra_rolled += m_roll
             t_kept += m_kept
@@ -1054,6 +1061,14 @@ class DamageView(discord.ui.View):
             bish_roll, bish_notes = advantage_effects.increased_damage_bonus(attacker, self.increased_damage)
             extra_rolled += bish_roll
             t_dmg_notes = t_dmg_notes + bish_notes
+            if self.void_damage and attacker.current_void_points > 0:
+                attacker.current_void_points -= 1
+                extra_rolled += 1
+                t_kept += 1
+                t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
+                store.save(attacker_rec)
+            elif self.void_damage:
+                t_dmg_notes.append("Katana: no Void Points for +1k1 damage")
             ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
             t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
             ignore += t_ignore
@@ -1083,13 +1098,17 @@ class DamageView(discord.ui.View):
             cre_base_red = cre_rec.creature.reduction
             bokken_note = ""
             bohiya_note = ""
+            firearm_red_note = ""
             if wp.get("ignore_all_reduction"):
                 bohiya_note = f"Bo-Hiya: ignores all Reduction ({cre_base_red} → 0)"
+                cre_base_red = 0
+            elif wp.get("ignore_creature_reduction"):
+                firearm_red_note = f"Firearm: ignores natural toughness ({cre_base_red} → 0)"
                 cre_base_red = 0
             elif wp.get("double_reduction"):
                 bokken_note = f"Bokken: Reduction doubled ({cre_base_red} → {cre_base_red * 2})"
                 cre_base_red *= 2
-            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, bohiya_note, *t_dmg_notes) if n)
+            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, *t_dmg_notes) if n)
             reduction = max(0, cre_base_red - ignore - tsu_ignore)
             bypasses = self.weapon_material in ("jade", "crystal", "obsidian", "nemuranai")
             applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction, bypasses_invuln=bypasses)
@@ -1258,10 +1277,15 @@ class DamageView(discord.ui.View):
         extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
         bg_roll, _, bg_note = combat.blowgun_damage_bonus(attacker, self.weapon)
         extra_rolled += bg_roll
+        tp_roll, tp_kept, tp_note = combat.teppoudo_damage_bonus(attacker, self.weapon)
+        extra_rolled += tp_roll
         t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
         extra_rolled += t_roll
+        t_kept += tp_kept
         if bg_note:
             t_dmg_notes = [bg_note] + t_dmg_notes
+        if tp_note:
+            t_dmg_notes = [tp_note] + t_dmg_notes
         m_roll, m_kept, m_flat, m_dmg_notes = skill_mastery.attacker_damage(attacker, wp, self.weapon)
         extra_rolled += m_roll
         t_kept += m_kept
@@ -1280,6 +1304,14 @@ class DamageView(discord.ui.View):
         bish_roll, bish_notes = advantage_effects.increased_damage_bonus(attacker, self.increased_damage)
         extra_rolled += bish_roll
         t_dmg_notes = t_dmg_notes + bish_notes
+        if self.void_damage and attacker.current_void_points > 0:
+            attacker.current_void_points -= 1
+            extra_rolled += 1
+            t_kept += 1
+            t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
+            store.save(attacker_rec)
+        elif self.void_damage:
+            t_dmg_notes.append("Katana: no Void Points for +1k1 damage")
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
         t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
         ignore += t_ignore
@@ -1312,14 +1344,18 @@ class DamageView(discord.ui.View):
         base_red = target.armor_reduction
         bokken_note = ""
         bohiya_note = ""
+        firearm_red_note = ""
         if wp.get("ignore_all_reduction"):
             bohiya_note = f"Bo-Hiya: ignores all Reduction ({base_red} → 0)"
+            base_red = 0
+        elif wp.get("ignore_armor_reduction"):
+            firearm_red_note = f"Firearm: ignores armor Reduction ({base_red} → 0)"
             base_red = 0
         elif wp.get("double_reduction"):
             bokken_note = f"Bokken: Reduction doubled ({base_red} → {base_red * 2})"
             base_red *= 2
         kata_line = "".join(
-            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes) if n
+            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes) if n
         )
         reduction = max(0, base_red - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red)
         if wp.get("ignore_all_reduction"):
@@ -1601,6 +1637,7 @@ combat_void = app_commands.Group(name="void", description="Round-level Void Poin
     increased_damage="Increased Damage raises: each adds +5 TN AND +1 damage die on a hit.",
     maneuver="A combat maneuver (its raise cost is added to the TN automatically).",
     spend_void="Spend a Void Point for +1k1 on the attack roll (RAW: not valid on damage).",
+    void_damage="(Katana only) Spend a Void Point for +1k1 on the damage roll.",
     attacker_stance="Your stance (Full Attack = +2k1 to hit).",
     defender_stance="Target's stance (affects their Armor TN).",
     bonus_tn="Situational +/- to the target's Armor TN (DM discretion).",
@@ -1626,6 +1663,7 @@ async def attack(
     increased_damage: app_commands.Range[int, 0, 10] = 0,
     maneuver: app_commands.Choice[str] | None = None,
     spend_void: bool = False,
+    void_damage: bool = False,
     attacker_stance: app_commands.Choice[str] | None = None,
     defender_stance: app_commands.Choice[str] | None = None,
     bonus_tn: app_commands.Range[int, -50, 50] = 0,
@@ -1751,6 +1789,15 @@ async def attack(
         else:
             void_line = " · 🌀 no Void Points to spend"
 
+    # Katana void damage: validate weapon eligibility (VP spent at damage time).
+    atk_weapon_profile = combat.get_weapon_profile(weapon)
+    if void_damage and not atk_weapon_profile.get("void_damage"):
+        await interaction.response.send_message(
+            f"**{weapon}** does not support void_damage — only katana can spend VP for +1k1 damage (GDD s39).",
+            ephemeral=True,
+        )
+        return
+
     # Active-kata combat modifiers (GDD s30; deterministic subset only).
     kata_notes: list[str] = []          # effects auto-applied to this roll
     rl_used_notes: list[str] = []       # rate-limited effects already spent this Turn/Round
@@ -1805,7 +1852,6 @@ async def attack(
         elif status == "used":
             rl_used_notes.append("Striking as Fire already used this Round.")
     # Attacker's active kata: a Trait replaced by a Ring on the attack roll.
-    atk_weapon_profile = combat.get_weapon_profile(weapon)
     trait_ovr, trait_ovr_note = kata_effects.attacker_trait_override(attacker, atk_weapon_profile)
     trait_ovr_name = "Air" if trait_ovr is not None else ""
     if trait_ovr_note:
@@ -2043,6 +2089,7 @@ async def attack(
                 target_creature_id=target_creature_rec.id, defender_stance=d_stance,
                 called_shot_raises=cs_raises, channel_id=interaction.channel_id,
                 source_channel_id=src_ch_id, weapon_material=mat,
+                void_damage=void_damage,
             )
         else:
             view = DamageView(
@@ -2050,6 +2097,7 @@ async def attack(
                 maneuver=man, attack_margin=outcome["margin"], defender_stance=d_stance,
                 called_shot_raises=cs_raises, channel_id=interaction.channel_id,
                 source_channel_id=src_ch_id, weapon_material=mat,
+                void_damage=void_damage,
             )
         prompt = {
             "disarm": "A DM can resolve the disarm below.",

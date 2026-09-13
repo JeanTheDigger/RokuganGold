@@ -33,14 +33,14 @@ from .dice import DiceEngine
 
 # Weapon catalog subset (values verbatim from individual_combat.gd WEAPON_CATALOG).
 # Keys used by the bot: rolled, kept, strength_adds, skill, trait, melee, size,
-# no_explode (shinai), double_reduction (bokken), armor_tn_mult (arrows/blowgun),
-# half_range, penalty_mounted, penalty_on_foot (bows), ignore_all_reduction
-# (bo-hiya), and break_threshold (kumade/lance/parangu/ninja-to). Other special keys
-# (thrown/charge/break/etc.) are intentionally
-# omitted: those maneuvers are not modelled at this phase.
+# no_explode (shinai), double_reduction (bokken), armor_tn_mult (arrows/blowgun/
+# firearms), half_range, penalty_mounted, penalty_on_foot (bows/lance),
+# ignore_all_reduction (bo-hiya), ignore_armor_reduction (firearms: zeroes armor
+# Reduction only), ignore_creature_reduction (hand-cannon: zeroes natural toughness),
+# break_threshold (kumade/lance/parangu/ninja-to), void_damage (katana: VP for +1k1).
 WEAPON_CATALOG: dict[str, dict] = {
     # Swords (Kenjutsu)
-    "katana": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium"},
+    "katana": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium", "void_damage": True},
     "wakizashi": {"rolled": 2, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Small"},
     "no_dachi": {"rolled": 3, "kept": 3, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Large"},
     "bokken": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium", "double_reduction": True},
@@ -99,7 +99,7 @@ WEAPON_CATALOG: dict[str, dict] = {
     "sang_kauw": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Staves", "trait": "agility", "melee": True, "size": "Medium"},
     # Chain weapons
     "kusarigama": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
-    "kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
+    "kyoketsu_shogi": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large", "armor_tn_mult": 2},
     "manrikikusari": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Chain Weapons", "trait": "agility", "melee": True, "size": "Large"},
     # Thrown / ninja (Ninjutsu; no Strength to damage; damage does NOT explode
     # by default: s24: "Rank 5: Damage dice explode normally (they do not
@@ -109,6 +109,13 @@ WEAPON_CATALOG: dict[str, dict] = {
     "blowgun": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Medium", "no_explode": True, "armor_tn_mult": 3},
     # Unarmed
     "unarmed": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Jiujutsu", "trait": "agility", "melee": True, "size": "Small"},
+    # Firearms (Teppoudo / Intelligence). General rule: ignore armor TN + armor Reduction.
+    # Kakiyari can be used as a yari in melee (DR 1k1) — select "yari" for that mode.
+    "kakiyari": {"rolled": 3, "kept": 2, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Large", "armor_tn_mult": 0, "ignore_armor_reduction": True},
+    # Hand-Cannon: also ignores natural toughness Reduction. Can be used as tetsubo in melee.
+    "hand_cannon": {"rolled": 4, "kept": 3, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Large", "armor_tn_mult": 0, "ignore_armor_reduction": True, "ignore_creature_reduction": True},
+    "bajozutsu": {"rolled": 3, "kept": 2, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Small", "armor_tn_mult": 0, "ignore_armor_reduction": True},
+    "teppo": {"rolled": 3, "kept": 3, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Large", "armor_tn_mult": 0, "ignore_armor_reduction": True},
 }
 
 # Armor catalog (verbatim from simulation/armor_system.gd ARMOR_CATALOG).
@@ -323,21 +330,22 @@ def armor_tn(target: Character, defender_stance: str = "attack", extra: int = 0)
 
 
 def arrow_armor_tn_mod(weapon_name: str, target_armor_tn_bonus: int) -> tuple[int, str]:
-    """Armor TN adjustment from arrow/blowgun specials (GDD s39).
-    Armor-Piercing ignores the bonus, Flesh Cutter doubles it, Blowgun triples it.
+    """Armor TN adjustment from arrow/blowgun/firearm specials (GDD s39).
+    armor_tn_mult 0 = ignores bonus, 2 = doubles, 3 = triples.
     Returns (tn_modifier, note). Modifier is added to the target's Armor TN."""
     wp = get_weapon_profile(weapon_name)
     mult = wp.get("armor_tn_mult")
     if mult is None:
         return 0, ""
+    label = weapon_name.replace("_", " ").title()
     adj = target_armor_tn_bonus * (mult - 1)
     if mult == 0:
-        return adj, f"Armor-Piercing: ignores armor TN bonus ({adj:+d})"
+        return adj, f"{label}: ignores armor TN bonus ({adj:+d})"
     if mult == 2:
-        return adj, f"Flesh Cutter: doubles armor TN bonus ({adj:+d})"
+        return adj, f"{label}: doubles armor TN bonus ({adj:+d})"
     if mult == 3:
-        return adj, f"Blowgun: triples armor TN bonus ({adj:+d})"
-    return adj, f"Arrow: armor TN ×{mult} ({adj:+d})"
+        return adj, f"{label}: triples armor TN bonus ({adj:+d})"
+    return adj, f"{label}: armor TN ×{mult} ({adj:+d})"
 
 
 def blowgun_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, int, str]:
@@ -351,6 +359,25 @@ def blowgun_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, in
         return 2, 0, "Blowgun DR 2k1 (Ninjutsu 7+)"
     if ninjutsu >= 3:
         return 1, 0, "Blowgun DR 1k1 (Ninjutsu 3+)"
+    return 0, 0, ""
+
+
+FIREARM_WEAPONS: frozenset[str] = frozenset({
+    "kakiyari", "hand_cannon", "bajozutsu", "teppo",
+})
+
+
+def teppoudo_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, int, str]:
+    """Extra damage dice from Teppoudo mastery ranks (GDD s39).
+    Mastery 3: +1k0; Mastery 7: additionally +0k1 (cumulative = +1k1).
+    Returns (extra_rolled, extra_kept, note)."""
+    if weapon_name.lower().strip() not in FIREARM_WEAPONS:
+        return 0, 0, ""
+    teppoudo = attacker.skills.get("Teppoudo", 0)
+    if teppoudo >= 7:
+        return 1, 1, "Teppoudo R7: +1k1 damage (R3 +1k0, R7 +0k1)"
+    if teppoudo >= 3:
+        return 1, 0, "Teppoudo R3: +1k0 damage"
     return 0, 0, ""
 
 
@@ -393,8 +420,8 @@ def resolve_attack(
     skill_name = weapon.get("skill", "Kenjutsu")
     skill_rank = attacker.skills.get(skill_name, 0)
 
-    trait_name = "reflexes" if weapon.get("trait") == "reflexes" else "agility"
-    trait_value = attacker.reflexes if trait_name == "reflexes" else attacker.agility
+    trait_name = weapon.get("trait", "agility")
+    trait_value = getattr(attacker, trait_name, attacker.agility)
     if trait_override is not None:
         # An active kata replaces the normal Trait with a Ring (e.g. Iron Forest
         # Style: Air Ring instead of Agility for spear/polearm attack rolls, s30).
