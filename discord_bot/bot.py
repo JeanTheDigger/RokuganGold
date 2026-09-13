@@ -6608,11 +6608,25 @@ async def location_area_create(
 
     if description:
         desc_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
-            everyone: discord.PermissionOverwrite(send_messages=False),
+            everyone: discord.PermissionOverwrite(view_channel=False, send_messages=False),
             bot_member: discord.PermissionOverwrite(
                 view_channel=True, send_messages=True, manage_messages=True,
             ),
         }
+        if role:
+            desc_overwrites[role] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=False, read_message_history=True,
+            )
+        elif approved_role:
+            desc_overwrites[approved_role] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=False, read_message_history=True,
+            )
+        for r in (fortune_role, kami_role):
+            if r:
+                desc_overwrites[r] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, read_message_history=True,
+                    manage_messages=True,
+                )
         desc_ch = await category.create_text_channel("description", overwrites=desc_overwrites)
         embed = discord.Embed(
             title=clean_name, color=0xC4A747, description=description,
@@ -6702,6 +6716,66 @@ async def location_area_list(interaction: discord.Interaction) -> None:
     else:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
+
+
+@location_area_group.command(name="fix-permissions", description="Repair permissions on all location areas (hides them from non-Approved). Kami role required.")
+async def location_area_fix_permissions(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    guild = interaction.guild
+    guild_id = str(guild.id)
+    areas = store.list_location_areas(guild_id)
+    if not areas:
+        await interaction.response.send_message("No location areas to fix.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    everyone = guild.default_role
+    bot_member = guild.me
+    approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
+    fortune_role = discord.utils.get(guild.roles, name=ROLE_FORTUNE)
+    kami_role = discord.utils.get(guild.roles, name=ROLE_KAMI)
+    fixed = 0
+    skipped = 0
+    for area in areas:
+        cat = guild.get_channel(int(area.category_id))
+        if cat is None or not isinstance(cat, discord.CategoryChannel):
+            skipped += 1
+            continue
+        try:
+            await cat.set_permissions(everyone, view_channel=False, reason="Fix permissions")
+            await cat.set_permissions(bot_member, view_channel=True, send_messages=True,
+                                     manage_channels=True, manage_messages=True,
+                                     manage_threads=True, reason="Fix permissions")
+            if approved_role:
+                await cat.set_permissions(approved_role, view_channel=True, send_messages=True,
+                                         read_message_history=True, reason="Fix permissions")
+            for r in (fortune_role, kami_role):
+                if r:
+                    await cat.set_permissions(r, view_channel=True, send_messages=True,
+                                             read_message_history=True, manage_messages=True,
+                                             reason="Fix permissions")
+            for ch in cat.text_channels:
+                if ch.name == "description":
+                    await ch.set_permissions(everyone, view_channel=False, send_messages=False,
+                                            reason="Fix permissions")
+                    if approved_role:
+                        await ch.set_permissions(approved_role, view_channel=True, send_messages=False,
+                                                read_message_history=True, reason="Fix permissions")
+                    for r in (fortune_role, kami_role):
+                        if r:
+                            await ch.set_permissions(r, view_channel=True, send_messages=True,
+                                                    read_message_history=True, manage_messages=True,
+                                                    reason="Fix permissions")
+            fixed += 1
+        except discord.Forbidden:
+            skipped += 1
+    await interaction.followup.send(
+        f"Fixed permissions on **{fixed}** area(s). "
+        + (f"Skipped **{skipped}** (missing or no permission)." if skipped else "All areas updated."),
+        ephemeral=True,
+    )
 
 
 @location_group.command(name="create", description="Create a location (text channel) in an area. Fortune role required.")
