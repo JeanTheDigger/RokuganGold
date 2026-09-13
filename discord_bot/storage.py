@@ -36,6 +36,14 @@ INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 0);
 _MIGRATIONS: list[str] = [
     # 1: add description column to rooms
     "ALTER TABLE rooms ADD COLUMN description TEXT NOT NULL DEFAULT '';",
+    # 2: date display channel with pinned message tracking
+    """\
+CREATE TABLE IF NOT EXISTS date_channels (
+    guild_id   TEXT NOT NULL PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL DEFAULT ''
+);
+""",
 ]
 
 _SCHEMA = """
@@ -573,6 +581,33 @@ class Store:
         with self._lock, self._conn:
             self._conn.execute(
                 "DELETE FROM approval_channels WHERE guild_id = ?", (guild_id,)
+            )
+
+    # -- date display channel --------------------------------------------------
+    def set_date_channel(self, guild_id: str, channel_id: str, message_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO date_channels (guild_id, channel_id, message_id) VALUES (?, ?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id, "
+                "message_id = excluded.message_id",
+                (guild_id, channel_id, message_id),
+            )
+
+    def get_date_channel(self, guild_id: str) -> tuple[str, str] | None:
+        """Return (channel_id, message_id) or None."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT channel_id, message_id FROM date_channels WHERE guild_id = ?",
+                (guild_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return (row["channel_id"], row["message_id"])
+
+    def clear_date_channel(self, guild_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM date_channels WHERE guild_id = ?", (guild_id,)
             )
 
     # -- encounter persistence -------------------------------------------------

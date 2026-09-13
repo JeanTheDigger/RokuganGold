@@ -2522,7 +2522,7 @@ async def dm_roles(interaction: discord.Interaction) -> None:
 
 SPELL_ELEMENTS = ("air", "earth", "fire", "water", "void")
 
-@dm.command(name="new_day", description="Advance to a new day: refresh spell slots and apply natural healing for all active PCs.")
+@dm.command(name="new_day", description="Advance one day: heal, refresh VP and spell slots for all PCs.")
 async def dm_new_day(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -2572,11 +2572,39 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         footer += " · Set the date with /dm setdate"
     embed.set_footer(text=footer)
     await interaction.response.send_message(embed=embed)
+    if date_str:
+        await _update_date_display(guild, date_str, reason="A new day dawns in Rokugan.")
 
 def _format_rokugani_date(year: int, month: int, day: int) -> str:
     """Format a Rokugani date as a human-readable string."""
     month_name, season = ROKUGANI_MONTHS[month - 1]
     return f"Day {day} of the Month of the {month_name}, {season} — Year {year} (Isawa Calendar)"
+
+def _date_embed(date_str: str) -> discord.Embed:
+    return discord.Embed(
+        title="Current Date",
+        description=date_str,
+        color=0xC4A747,
+    )
+
+async def _update_date_display(guild_id: str, date_str: str, reason: str = "Time has advanced.") -> None:
+    """Edit the pinned date message and ping @everyone in the date channel."""
+    info = store.get_date_channel(guild_id)
+    if info is None:
+        return
+    channel_id, message_id = info
+    channel = client.get_channel(int(channel_id))
+    if channel is None:
+        return
+    if message_id:
+        try:
+            msg = await channel.fetch_message(int(message_id))
+            await msg.edit(embed=_date_embed(date_str))
+        except discord.NotFound:
+            new_msg = await channel.send(embed=_date_embed(date_str))
+            await new_msg.pin()
+            store.set_date_channel(guild_id, channel_id, str(new_msg.id))
+    await channel.send(f"@everyone {reason}\n**{date_str}**")
 
 def _advance_calendar(guild_id: str) -> str | None:
     """Advance the guild's calendar by 1 day. Returns the new date string, or None if no date set."""
@@ -2594,7 +2622,7 @@ def _advance_calendar(guild_id: str) -> str | None:
     store.set_calendar(guild_id, year, month, day)
     return _format_rokugani_date(year, month, day)
 
-@dm.command(name="setdate", description="Set the in-game Rokugani calendar date. Fortune role required.")
+@dm.command(name="setdate", description="Set the Rokugani calendar date (Fortune+).")
 @app_commands.describe(
     year="Year number (Isawa Calendar).",
     month="Month (1-12): Hare, Dragon, Serpent, Horse, Goat, Monkey, Rooster, Dog, Boar, Rat, Ox, Tiger.",
@@ -2614,7 +2642,8 @@ async def dm_setdate(
         return
     if not await _require_dm_role(interaction):
         return
-    store.set_calendar(str(interaction.guild_id), year, month, day)
+    guild = str(interaction.guild_id)
+    store.set_calendar(guild, year, month, day)
     date_str = _format_rokugani_date(year, month, day)
     embed = discord.Embed(
         title="Calendar Set",
@@ -2622,6 +2651,7 @@ async def dm_setdate(
         color=0xC4A747,
     )
     await interaction.response.send_message(embed=embed)
+    await _update_date_display(guild, date_str, reason="The calendar has been set.")
 
 async def _any_character_autocomplete(
     interaction: discord.Interaction, current: str
@@ -6047,7 +6077,7 @@ async def spell_importune(
 # Phase 42: Taint Progression (#14)
 # ---------------------------------------------------------------------------
 
-@dm.command(name="taint", description="View or modify a character's Shadowlands Taint. Fortune role required.")
+@dm.command(name="taint", description="View or modify a character's Shadowlands Taint (Fortune+).")
 @app_commands.describe(
     name="Character name.",
     add="Taint points to add (can be negative to remove).",
@@ -6114,7 +6144,7 @@ async def taint_command(
 # Phase 42: Crafting Extended (#6)
 # ---------------------------------------------------------------------------
 
-@dm.command(name="craft_extended", description="Extended crafting roll: multi-step project with cumulative total. Fortune role required.")
+@dm.command(name="craft_extended", description="Extended crafting roll: cumulative multi-step project (Fortune+).")
 @app_commands.describe(
     name="Character name.",
     skill="Craft/Artisan skill name.",
@@ -6429,7 +6459,45 @@ async def dm_clear_log(interaction: discord.Interaction) -> None:
     store.clear_log_channel(str(interaction.guild_id))
     await interaction.response.send_message("Combat log channel cleared. Events will no longer be logged.", ephemeral=True)
 
-@dm.command(name="approval_channel", description="Set the DM channel where damage/healing approvals are routed (Kami only).")
+@dm.command(name="date_channel", description="Set the channel for the pinned date display (Kami only).")
+@app_commands.describe(channel="The text channel where the date will be pinned and updated.")
+async def dm_date_channel(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not _is_kami(interaction):
+        await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can set the date channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    cal = store.get_calendar(guild)
+    if cal is None:
+        await interaction.response.send_message(
+            "Set the date first with `/dm setdate` before choosing a date channel.", ephemeral=True
+        )
+        return
+    await interaction.response.defer(ephemeral=True)
+    date_str = _format_rokugani_date(*cal)
+    msg = await channel.send(embed=_date_embed(date_str))
+    await msg.pin()
+    store.set_date_channel(guild, str(channel.id), str(msg.id))
+    await interaction.followup.send(
+        f"Date channel set to {channel.mention}. The current date is pinned there and "
+        f"will update automatically when time advances."
+    )
+
+@dm.command(name="clear_date_channel", description="Stop updating the date display channel (Kami only).")
+async def dm_clear_date_channel(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not _is_kami(interaction):
+        await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can clear the date channel.", ephemeral=True)
+        return
+    store.clear_date_channel(str(interaction.guild_id))
+    await interaction.response.send_message("Date channel cleared. The pinned message will no longer update.", ephemeral=True)
+
+@dm.command(name="approval_channel", description="Set the DM channel for damage/healing approvals (Kami only).")
 @app_commands.describe(channel="The DM-only text channel for approval requests.")
 async def dm_approval_channel(
     interaction: discord.Interaction,
@@ -6457,7 +6525,7 @@ async def dm_clear_approval(interaction: discord.Interaction) -> None:
     store.clear_approval_channel(str(interaction.guild_id))
     await interaction.response.send_message("Approval channel cleared. Damage approvals will appear inline.", ephemeral=True)
 
-@dm.command(name="treat", description="Medicine treatment: healer rolls, DM approves healing. L5R 4e Medicine rules.")
+@dm.command(name="treat", description="Medicine treatment: healer rolls, DM approves (L5R 4e).")
 @app_commands.describe(
     healer="Character performing the treatment.",
     patient="Character being treated.",
