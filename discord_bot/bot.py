@@ -105,18 +105,22 @@ class RokuganBot(discord.Client):
         if GUILD_ID:
             guild = discord.Object(id=int(GUILD_ID))
             self.tree.copy_global_to(guild=guild)
-            synced = await self.tree.sync(guild=guild)
-            log.info("Synced %d commands to dev guild %s", len(synced), GUILD_ID)
+            await self.tree.sync(guild=guild)
             self.tree.clear_commands(guild=None)
             await self.tree.sync()
-            log.info("Cleared stale global commands")
-        else:
-            synced = await self.tree.sync()
-            log.info("Synced %d global commands (may take up to ~1h to appear)", len(synced))
+            log.info("Synced commands to dev guild %s and cleared global", GUILD_ID)
 
     async def on_ready(self) -> None:
         self.tree.on_error = _on_app_command_error
         self.add_view(_ChargenButtonView())
+        if not GUILD_ID:
+            for g in self.guilds:
+                self.tree.copy_global_to(guild=g)
+                synced = await self.tree.sync(guild=g)
+                log.info("Synced %d commands to guild %s", len(synced), g.id)
+            self.tree.clear_commands(guild=None)
+            await self.tree.sync()
+            log.info("Cleared stale global commands")
         log.info("Logged in as %s (id=%s). Ready.", self.user, getattr(self.user, "id", "?"))
         for ch_id_str, data_json in store.load_all_encounters():
             try:
@@ -599,7 +603,9 @@ async def sync_commands(interaction: discord.Interaction) -> None:
     guild = discord.Object(id=interaction.guild_id)
     client.tree.copy_global_to(guild=guild)
     synced = await client.tree.sync(guild=guild)
-    await interaction.followup.send(f"Synced **{len(synced)}** commands to this server.")
+    client.tree.clear_commands(guild=None)
+    await client.tree.sync()
+    await interaction.followup.send(f"Synced **{len(synced)}** commands to this server (global duplicates cleared).")
 
 @client.tree.command(name="whoami", description="Quick glance at your active character's status.")
 async def whoami(interaction: discord.Interaction) -> None:
