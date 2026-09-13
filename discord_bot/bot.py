@@ -113,6 +113,7 @@ class RokuganBot(discord.Client):
 
     async def on_ready(self) -> None:
         self.tree.on_error = _on_app_command_error
+        self.add_view(_ChargenButtonView())
         log.info("Logged in as %s (id=%s). Ready.", self.user, getattr(self.user, "id", "?"))
         for ch_id_str, data_json in store.load_all_encounters():
             try:
@@ -8475,6 +8476,23 @@ async def submit_character(interaction: discord.Interaction) -> None:
         return
     await _start_chargen_wizard(interaction)
 
+
+class _ChargenButtonView(discord.ui.View):
+    """Persistent button posted in #character-submission. Survives bot restarts."""
+
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Begin Character Creation",
+        style=discord.ButtonStyle.success,
+        custom_id="chargen_start_button",
+        emoji="⚔️",
+    )
+    async def start_chargen(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await _start_chargen_wizard(interaction)
+
+
 setup_group = app_commands.Group(name="setup", description="Server setup commands (Kami only).")
 
 @setup_group.command(name="server", description="Create the server channel structure (Lobby, OOC, IC, DM categories). Kami only.")
@@ -8723,11 +8741,8 @@ async def _setup_server_inner(
             description=(
                 "Welcome, traveler. This server hosts a persistent world set in "
                 "Rokugan, using **Legend of the Five Rings 4th Edition** rules.\n\n"
-                "**To gain access to the server:**\n"
-                "1. Go to the **#character-submission** channel\n"
-                "2. Use the `/submit` command with your character's name and concept\n"
-                "3. A Dungeon Master will review and approve your character\n"
-                "4. Once approved, you'll gain access to all channels\n\n"
+                "Head over to **#character-submission** to create your character "
+                "and join the world.\n\n"
                 "We look forward to your story."
             ),
         )
@@ -8735,8 +8750,45 @@ async def _setup_server_inner(
         await welcome_msg.pin()
         created_items.append("#welcome")
     if "character-submission" not in existing_names:
-        await lobby_cat.create_text_channel("character-submission")
+        sub_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+            everyone: discord.PermissionOverwrite(
+                view_channel=True, send_messages=False, read_message_history=True,
+            ),
+            bot_member: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_channels=True,
+                manage_messages=True,
+            ),
+        }
+        sub_ch = await lobby_cat.create_text_channel(
+            "character-submission", overwrites=sub_overwrites,
+        )
+        sub_embed = discord.Embed(
+            title="Character Submission",
+            color=0xC4A747,
+            description=(
+                "Ready to enter Rokugan? Press the button below to begin "
+                "creating your character.\n\n"
+                "A private channel will open where you can build your character "
+                "step by step. Once complete, a Dungeon Master will review and "
+                "approve your submission.\n\n"
+                "After approval, you'll gain access to the rest of the server."
+            ),
+        )
+        await sub_ch.send(embed=sub_embed, view=_ChargenButtonView())
         created_items.append("#character-submission")
+    else:
+        sub_ch = discord.utils.get(lobby_cat.text_channels, name="character-submission")
+        if sub_ch:
+            sub_overwrites_upd: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+                everyone: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=False, read_message_history=True,
+                ),
+                bot_member: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, manage_channels=True,
+                    manage_messages=True,
+                ),
+            }
+            await sub_ch.edit(overwrites=sub_overwrites_upd, reason="Server setup: lock character-submission")
 
     # --- 2. Out of Character (Approved + DMs only) ---
     ooc_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
