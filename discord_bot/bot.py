@@ -9060,7 +9060,7 @@ async def _setup_server_inner(
 
     # --- Cleanup helper: deduplicate categories, purge stray channels ---
     _EXPECTED_CATEGORIES: dict[str, set[str]] = {
-        "Lobby": {"welcome", "character-submission"},
+        "Lobby": {"lore", "welcome", "character-submission"},
         "Out of Character": {"general", "off-topic", "announcements", "rules-reference"},
         "IC Information": {"calendar"},
         "In Character": {"in-character"},
@@ -9122,6 +9122,9 @@ async def _setup_server_inner(
         await lobby_cat.edit(overwrites=lobby_overwrites, reason="Server setup: update permissions")
         existing_items.append("Lobby")
     existing_names = {ch.name for ch in lobby_cat.text_channels}
+    if "lore" not in existing_names:
+        await lobby_cat.create_text_channel("lore")
+        created_items.append("#lore")
     if "welcome" not in existing_names:
         welcome_ch = await lobby_cat.create_text_channel("welcome")
         welcome_embed = discord.Embed(
@@ -9193,6 +9196,25 @@ async def _setup_server_inner(
             )
             await sub_ch.send(embed=sub_embed, view=_ChargenButtonView())
 
+    # Order lobby channels: lore, welcome, character-submission
+    _LOBBY_ORDER = ["lore", "welcome", "character-submission"]
+    lobby_channels = {ch.name: ch for ch in lobby_cat.text_channels}
+    for pos, name in enumerate(_LOBBY_ORDER):
+        ch = lobby_channels.get(name)
+        if ch and ch.position != pos:
+            try:
+                await ch.edit(position=pos)
+            except discord.Forbidden:
+                pass
+
+    # Set welcome as the system channel so new members land there
+    welcome_ch_obj = discord.utils.get(lobby_cat.text_channels, name="welcome")
+    if welcome_ch_obj and guild.system_channel != welcome_ch_obj:
+        try:
+            await guild.edit(system_channel=welcome_ch_obj, reason="Server setup: new members see #welcome first")
+        except discord.Forbidden:
+            pass
+
     # --- 2. Out of Character (Approved + DMs only) ---
     ooc_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
         everyone: discord.PermissionOverwrite(view_channel=False),
@@ -9258,6 +9280,17 @@ async def _setup_server_inner(
         rules_ch = await ooc_cat.create_text_channel("rules-reference", overwrites=rules_overwrites)
         await _post_rules_reference(rules_ch)
         created_items.append("#rules-reference")
+
+    # Order OOC channels: announcements, general, off-topic, rules-reference
+    _OOC_ORDER = ["announcements", "general", "off-topic", "rules-reference"]
+    ooc_channels = {ch.name: ch for ch in ooc_cat.text_channels}
+    for pos, name in enumerate(_OOC_ORDER):
+        ch = ooc_channels.get(name)
+        if ch and ch.position != pos:
+            try:
+                await ch.edit(position=pos)
+            except discord.Forbidden:
+                pass
 
     # --- 3. IC Information (Approved + DMs, read-only) ---
     icinfo_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
