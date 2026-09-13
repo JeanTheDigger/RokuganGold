@@ -3681,7 +3681,7 @@ _FEATURE_FIELDS = [
     app_commands.Choice(name="Emphasis", value="_emphasis"),
 ]
 
-@dm_npc.command(name="feature", description="Add or remove an advantage, technique, kata, kiho, weapon, quality, or emphasis. Fortune role required.")
+@dm_npc.command(name="feature", description="Add or remove an advantage, technique, kata, kiho, weapon, quality, or emphasis.")
 @app_commands.describe(
     name="NPC name.", field="Which feature list to modify.",
     entry="Name to add or remove.", remove="Remove instead of adding.",

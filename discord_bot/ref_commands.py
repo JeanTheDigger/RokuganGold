@@ -248,7 +248,7 @@ RANGE_INCREMENTS: list[tuple[str, str]] = [
 
 @ref.command(
     name="search",
-    description="Search across all catalogs at once: spells, schools, kata, kiho, advantages, weapons, armor, creatures.",
+    description="Search all catalogs: spells, schools, kata, kiho, advantages, weapons, armor, creatures.",
 )
 @app_commands.describe(
     query="Search term (matches names, elements, categories).",

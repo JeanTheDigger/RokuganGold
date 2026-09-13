@@ -2406,7 +2406,7 @@ async def grapple_pin(
     await _d.combat_log(guild, f"Grapple Pin: {ctrl_cb.name} pins {tgt_cb.name}")
 
 
-@combat_grapple.command(name="break_free", description="Break free from a grapple. Controller: Simple Action, no roll. Defender: Complex Action, contested Jiujutsu/Str.")
+@combat_grapple.command(name="break_free", description="Break free from a grapple (controller: Simple, defender: Complex contested).")
 @app_commands.describe(
     combatant="The combatant trying to break free.",
     opponent="The grapple opponent (required for defender break-free contested roll; omit for controller break).",
