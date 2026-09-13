@@ -53,6 +53,33 @@ CREATE TABLE IF NOT EXISTS creation_channels (
     PRIMARY KEY (guild_id, user_id)
 );
 """,
+    # 4: location areas (Discord categories) and locations (text channels)
+    """\
+CREATE TABLE IF NOT EXISTS location_areas (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id    TEXT NOT NULL,
+    category_id TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
+    creator_id  TEXT NOT NULL,
+    created_at  REAL NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_location_area_unique
+    ON location_areas (guild_id, name COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS locations (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id    TEXT NOT NULL,
+    area_id     INTEGER NOT NULL,
+    channel_id  TEXT NOT NULL UNIQUE,
+    name        TEXT NOT NULL,
+    creator_id  TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    created_at  REAL NOT NULL,
+    FOREIGN KEY (area_id) REFERENCES location_areas(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_location_unique
+    ON locations (area_id, name COLLATE NOCASE);
+""",
 ]
 
 _SCHEMA = """
@@ -227,6 +254,30 @@ class MacroRecord:
     kept: int
     modifier: int
     label: str
+
+
+@dataclass
+class LocationAreaRecord:
+    """A location area backed by a Discord category channel."""
+
+    id: int
+    guild_id: str
+    category_id: str
+    name: str
+    creator_id: str
+
+
+@dataclass
+class LocationRecord:
+    """A location (text channel) within a location area."""
+
+    id: int
+    guild_id: str
+    area_id: int
+    channel_id: str
+    name: str
+    creator_id: str
+    description: str = ""
 
 
 class DuplicateNameError(Exception):
@@ -838,3 +889,119 @@ class Store:
                 (guild_id, entity_type, entity_name),
             ).fetchall()
         return [CategoryRecord(r["id"], r["guild_id"], r["name"]) for r in rows]
+
+    # -- location areas (Discord categories representing places) ----------------
+    def create_location_area(
+        self, guild_id: str, category_id: str, name: str, creator_id: str,
+    ) -> LocationAreaRecord:
+        try:
+            with self._lock, self._conn:
+                cur = self._conn.execute(
+                    "INSERT INTO location_areas (guild_id, category_id, name, creator_id, created_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (guild_id, category_id, name, creator_id, time.time()),
+                )
+                return LocationAreaRecord(cur.lastrowid, guild_id, category_id, name, creator_id)
+        except sqlite3.IntegrityError as exc:
+            raise DuplicateNameError(name) from exc
+
+    def get_location_area(self, guild_id: str, name: str) -> LocationAreaRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM location_areas WHERE guild_id = ? AND name = ? COLLATE NOCASE",
+                (guild_id, name),
+            ).fetchone()
+        if row is None:
+            return None
+        return LocationAreaRecord(row["id"], row["guild_id"], row["category_id"], row["name"], row["creator_id"])
+
+    def get_location_area_by_category(self, category_id: str) -> LocationAreaRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM location_areas WHERE category_id = ?",
+                (category_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return LocationAreaRecord(row["id"], row["guild_id"], row["category_id"], row["name"], row["creator_id"])
+
+    def list_location_areas(self, guild_id: str) -> list[LocationAreaRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM location_areas WHERE guild_id = ? ORDER BY name COLLATE NOCASE",
+                (guild_id,),
+            ).fetchall()
+        return [
+            LocationAreaRecord(r["id"], r["guild_id"], r["category_id"], r["name"], r["creator_id"])
+            for r in rows
+        ]
+
+    def delete_location_area(self, area_id: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM location_areas WHERE id = ?", (area_id,))
+
+    # -- locations (text channels within an area) --------------------------------
+    def create_location(
+        self, guild_id: str, area_id: int, channel_id: str, name: str, creator_id: str,
+        description: str = "",
+    ) -> LocationRecord:
+        try:
+            with self._lock, self._conn:
+                cur = self._conn.execute(
+                    "INSERT INTO locations (guild_id, area_id, channel_id, name, creator_id, description, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (guild_id, area_id, channel_id, name, creator_id, description, time.time()),
+                )
+                return LocationRecord(cur.lastrowid, guild_id, area_id, channel_id, name, creator_id, description)
+        except sqlite3.IntegrityError as exc:
+            raise DuplicateNameError(name) from exc
+
+    def get_location(self, guild_id: str, area_id: int, name: str) -> LocationRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM locations WHERE guild_id = ? AND area_id = ? AND name = ? COLLATE NOCASE",
+                (guild_id, area_id, name),
+            ).fetchone()
+        if row is None:
+            return None
+        return LocationRecord(
+            row["id"], row["guild_id"], row["area_id"], row["channel_id"],
+            row["name"], row["creator_id"], row["description"],
+        )
+
+    def get_location_by_channel(self, channel_id: str) -> LocationRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM locations WHERE channel_id = ?", (channel_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return LocationRecord(
+            row["id"], row["guild_id"], row["area_id"], row["channel_id"],
+            row["name"], row["creator_id"], row["description"],
+        )
+
+    def list_locations(self, area_id: int) -> list[LocationRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM locations WHERE area_id = ? ORDER BY name COLLATE NOCASE",
+                (area_id,),
+            ).fetchall()
+        return [
+            LocationRecord(
+                r["id"], r["guild_id"], r["area_id"], r["channel_id"],
+                r["name"], r["creator_id"], r["description"],
+            )
+            for r in rows
+        ]
+
+    def update_location_description(self, location_id: int, description: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE locations SET description = ? WHERE id = ?",
+                (description, location_id),
+            )
+
+    def delete_location(self, location_id: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM locations WHERE id = ?", (location_id,))

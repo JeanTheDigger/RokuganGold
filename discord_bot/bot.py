@@ -3303,6 +3303,8 @@ npc_edit_group = app_commands.Group(name="npc-edit", description="Edit NPC stats
 creature_group = app_commands.Group(name="creature", description="Spawn and run bestiary creatures.")
 room_group = app_commands.Group(name="room", description="Create private play rooms and invite people.")
 category_group = app_commands.Group(name="category", description="Organise NPCs and creatures into named groups.")
+location_group = app_commands.Group(name="location", description="Create and manage in-character areas and locations.")
+location_area_group = app_commands.Group(name="area", description="Manage location areas (Discord categories). Fortune role required.", parent=location_group)
 
 # ---------------------------------------------------------------------------
 # /dm wizard: interactive DM command menu
@@ -6154,6 +6156,296 @@ async def category_spawn(interaction: discord.Interaction, category: str) -> Non
     )
 
 # ===========================================================================
+# /location group: IC areas (Discord categories) and locations (text channels)
+# ===========================================================================
+
+async def _location_area_autocomplete(
+    interaction: discord.Interaction, current: str,
+) -> list[app_commands.Choice[str]]:
+    if interaction.guild_id is None:
+        return []
+    areas = store.list_location_areas(str(interaction.guild_id))
+    cur = current.lower()
+    return [
+        app_commands.Choice(name=a.name, value=a.name)
+        for a in areas if cur in a.name.lower()
+    ][:25]
+
+
+@location_area_group.command(name="create", description="Create a new location area (Discord category). Fortune role required.")
+@app_commands.describe(name="Area name (becomes the Discord category name).")
+async def location_area_create(
+    interaction: discord.Interaction,
+    name: app_commands.Range[str, 1, 90],
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    guild = interaction.guild
+    guild_id = str(guild.id)
+    clean_name = name.strip()
+    if store.get_location_area(guild_id, clean_name):
+        await interaction.response.send_message(f"Area **{clean_name}** already exists.", ephemeral=True)
+        return
+    everyone = guild.default_role
+    bot_member = guild.me
+    approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
+    fortune_role = discord.utils.get(guild.roles, name=ROLE_FORTUNE)
+    kami_role = discord.utils.get(guild.roles, name=ROLE_KAMI)
+    overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_channels=True,
+            manage_messages=True, manage_threads=True,
+        ),
+    }
+    if approved_role:
+        overwrites[approved_role] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+        )
+    for r in (fortune_role, kami_role):
+        if r:
+            overwrites[r] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+                manage_messages=True,
+            )
+    try:
+        category = await guild.create_category(clean_name, overwrites=overwrites, reason=f"Location area by {interaction.user}")
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "I need **Manage Channels** permission to create categories.", ephemeral=True,
+        )
+        return
+    try:
+        store.create_location_area(guild_id, str(category.id), clean_name, str(interaction.user.id))
+    except storage.DuplicateNameError:
+        await category.delete(reason="Duplicate area cleanup")
+        await interaction.response.send_message(f"Area **{clean_name}** already exists.", ephemeral=True)
+        return
+    await interaction.response.send_message(f"Created location area **{clean_name}**.")
+
+
+@location_area_group.command(name="delete", description="Delete a location area and all its locations. Fortune role required.")
+@app_commands.describe(name="Area to delete.")
+@app_commands.autocomplete(name=_location_area_autocomplete)
+async def location_area_delete(
+    interaction: discord.Interaction, name: str,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    guild = interaction.guild
+    guild_id = str(guild.id)
+    area = store.get_location_area(guild_id, name)
+    if area is None:
+        await interaction.response.send_message(f"No area named **{name}**.", ephemeral=True)
+        return
+    await interaction.response.defer(ephemeral=True)
+    locs = store.list_locations(area.id)
+    for loc in locs:
+        ch = guild.get_channel(int(loc.channel_id))
+        if ch:
+            try:
+                await ch.delete(reason=f"Area {area.name} deleted")
+            except discord.Forbidden:
+                pass
+        store.delete_location(loc.id)
+    cat_ch = guild.get_channel(int(area.category_id))
+    if cat_ch:
+        try:
+            await cat_ch.delete(reason=f"Location area deleted by {interaction.user}")
+        except discord.Forbidden:
+            pass
+    store.delete_location_area(area.id)
+    await interaction.followup.send(f"Deleted area **{area.name}** and {len(locs)} location(s).")
+
+
+@location_area_group.command(name="list", description="List all location areas on this server.")
+async def location_area_list(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
+        return
+    guild_id = str(interaction.guild_id)
+    areas = store.list_location_areas(guild_id)
+    if not areas:
+        await interaction.response.send_message(
+            "No location areas. A Fortune can create one with `/location area create`.", ephemeral=True,
+        )
+        return
+    lines = []
+    for a in areas:
+        n_locs = len(store.list_locations(a.id))
+        lines.append(f"• **{a.name}** ({n_locs} location{'s' if n_locs != 1 else ''})")
+    pages = _paginate(lines, "**Location Areas:**\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
+
+
+@location_group.command(name="create", description="Create a location (text channel) in an area. Approved role required.")
+@app_commands.describe(
+    area="Which area to create the location in.",
+    name="Location name (becomes the channel name).",
+    description="Optional location description (pinned at the top).",
+)
+@app_commands.autocomplete(area=_location_area_autocomplete)
+async def location_create(
+    interaction: discord.Interaction,
+    area: str,
+    name: app_commands.Range[str, 1, 90],
+    description: app_commands.Range[str, 1, 4000] | None = None,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not _has_role(interaction, ROLE_APPROVED) and not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_APPROVED}** role to create locations.", ephemeral=True,
+        )
+        return
+    guild = interaction.guild
+    guild_id = str(guild.id)
+    area_rec = store.get_location_area(guild_id, area)
+    if area_rec is None:
+        await interaction.response.send_message(f"No area named **{area}**.", ephemeral=True)
+        return
+    clean_name = name.strip()
+    cat_ch = guild.get_channel(int(area_rec.category_id))
+    if cat_ch is None or not isinstance(cat_ch, discord.CategoryChannel):
+        await interaction.response.send_message(
+            f"The Discord category for area **{area_rec.name}** no longer exists. "
+            "A Fortune should delete and recreate the area.",
+            ephemeral=True,
+        )
+        return
+    try:
+        channel = await cat_ch.create_text_channel(clean_name, reason=f"Location by {interaction.user}")
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "I need **Manage Channels** permission in this category.", ephemeral=True,
+        )
+        return
+    try:
+        loc = store.create_location(
+            guild_id, area_rec.id, str(channel.id), clean_name,
+            str(interaction.user.id), description=description or "",
+        )
+    except storage.DuplicateNameError:
+        await channel.delete(reason="Duplicate location cleanup")
+        await interaction.response.send_message(
+            f"A location named **{clean_name}** already exists in **{area_rec.name}**.", ephemeral=True,
+        )
+        return
+    await interaction.response.send_message(
+        f"Created location {channel.mention} in **{area_rec.name}**.",
+    )
+    if description:
+        embed = discord.Embed(title=clean_name, description=description, color=0xC4A747)
+        pin_msg = await channel.send(embed=embed)
+        await pin_msg.pin()
+
+
+@location_group.command(name="describe", description="Set or update a location's pinned description (run inside the location channel).")
+@app_commands.describe(description="The new location description to pin.")
+async def location_describe(
+    interaction: discord.Interaction,
+    description: app_commands.Range[str, 1, 4000],
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    loc = store.get_location_by_channel(str(interaction.channel_id))
+    if loc is None:
+        await interaction.response.send_message(
+            "Run this inside a location channel.", ephemeral=True,
+        )
+        return
+    if str(interaction.user.id) != loc.creator_id and not _is_dm(interaction):
+        await interaction.response.send_message(
+            "Only the location creator or a Fortune can change the description.", ephemeral=True,
+        )
+        return
+    await interaction.response.send_message(f"Updating description for **{loc.name}**...", ephemeral=True)
+    try:
+        pinned = await interaction.channel.pins()
+        for msg in pinned:
+            if msg.author == interaction.client.user and msg.embeds and msg.embeds[0].color and msg.embeds[0].color.value == 0xC4A747:
+                await msg.unpin()
+                await msg.delete()
+    except discord.Forbidden:
+        pass
+    store.update_location_description(loc.id, description)
+    embed = discord.Embed(title=loc.name, description=description, color=0xC4A747)
+    pin_msg = await interaction.channel.send(embed=embed)
+    await pin_msg.pin()
+
+
+@location_group.command(name="list", description="List locations in an area (or all areas if none specified).")
+@app_commands.describe(area="Filter to a specific area.")
+@app_commands.autocomplete(area=_location_area_autocomplete)
+async def location_list(
+    interaction: discord.Interaction,
+    area: str | None = None,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    guild_id = str(interaction.guild_id)
+    if area:
+        area_rec = store.get_location_area(guild_id, area)
+        if area_rec is None:
+            await interaction.response.send_message(f"No area named **{area}**.", ephemeral=True)
+            return
+        areas_to_show = [area_rec]
+    else:
+        areas_to_show = store.list_location_areas(guild_id)
+    if not areas_to_show:
+        await interaction.response.send_message(
+            "No location areas. A Fortune can create one with `/location area create`.",
+            ephemeral=True,
+        )
+        return
+    lines = []
+    for a in areas_to_show:
+        locs = store.list_locations(a.id)
+        lines.append(f"**{a.name}**")
+        if locs:
+            for loc in locs:
+                lines.append(f"  • <#{loc.channel_id}> — {loc.name}" + (f" (by <@{loc.creator_id}>)" if loc.creator_id else ""))
+        else:
+            lines.append("  *(no locations yet)*")
+    pages = _paginate(lines, "**Locations:**\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
+
+
+@location_group.command(name="close", description="Delete a location channel. Creator or Fortune required (run inside the channel).")
+async def location_close(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
+        return
+    loc = store.get_location_by_channel(str(interaction.channel_id))
+    if loc is None:
+        await interaction.response.send_message(
+            "Run this inside a location channel.", ephemeral=True,
+        )
+        return
+    if str(interaction.user.id) != loc.creator_id and not _is_dm(interaction):
+        await interaction.response.send_message(
+            "Only the location creator or a Fortune can close it.", ephemeral=True,
+        )
+        return
+    store.delete_location(loc.id)
+    await interaction.response.send_message(f"Closing location **{loc.name}**...")
+    try:
+        await interaction.channel.delete(reason=f"Location closed by {interaction.user}")
+    except discord.Forbidden:
+        pass
+
+
+# ===========================================================================
 # /xp group: Experience: DMs grant, players spend to advance (L5R 4e RAW)
 # ===========================================================================
 
@@ -8853,6 +9145,7 @@ client.tree.add_command(npc_edit_group)
 client.tree.add_command(creature_group)
 client.tree.add_command(room_group)
 client.tree.add_command(category_group)
+client.tree.add_command(location_group)
 client.tree.add_command(cog_combat.combat_group)
 client.tree.add_command(cog_combat.fight_group)
 client.tree.add_command(cog_combat.engage_group)
