@@ -1186,9 +1186,10 @@ class _ClanSelect(discord.ui.Select):
         if clan_families:
             view = _WizardView(self.state)
             view.add_item(_FamilySelect(self.state, clan_families))
+            total = "10" if self.state.get("full_wizard") else "5"
             await interaction.response.edit_message(
-                content="**Step 2/5**: Choose your Family.",
-                embed=_wizard_embed(self.state), view=view,
+                content=f"**Step 2/{total}**: Choose your Family.",
+                embed=_active_embed(self.state), view=view,
             )
         else:
             self.state["family_name"] = ""
@@ -1235,9 +1236,10 @@ async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dic
         skip_btn.callback = on_skip
         view.add_item(roll_btn)
         view.add_item(skip_btn)
+        total = "10" if state.get("full_wizard") else "5"
         await interaction.response.edit_message(
-            content="**Step 3/5**: Heritage Roll (optional).",
-            embed=_wizard_embed(state), view=view,
+            content=f"**Step 3/{total}**: Heritage Roll (optional).",
+            embed=_active_embed(state), view=view,
         )
     else:
         await _go_to_school_choice(interaction, state)
@@ -1261,19 +1263,22 @@ async def _go_to_school_choice(interaction: discord.Interaction, state: dict) ->
         state["different_school"] = True
         view2 = _WizardView(state)
         view2.add_item(_SchoolClanSelect(state))
+        total = "10" if state.get("full_wizard") else "5"
         await btn_inter.response.edit_message(
-            content="**Step 4/5**: Pick the clan whose school you want to attend.",
-            embed=_wizard_embed(state), view=view2,
+            content=f"**Step 4/{total}**: Pick the clan whose school you want to attend.",
+            embed=_active_embed(state), view=view2,
         )
 
     same_btn.callback = on_same
     diff_btn.callback = on_diff
     view.add_item(same_btn)
     view.add_item(diff_btn)
-    step = "4/5" if state["clan"] in heritage.HERITAGE_TABLES else "3/5"
+    total = "10" if state.get("full_wizard") else "5"
+    heritage_step = "4" if state["clan"] in heritage.HERITAGE_TABLES else "3"
+    step = f"{heritage_step}/{total}"
     await interaction.response.edit_message(
         content=f"**Step {step}**: Same-clan school or Different School?",
-        embed=_wizard_embed(state), view=view,
+        embed=_active_embed(state), view=view,
     )
 
 class _SchoolClanSelect(discord.ui.Select):
@@ -1293,14 +1298,15 @@ async def _show_school_select(interaction: discord.Interaction, state: dict, sch
     if not basic_schools:
         await interaction.response.edit_message(
             content=f"No basic schools found for **{school_clan}**. Pick another.",
-            embed=_wizard_embed(state), view=interaction.message.view,
+            embed=_active_embed(state), view=interaction.message.view,
         )
         return
     view = _WizardView(state)
     view.add_item(_SchoolSelect(state, basic_schools))
+    total = "10" if state.get("full_wizard") else "5"
     await interaction.response.edit_message(
-        content=f"**Step 5/5**: Choose your School ({school_clan}).",
-        embed=_wizard_embed(state), view=view,
+        content=f"**Step 4/{total}**: Choose your School ({school_clan}).",
+        embed=_active_embed(state), view=view,
     )
 
 class _SchoolSelect(discord.ui.Select):
@@ -1319,7 +1325,10 @@ class _SchoolSelect(discord.ui.Select):
             await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
             return
         self.state["school_name"] = self.values[0]
-        await _show_confirmation(interaction, self.state)
+        if self.state.get("full_wizard"):
+            await _chargen_traits(interaction, self.state)
+        else:
+            await _show_confirmation(interaction, self.state)
 
 async def _show_confirmation(interaction: discord.Interaction, state: dict) -> None:
     view = _WizardView(state)
@@ -1407,6 +1416,1031 @@ class _WizardView(discord.ui.View):
 
     async def on_timeout(self) -> None:
         pass
+
+# ---------------------------------------------------------------------------
+# Full character-creation wizard (runs in a private channel via /submit)
+# ---------------------------------------------------------------------------
+_CHARGEN_XP = 40
+_MAX_DISADVANTAGE_XP = 10
+
+_SKILL_CATEGORIES: dict[str, list[str]] = {
+    "Bugei": [
+        "Athletics", "Battle", "Defense", "Horsemanship", "Hunting",
+        "Iaijutsu", "Jiujutsu", "Kenjutsu", "Knives", "Kyujutsu",
+        "Naginatajutsu", "Polearms", "Spears", "Staves", "War Fan",
+        "Chain Weapons",
+    ],
+    "High": [
+        "Artisan", "Calligraphy", "Courtier", "Divination", "Etiquette",
+        "Games", "Investigation", "Lore", "Medicine", "Meditation",
+        "Perform", "Sincerity", "Spellcraft", "Tea Ceremony", "Theology",
+    ],
+    "Low": [
+        "Acting", "Commerce", "Engineering", "Forgery", "Intimidation",
+        "Locksmith", "Sleight of Hand", "Stealth", "Temptation",
+    ],
+    "Merchant": [
+        "Animal Handling", "Craft", "Sailing",
+    ],
+}
+
+_ALL_SKILLS_SORTED: list[str] = sorted(
+    s for cat in _SKILL_CATEGORIES.values() for s in cat
+)
+
+
+def _parse_spell_allotment(school: dict) -> dict[str, int] | None:
+    """Parse starting spell allotment from a shugenja school.
+
+    Returns {element: count} or None if not a shugenja school.
+    Sense/Commune/Summon are auto-granted and not counted here.
+    """
+    aff = school.get("affinity", "")
+    if not aff:
+        return None
+    if "|" in aff:
+        _, spell_part = aff.split("|", 1)
+        spell_part = spell_part.strip()
+        if spell_part.lower().startswith("starting spells:"):
+            spell_part = spell_part[len("Starting Spells:"):].strip()
+        allot: dict[str, int] = {}
+        for chunk in spell_part.split(","):
+            chunk = chunk.strip()
+            if chunk.lower() in ("sense", "commune", "summon"):
+                continue
+            parts = chunk.split(None, 1)
+            if len(parts) == 2 and parts[0].isdigit():
+                allot[parts[1]] = int(parts[0])
+        return allot if allot else None
+    elements = ["Air", "Earth", "Fire", "Water"]
+    aff_lower = aff.lower()
+    found: list[tuple[int, str]] = []
+    for el in elements:
+        pos = aff_lower.find(el.lower())
+        if pos >= 0:
+            found.append((pos, el))
+    if not found:
+        return None
+    found.sort()
+    affinity_el = found[0][1]
+    allot = {affinity_el: 3}
+    for el in elements:
+        if el != affinity_el:
+            allot[el] = 1
+    return allot
+
+
+def _build_base_char(state: dict) -> Character:
+    """Build a Character with family+school applied (no XP purchases)."""
+    char = Character(name=state["name"], clan=state.get("clan", ""),
+                     family=state.get("family_name", ""), school="", school_type="Bushi")
+    family_entry = families.get(state["family_name"]) if state.get("family_name") else None
+    if family_entry:
+        families.apply_to_character(char, family_entry)
+        if not char.clan:
+            char.clan = family_entry["clan"]
+    applied = schools.get(state["school_name"]) if state.get("school_name") else None
+    if applied:
+        schools.apply_to_character(char, applied)
+    return char
+
+
+def _calc_chargen_xp(state: dict) -> tuple[int, int]:
+    """Return (xp_spent, xp_remaining) from chargen purchases."""
+    spent = 0
+    if state.get("different_school"):
+        spent += 5
+    base_char = _build_base_char(state)
+    for trait, ranks in state.get("trait_purchases", {}).items():
+        base_val = base_char.void_ring if trait == "void" else base_char.get_trait(trait)
+        mult = advancement.VOID_XP_MULT if trait == "void" else advancement.TRAIT_XP_MULT
+        for i in range(ranks):
+            spent += (base_val + i + 1) * mult
+    for adv in state.get("advantages_chosen", []):
+        spent += adv["points"]
+    for skill, ranks in state.get("skill_purchases", {}).items():
+        base_val = base_char.skills.get(skill, 0)
+        for i in range(ranks):
+            spent += (base_val + i + 1) * advancement.SKILL_XP_MULT
+    disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+    disadv_xp = min(disadv_xp, _MAX_DISADVANTAGE_XP)
+    return spent, _CHARGEN_XP + disadv_xp - spent
+
+
+def _chargen_embed(state: dict) -> discord.Embed:
+    """Full-wizard progress embed showing all chargen state."""
+    spent, remaining = _calc_chargen_xp(state)
+    embed = discord.Embed(
+        title=f"Character Creation: {state['name']}",
+        color=discord.Color.gold(),
+    )
+    lines: list[str] = []
+    if state.get("clan"):
+        lines.append(f"**Clan:** {state['clan']}")
+    if state.get("family_name"):
+        fam = families.get(state["family_name"])
+        bonus = f" (+1 {fam['bonus_trait'].capitalize()})" if fam else ""
+        lines.append(f"**Family:** {state['family_name']}{bonus}")
+    if state.get("heritage_result"):
+        lines.append(f"**Heritage:** {state['heritage_result'][:80]}")
+    if state.get("different_school"):
+        lines.append("**Different School** (5 XP)")
+    if state.get("school_name"):
+        sch = schools.get(state["school_name"])
+        if sch:
+            ben = schools.parse_benefit(sch.get("benefit", ""))
+            ben_str = f" (+{ben[1]} {ben[0].capitalize()})" if ben else ""
+            lines.append(f"**School:** {sch['name']}{ben_str}")
+
+    if state.get("trait_purchases"):
+        tp = ", ".join(f"{t.capitalize()} +{r}" for t, r in state["trait_purchases"].items())
+        lines.append(f"**Trait Raises:** {tp}")
+    if state.get("advantages_chosen"):
+        al = ", ".join(f"{a['name']} ({a['points']})" for a in state["advantages_chosen"])
+        lines.append(f"**Advantages:** {al}")
+    if state.get("disadvantages_chosen"):
+        dl = ", ".join(f"{d['name']} ({d['points']})" for d in state["disadvantages_chosen"])
+        lines.append(f"**Disadvantages:** {dl}")
+    if state.get("skill_purchases"):
+        sl = ", ".join(f"{s} +{r}" for s, r in state["skill_purchases"].items())
+        lines.append(f"**Skill Purchases:** {sl}")
+    if state.get("chosen_spells"):
+        lines.append(f"**Spells:** {', '.join(state['chosen_spells'])}")
+
+    lines.append(f"\n**XP:** {remaining} remaining ({spent} spent of {_CHARGEN_XP}"
+                 + (f" + {min(sum(d['points'] for d in state.get('disadvantages_chosen', [])), _MAX_DISADVANTAGE_XP)} from disadv." if state.get("disadvantages_chosen") else "")
+                 + ")")
+    embed.description = "\n".join(lines) if lines else "Starting..."
+    return embed
+
+
+def _active_embed(state: dict) -> discord.Embed:
+    """Choose the right embed based on wizard mode."""
+    if state.get("full_wizard"):
+        return _chargen_embed(state)
+    return _wizard_embed(state)
+
+
+def _materialize_character(state: dict) -> Character:
+    """Build the final Character with all XP purchases applied."""
+    char = _build_base_char(state)
+
+    for trait, ranks in state.get("trait_purchases", {}).items():
+        for _ in range(ranks):
+            advancement.apply_trait_raise(char, trait)
+
+    for skill, ranks in state.get("skill_purchases", {}).items():
+        for _ in range(ranks):
+            advancement.apply_skill_raise(char, skill)
+
+    for adv in state.get("advantages_chosen", []):
+        if adv["name"] not in char.advantages:
+            char.advantages.append(adv["name"])
+
+    for dis in state.get("disadvantages_chosen", []):
+        if dis["name"] not in char.disadvantages:
+            char.disadvantages.append(dis["name"])
+
+    for spell_name in state.get("chosen_spells", []):
+        if spell_name not in char.spells_known:
+            char.spells_known.append(spell_name)
+
+    sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+    if sch and sch.get("affinity"):
+        allot = _parse_spell_allotment(sch)
+        if allot:
+            for base_spell in ("Sense", "Commune", "Summon"):
+                if base_spell not in char.spells_known:
+                    char.spells_known.insert(0, base_spell)
+
+    spent, _ = _calc_chargen_xp(state)
+    char.xp_spent = float(spent)
+    char.xp = 0.0
+
+    if state.get("concept"):
+        char.notes = state["concept"]
+
+    return char
+
+
+class _ChargenView(discord.ui.View):
+    def __init__(self, state: dict):
+        super().__init__(timeout=1800)
+        self.state = state
+
+    async def on_timeout(self) -> None:
+        pass
+
+
+# --- Step 5: Trait raises ---
+class _TraitRaiseSelect(discord.ui.Select):
+    def __init__(self, state: dict):
+        self.state = state
+        base = _build_base_char(state)
+        options = []
+        for t in advancement.TRAIT_NAMES:
+            cur = base.void_ring if t == "void" else base.get_trait(t)
+            bought = state.get("trait_purchases", {}).get(t, 0)
+            effective = cur + bought
+            cap = advancement.MAX_VOID_RANK if t == "void" else advancement.MAX_TRAIT_RANK
+            if effective >= cap:
+                continue
+            mult = advancement.VOID_XP_MULT if t == "void" else advancement.TRAIT_XP_MULT
+            cost = (effective + 1) * mult
+            options.append(discord.SelectOption(
+                label=f"{t.capitalize()} ({effective} → {effective + 1})",
+                value=t,
+                description=f"Cost: {cost} XP",
+            ))
+        if not options:
+            options = [discord.SelectOption(label="All traits maxed", value="__none__")]
+        super().__init__(placeholder="Raise a trait...", options=options[:25])
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        chosen = self.values[0]
+        if chosen == "__none__":
+            await interaction.response.defer()
+            return
+        purchases = self.state.setdefault("trait_purchases", {})
+        purchases[chosen] = purchases.get(chosen, 0) + 1
+        _, remaining = _calc_chargen_xp(self.state)
+        if remaining < 0:
+            purchases[chosen] -= 1
+            if purchases[chosen] <= 0:
+                del purchases[chosen]
+            await interaction.response.send_message("Not enough XP for that raise.", ephemeral=True)
+            return
+        await _chargen_traits(interaction, self.state)
+
+
+async def _chargen_traits(interaction: discord.Interaction, state: dict) -> None:
+    view = _ChargenView(state)
+    view.add_item(_TraitRaiseSelect(state))
+
+    undo_btn = discord.ui.Button(label="Undo Last", style=discord.ButtonStyle.secondary, row=2)
+    next_btn = discord.ui.Button(label="Next: Advantages", style=discord.ButtonStyle.primary, row=2)
+
+    async def on_undo(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        purchases = state.get("trait_purchases", {})
+        if purchases:
+            last_key = list(purchases.keys())[-1]
+            purchases[last_key] -= 1
+            if purchases[last_key] <= 0:
+                del purchases[last_key]
+        await _chargen_traits(btn_inter, state)
+
+    async def on_next(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_advantages(btn_inter, state)
+
+    undo_btn.callback = on_undo
+    next_btn.callback = on_next
+    view.add_item(undo_btn)
+    view.add_item(next_btn)
+
+    await interaction.response.edit_message(
+        content="**Step 5/10 — Trait Raises** · Select a trait to raise (costs XP). Press **Next** when done.",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+# --- Step 6: Advantages ---
+class _AdvantageSelect(discord.ui.Select):
+    def __init__(self, state: dict, category: str):
+        self.state = state
+        self.category = category
+        chosen_names = {a["name"] for a in state.get("advantages_chosen", [])}
+        advs = [a for a in advantages.by_kind("advantage")
+                if a.get("points") is not None and a["name"] not in chosen_names
+                and (a.get("category") or "") == category]
+        advs.sort(key=lambda a: a["name"])
+        options = []
+        for a in advs[:25]:
+            options.append(discord.SelectOption(
+                label=a["name"][:100],
+                description=f"{a['cost_text']} — {a.get('category', '')}",
+            ))
+        if not options:
+            options = [discord.SelectOption(label="(none available)", value="__none__")]
+        super().__init__(placeholder=f"{category} advantages...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        chosen = self.values[0]
+        if chosen == "__none__":
+            await interaction.response.defer()
+            return
+        adv = advantages.get(chosen, "advantage")
+        if not adv or adv.get("points") is None:
+            await interaction.response.send_message("That advantage has a variable cost; ask a DM.", ephemeral=True)
+            return
+        self.state.setdefault("advantages_chosen", []).append({"name": adv["name"], "points": adv["points"]})
+        _, remaining = _calc_chargen_xp(self.state)
+        if remaining < 0:
+            self.state["advantages_chosen"].pop()
+            await interaction.response.send_message("Not enough XP for that advantage.", ephemeral=True)
+            return
+        await _chargen_advantages(interaction, self.state)
+
+
+class _AdvCategorySelect(discord.ui.Select):
+    def __init__(self, state: dict):
+        self.state = state
+        cats = ["Mental", "Physical", "Social", "Spiritual", "Material"]
+        options = [discord.SelectOption(label=c) for c in cats]
+        super().__init__(placeholder="Pick a category to browse...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        cat = self.values[0]
+        view = _ChargenView(self.state)
+        view.add_item(_AdvantageSelect(self.state, cat))
+        back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
+
+        async def on_back(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(self.state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            await _chargen_advantages(btn_inter, self.state)
+
+        back_btn.callback = on_back
+        view.add_item(back_btn)
+        await interaction.response.edit_message(
+            content=f"**Step 6/10 — Advantages ({cat})** · Select an advantage to buy.",
+            embed=_chargen_embed(self.state), view=view,
+        )
+
+
+async def _chargen_advantages(interaction: discord.Interaction, state: dict) -> None:
+    view = _ChargenView(state)
+    view.add_item(_AdvCategorySelect(state))
+
+    undo_btn = discord.ui.Button(label="Undo Last", style=discord.ButtonStyle.secondary, row=2)
+    next_btn = discord.ui.Button(label="Next: Disadvantages", style=discord.ButtonStyle.primary, row=2)
+
+    async def on_undo(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        if state.get("advantages_chosen"):
+            state["advantages_chosen"].pop()
+        await _chargen_advantages(btn_inter, state)
+
+    async def on_next(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_disadvantages(btn_inter, state)
+
+    undo_btn.callback = on_undo
+    next_btn.callback = on_next
+    view.add_item(undo_btn)
+    view.add_item(next_btn)
+
+    await interaction.response.edit_message(
+        content="**Step 6/10 — Advantages** · Pick a category then select advantages. Press **Next** when done.",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+# --- Step 7: Disadvantages ---
+class _DisadvantageSelect(discord.ui.Select):
+    def __init__(self, state: dict, category: str):
+        self.state = state
+        chosen_names = {d["name"] for d in state.get("disadvantages_chosen", [])}
+        disadvs = [d for d in advantages.by_kind("disadvantage")
+                   if d.get("points") is not None and d["name"] not in chosen_names
+                   and (d.get("category") or "") == category]
+        disadvs.sort(key=lambda d: d["name"])
+        options = []
+        for d in disadvs[:25]:
+            options.append(discord.SelectOption(
+                label=d["name"][:100],
+                description=f"{d['cost_text']} — gives XP back",
+            ))
+        if not options:
+            options = [discord.SelectOption(label="(none available)", value="__none__")]
+        super().__init__(placeholder=f"{category} disadvantages...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        chosen = self.values[0]
+        if chosen == "__none__":
+            await interaction.response.defer()
+            return
+        dis = advantages.get(chosen, "disadvantage")
+        if not dis or dis.get("points") is None:
+            await interaction.response.send_message("That disadvantage has a variable cost; ask a DM.", ephemeral=True)
+            return
+        current_disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+        if current_disadv_xp >= _MAX_DISADVANTAGE_XP:
+            await interaction.response.send_message(
+                f"You've already reached the maximum {_MAX_DISADVANTAGE_XP} XP from disadvantages.",
+                ephemeral=True,
+            )
+            return
+        self.state.setdefault("disadvantages_chosen", []).append({"name": dis["name"], "points": dis["points"]})
+        await _chargen_disadvantages(interaction, self.state)
+
+
+class _DisadvCategorySelect(discord.ui.Select):
+    def __init__(self, state: dict):
+        self.state = state
+        cats = ["Mental", "Physical", "Social", "Spiritual"]
+        options = [discord.SelectOption(label=c) for c in cats]
+        super().__init__(placeholder="Pick a category to browse...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        cat = self.values[0]
+        view = _ChargenView(self.state)
+        view.add_item(_DisadvantageSelect(self.state, cat))
+        back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
+
+        async def on_back(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(self.state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            await _chargen_disadvantages(btn_inter, self.state)
+
+        back_btn.callback = on_back
+        view.add_item(back_btn)
+        disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+        await interaction.response.edit_message(
+            content=f"**Step 7/10 — Disadvantages ({cat})** · "
+                    f"Select a disadvantage ({disadv_xp}/{_MAX_DISADVANTAGE_XP} XP gained).",
+            embed=_chargen_embed(self.state), view=view,
+        )
+
+
+async def _chargen_disadvantages(interaction: discord.Interaction, state: dict) -> None:
+    view = _ChargenView(state)
+    view.add_item(_DisadvCategorySelect(state))
+
+    undo_btn = discord.ui.Button(label="Undo Last", style=discord.ButtonStyle.secondary, row=2)
+    next_btn = discord.ui.Button(label="Next: Skills", style=discord.ButtonStyle.primary, row=2)
+
+    async def on_undo(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        if state.get("disadvantages_chosen"):
+            state["disadvantages_chosen"].pop()
+        await _chargen_disadvantages(btn_inter, state)
+
+    async def on_next(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills(btn_inter, state)
+
+    undo_btn.callback = on_undo
+    next_btn.callback = on_next
+    view.add_item(undo_btn)
+    view.add_item(next_btn)
+
+    disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+    await interaction.response.edit_message(
+        content=f"**Step 7/10 — Disadvantages** · Pick a category to browse. "
+                f"({disadv_xp}/{_MAX_DISADVANTAGE_XP} XP gained). Press **Next** when done.",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+# --- Step 8: Skills ---
+class _SkillSelect(discord.ui.Select):
+    def __init__(self, state: dict, category: str):
+        self.state = state
+        self._category = category
+        skill_list = _SKILL_CATEGORIES.get(category, [])
+        base = _build_base_char(state)
+        options = []
+        for sk in skill_list:
+            base_rank = base.skills.get(sk, 0)
+            bought = state.get("skill_purchases", {}).get(sk, 0)
+            effective = base_rank + bought
+            if effective >= advancement.MAX_SKILL_RANK:
+                continue
+            cost = (effective + 1) * advancement.SKILL_XP_MULT
+            label = f"{sk} ({effective} → {effective + 1})" if effective > 0 else f"{sk} (0 → 1)"
+            options.append(discord.SelectOption(
+                label=label[:100], value=sk,
+                description=f"Cost: {cost} XP",
+            ))
+        if not options:
+            options = [discord.SelectOption(label="(none available)", value="__none__")]
+        super().__init__(placeholder=f"{category} skills...", options=options[:25])
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        chosen = self.values[0]
+        if chosen == "__none__":
+            await interaction.response.defer()
+            return
+        purchases = self.state.setdefault("skill_purchases", {})
+        purchases[chosen] = purchases.get(chosen, 0) + 1
+        _, remaining = _calc_chargen_xp(self.state)
+        if remaining < 0:
+            purchases[chosen] -= 1
+            if purchases[chosen] <= 0:
+                del purchases[chosen]
+            await interaction.response.send_message("Not enough XP for that skill rank.", ephemeral=True)
+            return
+        await _chargen_skills_category(interaction, self.state, self._category)
+
+
+class _SkillCategorySelect(discord.ui.Select):
+    def __init__(self, state: dict):
+        self.state = state
+        options = [discord.SelectOption(label=c) for c in _SKILL_CATEGORIES]
+        super().__init__(placeholder="Pick a skill category...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills_category(interaction, self.state, self.values[0])
+
+
+async def _chargen_skills_category(interaction: discord.Interaction, state: dict, category: str) -> None:
+    view = _ChargenView(state)
+    view.add_item(_SkillSelect(state, category))
+    back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills(btn_inter, state)
+
+    back_btn.callback = on_back
+    view.add_item(back_btn)
+    await interaction.response.edit_message(
+        content=f"**Step 8/10 — Skills ({category})** · Select a skill to buy/raise.",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+async def _chargen_skills(interaction: discord.Interaction, state: dict) -> None:
+    view = _ChargenView(state)
+    view.add_item(_SkillCategorySelect(state))
+
+    undo_btn = discord.ui.Button(label="Undo Last", style=discord.ButtonStyle.secondary, row=2)
+    next_btn = discord.ui.Button(label="Next: Spells", style=discord.ButtonStyle.primary, row=2)
+
+    async def on_undo(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        purchases = state.get("skill_purchases", {})
+        if purchases:
+            last_key = list(purchases.keys())[-1]
+            purchases[last_key] -= 1
+            if purchases[last_key] <= 0:
+                del purchases[last_key]
+        await _chargen_skills(btn_inter, state)
+
+    async def on_next(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+        if sch and sch.get("affinity"):
+            await _chargen_spells(btn_inter, state)
+        else:
+            await _chargen_review(btn_inter, state)
+
+    undo_btn.callback = on_undo
+    next_btn.callback = on_next
+    view.add_item(undo_btn)
+    view.add_item(next_btn)
+
+    await interaction.response.edit_message(
+        content="**Step 8/10 — Skills** · Pick a category then select skills to buy. Press **Next** when done.",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+# --- Step 9: Spells (shugenja only) ---
+class _SpellSelect(discord.ui.Select):
+    def __init__(self, state: dict, element: str, remaining: int):
+        self.state = state
+        self.element = element
+        chosen_names = set(state.get("chosen_spells", []))
+        available = [s for s in spells.by_element(element)
+                     if s["mastery"] == 1 and s["name"] not in chosen_names]
+        available.sort(key=lambda s: s["name"])
+        options = []
+        for s in available[:25]:
+            kw = s.get("keyword", "")
+            desc = kw[:100] if kw else s.get("range", "")[:100]
+            options.append(discord.SelectOption(
+                label=s["name"][:100], description=desc,
+            ))
+        if not options:
+            options = [discord.SelectOption(label="(none available)", value="__none__")]
+        super().__init__(
+            placeholder=f"{element} spells ({remaining} left to pick)...",
+            options=options,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        chosen = self.values[0]
+        if chosen == "__none__":
+            await interaction.response.defer()
+            return
+        self.state.setdefault("chosen_spells", []).append(chosen)
+        allot_tracking = self.state.setdefault("_spell_allot_remaining", {})
+        allot_tracking[self.element] = allot_tracking.get(self.element, 0) - 1
+        await _chargen_spells(interaction, self.state)
+
+
+async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None:
+    sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+    allot = _parse_spell_allotment(sch) if sch else None
+    if allot is None:
+        await _chargen_review(interaction, state)
+        return
+
+    if "_spell_allot_remaining" not in state:
+        state["_spell_allot_remaining"] = dict(allot)
+
+    remaining = state["_spell_allot_remaining"]
+    total_remaining = sum(max(0, v) for v in remaining.values())
+
+    if total_remaining <= 0:
+        await _chargen_review(interaction, state)
+        return
+
+    view = _ChargenView(state)
+
+    elements_with_slots = [(el, cnt) for el, cnt in remaining.items() if cnt > 0]
+    if len(elements_with_slots) == 1:
+        el, cnt = elements_with_slots[0]
+        view.add_item(_SpellSelect(state, el, cnt))
+    else:
+        el_select = discord.ui.Select(
+            placeholder="Pick an element...",
+            options=[discord.SelectOption(label=f"{el} ({cnt} remaining)", value=el)
+                     for el, cnt in elements_with_slots],
+        )
+
+        async def on_element(sel_inter: discord.Interaction) -> None:
+            if sel_inter.user.id != int(state["user_id"]):
+                await sel_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            el = sel_inter.values[0]
+            cnt = remaining.get(el, 0)
+            v2 = _ChargenView(state)
+            v2.add_item(_SpellSelect(state, el, cnt))
+            back_btn = discord.ui.Button(label="Back to Elements", style=discord.ButtonStyle.secondary, row=2)
+
+            async def on_back(btn_inter: discord.Interaction) -> None:
+                if btn_inter.user.id != int(state["user_id"]):
+                    await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                    return
+                await _chargen_spells(btn_inter, state)
+
+            back_btn.callback = on_back
+            v2.add_item(back_btn)
+            await sel_inter.response.edit_message(
+                content=f"**Step 9/10 — Spells ({el})** · Pick a Mastery 1 spell.",
+                embed=_chargen_embed(state), view=v2,
+            )
+
+        el_select.callback = on_element
+        view.add_item(el_select)
+
+    skip_btn = discord.ui.Button(label="Skip Remaining Spells", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_skip(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_review(btn_inter, state)
+
+    skip_btn.callback = on_skip
+    view.add_item(skip_btn)
+
+    slots_desc = ", ".join(f"{el}: {cnt}" for el, cnt in remaining.items() if cnt > 0)
+    await interaction.response.edit_message(
+        content=f"**Step 9/10 — Starting Spells** · Remaining slots: {slots_desc}. "
+                f"(Sense, Commune, Summon are auto-granted.)",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+# --- Step 10: Review & Submit ---
+async def _chargen_review(interaction: discord.Interaction, state: dict) -> None:
+    char = _materialize_character(state)
+    spent, remaining = _calc_chargen_xp(state)
+
+    embed = discord.Embed(
+        title=f"Review: {state['name']}",
+        color=discord.Color.green(),
+    )
+
+    lines: list[str] = []
+    lines.append(f"**Clan:** {char.clan}")
+    if char.family:
+        lines.append(f"**Family:** {char.family}")
+    lines.append(f"**School:** {char.school} ({char.school_type})")
+    if state.get("heritage_result"):
+        lines.append(f"**Heritage:** {state['heritage_result'][:80]}")
+    if state.get("concept"):
+        lines.append(f"**Concept:** {state['concept'][:200]}")
+    embed.description = "\n".join(lines)
+
+    rings = stats.all_rings(char)
+    trait_lines = (
+        f"Air: Ref {char.reflexes} / Awa {char.awareness} (Ring {rings['air']})\n"
+        f"Earth: Sta {char.stamina} / Wil {char.willpower} (Ring {rings['earth']})\n"
+        f"Fire: Agi {char.agility} / Int {char.intelligence} (Ring {rings['fire']})\n"
+        f"Water: Str {char.strength} / Per {char.perception} (Ring {rings['water']})\n"
+        f"Void: {char.void_ring}"
+    )
+    embed.add_field(name="Traits & Rings", value=trait_lines, inline=False)
+
+    if char.skills:
+        skill_str = ", ".join(f"{s} {r}" for s, r in sorted(char.skills.items()))
+        embed.add_field(name="Skills", value=skill_str[:1024], inline=False)
+
+    if char.advantages:
+        embed.add_field(name="Advantages", value=", ".join(char.advantages)[:1024], inline=False)
+    if char.disadvantages:
+        embed.add_field(name="Disadvantages", value=", ".join(char.disadvantages)[:1024], inline=False)
+
+    if char.spells_known:
+        embed.add_field(name="Spells", value=", ".join(char.spells_known)[:1024], inline=False)
+
+    embed.add_field(name="Honor", value=f"{char.honor:.1f}", inline=True)
+    embed.add_field(name="Insight", value=str(stats.insight(char)), inline=True)
+    embed.add_field(name="XP", value=f"{spent} spent, {remaining} unspent", inline=True)
+
+    if remaining > 0:
+        embed.set_footer(text=f"Warning: {remaining} XP unspent! Consider spending it before submitting.")
+
+    sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+    school_report = schools.apply_to_character(Character(), sch) if sch else None
+    wildcards = school_report.get("wildcards", []) if school_report else []
+    if wildcards:
+        embed.add_field(name="Wildcard Skills (DM assigns)",
+                        value="\n".join(f"- {w}" for w in wildcards)[:1024], inline=False)
+
+    view = _ChargenView(state)
+    submit_btn = discord.ui.Button(label="Submit for Approval", style=discord.ButtonStyle.success, emoji="📋", row=0)
+    back_traits_btn = discord.ui.Button(label="Back: Traits", style=discord.ButtonStyle.secondary, row=1)
+    back_skills_btn = discord.ui.Button(label="Back: Skills", style=discord.ButtonStyle.secondary, row=1)
+
+    async def on_submit(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _submit_for_approval(btn_inter, state)
+
+    async def on_back_traits(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_traits(btn_inter, state)
+
+    async def on_back_skills(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills(btn_inter, state)
+
+    submit_btn.callback = on_submit
+    back_traits_btn.callback = on_back_traits
+    back_skills_btn.callback = on_back_skills
+    view.add_item(submit_btn)
+    view.add_item(back_traits_btn)
+    view.add_item(back_skills_btn)
+
+    await interaction.response.edit_message(
+        content="**Step 10/10 — Review** · Check your character below, then submit for DM approval.",
+        embed=embed, view=view,
+    )
+
+
+async def _submit_for_approval(interaction: discord.Interaction, state: dict) -> None:
+    """Send the completed character to the approval channel for DM review."""
+    guild_id = state["guild_id"]
+    approval_ch_id = store.get_approval_channel(guild_id)
+    if not approval_ch_id:
+        await interaction.response.send_message(
+            "No approval channel configured. Ask an admin to run `/setup server`.",
+            ephemeral=True,
+        )
+        return
+    approval_ch = client.get_channel(int(approval_ch_id))
+    if approval_ch is None:
+        await interaction.response.send_message(
+            "The approval channel is no longer accessible.", ephemeral=True,
+        )
+        return
+
+    char = _materialize_character(state)
+    spent, remaining = _calc_chargen_xp(state)
+
+    embed = discord.Embed(
+        title="📋 Character Submission (Full Sheet)",
+        color=0xC4A747,
+    )
+    embed.add_field(name="Player", value=f"<@{state['user_id']}>", inline=True)
+    embed.add_field(name="Character Name", value=state["name"], inline=True)
+    embed.add_field(name="Clan / Family / School",
+                    value=f"{char.clan} / {char.family} / {char.school} ({char.school_type})",
+                    inline=False)
+
+    if state.get("concept"):
+        embed.add_field(name="Concept", value=state["concept"][:1024], inline=False)
+
+    rings = stats.all_rings(char)
+    trait_lines = (
+        f"Air: Ref {char.reflexes} / Awa {char.awareness} (Ring {rings['air']})\n"
+        f"Earth: Sta {char.stamina} / Wil {char.willpower} (Ring {rings['earth']})\n"
+        f"Fire: Agi {char.agility} / Int {char.intelligence} (Ring {rings['fire']})\n"
+        f"Water: Str {char.strength} / Per {char.perception} (Ring {rings['water']})\n"
+        f"Void: {char.void_ring}"
+    )
+    embed.add_field(name="Traits & Rings", value=trait_lines, inline=False)
+
+    if char.skills:
+        skill_str = ", ".join(f"{s} {r}" for s, r in sorted(char.skills.items()))
+        embed.add_field(name="Skills", value=skill_str[:1024], inline=False)
+
+    if char.advantages:
+        embed.add_field(name="Advantages", value=", ".join(char.advantages)[:1024], inline=False)
+    if char.disadvantages:
+        embed.add_field(name="Disadvantages", value=", ".join(char.disadvantages)[:1024], inline=False)
+    if char.spells_known:
+        embed.add_field(name="Spells", value=", ".join(char.spells_known)[:1024], inline=False)
+
+    embed.add_field(name="Honor", value=f"{char.honor:.1f}", inline=True)
+    embed.add_field(name="Insight", value=str(stats.insight(char)), inline=True)
+    embed.add_field(name="XP", value=f"{spent} spent, {remaining} unspent", inline=True)
+
+    if state.get("heritage_result"):
+        embed.add_field(name="Heritage", value=state["heritage_result"][:1024], inline=False)
+
+    view = _FullCharacterApprovalView(
+        applicant_id=int(state["user_id"]),
+        character_state=state,
+        lobby_channel_id=int(state.get("channel_id", interaction.channel_id)),
+    )
+    await approval_ch.send(embed=embed, view=view)
+
+    for child in interaction.message.view.children:
+        child.disabled = True
+    await interaction.response.edit_message(
+        content=f"📋 Your character **{state['name']}** has been submitted for DM review! "
+                f"You'll be notified when a decision is made.",
+        embed=None, view=None,
+    )
+
+
+class _FullCharacterApprovalView(discord.ui.View):
+    """DM approval view for fully-built character sheets from the wizard."""
+
+    def __init__(self, applicant_id: int, character_state: dict,
+                 lobby_channel_id: int) -> None:
+        super().__init__(timeout=None)
+        self.applicant_id = applicant_id
+        self.character_state = character_state
+        self.lobby_channel_id = lobby_channel_id
+
+    @discord.ui.button(label="Approve", style=discord.ButtonStyle.success, emoji="✅")
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await _require_dm_role(interaction):
+            return
+        guild = interaction.guild
+        if guild is None:
+            return
+        member = guild.get_member(self.applicant_id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(self.applicant_id)
+            except discord.NotFound:
+                await interaction.response.send_message("That member is no longer in the server.", ephemeral=True)
+                return
+        approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
+        if approved_role is None:
+            await interaction.response.send_message(
+                f"The **{ROLE_APPROVED}** role doesn't exist. Run `/setup server` first.",
+                ephemeral=True,
+            )
+            return
+
+        guild_id = str(guild.id)
+        owner_id = str(self.applicant_id)
+        state = self.character_state
+        char = _materialize_character(state)
+
+        try:
+            record = store.create_character(guild_id, owner_id, char)
+        except storage.DuplicateNameError:
+            await interaction.response.send_message(
+                f"A character named **{state['name']}** already exists for that player.",
+                ephemeral=True,
+            )
+            return
+        store.set_active(guild_id, owner_id, record.id)
+
+        await member.add_roles(approved_role,
+                               reason=f"Character '{state['name']}' approved by {interaction.user.display_name}")
+        nick_note = ""
+        try:
+            await member.edit(nick=state["name"], reason=f"Character approved: {state['name']}")
+        except discord.Forbidden:
+            nick_note = ("\n(Could not change nickname — the bot's role may be too low "
+                         "or the member is the server owner.)")
+
+        creation_ch_id = store.get_creation_channel(guild_id, owner_id)
+        if creation_ch_id:
+            ch = client.get_channel(int(creation_ch_id))
+            if ch:
+                try:
+                    await ch.delete(reason=f"Character '{state['name']}' approved — wizard channel cleanup")
+                except discord.Forbidden:
+                    pass
+            store.delete_creation_channel(guild_id, owner_id)
+
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+        await interaction.response.edit_message(view=self)
+
+        embed = discord.Embed(
+            title="✅ Character Approved (Full Sheet)",
+            color=discord.Color.green(),
+            description=(
+                f"**{member.mention}**'s character **{state['name']}** has been approved.\n"
+                f"Full character sheet created with all traits, skills, advantages, "
+                f"and spells applied.{nick_note}"
+            ),
+        )
+        embed.set_footer(text=f"Approved by {interaction.user.display_name}")
+        await interaction.followup.send(embed=embed)
+
+        lobby = client.get_channel(self.lobby_channel_id)
+        if lobby:
+            await lobby.send(
+                f"✅ {member.mention}, your character **{state['name']}** has been approved! "
+                f"Your full character sheet is ready. Welcome to Rokugan!"
+            )
+
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.danger, emoji="❌")
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await _require_dm_role(interaction):
+            return
+        for child in self.children:
+            child.disabled = True
+        self.stop()
+        await interaction.response.edit_message(view=self)
+        guild = interaction.guild
+        member = guild.get_member(self.applicant_id) if guild else None
+        if member is None and guild is not None:
+            try:
+                member = await guild.fetch_member(self.applicant_id)
+            except discord.NotFound:
+                member = None
+        member_str = member.mention if member else f"User {self.applicant_id}"
+        embed = discord.Embed(
+            title="❌ Character Denied",
+            color=discord.Color.red(),
+            description=f"**{member_str}**'s character **{self.character_state['name']}** was denied.",
+        )
+        embed.set_footer(text=f"Denied by {interaction.user.display_name}")
+        await interaction.followup.send(embed=embed)
+        lobby = client.get_channel(self.lobby_channel_id)
+        if lobby and member:
+            await lobby.send(
+                f"❌ {member.mention}, your character **{self.character_state['name']}** was not approved. "
+                f"Please speak with a DM for details and feel free to submit again."
+            )
+
 
 @sheet.command(name="wizard", description="Step-by-step guided character creation.")
 @app_commands.describe(name="Your character's name.")
@@ -7103,75 +8137,104 @@ class CharacterApprovalView(discord.ui.View):
                 f"Please speak with a DM for details and feel free to submit again."
             )
 
-@client.tree.command(name="submit", description="Submit a character for DM approval (use in the lobby).")
+@client.tree.command(name="submit", description="Start character creation — opens a private channel with the full wizard.")
 @app_commands.describe(
     character_name="Your character's full name (e.g. Bayushi Kachiko).",
-    clan="Your character's Great Clan.",
-    family="Family name (start typing for suggestions).",
-    school="Starting school (start typing for suggestions).",
-    concept="A short description of your character concept and personality.",
+    concept="A short description of your character concept and personality (optional).",
 )
-@app_commands.choices(clan=[app_commands.Choice(name=c, value=c) for c in _GREAT_CLANS])
-@app_commands.autocomplete(family=_family_autocomplete, school=_basic_school_autocomplete)
 async def submit_character(
     interaction: discord.Interaction,
     character_name: app_commands.Range[str, 1, 100],
-    clan: app_commands.Choice[str],
-    concept: app_commands.Range[str, 1, 2000],
-    family: str | None = None,
-    school: str | None = None,
+    concept: app_commands.Range[str, 1, 2000] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
-    guild = str(interaction.guild_id)
-    approval_ch_id = store.get_approval_channel(guild)
+    guild = interaction.guild
+    guild_id = str(guild.id)
+    user_id = str(interaction.user.id)
+
+    approval_ch_id = store.get_approval_channel(guild_id)
     if not approval_ch_id:
         await interaction.response.send_message(
             "No approval channel has been configured. A server admin needs to run `/setup server` first.",
             ephemeral=True,
         )
         return
-    approval_ch = client.get_channel(int(approval_ch_id))
-    if approval_ch is None:
-        await interaction.response.send_message(
-            "The approval channel is no longer accessible. Ask a server admin to reconfigure it.",
-            ephemeral=True,
+
+    existing_ch_id = store.get_creation_channel(guild_id, user_id)
+    if existing_ch_id:
+        existing_ch = client.get_channel(int(existing_ch_id))
+        if existing_ch:
+            await interaction.response.send_message(
+                f"You already have an active character creation channel: {existing_ch.mention}. "
+                f"Finish or cancel that one first.",
+                ephemeral=True,
+            )
+            return
+        store.delete_creation_channel(guild_id, user_id)
+
+    await interaction.response.defer(ephemeral=True)
+
+    lobby_cat = interaction.channel.category if interaction.channel else None
+    bot_member = guild.me
+
+    dm_roles = [r for r in guild.roles if r.name in (ROLE_KAMI, ROLE_FORTUNE)]
+    everyone = guild.default_role
+
+    overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        interaction.user: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+        ),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_channels=True,
+            manage_messages=True,
+        ),
+    }
+    for r in dm_roles:
+        overwrites[r] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
         )
-        return
-    clan_val = clan.value
-    family_val = family or ""
-    school_val = school or ""
-    embed = discord.Embed(
-        title="📋 Character Submission",
-        color=0xC4A747,
-        description="A new character has been submitted for approval.",
+
+    channel_name = f"chargen-{interaction.user.display_name[:20].lower().replace(' ', '-')}"
+    priv_channel = await guild.create_text_channel(
+        channel_name,
+        category=lobby_cat,
+        overwrites=overwrites,
+        reason=f"Character creation wizard for {interaction.user.display_name}",
     )
-    embed.add_field(name="Player", value=interaction.user.mention, inline=True)
-    embed.add_field(name="Submitted from", value=f"<#{interaction.channel_id}>", inline=True)
-    embed.add_field(name="Character Name", value=character_name, inline=False)
-    embed.add_field(name="Clan", value=clan_val, inline=True)
-    if family_val:
-        fam_entry = families.get(family_val)
-        fam_display = f"{family_val} (+1 {fam_entry['bonus_trait'].capitalize()})" if fam_entry else family_val
-        embed.add_field(name="Family", value=fam_display, inline=True)
-    if school_val:
-        sch_entry = schools.get(school_val)
-        sch_display = f"{sch_entry['name']} ({sch_entry['clan']})" if sch_entry else school_val
-        embed.add_field(name="School", value=sch_display, inline=True)
-    embed.add_field(name="Concept", value=concept, inline=False)
-    view = CharacterApprovalView(
-        applicant_id=interaction.user.id,
-        character_name=character_name,
-        concept=concept,
-        lobby_channel_id=interaction.channel_id,
-        clan=clan_val,
-        family_name=family_val,
-        school_name=school_val,
+
+    store.set_creation_channel(guild_id, user_id, str(priv_channel.id))
+
+    state = {
+        "guild_id": guild_id,
+        "user_id": user_id,
+        "name": character_name,
+        "channel_id": priv_channel.id,
+        "full_wizard": True,
+        "clan": "",
+        "family_name": "",
+        "heritage_result": None,
+        "different_school": False,
+        "school_name": "",
+        "trait_purchases": {},
+        "advantages_chosen": [],
+        "disadvantages_chosen": [],
+        "skill_purchases": {},
+        "chosen_spells": [],
+        "concept": concept or "",
+    }
+    view = _WizardView(state)
+    view.add_item(_ClanSelect(state))
+    await priv_channel.send(
+        content=f"Welcome, {interaction.user.mention}! Let's build **{character_name}**.\n"
+                f"**Step 1/10**: Choose your Clan.",
+        embed=_chargen_embed(state), view=view,
     )
-    await approval_ch.send(embed=embed, view=view)
-    await interaction.response.send_message(
-        f"📋 Your character **{character_name}** ({clan_val}) has been submitted for DM review. "
-        f"You'll be notified here when a decision is made.",
+
+    await interaction.followup.send(
+        f"Your private character creation channel has been created: {priv_channel.mention}\n"
+        f"Head there to build **{character_name}**!",
         ephemeral=True,
     )
 

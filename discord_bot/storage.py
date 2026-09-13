@@ -44,6 +44,15 @@ CREATE TABLE IF NOT EXISTS date_channels (
     message_id TEXT NOT NULL DEFAULT ''
 );
 """,
+    # 3: private channels for the character creation wizard
+    """\
+CREATE TABLE IF NOT EXISTS creation_channels (
+    guild_id   TEXT NOT NULL,
+    user_id    TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
+);
+""",
 ]
 
 _SCHEMA = """
@@ -608,6 +617,30 @@ class Store:
         with self._lock, self._conn:
             self._conn.execute(
                 "DELETE FROM date_channels WHERE guild_id = ?", (guild_id,)
+            )
+
+    # -- creation channel (private wizard channels) ----------------------------
+    def set_creation_channel(self, guild_id: str, user_id: str, channel_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO creation_channels (guild_id, user_id, channel_id) VALUES (?, ?, ?) "
+                "ON CONFLICT(guild_id, user_id) DO UPDATE SET channel_id = excluded.channel_id",
+                (guild_id, user_id, channel_id),
+            )
+
+    def get_creation_channel(self, guild_id: str, user_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT channel_id FROM creation_channels WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
+            ).fetchone()
+        return row["channel_id"] if row else None
+
+    def delete_creation_channel(self, guild_id: str, user_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM creation_channels WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
             )
 
     # -- encounter persistence -------------------------------------------------
