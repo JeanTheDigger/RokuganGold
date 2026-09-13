@@ -1076,7 +1076,8 @@ async def sheet_create(interaction: discord.Interaction) -> None:
 # ---------------------------------------------------------------------------
 # /sheet wizard: guided step-by-step character creation
 # ---------------------------------------------------------------------------
-_GREAT_CLANS = ["Crab", "Crane", "Dragon", "Lion", "Mantis", "Phoenix", "Scorpion", "Unicorn"]
+_GREAT_CLANS = ["Crab", "Crane", "Dragon", "Lion", "Mantis", "Phoenix", "Scorpion", "Unicorn",
+                "Ronin", "Imperial", "Minor Clan", "Spider"]
 _ALL_SCHOOL_CLANS = sorted({s["clan"] for s in schools.ALL if s.get("category", "basic") == "basic"})
 
 def _wizard_embed(state: dict) -> discord.Embed:
@@ -1257,6 +1258,14 @@ class _SchoolSelect(discord.ui.Select):
             return
         self.state["school_name"] = self.values[0]
         if self.state.get("full_wizard"):
+            sch = schools.get(self.values[0])
+            if sch:
+                wc_slots = _expand_wildcard_slots(sch)
+                if wc_slots:
+                    self.state["wildcard_slots"] = wc_slots
+                    self.state["wildcard_picks"] = []
+                    await _chargen_wildcards(interaction, self.state)
+                    return
             await _chargen_traits(interaction, self.state)
         else:
             await _show_confirmation(interaction, self.state)
@@ -1375,6 +1384,142 @@ _SKILL_CATEGORIES: dict[str, list[str]] = {
     ],
 }
 
+_WEAPON_SKILLS: list[str] = [
+    "Chain Weapons", "Iaijutsu", "Kenjutsu", "Knives", "Kyujutsu",
+    "Naginatajutsu", "Polearms", "Spears", "Staves", "War Fan",
+]
+_LORE_SKILLS: list[str] = [
+    "Lore: Architecture", "Lore: Bushido", "Lore: Elements",
+    "Lore: Ghosts", "Lore: Heraldry", "Lore: History", "Lore: Law",
+    "Lore: Maho", "Lore: Nature", "Lore: Nonhumans",
+    "Lore: Shadowlands", "Lore: Spirit Realms", "Lore: Theology",
+    "Lore: Underworld", "Lore: War",
+]
+_CRAFT_SKILLS: list[str] = [
+    "Craft: Armorsmithing", "Craft: Blacksmithing", "Craft: Bowyer",
+    "Craft: Brewing", "Craft: Carpentry", "Craft: Cartography",
+    "Craft: Cooking", "Craft: Farming", "Craft: Fishing",
+    "Craft: Mining", "Craft: Pottery", "Craft: Shipbuilding",
+    "Craft: Weaponsmithing",
+]
+_ARTISAN_SKILLS: list[str] = [
+    "Artisan: Gardening", "Artisan: Ikebana", "Artisan: Origami",
+    "Artisan: Painting", "Artisan: Poetry", "Artisan: Sculpture",
+]
+_PERFORM_SKILLS: list[str] = [
+    "Perform: Biwa", "Perform: Dance", "Perform: Flute",
+    "Perform: Oratory", "Perform: Song", "Perform: Storytelling",
+]
+
+_ALL_CHARGEN_SKILLS: list[str] = sorted(
+    set(s for cat in _SKILL_CATEGORIES.values() for s in cat)
+)
+
+_SUBCAT_MAP: dict[str, list[str]] = {
+    "weapon": _WEAPON_SKILLS,
+    "lore": _LORE_SKILLS,
+    "craft": _CRAFT_SKILLS,
+    "artisan": _ARTISAN_SKILLS,
+    "perform": _PERFORM_SKILLS,
+}
+
+
+def _wildcard_count(text: str) -> int:
+    low = text.lower().strip()
+    _wn = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+    if re.match(r"\w+\s+ranks?\s+in\b", low):
+        m = re.search(r"any\s+(\w+)\b", low)
+        if m:
+            return _wn.get(m.group(1), int(m.group(1)) if m.group(1).isdigit() else 1)
+        return 1
+    m = re.search(r"\bany\s+(\d+)\b", low)
+    if m:
+        return int(m.group(1))
+    for word, n in _wn.items():
+        if re.search(r"\b" + word + r"\b", low):
+            return n
+    return 1
+
+
+def _wildcard_rank(text: str) -> int:
+    m = re.match(r"(\w+)\s+ranks?\s+in\b", text.lower().strip())
+    if m:
+        return {"one": 1, "two": 2, "three": 3}.get(m.group(1),
+               int(m.group(1)) if m.group(1).isdigit() else 1)
+    return 1
+
+
+def _wildcard_eligible(text: str) -> list[str]:
+    low = text.lower().strip()
+    if "|" in low:
+        low = low.split("|")[0].strip()
+    if "ninja weapon" in low:
+        return []
+    if "from:" in low:
+        return list(_ALL_CHARGEN_SKILLS)
+    negate: set[str] = set()
+    if "non-high" in low or "not be a high" in low:
+        negate.add("High")
+    if "non-low" in low or "not be a low" in low:
+        negate.add("Low")
+    if "non-bugei" in low or "not be a bugei" in low:
+        negate.add("Bugei")
+    if "non-merchant" in low or "not be a merchant" in low:
+        negate.add("Merchant")
+    if negate:
+        return sorted(s for cat, skills in _SKILL_CATEGORIES.items()
+                      if cat not in negate for s in skills)
+    main_cats: list[str] = []
+    for key, label in [("bugei", "Bugei"), ("high", "High"),
+                       ("low", "Low"), ("merchant", "Merchant")]:
+        if re.search(r"\b" + key + r"\b", low):
+            main_cats.append(label)
+    sub_lists: list[list[str]] = []
+    for sub_name, sub_skills in _SUBCAT_MAP.items():
+        if re.search(r"\b" + sub_name + r"\b", low):
+            sub_lists.append(sub_skills)
+    result: list[str] = []
+    for cn in main_cats:
+        result.extend(_SKILL_CATEGORIES.get(cn, []))
+    for sl in sub_lists:
+        result.extend(sl)
+    if result:
+        return sorted(set(result))
+    return list(_ALL_CHARGEN_SKILLS)
+
+
+def _expand_wildcard_slots(school: dict) -> list[dict]:
+    _, wildcards = schools.parse_skills(school.get("skills", ""))
+    slots: list[dict] = []
+    for wc in wildcards:
+        eligible = _wildcard_eligible(wc)
+        if not eligible:
+            continue
+        count = _wildcard_count(wc)
+        rank = _wildcard_rank(wc)
+        label = wc.split("|")[0].strip() if "|" in wc else wc
+        for _ in range(count):
+            slots.append({"label": label, "eligible": eligible, "rank": rank})
+    return slots
+
+
+def _wildcard_cat_groups(eligible: list[str]) -> dict[str, list[str]]:
+    cat_lookup: dict[str, str] = {}
+    for cat, skills in _SKILL_CATEGORIES.items():
+        for s in skills:
+            cat_lookup[s] = cat
+    groups: dict[str, list[str]] = {}
+    for s in eligible:
+        if ":" in s:
+            prefix = s.split(":")[0]
+            groups.setdefault(prefix, []).append(s)
+        elif s in cat_lookup:
+            groups.setdefault(cat_lookup[s], []).append(s)
+        else:
+            groups.setdefault("Other", []).append(s)
+    return groups
+
+
 def _parse_spell_allotment(school: dict) -> dict[str, int] | None:
     """Parse starting spell allotment from a shugenja school.
 
@@ -1428,6 +1573,10 @@ def _build_base_char(state: dict) -> Character:
     applied = schools.get(state["school_name"]) if state.get("school_name") else None
     if applied:
         schools.apply_to_character(char, applied)
+    for pick in state.get("wildcard_picks", []):
+        sk = pick["skill"]
+        rk = pick["rank"]
+        char.skills[sk] = max(char.skills.get(sk, 0), rk)
     return char
 
 
@@ -1477,6 +1626,10 @@ def _chargen_embed(state: dict) -> discord.Embed:
             ben = schools.parse_benefit(sch.get("benefit", ""))
             ben_str = f" (+{ben[1]} {ben[0].capitalize()})" if ben else ""
             lines.append(f"**School:** {sch['name']}{ben_str}")
+
+    if state.get("wildcard_picks"):
+        wl = ", ".join(f"{p['skill']} {p['rank']}" for p in state["wildcard_picks"])
+        lines.append(f"**Starting Skill Picks:** {wl}")
 
     if state.get("trait_purchases"):
         tp = ", ".join(f"{t.capitalize()} +{r}" for t, r in state["trait_purchases"].items())
@@ -1558,6 +1711,135 @@ class _ChargenView(discord.ui.View):
         pass
 
 
+# --- Step 4b: Wildcard school skill picks ---
+class _WildcardSkillSelect(discord.ui.Select):
+    def __init__(self, state: dict, eligible: list[str], slot_idx: int, rank: int):
+        self.state = state
+        self.slot_idx = slot_idx
+        self.rank = rank
+        options = [discord.SelectOption(label=s) for s in eligible[:25]]
+        super().__init__(placeholder="Choose a skill...", options=options)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        picks = self.state.setdefault("wildcard_picks", [])
+        picks.append({"skill": self.values[0], "rank": self.rank})
+        await _chargen_wildcards(interaction, self.state)
+
+
+class _WildcardCategorySelect(discord.ui.Select):
+    def __init__(self, state: dict, eligible: list[str], slot_idx: int):
+        self.state = state
+        self.eligible = eligible
+        self.slot_idx = slot_idx
+        groups = _wildcard_cat_groups(eligible)
+        options = [discord.SelectOption(label=cat, description=f"{len(skills)} skills")
+                   for cat, skills in sorted(groups.items())]
+        super().__init__(placeholder="Choose a category first...", options=options[:25])
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_wildcard_category(interaction, self.state, self.slot_idx, self.values[0])
+
+
+async def _chargen_wildcards(interaction: discord.Interaction, state: dict) -> None:
+    slots = state.get("wildcard_slots", [])
+    picks = state.get("wildcard_picks", [])
+    slot_idx = len(picks)
+
+    if slot_idx >= len(slots):
+        await _chargen_traits(interaction, state)
+        return
+
+    slot = slots[slot_idx]
+    already = {p["skill"] for p in picks}
+    eligible = [s for s in slot["eligible"] if s not in already]
+
+    if not eligible:
+        picks.append({"skill": "(auto-skipped)", "rank": slot["rank"]})
+        await _chargen_wildcards(interaction, state)
+        return
+
+    view = _WizardView(state)
+    rank_note = f" at Rank {slot['rank']}" if slot["rank"] > 1 else ""
+
+    if len(eligible) <= 25:
+        view.add_item(_WildcardSkillSelect(state, eligible, slot_idx, slot["rank"]))
+    else:
+        view.add_item(_WildcardCategorySelect(state, eligible, slot_idx))
+
+    if picks:
+        undo_btn = discord.ui.Button(label="Undo Last", style=discord.ButtonStyle.secondary, row=2)
+
+        async def on_undo(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            state["wildcard_picks"].pop()
+            await _chargen_wildcards(btn_inter, state)
+
+        undo_btn.callback = on_undo
+        view.add_item(undo_btn)
+
+    skip_btn = discord.ui.Button(label="Skip Remaining", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_skip(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        state["wildcard_slots"] = slots[:len(state.get("wildcard_picks", []))]
+        await _chargen_traits(btn_inter, state)
+
+    skip_btn.callback = on_skip
+    view.add_item(skip_btn)
+
+    total = len(slots)
+    await interaction.response.edit_message(
+        content=f"**Starting Skills — Pick {slot_idx + 1} of {total}**{rank_note}\n{slot['label']}",
+        embed=_active_embed(state), view=view,
+    )
+
+
+async def _chargen_wildcard_category(interaction: discord.Interaction, state: dict,
+                                     slot_idx: int, category: str) -> None:
+    slots = state.get("wildcard_slots", [])
+    slot = slots[slot_idx]
+    picks = state.get("wildcard_picks", [])
+    already = {p["skill"] for p in picks}
+
+    groups = _wildcard_cat_groups([s for s in slot["eligible"] if s not in already])
+    skills_in_cat = groups.get(category, [])
+
+    if not skills_in_cat:
+        await interaction.response.send_message("No skills available in that category.", ephemeral=True)
+        return
+
+    view = _WizardView(state)
+    view.add_item(_WildcardSkillSelect(state, skills_in_cat[:25], slot_idx, slot["rank"]))
+
+    back_btn = discord.ui.Button(label="Back: Categories", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_wildcards(btn_inter, state)
+
+    back_btn.callback = on_back
+    view.add_item(back_btn)
+
+    rank_note = f" at Rank {slot['rank']}" if slot["rank"] > 1 else ""
+    total = len(slots)
+    await interaction.response.edit_message(
+        content=f"**Starting Skills — Pick {slot_idx + 1} of {total}** ({category}){rank_note}\n{slot['label']}",
+        embed=_active_embed(state), view=view,
+    )
+
+
 # --- Step 5: Trait raises ---
 class _TraitRaiseSelect(discord.ui.Select):
     def __init__(self, state: dict):
@@ -1629,6 +1911,20 @@ async def _chargen_traits(interaction: discord.Interaction, state: dict) -> None
 
     undo_btn.callback = on_undo
     next_btn.callback = on_next
+
+    if state.get("wildcard_slots"):
+        back_wc_btn = discord.ui.Button(label="Back: Starting Skills", style=discord.ButtonStyle.secondary, row=2)
+
+        async def on_back_wc(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            state["wildcard_picks"] = state.get("wildcard_picks", [])[:-1] if state.get("wildcard_picks") else []
+            await _chargen_wildcards(btn_inter, state)
+
+        back_wc_btn.callback = on_back_wc
+        view.add_item(back_wc_btn)
+
     view.add_item(undo_btn)
     view.add_item(next_btn)
 
@@ -2308,8 +2604,6 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
     )
     await approval_ch.send(embed=embed, view=view)
 
-    for child in interaction.message.view.children:
-        child.disabled = True
     await interaction.response.edit_message(
         content=f"📋 Your character **{state['name']}** has been submitted for DM review! "
                 f"You'll be notified when a decision is made.",
@@ -2547,6 +2841,8 @@ async def sheet_delete(
             return
         owner_target = member
     rec = store.get_by_name(guild, str(owner_target.id), name)
+    if rec is None and member is None and _is_dm(interaction):
+        rec = store.get_by_name_guild(guild, name)
     if rec is None:
         await interaction.response.send_message(f"No character named **{name}** found.", ephemeral=True)
         return
@@ -8650,6 +8946,9 @@ async def _setup_server_inner(
         "Scorpion": "#E74C3C",
         "Unicorn": "#9B59B6",
         "Spider": "#7F8C8D",
+        "Ronin": "#95A5A6",
+        "Imperial": "#DAA520",
+        "Minor Clan": "#8E7CC3",
     }
     clan_roles_created: list[discord.Role] = []
     for clan_name in _GREAT_CLANS:
