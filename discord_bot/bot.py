@@ -4542,9 +4542,12 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/fight env cover / notes / damage", "Environment effects on combatants."),
         ("/combat start / end", "Start or end an encounter."),
         ("/combat join / add / npc / creature", "Add combatants to initiative."),
-        ("/combat next / status / remove / summary", "Manage turn order."),
+        ("/combat category / room", "Add a whole group or room to initiative (Fortune)."),
+        ("/combat next / summary / status / remove", "Manage turn order."),
         ("/combat condition set / clear / list", "Apply or remove conditions."),
-        ("/combat turn init / hold / delay / act / surprise", "Advanced initiative (Fortune)."),
+        ("/combat turn init / hold / delay / act / done", "Turn management (Fortune)."),
+        ("/combat turn surprise", "Toggle surprise round (Fortune)."),
+        ("/combat void armor / initiative / swap", "Spend VP for combat bonuses."),
         ("/engage grapple initiate / control / ...", "Grappling sub-system (Fortune)."),
         ("/engage duel assess / focus / strike", "Iaijutsu dueling (Fortune)."),
         ("/engage battle roll / damage", "Mass Battle engagement and damage."),
@@ -9721,6 +9724,40 @@ async def _setup_server_inner(
     except (discord.Forbidden, discord.HTTPException):
         pass
 
+    # --- 7. Fix permissions on existing location areas ---
+    location_areas = store.list_location_areas(str(guild.id))
+    areas_fixed = 0
+    areas_skipped = 0
+    for area in location_areas:
+        cat = guild.get_channel(int(area.category_id))
+        if cat is None or not isinstance(cat, discord.CategoryChannel):
+            areas_skipped += 1
+            continue
+        try:
+            await cat.set_permissions(everyone, view_channel=False, reason="Server setup: fix area permissions")
+            await cat.set_permissions(bot_member, view_channel=True, send_messages=True,
+                                     manage_channels=True, manage_messages=True,
+                                     manage_threads=True, reason="Server setup: fix area permissions")
+            await cat.set_permissions(approved_role, view_channel=True, send_messages=True,
+                                     read_message_history=True, reason="Server setup: fix area permissions")
+            for r in (fortune_role, kami_role):
+                await cat.set_permissions(r, view_channel=True, send_messages=True,
+                                         read_message_history=True, manage_messages=True,
+                                         reason="Server setup: fix area permissions")
+            for ch in cat.text_channels:
+                if ch.name == "description":
+                    await ch.set_permissions(everyone, view_channel=False, send_messages=False,
+                                            reason="Server setup: fix area permissions")
+                    await ch.set_permissions(approved_role, view_channel=True, send_messages=False,
+                                            read_message_history=True, reason="Server setup: fix area permissions")
+                    for r in (fortune_role, kami_role):
+                        await ch.set_permissions(r, view_channel=True, send_messages=True,
+                                                 read_message_history=True, manage_messages=True,
+                                                 reason="Server setup: fix area permissions")
+            areas_fixed += 1
+        except discord.Forbidden:
+            areas_skipped += 1
+
     # --- Summary ---
     summary_parts = ["**Server setup complete!**\n"]
     summary_parts.append(
@@ -9736,7 +9773,9 @@ async def _setup_server_inner(
         summary_parts.append(f"**Created:** {', '.join(created_items)}")
     if existing_items:
         summary_parts.append(f"**Already existed (permissions updated):** {', '.join(existing_items)}")
-    if not deleted_dupes and not deleted_channels and not created_items:
+    if areas_fixed:
+        summary_parts.append(f"**Location areas:** permissions repaired on {areas_fixed} area(s).")
+    if not deleted_dupes and not deleted_channels and not created_items and not areas_fixed:
         summary_parts.append("Everything was already in order. Permissions refreshed.")
     summary_parts.append(
         f"\nPlayers use `/submit` in the lobby to apply. "
