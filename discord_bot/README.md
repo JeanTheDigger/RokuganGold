@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 54: Weapon Specials (Armor TN Modifiers, Bow Penalties, Bo-Hiya, Weapon Breakage, Ninjutsu Scaling)
+## Status: Phase 55: Weapon Specials (Armor TN, Stance Penalties, Bo-Hiya, Breakage, Lance, Ninjutsu Scaling)
 
 **Help & Navigation**
 
@@ -666,6 +666,19 @@ toughness). "Half range" arrows display a DM reminder in the combat effects.
 When a weapon's raw damage (pre-Reduction) meets or exceeds its break threshold,
 a **WEAPON BROKEN** warning appears in the damage embed. The DM should enforce
 removal of the weapon from play.
+
+**Weapon Stance Penalties** (GDD s39 — auto-applied on attack)
+
+| Weapon | On Foot | Mounted |
+|---|---|---|
+| `dai_kyu` | +10 TN | — |
+| `yumi` | — | +10 TN |
+| `han_kyu` | — | +10 TN |
+| `lance` | +10 TN | +5 TN |
+
+Lance uses DR 1k2 (non-charging). Full DR 3k4 requires a mounted charge,
+which is not yet modeled — the DM can use `bonus_tn:` to remove the penalty
+and override DR manually for a charge.
 
 **Rooms** (private play rooms: each is a Discord **private thread**)
 

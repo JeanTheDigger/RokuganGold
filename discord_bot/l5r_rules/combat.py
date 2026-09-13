@@ -65,7 +65,7 @@ WEAPON_CATALOG: dict[str, dict] = {
     "nagamaki": {"rolled": 2, "kept": 3, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
     # Spears
     "yari": {"rolled": 2, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large"},
-    "lance": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large", "break_threshold": 30},
+    "lance": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large", "break_threshold": 30, "penalty_on_foot": 10, "penalty_mounted": 5},
     "nage_yari": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large"},
     # Staves
     "bo": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Staves", "trait": "agility", "melee": True, "size": "Large"},
@@ -354,9 +354,10 @@ def blowgun_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, in
     return 0, 0, ""
 
 
-def bow_attack_penalty(weapon_name: str, is_mounted: bool) -> tuple[int, str]:
-    """Flat penalty from bow-specific restrictions (GDD s39).
-    Dai-kyu: +10 TN on foot. Han-kyu/Yumi: +10 TN on horseback.
+def weapon_stance_penalty(weapon_name: str, is_mounted: bool) -> tuple[int, str]:
+    """Flat penalty from weapon-specific stance restrictions (GDD s39).
+    Bows: Dai-kyu +10 on foot, Yumi/Han-kyu +10 mounted.
+    Lance: +10 on foot, +5 mounted (no charge modeled yet; full DR 3k4 requires charge).
     Returns (flat_penalty, note). Penalty is negative (added to the attack roll)."""
     wp = get_weapon_profile(weapon_name)
     if wp.get("penalty_on_foot") and not is_mounted:
