@@ -6986,8 +6986,11 @@ class CharacterApprovalView(discord.ui.View):
             return
         member = guild.get_member(self.applicant_id)
         if member is None:
-            await interaction.response.send_message("That member is no longer in the server.", ephemeral=True)
-            return
+            try:
+                member = await guild.fetch_member(self.applicant_id)
+            except discord.NotFound:
+                await interaction.response.send_message("That member is no longer in the server.", ephemeral=True)
+                return
         approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
         if approved_role is None:
             await interaction.response.send_message(
@@ -7080,6 +7083,11 @@ class CharacterApprovalView(discord.ui.View):
         await interaction.response.edit_message(view=self)
         guild = interaction.guild
         member = guild.get_member(self.applicant_id) if guild else None
+        if member is None and guild is not None:
+            try:
+                member = await guild.fetch_member(self.applicant_id)
+            except discord.NotFound:
+                member = None
         member_str = member.mention if member else f"User {self.applicant_id}"
         embed = discord.Embed(
             title="❌ Character Denied",
