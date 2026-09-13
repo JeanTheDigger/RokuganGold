@@ -7188,6 +7188,53 @@ async def setup_server(interaction: discord.Interaction) -> None:
     bot_member = guild.me
     everyone = guild.default_role
 
+    # --- Pre-flight: check the bot actually has the permissions it needs ---
+    bot_perms = bot_member.guild_permissions
+    missing: list[str] = []
+    if not bot_perms.manage_roles:
+        missing.append("Manage Roles")
+    if not bot_perms.manage_channels:
+        missing.append("Manage Channels")
+    if not bot_perms.send_messages:
+        missing.append("Send Messages")
+    if not bot_perms.manage_messages:
+        missing.append("Manage Messages")
+    if missing:
+        await interaction.followup.send(
+            "The bot is missing required permissions to set up the server:\n"
+            + "\n".join(f"• **{p}**" for p in missing)
+            + "\n\nGo to **Server Settings → Roles**, find the bot's role, "
+            "and enable those permissions — or re-invite the bot with "
+            "**Administrator** ticked.",
+            ephemeral=True,
+        )
+        return
+
+    try:
+        await _setup_server_inner(guild, bot_member, everyone, interaction)
+    except discord.Forbidden as exc:
+        await interaction.followup.send(
+            f"The bot was denied a permission by Discord: `{exc}`\n\n"
+            "Make sure the bot's role is **above** the roles it's trying to "
+            "create (Kami, Fortune, Approved) in **Server Settings → Roles**, "
+            "and that **Manage Roles** + **Manage Channels** are enabled.",
+            ephemeral=True,
+        )
+    except Exception as exc:
+        await interaction.followup.send(
+            f"Server setup failed with an unexpected error:\n```\n{exc}\n```\n"
+            "Please report this to the bot developer.",
+            ephemeral=True,
+        )
+
+
+async def _setup_server_inner(
+    guild: discord.Guild,
+    bot_member: discord.Member,
+    everyone: discord.Role,
+    interaction: discord.Interaction,
+) -> None:
+    """Core setup logic, extracted so the caller can wrap it in error handling."""
     # --- Roles (create if missing, update color/permissions if they exist) ---
     kami_perms = discord.Permissions(
         administrator=True,
