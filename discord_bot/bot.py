@@ -2791,7 +2791,7 @@ async def sheet_view(interaction: discord.Interaction, member: discord.Member | 
                 "You have no active character. Use `/sheet create` first.", ephemeral=True
             )
             return
-    await interaction.response.send_message(embed=build_sheet_embed(rec))
+    await interaction.response.send_message(embed=build_sheet_embed(rec), ephemeral=True)
 
 @sheet.command(name="list", description="List your characters (or a player's, if you are a DM).")
 @app_commands.describe(member="Whose characters to list (Fortune). Omit for your own.")
