@@ -1727,8 +1727,18 @@ async def _chargen_advantages(interaction: discord.Interaction, state: dict) -> 
             return
         await _chargen_disadvantages(btn_inter, state)
 
+    back_btn = discord.ui.Button(label="Back: Traits", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_traits(btn_inter, state)
+
     undo_btn.callback = on_undo
     next_btn.callback = on_next
+    back_btn.callback = on_back
+    view.add_item(back_btn)
     view.add_item(undo_btn)
     view.add_item(next_btn)
 
@@ -1833,8 +1843,18 @@ async def _chargen_disadvantages(interaction: discord.Interaction, state: dict) 
             return
         await _chargen_skills(btn_inter, state)
 
+    back_btn = discord.ui.Button(label="Back: Advantages", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_advantages(btn_inter, state)
+
     undo_btn.callback = on_undo
     next_btn.callback = on_next
+    back_btn.callback = on_back
+    view.add_item(back_btn)
     view.add_item(undo_btn)
     view.add_item(next_btn)
 
@@ -1951,8 +1971,18 @@ async def _chargen_skills(interaction: discord.Interaction, state: dict) -> None
         else:
             await _chargen_review(btn_inter, state)
 
+    back_btn = discord.ui.Button(label="Back: Disadvantages", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_disadvantages(btn_inter, state)
+
     undo_btn.callback = on_undo
     next_btn.callback = on_next
+    back_btn.callback = on_back
+    view.add_item(back_btn)
     view.add_item(undo_btn)
     view.add_item(next_btn)
 
@@ -2055,7 +2085,14 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
         el_select.callback = on_element
         view.add_item(el_select)
 
+    back_btn = discord.ui.Button(label="Back: Skills", style=discord.ButtonStyle.secondary, row=2)
     skip_btn = discord.ui.Button(label="Skip Remaining Spells", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills(btn_inter, state)
 
     async def on_skip(btn_inter: discord.Interaction) -> None:
         if btn_inter.user.id != int(state["user_id"]):
@@ -2063,7 +2100,9 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
             return
         await _chargen_review(btn_inter, state)
 
+    back_btn.callback = on_back
     skip_btn.callback = on_skip
+    view.add_item(back_btn)
     view.add_item(skip_btn)
 
     slots_desc = ", ".join(f"{el}: {cnt}" for el, cnt in remaining.items() if cnt > 0)
@@ -2134,6 +2173,8 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
     view = _ChargenView(state)
     submit_btn = discord.ui.Button(label="Submit for Approval", style=discord.ButtonStyle.success, emoji="📋", row=0)
     back_traits_btn = discord.ui.Button(label="Back: Traits", style=discord.ButtonStyle.secondary, row=1)
+    back_adv_btn = discord.ui.Button(label="Back: Advantages", style=discord.ButtonStyle.secondary, row=1)
+    back_disadv_btn = discord.ui.Button(label="Back: Disadvantages", style=discord.ButtonStyle.secondary, row=1)
     back_skills_btn = discord.ui.Button(label="Back: Skills", style=discord.ButtonStyle.secondary, row=1)
 
     async def on_submit(btn_inter: discord.Interaction) -> None:
@@ -2148,6 +2189,18 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
             return
         await _chargen_traits(btn_inter, state)
 
+    async def on_back_adv(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_advantages(btn_inter, state)
+
+    async def on_back_disadv(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_disadvantages(btn_inter, state)
+
     async def on_back_skills(btn_inter: discord.Interaction) -> None:
         if btn_inter.user.id != int(state["user_id"]):
             await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
@@ -2156,10 +2209,27 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
 
     submit_btn.callback = on_submit
     back_traits_btn.callback = on_back_traits
+    back_adv_btn.callback = on_back_adv
+    back_disadv_btn.callback = on_back_disadv
     back_skills_btn.callback = on_back_skills
     view.add_item(submit_btn)
     view.add_item(back_traits_btn)
+    view.add_item(back_adv_btn)
+    view.add_item(back_disadv_btn)
     view.add_item(back_skills_btn)
+
+    is_shugenja = sch and sch.get("affinity")
+    if is_shugenja:
+        back_spells_btn = discord.ui.Button(label="Back: Spells", style=discord.ButtonStyle.secondary, row=2)
+
+        async def on_back_spells(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            await _chargen_spells(btn_inter, state)
+
+        back_spells_btn.callback = on_back_spells
+        view.add_item(back_spells_btn)
 
     await interaction.response.edit_message(
         content="**Step 10/10 — Review** · Check your character below, then submit for DM approval.",
