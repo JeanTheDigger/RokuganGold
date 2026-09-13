@@ -12,6 +12,7 @@ Discord plumbing only. All game math lives in `l5r_rules/`; all persistence in
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import math
@@ -3607,6 +3608,10 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/dm npc view / list", "View one NPC or list all on this server"),
         ("/dm npc trait / skill / set", "Edit Traits, Skills, or numeric fields"),
         ("/dm npc wound / heal", "Apply or heal wounds"),
+        ("/dm npc item", "Add/remove inventory items"),
+        ("/dm npc spell", "Add/remove known spells"),
+        ("/dm npc notes", "Set or clear NPC notes"),
+        ("/dm npc clone", "Clone an NPC with a new name"),
         ("/dm npc rename / delete", "Rename or remove an NPC"),
         ("/dm npc place / dismiss", "Place or remove an NPC in a room"),
         ("/dm npc say", "Speak as an NPC (webhook — appears as their name)"),
@@ -7793,6 +7798,128 @@ async def npc_say(interaction: discord.Interaction, name: str, message: app_comm
         )
     except discord.HTTPException as exc:
         await interaction.response.send_message(f"Webhook failed: {exc}", ephemeral=True)
+
+
+# --- NPC inventory, spells, notes, clone -----------------------------------
+
+@dm_npc.command(name="item", description="Add or remove items from an NPC's inventory. Fortune role required.")
+@app_commands.describe(
+    name="NPC name.", item="Item name.",
+    quantity="How many (default 1).", remove="Remove instead of adding.",
+)
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_item(
+    interaction: discord.Interaction, name: str, item: str,
+    quantity: app_commands.Range[int, 1, 9999] = 1, remove: bool = False,
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    item_name = item.strip()
+    match_key = next((k for k in c.inventory if k.lower() == item_name.lower()), None)
+    if remove:
+        if match_key is None:
+            await interaction.response.send_message(f"**{c.name}** doesn't have **{item_name}**.", ephemeral=True)
+            return
+        current = c.inventory[match_key]
+        remaining = current - quantity
+        if remaining <= 0:
+            del c.inventory[match_key]
+            msg = f"Removed all **{match_key}** from **{c.name}**'s inventory."
+        else:
+            c.inventory[match_key] = remaining
+            msg = f"Removed {quantity}× **{match_key}** from **{c.name}** ({remaining} left)."
+    else:
+        key = match_key or item_name
+        c.inventory[key] = c.inventory.get(key, 0) + quantity
+        total = c.inventory[key]
+        msg = f"Added {quantity}× **{key}** to **{c.name}** (now {total})."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+@dm_npc.command(name="spell", description="Add or remove a spell from an NPC's known spell list. Fortune role required.")
+@app_commands.describe(
+    name="NPC name.", spell="Spell name to add or remove.", remove="Remove instead of adding.",
+)
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_spell(
+    interaction: discord.Interaction, name: str, spell: str, remove: bool = False,
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    spell_name = spell.strip()
+    if remove:
+        match = next((s for s in c.spells_known if s.lower() == spell_name.lower()), None)
+        if match is None:
+            await interaction.response.send_message(
+                f"**{c.name}** doesn't know **{spell_name}**.", ephemeral=True,
+            )
+            return
+        c.spells_known.remove(match)
+        msg = f"Removed spell **{match}** from **{c.name}**."
+    else:
+        if any(s.lower() == spell_name.lower() for s in c.spells_known):
+            await interaction.response.send_message(
+                f"**{c.name}** already knows **{spell_name}**.", ephemeral=True,
+            )
+            return
+        c.spells_known.append(spell_name)
+        msg = f"Added spell **{spell_name}** to **{c.name}**."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+@dm_npc.command(name="notes", description="Set or clear notes on an NPC. Fortune role required.")
+@app_commands.describe(
+    name="NPC name.", text="Notes text (omit or leave empty to clear).",
+)
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_notes(
+    interaction: discord.Interaction, name: str, text: str = "",
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    rec.character.notes = text.strip()
+    store.save(rec)
+    if rec.character.notes:
+        msg = f"Notes set on **{rec.character.name}**: *{rec.character.notes}*"
+    else:
+        msg = f"Notes cleared on **{rec.character.name}**."
+    await interaction.response.send_message(msg, ephemeral=True)
+
+
+@dm_npc.command(name="clone", description="Clone an NPC with a new name. Fortune role required.")
+@app_commands.describe(name="NPC to clone.", new_name="Name for the clone.")
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_clone(
+    interaction: discord.Interaction, name: str, new_name: app_commands.Range[str, 1, 64],
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    clone = copy.deepcopy(rec.character)
+    clone.name = new_name.strip()
+    clone.wounds_taken = 0
+    try:
+        new_rec = store.create_character(rec.guild_id, NPC_OWNER, clone)
+    except storage.DuplicateNameError:
+        await interaction.response.send_message(
+            f"An NPC named **{clone.name}** already exists.", ephemeral=True,
+        )
+        return
+    await interaction.response.send_message(
+        f"🎭 Cloned **{rec.character.name}** → **{clone.name}**.",
+        embed=build_sheet_embed(new_rec),
+    )
 
 
 # ===========================================================================

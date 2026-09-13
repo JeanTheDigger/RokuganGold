@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 61: Creature Bestiary Viewer & Category System
+## Status: Phase 62: NPC Enhancements & Category System
 
 **Help & Navigation**
 
@@ -1000,6 +1000,15 @@ Distinct from existing `/dm creature view` (which shows a *spawned* instance wit
 Categories use **name-based** references rather than IDs, so entries survive creature delete/respawn cycles. Storage uses two tables (`categories` + `category_members`) with cascading deletes. Autocomplete on category names across all subcommands.
 
 Viewing an NPC (`/dm npc view`) or creature (`/dm creature view`) now shows which categories they belong to in a "Categories" field on the embed.
+
+**Phase 62: NPC Enhancements**
+
+| Command | What it does |
+|---|---|
+| `/dm npc item` | Add or remove items from an NPC's inventory. Supports quantity, case-insensitive matching, partial removal. Mirrors `/sheet item` for PCs. |
+| `/dm npc spell` | Add or remove a spell from an NPC's known spell list. Case-insensitive duplicate detection. |
+| `/dm npc notes` | Set or clear free-text notes on an NPC (appearance, personality, plot hooks). Shown in the Details section of the NPC embed. Omit text to clear. |
+| `/dm npc clone` | Clone an existing NPC with a new name. Deep copies all fields (traits, skills, equipment, spells, inventory), resets wounds to 0. Useful for creating variants (e.g. "Guard Captain" from "Town Guard"). |
 
 ---
 
