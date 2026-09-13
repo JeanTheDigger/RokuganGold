@@ -9061,6 +9061,30 @@ async def _setup_server_inner(
             )
         family_roles_created.append(role)
 
+    # --- Reorder roles: Kami > Fortune > Clans > Families > Approved ---
+    bot_top = guild.me.top_role.position if guild.me else 1
+    role_positions: dict[discord.Role, int] = {}
+    next_pos = bot_top - 1
+    for r in [kami_role, fortune_role]:
+        if r.position != next_pos:
+            role_positions[r] = next_pos
+        next_pos -= 1
+    for r in clan_roles_created:
+        if r.position != next_pos:
+            role_positions[r] = next_pos
+        next_pos -= 1
+    for r in family_roles_created:
+        if r.position != next_pos:
+            role_positions[r] = next_pos
+        next_pos -= 1
+    if approved_role.position != next_pos:
+        role_positions[approved_role] = next_pos
+    if role_positions:
+        try:
+            await guild.edit_role_positions(positions=role_positions, reason="Server setup: enforce role hierarchy")
+        except discord.Forbidden:
+            pass
+
     # --- Cleanup helper: deduplicate categories, purge stray channels ---
     _EXPECTED_CATEGORIES: dict[str, set[str]] = {
         "Lobby": {"lore", "welcome", "character-submission"},
