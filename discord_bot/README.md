@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 57: Full s39 Weapon Specials (Thrown, Firearms, Katana Void, Kyoketsu-shogi, All Prior)
+## Status: Phase 58: Full s39 Weapon Specials (Grapple Polearms, Thrown, Firearms, Katana Void, All Prior)
 
 **Help & Navigation**
 
@@ -679,6 +679,18 @@ removal of the weapon from play.
 Lance uses DR 1k2 (non-charging). Full DR 3k4 requires a mounted charge,
 which is not yet modeled — the DM can use `bonus_tn:` to remove the penalty
 and override DR manually for a charge.
+
+**Grapple-Capable Polearms** (GDD s39)
+
+Sasumata and sodegarami can be used to initiate a grapple while armed (normally
+a grapple requires free hands). When `/combat grapple initiate` is used and the
+attacker has a weapon equipped:
+- If the weapon is **grapple-capable**: a green checkmark note confirms it
+- If the weapon is **not** grapple-capable: a warning reminds the DM that the
+  attacker must drop/sheathe the weapon first
+
+The grapple roll itself is still Jiujutsu/Agility (per s40). The weapon special
+only removes the "free hands" requirement.
 
 **Thrown Weapon Variants** (GDD s39)
 

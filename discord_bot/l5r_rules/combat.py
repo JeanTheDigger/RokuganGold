@@ -37,7 +37,8 @@ from .dice import DiceEngine
 # firearms), half_range, penalty_mounted, penalty_on_foot (bows/lance),
 # ignore_all_reduction (bo-hiya), ignore_armor_reduction (firearms: zeroes armor
 # Reduction only), ignore_creature_reduction (hand-cannon: zeroes natural toughness),
-# break_threshold (kumade/lance/parangu/ninja-to), void_damage (katana: VP for +1k1).
+# break_threshold (kumade/lance/parangu/ninja-to), void_damage (katana: VP for +1k1),
+# grapple_capable (sasumata/sodegarami: can initiate grapple while armed).
 WEAPON_CATALOG: dict[str, dict] = {
     # Swords (Kenjutsu)
     "katana": {"rolled": 3, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "agility", "melee": True, "size": "Medium", "void_damage": True},
@@ -89,8 +90,8 @@ WEAPON_CATALOG: dict[str, dict] = {
     "rope_cutter_arrow": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "half_range": True},
     "bo_hiya": {"rolled": 3, "kept": 3, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "ignore_all_reduction": True},
     # Polearms (grappling)
-    "sasumata": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
-    "sadegarami": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large"},
+    "sasumata": {"rolled": 0, "kept": 2, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large", "grapple_capable": True},
+    "sodegarami": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Polearms", "trait": "agility", "melee": True, "size": "Large", "grapple_capable": True},
     # More spears
     "kumade": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large", "break_threshold": 25},
     "mai_chong": {"rolled": 0, "kept": 3, "strength_adds": True, "skill": "Spears", "trait": "agility", "melee": True, "size": "Large"},

@@ -4686,6 +4686,14 @@ async def grapple_initiate(
         return
     outcome = combat.resolve_grapple_initiate(atk_rec.character, tn, engine)
     hit = outcome["hit"]
+    equipped = atk_rec.character.equipped_weapon
+    grapple_weapon_note = ""
+    if equipped:
+        wp = combat.get_weapon_profile(equipped)
+        if wp.get("grapple_capable"):
+            grapple_weapon_note = f"\n✓ {equipped.replace('_', ' ').title()}: can initiate grapple while armed (s39)"
+        else:
+            grapple_weapon_note = f"\n⚠️ {equipped.replace('_', ' ').title()} is not grapple-capable — must drop/sheathe to grapple (DM adjudicates)"
     embed = discord.Embed(
         title=f"🤼 {atk_cb.name} attempts to grapple {def_cb.name}",
         color=discord.Color.greyple(),
@@ -4694,7 +4702,8 @@ async def grapple_initiate(
         name="1. Grapple Attack (Jiujutsu/Agility)",
         value=f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
               f": {'**HIT**' if hit else '**miss**'}"
-              f"\n({outcome['rolled']}k{outcome['kept']}, wound penalty {outcome['wound_penalty']})",
+              f"\n({outcome['rolled']}k{outcome['kept']}, wound penalty {outcome['wound_penalty']})"
+              f"{grapple_weapon_note}",
         inline=False,
     )
     grappled = False
