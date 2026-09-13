@@ -2658,7 +2658,16 @@ class _FullCharacterApprovalView(_DisableableView):
             return
         store.set_active(guild_id, owner_id, record.id)
 
-        await member.add_roles(approved_role,
+        roles_to_add = [approved_role]
+        if char.clan:
+            clan_role = discord.utils.get(guild.roles, name=char.clan)
+            if clan_role:
+                roles_to_add.append(clan_role)
+        if char.family:
+            family_role = discord.utils.get(guild.roles, name=char.family)
+            if family_role:
+                roles_to_add.append(family_role)
+        await member.add_roles(*roles_to_add,
                                reason=f"Character '{state['name']}' approved by {interaction.user.display_name}")
         nick_note = ""
         try:
@@ -2865,10 +2874,49 @@ class _DeleteConfirmView(discord.ui.View):
         if interaction.user.id != self._user_id:
             await interaction.response.send_message("Not your confirmation.", ephemeral=True)
             return
+        guild = interaction.guild
+        owner_id = self._record.owner_id
+        char = self._record.character
         store.delete(self._record.id)
         self.stop()
+
+        role_notes: list[str] = []
+        if guild is not None:
+            member = guild.get_member(int(owner_id))
+            if member is None:
+                try:
+                    member = await guild.fetch_member(int(owner_id))
+                except discord.NotFound:
+                    member = None
+
+            if member is not None:
+                roles_to_remove: list[discord.Role] = []
+                approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
+                if approved_role and approved_role in member.roles:
+                    roles_to_remove.append(approved_role)
+                if char.clan:
+                    clan_role = discord.utils.get(guild.roles, name=char.clan)
+                    if clan_role and clan_role in member.roles:
+                        roles_to_remove.append(clan_role)
+                if char.family:
+                    family_role = discord.utils.get(guild.roles, name=char.family)
+                    if family_role and family_role in member.roles:
+                        roles_to_remove.append(family_role)
+                if roles_to_remove:
+                    try:
+                        await member.remove_roles(*roles_to_remove, reason=f"Character '{char.name}' deleted")
+                        role_notes.append("Roles removed: " + ", ".join(r.name for r in roles_to_remove))
+                    except discord.Forbidden:
+                        role_notes.append("Could not remove roles — bot lacks permission.")
+                try:
+                    await member.edit(nick=None, reason=f"Character '{char.name}' deleted")
+                    role_notes.append("Nickname reset.")
+                except discord.Forbidden:
+                    role_notes.append("Could not reset nickname — bot lacks permission.")
+
+        extra = ("\n" + "\n".join(role_notes)) if role_notes else ""
         await interaction.response.edit_message(
-            content=f"🗑️ Deleted **{self._record.character.name}** permanently.", view=None
+            content=f"🗑️ Deleted **{char.name}** permanently.{extra}", view=None
         )
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
@@ -8602,7 +8650,16 @@ class CharacterApprovalView(_DisableableView):
             return
         store.set_active(guild_id, owner_id, record.id)
 
-        await member.add_roles(approved_role, reason=f"Character '{self.character_name}' approved by {interaction.user.display_name}")
+        roles_to_add = [approved_role]
+        if char.clan:
+            clan_role = discord.utils.get(guild.roles, name=char.clan)
+            if clan_role:
+                roles_to_add.append(clan_role)
+        if char.family:
+            family_role = discord.utils.get(guild.roles, name=char.family)
+            if family_role:
+                roles_to_add.append(family_role)
+        await member.add_roles(*roles_to_add, reason=f"Character '{self.character_name}' approved by {interaction.user.display_name}")
         nick_note = ""
         try:
             await member.edit(nick=self.character_name, reason=f"Character approved: {self.character_name}")
@@ -8682,6 +8739,15 @@ async def _start_chargen_wizard(interaction: discord.Interaction) -> None:
     if not approval_ch_id:
         await interaction.response.send_message(
             "No approval channel has been configured. A server admin needs to run `/setup server` first.",
+            ephemeral=True,
+        )
+        return
+
+    existing_chars = store.list_by_owner(guild_id, user_id)
+    if existing_chars:
+        await interaction.response.send_message(
+            f"You already have a character: **{existing_chars[0].character.name}**. "
+            f"You can only have one character at a time. Delete the existing one first with `/sheet delete`.",
             ephemeral=True,
         )
         return
