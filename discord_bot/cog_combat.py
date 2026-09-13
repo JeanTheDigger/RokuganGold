@@ -15,7 +15,7 @@ import storage as _storage_mod
 from l5r_rules import (
     advantage_effects, advantages, combat, condition_effects, creature, enums,
     kata, kata_effects, kiho, kiho_effects, mass_battle, skill_mastery,
-    spells, stats, technique_effects,
+    spells, stats, tattoo_effects, technique_effects,
 )
 from l5r_rules.character import Character
 
@@ -307,6 +307,11 @@ class DamageView(discord.ui.View):
             t_kept += k_kept
             t_flat += k_flat
             t_dmg_notes = t_dmg_notes + k_dmg_notes
+            tt_roll, tt_kept, tt_flat, tt_dmg_notes = tattoo_effects.attacker_damage(attacker, self.weapon)
+            extra_rolled += tt_roll
+            t_kept += tt_kept
+            t_flat += tt_flat
+            t_dmg_notes = t_dmg_notes + tt_dmg_notes
             bish_roll, bish_notes = advantage_effects.increased_damage_bonus(attacker, self.increased_damage)
             extra_rolled += bish_roll
             t_dmg_notes = t_dmg_notes + bish_notes
@@ -563,6 +568,11 @@ class DamageView(discord.ui.View):
         t_kept += k_kept
         t_flat += k_flat
         t_dmg_notes = t_dmg_notes + k_dmg_notes
+        tt_roll, tt_kept, tt_flat, tt_dmg_notes = tattoo_effects.attacker_damage(attacker, self.weapon)
+        extra_rolled += tt_roll
+        t_kept += tt_kept
+        t_flat += tt_flat
+        t_dmg_notes = t_dmg_notes + tt_dmg_notes
         bish_roll, bish_notes = advantage_effects.increased_damage_bonus(attacker, self.increased_damage)
         extra_rolled += bish_roll
         t_dmg_notes = t_dmg_notes + bish_notes
@@ -601,6 +611,7 @@ class DamageView(discord.ui.View):
         crab_bonus, crab_note = kata_effects.defender_reduction_bonus(target, self.defender_stance)
         tech_red, tech_red_notes = technique_effects.defender_reduction_bonus(target)
         kiho_red, kiho_red_notes = kiho_effects.defender_reduction_bonus(target)
+        tat_red, tat_red_notes = tattoo_effects.defender_reduction_bonus(target)
         scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
         raw += scorp_bonus
         base_red = target.armor_reduction
@@ -623,9 +634,9 @@ class DamageView(discord.ui.View):
                 true_note = f"True: Reduction −{true_sub} (wielder Strength {attacker.strength})"
                 base_red = max(0, base_red - attacker.strength)
         kata_line = "".join(
-            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes) if n
+            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes, *tat_red_notes) if n
         )
-        reduction = max(0, base_red - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red)
+        reduction = max(0, base_red - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red + tat_red)
         if wp.get("ignore_all_reduction"):
             reduction = 0
         applied = combat.apply_damage(target, raw, reduction)
@@ -652,6 +663,11 @@ class DamageView(discord.ui.View):
                 attacker.wounds_taken = max(0, attacker.wounds_taken - heal_amt)
                 _d.store.save(attacker_rec)
                 heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
+        phoenix_line = ""
+        if applied["new_wound_level"] in ("Down", "Out", "Dead"):
+            phx = tattoo_effects.phoenix_heal_reminder(target)
+            if phx:
+                phoenix_line = f"\n🔥 {phx}"
         _d.store.save(target_rec)
 
         called_shot_line = ""
@@ -682,7 +698,7 @@ class DamageView(discord.ui.View):
             ),
             inline=False,
         )
-        embed.add_field(name="Result", value=self._wound_status(target_rec, applied) + heal_line, inline=False)
+        embed.add_field(name="Result", value=self._wound_status(target_rec, applied) + heal_line + phoenix_line, inline=False)
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
         await interaction.response.edit_message(view=self)
@@ -860,6 +876,9 @@ def _active_ability_reminders(c: Character, role: str, drop_rate_limited: bool =
         rec = kiho.get(name)
         effect = rec["effect"] if rec else ""
         lines.append(f"**{role.capitalize()} kiho: {name}: ** {effect}")
+    tat_reminder = tattoo_effects.active_tattoo_reminder(c)
+    if tat_reminder:
+        lines.append(f"**{role.capitalize()} tattoo:** {tat_reminder}")
     return lines
 
 
@@ -1113,6 +1132,9 @@ async def attack(
         def_kiho_tn, def_kiho_tn_notes = kiho_effects.defender_armor_tn_bonus(target_rec.character)
         def_kata_bonus += def_kiho_tn
         kata_notes.extend(def_kiho_tn_notes)
+        def_tattoo_tn, def_tattoo_tn_notes = tattoo_effects.defender_armor_tn_bonus(target_rec.character)
+        def_kata_bonus += def_tattoo_tn
+        kata_notes.extend(def_tattoo_tn_notes)
     # Attacker's active kata: flat bonus added to the attack-roll total.
     atk_flat, atk_note = kata_effects.attacker_roll_flat_bonus(attacker, man, increased_damage)
     if atk_note:
@@ -1179,6 +1201,12 @@ async def attack(
         atk_flat += kiho_wp_mod
         kata_notes.extend(kiho_wp_notes)
 
+    # Tattoo wound-penalty modifier (Mountain).
+    tat_wp_mod, tat_wp_notes = tattoo_effects.attacker_wound_penalty_mod(attacker)
+    if tat_wp_mod:
+        atk_flat += tat_wp_mod
+        kata_notes.extend(tat_wp_notes)
+
     # Condition-based attack modifiers (GDD s40: Blinded, Dazed, Fatigued, Mounted, Prone).
     atk_conds = atk_combatant.conditions if atk_combatant else set()
     cond_rolled, cond_kept, cond_flat, cond_atk_notes = condition_effects.attacker_attack_dice(
@@ -1235,6 +1263,12 @@ async def attack(
     if mastery_free:
         maneuver_raises = max(0, maneuver_raises - mastery_free)
         kata_notes.extend(mastery_free_notes)
+
+    # Tattoo: Storm free raise for Knockdown (s57.25).
+    tat_free, tat_free_notes = tattoo_effects.maneuver_free_raises(attacker, man)
+    if tat_free:
+        maneuver_raises = max(0, maneuver_raises - tat_free)
+        kata_notes.extend(tat_free_notes)
 
     # Guard maneuver TN modifiers (s40): guarded target gets +10 per guarder, guarder gets -5.
     guard_mod = 0

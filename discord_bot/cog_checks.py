@@ -12,6 +12,7 @@ from discord import app_commands
 
 from l5r_rules import combat, enums, stats
 from l5r_rules import advantage_effects
+from l5r_rules import tattoo_effects
 import storage as _storage_mod
 
 
@@ -367,6 +368,12 @@ async def fear_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if tattoo_effects.is_fear_immune(c):
+        await interaction.response.send_message(
+            f"**{c.name}** is immune to Fear (Mantis Tattoo, s57.25). No roll needed.",
+            ephemeral=True,
+        )
+        return
     wp = stats.wound_penalty(c)
     void_r, void_k, void_spent, void_line, _ = _try_spend_void(c, spend_void)
     result = combat.resolve_fear_check(c.willpower, fear_rank, _d.engine, bonus=bonus + wp, extra_rolled=void_r, extra_kept=void_k)
