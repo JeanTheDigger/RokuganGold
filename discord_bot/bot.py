@@ -7290,6 +7290,60 @@ async def _setup_server_inner(
 
     dm_roles: list[discord.Role] = [fortune_role, kami_role]
 
+    # --- Clan roles (cosmetic, hoisted to group members in sidebar) ---
+    _CLAN_COLORS: dict[str, str] = {
+        "Crab": "#4A6FA5",
+        "Crane": "#5DADE2",
+        "Dragon": "#27AE60",
+        "Lion": "#F1C40F",
+        "Mantis": "#1ABC9C",
+        "Phoenix": "#E67E22",
+        "Scorpion": "#E74C3C",
+        "Unicorn": "#9B59B6",
+        "Spider": "#7F8C8D",
+    }
+    clan_roles_created: list[discord.Role] = []
+    for clan_name in _GREAT_CLANS:
+        color_hex = _CLAN_COLORS.get(clan_name, "#95A5A6")
+        role = discord.utils.get(guild.roles, name=clan_name)
+        if role is None:
+            role = await guild.create_role(
+                name=clan_name,
+                color=discord.Color.from_str(color_hex),
+                hoist=True,
+                reason="Server setup: clan role",
+            )
+        else:
+            await role.edit(
+                color=discord.Color.from_str(color_hex),
+                hoist=True,
+                reason="Server setup: update clan role",
+            )
+        clan_roles_created.append(role)
+
+    # --- Family roles (cosmetic, not hoisted, colored to match clan) ---
+    from l5r_rules import families as _families_mod
+    family_roles_created: list[discord.Role] = []
+    for fam in _families_mod.ALL:
+        fam_name = fam["name"]
+        fam_clan = fam["clan"]
+        color_hex = _CLAN_COLORS.get(fam_clan, "#95A5A6")
+        role = discord.utils.get(guild.roles, name=fam_name)
+        if role is None:
+            role = await guild.create_role(
+                name=fam_name,
+                color=discord.Color.from_str(color_hex),
+                hoist=False,
+                reason=f"Server setup: {fam_clan} family role",
+            )
+        else:
+            await role.edit(
+                color=discord.Color.from_str(color_hex),
+                hoist=False,
+                reason=f"Server setup: update {fam_clan} family role",
+            )
+        family_roles_created.append(role)
+
     # --- 1. Lobby (visible to everyone) ---
     lobby_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
         everyone: discord.PermissionOverwrite(
@@ -7413,12 +7467,16 @@ async def _setup_server_inner(
 
     store.set_approval_channel(str(guild.id), str(approvals_ch.id))
 
+    clan_list = ", ".join(r.mention for r in clan_roles_created)
+    family_list = ", ".join(r.mention for r in family_roles_created)
     summary = (
         f"**Server setup complete!**\n\n"
-        f"**Roles created/updated:**\n"
+        f"**Staff Roles:**\n"
         f"• {kami_role.mention} — Server admin (gold, full permissions)\n"
         f"• {fortune_role.mention} — Dungeon Master (purple, moderation tools)\n"
         f"• {approved_role.mention} — Approved player (green, basic access)\n\n"
+        f"**Clan Roles ({len(clan_roles_created)}):** {clan_list}\n\n"
+        f"**Family Roles ({len(family_roles_created)}):** {family_list}\n\n"
         f"**Categories & Channels:**\n"
         f"• **Lobby** — {welcome_ch.mention}, #character-submission\n"
         f"• **Out of Character** — #general, #off-topic, {announcements_ch.mention} (DM-post only), "
