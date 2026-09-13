@@ -3576,6 +3576,7 @@ dm = app_commands.Group(name="dm", description="DM tools: requires the Fortune r
 dm_creature = app_commands.Group(name="creature", description="Spawn and run bestiary creatures.", parent=dm)
 dm_npc = app_commands.Group(name="npc", description="Generate and manage NPC characters.", parent=dm)
 dm_room = app_commands.Group(name="room", description="Create private play rooms and invite people.", parent=dm)
+dm_category = app_commands.Group(name="category", description="Organise NPCs and creatures into named groups.", parent=dm)
 
 
 # ---------------------------------------------------------------------------
@@ -3612,6 +3613,15 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/dm creature attack", "Creature attacks a PC/NPC"),
         ("/dm creature wound / heal", "Apply or heal creature wounds"),
         ("/dm creature delete", "Remove a spawned creature"),
+    ]),
+    ("\U0001f4c2", "Categories", "Organise NPCs and creatures into named groups.", [
+        ("/dm category create", "Create a named category"),
+        ("/dm category delete", "Delete a category (members untouched)"),
+        ("/dm category rename", "Rename a category"),
+        ("/dm category add", "Add an NPC or creature to a category"),
+        ("/dm category remove", "Remove an NPC or creature from a category"),
+        ("/dm category list", "List all categories on this server"),
+        ("/dm category view", "View all members of a category"),
     ]),
     ("⚔️", "Combat", "Start encounters and manage combatants.", [
         ("/combat start / end", "Start or end an encounter"),
@@ -8854,6 +8864,234 @@ async def creature_attack_cmd(
     else:
         await interaction.response.send_message(embed=embed)
         await _combat_log(guild, f"Creature Attack: {cr.name} → {t_name} MISS (roll {outcome['total']} vs TN {outcome['tn']})")
+
+
+# ===========================================================================
+# /dm category — organise NPCs & creatures into named groups
+# ===========================================================================
+_ENTITY_TYPE_CHOICES = [
+    app_commands.Choice(name="NPC", value="npc"),
+    app_commands.Choice(name="Creature", value="creature"),
+]
+
+
+async def _category_autocomplete(
+    interaction: discord.Interaction, current: str,
+) -> list[app_commands.Choice[str]]:
+    if interaction.guild_id is None:
+        return []
+    cats = store.list_categories(str(interaction.guild_id))
+    cur = current.lower().strip()
+    return [
+        app_commands.Choice(name=c.name, value=c.name)
+        for c in cats if cur in c.name.lower()
+    ][:25]
+
+
+@dm_category.command(name="create", description="Create a new category. Fortune role required.")
+@app_commands.describe(name="Category name (e.g. 'Bandits', 'Town Guards', 'Wildlife').")
+async def category_create(interaction: discord.Interaction, name: app_commands.Range[str, 1, 64]) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
+            ephemeral=True,
+        )
+        return
+    try:
+        cat = store.create_category(str(interaction.guild_id), name.strip())
+    except storage.DuplicateNameError:
+        await interaction.response.send_message(f"Category **{name}** already exists.", ephemeral=True)
+        return
+    await interaction.response.send_message(f"\U0001f4c1 Created category **{cat.name}**.")
+
+
+@dm_category.command(name="delete", description="Delete a category (members are NOT deleted). Fortune role required.")
+@app_commands.describe(name="Category to delete.")
+@app_commands.autocomplete(name=_category_autocomplete)
+async def category_delete(interaction: discord.Interaction, name: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
+            ephemeral=True,
+        )
+        return
+    cat = store.get_category(str(interaction.guild_id), name)
+    if cat is None:
+        await interaction.response.send_message(f"No category named **{name}**.", ephemeral=True)
+        return
+    store.delete_category(cat.id)
+    await interaction.response.send_message(f"\U0001f4c1 Deleted category **{cat.name}**.", ephemeral=True)
+
+
+@dm_category.command(name="rename", description="Rename a category. Fortune role required.")
+@app_commands.describe(name="Current category name.", new_name="New name.")
+@app_commands.autocomplete(name=_category_autocomplete)
+async def category_rename(
+    interaction: discord.Interaction, name: str, new_name: app_commands.Range[str, 1, 64],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
+            ephemeral=True,
+        )
+        return
+    cat = store.get_category(str(interaction.guild_id), name)
+    if cat is None:
+        await interaction.response.send_message(f"No category named **{name}**.", ephemeral=True)
+        return
+    try:
+        store.rename_category(cat.id, new_name.strip())
+    except storage.DuplicateNameError:
+        await interaction.response.send_message(f"Category **{new_name}** already exists.", ephemeral=True)
+        return
+    await interaction.response.send_message(f"\U0001f4c1 Renamed **{cat.name}** → **{new_name.strip()}**.")
+
+
+@dm_category.command(name="add", description="Add an NPC or creature to a category. Fortune role required.")
+@app_commands.describe(
+    category="Which category.", kind="NPC or creature.", name="Name of the NPC or creature.",
+)
+@app_commands.choices(kind=_ENTITY_TYPE_CHOICES)
+@app_commands.autocomplete(category=_category_autocomplete)
+async def category_add(
+    interaction: discord.Interaction,
+    category: str,
+    kind: app_commands.Choice[str],
+    name: app_commands.Range[str, 1, 64],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
+            ephemeral=True,
+        )
+        return
+    guild = str(interaction.guild_id)
+    cat = store.get_category(guild, category)
+    if cat is None:
+        await interaction.response.send_message(f"No category named **{category}**.", ephemeral=True)
+        return
+    if kind.value == "npc":
+        if store.get_by_name(guild, NPC_OWNER, name) is None:
+            await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
+            return
+    else:
+        if store.get_creature_by_name(guild, name) is None:
+            await interaction.response.send_message(f"No creature named **{name}**.", ephemeral=True)
+            return
+    added = store.add_to_category(cat.id, kind.value, name.strip())
+    if not added:
+        await interaction.response.send_message(
+            f"**{name}** is already in **{cat.name}**.", ephemeral=True,
+        )
+        return
+    await interaction.response.send_message(
+        f"\U0001f4c1 Added {kind.name} **{name}** to **{cat.name}**.",
+    )
+
+
+@dm_category.command(name="remove", description="Remove an NPC or creature from a category. Fortune role required.")
+@app_commands.describe(
+    category="Which category.", kind="NPC or creature.", name="Name to remove.",
+)
+@app_commands.choices(kind=_ENTITY_TYPE_CHOICES)
+@app_commands.autocomplete(category=_category_autocomplete)
+async def category_remove(
+    interaction: discord.Interaction,
+    category: str,
+    kind: app_commands.Choice[str],
+    name: app_commands.Range[str, 1, 64],
+) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to manage categories.",
+            ephemeral=True,
+        )
+        return
+    cat = store.get_category(str(interaction.guild_id), category)
+    if cat is None:
+        await interaction.response.send_message(f"No category named **{category}**.", ephemeral=True)
+        return
+    removed = store.remove_from_category(cat.id, kind.value, name.strip())
+    if not removed:
+        await interaction.response.send_message(f"**{name}** is not in **{cat.name}**.", ephemeral=True)
+        return
+    await interaction.response.send_message(
+        f"\U0001f4c1 Removed {kind.name} **{name}** from **{cat.name}**.", ephemeral=True,
+    )
+
+
+@dm_category.command(name="list", description="List all categories on this server.")
+async def category_list(interaction: discord.Interaction) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view categories.",
+            ephemeral=True,
+        )
+        return
+    cats = store.list_categories(str(interaction.guild_id))
+    if not cats:
+        await interaction.response.send_message(
+            "No categories yet. Use `/dm category create` to make one.", ephemeral=True,
+        )
+        return
+    lines = [f"• **{c.name}** ({store.category_count(c.id)} members)" for c in cats]
+    pages = _paginate(lines, "\U0001f4c1 **Categories: **\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
+
+
+@dm_category.command(name="view", description="View all members of a category.")
+@app_commands.describe(category="Which category to view.")
+@app_commands.autocomplete(category=_category_autocomplete)
+async def category_view(interaction: discord.Interaction, category: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view categories.",
+            ephemeral=True,
+        )
+        return
+    cat = store.get_category(str(interaction.guild_id), category)
+    if cat is None:
+        await interaction.response.send_message(f"No category named **{category}**.", ephemeral=True)
+        return
+    members = store.list_category_members(cat.id)
+    if not members:
+        await interaction.response.send_message(
+            f"\U0001f4c1 **{cat.name}** is empty. Use `/dm category add` to populate it.",
+            ephemeral=True,
+        )
+        return
+    lines = [f"• `{etype:8s}` **{ename}**" for etype, ename in members]
+    pages = _paginate(lines, f"\U0001f4c1 **{cat.name}** ({len(members)} members):\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
 
 # ===========================================================================

@@ -121,6 +121,22 @@ CREATE TABLE IF NOT EXISTS calendar (
     month    INTEGER NOT NULL,
     day      INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS categories (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    name     TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_category_unique
+    ON categories (guild_id, name COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS category_members (
+    category_id INTEGER NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_name TEXT NOT NULL,
+    PRIMARY KEY (category_id, entity_type, entity_name COLLATE NOCASE),
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+);
 """
 
 
@@ -158,6 +174,15 @@ class CreatureRecord:
 
 
 @dataclass
+class CategoryRecord:
+    """A named grouping for NPCs and/or creatures."""
+
+    id: int
+    guild_id: str
+    name: str
+
+
+@dataclass
 class MacroRecord:
     """A saved roll macro."""
 
@@ -181,6 +206,7 @@ class Store:
         # loop, but this keeps us safe if a call ever lands off-thread.
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA foreign_keys = ON")
         self._lock = threading.Lock()
         with self._lock, self._conn:
             self._conn.executescript(_SCHEMA)
@@ -625,3 +651,97 @@ class Store:
                 "month = excluded.month, day = excluded.day",
                 (guild_id, year, month, day),
             )
+
+    # -- categories ---------------------------------------------------------------
+    def create_category(self, guild_id: str, name: str) -> CategoryRecord:
+        try:
+            with self._lock, self._conn:
+                cur = self._conn.execute(
+                    "INSERT INTO categories (guild_id, name) VALUES (?, ?)",
+                    (guild_id, name),
+                )
+                return CategoryRecord(cur.lastrowid, guild_id, name)
+        except sqlite3.IntegrityError as exc:
+            raise DuplicateNameError(name) from exc
+
+    def get_category(self, guild_id: str, name: str) -> CategoryRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM categories WHERE guild_id = ? AND name = ? COLLATE NOCASE",
+                (guild_id, name),
+            ).fetchone()
+        if row is None:
+            return None
+        return CategoryRecord(row["id"], row["guild_id"], row["name"])
+
+    def list_categories(self, guild_id: str) -> list[CategoryRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM categories WHERE guild_id = ? ORDER BY name COLLATE NOCASE",
+                (guild_id,),
+            ).fetchall()
+        return [CategoryRecord(r["id"], r["guild_id"], r["name"]) for r in rows]
+
+    def delete_category(self, category_id: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM category_members WHERE category_id = ?", (category_id,))
+            self._conn.execute("DELETE FROM categories WHERE id = ?", (category_id,))
+
+    def rename_category(self, category_id: int, new_name: str) -> None:
+        try:
+            with self._lock, self._conn:
+                self._conn.execute(
+                    "UPDATE categories SET name = ? WHERE id = ?",
+                    (new_name, category_id),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise DuplicateNameError(new_name) from exc
+
+    def add_to_category(self, category_id: int, entity_type: str, entity_name: str) -> bool:
+        try:
+            with self._lock, self._conn:
+                self._conn.execute(
+                    "INSERT INTO category_members (category_id, entity_type, entity_name) "
+                    "VALUES (?, ?, ?)",
+                    (category_id, entity_type, entity_name),
+                )
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def remove_from_category(self, category_id: int, entity_type: str, entity_name: str) -> bool:
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM category_members "
+                "WHERE category_id = ? AND entity_type = ? AND entity_name = ? COLLATE NOCASE",
+                (category_id, entity_type, entity_name),
+            )
+        return cur.rowcount > 0
+
+    def list_category_members(self, category_id: int) -> list[tuple[str, str]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT entity_type, entity_name FROM category_members "
+                "WHERE category_id = ? ORDER BY entity_type, entity_name COLLATE NOCASE",
+                (category_id,),
+            ).fetchall()
+        return [(r["entity_type"], r["entity_name"]) for r in rows]
+
+    def category_count(self, category_id: int) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COUNT(*) AS cnt FROM category_members WHERE category_id = ?",
+                (category_id,),
+            ).fetchone()
+        return row["cnt"]
+
+    def list_entity_categories(self, guild_id: str, entity_type: str, entity_name: str) -> list[CategoryRecord]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT c.* FROM categories c "
+                "JOIN category_members m ON c.id = m.category_id "
+                "WHERE c.guild_id = ? AND m.entity_type = ? AND m.entity_name = ? COLLATE NOCASE "
+                "ORDER BY c.name COLLATE NOCASE",
+                (guild_id, entity_type, entity_name),
+            ).fetchall()
+        return [CategoryRecord(r["id"], r["guild_id"], r["name"]) for r in rows]

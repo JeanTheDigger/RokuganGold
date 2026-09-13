@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 61: Creature Template Info & Compare (Bestiary Viewer)
+## Status: Phase 61: Creature Bestiary Viewer & Category System
 
 **Help & Navigation**
 
@@ -980,6 +980,20 @@ The embed shows:
 - **Tags** — full tag list as inline code
 
 Distinct from existing `/dm creature view` (which shows a *spawned* instance with current wounds). This is a reference lookup — no instance needed.
+
+**Phase 61 (cont.): Category System**
+
+| Command | What it does |
+|---|---|
+| `/dm category create` | Create a named category (e.g. "Bandits", "Town Guards"). 64-char limit, case-insensitive unique per server. |
+| `/dm category delete` | Delete a category. Members (NPCs/creatures) are **not** deleted — only the grouping is removed. |
+| `/dm category rename` | Rename a category (same uniqueness rules). |
+| `/dm category add` | Add an NPC or creature to a category. Validates the entity exists before adding. |
+| `/dm category remove` | Remove an NPC or creature from a category. |
+| `/dm category list` | List all categories on this server with member counts. |
+| `/dm category view` | View all members of a category, grouped by type (NPCs / Creatures). |
+
+Categories use **name-based** references rather than IDs, so entries survive creature delete/respawn cycles. Storage uses two tables (`categories` + `category_members`) with cascading deletes. Autocomplete on category names across all subcommands.
 
 ---
 
