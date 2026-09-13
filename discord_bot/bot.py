@@ -8991,12 +8991,12 @@ async def _setup_server_inner(
     if approved_role is None:
         approved_role = await guild.create_role(
             name=ROLE_APPROVED, color=discord.Color.from_str("#2ECC71"),
-            permissions=approved_perms, hoist=True,
+            permissions=approved_perms, hoist=False,
             reason="Server setup: player access role",
         )
     else:
         await approved_role.edit(color=discord.Color.from_str("#2ECC71"),
-                                 permissions=approved_perms, hoist=True,
+                                 permissions=approved_perms, hoist=False,
                                  reason="Server setup: update player role")
 
     dm_roles: list[discord.Role] = [fortune_role, kami_role]
