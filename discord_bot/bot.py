@@ -3603,7 +3603,8 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/dm npc say", "Speak as an NPC (webhook — appears as their name)"),
     ]),
     ("\U0001f409", "Creatures", "Bestiary creature management.", [
-        ("/dm creature catalog", "Search bestiary templates"),
+        ("/dm creature catalog", "Search bestiary templates (compact)"),
+        ("/dm creature search", "Search with detailed output"),
         ("/dm creature info", "Full stat block of a template"),
         ("/dm creature compare", "Compare two templates side-by-side"),
         ("/dm creature spawn", "Spawn a creature from a template"),
@@ -8541,6 +8542,67 @@ async def creature_catalog(interaction: discord.Interaction, search: str | None 
         for tid, t in matches
     ]
     pages = _paginate(lines, f"👹 **{len(matches)} match(es) for `{search}`: **\n")
+    if len(pages) == 1:
+        await interaction.response.send_message(pages[0], ephemeral=True)
+    else:
+        view = _PaginatorView(pages, interaction.user.id)
+        await interaction.response.send_message(pages[0], view=view, ephemeral=True)
+
+
+@dm_creature.command(name="search", description="Search bestiary templates with detailed output. Fortune role required.")
+@app_commands.describe(query="Search by name, id, or tag (e.g. 'oni', 'bear', 'spirit').")
+async def creature_search(interaction: discord.Interaction, query: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to search creature templates.",
+            ephemeral=True,
+        )
+        return
+    q = query.lower().strip()
+    if len(q) < 2:
+        await interaction.response.send_message("Search term must be at least 2 characters.", ephemeral=True)
+        return
+    items = sorted(creature.CREATURE_CATALOG.items(), key=lambda kv: kv[1].name)
+    matches = [
+        (tid, t) for tid, t in items
+        if q in tid or q in t.name.lower() or any(q in tag for tag in t.tags)
+    ]
+    if not matches:
+        await interaction.response.send_message(f"No templates match `{query}`.", ephemeral=True)
+        return
+    lines: list[str] = []
+    for tid, t in matches:
+        ring_parts: list[str] = []
+        for rn, (ta, tb) in _RING_TRAITS.items():
+            rv = getattr(t, rn)
+            ov = []
+            if ta in t.traits:
+                ov.append(f"{_TRAIT_ABBREV[ta]} {t.traits[ta]}")
+            if tb in t.traits:
+                ov.append(f"{_TRAIT_ABBREV[tb]} {t.traits[tb]}")
+            lbl = rn.capitalize()[:1]
+            ring_parts.append(f"{lbl} {rv} ({', '.join(ov)})" if ov else f"{lbl} {rv}")
+        atk = f"{t.attack_rolled}k{t.attack_kept}"
+        if t.attack_flat:
+            atk += f"+{t.attack_flat}"
+        dmg = f"{t.damage_rolled}k{t.damage_kept}"
+        if t.damage_flat:
+            dmg += f"+{t.damage_flat}"
+        fear_s = f" | Fear {t.fear}" if t.fear else ""
+        tags_s = ", ".join(t.tags[:6])
+        if len(t.tags) > 6:
+            tags_s += f" +{len(t.tags) - 6}"
+        lines.append(
+            f"• **{t.name}** (`{tid}`)\n"
+            f"  {' · '.join(ring_parts)}\n"
+            f"  {t.attack_name or 'Atk'}: atk {atk}, dmg {dmg} | TN {t.armor_tn}, Red {t.reduction} | "
+            f"Dead {t.wounds_dead}{fear_s}\n"
+            f"  {tags_s}"
+        )
+    pages = _paginate(lines, f"\U0001f479 **{len(matches)} match(es) for `{query}`: **\n", per_page=5)
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:

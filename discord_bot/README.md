@@ -968,6 +968,7 @@ python3 l5r_rules/dice.py     # runs a built-in validation of the dice rules
 
 | Command | What it does |
 |---|---|
+| `/dm creature search` | Search templates with detailed multi-line output: rings (with abbreviated trait overrides), attack/damage with flat bonuses, TN, Reduction, Fear, wound total, and tags. Paginated at 5 per page. Richer than `/dm creature catalog`. |
 | `/dm creature info` | Full stat block of a bestiary template: rings with overridden traits, initiative, attack/damage (including flat bonuses), Armor TN, Reduction, Fear, wound track with level ranges, special abilities (invulnerability, spirit, undead, fear), and all tags. Ephemeral, DM-only. Uses existing template autocomplete. |
 | `/dm creature compare` | Side-by-side comparison of two bestiary templates in one embed. Each creature shown as a compact stat summary (abbreviated traits, attack/damage, TN, wounds, specials, tags). Useful for DM encounter prep. Ephemeral, DM-only. |
 
