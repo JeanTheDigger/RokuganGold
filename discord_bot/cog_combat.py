@@ -882,14 +882,18 @@ _WEAPON_MATERIAL_CHOICES = [
 combat_group = app_commands.Group(name="combat", description="Track combat initiative and turn order.")
 combat_condition = app_commands.Group(name="condition", description="Apply, clear, or view conditions.", parent=combat_group)
 combat_turn = app_commands.Group(name="turn", description="Initiative adjustments: hold, delay, act, surprise.", parent=combat_group)
-combat_grapple = app_commands.Group(name="grapple", description="Grappling subsystem (s40).", parent=combat_group)
-combat_duel = app_commands.Group(name="duel", description="Iaijutsu dueling (s40).", parent=combat_group)
-combat_battle = app_commands.Group(name="battle", description="Mass Battle system.", parent=combat_group)
 combat_void = app_commands.Group(name="void", description="Round-level Void Point combat effects (s25).", parent=combat_group)
-combat_env = app_commands.Group(name="env", description="Environment effects: cover, notes, damage.", parent=combat_group)
+
+fight_group = app_commands.Group(name="fight", description="Attack, stance, and defense actions.")
+combat_env = app_commands.Group(name="env", description="Environment effects: cover, notes, damage.", parent=fight_group)
+
+engage_group = app_commands.Group(name="engage", description="Grapple, duel, and mass battle subsystems.")
+combat_grapple = app_commands.Group(name="grapple", description="Grappling subsystem (s40).", parent=engage_group)
+combat_duel = app_commands.Group(name="duel", description="Iaijutsu dueling (s40).", parent=engage_group)
+combat_battle = app_commands.Group(name="battle", description="Mass Battle system.", parent=engage_group)
 
 
-@combat_group.command(
+@fight_group.command(
     name="attack",
     description="Attack another character. Rolls to hit; on a hit a DM authorizes the outcome.",
 )
@@ -1004,7 +1008,7 @@ async def attack(
     if atk_combatant is not None and atk_combatant.actions_used > 0:
         await interaction.response.send_message(
             f"**{atk_combatant.name}** has already used actions this turn ({atk_combatant.actions_used}/2). "
-            f"Use `/combat action reset` to override.",
+            f"Use `/fight action reset` to override.",
             ephemeral=True,
         )
         return
@@ -1216,7 +1220,7 @@ async def attack(
             guard_mod -= 5
             kata_notes.append(f"Guarding {def_combatant.guarding}: −5 Armor TN")
 
-    # Full Defense bonus (s40): half of Defense/Reflexes roll, set by /combat full_defense.
+    # Full Defense bonus (s40): half of Defense/Reflexes roll, set by /fight full_defense.
     fd_bonus = 0
     if def_combatant and def_combatant.full_defense_bonus:
         fd_bonus = def_combatant.full_defense_bonus
@@ -1774,7 +1778,7 @@ async def combat_conditions(interaction: discord.Interaction, name: str) -> None
     await interaction.response.send_message(lines, ephemeral=True)
 
 
-@combat_group.command(name="guard", description="Guard another combatant (+10 Armor TN to ward, −5 to you). Lasts until your next turn.")
+@fight_group.command(name="guard", description="Guard another combatant (+10 Armor TN to ward, −5 to you). Lasts until your next turn.")
 @app_commands.describe(
     guarder="The combatant doing the guarding.",
     ward="The combatant being protected.",
@@ -1814,7 +1818,7 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
     if g.actions_used >= 2:
         await interaction.response.send_message(
             f"**{g.name}** has no actions remaining this turn ({g.actions_used}/2). "
-            f"Use `/combat action reset` to override.",
+            f"Use `/fight action reset` to override.",
             ephemeral=True,
         )
         return
@@ -1831,7 +1835,7 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
     await _d.combat_log(str(interaction.guild_id), f"Guard: {g.name} guards {w.name}")
 
 
-@combat_group.command(name="full_defense", description="Full Defense: Defense/Reflexes roll, half (rounded up) added to Armor TN until next turn.")
+@fight_group.command(name="full_defense", description="Full Defense: Defense/Reflexes roll, half (rounded up) added to Armor TN until next turn.")
 @app_commands.describe(
     combatant="The combatant entering Full Defense.",
     reflexes="Override Reflexes (for ad-hoc NPCs without a sheet).",
@@ -1862,7 +1866,7 @@ async def combat_full_defense(
     if cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.",
+            f"Use `/fight action reset` to override.",
             ephemeral=True,
         )
         return
@@ -2115,7 +2119,7 @@ async def grapple_initiate(
     if atk_cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{atk_cb.name}** has already used actions this turn ({atk_cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.", ephemeral=True)
+            f"Use `/fight action reset` to override.", ephemeral=True)
         return
     outcome = combat.resolve_grapple_initiate(atk_rec.character, tn, _d.engine)
     hit = outcome["hit"]
@@ -2281,7 +2285,7 @@ async def grapple_hit(
     if atk_cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{atk_cb.name}** has already used actions this turn ({atk_cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.", ephemeral=True)
+            f"Use `/fight action reset` to override.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     atk_rec = _d.resolve_combatant_record(guild, atk_cb)
@@ -2341,7 +2345,7 @@ async def grapple_throw(
     if thrower_cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{thrower_cb.name}** has already used actions this turn ({thrower_cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.", ephemeral=True)
+            f"Use `/fight action reset` to override.", ephemeral=True)
         return
     thrower_cb.conditions.discard("grappled")
     thrower_cb.conditions.add("prone")
@@ -2392,7 +2396,7 @@ async def grapple_pin(
     if ctrl_cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{ctrl_cb.name}** has already used actions this turn ({ctrl_cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.", ephemeral=True)
+            f"Use `/fight action reset` to override.", ephemeral=True)
         return
     tgt_cb.conditions.add("pinned")
     ctrl_cb.actions_used = 2
@@ -2438,7 +2442,7 @@ async def grapple_break(
         if cb.actions_used >= 2:
             await interaction.response.send_message(
                 f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-                f"Use `/combat action reset` to override.", ephemeral=True)
+                f"Use `/fight action reset` to override.", ephemeral=True)
             return
         cb.conditions.discard("grappled")
         cb.conditions.discard("pinned")
@@ -2458,7 +2462,7 @@ async def grapple_break(
     if cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.", ephemeral=True)
+            f"Use `/fight action reset` to override.", ephemeral=True)
         return
     rec_cb = _d.resolve_combatant_record(guild, cb)
     rec_opp = _d.resolve_combatant_record(guild, opp_cb)
@@ -2958,12 +2962,12 @@ _STANCE_CHOICES = [
     app_commands.Choice(name="Attack (standard)", value="attack"),
     app_commands.Choice(name="Full Attack (+2k1 hit, −10 ATN, no ranged)", value="full_attack"),
     app_commands.Choice(name="Defense (+Air+Defense to ATN, no attacks)", value="defense"),
-    app_commands.Choice(name="Full Defense (use /combat full_defense)", value="full_defense"),
+    app_commands.Choice(name="Full Defense (use /fight full_defense)", value="full_defense"),
     app_commands.Choice(name="Center (forfeit actions, +1k1+Void next)", value="center"),
 ]
 
 
-@combat_group.command(name="stance", description="Declare your stance for this turn (persists until your next turn).")
+@fight_group.command(name="stance", description="Declare your stance for this turn (persists until your next turn).")
 @app_commands.describe(
     name="Combatant name.",
     stance="Stance to adopt.",
@@ -2992,7 +2996,7 @@ async def combat_stance(
         return
     if stance.value == "full_defense":
         await interaction.response.send_message(
-            f"Use `/combat full_defense combatant:{cb.name}` instead — Full Defense requires a Defense/Reflexes roll (Complex Action).",
+            f"Use `/fight full_defense combatant:{cb.name}` instead — Full Defense requires a Defense/Reflexes roll (Complex Action).",
             ephemeral=True,
         )
         return
@@ -3381,7 +3385,7 @@ async def battle_damage(
 # Phase 42: Mounted Combat (#10)
 # ---------------------------------------------------------------------------
 
-@combat_group.command(name="mount", description="Mount or dismount (sets/clears Mounted condition). Fortune role required.")
+@fight_group.command(name="mount", description="Mount or dismount (sets/clears Mounted condition). Fortune role required.")
 @app_commands.describe(
     name="Combatant name.",
     dismount="Dismount instead of mounting.",
@@ -3420,7 +3424,7 @@ async def combat_mount(
 # Phase 42: Multiple Attacks / Action Economy (#9)
 # ---------------------------------------------------------------------------
 
-@combat_group.command(name="action", description="Track action usage this turn (Simple or Complex). Fortune role required.")
+@fight_group.command(name="action", description="Track action usage this turn (Simple or Complex). Fortune role required.")
 @app_commands.describe(
     name="Combatant name.",
     action_type="Type of action being taken.",
