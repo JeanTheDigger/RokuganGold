@@ -1009,6 +1009,9 @@ Viewing an NPC (`/dm npc view`) or creature (`/dm creature view`) now shows whic
 | `/dm npc spell` | Add or remove a spell from an NPC's known spell list. Case-insensitive duplicate detection. |
 | `/dm npc notes` | Set or clear free-text notes on an NPC (appearance, personality, plot hooks). Shown in the Details section of the NPC embed. Omit text to clear. |
 | `/dm npc clone` | Clone an existing NPC with a new name. Deep copies all fields (traits, skills, equipment, spells, inventory), resets wounds to 0. Useful for creating variants (e.g. "Guard Captain" from "Town Guard"). |
+| `/dm npc equip` | Set an NPC's equipped weapon, off-hand weapon, and/or armor name. All three parameters are optional — provide whichever you're changing. Empty string clears the field. |
+| `/dm npc feature` | Add or remove from any list field: Advantage, Disadvantage, Technique, Kata, Kiho, Weapon (owned), Weapon Quality, or Emphasis (requires `skill:` parameter). Case-insensitive duplicate detection. |
+| `/dm npc affinity` | Set an NPC's shugenja affinity and/or deficiency element. Choice of Air/Earth/Fire/Water/Void/(clear). |
 
 ---
 

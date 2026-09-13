@@ -3610,6 +3610,9 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/dm npc wound / heal", "Apply or heal wounds"),
         ("/dm npc item", "Add/remove inventory items"),
         ("/dm npc spell", "Add/remove known spells"),
+        ("/dm npc equip", "Set weapon, off-hand, armor name"),
+        ("/dm npc feature", "Add/remove advantage, technique, kata, etc."),
+        ("/dm npc affinity", "Set shugenja affinity/deficiency"),
         ("/dm npc notes", "Set or clear NPC notes"),
         ("/dm npc clone", "Clone an NPC with a new name"),
         ("/dm npc rename / delete", "Rename or remove an NPC"),
@@ -7919,6 +7922,170 @@ async def npc_clone(
     await interaction.response.send_message(
         f"🎭 Cloned **{rec.character.name}** → **{clone.name}**.",
         embed=build_sheet_embed(new_rec),
+    )
+
+
+@dm_npc.command(name="equip", description="Set an NPC's equipped weapon and/or armor name. Fortune role required.")
+@app_commands.describe(
+    name="NPC name.",
+    weapon="Equipped weapon name (empty to clear).",
+    off_hand="Off-hand weapon (empty to clear).",
+    armor="Armor name (empty to clear).",
+)
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_equip(
+    interaction: discord.Interaction, name: str,
+    weapon: str | None = None, off_hand: str | None = None, armor: str | None = None,
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    changes: list[str] = []
+    if weapon is not None:
+        c.equipped_weapon = weapon.strip()
+        changes.append(f"Weapon: **{c.equipped_weapon or '(none)'}**")
+    if off_hand is not None:
+        c.off_hand_weapon = off_hand.strip()
+        changes.append(f"Off-hand: **{c.off_hand_weapon or '(none)'}**")
+    if armor is not None:
+        c.armor_name = armor.strip()
+        changes.append(f"Armor: **{c.armor_name or '(none)'}**")
+    if not changes:
+        await interaction.response.send_message(
+            "Provide at least one of `weapon:`, `off_hand:`, or `armor:`.", ephemeral=True,
+        )
+        return
+    store.save(rec)
+    await interaction.response.send_message(
+        f"🎭 **{c.name}** equipment updated:\n" + "\n".join(changes),
+        embed=build_sheet_embed(rec),
+    )
+
+
+_FEATURE_FIELDS = [
+    app_commands.Choice(name="Advantage", value="advantages"),
+    app_commands.Choice(name="Disadvantage", value="disadvantages"),
+    app_commands.Choice(name="Technique", value="techniques"),
+    app_commands.Choice(name="Kata", value="katas"),
+    app_commands.Choice(name="Kiho", value="kiho"),
+    app_commands.Choice(name="Weapon (owned)", value="weapons"),
+    app_commands.Choice(name="Weapon Quality", value="weapon_qualities"),
+    app_commands.Choice(name="Emphasis", value="_emphasis"),
+]
+
+
+@dm_npc.command(name="feature", description="Add or remove an advantage, technique, kata, kiho, weapon, quality, or emphasis. Fortune role required.")
+@app_commands.describe(
+    name="NPC name.", field="Which feature list to modify.",
+    entry="Name to add or remove.", remove="Remove instead of adding.",
+    skill="Skill name (required for Emphasis only).",
+)
+@app_commands.choices(field=_FEATURE_FIELDS)
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_feature(
+    interaction: discord.Interaction, name: str,
+    field: app_commands.Choice[str], entry: str,
+    remove: bool = False, skill: str | None = None,
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    entry_name = entry.strip()
+    if field.value == "_emphasis":
+        if not skill:
+            await interaction.response.send_message(
+                "Emphasis requires the `skill:` parameter (e.g. skill: Kenjutsu).", ephemeral=True,
+            )
+            return
+        skill_name = skill.strip()
+        if remove:
+            emph_list = c.emphases.get(skill_name, [])
+            match = next((e for e in emph_list if e.lower() == entry_name.lower()), None)
+            if match is None:
+                await interaction.response.send_message(
+                    f"**{c.name}** has no emphasis **{entry_name}** under {skill_name}.", ephemeral=True,
+                )
+                return
+            emph_list.remove(match)
+            if not emph_list:
+                del c.emphases[skill_name]
+            msg = f"Removed emphasis **{match}** ({skill_name}) from **{c.name}**."
+        else:
+            emph_list = c.emphases.setdefault(skill_name, [])
+            if any(e.lower() == entry_name.lower() for e in emph_list):
+                await interaction.response.send_message(
+                    f"**{c.name}** already has emphasis **{entry_name}** under {skill_name}.", ephemeral=True,
+                )
+                return
+            emph_list.append(entry_name)
+            msg = f"Added emphasis **{entry_name}** ({skill_name}) to **{c.name}**."
+    else:
+        lst: list = getattr(c, field.value)
+        if remove:
+            match = next((x for x in lst if x.lower() == entry_name.lower()), None)
+            if match is None:
+                await interaction.response.send_message(
+                    f"**{c.name}** doesn't have {field.name} **{entry_name}**.", ephemeral=True,
+                )
+                return
+            lst.remove(match)
+            msg = f"Removed {field.name} **{match}** from **{c.name}**."
+        else:
+            if any(x.lower() == entry_name.lower() for x in lst):
+                await interaction.response.send_message(
+                    f"**{c.name}** already has {field.name} **{entry_name}**.", ephemeral=True,
+                )
+                return
+            lst.append(entry_name)
+            msg = f"Added {field.name} **{entry_name}** to **{c.name}**."
+    store.save(rec)
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+
+
+_ELEMENT_CHOICES = [
+    app_commands.Choice(name=e, value=e)
+    for e in ("Air", "Earth", "Fire", "Water", "Void", "(clear)")
+]
+
+
+@dm_npc.command(name="affinity", description="Set an NPC's affinity and/or deficiency element. Fortune role required.")
+@app_commands.describe(
+    name="NPC name.",
+    affinity_element="Affinity element (choose '(clear)' to remove).",
+    deficiency_element="Deficiency element (choose '(clear)' to remove).",
+)
+@app_commands.choices(affinity_element=_ELEMENT_CHOICES, deficiency_element=_ELEMENT_CHOICES)
+@app_commands.autocomplete(name=_npc_autocomplete)
+async def npc_affinity(
+    interaction: discord.Interaction, name: str,
+    affinity_element: app_commands.Choice[str] | None = None,
+    deficiency_element: app_commands.Choice[str] | None = None,
+) -> None:
+    rec, err = _resolve_npc(interaction, name)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    changes: list[str] = []
+    if affinity_element is not None:
+        c.affinity_element = "" if affinity_element.value == "(clear)" else affinity_element.value.lower()
+        changes.append(f"Affinity: **{c.affinity_element or '(none)'}**")
+    if deficiency_element is not None:
+        c.deficiency_element = "" if deficiency_element.value == "(clear)" else deficiency_element.value.lower()
+        changes.append(f"Deficiency: **{c.deficiency_element or '(none)'}**")
+    if not changes:
+        await interaction.response.send_message(
+            "Provide at least one of `affinity_element:` or `deficiency_element:`.", ephemeral=True,
+        )
+        return
+    store.save(rec)
+    await interaction.response.send_message(
+        f"🎭 **{c.name}** element affinity updated:\n" + "\n".join(changes),
+        ephemeral=True,
     )
 
 
