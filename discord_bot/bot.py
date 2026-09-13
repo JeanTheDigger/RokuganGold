@@ -27,6 +27,7 @@ from discord import app_commands
 
 import encounter
 import cog_checks
+import cog_combat
 import ref_commands
 import storage
 from l5r_rules import (
@@ -92,10 +93,8 @@ _roll_history: dict[int, deque] = defaultdict(lambda: deque(maxlen=50))
 _npc_webhooks: dict[int, discord.Webhook] = {}
 WEBHOOK_NAME = "Rokugan NPC"
 
-
 def _log_roll(channel_id: int, user: str, description: str, total: int | str) -> None:
     _roll_history[channel_id].append((monotonic(), user, description, total))
-
 
 class RokuganBot(discord.Client):
     def __init__(self) -> None:
@@ -124,9 +123,7 @@ class RokuganBot(discord.Client):
         if encounters:
             log.info("Restored %d encounter(s) from database.", len(encounters))
 
-
 client = RokuganBot()
-
 
 # ===========================================================================
 # Global error handler
@@ -162,7 +159,6 @@ async def _on_app_command_error(
     except discord.HTTPException:
         pass
 
-
 # ===========================================================================
 # Shared helpers
 # ===========================================================================
@@ -173,20 +169,16 @@ def _has_role(interaction: discord.Interaction, name: str) -> bool:
         return False
     return any(r.name == name for r in member.roles)
 
-
 def _is_dm(interaction: discord.Interaction) -> bool:
     """True if the member has the Fortune or Kami role."""
     return _has_role(interaction, ROLE_FORTUNE) or _has_role(interaction, ROLE_KAMI)
-
 
 def _is_kami(interaction: discord.Interaction) -> bool:
     """True if the member has the Kami role."""
     return _has_role(interaction, ROLE_KAMI)
 
-
 def _guild_ok(interaction: discord.Interaction) -> bool:
     return interaction.guild_id is not None
-
 
 async def _require_guild(interaction: discord.Interaction) -> bool:
     """Send an error if not in a server channel. Returns True if OK."""
@@ -196,7 +188,6 @@ async def _require_guild(interaction: discord.Interaction) -> bool:
         "Please use this in a server channel.", ephemeral=True
     )
     return False
-
 
 async def _require_dm_role(interaction: discord.Interaction) -> bool:
     """Send an error if the user lacks the Fortune/Kami role. Returns True if OK."""
@@ -208,7 +199,6 @@ async def _require_dm_role(interaction: discord.Interaction) -> bool:
     )
     return False
 
-
 async def _require_encounter(interaction: discord.Interaction) -> encounter.Encounter | None:
     """Return the channel's encounter, or send an error and return None."""
     enc = encounters.get(interaction.channel_id)
@@ -218,7 +208,6 @@ async def _require_encounter(interaction: discord.Interaction) -> encounter.Enco
         "No encounter here. Start one with `/combat start`.", ephemeral=True
     )
     return None
-
 
 async def _resolve_active(
     interaction: discord.Interaction, member: discord.Member | None
@@ -242,7 +231,6 @@ async def _resolve_active(
         return None
     return rec
 
-
 def _wound_color(record: storage.CharacterRecord) -> discord.Color:
     idx = stats.wound_level_index(record.character)
     if idx == 0:
@@ -252,7 +240,6 @@ def _wound_color(record: storage.CharacterRecord) -> discord.Color:
     if idx >= 3:  # Hurt / Injured / Crippled
         return discord.Color.orange()
     return discord.Color.gold()
-
 
 def _format_traits(c: Character) -> str:
     def pair(a: str, b: str) -> str:
@@ -265,7 +252,6 @@ def _format_traits(c: Character) -> str:
         f"💧 Water: {pair('strength', 'perception')}\n"
         f"🌀 Void: {c.void_ring}"
     )
-
 
 def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     c = record.character
@@ -406,7 +392,6 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     embed.set_footer(text=f"Owner: player {record.owner_id} · sheet #{record.id}")
     return embed
 
-
 def build_creature_embed(record: storage.CreatureRecord) -> discord.Embed:
     cr = record.creature
     lvl = creature.creature_wound_level(cr)
@@ -449,7 +434,6 @@ def build_creature_embed(record: storage.CreatureRecord) -> discord.Embed:
     embed.set_footer(text=f"creature #{record.id}")
     return embed
 
-
 _RING_TRAITS: dict[str, tuple[str, str]] = {
     "air": ("reflexes", "awareness"),
     "earth": ("stamina", "willpower"),
@@ -458,7 +442,6 @@ _RING_TRAITS: dict[str, tuple[str, str]] = {
 }
 
 _CR_WOUND_LEVELS = ["Healthy", "Nicked", "Grazed", "Hurt", "Injured", "Crippled", "Down", "Out"]
-
 
 def _build_creature_template_embed(cr: creature.Creature) -> discord.Embed:
     embed = discord.Embed(title=f"\U0001f479 {cr.name}", color=discord.Color.dark_purple())
@@ -520,12 +503,10 @@ def _build_creature_template_embed(cr: creature.Creature) -> discord.Embed:
 
     return embed
 
-
 _TRAIT_ABBREV = {
     "reflexes": "Ref", "awareness": "Awa", "stamina": "Sta", "willpower": "Wil",
     "agility": "Agi", "intelligence": "Int", "strength": "Str", "perception": "Per",
 }
-
 
 def _creature_compact_summary(cr: creature.Creature) -> str:
     ring_parts: list[str] = []
@@ -568,7 +549,6 @@ def _creature_compact_summary(cr: creature.Creature) -> str:
         lines.append(", ".join(f"`{t}`" for t in cr.tags))
     return "\n".join(lines)
 
-
 async def _resolve_active_for_edit(
     interaction: discord.Interaction, member: discord.Member | None
 ) -> tuple[storage.CharacterRecord | None, str | None]:
@@ -586,7 +566,6 @@ async def _resolve_active_for_edit(
         return None, "You have no active character. Use `/sheet create` first."
     return rec, None
 
-
 # ===========================================================================
 # Top-level commands
 # ===========================================================================
@@ -595,7 +574,6 @@ async def ping(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
         f"🎋 Alive. Gateway latency {round(client.latency * 1000)} ms.", ephemeral=True
     )
-
 
 @client.tree.command(name="whoami", description="Quick glance at your active character's status.")
 async def whoami(interaction: discord.Interaction) -> None:
@@ -660,7 +638,6 @@ async def whoami(interaction: discord.Interaction) -> None:
                 break
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
-
 @client.tree.command(name="date", description="Show the current in-game Rokugani calendar date.")
 async def date_cmd(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
@@ -675,7 +652,6 @@ async def date_cmd(interaction: discord.Interaction) -> None:
     date_str = _format_rokugani_date(year, month, day)
     embed = discord.Embed(title="Rokugani Calendar", description=date_str, color=0xC4A747)
     await interaction.response.send_message(embed=embed)
-
 
 def _format_dice(result: DiceResult) -> str:
     kept = " + ".join(f"**{d}**" for d in result.kept_dice) or " "
@@ -693,7 +669,6 @@ def _format_dice(result: DiceResult) -> str:
         line += "\n" + "   ·   ".join(extras)
     return line
 
-
 async def _combat_log(guild_id: str, message: str) -> None:
     """Post a compact line to the server's combat log channel, if configured."""
     ch_id = store.get_log_channel(guild_id)
@@ -707,14 +682,11 @@ async def _combat_log(guild_id: str, message: str) -> None:
     except Exception:
         pass
 
-
 def _save_encounter(guild_id: str, enc: encounter.Encounter) -> None:
     store.save_encounter(str(enc.channel_id), guild_id, json.dumps(enc.to_dict()))
 
-
 def _delete_encounter(channel_id: int) -> None:
     store.delete_encounter(str(channel_id))
-
 
 @client.tree.command(
     name="roll",
@@ -787,14 +759,12 @@ async def roll(
     _log_roll(interaction.channel_id, interaction.user.display_name, title, log_total)
     await interaction.response.send_message(embed=embed)
 
-
 _DICE_RE = re.compile(
     r"^(\d{1,3})\s*k\s*(\d{1,3})"
     r"(?:\s*([+-])\s*(\d{1,4}))?"
     r"$",
     re.IGNORECASE,
 )
-
 
 @client.tree.command(
     name="dice",
@@ -854,22 +824,6 @@ async def dice_quick(
     _log_roll(interaction.channel_id, interaction.user.display_name, title, outcome["total"] if tn else total)
     await interaction.response.send_message(embed=embed)
 
-
-# ===========================================================================
-# /attack: combat with DM-authorized damage
-# ===========================================================================
-_ATTACKER_STANCES = [
-    app_commands.Choice(name="Attack", value="attack"),
-    app_commands.Choice(name="Full Attack (+2k1 to hit, -10 own Armor TN)", value="full_attack"),
-    app_commands.Choice(name="Center", value="center"),
-]
-_DEFENDER_STANCES = [
-    app_commands.Choice(name="Attack", value="attack"),
-    app_commands.Choice(name="Full Attack (-10 Armor TN)", value="full_attack"),
-    app_commands.Choice(name="Defense (+Air + Defense skill to Armor TN)", value="defense"),
-]
-
-
 async def _weapon_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -877,14 +831,12 @@ async def _weapon_autocomplete(
     names = [w for w in combat.WEAPON_CATALOG if cur in w.lower()]
     return [app_commands.Choice(name=w, value=w) for w in sorted(names)[:25]]
 
-
 async def _armor_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
     cur = current.lower().strip()
     names = [a for a in combat.ARMOR_CATALOG if cur in a] + (["none"] if cur in "none" else [])
     return [app_commands.Choice(name=a, value=a) for a in names][:25]
-
 
 def _adv_choices(current: str, kind: str | None) -> list[app_commands.Choice[str]]:
     cur = current.lower().strip()
@@ -896,18 +848,14 @@ def _adv_choices(current: str, kind: str | None) -> list[app_commands.Choice[str
             out.append(app_commands.Choice(name=label[:100], value=r["name"]))
     return out[:25]
 
-
 async def _advantage_autocomplete(interaction: discord.Interaction, current: str):
     return _adv_choices(current, "advantage")
-
 
 async def _disadvantage_autocomplete(interaction: discord.Interaction, current: str):
     return _adv_choices(current, "disadvantage")
 
-
 async def _anyadv_autocomplete(interaction: discord.Interaction, current: str):
     return _adv_choices(current, None)
-
 
 async def _own_character_autocomplete(
     interaction: discord.Interaction, current: str
@@ -919,7 +867,6 @@ async def _own_character_autocomplete(
     names = [r.character.name for r in recs if cur in r.character.name.lower()]
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
-
 async def _npc_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -929,7 +876,6 @@ async def _npc_autocomplete(
     recs = store.list_by_owner(str(interaction.guild_id), NPC_OWNER)
     names = [r.character.name for r in recs if cur in r.character.name.lower()]
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
-
 
 async def _creature_template_autocomplete(
     interaction: discord.Interaction, current: str
@@ -941,7 +887,6 @@ async def _creature_template_autocomplete(
             out.append(app_commands.Choice(name=tmpl.name, value=tid))
     return out[:25]
 
-
 async def _creature_instance_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -952,25 +897,12 @@ async def _creature_instance_autocomplete(
     names = [r.creature.name for r in recs if cur in r.creature.name.lower()]
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
-
-async def _combatant_autocomplete(
-    interaction: discord.Interaction, current: str
-) -> list[app_commands.Choice[str]]:
-    enc = encounters.get(interaction.channel_id)
-    if enc is None or not enc.combatants:
-        return []
-    cur = current.lower().strip()
-    names = [c.name for c in enc.combatants if cur in c.name.lower()]
-    return [app_commands.Choice(name=n, value=n) for n in names[:25]]
-
-
 async def _school_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
     cur = current.lower().strip()
     out = [app_commands.Choice(name=s["name"], value=s["name"]) for s in schools.ALL if cur in s["name"].lower()]
     return out[:25]
-
 
 async def _basic_school_autocomplete(
     interaction: discord.Interaction, current: str
@@ -980,7 +912,6 @@ async def _basic_school_autocomplete(
     cur = current.lower().strip()
     out = [app_commands.Choice(name=s["name"], value=s["name"]) for s in schools.basic() if cur in s["name"].lower()]
     return out[:25]
-
 
 async def _family_autocomplete(
     interaction: discord.Interaction, current: str
@@ -992,7 +923,6 @@ async def _family_autocomplete(
     ]
     return out[:25]
 
-
 async def _spell_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -1002,7 +932,6 @@ async def _spell_autocomplete(
         for s in spells.ALL if cur in s["name"].lower()
     ]
     return out[:25]
-
 
 async def _kata_autocomplete(
     interaction: discord.Interaction, current: str
@@ -1014,7 +943,6 @@ async def _kata_autocomplete(
     ]
     return out[:25]
 
-
 async def _kiho_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -1024,7 +952,6 @@ async def _kiho_autocomplete(
         for k in kiho.ALL if cur in k["name"].lower()
     ]
     return out[:25]
-
 
 async def _skill_autocomplete(
     interaction: discord.Interaction, current: str
@@ -1062,1277 +989,6 @@ async def _skill_autocomplete(
     ]
     return out[:25]
 
-
-_MANEUVER_APPLY_LABEL = {
-    "none": "Roll & Apply Damage",
-    "feint": "Roll & Apply Damage (Feint)",
-    "increased_damage": "Roll & Apply Damage",
-    "disarm": "Resolve Disarm (2k1 + Strength)",
-    "knockdown": "Resolve Knockdown (Strength)",
-    "called_shot": "Roll & Apply Damage (Called Shot)",
-    "extra_attack": "Roll & Apply Damage (1st Attack)",
-}
-
-
-class DamageView(discord.ui.View):
-    """DM-only buttons attached to a landed attack: resolve the hit, or waive it.
-
-    Handles the plain hit and the Feint / Disarm / Knockdown maneuvers."""
-
-    def __init__(
-        self,
-        attacker_id: int,
-        target_id: int | None,
-        weapon: str,
-        increased_damage: int,
-        attacker_name: str,
-        target_name: str,
-        maneuver: str = "none",
-        attack_margin: int = 0,
-        target_creature_id: int | None = None,
-        defender_stance: str = "attack",
-        called_shot_raises: int = 0,
-        channel_id: int = 0,
-        source_channel_id: int = 0,
-        weapon_material: str = "normal",
-        void_damage: bool = False,
-    ) -> None:
-        super().__init__(timeout=1800)  # 30 min
-        self.attacker_id = attacker_id
-        self.target_id = target_id
-        self.target_creature_id = target_creature_id
-        self.weapon = weapon
-        self.increased_damage = increased_damage
-        self.attacker_name = attacker_name
-        self.target_name = target_name
-        self.maneuver = maneuver
-        self.attack_margin = attack_margin
-        self.defender_stance = defender_stance
-        self.called_shot_raises = called_shot_raises
-        self.channel_id = channel_id
-        self.source_channel_id = source_channel_id
-        self.weapon_material = weapon_material
-        self.void_damage = void_damage
-        # Relabel the primary button to match the maneuver, and hide the Void
-        # button when it would be nonsensical (knockdown has no damage roll;
-        # creature targets have no VP pool).
-        hide_void = maneuver == "knockdown" or target_creature_id is not None
-        to_remove = []
-        for child in self.children:
-            if isinstance(child, discord.ui.Button) and child.style == discord.ButtonStyle.danger:
-                child.label = _MANEUVER_APPLY_LABEL.get(maneuver, "Roll & Apply Damage")
-            if isinstance(child, discord.ui.Button) and child.style == discord.ButtonStyle.primary and hide_void:
-                to_remove.append(child)
-        for child in to_remove:
-            self.remove_item(child)
-
-    def _disable(self) -> None:
-        for child in self.children:
-            child.disabled = True
-        self.stop()
-
-    async def _post_result(self, interaction: discord.Interaction, embed: discord.Embed, text: str = "") -> None:
-        """Post result to source channel when using approval routing, or inline."""
-        if self.source_channel_id:
-            src = client.get_channel(self.source_channel_id)
-            if src:
-                await src.send(content=text or None, embed=embed)
-            await interaction.followup.send(f"Resolved in <#{self.source_channel_id}>.")
-        else:
-            await interaction.followup.send(content=text or None, embed=embed)
-
-    def _wound_status(self, target_rec: storage.CharacterRecord, applied: dict) -> str:
-        c = target_rec.character
-        if applied["level_changed"]:
-            status = (
-                f"{self.target_name}: {applied['old_wound_level']} → "
-                f"**{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
-            )
-        else:
-            status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
-        if applied["is_dead"]:
-            status += "  💀 **DEAD**"
-        return status
-
-    def _rate_limited_damage(self, interaction: discord.Interaction, attacker: Character):
-        """Enforce once-per-Turn/Round damage-side kata against the live tracker.
-        Returns (scorpion_bonus, scorpion_note, tsunami_ignore, tsunami_note); an
-        effect fires only while an encounter is tracking the attacker."""
-        enc = encounters.get(self.channel_id)
-        combatant = enc.find(attacker.name) if enc else None
-        scorp_bonus, scorp_note = 0, ""
-        val, note = kata_effects.scorpion_feint_damage(attacker, self.maneuver)
-        if val and _rate_status(combatant, "scorpion", "turn") == "apply":
-            scorp_bonus, scorp_note = val, note
-        tsu_ignore, tsu_note = 0, ""
-        val, note = kata_effects.tsunami_ignore_reduction(attacker)
-        if val and _rate_status(combatant, "tsunami", "round") == "apply":
-            tsu_ignore, tsu_note = val, note
-        return scorp_bonus, scorp_note, tsu_ignore, tsu_note
-
-    @discord.ui.button(label="Roll & Apply Damage", style=discord.ButtonStyle.danger, emoji="⚔️")
-    async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not await _require_dm_role(interaction):
-            return
-        await self._resolve_damage(interaction, void_reduce=False)
-
-    @discord.ui.button(label="Void Reduce (−10 wounds)", style=discord.ButtonStyle.primary, emoji="🔮")
-    async def void_reduce_apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not await _require_dm_role(interaction):
-            return
-        await self._resolve_damage(interaction, void_reduce=True)
-
-    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
-    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not await _require_dm_role(interaction):
-            return
-        msg = (
-            f"🛡️ {interaction.user.display_name} denied the effect: "
-            f"no damage applied to **{self.target_name}**."
-        )
-        self._disable()
-        await interaction.response.edit_message(view=self)
-        if self.source_channel_id:
-            src = client.get_channel(self.source_channel_id)
-            if src:
-                await src.send(msg)
-            await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
-        else:
-            await interaction.followup.send(msg)
-
-    async def _resolve_damage(self, interaction: discord.Interaction, void_reduce: bool = False) -> None:
-        """Shared damage resolution for both normal and Void-reduced paths."""
-
-        # Creature target: apply the attacker's weapon damage to the creature's
-        # own wound track (plain hit or Feint only; disarm/knockdown are blocked
-        # against creatures at /attack).
-        if self.target_creature_id is not None:
-            attacker_rec = store.get_by_id(self.attacker_id)
-            cre_rec = store.get_creature_by_id(self.target_creature_id)
-            if cre_rec is None:
-                await interaction.response.send_message("The creature no longer exists.", ephemeral=True)
-                return
-            if attacker_rec is None:
-                await interaction.response.send_message("The attacker no longer exists.", ephemeral=True)
-                return
-            attacker = attacker_rec.character
-            wp = combat.get_weapon_profile(self.weapon)
-            extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
-            bg_roll, _, bg_note = combat.blowgun_damage_bonus(attacker, self.weapon)
-            extra_rolled += bg_roll
-            tp_roll, tp_kept, tp_note = combat.teppoudo_damage_bonus(attacker, self.weapon)
-            extra_rolled += tp_roll
-            t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
-            extra_rolled += t_roll
-            t_kept += tp_kept
-            if bg_note:
-                t_dmg_notes = [bg_note] + t_dmg_notes
-            if tp_note:
-                t_dmg_notes = [tp_note] + t_dmg_notes
-            m_roll, m_kept, m_flat, m_dmg_notes = skill_mastery.attacker_damage(attacker, wp, self.weapon)
-            extra_rolled += m_roll
-            t_kept += m_kept
-            t_flat += m_flat
-            t_dmg_notes = t_dmg_notes + m_dmg_notes
-            a_roll, a_kept, a_flat, a_dmg_notes = advantage_effects.attacker_damage(attacker, wp, self.weapon)
-            extra_rolled += a_roll
-            t_kept += a_kept
-            t_flat += a_flat
-            t_dmg_notes = t_dmg_notes + a_dmg_notes
-            k_roll, k_kept, k_flat, k_dmg_notes = kiho_effects.attacker_damage(attacker, self.weapon)
-            extra_rolled += k_roll
-            t_kept += k_kept
-            t_flat += k_flat
-            t_dmg_notes = t_dmg_notes + k_dmg_notes
-            bish_roll, bish_notes = advantage_effects.increased_damage_bonus(attacker, self.increased_damage)
-            extra_rolled += bish_roll
-            t_dmg_notes = t_dmg_notes + bish_notes
-            if self.void_damage and attacker.current_void_points > 0:
-                attacker.current_void_points -= 1
-                extra_rolled += 1
-                t_kept += 1
-                t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
-                store.save(attacker_rec)
-            elif self.void_damage:
-                t_dmg_notes.append("Katana: no Void Points for +1k1 damage")
-            ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
-            t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
-            ignore += t_ignore
-            enc = encounters.get(self.channel_id)
-            enc_round = enc.round if enc else None
-            m_ignore, m_ign_notes = skill_mastery.attacker_reduction_ignored(attacker, wp, enc_round)
-            ignore += m_ignore
-            t_dmg_notes = t_dmg_notes + t_ign_notes + m_ign_notes
-            explode_9, e9_note = skill_mastery.attacker_explode_9(attacker, wp)
-            force_explode, fe_note = skill_mastery.attacker_ninjutsu_can_explode(attacker, wp)
-            if e9_note:
-                t_dmg_notes.append(e9_note)
-            if fe_note:
-                t_dmg_notes.append(fe_note)
-            dmg = combat.resolve_damage(
-                attacker, self.weapon, engine, self.increased_damage,
-                extra_rolled, t_kept, t_flat, explode_9=explode_9, force_explode=force_explode,
-            )
-            raw = dmg["raw_damage"]
-            feint_line = ""
-            if self.maneuver == "feint":
-                fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
-                raw += fb
-                feint_line = f"\nFeint bonus **+{fb}**"
-            scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
-            raw += scorp_bonus
-            cre_base_red = cre_rec.creature.reduction
-            bokken_note = ""
-            bohiya_note = ""
-            firearm_red_note = ""
-            if wp.get("ignore_all_reduction"):
-                bohiya_note = f"Bo-Hiya: ignores all Reduction ({cre_base_red} → 0)"
-                cre_base_red = 0
-            elif wp.get("ignore_creature_reduction"):
-                firearm_red_note = f"Firearm: ignores natural toughness ({cre_base_red} → 0)"
-                cre_base_red = 0
-            elif wp.get("double_reduction"):
-                bokken_note = f"Bokken: Reduction doubled ({cre_base_red} → {cre_base_red * 2})"
-                cre_base_red *= 2
-            true_note = ""
-            if combat.has_weapon_quality(attacker, self.weapon, "true") and cre_base_red > 0:
-                true_sub = min(cre_base_red, attacker.strength)
-                if true_sub > 0:
-                    true_note = f"True: Reduction −{true_sub} (wielder Strength {attacker.strength})"
-                    cre_base_red = max(0, cre_base_red - attacker.strength)
-            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, *t_dmg_notes) if n)
-            reduction = max(0, cre_base_red - ignore - tsu_ignore)
-            radiant = combat.has_weapon_quality(attacker, self.weapon, "radiant")
-            bypasses = radiant or self.weapon_material in ("jade", "crystal", "obsidian", "nemuranai")
-            applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction, bypasses_invuln=bypasses)
-            heal_line = ""
-            if applied["is_dead"]:
-                heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
-                if heal_amt:
-                    attacker.wounds_taken = max(0, attacker.wounds_taken - heal_amt)
-                    store.save(attacker_rec)
-                    heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
-            store.save_creature(cre_rec)
-            cr = cre_rec.creature
-            cre_cs_line = ""
-            if self.maneuver == "called_shot" and self.called_shot_raises > 0:
-                part = combat.CALLED_SHOT_PARTS.get(
-                    min(self.called_shot_raises, 4), "specific part"
-                )
-                cre_cs_line = f"\n🎯 Called Shot: **{part}** ({self.called_shot_raises} raise{'s' if self.called_shot_raises != 1 else ''})"
-            mat_line = ""
-            if self.weapon_material != "normal":
-                mat_line = f"\n🔶 Weapon material: **{self.weapon_material.title()}**"
-            if radiant:
-                mat_line += "\n🔶 Radiant: counts as Jade (bypasses Invulnerability)"
-            special_line = "".join(f"\n🛡️ {n}" for n in applied.get("special_notes", []))
-            break_line = ""
-            brk = wp.get("break_threshold")
-            if brk and raw >= brk:
-                if combat.has_weapon_quality(attacker, self.weapon, "unbreakable"):
-                    break_line = f"\n🛡️ Unbreakable: weapon survives {raw} damage (threshold {brk})"
-                else:
-                    break_line = f"\n💥 **WEAPON BROKEN** — {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
-            embed = discord.Embed(
-                title="⚔️ Damage applied",
-                color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
-            )
-            embed.add_field(
-                name="Damage",
-                value=(
-                    f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                    f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}{cre_cs_line}{mat_line}\n"
-                    f"Raw **{raw}** − reduction {applied['reduction']} = "
-                    f"**{applied['final_damage']}** wounds{special_line}{break_line}"
-                ),
-                inline=False,
-            )
-            if applied["level_changed"]:
-                status = (
-                    f"{self.target_name}: {applied['old_wound_level']} → "
-                    f"**{applied['new_wound_level']}** ({cr.wounds_taken}/{cr.wounds_dead})"
-                )
-            else:
-                status = f"{self.target_name}: **{applied['new_wound_level']}** ({cr.wounds_taken}/{cr.wounds_dead})"
-            if applied["is_dead"]:
-                status += "  💀 **SLAIN**"
-            status += heal_line
-            embed.add_field(name="Result", value=status, inline=False)
-            embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
-            self._disable()
-            await interaction.response.edit_message(view=self)
-            await self._post_result(interaction, embed)
-            dead_tag = " SLAIN" if applied["is_dead"] else ""
-            await _combat_log(
-                str(interaction.guild_id),
-                f"Damage: {self.attacker_name} → {self.target_name} ({self.weapon}) "
-                f"{applied['final_damage']} wounds [{applied['new_wound_level']}]{dead_tag}",
-            )
-            if self.maneuver == "extra_attack" and not applied["is_dead"]:
-                await self._second_attack_creature(interaction, attacker_rec, cre_rec)
-            return
-
-        attacker_rec = store.get_by_id(self.attacker_id)
-        target_rec = store.get_by_id(self.target_id)
-        if target_rec is None:
-            await interaction.response.send_message("The target no longer exists.", ephemeral=True)
-            return
-        if attacker_rec is None:
-            await interaction.response.send_message("The attacker no longer exists.", ephemeral=True)
-            return
-        attacker = attacker_rec.character
-        target = target_rec.character
-
-        if self.maneuver == "knockdown":
-            kd = combat.resolve_knockdown(attacker, target, engine)
-            if kd["knocked_down"]:
-                enc = encounters.get(self.channel_id)
-                if enc:
-                    def_c = enc.find(target.name)
-                    if def_c:
-                        def_c.conditions.add("prone")
-                        _save_encounter(str(interaction.guild_id), enc)
-            embed = discord.Embed(
-                title="🥋 Knockdown",
-                color=discord.Color.green() if kd["knocked_down"] else discord.Color.greyple(),
-            )
-            embed.add_field(
-                name="Contested Strength",
-                value=f"{self.attacker_name} **{kd['attacker_roll']}** vs "
-                f"{self.target_name} **{kd['defender_roll']}**",
-                inline=False,
-            )
-            verdict = (
-                f"**{self.target_name} is knocked prone!**" if kd["knocked_down"]
-                else f"{self.target_name} keeps their feet."
-            )
-            embed.add_field(name="Result", value=verdict, inline=False)
-            embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
-            self._disable()
-            await interaction.response.edit_message(view=self)
-            await self._post_result(interaction, embed)
-            result_tag = "knocked prone" if kd["knocked_down"] else "resisted"
-            await _combat_log(
-                str(interaction.guild_id),
-                f"Knockdown: {self.attacker_name} → {self.target_name} ({result_tag})",
-            )
-            return
-
-        if self.maneuver == "disarm":
-            dis = combat.resolve_disarm(attacker, target, engine)
-            applied = combat.apply_damage(target, dis["damage"], target.armor_reduction)
-            void_line = ""
-            if void_reduce:
-                ok, reason_block = advantage_effects.can_spend_void_on_roll(target, is_wound_reduction=True)
-                if not ok:
-                    void_line = f"\n🔮 {reason_block}"
-                elif target.current_void_points > 0:
-                    void_saved = min(10, applied["final_damage"])
-                    target.wounds_taken = max(0, target.wounds_taken - void_saved)
-                    target.current_void_points -= 1
-                    applied["final_damage"] -= void_saved
-                    applied["new_wound_level"] = stats.wound_level_name(target)
-                    applied["is_dead"] = stats.is_dead(target)
-                    applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
-                    void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
-                else:
-                    void_line = "\n🔮 No Void Points available: full damage applied"
-            store.save(target_rec)
-            embed = discord.Embed(
-                title="🗡️ Disarm",
-                color=discord.Color.green() if dis["disarmed"] else discord.Color.orange(),
-            )
-            embed.add_field(
-                name="Damage (2k1)",
-                value=f"{_format_dice(dis['damage_dice'])}\nRaw **{dis['damage']}** − reduction "
-                f"{applied['reduction']} = **{applied['final_damage']}** wounds{void_line}",
-                inline=False,
-            )
-            embed.add_field(
-                name="Contested Strength",
-                value=f"{self.attacker_name} **{dis['attacker_roll']}** vs "
-                f"{self.target_name} **{dis['defender_roll']}**",
-                inline=False,
-            )
-            verdict = (
-                f"**{self.target_name} is disarmed!**" if dis["disarmed"]
-                else f"{self.target_name} holds their weapon."
-            )
-            embed.add_field(name="Result", value=f"{verdict}\n{self._wound_status(target_rec, applied)}", inline=False)
-            embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
-            self._disable()
-            await interaction.response.edit_message(view=self)
-            await self._post_result(interaction, embed)
-            disarm_tag = "disarmed" if dis["disarmed"] else "held"
-            await _combat_log(
-                str(interaction.guild_id),
-                f"Disarm: {self.attacker_name} → {self.target_name} ({disarm_tag}, "
-                f"{applied['final_damage']} wounds [{applied['new_wound_level']}])",
-            )
-            return
-
-        # Plain hit or Feint: weapon damage (+ feint bonus, + active-kata, Technique & Mastery mods).
-        wp = combat.get_weapon_profile(self.weapon)
-        extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
-        bg_roll, _, bg_note = combat.blowgun_damage_bonus(attacker, self.weapon)
-        extra_rolled += bg_roll
-        tp_roll, tp_kept, tp_note = combat.teppoudo_damage_bonus(attacker, self.weapon)
-        extra_rolled += tp_roll
-        t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
-        extra_rolled += t_roll
-        t_kept += tp_kept
-        if bg_note:
-            t_dmg_notes = [bg_note] + t_dmg_notes
-        if tp_note:
-            t_dmg_notes = [tp_note] + t_dmg_notes
-        m_roll, m_kept, m_flat, m_dmg_notes = skill_mastery.attacker_damage(attacker, wp, self.weapon)
-        extra_rolled += m_roll
-        t_kept += m_kept
-        t_flat += m_flat
-        t_dmg_notes = t_dmg_notes + m_dmg_notes
-        a_roll, a_kept, a_flat, a_dmg_notes = advantage_effects.attacker_damage(attacker, wp, self.weapon)
-        extra_rolled += a_roll
-        t_kept += a_kept
-        t_flat += a_flat
-        t_dmg_notes = t_dmg_notes + a_dmg_notes
-        k_roll, k_kept, k_flat, k_dmg_notes = kiho_effects.attacker_damage(attacker, self.weapon)
-        extra_rolled += k_roll
-        t_kept += k_kept
-        t_flat += k_flat
-        t_dmg_notes = t_dmg_notes + k_dmg_notes
-        bish_roll, bish_notes = advantage_effects.increased_damage_bonus(attacker, self.increased_damage)
-        extra_rolled += bish_roll
-        t_dmg_notes = t_dmg_notes + bish_notes
-        if self.void_damage and attacker.current_void_points > 0:
-            attacker.current_void_points -= 1
-            extra_rolled += 1
-            t_kept += 1
-            t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
-            store.save(attacker_rec)
-        elif self.void_damage:
-            t_dmg_notes.append("Katana: no Void Points for +1k1 damage")
-        ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
-        t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
-        ignore += t_ignore
-        enc = encounters.get(self.channel_id)
-        enc_round = enc.round if enc else None
-        m_ignore, m_ign_notes = skill_mastery.attacker_reduction_ignored(attacker, wp, enc_round)
-        ignore += m_ignore
-        t_dmg_notes = t_dmg_notes + t_ign_notes + m_ign_notes
-        explode_9, e9_note = skill_mastery.attacker_explode_9(attacker, wp)
-        force_explode, fe_note = skill_mastery.attacker_ninjutsu_can_explode(attacker, wp)
-        if e9_note:
-            t_dmg_notes.append(e9_note)
-        if fe_note:
-            t_dmg_notes.append(fe_note)
-        dmg = combat.resolve_damage(
-            attacker, self.weapon, engine, self.increased_damage,
-            extra_rolled, t_kept, t_flat, explode_9=explode_9, force_explode=force_explode,
-        )
-        raw = dmg["raw_damage"]
-        feint_line = ""
-        if self.maneuver == "feint":
-            fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
-            raw += fb
-            feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
-        crab_bonus, crab_note = kata_effects.defender_reduction_bonus(target, self.defender_stance)
-        tech_red, tech_red_notes = technique_effects.defender_reduction_bonus(target)
-        kiho_red, kiho_red_notes = kiho_effects.defender_reduction_bonus(target)
-        scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
-        raw += scorp_bonus
-        base_red = target.armor_reduction
-        bokken_note = ""
-        bohiya_note = ""
-        firearm_red_note = ""
-        if wp.get("ignore_all_reduction"):
-            bohiya_note = f"Bo-Hiya: ignores all Reduction ({base_red} → 0)"
-            base_red = 0
-        elif wp.get("ignore_armor_reduction"):
-            firearm_red_note = f"Firearm: ignores armor Reduction ({base_red} → 0)"
-            base_red = 0
-        elif wp.get("double_reduction"):
-            bokken_note = f"Bokken: Reduction doubled ({base_red} → {base_red * 2})"
-            base_red *= 2
-        true_note = ""
-        if combat.has_weapon_quality(attacker, self.weapon, "true") and base_red > 0:
-            true_sub = min(base_red, attacker.strength)
-            if true_sub > 0:
-                true_note = f"True: Reduction −{true_sub} (wielder Strength {attacker.strength})"
-                base_red = max(0, base_red - attacker.strength)
-        kata_line = "".join(
-            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes) if n
-        )
-        reduction = max(0, base_red - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red)
-        if wp.get("ignore_all_reduction"):
-            reduction = 0
-        applied = combat.apply_damage(target, raw, reduction)
-        void_line = ""
-        if void_reduce:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(target, is_wound_reduction=True)
-            if not ok:
-                void_line = f"\n🔮 {reason_block}"
-            elif target.current_void_points > 0:
-                void_saved = min(10, applied["final_damage"])
-                target.wounds_taken = max(0, target.wounds_taken - void_saved)
-                target.current_void_points -= 1
-                applied["final_damage"] -= void_saved
-                applied["new_wound_level"] = stats.wound_level_name(target)
-                applied["is_dead"] = stats.is_dead(target)
-                applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
-                void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
-            else:
-                void_line = "\n🔮 No Void Points available: full damage applied"
-        heal_line = ""
-        if applied["is_dead"]:
-            heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
-            if heal_amt:
-                attacker.wounds_taken = max(0, attacker.wounds_taken - heal_amt)
-                store.save(attacker_rec)
-                heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
-        store.save(target_rec)
-
-        called_shot_line = ""
-        if self.maneuver == "called_shot" and self.called_shot_raises > 0:
-            part = combat.CALLED_SHOT_PARTS.get(
-                min(self.called_shot_raises, 4), "specific part"
-            )
-            called_shot_line = f"\n🎯 Called Shot: **{part}** ({self.called_shot_raises} raise{'s' if self.called_shot_raises != 1 else ''})"
-        break_line = ""
-        brk = wp.get("break_threshold")
-        if brk and raw >= brk:
-            if combat.has_weapon_quality(attacker, self.weapon, "unbreakable"):
-                break_line = f"\n🛡️ Unbreakable: weapon survives {raw} damage (threshold {brk})"
-            else:
-                break_line = f"\n💥 **WEAPON BROKEN** — {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
-
-        embed = discord.Embed(
-            title="⚔️ Damage applied",
-            color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
-        )
-        embed.add_field(
-            name="Damage",
-            value=(
-                f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                f"{_format_dice(dmg['dice'])}{feint_line}{kata_line}{called_shot_line}\n"
-                f"Raw **{raw}** − reduction {applied['reduction']} = "
-                f"**{applied['final_damage']}** wounds{void_line}{break_line}"
-            ),
-            inline=False,
-        )
-        embed.add_field(name="Result", value=self._wound_status(target_rec, applied) + heal_line, inline=False)
-        embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
-        self._disable()
-        await interaction.response.edit_message(view=self)
-        await self._post_result(interaction, embed)
-        dead_tag = " DEAD" if applied["is_dead"] else ""
-        man_tag = f" ({self.maneuver})" if self.maneuver not in ("none", "called_shot") else ""
-        cs_tag = ""
-        if self.maneuver == "called_shot" and self.called_shot_raises > 0:
-            part = combat.CALLED_SHOT_PARTS.get(min(self.called_shot_raises, 4), "specific part")
-            cs_tag = f" (Called Shot: {part})"
-        await _combat_log(
-            str(interaction.guild_id),
-            f"Damage: {self.attacker_name} → {self.target_name} ({self.weapon}){man_tag}{cs_tag} "
-            f"{applied['final_damage']} wounds [{applied['new_wound_level']}]{dead_tag}",
-        )
-
-        if self.maneuver == "extra_attack" and not applied["is_dead"]:
-            await self._second_attack(interaction, attacker_rec, target_rec)
-
-    async def _second_attack(
-        self,
-        interaction: discord.Interaction,
-        attacker_rec: storage.CharacterRecord,
-        target_rec: storage.CharacterRecord,
-    ) -> None:
-        """Roll the free second attack granted by Extra Attack (s40)."""
-        attacker = attacker_rec.character
-        target = target_rec.character
-        wp = combat.get_weapon_profile(self.weapon)
-        is_melee = wp.get("melee", True)
-        enc = encounters.get(self.channel_id)
-        def_conds = set()
-        dc = None
-        if enc:
-            dc = enc.find(target.name)
-            if dc:
-                def_conds = dc.conditions
-        cond_tn_ovr, cond_tn_notes = condition_effects.defender_armor_tn_override(
-            def_conds, target.reflexes, target.armor_tn_bonus, is_melee,
-        )
-        cond_def_mod, _ = condition_effects.defender_armor_tn_mod(def_conds, is_melee)
-        guard_mod2 = 0
-        fd_bonus2 = dc.full_defense_bonus if dc else 0
-        void_tn_bonus2 = dc.void_armor_tn_bonus if dc else 0
-        cover_mod2 = dc.cover_bonus if dc else 0
-        if enc:
-            for gc in enc.combatants:
-                if gc.guarding.lower() == target.name.lower():
-                    guard_mod2 += 10
-            if dc and dc.guarding:
-                guard_mod2 -= 5
-        arrow_tn_adj2, _ = combat.arrow_armor_tn_mod(self.weapon, target.armor_tn_bonus)
-        if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + cover_mod2 + arrow_tn_adj2
-        else:
-            tn = combat.armor_tn(target, self.defender_stance) + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + cover_mod2 + arrow_tn_adj2
-        outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, engine)
-        hit = outcome["hit"]
-        embed2 = discord.Embed(
-            title="⚔️ Extra Attack: 2nd strike",
-            color=discord.Color.green() if hit else discord.Color.light_grey(),
-        )
-        embed2.add_field(
-            name="Attack Roll",
-            value=f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                  f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
-                  f": {'**HIT**' if hit else 'miss'}",
-            inline=False,
-        )
-        if hit:
-            view2 = DamageView(
-                attacker_rec.id, target_rec.id, self.weapon, 0,
-                self.attacker_name, self.target_name,
-                maneuver="none", attack_margin=outcome["margin"],
-                defender_stance=self.defender_stance,
-                channel_id=self.channel_id,
-                source_channel_id=self.source_channel_id,
-                weapon_material=self.weapon_material,
-            )
-            await interaction.followup.send(
-                content="A DM can authorize the 2nd attack's damage below.",
-                embed=embed2, view=view2,
-            )
-            await _combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
-        else:
-            await interaction.followup.send(embed=embed2)
-            await _combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) MISS")
-
-    async def _second_attack_creature(
-        self,
-        interaction: discord.Interaction,
-        attacker_rec: storage.CharacterRecord,
-        cre_rec: storage.CreatureRecord,
-    ) -> None:
-        """Roll the free second attack against a creature (Extra Attack, s40)."""
-        attacker = attacker_rec.character
-        enc2 = encounters.get(self.channel_id)
-        dc2 = enc2.find(cre_rec.creature.name) if enc2 else None
-        tn = cre_rec.creature.armor_tn + (dc2.cover_bonus if dc2 else 0)
-        outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, engine)
-        hit = outcome["hit"]
-        embed2 = discord.Embed(
-            title="⚔️ Extra Attack: 2nd strike",
-            color=discord.Color.green() if hit else discord.Color.light_grey(),
-        )
-        embed2.add_field(
-            name="Attack Roll",
-            value=f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                  f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
-                  f": {'**HIT**' if hit else 'miss'}",
-            inline=False,
-        )
-        if hit:
-            view2 = DamageView(
-                attacker_rec.id, None, self.weapon, 0,
-                self.attacker_name, self.target_name,
-                maneuver="none", attack_margin=outcome["margin"],
-                target_creature_id=cre_rec.id,
-                channel_id=self.channel_id,
-                source_channel_id=self.source_channel_id,
-                weapon_material=self.weapon_material,
-            )
-            await interaction.followup.send(
-                content="A DM can authorize the 2nd attack's damage below.",
-                embed=embed2, view=view2,
-            )
-            await _combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
-        else:
-            await interaction.followup.send(embed=embed2)
-            await _combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) MISS")
-
-    @discord.ui.button(label="No Effect", style=discord.ButtonStyle.secondary, emoji="🛡️")
-    async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not await _require_dm_role(interaction):
-            return
-        msg = (
-            f"🛡️ {interaction.user.display_name} ruled **no effect** on "
-            f"{self.attacker_name}'s hit against {self.target_name}."
-        )
-        self._disable()
-        await interaction.response.edit_message(view=self)
-        if self.source_channel_id:
-            src = client.get_channel(self.source_channel_id)
-            if src:
-                await src.send(msg)
-            await interaction.followup.send(f"No effect — posted in <#{self.source_channel_id}>.")
-        else:
-            await interaction.followup.send(msg)
-
-
-def _rate_status(combatant, key: str, scope: str) -> str:
-    """Gate a once-per-Turn/Round kata against the live encounter tracker.
-
-    Returns 'apply' (available: and marks it spent), 'used' (already spent this
-    Turn/Round), or 'untracked' (no encounter is tracking this attacker, so the
-    limit can't be enforced and the effect stays a DM-adjudicated reminder)."""
-    if combatant is None:
-        return "untracked"
-    return "apply" if combatant.consume_once(key, scope) else "used"
-
-
-def _active_ability_reminders(c: Character, role: str, drop_rate_limited: bool = False) -> list[str]:
-    """DM reminder lines for a combatant's active kata/kiho that the bot does NOT
-    auto-apply (rate-limited, positional, tradeoff, or every kiho). The
-    deterministic kata are folded into the roll instead and shown separately.
-    `drop_rate_limited` skips the kata line when a rate-limited kata was already
-    enforced against the live tracker (the roll shows the enforced note instead)."""
-    lines: list[str] = []
-    kata_text = kata_effects.active_kata_reminder(c)
-    if kata_text and not (drop_rate_limited and kata_effects.is_rate_limited(c.active_kata)):
-        active = c.active_kata
-        lines.append(f"**{role.capitalize()} kata: {active}: ** {kata_text}")
-    for name in getattr(c, "active_kiho", []) or []:
-        if kiho_effects.is_auto(name):
-            continue
-        rec = kiho.get(name)
-        effect = rec["effect"] if rec else ""
-        lines.append(f"**{role.capitalize()} kiho: {name}: ** {effect}")
-    return lines
-
-
-_MANEUVER_CHOICES = [
-    app_commands.Choice(name="None", value="none"),
-    app_commands.Choice(name="Feint (2 raises → bonus damage)", value="feint"),
-    app_commands.Choice(name="Disarm (3 raises → 2k1 + contested Strength)", value="disarm"),
-    app_commands.Choice(name="Knockdown (2 raises → contested Strength)", value="knockdown"),
-    app_commands.Choice(name="Called Shot (1-4 raises → target body part)", value="called_shot"),
-    app_commands.Choice(name="Extra Attack (5 raises → second attack)", value="extra_attack"),
-]
-
-_WEAPON_MATERIAL_CHOICES = [
-    app_commands.Choice(name="Normal (steel/wood)", value="normal"),
-    app_commands.Choice(name="Jade", value="jade"),
-    app_commands.Choice(name="Crystal", value="crystal"),
-    app_commands.Choice(name="Obsidian", value="obsidian"),
-    app_commands.Choice(name="Nemuranai (magical)", value="nemuranai"),
-]
-
-
-# ===========================================================================
-# /combat group: initiative tracker
-# ===========================================================================
-combat_group = app_commands.Group(name="combat", description="Track combat initiative and turn order.")
-combat_condition = app_commands.Group(name="condition", description="Apply, clear, or view conditions.", parent=combat_group)
-combat_turn = app_commands.Group(name="turn", description="Initiative adjustments: hold, delay, act, surprise.", parent=combat_group)
-combat_grapple = app_commands.Group(name="grapple", description="Grappling subsystem (s40).", parent=combat_group)
-combat_duel = app_commands.Group(name="duel", description="Iaijutsu dueling (s40).", parent=combat_group)
-combat_battle = app_commands.Group(name="battle", description="Mass Battle system.", parent=combat_group)
-combat_void = app_commands.Group(name="void", description="Round-level Void Point combat effects (s25).", parent=combat_group)
-
-
-@combat_group.command(
-    name="attack",
-    description="Attack another character. Rolls to hit; on a hit a DM authorizes the outcome.",
-)
-@app_commands.describe(
-    target="The player to attack (their active character). Or use target_npc / target_creature.",
-    target_npc="Attack a stored NPC by name (instead of a player).",
-    target_creature="Attack a spawned creature by name (instead of a player).",
-    attacker_npc="Attack WITH a stored NPC instead of your own character (Fortune).",
-    weapon="Weapon for this attack. Defaults to your wielded weapon (`/sheet wield`), else katana.",
-    raises="Called Raises: each adds +5 to the target's Armor TN.",
-    increased_damage="Increased Damage raises: each adds +5 TN AND +1 damage die on a hit.",
-    maneuver="A combat maneuver (its raise cost is added to the TN automatically).",
-    spend_void="Spend a Void Point for +1k1 on the attack roll (RAW: not valid on damage).",
-    void_damage="(Katana only) Spend a Void Point for +1k1 on the damage roll.",
-    attacker_stance="Your stance (Full Attack = +2k1 to hit).",
-    defender_stance="Target's stance (affects their Armor TN).",
-    bonus_tn="Situational +/- to the target's Armor TN (DM discretion).",
-    weapon_material="Weapon material (jade/crystal/obsidian bypass Invulnerability; nemuranai too).",
-)
-@app_commands.autocomplete(
-    weapon=_weapon_autocomplete, target_npc=_npc_autocomplete, attacker_npc=_npc_autocomplete,
-    target_creature=_creature_instance_autocomplete,
-)
-@app_commands.choices(
-    attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES, maneuver=_MANEUVER_CHOICES,
-    weapon_material=_WEAPON_MATERIAL_CHOICES,
-)
-@app_commands.checks.cooldown(1, 3.0)
-async def attack(
-    interaction: discord.Interaction,
-    target: discord.Member | None = None,
-    target_npc: str | None = None,
-    target_creature: str | None = None,
-    attacker_npc: str | None = None,
-    weapon: str | None = None,
-    raises: app_commands.Range[int, 0, 10] = 0,
-    increased_damage: app_commands.Range[int, 0, 10] = 0,
-    maneuver: app_commands.Choice[str] | None = None,
-    spend_void: bool = False,
-    void_damage: bool = False,
-    attacker_stance: app_commands.Choice[str] | None = None,
-    defender_stance: app_commands.Choice[str] | None = None,
-    bonus_tn: app_commands.Range[int, -50, 50] = 0,
-    weapon_material: app_commands.Choice[str] | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    guild = str(interaction.guild_id)
-
-    # Resolve the attacker: a stored NPC (Fortune) or the caller's active character.
-    if attacker_npc:
-        if not await _require_dm_role(interaction):
-            return
-        attacker_rec = store.get_by_name(guild, NPC_OWNER, attacker_npc)
-        if attacker_rec is None:
-            await interaction.response.send_message(
-                f"No NPC named **{attacker_npc}**.", ephemeral=True
-            )
-            return
-    else:
-        attacker_rec = store.get_active(guild, str(interaction.user.id))
-        if attacker_rec is None:
-            await interaction.response.send_message(
-                "You have no active character. Use `/sheet create` first.", ephemeral=True
-            )
-            return
-
-    # Weapon: explicit choice, else the attacker's wielded weapon, else katana.
-    weapon = (weapon or "").strip() or attacker_rec.character.equipped_weapon or "katana"
-
-    # Resolve the target: a spawned creature, a stored NPC, or a player's character.
-    target_rec = None
-    target_creature_rec = None
-    if target_creature:
-        target_creature_rec = store.get_creature_by_name(guild, target_creature)
-        if target_creature_rec is None:
-            await interaction.response.send_message(
-                f"No creature named **{target_creature}**.", ephemeral=True
-            )
-            return
-    elif target_npc:
-        target_rec = store.get_by_name(guild, NPC_OWNER, target_npc)
-        if target_rec is None:
-            await interaction.response.send_message(f"No NPC named **{target_npc}**.", ephemeral=True)
-            return
-    elif target is not None:
-        target_rec = store.get_active(guild, str(target.id))
-        if target_rec is None:
-            await interaction.response.send_message(
-                f"{target.display_name} has no active character.", ephemeral=True
-            )
-            return
-    else:
-        await interaction.response.send_message(
-            "Pick a target: `target:` (player), `target_npc:`, or `target_creature:`.", ephemeral=True
-        )
-        return
-
-    a_stance_explicit = attacker_stance.value if attacker_stance else None
-    d_stance_explicit = defender_stance.value if defender_stance else None
-    man = maneuver.value if maneuver else "none"
-
-    # Early encounter/combatant lookup for action economy enforcement.
-    enc = encounters.get(interaction.channel_id)
-    atk_combatant = enc.find(attacker_rec.character.name) if enc else None
-
-    # Condition restrictions (GDD s40): some conditions prevent attacking entirely.
-    if atk_combatant is not None:
-        wpn_size = combat.get_weapon_profile(weapon).get("size", "Medium")
-        blocked, block_reason = condition_effects.cannot_attack(atk_combatant.conditions, wpn_size)
-        if blocked:
-            await interaction.response.send_message(f"**{atk_combatant.name}** cannot attack: {block_reason}", ephemeral=True)
-            return
-
-    # Action economy (s40): attack is a Complex Action — requires full action budget.
-    if atk_combatant is not None and atk_combatant.actions_used > 0:
-        await interaction.response.send_message(
-            f"**{atk_combatant.name}** has already used actions this turn ({atk_combatant.actions_used}/2). "
-            f"Use `/combat action reset` to override.",
-            ephemeral=True,
-        )
-        return
-
-    if target_creature_rec is not None and man in ("disarm", "knockdown"):
-        await interaction.response.send_message(
-            "Disarm/Knockdown aren't supported against creatures yet: use a plain attack or Feint.",
-            ephemeral=True,
-        )
-        return
-    if man == "called_shot" and raises < 1:
-        await interaction.response.send_message(
-            "Called Shot requires at least 1 raise (1=limb, 2=hand/foot, 3=head, 4=eye/ear/finger).",
-            ephemeral=True,
-        )
-        return
-    if man == "extra_attack":
-        if atk_combatant and "extra_attack" in atk_combatant.used_this_turn:
-            await interaction.response.send_message(
-                "Extra Attack can only be used once per Turn.", ephemeral=True
-            )
-            return
-        if atk_combatant:
-            atk_combatant.used_this_turn.add("extra_attack")
-    maneuver_raises = combat.MANEUVER_RAISES.get(man, 0)
-
-    # Void Point spend: +1k1 on the attack roll (decrement the pool now).
-    void_line = ""
-    bonus_rolled = bonus_kept = 0
-    if spend_void:
-        c = attacker_rec.character
-        ok, reason_block = advantage_effects.can_spend_void_on_roll(c)
-        if not ok:
-            void_line = f" · 🌀 {reason_block}"
-        elif c.current_void_points > 0:
-            c.current_void_points -= 1
-            bonus_rolled = bonus_kept = 1
-            store.save(attacker_rec)
-            void_line = f" · 🌀 Void +1k1 ({c.current_void_points} VP left)"
-        else:
-            void_line = " · 🌀 no Void Points to spend"
-
-    # Katana void damage: validate weapon eligibility (VP spent at damage time).
-    atk_weapon_profile = combat.get_weapon_profile(weapon)
-    if void_damage and not atk_weapon_profile.get("void_damage"):
-        await interaction.response.send_message(
-            f"**{weapon}** does not support void_damage — only katana can spend VP for +1k1 damage (GDD s39).",
-            ephemeral=True,
-        )
-        return
-
-    # Active-kata combat modifiers (GDD s30; deterministic subset only).
-    kata_notes: list[str] = []          # effects auto-applied to this roll
-    rl_used_notes: list[str] = []       # rate-limited effects already spent this Turn/Round
-    attacker = attacker_rec.character
-    atk_init = atk_combatant.initiative if atk_combatant else None
-    def_combatant = enc.find(target_rec.character.name) if (enc and target_rec is not None) else None
-    def_init = def_combatant.initiative if def_combatant else None
-
-    # Stance resolution: explicit parameter wins; otherwise read from encounter.
-    a_stance = a_stance_explicit or (atk_combatant.stance if atk_combatant else "attack")
-    d_stance = d_stance_explicit or (def_combatant.stance if def_combatant else "attack")
-
-    # A rate-limited kata is enforced by the tracker (on this roll or its damage
-    # step) only while an encounter is tracking the attacker; then suppress its
-    # generic reminder. Untracked -> stays a DM-adjudicated reminder.
-    rate_limited_handled = atk_combatant is not None and kata_effects.is_rate_limited(attacker.active_kata)
-
-    # Defender's active kata + known Techniques: stance-conditional Armor TN
-    # bonus (players only: creatures use fixed stat blocks and carry neither).
-    def_kata_bonus = 0
-    if target_creature_rec is None:
-        def_kata_bonus, def_note = kata_effects.defender_armor_tn_bonus(
-            target_rec.character, d_stance
-        )
-        if def_note:
-            kata_notes.append(def_note)
-        def_tech_bonus, def_tech_notes = technique_effects.defender_armor_tn_bonus(
-            target_rec.character, d_stance, atk_init, def_init, attacker=attacker
-        )
-        def_kata_bonus += def_tech_bonus
-        kata_notes.extend(def_tech_notes)
-        def_mastery_bonus, def_mastery_notes = skill_mastery.defender_armor_tn_bonus(target_rec.character)
-        def_kata_bonus += def_mastery_bonus
-        kata_notes.extend(def_mastery_notes)
-        def_adv_mod, def_adv_notes = advantage_effects.defender_armor_tn_mod(target_rec.character)
-        def_kata_bonus += def_adv_mod
-        kata_notes.extend(def_adv_notes)
-        def_kiho_tn, def_kiho_tn_notes = kiho_effects.defender_armor_tn_bonus(target_rec.character)
-        def_kata_bonus += def_kiho_tn
-        kata_notes.extend(def_kiho_tn_notes)
-    # Attacker's active kata: flat bonus added to the attack-roll total.
-    atk_flat, atk_note = kata_effects.attacker_roll_flat_bonus(attacker, man, increased_damage)
-    if atk_note:
-        kata_notes.append(atk_note)
-    # Rate-limited: Striking as Fire adds Fire Ring to one attack roll per Round.
-    sf_val, sf_note = kata_effects.striking_as_fire_bonus(attacker, a_stance)
-    if sf_val:
-        status = _rate_status(atk_combatant, "striking_as_fire", "round")
-        if status == "apply":
-            atk_flat += sf_val
-            kata_notes.append(sf_note)
-        elif status == "used":
-            rl_used_notes.append("Striking as Fire already used this Round.")
-    # Attacker's active kata: a Trait replaced by a Ring on the attack roll.
-    trait_ovr, trait_ovr_note = kata_effects.attacker_trait_override(attacker, atk_weapon_profile)
-    trait_ovr_name = "Air" if trait_ovr is not None else ""
-    if trait_ovr_note:
-        kata_notes.append(trait_ovr_note)
-    # Rate-limited: Strength in Arms uses Strength (not Agility) once per Turn (Heavy Weapon).
-    if trait_ovr is None:
-        sia_val, sia_note = kata_effects.strength_in_arms_override(attacker, atk_weapon_profile)
-        if sia_val is not None:
-            status = _rate_status(atk_combatant, "strength_in_arms", "turn")
-            if status == "apply":
-                trait_ovr, trait_ovr_name = sia_val, "Strength"
-                kata_notes.append(sia_note)
-            elif status == "used":
-                rl_used_notes.append("Strength in Arms already used this Turn.")
-    # Technique trait override (Falcon's Strike: Perception for bow attacks):
-    # only if no kata already replaced the attack Trait.
-    if trait_ovr is None:
-        to_val, to_name, to_note = technique_effects.attacker_trait_override(attacker, atk_weapon_profile)
-        if to_val is not None:
-            trait_ovr, trait_ovr_name = to_val, to_name
-            kata_notes.append(to_note)
-
-    # Attacker's known Techniques: extra attack dice / flat bonus to the roll.
-    t_rolled, t_kept, t_flat, t_notes = technique_effects.attacker_attack_dice(
-        attacker, atk_weapon_profile, weapon, a_stance, atk_init, def_init
-    )
-    bonus_rolled += t_rolled
-    bonus_kept += t_kept
-    atk_flat += t_flat
-    kata_notes.extend(t_notes)
-
-    # Advantage/disadvantage attack-roll modifiers (Bad Eyesight, Blind, Touch of Jigoku).
-    adv_rolled, adv_kept, adv_flat, adv_notes = advantage_effects.attacker_attack_dice(
-        attacker, atk_weapon_profile
-    )
-    bonus_rolled += adv_rolled
-    bonus_kept += adv_kept
-    atk_flat += adv_flat
-    kata_notes.extend(adv_notes)
-
-    # Advantage wound-penalty modifiers (Strength of the Earth, Low Pain Threshold).
-    wp_mod, wp_notes = advantage_effects.attacker_wound_penalty_mod(attacker)
-    if wp_mod:
-        atk_flat += wp_mod
-        kata_notes.extend(wp_notes)
-
-    # Kiho wound-penalty modifier (Grasp the Earth Dragon).
-    kiho_wp_mod, kiho_wp_notes = kiho_effects.attacker_wound_penalty_mod(attacker)
-    if kiho_wp_mod:
-        atk_flat += kiho_wp_mod
-        kata_notes.extend(kiho_wp_notes)
-
-    # Condition-based attack modifiers (GDD s40: Blinded, Dazed, Fatigued, Mounted, Prone).
-    atk_conds = atk_combatant.conditions if atk_combatant else set()
-    cond_rolled, cond_kept, cond_flat, cond_atk_notes = condition_effects.attacker_attack_dice(
-        atk_conds, atk_weapon_profile
-    )
-    bonus_rolled += cond_rolled
-    bonus_kept += cond_kept
-    atk_flat += cond_flat
-    kata_notes.extend(cond_atk_notes)
-
-    # Armor attack penalty (s39: Heavy −5, Tetsu-Do −10/−5; Hida R1 exempt).
-    armor_pen, armor_note = combat.armor_attack_penalty(attacker)
-    if armor_pen:
-        atk_flat += armor_pen
-        kata_notes.append(armor_note)
-
-    # Weapon stance penalty (s39: bows/lance mounted/foot restrictions).
-    stance_pen, stance_pen_note = combat.weapon_stance_penalty(weapon, "mounted" in atk_conds)
-    if stance_pen:
-        atk_flat += stance_pen
-        kata_notes.append(stance_pen_note)
-
-    # Extraordinary weapon quality: Balanced (+1k0 attack, s39 crafting).
-    if combat.has_weapon_quality(attacker, weapon, "balanced"):
-        bonus_rolled += 1
-        kata_notes.append("Balanced: +1k0 attack")
-
-    # Defender condition modifiers (Prone -10 Armor TN vs melee).
-    # Kept separate from def_kata_bonus so it applies even when an override fires.
-    def_conds = def_combatant.conditions if def_combatant else set()
-    is_melee_attack = atk_weapon_profile.get("melee", True)
-    cond_def_mod, cond_def_notes = condition_effects.defender_armor_tn_mod(def_conds, is_melee_attack)
-    kata_notes.extend(cond_def_notes)
-
-    # Skill mastery: free raises that reduce a maneuver's raise cost (s24).
-    mastery_free, mastery_free_notes = skill_mastery.maneuver_free_raises(
-        attacker, atk_weapon_profile, weapon, man
-    )
-    if mastery_free:
-        maneuver_raises = max(0, maneuver_raises - mastery_free)
-        kata_notes.extend(mastery_free_notes)
-
-    # Guard maneuver TN modifiers (s40): guarded target gets +10 per guarder, guarder gets -5.
-    guard_mod = 0
-    if enc and target_rec is not None:
-        def_name_lower = target_rec.character.name.lower()
-        for gc in enc.combatants:
-            if gc.guarding.lower() == def_name_lower:
-                guard_mod += 10
-                kata_notes.append(f"Guarded by {gc.name}: +10 Armor TN")
-        if def_combatant and def_combatant.guarding:
-            guard_mod -= 5
-            kata_notes.append(f"Guarding {def_combatant.guarding}: −5 Armor TN")
-
-    # Full Defense bonus (s40): half of Defense/Reflexes roll, set by /combat full_defense.
-    fd_bonus = 0
-    if def_combatant and def_combatant.full_defense_bonus:
-        fd_bonus = def_combatant.full_defense_bonus
-        kata_notes.append(f"Full Defense: +{fd_bonus} Armor TN")
-
-    # Void Point Armor TN bonus (s25): +10 for one Round.
-    void_tn_bonus = 0
-    if def_combatant and def_combatant.void_armor_tn_bonus:
-        void_tn_bonus = def_combatant.void_armor_tn_bonus
-        kata_notes.append(f"Void Armor: +{void_tn_bonus} Armor TN")
-
-    # Cover/terrain bonus: DM-set persistent Armor TN modifier.
-    cover_mod = 0
-    if def_combatant and def_combatant.cover_bonus:
-        cover_mod = def_combatant.cover_bonus
-        kata_notes.append(f"Cover: {'+' if cover_mod > 0 else ''}{cover_mod} Armor TN")
-
-    # Arrow/blowgun Armor TN specials (GDD s39): modify the armor TN bonus contribution.
-    arrow_tn_adj = 0
-    if target_creature_rec is None:
-        arrow_tn_adj, arrow_tn_note = combat.arrow_armor_tn_mod(weapon, target_rec.character.armor_tn_bonus)
-        if arrow_tn_note:
-            kata_notes.append(arrow_tn_note)
-    if atk_weapon_profile.get("half_range"):
-        kata_notes.append("⚠️ Half range — verify target is within halved bow range")
-
-    # Target name + Armor TN depend on the target kind.
-    if target_creature_rec is not None:
-        t_name = target_creature_rec.creature.name
-        tn = target_creature_rec.creature.armor_tn + bonus_tn + cover_mod
-    else:
-        t_name = target_rec.character.name
-        # Condition Armor TN override (Stunned/Grappled/Blinded replace the formula).
-        # Overrides ignore stance and kata/technique bonuses (GDD: "5 + armor bonuses").
-        # Condition modifiers (Prone -10) still stack on top.
-        cond_tn_ovr, cond_tn_notes = condition_effects.defender_armor_tn_override(
-            def_conds, target_rec.character.reflexes, target_rec.character.armor_tn_bonus,
-            is_melee_attack,
-        )
-        if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + bonus_tn + arrow_tn_adj
-            kata_notes.extend(cond_tn_notes)
-        else:
-            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + arrow_tn_adj)
-
-    # Center Stance bonus (s40): +1k1 + Void Ring on one roll, from centering last Round.
-    center_line = ""
-    if atk_combatant and atk_combatant.center_bonus_available:
-        void_ring_val = attacker.void_ring if attacker else 0
-        bonus_rolled += 1
-        bonus_kept += 1
-        atk_flat += void_ring_val
-        atk_combatant.center_bonus_available = False
-        center_line = f" · 🎯 Center: +1k1 +{void_ring_val} flat (Void Ring)"
-        kata_notes.append(f"Center Stance: +1k1 + {void_ring_val} (Void Ring)")
-
-    # Defense Stance warning (s40): may not attack while in Defense.
-    if a_stance == "defense":
-        kata_notes.append("⚠️ Defense Stance: may not attack (DM override in effect)")
-
-    outcome = combat.resolve_attack(
-        attacker, weapon, tn, raises + maneuver_raises, engine,
-        attacker_stance=a_stance, increased_damage=increased_damage,
-        bonus_rolled=bonus_rolled, bonus_kept=bonus_kept, extra_flat=atk_flat,
-        trait_override=trait_ovr, trait_override_name=trait_ovr_name,
-    )
-
-    a_name = attacker_rec.character.name
-    hit = outcome["hit"]
-    mat = weapon_material.value if weapon_material else "normal"
-    embed = discord.Embed(
-        title=f"⚔️ {a_name} attacks {t_name}",
-        color=discord.Color.green() if hit else discord.Color.greyple(),
-    )
-    atk_desc = (
-        f"{outcome['skill_name']} {outcome['skill_rank']} / "
-        f"{outcome['trait_name'].capitalize()} with **{weapon}**"
-    )
-    if mat != "normal":
-        atk_desc += f"  ·  🔶 {mat.title()}"
-    if a_stance != "attack":
-        auto_tag = " *(enc)*" if (not a_stance_explicit and atk_combatant) else ""
-        atk_desc += f"  ·  {a_stance.replace('_', ' ').title()}{auto_tag}"
-    if man != "none":
-        atk_desc += f"  ·  Maneuver: {man.title()}"
-    atk_desc += void_line
-    embed.add_field(name="Attacker", value=atk_desc, inline=False)
-    embed.add_field(name="Attack roll", value=_format_dice(outcome["dice"]), inline=False)
-
-    tn_note = f"Armor TN **{outcome['target_tn']}**"
-    if outcome["raises"]:
-        tn_note += f" ({outcome['raises']} raises)"
-    if target_creature_rec is None and d_stance != "attack":
-        auto_tag = " *(enc)*" if (not d_stance_explicit and def_combatant) else ""
-        tn_note += f"  ·  {d_stance.replace('_', ' ').title()}{auto_tag}"
-    verdict = "✅ **HIT**" if hit else "❌ **MISS**"
-    embed.add_field(
-        name="Result",
-        value=f"Total **{outcome['roll']}** vs {tn_note}: {verdict} (margin {outcome['margin']:+d})",
-        inline=False,
-    )
-    if outcome["unskilled"]:
-        embed.set_footer(text=f"Unskilled in {outcome['skill_name']}: dice did not explode.")
-
-    if kata_notes:
-        embed.add_field(name="⚑ Combat effects (auto-applied)", value=" · ".join(kata_notes)[:1024], inline=False)
-    if rl_used_notes:
-        embed.add_field(name="Rate-limited (already spent)", value="\n".join(rl_used_notes)[:1024], inline=False)
-    reminders = _active_ability_reminders(attacker, "attacker", drop_rate_limited=rate_limited_handled)
-    if target_creature_rec is None:
-        reminders += _active_ability_reminders(target_rec.character, "defender")
-    if target_creature_rec is not None:
-        reminders += creature.creature_special_notes(target_creature_rec.creature)
-    cond_reminders = condition_effects.condition_reminders(atk_conds)
-    if def_conds:
-        cond_reminders += condition_effects.condition_reminders(def_conds)
-    reminders += cond_reminders
-    if reminders:
-        embed.add_field(
-            name="Active abilities: DM adjudicates",
-            value="\n".join(reminders)[:1024],
-            inline=False,
-        )
-
-    if atk_combatant is not None:
-        atk_combatant.actions_used = 2
-    if enc and atk_combatant is not None:
-        _save_encounter(guild, enc)
-
-    cs_raises = raises if man == "called_shot" else 0
-    if hit:
-        approval_ch_id = store.get_approval_channel(guild)
-        approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
-        src_ch_id = interaction.channel_id if approval_ch else 0
-        if target_creature_rec is not None:
-            view = DamageView(
-                attacker_rec.id, None, weapon, increased_damage, a_name, t_name,
-                maneuver=man, attack_margin=outcome["margin"],
-                target_creature_id=target_creature_rec.id, defender_stance=d_stance,
-                called_shot_raises=cs_raises, channel_id=interaction.channel_id,
-                source_channel_id=src_ch_id, weapon_material=mat,
-                void_damage=void_damage,
-            )
-        else:
-            view = DamageView(
-                attacker_rec.id, target_rec.id, weapon, increased_damage, a_name, t_name,
-                maneuver=man, attack_margin=outcome["margin"], defender_stance=d_stance,
-                called_shot_raises=cs_raises, channel_id=interaction.channel_id,
-                source_channel_id=src_ch_id, weapon_material=mat,
-                void_damage=void_damage,
-            )
-        prompt = {
-            "disarm": "A DM can resolve the disarm below.",
-            "knockdown": "A DM can resolve the knockdown below.",
-        }.get(man, "A DM can authorize the damage below.")
-        if approval_ch:
-            embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
-            embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-            await approval_ch.send(content=prompt, embed=embed, view=view)
-            await interaction.response.send_message(
-                f"⚔️ **{a_name}** hit **{t_name}** — damage approval pending in the DM channel."
-            )
-        else:
-            await interaction.response.send_message(content=prompt, embed=embed, view=view)
-        await _combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) HIT (roll {outcome['roll']} vs TN {outcome['target_tn']})")
-    else:
-        await interaction.response.send_message(embed=embed)
-        await _combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) MISS (roll {outcome['roll']} vs TN {outcome['target_tn']})")
-
-
 def _apply_numeric_field(c: Character, field: str, value: float) -> None:
     """Set one numeric sheet field with clamping. Shared by /sheet set and /npc set."""
     if field in ("honor", "glory", "status", "infamy"):
@@ -2355,7 +1011,6 @@ def _apply_numeric_field(c: Character, field: str, value: float) -> None:
     elif field == "armor_reduction":
         c.armor_reduction = max(0, int(value))
 
-
 def _check_insight_rank_advance(c: Character) -> str:
     result = stats.check_insight_rank_advance(c)
     if result is None:
@@ -2367,7 +1022,6 @@ def _check_insight_rank_advance(c: Character) -> str:
         f"Use `/sheet learn` to learn your Rank {new_rank} technique."
     )
 
-
 # ===========================================================================
 # /sheet group
 # ===========================================================================
@@ -2376,6 +1030,7 @@ sheet_void = app_commands.Group(name="void", description="Void Point management:
 sheet_xp = app_commands.Group(name="xp", description="Grant and spend Experience to advance characters.", parent=sheet)
 sheet_kata_grp = app_commands.Group(name="kata", description="Record and activate Kata.", parent=sheet)
 sheet_kiho_grp = app_commands.Group(name="kiho", description="Record and activate Kiho.", parent=sheet)
+sheet_data = app_commands.Group(name="data", description="Export / import character sheets.", parent=sheet)
 
 _SCHOOL_CHOICES = [app_commands.Choice(name=s, value=s) for s in enums.SCHOOL_TYPES]
 _TRAIT_CHOICES = [
@@ -2387,7 +1042,6 @@ _SET_FIELDS = [
     "void_points_current", "void_points_max", "armor_tn_bonus", "armor_reduction",
 ]
 _SET_CHOICES = [app_commands.Choice(name=f, value=f) for f in _SET_FIELDS]
-
 
 @sheet.command(name="create", description="Create a new character and make it your active one.")
 @app_commands.describe(
@@ -2472,13 +1126,11 @@ async def sheet_create(
         )
     await interaction.response.send_message(content=content, embed=build_sheet_embed(record))
 
-
 # ---------------------------------------------------------------------------
 # /sheet wizard: guided step-by-step character creation
 # ---------------------------------------------------------------------------
 _GREAT_CLANS = ["Crab", "Crane", "Dragon", "Lion", "Mantis", "Phoenix", "Scorpion", "Unicorn"]
 _ALL_SCHOOL_CLANS = sorted({s["clan"] for s in schools.ALL if s.get("category", "basic") == "basic"})
-
 
 def _wizard_embed(state: dict) -> discord.Embed:
     """Build a progress embed from the wizard state dict."""
@@ -2503,7 +1155,6 @@ def _wizard_embed(state: dict) -> discord.Embed:
     embed.description = "\n".join(lines) if lines else "Starting..."
     return embed
 
-
 class _ClanSelect(discord.ui.Select):
     def __init__(self, state: dict):
         self.state = state
@@ -2527,7 +1178,6 @@ class _ClanSelect(discord.ui.Select):
             self.state["family_name"] = ""
             await _go_to_heritage_or_school(interaction, self.state)
 
-
 class _FamilySelect(discord.ui.Select):
     def __init__(self, state: dict, clan_families: list[dict]):
         self.state = state
@@ -2543,7 +1193,6 @@ class _FamilySelect(discord.ui.Select):
             return
         self.state["family_name"] = self.values[0]
         await _go_to_heritage_or_school(interaction, self.state)
-
 
 async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dict) -> None:
     clan = state["clan"]
@@ -2576,7 +1225,6 @@ async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dic
         )
     else:
         await _go_to_school_choice(interaction, state)
-
 
 async def _go_to_school_choice(interaction: discord.Interaction, state: dict) -> None:
     view = _WizardView(state)
@@ -2612,7 +1260,6 @@ async def _go_to_school_choice(interaction: discord.Interaction, state: dict) ->
         embed=_wizard_embed(state), view=view,
     )
 
-
 class _SchoolClanSelect(discord.ui.Select):
     def __init__(self, state: dict):
         self.state = state
@@ -2624,7 +1271,6 @@ class _SchoolClanSelect(discord.ui.Select):
             await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
             return
         await _show_school_select(interaction, self.state, self.values[0])
-
 
 async def _show_school_select(interaction: discord.Interaction, state: dict, school_clan: str) -> None:
     basic_schools = [s for s in schools.by_clan(school_clan) if s.get("category", "basic") == "basic"]
@@ -2640,7 +1286,6 @@ async def _show_school_select(interaction: discord.Interaction, state: dict, sch
         content=f"**Step 5/5**: Choose your School ({school_clan}).",
         embed=_wizard_embed(state), view=view,
     )
-
 
 class _SchoolSelect(discord.ui.Select):
     def __init__(self, state: dict, school_list: list[dict]):
@@ -2659,7 +1304,6 @@ class _SchoolSelect(discord.ui.Select):
             return
         self.state["school_name"] = self.values[0]
         await _show_confirmation(interaction, self.state)
-
 
 async def _show_confirmation(interaction: discord.Interaction, state: dict) -> None:
     view = _WizardView(state)
@@ -2740,7 +1384,6 @@ async def _show_confirmation(interaction: discord.Interaction, state: dict) -> N
         embed=preview_embed, view=view,
     )
 
-
 class _WizardView(discord.ui.View):
     def __init__(self, state: dict):
         super().__init__(timeout=300)
@@ -2748,7 +1391,6 @@ class _WizardView(discord.ui.View):
 
     async def on_timeout(self) -> None:
         pass
-
 
 @sheet.command(name="wizard", description="Step-by-step guided character creation.")
 @app_commands.describe(name="Your character's name.")
@@ -2775,7 +1417,6 @@ async def sheet_wizard(
         embed=_wizard_embed(state), view=view,
     )
 
-
 @sheet.command(name="view", description="View a character sheet (yours or another player's).")
 @app_commands.describe(member="Whose active character to view. Omit for your own.")
 async def sheet_view(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
@@ -2797,7 +1438,6 @@ async def sheet_view(interaction: discord.Interaction, member: discord.Member | 
             )
             return
     await interaction.response.send_message(embed=build_sheet_embed(rec))
-
 
 @sheet.command(name="list", description="List your characters (or a player's, if you are a DM).")
 @app_commands.describe(member="Whose characters to list (Fortune). Omit for your own.")
@@ -2831,7 +1471,6 @@ async def sheet_list(interaction: discord.Interaction, member: discord.Member | 
         f"Characters for {target.display_name}:\n" + "\n".join(lines), ephemeral=True
     )
 
-
 @sheet.command(name="activate", description="Set which of your characters is active.")
 @app_commands.describe(name="The character name to activate.")
 @app_commands.autocomplete(name=_own_character_autocomplete)
@@ -2850,7 +1489,6 @@ async def sheet_activate(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(
         f"**{rec.character.name}** is now your active character.", ephemeral=True
     )
-
 
 @sheet.command(name="delete", description="Delete a character (yours, or a player's if you are a DM).")
 @app_commands.describe(name="Character name.", member="Owner of the character (Fortune).")
@@ -2877,7 +1515,6 @@ async def sheet_delete(
         view=view,
         ephemeral=True,
     )
-
 
 class _DeleteConfirmView(discord.ui.View):
     def __init__(self, record: storage.CharacterRecord, user_id: int) -> None:
@@ -2906,7 +1543,6 @@ class _DeleteConfirmView(discord.ui.View):
 
     async def on_timeout(self) -> None:
         pass
-
 
 class _PaginatorView(discord.ui.View):
     """Reusable paginator for long text lists."""
@@ -2945,7 +1581,6 @@ class _PaginatorView(discord.ui.View):
     async def on_timeout(self) -> None:
         pass
 
-
 def _paginate(lines: list[str], header: str, *, per_page: int = 15) -> list[str]:
     """Split lines into pages with a header and page indicator.
 
@@ -2977,7 +1612,6 @@ def _paginate(lines: list[str], header: str, *, per_page: int = 15) -> list[str]
         result.append(header + "\n".join(chunk) + footer)
     return result
 
-
 @sheet.command(name="trait", description="Set a Trait (or Void) on the active character.")
 @app_commands.describe(
     trait="Which Trait to set.", value="New value (0-10).",
@@ -3003,7 +1637,6 @@ async def sheet_trait(
     await interaction.response.send_message(
         f"Set **{label}** to **{value}** on **{rec.character.name}**.{rank_msg}", embed=build_sheet_embed(rec)
     )
-
 
 @sheet.command(name="skill", description="Set skill ranks. Single: skill='Kenjutsu' rank=3. Bulk: skill='Kenjutsu 3, Courtier 2'.")
 @app_commands.describe(
@@ -3057,7 +1690,6 @@ async def sheet_skill(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-
 @sheet.command(name="set", description="Set a numeric field (honor, glory, void points, armor, etc.).")
 @app_commands.describe(
     field="Which field to set.", value="New value.",
@@ -3081,7 +1713,6 @@ async def sheet_set(
     await interaction.response.send_message(
         f"Updated **{field.value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
     )
-
 
 @sheet.command(name="equip", description="Add (or remove) a weapon on your character's gear.")
 @app_commands.describe(weapon="Weapon name.", remove="Remove it instead of adding.", member="Target player (Fortune).")
@@ -3115,7 +1746,6 @@ async def sheet_equip(
         msg = f"**{c.name}** equips **{w}** (DR {prof['rolled']}k{prof['kept']}, {prof['skill']})."
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
 
 @sheet.command(name="wield", description="Set the weapon(s) you're wielding:/attack's default weapon and defender Kata gates (s30).")
 @app_commands.describe(
@@ -3161,7 +1791,6 @@ async def sheet_wield(
         f"🗡️ **{c.name}** wields **{c.equipped_weapon}**{off}.", embed=build_sheet_embed(rec)
     )
 
-
 @sheet.command(name="armor", description="Equip armor (sets Armor TN bonus & Reduction), or 'none' to remove.")
 @app_commands.describe(armor="Armor type (bogu/ashigaru/tatami/light/heavy/tetsu_do/riding, or 'none').", member="Target player (Fortune).")
 @app_commands.autocomplete(armor=_armor_autocomplete)
@@ -3201,18 +1830,15 @@ async def sheet_armor(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-
 _QUALITY_CHOICES = [
     app_commands.Choice(name=q.title(), value=q) for q in sorted(combat.WEAPON_QUALITIES)
 ]
-
 
 async def _quality_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
     low = current.lower()
     return [c for c in _QUALITY_CHOICES if low in c.value][:25]
-
 
 @sheet.command(name="quality", description="Set extraordinary weapon qualities on the equipped weapon (s39 crafting).")
 @app_commands.describe(
@@ -3265,7 +1891,6 @@ async def sheet_quality(
         f"**{c.name}** weapon qualities set: **{q_list}** (on {wpn}).", embed=build_sheet_embed(rec)
     )
 
-
 @sheet.command(name="item", description="Add or remove items from your inventory (quantity supported).")
 @app_commands.describe(
     name="Item name.", quantity="How many (default 1).",
@@ -3305,7 +1930,6 @@ async def sheet_item(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-
 @sheet.command(name="koku", description="Add or spend koku (money). Negative amount spends.")
 @app_commands.describe(
     amount="Koku to add (positive) or spend (negative).",
@@ -3340,7 +1964,6 @@ async def sheet_koku(
     msg = f"\U0001F4B0 **{c.name}**: {label}{why}. Balance: **{c.koku:g}** koku."
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
 
 @sheet.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free: no XP).")
 @app_commands.describe(
@@ -3378,7 +2001,6 @@ async def sheet_advantage(
             msg += f"\n*Hint: this advantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
 
 @sheet.command(name="disadvantage", description="Record (or remove) a Disadvantage on your sheet (grants XP: DM /xp grant).")
 @app_commands.describe(
@@ -3418,7 +2040,6 @@ async def sheet_disadvantage(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-
 @sheet_kata_grp.command(name="learn", description="Record (or remove) a Kata on your sheet (free: no XP; use /sheet xp kata to buy).")
 @app_commands.describe(name="Kata name.", remove="Remove it instead.", member="Target player (Fortune).")
 @app_commands.autocomplete(name=_kata_autocomplete)
@@ -3444,7 +2065,6 @@ async def sheet_kata(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-
 @sheet_kiho_grp.command(name="learn", description="Record (or remove) a Kiho on your sheet (free: no XP; use /sheet xp kiho to buy).")
 @app_commands.describe(name="Kiho name.", remove="Remove it instead.", member="Target player (Fortune).")
 @app_commands.autocomplete(name=_kiho_autocomplete)
@@ -3469,7 +2089,6 @@ async def sheet_kiho(
         msg = f"✋ **{c.name}** learns the Kiho **{canonical}**."
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
 
 @sheet_kata_grp.command(name="activate", description="Set your active Kata (Simple Action; only one active: s30). Blank name drops it.")
 @app_commands.describe(
@@ -3513,7 +2132,6 @@ async def sheet_kata_activate(
     await interaction.response.send_message(
         f"🥋 **{c.name}** assumes the Kata **{canonical}**.{note}", embed=build_sheet_embed(rec)
     )
-
 
 @sheet_kiho_grp.command(name="activate", description="Activate/deactivate a Kiho (one Internal/Kharmic/Mystical; Martial stacks: s38).")
 @app_commands.describe(
@@ -3571,7 +2189,6 @@ async def sheet_kiho_activate(
         embed=build_sheet_embed(rec),
     )
 
-
 @sheet.command(name="wound", description="Apply wounds to the active character (raw, no armor reduction here).")
 @app_commands.describe(
     amount="Wounds to apply.",
@@ -3600,7 +2217,6 @@ async def sheet_wound(
         embed=build_sheet_embed(rec),
     )
 
-
 @sheet.command(name="heal", description="Heal wounds on the active character.")
 @app_commands.describe(
     amount="Wounds to heal.",
@@ -3628,7 +2244,6 @@ async def sheet_heal(
         embed=build_sheet_embed(rec),
     )
 
-
 # ===========================================================================
 # /dm group
 # ===========================================================================
@@ -3637,7 +2252,6 @@ dm_creature = app_commands.Group(name="creature", description="Spawn and run bes
 dm_npc = app_commands.Group(name="npc", description="Generate and manage NPC characters.", parent=dm)
 dm_room = app_commands.Group(name="room", description="Create private play rooms and invite people.", parent=dm)
 dm_category = app_commands.Group(name="category", description="Organise NPCs and creatures into named groups.", parent=dm)
-
 
 # ---------------------------------------------------------------------------
 # /dm wizard: interactive DM command menu
@@ -3759,7 +2373,6 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ]),
 ]
 
-
 class _DmWizardCatSelect(discord.ui.Select):
     def __init__(self) -> None:
         options = [
@@ -3805,7 +2418,6 @@ class _DmWizardCatSelect(discord.ui.Select):
         view.add_item(back_btn)
         await interaction.response.edit_message(content=None, embed=embed, view=view)
 
-
 @dm.command(name="wizard", description="Interactive command menu: browse all Fortune and Kami actions by category.")
 async def dm_wizard_cmd(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
@@ -3823,7 +2435,6 @@ async def dm_wizard_cmd(interaction: discord.Interaction) -> None:
         view=view,
         ephemeral=True,
     )
-
 
 @dm.command(name="party", description="DM overview: all active PCs on this server.")
 async def party_overview(interaction: discord.Interaction) -> None:
@@ -3868,7 +2479,6 @@ async def party_overview(interaction: discord.Interaction) -> None:
     embed.set_footer(text=f"{len(active)} active PC{'s' if len(active) != 1 else ''}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
 @dm.command(name="roles", description="Show who has the Fortune and Kami roles on this server.")
 async def dm_roles(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
@@ -3892,9 +2502,7 @@ async def dm_roles(interaction: discord.Interaction) -> None:
         lines.append(f"**{ROLE_FORTUNE}** role not found: create it in Server Settings > Roles.")
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
-
 SPELL_ELEMENTS = ("air", "earth", "fire", "water", "void")
-
 
 @dm.command(name="new_day", description="Advance to a new day: refresh spell slots and apply natural healing for all active PCs.")
 async def dm_new_day(interaction: discord.Interaction) -> None:
@@ -3947,12 +2555,10 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
     embed.set_footer(text=footer)
     await interaction.response.send_message(embed=embed)
 
-
 def _format_rokugani_date(year: int, month: int, day: int) -> str:
     """Format a Rokugani date as a human-readable string."""
     month_name, season = ROKUGANI_MONTHS[month - 1]
     return f"Day {day} of the Month of the {month_name}, {season} — Year {year} (Isawa Calendar)"
-
 
 def _advance_calendar(guild_id: str) -> str | None:
     """Advance the guild's calendar by 1 day. Returns the new date string, or None if no date set."""
@@ -3969,7 +2575,6 @@ def _advance_calendar(guild_id: str) -> str | None:
             year += 1
     store.set_calendar(guild_id, year, month, day)
     return _format_rokugani_date(year, month, day)
-
 
 @dm.command(name="setdate", description="Set the in-game Rokugani calendar date. Fortune role required.")
 @app_commands.describe(
@@ -4000,7 +2605,6 @@ async def dm_setdate(
     )
     await interaction.response.send_message(embed=embed)
 
-
 async def _any_character_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -4018,7 +2622,6 @@ async def _any_character_autocomplete(
             names.append(rec.character.name)
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
-
 def _find_any_character(guild: str, name: str) -> storage.CharacterRecord | None:
     rec = store.get_by_name(guild, NPC_OWNER, name)
     if rec is not None:
@@ -4027,7 +2630,6 @@ def _find_any_character(guild: str, name: str) -> storage.CharacterRecord | None
         if pc_rec.character.name.lower() == name.lower():
             return pc_rec
     return None
-
 
 @dm.command(name="damage", description="Apply damage to a character (shows DM-approval buttons).")
 @app_commands.describe(
@@ -4091,7 +2693,6 @@ async def dm_damage(
             content="A DM can authorize the damage below.",
             embed=embed, view=view,
         )
-
 
 @dm.command(name="heal", description="Heal wounds on a character (shows DM-approval buttons).")
 @app_commands.describe(
@@ -4162,687 +2763,9 @@ async def dm_heal(
             embed=embed, view=view,
         )
 
-
-def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
-    if not enc.combatants:
-        return "No combatants yet. Add them with `/combat join` or `/combat add`."
-    cur = enc.current()
-    lines = []
-    for i, c in enumerate(enc.combatants):
-        marker = "▶️ " if (enc.started and c is cur) else f"{i + 1}. "
-        tag = " *(NPC)*" if c.is_npc else ""
-        wound_tag = ""
-        if guild_id:
-            rec = _resolve_combatant_record(guild_id, c)
-            if rec is not None:
-                pen = stats.wound_penalty(rec.character)
-                if pen:
-                    lvl = stats.wound_level_name(rec.character)
-                    wound_tag = f"  ⚠️{lvl}({pen})"
-        detail = f"  ·  {c.initiative_detail}" if c.initiative_detail else ""
-        stance_str = f"  ⚔️{c.stance.replace('_', ' ').title()}" if c.stance != "attack" else ""
-        acts = f"  [{c.actions_used}/2 acts]" if enc.started and c.actions_used > 0 else ""
-        cond = f"  [{', '.join(sorted(c.conditions))}]" if c.conditions else ""
-        guard = f"  🛡️→{c.guarding}" if c.guarding else ""
-        fd = f"  🛡️FD+{c.full_defense_bonus}" if c.full_defense_bonus else ""
-        void_atn = f"  🌀ATN+{c.void_armor_tn_bonus}" if c.void_armor_tn_bonus else ""
-        void_init = f"  🌀Init+{c.void_initiative_boost}" if c.void_initiative_boost else ""
-        center_tag = "  🎯Center+1k1" if c.center_bonus_available else ""
-        center_init = f"  🎯Init+{c.center_init_boost}" if c.center_init_boost else ""
-        held = "  ⏸️HELD" if c.held else ""
-        delayed = "  ⏳DELAYED" if c.delayed else ""
-        cover = f"  🪨Cover{'+' if c.cover_bonus > 0 else ''}{c.cover_bonus}" if c.cover_bonus else ""
-        init_val = c.effective_initiative
-        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{held}{delayed}")
-    header = f"⚔️ **Round {enc.round}**"
-    if enc.surprise_round:
-        header += " *(Surprise)*"
-    if not enc.started:
-        header = "⚔️ **Not started**: use `/combat next` to begin."
-        if enc.surprise_round:
-            header += " *(Surprise Round)*"
-    notes_line = f"\n📍 *{enc.notes}*" if enc.notes else ""
-    result = header + notes_line + "\n" + "\n".join(lines)
-    if len(result) > 1700:
-        result = result[:1700] + "\n*(truncated — use `/combat summary` for full view)*"
-    return result
-
-
-@combat_group.command(name="start", description="Start a fresh initiative tracker in this channel.")
-async def combat_start(interaction: discord.Interaction) -> None:
-    if not await _require_guild(interaction):
-        return
-    enc = encounter.Encounter(channel_id=interaction.channel_id)
-    encounters[interaction.channel_id] = enc
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(
-        "⚔️ New encounter started. Add combatants with `/combat join` (your character) "
-        "or `/combat add` (an NPC), then `/combat next` to begin.\n"
-        "Players end their turn with `/combat turn done`."
-    )
-    await _combat_log(guild, "--- Encounter started ---")
-
-
-def _get_or_create(channel_id: int) -> encounter.Encounter:
-    enc = encounters.get(channel_id)
-    if enc is None:
-        enc = encounter.Encounter(channel_id=channel_id)
-        encounters[channel_id] = enc
-    return enc
-
-
-@combat_group.command(name="join", description="Add a character to initiative (rolls initiative).")
-@app_commands.describe(member="Add another player's active character (Fortune). Omit for your own.")
-async def combat_join(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
-    if not await _require_guild(interaction):
-        return
-    guild = str(interaction.guild_id)
-    if member is not None and member.id != interaction.user.id:
-        if not await _require_dm_role(interaction):
-            return
-        owner = member
-    else:
-        owner = interaction.user
-    rec = store.get_active(guild, str(owner.id))
-    if rec is None:
-        who = "You have" if owner.id == interaction.user.id else f"{owner.display_name} has"
-        await interaction.response.send_message(f"{who} no active character. Use `/sheet create` first.", ephemeral=True)
-        return
-
-    result = combat.roll_initiative(rec.character, engine)
-    swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
-    init_total = result.total + swift_bonus
-    swift_detail = f" +5 Swift" if swift_bonus else ""
-    enc = _get_or_create(interaction.channel_id)
-    enc.remove(rec.character.name)  # re-join re-rolls
-    enc.add(encounter.Combatant(
-        name=rec.character.name,
-        initiative=init_total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
-        owner_id=str(owner.id),
-        is_npc=False,
-        reflexes=rec.character.reflexes,
-    ))
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(_render_encounter(enc, guild))
-    await _combat_log(guild, f"Joined: {rec.character.name} (Init {init_total})")
-
-
-@combat_group.command(name="add", description="Add an NPC/monster to initiative by its Reflexes and Insight Rank.")
-@app_commands.describe(
-    name="NPC name.", reflexes="NPC Reflexes.", insight_rank="NPC Insight Rank (1 if unknown).",
-)
-async def combat_add(
-    interaction: discord.Interaction,
-    name: app_commands.Range[str, 1, 40],
-    reflexes: app_commands.Range[int, 1, 10],
-    insight_rank: app_commands.Range[int, 1, 10] = 1,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    result = engine.roll_and_keep(reflexes + insight_rank, reflexes)
-    enc = _get_or_create(interaction.channel_id)
-    enc.remove(name)
-    enc.add(encounter.Combatant(
-        name=name,
-        initiative=result.total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}",
-        owner_id=None,
-        is_npc=True,
-        reflexes=reflexes,
-    ))
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(_render_encounter(enc, guild))
-    await _combat_log(guild, f"Added NPC: {name} (Init {result.total})")
-
-
-@combat_group.command(name="next", description="Advance to the next combatant's turn.")
-async def combat_next(interaction: discord.Interaction) -> None:
-    if not await _require_guild(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None or not enc.combatants:
-        return
-    prev_round = enc.round
-    current = enc.advance()
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    mention = f"<@{current.owner_id}> " if current.owner_id and not current.is_npc else ""
-    parts = [f"➡️ {mention}It is now **{current.name}**'s turn."]
-    if current.center_bonus_available:
-        rec = _resolve_combatant_record(guild, current)
-        vr = rec.character.void_ring if rec else "?"
-        parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
-    reminders = condition_effects.condition_reminders(current.conditions)
-    if reminders:
-        parts.append("\n".join(reminders))
-    parts.append(_render_encounter(enc, guild))
-    msg = "\n\n".join(parts)
-    if len(msg) > 2000:
-        msg = msg[:1997] + "..."
-    await interaction.response.send_message(msg)
-    if enc.round != prev_round:
-        await _combat_log(guild, f"--- Round {enc.round} ---")
-    cond_str = f" [{', '.join(sorted(current.conditions))}]" if current.conditions else ""
-    await _combat_log(guild, f"Turn: {current.name}{cond_str}")
-
-
-@combat_group.command(name="status", description="Show the current initiative order.")
-async def combat_status(interaction: discord.Interaction) -> None:
-    if not await _require_guild(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    await interaction.response.send_message(_render_encounter(enc, str(interaction.guild_id)))
-
-
-@combat_group.command(name="remove", description="Remove a combatant from initiative.")
-@app_commands.describe(name="The combatant name to remove.")
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_remove(interaction: discord.Interaction, name: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = encounters.get(interaction.channel_id)
-    if enc is None or not enc.remove(name):
-        await interaction.response.send_message(f"No combatant named **{name}** here.", ephemeral=True)
-        return
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(f"Removed **{name}**.\n\n{_render_encounter(enc, guild)}")
-
-
-@combat_group.command(name="end", description="End the encounter in this channel.")
-async def combat_end(interaction: discord.Interaction) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    if encounters.pop(interaction.channel_id, None) is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
-        return
-    _delete_encounter(interaction.channel_id)
-    await interaction.response.send_message("⚔️ Encounter ended.")
-    await _combat_log(str(interaction.guild_id), "--- Encounter ended ---")
-
-
-@combat_group.command(name="summary", description="Compact overview of all combatants' key stats. Fortune role required.")
-async def combat_summary(interaction: discord.Interaction) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None or not enc.combatants:
-        return
-    guild = str(interaction.guild_id)
-    title = f"⚔️ Combat Summary: Round {enc.round}"
-    if enc.surprise_round:
-        title += " (Surprise)"
-    embed = discord.Embed(title=title, color=discord.Color.dark_red())
-    if enc.notes:
-        embed.description = f"📍 *{enc.notes}*"
-    for cb in enc.combatants[:25]:
-        rec = _resolve_combatant_record(guild, cb)
-        if rec is not None:
-            c = rec.character
-            lvl = stats.wound_level_name(c)
-            pen = stats.wound_penalty(c)
-            cap = stats.total_wound_capacity(c)
-            tn = combat.armor_tn(c, cb.stance)
-            pen_str = f" ⚠️ **{pen} penalty**" if pen else ""
-            vp = f"{c.current_void_points}/{c.max_void_points} VP"
-            conds = ", ".join(sorted(cb.conditions)) if cb.conditions else " "
-            fd = f", FD+{cb.full_defense_bonus}" if cb.full_defense_bonus else ""
-            v_atn = f", 🌀ATN+{cb.void_armor_tn_bonus}" if cb.void_armor_tn_bonus else ""
-            v_init = f", 🌀Init+{cb.void_initiative_boost}" if cb.void_initiative_boost else ""
-            c_bonus = ", 🎯Center+1k1" if cb.center_bonus_available else ""
-            c_init = f", 🎯Init+{cb.center_init_boost}" if cb.center_init_boost else ""
-            guard = f", guarding {cb.guarding}" if cb.guarding else ""
-            cover = f", Cover{'+' if cb.cover_bonus > 0 else ''}{cb.cover_bonus}" if cb.cover_bonus else ""
-            held = ", HELD" if cb.held else ""
-            delayed = ", DELAYED" if cb.delayed else ""
-            stance_label = cb.stance.replace("_", " ").title()
-            acts_left = 2 - cb.actions_used
-            value = (
-                f"Wounds: {c.wounds_taken}/{cap} **{lvl}**{pen_str}\n"
-                f"ATN: **{tn}** · {vp} · Stance: **{stance_label}** · Acts: {acts_left}\n"
-                f"Conditions: {conds}{fd}{v_atn}{v_init}{c_bonus}{c_init}{guard}{cover}{held}{delayed}"
-            )
-        else:
-            conds = ", ".join(sorted(cb.conditions)) if cb.conditions else " "
-            value = f"*(no sheet)* · Conditions: {conds}"
-        marker = "▶️ " if (enc.started and cb is enc.current()) else ""
-        embed.add_field(
-            name=f"{marker}{cb.name} (init {cb.effective_initiative})",
-            value=value,
-            inline=True,
-        )
-    if len(enc.combatants) > 25:
-        embed.set_footer(text=f"Showing 25 of {len(enc.combatants)} combatants.")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-@combat_group.command(name="npc", description="Add a stored NPC to initiative (rolls its initiative). Fortune role required.")
-@app_commands.describe(name="The NPC to add.")
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def combat_npc(interaction: discord.Interaction, name: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec = store.get_by_name(str(interaction.guild_id), NPC_OWNER, name)
-    if rec is None:
-        await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
-        return
-    result = combat.roll_initiative(rec.character, engine)
-    swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
-    init_total = result.total + swift_bonus
-    swift_detail = f" +5 Swift" if swift_bonus else ""
-    enc = _get_or_create(interaction.channel_id)
-    enc.remove(rec.character.name)
-    enc.add(encounter.Combatant(
-        name=rec.character.name,
-        initiative=init_total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
-        owner_id=None,
-        is_npc=True,
-        reflexes=rec.character.reflexes,
-    ))
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(_render_encounter(enc, guild))
-
-
-_CONDITION_CHOICES = [
-    app_commands.Choice(name=c.title(), value=c)
-    for c in sorted(encounter.VALID_CONDITIONS)
-]
-
-
-@combat_condition.command(name="set", description="Apply a condition to a combatant (Fortune).")
-@app_commands.describe(
-    name="The combatant to affect.",
-    condition="The condition to apply.",
-)
-@app_commands.choices(condition=_CONDITION_CHOICES)
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_condition_set(
-    interaction: discord.Interaction,
-    name: str,
-    condition: app_commands.Choice[str],
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    c = enc.find(name)
-    if c is None:
-        await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
-        return
-    c.conditions.add(condition.value)
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"**{c.name}** is now **{condition.name}**.\n\n{_render_encounter(enc, guild)}"
-    )
-    await _combat_log(str(interaction.guild_id), f"Condition: {c.name} +{condition.name}")
-
-
-@combat_condition.command(name="clear", description="Remove a condition from a combatant (Fortune).")
-@app_commands.describe(
-    name="The combatant to affect.",
-    condition="The condition to remove.",
-)
-@app_commands.choices(condition=_CONDITION_CHOICES)
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_condition_clear(
-    interaction: discord.Interaction,
-    name: str,
-    condition: app_commands.Choice[str],
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    c = enc.find(name)
-    if c is None:
-        await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
-        return
-    c.conditions.discard(condition.value)
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"**{c.name}** is no longer **{condition.name}**.\n\n{_render_encounter(enc, guild)}"
-    )
-    await _combat_log(str(interaction.guild_id), f"Condition: {c.name} -{condition.name}")
-
-
-@combat_condition.command(name="list", description="Show a combatant's active conditions.")
-@app_commands.describe(name="The combatant to check.")
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_conditions(interaction: discord.Interaction, name: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    c = enc.find(name)
-    if c is None:
-        await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
-        return
-    if not c.conditions:
-        await interaction.response.send_message(f"**{c.name}** has no active conditions.", ephemeral=True)
-        return
-    cond_list = ", ".join(sorted(c.conditions))
-    reminders = condition_effects.condition_reminders(c.conditions)
-    lines = f"**{c.name}** conditions: {cond_list}"
-    if reminders:
-        lines += "\n" + "\n".join(reminders)
-    await interaction.response.send_message(lines, ephemeral=True)
-
-
-@combat_group.command(name="guard", description="Guard another combatant (+10 Armor TN to ward, −5 to you). Lasts until your next turn.")
-@app_commands.describe(
-    guarder="The combatant doing the guarding.",
-    ward="The combatant being protected.",
-)
-@app_commands.autocomplete(guarder=_combatant_autocomplete, ward=_combatant_autocomplete)
-async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    g = enc.find(guarder)
-    if g is None:
-        await interaction.response.send_message(f"No combatant named **{guarder}**.", ephemeral=True)
-        return
-    w = enc.find(ward)
-    if w is None:
-        await interaction.response.send_message(f"No combatant named **{ward}**.", ephemeral=True)
-        return
-    if g.name == w.name:
-        await interaction.response.send_message("A combatant cannot guard themselves.", ephemeral=True)
-        return
-    blocked, block_reason = condition_effects.cannot_act(g.conditions)
-    if blocked:
-        await interaction.response.send_message(f"**{g.name}** cannot act: {block_reason}", ephemeral=True)
-        return
-    if g.stance in ("full_attack", "full_defense", "center"):
-        reasons = {
-            "full_attack": "Guard is not available in Full Attack Stance (s40).",
-            "full_defense": "Only Free Actions allowed in Full Defense Stance.",
-            "center": "All Actions are forfeited in Center Stance.",
-        }
-        await interaction.response.send_message(f"**{g.name}**: {reasons[g.stance]}", ephemeral=True)
-        return
-    if g.actions_used >= 2:
-        await interaction.response.send_message(
-            f"**{g.name}** has no actions remaining this turn ({g.actions_used}/2). "
-            f"Use `/combat action reset` to override.",
-            ephemeral=True,
-        )
-        return
-    g.guarding = w.name
-    g.actions_used += 1
-    remaining = 2 - g.actions_used
-    _save_encounter(str(interaction.guild_id), enc)
-    await interaction.response.send_message(
-        f"🛡️ **{g.name}** is guarding **{w.name}**.\n"
-        f"  Ward: +10 Armor TN · Guarder: −5 Armor TN\n"
-        f"  Simple Action ({remaining} action{'s' if remaining != 1 else ''} remaining).\n"
-        f"  Expires at the start of {g.name}'s next turn."
-    )
-    await _combat_log(str(interaction.guild_id), f"Guard: {g.name} guards {w.name}")
-
-
-@combat_group.command(name="full_defense", description="Full Defense: Defense/Reflexes roll, half (rounded up) added to Armor TN until next turn.")
-@app_commands.describe(
-    combatant="The combatant entering Full Defense.",
-    reflexes="Override Reflexes (for ad-hoc NPCs without a sheet).",
-    defense_skill="Override Defense skill rank (for ad-hoc NPCs without a sheet).",
-)
-@app_commands.autocomplete(combatant=_combatant_autocomplete)
-async def combat_full_defense(
-    interaction: discord.Interaction,
-    combatant: str,
-    reflexes: app_commands.Range[int, 1, 10] | None = None,
-    defense_skill: app_commands.Range[int, 0, 10] | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(combatant)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
-        return
-    blocked, block_reason = condition_effects.cannot_act(cb.conditions)
-    if blocked:
-        await interaction.response.send_message(f"**{cb.name}** cannot act: {block_reason}", ephemeral=True)
-        return
-    if cb.actions_used > 0:
-        await interaction.response.send_message(
-            f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.",
-            ephemeral=True,
-        )
-        return
-    guild = str(interaction.guild_id)
-    rec = _resolve_combatant_record(guild, cb)
-    ref = reflexes
-    def_sk = defense_skill
-    if rec is not None:
-        if ref is None:
-            ref = rec.character.reflexes
-        if def_sk is None:
-            def_sk = rec.character.skills.get("Defense", 0)
-    if ref is None or def_sk is None:
-        await interaction.response.send_message(
-            f"Cannot resolve stats for **{cb.name}**. Provide `reflexes:` and `defense_skill:` explicitly.",
-            ephemeral=True,
-        )
-        return
-    wp = stats.wound_penalty(rec.character) if rec is not None else 0
-    result = combat.roll_full_defense(ref, def_sk, engine, wound_penalty=wp)
-    cb.full_defense_bonus = result["bonus"]
-    cb.stance = "full_defense"
-    cb.actions_used = 2
-    _save_encounter(guild, enc)
-    wp_note = f"  Wound penalty: **{wp}**\n" if wp != 0 else ""
-    await interaction.response.send_message(
-        f"🛡️ **{cb.name}** enters **Full Defense**.\n"
-        f"  Roll: {result['rolled']}k{result['kept']} → **{result['total']}** · "
-        f"half (rounded up) = **+{result['bonus']} Armor TN**\n"
-        f"{wp_note}"
-        f"  Complex Action: only Free Actions until next turn.\n"
-        f"  Expires at the start of {cb.name}'s next turn."
-    )
-    await _combat_log(str(interaction.guild_id), f"Full Defense: {cb.name} (+{result['bonus']} Armor TN)")
-
-
-# ===========================================================================
-# /combat void group: round-level Void Point effects (GDD s25)
-# ===========================================================================
-
-
-@combat_void.command(name="armor", description="Spend a Void Point for +10 Armor TN for one Round (beginning of Round).")
-@app_commands.describe(combatant="The combatant spending the Void Point.")
-@app_commands.autocomplete(combatant=_combatant_autocomplete)
-async def combat_void_armor(interaction: discord.Interaction, combatant: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(combatant)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
-        return
-    guild = str(interaction.guild_id)
-    rec = _resolve_combatant_record(guild, cb)
-    if rec is None:
-        await interaction.response.send_message(f"Cannot resolve character sheet for **{cb.name}**.", ephemeral=True)
-        return
-    c = rec.character
-    ok, reason = advantage_effects.can_spend_void_on_roll(c)
-    if not ok:
-        await interaction.response.send_message(f"🌀 {reason}", ephemeral=True)
-        return
-    if c.current_void_points <= 0:
-        await interaction.response.send_message(f"🌀 **{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
-        return
-    if not cb.consume_once("void_combat", "round"):
-        await interaction.response.send_message(f"🌀 **{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
-        return
-    c.current_void_points -= 1
-    cb.void_armor_tn_bonus += 10
-    store.save(rec)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"🌀 **{cb.name}** spends a Void Point: **+10 Armor TN** for this Round.\n"
-        f"  Armor TN bonus: +{cb.void_armor_tn_bonus} · VP remaining: {c.current_void_points}/{c.max_void_points}\n"
-        f"  Clears at the start of the next Round."
-    )
-    await _combat_log(guild, f"Void Armor: {cb.name} (+10 Armor TN, {c.current_void_points} VP left)")
-
-
-@combat_void.command(name="initiative", description="Spend a Void Point for +10 Initiative for the remainder of the skirmish.")
-@app_commands.describe(combatant="The combatant spending the Void Point.")
-@app_commands.autocomplete(combatant=_combatant_autocomplete)
-async def combat_void_initiative(interaction: discord.Interaction, combatant: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(combatant)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
-        return
-    guild = str(interaction.guild_id)
-    rec = _resolve_combatant_record(guild, cb)
-    if rec is None:
-        await interaction.response.send_message(f"Cannot resolve character sheet for **{cb.name}**.", ephemeral=True)
-        return
-    c = rec.character
-    ok, reason = advantage_effects.can_spend_void_on_roll(c)
-    if not ok:
-        await interaction.response.send_message(f"🌀 {reason}", ephemeral=True)
-        return
-    if c.current_void_points <= 0:
-        await interaction.response.send_message(f"🌀 **{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
-        return
-    if not cb.consume_once("void_combat", "round"):
-        await interaction.response.send_message(f"🌀 **{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
-        return
-    c.current_void_points -= 1
-    cb.void_initiative_boost += 10
-    cur_before = enc.current() if enc.started else None
-    enc._sort()
-    if cur_before is not None:
-        enc.turn_index = enc.combatants.index(cur_before)
-    store.save(rec)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"🌀 **{cb.name}** spends a Void Point: **+10 Initiative** for the skirmish.\n"
-        f"  Effective initiative: **{cb.effective_initiative}** · VP remaining: {c.current_void_points}/{c.max_void_points}\n"
-        f"  Persists until the encounter ends.\n\n"
-        f"{_render_encounter(enc, guild)}"
-    )
-    await _combat_log(guild, f"Void Initiative: {cb.name} (+10, now {cb.effective_initiative}, {c.current_void_points} VP left)")
-
-
-@combat_void.command(name="swap", description="Exchange Initiative with a willing target for the remainder of the skirmish (1 VP).")
-@app_commands.describe(
-    spender="The combatant spending the Void Point.",
-    target="The willing target to swap Initiative with.",
-)
-@app_commands.autocomplete(spender=_combatant_autocomplete, target=_combatant_autocomplete)
-async def combat_void_swap(interaction: discord.Interaction, spender: str, target: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb_s = enc.find(spender)
-    if cb_s is None:
-        await interaction.response.send_message(f"No combatant named **{spender}**.", ephemeral=True)
-        return
-    cb_t = enc.find(target)
-    if cb_t is None:
-        await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
-        return
-    if cb_s.name == cb_t.name:
-        await interaction.response.send_message("Cannot swap Initiative with yourself.", ephemeral=True)
-        return
-    guild = str(interaction.guild_id)
-    rec = _resolve_combatant_record(guild, cb_s)
-    if rec is None:
-        await interaction.response.send_message(f"Cannot resolve character sheet for **{cb_s.name}**.", ephemeral=True)
-        return
-    c = rec.character
-    ok, reason = advantage_effects.can_spend_void_on_roll(c)
-    if not ok:
-        await interaction.response.send_message(f"🌀 {reason}", ephemeral=True)
-        return
-    if c.current_void_points <= 0:
-        await interaction.response.send_message(f"🌀 **{cb_s.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
-        return
-    if not cb_s.consume_once("void_combat", "round"):
-        await interaction.response.send_message(f"🌀 **{cb_s.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
-        return
-    c.current_void_points -= 1
-    old_s = cb_s.effective_initiative
-    old_t = cb_t.effective_initiative
-    cb_s.initiative, cb_t.initiative = cb_t.initiative, cb_s.initiative
-    cb_s.void_initiative_boost, cb_t.void_initiative_boost = cb_t.void_initiative_boost, cb_s.void_initiative_boost
-    cur_before = enc.current() if enc.started else None
-    enc._sort()
-    if cur_before is not None:
-        enc.turn_index = enc.combatants.index(cur_before)
-    store.save(rec)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"🌀 **{cb_s.name}** spends a Void Point to **exchange Initiative** with **{cb_t.name}**.\n"
-        f"  {cb_s.name}: {old_s} → **{cb_s.effective_initiative}** · "
-        f"{cb_t.name}: {old_t} → **{cb_t.effective_initiative}**\n"
-        f"  VP remaining: {c.current_void_points}/{c.max_void_points}\n"
-        f"  Persists for the remainder of the skirmish.\n\n"
-        f"{_render_encounter(enc, guild)}"
-    )
-    await _combat_log(guild, f"Void Swap: {cb_s.name} ↔ {cb_t.name} initiative ({c.current_void_points} VP left)")
-
-
 # ===========================================================================
 # /grapple group: grappling subsystem (s40)
 # ===========================================================================
-
-
 
 def _resolve_combatant_record(guild: str, cb: encounter.Combatant) -> storage.CharacterRecord | None:
     """Look up a stored character record from a Combatant (PC or NPC)."""
@@ -4851,7 +2774,6 @@ def _resolve_combatant_record(guild: str, cb: encounter.Combatant) -> storage.Ch
     if cb.owner_id:
         return store.get_active(guild, cb.owner_id)
     return None
-
 
 def _resolve_duelist(
     guild: str, channel_id: int, name: str, is_npc: bool, member: discord.Member | None,
@@ -4868,763 +2790,9 @@ def _resolve_duelist(
             return _resolve_combatant_record(guild, cb)
     return store.get_by_name(guild, NPC_OWNER, name)
 
-
-@combat_grapple.command(name="initiate", description="Initiate a Grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus). Fortune role required.")
-@app_commands.describe(
-    attacker="The combatant initiating the grapple.",
-    target="The target being grappled.",
-    bonus_tn="DM situational TN modifier.",
-    defender_stance="Target's stance.",
-)
-@app_commands.choices(defender_stance=_DEFENDER_STANCES)
-async def grapple_initiate(
-    interaction: discord.Interaction,
-    attacker: str,
-    target: str,
-    bonus_tn: int = 0,
-    defender_stance: app_commands.Choice[str] | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    atk_cb = enc.find(attacker)
-    if atk_cb is None:
-        await interaction.response.send_message(f"No combatant named **{attacker}**.", ephemeral=True)
-        return
-    def_cb = enc.find(target)
-    if def_cb is None:
-        await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
-        return
-    blocked, block_reason = condition_effects.cannot_act(atk_cb.conditions)
-    if blocked:
-        await interaction.response.send_message(f"**{atk_cb.name}** cannot act: {block_reason}", ephemeral=True)
-        return
-    guild = str(interaction.guild_id)
-    atk_rec = _resolve_combatant_record(guild, atk_cb)
-    def_rec = _resolve_combatant_record(guild, def_cb)
-    if atk_rec is None or def_rec is None:
-        await interaction.response.send_message(
-            "Both combatants need stored character sheets for grapple initiation.", ephemeral=True
-        )
-        return
-    d_stance = defender_stance.value if defender_stance else "attack"
-    tn = combat.grapple_initiate_tn(def_rec.character, d_stance, bonus_tn)
-    extra_tn = 0
-    if def_cb.full_defense_bonus:
-        extra_tn += def_cb.full_defense_bonus
-    def_conds = def_cb.conditions
-    cond_tn_ovr, cond_tn_notes = condition_effects.defender_armor_tn_override(
-        def_conds, def_rec.character.reflexes, def_rec.character.armor_tn_bonus, True,
-    )
-    cond_def_mod, _ = condition_effects.defender_armor_tn_mod(def_conds, True)
-    if cond_tn_ovr is not None:
-        tn = cond_tn_ovr + cond_def_mod + extra_tn + bonus_tn
-    else:
-        tn += cond_def_mod + extra_tn
-    if atk_cb.actions_used > 0:
-        await interaction.response.send_message(
-            f"**{atk_cb.name}** has already used actions this turn ({atk_cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.", ephemeral=True)
-        return
-    outcome = combat.resolve_grapple_initiate(atk_rec.character, tn, engine)
-    hit = outcome["hit"]
-    equipped = atk_rec.character.equipped_weapon
-    grapple_weapon_note = ""
-    if equipped:
-        wp = combat.get_weapon_profile(equipped)
-        if wp.get("grapple_capable"):
-            grapple_weapon_note = f"\n✓ {equipped.replace('_', ' ').title()}: can initiate grapple while armed (s39)"
-        else:
-            grapple_weapon_note = f"\n⚠️ {equipped.replace('_', ' ').title()} is not grapple-capable — must drop/sheathe to grapple (DM adjudicates)"
-    embed = discord.Embed(
-        title=f"🤼 {atk_cb.name} attempts to grapple {def_cb.name}",
-        color=discord.Color.greyple(),
-    )
-    embed.add_field(
-        name="1. Grapple Attack (Jiujutsu/Agility)",
-        value=f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
-              f": {'**HIT**' if hit else '**miss**'}"
-              f"\n({outcome['rolled']}k{outcome['kept']}, wound penalty {outcome['wound_penalty']})"
-              f"{grapple_weapon_note}",
-        inline=False,
-    )
-    grappled = False
-    if hit:
-        str_a = atk_rec.character.strength
-        jiu_a = atk_rec.character.skills.get("Jiujutsu", 0)
-        str_b = def_rec.character.strength
-        jiu_b = def_rec.character.skills.get("Jiujutsu", 0)
-        wp_a = stats.wound_penalty(atk_rec.character)
-        wp_b = stats.wound_penalty(def_rec.character)
-        contest = combat.resolve_grapple_control(str_a, jiu_a, str_b, jiu_b, engine, wp_a, wp_b)
-        atk_wins = contest["winner"] in ("a", "tie")
-        embed.add_field(
-            name="2. Contested Strength (Jiujutsu/Strength)",
-            value=f"{atk_cb.name}: ({str_a + jiu_a}k{str_a}) → **{contest['total_a']}**\n"
-                  f"{def_cb.name}: ({str_b + jiu_b}k{str_b}) → **{contest['total_b']}**\n"
-                  f"{'**Attacker wins** — grapple established!' if atk_wins else '**Defender resists** — grab fails!'}",
-            inline=False,
-        )
-        if atk_wins:
-            grappled = True
-            atk_cb.conditions.add("grappled")
-            def_cb.conditions.add("grappled")
-            embed.colour = discord.Color.green()
-            embed.add_field(
-                name="Result",
-                value=f"Both **{atk_cb.name}** and **{def_cb.name}** are now **Grappled**.\n"
-                      f"{atk_cb.name} has initial control.",
-                inline=False,
-            )
-        else:
-            embed.add_field(
-                name="Result",
-                value=f"**{def_cb.name}** breaks the grab. {atk_cb.name}'s Complex Action is spent.",
-                inline=False,
-            )
-    atk_cb.actions_used = 2
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(embed=embed)
-    tag = "GRAPPLED" if grappled else ("RESISTED" if hit else "MISS")
-    await _combat_log(guild, f"Grapple: {atk_cb.name} → {def_cb.name} {tag}")
-
-
-@combat_grapple.command(name="control", description="Contested Jiujutsu/Strength roll for grapple control. Fortune role required.")
-@app_commands.describe(
-    combatant_a="First grapple participant.",
-    combatant_b="Second grapple participant.",
-)
-async def grapple_control(
-    interaction: discord.Interaction,
-    combatant_a: str,
-    combatant_b: str,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb_a = enc.find(combatant_a)
-    cb_b = enc.find(combatant_b)
-    if cb_a is None:
-        await interaction.response.send_message(f"No combatant named **{combatant_a}**.", ephemeral=True)
-        return
-    if cb_b is None:
-        await interaction.response.send_message(f"No combatant named **{combatant_b}**.", ephemeral=True)
-        return
-    guild = str(interaction.guild_id)
-    rec_a = _resolve_combatant_record(guild, cb_a)
-    rec_b = _resolve_combatant_record(guild, cb_b)
-    if rec_a is None or rec_b is None:
-        await interaction.response.send_message(
-            "Both combatants need stored character sheets for grapple control.", ephemeral=True
-        )
-        return
-    str_a = rec_a.character.strength
-    jiu_a = rec_a.character.skills.get("Jiujutsu", 0)
-    str_b = rec_b.character.strength
-    jiu_b = rec_b.character.skills.get("Jiujutsu", 0)
-    wp_a = stats.wound_penalty(rec_a.character)
-    wp_b = stats.wound_penalty(rec_b.character)
-    result = combat.resolve_grapple_control(str_a, jiu_a, str_b, jiu_b, engine, wp_a, wp_b)
-    if result["winner"] == "a":
-        winner, loser = cb_a.name, cb_b.name
-    elif result["winner"] == "b":
-        winner, loser = cb_b.name, cb_a.name
-    else:
-        winner = "Tie (previous controller retains)"
-        loser = ""
-    embed = discord.Embed(
-        title="🤼 Grapple Control: Contested Jiujutsu/Strength",
-        color=discord.Color.blue(),
-    )
-    embed.add_field(
-        name=cb_a.name,
-        value=f"({str_a + jiu_a}k{str_a}) → **{result['total_a']}**",
-        inline=True,
-    )
-    embed.add_field(
-        name=cb_b.name,
-        value=f"({str_b + jiu_b}k{str_b}) → **{result['total_b']}**",
-        inline=True,
-    )
-    if loser:
-        embed.add_field(name="Control", value=f"**{winner}** has control.", inline=False)
-    else:
-        embed.add_field(name="Control", value=f"**{winner}**", inline=False)
-    await interaction.response.send_message(embed=embed)
-    await _combat_log(guild, f"Grapple Control: {winner} wins")
-
-
-@combat_grapple.command(name="hit", description="Grapple Hit: unarmed damage on a grappled opponent (no attack roll). Fortune role required.")
-@app_commands.describe(
-    attacker="The combatant in control (dealing damage).",
-    target="The grapple participant receiving damage.",
-)
-async def grapple_hit(
-    interaction: discord.Interaction,
-    attacker: str,
-    target: str,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    atk_cb = enc.find(attacker)
-    def_cb = enc.find(target)
-    if atk_cb is None:
-        await interaction.response.send_message(f"No combatant named **{attacker}**.", ephemeral=True)
-        return
-    if def_cb is None:
-        await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
-        return
-    blocked, block_reason = condition_effects.cannot_act(atk_cb.conditions)
-    if blocked:
-        await interaction.response.send_message(f"**{atk_cb.name}** cannot act: {block_reason}", ephemeral=True)
-        return
-    if atk_cb.actions_used > 0:
-        await interaction.response.send_message(
-            f"**{atk_cb.name}** has already used actions this turn ({atk_cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.", ephemeral=True)
-        return
-    guild = str(interaction.guild_id)
-    atk_rec = _resolve_combatant_record(guild, atk_cb)
-    def_rec = _resolve_combatant_record(guild, def_cb)
-    if atk_rec is None:
-        await interaction.response.send_message(f"No character sheet for **{attacker}**.", ephemeral=True)
-        return
-    if def_rec is None:
-        await interaction.response.send_message(f"No character sheet for **{target}**.", ephemeral=True)
-        return
-    atk_cb.actions_used = 2
-    _save_encounter(guild, enc)
-    embed = discord.Embed(
-        title=f"🤼 Grapple Hit: {atk_cb.name} strikes {def_cb.name}",
-        description="Unarmed damage, no attack roll (controller's Complex Action).",
-        color=discord.Color.orange(),
-    )
-    view = DamageView(
-        atk_rec.id, def_rec.id, "unarmed", 0,
-        atk_cb.name, def_cb.name,
-        maneuver="none", attack_margin=0,
-        defender_stance="attack",
-        channel_id=interaction.channel_id,
-    )
-    await interaction.response.send_message(embed=embed, view=view)
-
-
-@combat_grapple.command(name="throw", description="Grapple Throw: target becomes Prone and leaves the grapple. Fortune role required.")
-@app_commands.describe(
-    thrower="The combatant in control (throwing).",
-    target="The combatant being thrown.",
-)
-async def grapple_throw(
-    interaction: discord.Interaction,
-    thrower: str,
-    target: str,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    thrower_cb = enc.find(thrower)
-    target_cb = enc.find(target)
-    if thrower_cb is None:
-        await interaction.response.send_message(f"No combatant named **{thrower}**.", ephemeral=True)
-        return
-    if target_cb is None:
-        await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
-        return
-    blocked, block_reason = condition_effects.cannot_act(thrower_cb.conditions)
-    if blocked:
-        await interaction.response.send_message(f"**{thrower_cb.name}** cannot act: {block_reason}", ephemeral=True)
-        return
-    if thrower_cb.actions_used > 0:
-        await interaction.response.send_message(
-            f"**{thrower_cb.name}** has already used actions this turn ({thrower_cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.", ephemeral=True)
-        return
-    thrower_cb.conditions.discard("grappled")
-    thrower_cb.conditions.add("prone")
-    target_cb.conditions.discard("grappled")
-    target_cb.conditions.discard("pinned")
-    target_cb.conditions.add("prone")
-    thrower_cb.actions_used = 2
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"🤼 **{thrower_cb.name}** throws **{target_cb.name}**!\n"
-        f"  Both are now **Prone**. The grapple ends.\n"
-        f"  (Standing up is a Simple Action.)"
-    )
-    await _combat_log(guild, f"Grapple Throw: {thrower_cb.name} throws {target_cb.name} (both prone, grapple ends)")
-
-
-@combat_grapple.command(name="pin", description="Grapple Pin: immobilize the target (Complex Action, controller only). Fortune role required.")
-@app_commands.describe(
-    controller="The combatant in control.",
-    target="The grapple participant being pinned.",
-)
-@app_commands.autocomplete(controller=_combatant_autocomplete, target=_combatant_autocomplete)
-async def grapple_pin(
-    interaction: discord.Interaction,
-    controller: str,
-    target: str,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    ctrl_cb = enc.find(controller)
-    tgt_cb = enc.find(target)
-    if ctrl_cb is None:
-        await interaction.response.send_message(f"No combatant named **{controller}**.", ephemeral=True)
-        return
-    if tgt_cb is None:
-        await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
-        return
-    blocked, block_reason = condition_effects.cannot_act(ctrl_cb.conditions)
-    if blocked:
-        await interaction.response.send_message(f"**{ctrl_cb.name}** cannot act: {block_reason}", ephemeral=True)
-        return
-    if ctrl_cb.actions_used > 0:
-        await interaction.response.send_message(
-            f"**{ctrl_cb.name}** has already used actions this turn ({ctrl_cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.", ephemeral=True)
-        return
-    tgt_cb.conditions.add("pinned")
-    ctrl_cb.actions_used = 2
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"🤼 **{ctrl_cb.name}** pins **{tgt_cb.name}**!\n"
-        f"  {tgt_cb.name} is **Pinned**: fully immobilized. Can only speak or cast verbal-only Mastery 1 spells.\n"
-        f"  (Pin is a prerequisite for Bind.)"
-    )
-    await _combat_log(guild, f"Grapple Pin: {ctrl_cb.name} pins {tgt_cb.name}")
-
-
-@combat_grapple.command(name="break_free", description="Break free from a grapple. Controller: Simple Action, no roll. Defender: Complex Action, contested Jiujutsu/Str.")
-@app_commands.describe(
-    combatant="The combatant trying to break free.",
-    opponent="The grapple opponent (required for defender break-free contested roll; omit for controller break).",
-)
-@app_commands.autocomplete(combatant=_combatant_autocomplete, opponent=_combatant_autocomplete)
-async def grapple_break(
-    interaction: discord.Interaction,
-    combatant: str,
-    opponent: str | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(combatant)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
-        return
-    if "stunned" in cb.conditions:
-        await interaction.response.send_message(
-            f"**{cb.name}** cannot act: **Stunned** (recovers Earth TN 20 at Reactions Stage)", ephemeral=True)
-        return
-    guild = str(interaction.guild_id)
-
-    if opponent is None:
-        if cb.actions_used >= 2:
-            await interaction.response.send_message(
-                f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-                f"Use `/combat action reset` to override.", ephemeral=True)
-            return
-        cb.conditions.discard("grappled")
-        cb.conditions.discard("pinned")
-        cb.actions_used += 1
-        _save_encounter(guild, enc)
-        await interaction.response.send_message(
-            f"🤼 **{cb.name}** breaks free from the grapple (controller break, Simple Action).\n"
-            f"  Grappled condition removed. [{cb.actions_used}/2 actions used]"
-        )
-        await _combat_log(guild, f"Grapple Break: {cb.name} breaks free (controller)")
-        return
-
-    opp_cb = enc.find(opponent)
-    if opp_cb is None:
-        await interaction.response.send_message(f"No combatant named **{opponent}**.", ephemeral=True)
-        return
-    if cb.actions_used > 0:
-        await interaction.response.send_message(
-            f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-            f"Use `/combat action reset` to override.", ephemeral=True)
-        return
-    rec_cb = _resolve_combatant_record(guild, cb)
-    rec_opp = _resolve_combatant_record(guild, opp_cb)
-    if rec_cb is None or rec_opp is None:
-        await interaction.response.send_message(
-            "Both combatants need stored character sheets for contested break-free.", ephemeral=True)
-        return
-    str_def = rec_cb.character.strength
-    jiu_def = rec_cb.character.skills.get("Jiujutsu", 0)
-    str_ctrl = rec_opp.character.strength
-    jiu_ctrl = rec_opp.character.skills.get("Jiujutsu", 0)
-    wp_def = stats.wound_penalty(rec_cb.character)
-    wp_ctrl = stats.wound_penalty(rec_opp.character)
-    result = combat.resolve_grapple_control(str_def, jiu_def, str_ctrl, jiu_ctrl, engine, wp_def, wp_ctrl)
-    defender_wins = result["winner"] == "a"
-    cb.actions_used = 2
-    embed = discord.Embed(
-        title=f"🤼 {cb.name} tries to break free from {opp_cb.name}",
-        color=discord.Color.green() if defender_wins else discord.Color.red(),
-    )
-    embed.add_field(
-        name=f"{cb.name} (Jiujutsu/Strength)",
-        value=f"({str_def + jiu_def}k{str_def}) → **{result['total_a']}**",
-        inline=True,
-    )
-    embed.add_field(
-        name=f"{opp_cb.name} (Jiujutsu/Strength)",
-        value=f"({str_ctrl + jiu_ctrl}k{str_ctrl}) → **{result['total_b']}**",
-        inline=True,
-    )
-    if defender_wins:
-        cb.conditions.discard("grappled")
-        cb.conditions.discard("pinned")
-        embed.add_field(
-            name="Result",
-            value=f"**{cb.name}** breaks free! Grappled condition removed.",
-            inline=False,
-        )
-    else:
-        embed.add_field(
-            name="Result",
-            value=f"**{cb.name}** fails to escape. {opp_cb.name} retains control.",
-            inline=False,
-        )
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(embed=embed)
-    tag = "FREE" if defender_wins else "HELD"
-    await _combat_log(guild, f"Grapple Break: {cb.name} vs {opp_cb.name} → {tag}")
-
-
-# ===========================================================================
-# /duel group: Iaijutsu dueling (s40)
-# ===========================================================================
-
-
-
-@combat_duel.command(name="assess", description="Assessment stage: both duelists roll Iaijutsu(Assessment)/Awareness. Fortune role required.")
-@app_commands.describe(
-    duelist_a="First duelist (combatant name or character).",
-    duelist_b="Second duelist (combatant name or character).",
-    a_is_npc="First duelist is a stored NPC.",
-    b_is_npc="Second duelist is a stored NPC.",
-    a_member="First duelist is another player's character.",
-    b_member="Second duelist is another player's character.",
-)
-async def duel_assess(
-    interaction: discord.Interaction,
-    duelist_a: str,
-    duelist_b: str,
-    a_is_npc: bool = False,
-    b_is_npc: bool = False,
-    a_member: discord.Member | None = None,
-    b_member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    guild = str(interaction.guild_id)
-    ch = interaction.channel_id
-    rec_a = _resolve_duelist(guild, ch, duelist_a, a_is_npc, a_member)
-    rec_b = _resolve_duelist(guild, ch, duelist_b, b_is_npc, b_member)
-    if rec_a is None:
-        await interaction.response.send_message(f"No character found for **{duelist_a}**.", ephemeral=True)
-        return
-    if rec_b is None:
-        await interaction.response.send_message(f"No character found for **{duelist_b}**.", ephemeral=True)
-        return
-
-    ca, cb_char = rec_a.character, rec_b.character
-    ir_a = stats.insight_rank(ca)
-    ir_b = stats.insight_rank(cb_char)
-    wp_a = stats.wound_penalty(ca)
-    wp_b = stats.wound_penalty(cb_char)
-
-    res_a = combat.resolve_iaijutsu_assessment(
-        ca.awareness, ca.skills.get("Iaijutsu", 0), ir_b, engine, extra_flat=wp_a,
-    )
-    res_b = combat.resolve_iaijutsu_assessment(
-        cb_char.awareness, cb_char.skills.get("Iaijutsu", 0), ir_a, engine, extra_flat=wp_b,
-    )
-
-    diff_ab = res_a["total"] - res_b["total"]
-    focus_bonus = ""
-    if diff_ab >= 10:
-        focus_bonus = f"⚡ **{ca.name}** exceeded by {diff_ab} → **+1k1** on Focus roll."
-    elif diff_ab <= -10:
-        focus_bonus = f"⚡ **{cb_char.name}** exceeded by {-diff_ab} → **+1k1** on Focus roll."
-
-    embed = discord.Embed(title=f"⚔️ Iaijutsu Duel: Assessment", color=discord.Color.gold())
-
-    def _reveal_text(res, opponent):
-        if not res["success"]:
-            return "Failed: no information learned."
-        reveals = res["reveals"]
-        opponent_ir = stats.insight_rank(opponent)
-        opponent_iaijutsu = opponent.skills.get("Iaijutsu", 0)
-        available = [
-            f"Void Ring: **{opponent.void_ring}**",
-            f"Reflexes: **{opponent.reflexes}**",
-            f"Iaijutsu Skill: **{opponent_iaijutsu}**",
-            f"Iaijutsu Emphases: **{'Assessment, Focus' if opponent_iaijutsu >= 1 else 'none listed'}**",
-            f"Void Points: **{opponent.current_void_points}**",
-            f"Wound Level: **{stats.wound_level_name(opponent)}**",
-        ]
-        chosen = available[: reveals]
-        return "Learned " + str(reveals) + ":\n" + "\n".join(chosen)
-
-    embed.add_field(
-        name=f"{ca.name}: Assessment",
-        value=(
-            f"{res_a['rolled']}k{res_a['kept']} → **{res_a['total']}** vs TN **{res_a['tn']}**"
-            f": {'**SUCCESS**' if res_a['success'] else '**FAILED**'}"
-            + (f" (wound penalty {wp_a})" if wp_a else "")
-            + "\n" + _reveal_text(res_a, cb_char)
-        ),
-        inline=False,
-    )
-    embed.add_field(
-        name=f"{cb_char.name}: Assessment",
-        value=(
-            f"{res_b['rolled']}k{res_b['kept']} → **{res_b['total']}** vs TN **{res_b['tn']}**"
-            f": {'**SUCCESS**' if res_b['success'] else '**FAILED**'}"
-            + (f" (wound penalty {wp_b})" if wp_b else "")
-            + "\n" + _reveal_text(res_b, ca)
-        ),
-        inline=False,
-    )
-    if focus_bonus:
-        embed.add_field(name="Focus Bonus", value=focus_bonus.strip(), inline=False)
-    embed.set_footer(text="Either duelist may concede after Assessment. Otherwise: /duel focus")
-    await interaction.response.send_message(embed=embed)
-    await _combat_log(str(interaction.guild_id), f"Duel Assess: {ca.name} vs {cb_char.name}")
-
-
-@combat_duel.command(name="focus", description="Focus stage: contested Iaijutsu(Focus)/Void roll. Fortune role required.")
-@app_commands.describe(
-    duelist_a="First duelist.",
-    duelist_b="Second duelist.",
-    a_focus_bonus="Duelist A got +1k1 from Assessment (exceeded by 10+).",
-    b_focus_bonus="Duelist B got +1k1 from Assessment (exceeded by 10+).",
-    a_is_npc="First duelist is a stored NPC.",
-    b_is_npc="Second duelist is a stored NPC.",
-    a_member="First duelist is another player's character.",
-    b_member="Second duelist is another player's character.",
-)
-async def duel_focus(
-    interaction: discord.Interaction,
-    duelist_a: str,
-    duelist_b: str,
-    a_focus_bonus: bool = False,
-    b_focus_bonus: bool = False,
-    a_is_npc: bool = False,
-    b_is_npc: bool = False,
-    a_member: discord.Member | None = None,
-    b_member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    guild = str(interaction.guild_id)
-    ch = interaction.channel_id
-    rec_a = _resolve_duelist(guild, ch, duelist_a, a_is_npc, a_member)
-    rec_b = _resolve_duelist(guild, ch, duelist_b, b_is_npc, b_member)
-    if rec_a is None:
-        await interaction.response.send_message(f"No character found for **{duelist_a}**.", ephemeral=True)
-        return
-    if rec_b is None:
-        await interaction.response.send_message(f"No character found for **{duelist_b}**.", ephemeral=True)
-        return
-
-    ca, cb_char = rec_a.character, rec_b.character
-    bonus_r_a = 1 if a_focus_bonus else 0
-    bonus_k_a = 1 if a_focus_bonus else 0
-    bonus_r_b = 1 if b_focus_bonus else 0
-    bonus_k_b = 1 if b_focus_bonus else 0
-    wp_a = stats.wound_penalty(ca)
-    wp_b = stats.wound_penalty(cb_char)
-
-    result = combat.resolve_iaijutsu_focus(
-        ca.void_ring, ca.skills.get("Iaijutsu", 0),
-        cb_char.void_ring, cb_char.skills.get("Iaijutsu", 0),
-        engine,
-        bonus_rolled_a=bonus_r_a, bonus_kept_a=bonus_k_a,
-        bonus_rolled_b=bonus_r_b, bonus_kept_b=bonus_k_b,
-        extra_flat_a=wp_a, extra_flat_b=wp_b,
-    )
-
-    embed = discord.Embed(title="⚔️ Iaijutsu Duel: Focus", color=discord.Color.dark_gold())
-    a_mods = []
-    b_mods = []
-    if a_focus_bonus:
-        a_mods.append("+1k1 Assessment")
-    if wp_a:
-        a_mods.append(f"wound {wp_a}")
-    if b_focus_bonus:
-        b_mods.append("+1k1 Assessment")
-    if wp_b:
-        b_mods.append(f"wound {wp_b}")
-    a_notes = f" ({', '.join(a_mods)})" if a_mods else ""
-    b_notes = f" ({', '.join(b_mods)})" if b_mods else ""
-    embed.add_field(
-        name=f"{ca.name}: Focus (Iaijutsu/Void)",
-        value=f"{result['a_rolled']}k{result['a_kept']}{a_notes} → **{result['a_total']}**",
-        inline=True,
-    )
-    embed.add_field(
-        name=f"{cb_char.name}: Focus (Iaijutsu/Void)",
-        value=f"{result['b_rolled']}k{result['b_kept']}{b_notes} → **{result['b_total']}**",
-        inline=True,
-    )
-
-    diff = abs(result["diff"])
-    fs = result["first_striker"]
-    if fs == "kharmic":
-        outcome = (
-            f"Neither exceeds by 5: **Kharmic Strike** (simultaneous).\n"
-            f"Both attack at the same time; the cause is considered dropped."
-        )
-    else:
-        winner = ca.name if fs == "a" else cb_char.name
-        loser = cb_char.name if fs == "a" else ca.name
-        fr = result["free_raises"]
-        fr_text = f" with **{fr} Free Raise{'s' if fr != 1 else ''}**" if fr else ""
-        outcome = (
-            f"**{winner}** wins Focus by {diff} → strikes first{fr_text}.\n"
-            f"**{loser}** may strike after if still alive."
-        )
-    embed.add_field(name="Result", value=outcome, inline=False)
-    embed.set_footer(text="Proceed to: /duel strike")
-    await interaction.response.send_message(embed=embed)
-    if fs == "kharmic":
-        await _combat_log(str(interaction.guild_id), f"Duel Focus: {ca.name} vs {cb_char.name}: Kharmic Strike")
-    else:
-        winner = ca.name if fs == "a" else cb_char.name
-        await _combat_log(str(interaction.guild_id), f"Duel Focus: {winner} strikes first (margin {diff})")
-
-
-@combat_duel.command(name="strike", description="Strike stage: Iaijutsu/Reflexes attack roll + damage. Fortune role required.")
-@app_commands.describe(
-    attacker="The duelist striking.",
-    target="The opponent being struck.",
-    weapon="Weapon used (default: katana).",
-    free_raises="Free Raises from Focus (auto-applied to damage total).",
-    bonus_tn="DM situational modifier to the target's Armor TN.",
-    attacker_npc="Attacker is a stored NPC.",
-    target_npc="Target is a stored NPC.",
-    attacker_member="Attacker is another player's character.",
-    target_member="Target is another player's character.",
-)
-async def duel_strike(
-    interaction: discord.Interaction,
-    attacker: str,
-    target: str,
-    weapon: str = "katana",
-    free_raises: int = 0,
-    bonus_tn: int = 0,
-    attacker_npc: bool = False,
-    target_npc: bool = False,
-    attacker_member: discord.Member | None = None,
-    target_member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    guild = str(interaction.guild_id)
-    ch = interaction.channel_id
-    rec_a = _resolve_duelist(guild, ch, attacker, attacker_npc, attacker_member)
-    rec_t = _resolve_duelist(guild, ch, target, target_npc, target_member)
-    if rec_a is None:
-        await interaction.response.send_message(f"No character found for **{attacker}**.", ephemeral=True)
-        return
-    if rec_t is None:
-        await interaction.response.send_message(f"No character found for **{target}**.", ephemeral=True)
-        return
-
-    atk = rec_a.character
-    tgt = rec_t.character
-    wp = combat.get_weapon(weapon)
-    if wp is None:
-        await interaction.response.send_message(f"No weapon named **{weapon}**.", ephemeral=True)
-        return
-    target_tn = combat.armor_tn(tgt, "center", bonus_tn)
-    wound_pen = stats.wound_penalty(atk)
-    result = combat.resolve_iaijutsu_strike(
-        atk.reflexes, atk.skills.get("Iaijutsu", 0), target_tn, engine,
-        free_raises=free_raises, extra_flat=wound_pen,
-    )
-    hit = result["hit"]
-    embed = discord.Embed(
-        title=f"⚔️ {atk.name} strikes at {tgt.name}",
-        color=discord.Color.red() if hit else discord.Color.greyple(),
-    )
-    roll_text = (
-        f"Iaijutsu/Reflexes: {result['rolled']}k{result['kept']} → **{result['total']}**"
-        f" vs TN **{result['tn']}**: {'**HIT**' if hit else '**MISS**'}"
-    )
-    notes = []
-    if wound_pen:
-        notes.append(f"wound penalty {wound_pen}")
-    if free_raises:
-        notes.append(f"{free_raises} Free Raise{'s' if free_raises != 1 else ''} from Focus")
-    if notes:
-        roll_text += f"\n({', '.join(notes)})"
-    embed.add_field(name="Strike Roll", value=roll_text, inline=False)
-
-    view = None
-    if hit:
-        view = DamageView(
-            attacker_id=rec_a.id,
-            target_id=rec_t.id,
-            weapon=weapon,
-            increased_damage=free_raises,
-            attacker_name=atk.name,
-            target_name=tgt.name,
-            maneuver="none",
-            attack_margin=result["margin"],
-            channel_id=interaction.channel_id,
-        )
-    else:
-        embed.set_footer(text="The strike misses.")
-
-    await interaction.response.send_message(embed=embed, view=view)
-    tag = "HIT" if hit else "MISS"
-    await _combat_log(guild, f"Duel Strike: {atk.name} → {tgt.name} ({weapon}) {tag} (roll {result['total']} vs TN {result['tn']})")
-
-
 # ===========================================================================
 # /void group: Void Point management
 # ===========================================================================
-
 
 @sheet_void.command(name="spend", description="Spend a Void Point (general purpose: +1k1, negate Conditional, etc.).")
 @app_commands.describe(
@@ -5673,7 +2841,6 @@ async def void_spend(
         f"🌀 **{c.name}** spends a Void Point: {reason}\n"
         f"  VP remaining: **{c.current_void_points}/{c.max_void_points}**"
     )
-
 
 @sheet_void.command(name="refresh", description="Refresh Void Points (rest = full, or Meditation/Void check for 1).")
 @app_commands.describe(
@@ -5775,7 +2942,6 @@ async def void_refresh(
             )
         await interaction.response.send_message(embed=embed)
 
-
 @sheet_void.command(name="status", description="Show current Void Points for a character.")
 @app_commands.describe(
     member="Player to check (uses their active character). Omit = yourself.",
@@ -5815,7 +2981,6 @@ async def void_status(
         f"  Void Ring: **{c.void_ring}**",
         ephemeral=True,
     )
-
 
 # ===========================================================================
 # /help: categorized command reference
@@ -5917,9 +3082,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
         ("/ref ancestors / dual_wield / travel", "Other reference info."),
     ]),
 
-
 ]
-
 
 @client.tree.command(
     name="help",
@@ -5962,11 +3125,9 @@ async def help_command(
     embed.set_footer(text="Tip: /help category:Combat to see all combat commands.")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-
 # ===========================================================================
 # /npc group: generate and manage NPC characters (s22.4 templates)
 # ===========================================================================
-
 
 @dm_npc.command(name="generate", description="Generate an NPC samurai from a Clan/Family/School/Rank template. Fortune role required.")
 @app_commands.describe(
@@ -6033,7 +3194,6 @@ async def npc_generate(
         note += " No skills set: regenerate with `skills:` to give it school skills."
     await interaction.response.send_message(content=note, embed=build_sheet_embed(rec))
 
-
 @dm_npc.command(name="view", description="View a stored NPC.")
 @app_commands.describe(name="The NPC to view.")
 @app_commands.autocomplete(name=_npc_autocomplete)
@@ -6045,7 +3205,6 @@ async def npc_view(interaction: discord.Interaction, name: str) -> None:
         await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
         return
     await interaction.response.send_message(embed=build_sheet_embed(rec))
-
 
 @dm_npc.command(name="list", description="List the NPCs on this server.")
 async def npc_list(interaction: discord.Interaction) -> None:
@@ -6069,7 +3228,6 @@ async def npc_list(interaction: discord.Interaction) -> None:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view)
 
-
 @dm_npc.command(name="delete", description="Delete a stored NPC. Fortune role required.")
 @app_commands.describe(name="The NPC to delete.")
 @app_commands.autocomplete(name=_npc_autocomplete)
@@ -6085,7 +3243,6 @@ async def npc_delete(interaction: discord.Interaction, name: str) -> None:
     store.delete(rec.id)
     await interaction.response.send_message(f"Deleted NPC **{rec.character.name}**.", ephemeral=True)
 
-
 def _resolve_npc(
     interaction: discord.Interaction, name: str
 ) -> tuple[storage.CharacterRecord | None, str | None]:
@@ -6097,7 +3254,6 @@ def _resolve_npc(
     if rec is None:
         return None, f"No NPC named **{name}**."
     return rec, None
-
 
 @dm_npc.command(name="trait", description="Set a Trait (or Void) on an NPC. Fortune role required.")
 @app_commands.describe(name="NPC name.", trait="Which Trait.", value="New value (0-10).")
@@ -6119,7 +3275,6 @@ async def npc_trait(
     await interaction.response.send_message(
         f"Set **{label}** to **{value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
     )
-
 
 @dm_npc.command(name="skill", description="Set a skill rank on an NPC (0 removes it). Fortune role required.")
 @app_commands.describe(name="NPC name.", skill="Skill name.", rank="Rank 0-10 (0 removes).")
@@ -6144,7 +3299,6 @@ async def npc_skill(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-
 @dm_npc.command(name="set", description="Set a numeric field on an NPC (honor, armor, void points, etc.). Fortune role required.")
 @app_commands.describe(name="NPC name.", field="Which field.", value="New value.")
 @app_commands.choices(field=_SET_CHOICES)
@@ -6164,7 +3318,6 @@ async def npc_set(
     await interaction.response.send_message(
         f"Updated **{field.value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
     )
-
 
 @dm_npc.command(name="wound", description="Apply wounds to an NPC. Fortune role required.")
 @app_commands.describe(name="NPC name.", amount="Wounds to apply.")
@@ -6188,7 +3341,6 @@ async def npc_wound(
         embed=build_sheet_embed(rec),
     )
 
-
 @dm_npc.command(name="heal", description="Heal wounds on an NPC. Fortune role required.")
 @app_commands.describe(name="NPC name.", amount="Wounds to heal.")
 @app_commands.autocomplete(name=_npc_autocomplete)
@@ -6209,7 +3361,6 @@ async def npc_heal(
         f"**{c.name}** heals **{amount}** wounds → {c.wounds_taken} total{crossed}",
         embed=build_sheet_embed(rec),
     )
-
 
 @dm_npc.command(name="rename", description="Rename an NPC. Fortune role required.")
 @app_commands.describe(name="Current NPC name.", new_name="New name.")
@@ -6233,7 +3384,6 @@ async def npc_rename(
         f"Renamed **{old_name}** → **{new_name}**.", embed=build_sheet_embed(rec)
     )
 
-
 # -- NPC room placement & speech -------------------------------------------
 
 async def _get_npc_webhook(channel: discord.TextChannel) -> discord.Webhook:
@@ -6249,7 +3399,6 @@ async def _get_npc_webhook(channel: discord.TextChannel) -> discord.Webhook:
     _npc_webhooks[channel.id] = wh
     return wh
 
-
 async def _room_npc_autocomplete(
     interaction: discord.Interaction, current: str,
 ) -> list[app_commands.Choice[str]]:
@@ -6263,7 +3412,6 @@ async def _room_npc_autocomplete(
         app_commands.Choice(name=n, value=n)
         for n in sorted(names) if cur in n.lower()
     ][:25]
-
 
 @dm_npc.command(name="place", description="Place an NPC in this room (run inside a room thread). Fortune role required.")
 @app_commands.describe(name="NPC to place in the room.")
@@ -6286,7 +3434,6 @@ async def npc_place(interaction: discord.Interaction, name: str) -> None:
         f"🎭 **{rec.character.name}** enters **{room.name}**.\n"
         f"NPCs present: {npc_list}"
     )
-
 
 @dm_npc.command(name="dismiss", description="Remove an NPC from this room. Fortune role required.")
 @app_commands.describe(name="NPC to remove from the room.")
@@ -6315,7 +3462,6 @@ async def npc_dismiss(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(
         f"🎭 **{matched}** leaves **{room.name}**.\nNPCs present: {npc_list}"
     )
-
 
 @dm_npc.command(name="say", description="Speak as an NPC (posts as their name via webhook). Fortune role required.")
 @app_commands.describe(name="Which NPC speaks.", message="What they say.")
@@ -6353,7 +3499,6 @@ async def npc_say(interaction: discord.Interaction, name: str, message: app_comm
         )
     except discord.HTTPException as exc:
         await interaction.response.send_message(f"Webhook failed: {exc}", ephemeral=True)
-
 
 # --- NPC inventory, spells, notes, clone -----------------------------------
 
@@ -6394,7 +3539,6 @@ async def npc_item(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-
 @dm_npc.command(name="spell", description="Add or remove a spell from an NPC's known spell list. Fortune role required.")
 @app_commands.describe(
     name="NPC name.", spell="Spell name to add or remove.", remove="Remove instead of adding.",
@@ -6429,7 +3573,6 @@ async def npc_spell(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-
 @dm_npc.command(name="notes", description="Set or clear notes on an NPC. Fortune role required.")
 @app_commands.describe(
     name="NPC name.", text="Notes text (omit or leave empty to clear).",
@@ -6449,7 +3592,6 @@ async def npc_notes(
     else:
         msg = f"Notes cleared on **{rec.character.name}**."
     await interaction.response.send_message(msg, ephemeral=True)
-
 
 @dm_npc.command(name="clone", description="Clone an NPC with a new name. Fortune role required.")
 @app_commands.describe(name="NPC to clone.", new_name="Name for the clone.")
@@ -6475,7 +3617,6 @@ async def npc_clone(
         f"🎭 Cloned **{rec.character.name}** → **{clone.name}**.",
         embed=build_sheet_embed(new_rec),
     )
-
 
 @dm_npc.command(name="equip", description="Set an NPC's equipped weapon and/or armor name. Fortune role required.")
 @app_commands.describe(
@@ -6529,7 +3670,6 @@ async def npc_equip(
         embed=build_sheet_embed(rec),
     )
 
-
 _FEATURE_FIELDS = [
     app_commands.Choice(name="Advantage", value="advantages"),
     app_commands.Choice(name="Disadvantage", value="disadvantages"),
@@ -6540,7 +3680,6 @@ _FEATURE_FIELDS = [
     app_commands.Choice(name="Weapon Quality", value="weapon_qualities"),
     app_commands.Choice(name="Emphasis", value="_emphasis"),
 ]
-
 
 @dm_npc.command(name="feature", description="Add or remove an advantage, technique, kata, kiho, weapon, quality, or emphasis. Fortune role required.")
 @app_commands.describe(
@@ -6611,12 +3750,10 @@ async def npc_feature(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-
 _ELEMENT_CHOICES = [
     app_commands.Choice(name=e, value=e)
     for e in ("Air", "Earth", "Fire", "Water", "Void", "(clear)")
 ]
-
 
 @dm_npc.command(name="affinity", description="Set an NPC's affinity and/or deficiency element. Fortune role required.")
 @app_commands.describe(
@@ -6654,15 +3791,12 @@ async def npc_affinity(
         ephemeral=True,
     )
 
-
 # ===========================================================================
 # /room group: private-thread play rooms with invites
 # ===========================================================================
 
-
 def _room_host_or_dm(interaction: discord.Interaction, rec: storage.RoomRecord) -> bool:
     return str(interaction.user.id) == rec.host_id or _is_dm(interaction)
-
 
 async def _resolve_current_room(
     interaction: discord.Interaction,
@@ -6672,7 +3806,6 @@ async def _resolve_current_room(
     if rec is None:
         return None, "Run this inside a room's thread (open one with `/room create`)."
     return rec, None
-
 
 @dm_room.command(name="create", description="Create a private play room (a thread) and become its host.")
 @app_commands.describe(name="Room name.", description="Optional location description (pinned at top of the room).")
@@ -6717,7 +3850,6 @@ async def room_create(
         pin_msg = await thread.send(embed=embed)
         await pin_msg.pin()
 
-
 @dm_room.command(name="describe", description="Set or update the room's pinned description (run inside the room).")
 @app_commands.describe(description="The new location description to pin.")
 async def room_describe(
@@ -6748,7 +3880,6 @@ async def room_describe(
     pin_msg = await interaction.channel.send(embed=embed)
     await pin_msg.pin()
 
-
 @dm_room.command(name="invite", description="Invite a member into this room (run inside the room's thread).")
 @app_commands.describe(member="Who to invite.")
 async def room_invite(interaction: discord.Interaction, member: discord.Member) -> None:
@@ -6770,7 +3901,6 @@ async def room_invite(interaction: discord.Interaction, member: discord.Member) 
         return
     store.add_room_member(rec.id, str(member.id))
     await interaction.response.send_message(f"➕ {member.mention} joined **{rec.name}**.")
-
 
 @dm_room.command(name="kick", description="Remove a member from this room (run inside the room's thread).")
 @app_commands.describe(member="Who to remove.")
@@ -6794,7 +3924,6 @@ async def room_kick(interaction: discord.Interaction, member: discord.Member) ->
     store.remove_room_member(rec.id, str(member.id))
     await interaction.response.send_message(f"➖ Removed {member.mention} from **{rec.name}**.")
 
-
 @dm_room.command(name="members", description="List who's in this room (run inside the room's thread).")
 async def room_members(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
@@ -6811,7 +3940,6 @@ async def room_members(interaction: discord.Interaction) -> None:
         f"🏮 **{rec.name}**: host <@{rec.host_id}>\nMembers: {mentions}{npc_line}",
         ephemeral=True,
     )
-
 
 @dm_room.command(name="list", description="List the open rooms on this server.")
 async def room_list(interaction: discord.Interaction) -> None:
@@ -6834,7 +3962,6 @@ async def room_list(interaction: discord.Interaction) -> None:
         )
     await interaction.response.send_message("🏮 **Open rooms: **\n" + "\n".join(lines[:40]), ephemeral=True)
 
-
 @dm_room.command(name="close", description="Close this room (archives the thread). Host or Fortune role required.")
 async def room_close(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
@@ -6856,158 +3983,9 @@ async def room_close(interaction: discord.Interaction) -> None:
     except discord.Forbidden:
         pass
 
-
-@combat_group.command(name="creature", description="Add a spawned creature to initiative (rolls its initiative). Fortune role required.")
-@app_commands.describe(name="The creature to add.")
-@app_commands.autocomplete(name=_creature_instance_autocomplete)
-async def combat_creature(interaction: discord.Interaction, name: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec = store.get_creature_by_name(str(interaction.guild_id), name)
-    if rec is None:
-        await interaction.response.send_message(f"No creature named **{name}**.", ephemeral=True)
-        return
-    result = creature.roll_creature_initiative(rec.creature, engine)
-    enc = _get_or_create(interaction.channel_id)
-    enc.remove(rec.creature.name)
-    enc.add(encounter.Combatant(
-        name=rec.creature.name,
-        initiative=result.total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}",
-        owner_id=None,
-        is_npc=True,
-        reflexes=rec.creature.air,
-    ))
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(_render_encounter(enc, guild))
-
-
-@combat_group.command(
-    name="category",
-    description="Add all NPCs and creatures in a category to initiative. Fortune role required.",
-)
-@app_commands.describe(category="Which category to add.")
-@app_commands.autocomplete(category=_category_autocomplete)
-async def combat_category(interaction: discord.Interaction, category: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    guild = str(interaction.guild_id)
-    cat = store.get_category(guild, category)
-    if cat is None:
-        await interaction.response.send_message(f"No category named **{category}**.", ephemeral=True)
-        return
-    members = store.list_category_members(cat.id)
-    if not members:
-        await interaction.response.send_message(f"**{cat.name}** is empty.", ephemeral=True)
-        return
-    enc = _get_or_create(interaction.channel_id)
-    added: list[str] = []
-    not_found: list[str] = []
-    for etype, ename in members:
-        if etype == "npc":
-            rec = store.get_by_name(guild, NPC_OWNER, ename)
-            if rec is None:
-                not_found.append(f"NPC {ename}")
-                continue
-            result = combat.roll_initiative(rec.character, engine)
-            swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
-            init_total = result.total + swift_bonus
-            swift_detail = f" +5 Swift" if swift_bonus else ""
-            enc.remove(rec.character.name)
-            enc.add(encounter.Combatant(
-                name=rec.character.name,
-                initiative=init_total,
-                initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
-                owner_id=None,
-                is_npc=True,
-                reflexes=rec.character.reflexes,
-            ))
-            added.append(rec.character.name)
-        else:
-            rec_c = store.get_creature_by_name(guild, ename)
-            if rec_c is None:
-                not_found.append(f"Creature {ename}")
-                continue
-            result = creature.roll_creature_initiative(rec_c.creature, engine)
-            enc.remove(rec_c.creature.name)
-            enc.add(encounter.Combatant(
-                name=rec_c.creature.name,
-                initiative=result.total,
-                initiative_detail=f"kept {result.kept_dice} = {result.total}",
-                owner_id=None,
-                is_npc=True,
-                reflexes=rec_c.creature.air,
-            ))
-            added.append(rec_c.creature.name)
-    _save_encounter(guild, enc)
-    parts = [_render_encounter(enc, guild)]
-    if not_found:
-        parts.append(f"Not found (skipped): {', '.join(not_found)}")
-    await interaction.response.send_message("\n".join(parts))
-
-
-@combat_group.command(
-    name="room",
-    description="Add all room members' active characters to initiative. Fortune role required.",
-)
-async def combat_room(interaction: discord.Interaction) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec = store.get_room_by_thread(str(interaction.channel_id))
-    if rec is None:
-        await interaction.response.send_message(
-            "Run this inside a room's thread (open one with `/room create`).", ephemeral=True
-        )
-        return
-    guild = str(interaction.guild_id)
-    member_ids = store.list_room_members(rec.id)
-    enc = _get_or_create(interaction.channel_id)
-    added: list[str] = []
-    skipped: list[str] = []
-    for uid in member_ids:
-        char_rec = store.get_active(guild, uid)
-        if char_rec is None:
-            skipped.append(f"<@{uid}>")
-            continue
-        result = combat.roll_initiative(char_rec.character, engine)
-        swift_bonus = 5 if "swift" in char_rec.character.weapon_qualities else 0
-        init_total = result.total + swift_bonus
-        swift_detail = f" +5 Swift" if swift_bonus else ""
-        enc.remove(char_rec.character.name)
-        enc.add(encounter.Combatant(
-            name=char_rec.character.name,
-            initiative=init_total,
-            initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
-            owner_id=uid,
-            is_npc=False,
-            reflexes=char_rec.character.reflexes,
-        ))
-        added.append(f"**{char_rec.character.name}** (init {init_total})")
-    _save_encounter(guild, enc)
-    parts = []
-    if added:
-        parts.append("Added: " + ", ".join(added))
-    if skipped:
-        parts.append("Skipped (no active character): " + ", ".join(skipped))
-    if not added and not skipped:
-        parts.append("No members in this room.")
-    parts.append(_render_encounter(enc, guild))
-    await interaction.response.send_message("\n".join(parts))
-    for entry in added:
-        await _combat_log(guild, f"Room join: {entry}")
-
-
 # ===========================================================================
 # /creature group: bestiary monsters and creature combat
 # ===========================================================================
-
 
 class CreatureAttackView(discord.ui.View):
     """DM-only button: apply a creature's fixed damage to a character it hit."""
@@ -7083,7 +4061,6 @@ class CreatureAttackView(discord.ui.View):
         await interaction.followup.send(
             f"🛡️ {interaction.user.display_name} ruled no damage from {self.creature_name}."
         )
-
 
 class SpellDamageView(discord.ui.View):
     """DM-approval gate for spell damage: shows the rolled damage and lets
@@ -7215,7 +4192,6 @@ class SpellDamageView(discord.ui.View):
             f"{applied['final_damage']} wounds [{applied['new_wound_level']}]{dead_tag}",
         )
 
-
 class DmDamageView(discord.ui.View):
     """DM-approval gate for /dm damage: shows pending damage and lets a DM
     confirm or deny before applying to the target's sheet."""
@@ -7344,7 +4320,6 @@ class DmDamageView(discord.ui.View):
         else:
             await interaction.followup.send(msg)
 
-
 class DmHealView(discord.ui.View):
     """DM-approval gate for /dm heal: shows pending healing and lets a DM
     confirm or deny before modifying the target's wound track."""
@@ -7435,7 +4410,6 @@ class DmHealView(discord.ui.View):
         else:
             await interaction.followup.send(msg)
 
-
 def _resolve_creature(
     interaction: discord.Interaction, name: str, require_dm: bool = True
 ) -> tuple[storage.CreatureRecord | None, str | None]:
@@ -7447,7 +4421,6 @@ def _resolve_creature(
     if rec is None:
         return None, f"No creature named **{name}**."
     return rec, None
-
 
 @dm_creature.command(name="catalog", description="Search the bestiary templates you can spawn.")
 @app_commands.describe(search="Filter by name, id, or tag (e.g. 'oni', 'goblin', 'wolf'). Omit for a summary.")
@@ -7486,7 +4459,6 @@ async def creature_catalog(interaction: discord.Interaction, search: str | None 
     else:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
-
 
 @dm_creature.command(name="search", description="Search bestiary templates with detailed output. Fortune role required.")
 @app_commands.describe(query="Search by name, id, or tag (e.g. 'oni', 'bear', 'spirit').")
@@ -7543,7 +4515,6 @@ async def creature_search(interaction: discord.Interaction, query: str) -> None:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
-
 @dm_creature.command(name="info", description="View the full stat block of a bestiary template (without spawning). Fortune role required.")
 @app_commands.describe(template="Which creature template to look up.")
 @app_commands.autocomplete(template=_creature_template_autocomplete)
@@ -7559,7 +4530,6 @@ async def creature_info(interaction: discord.Interaction, template: str) -> None
         )
         return
     await interaction.response.send_message(embed=_build_creature_template_embed(tmpl), ephemeral=True)
-
 
 @dm_creature.command(name="compare", description="Compare two bestiary templates side-by-side. Fortune role required.")
 @app_commands.describe(template_a="First creature template.", template_b="Second creature template.")
@@ -7585,7 +4555,6 @@ async def creature_compare(interaction: discord.Interaction, template_a: str, te
     embed.add_field(name=f"⚔️ {b.name}", value=_creature_compact_summary(b), inline=False)
     embed.set_footer(text=f"{template_a}  vs  {template_b}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
-
 
 @dm_creature.command(name="spawn", description="Spawn a creature instance from a template. Fortune role required.")
 @app_commands.describe(template="Which creature template.", name="Instance name (default: the template's name).")
@@ -7615,7 +4584,6 @@ async def creature_spawn(interaction: discord.Interaction, template: str, name: 
         content=f"👹 Spawned **{inst_name}**.", embed=build_creature_embed(rec)
     )
 
-
 @dm_creature.command(name="list", description="List spawned creatures on this server.")
 async def creature_list(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
@@ -7638,7 +4606,6 @@ async def creature_list(interaction: discord.Interaction) -> None:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view)
 
-
 @dm_creature.command(name="view", description="View a spawned creature.")
 @app_commands.describe(name="The creature to view.")
 @app_commands.autocomplete(name=_creature_instance_autocomplete)
@@ -7648,7 +4615,6 @@ async def creature_view(interaction: discord.Interaction, name: str) -> None:
         await interaction.response.send_message(err, ephemeral=True)
         return
     await interaction.response.send_message(embed=build_creature_embed(rec))
-
 
 @dm_creature.command(name="delete", description="Remove a spawned creature. Fortune role required.")
 @app_commands.describe(name="The creature to remove.")
@@ -7660,7 +4626,6 @@ async def creature_delete(interaction: discord.Interaction, name: str) -> None:
         return
     store.delete_creature(rec.id)
     await interaction.response.send_message(f"Removed creature **{rec.creature.name}**.", ephemeral=True)
-
 
 @dm_creature.command(name="wound", description="Apply wounds to a creature directly (no reduction). Fortune role required.")
 @app_commands.describe(name="The creature.", amount="Wounds to apply.")
@@ -7681,7 +4646,6 @@ async def creature_wound(
         embed=build_creature_embed(rec),
     )
 
-
 @dm_creature.command(name="heal", description="Heal a creature's wounds. Fortune role required.")
 @app_commands.describe(name="The creature.", amount="Wounds to heal.")
 @app_commands.autocomplete(name=_creature_instance_autocomplete)
@@ -7698,7 +4662,6 @@ async def creature_heal(
         f"**{rec.creature.name}** healed **{amount}** → {rec.creature.wounds_taken}/{rec.creature.wounds_dead}",
         embed=build_creature_embed(rec),
     )
-
 
 @dm_creature.command(name="attack", description="A creature attacks a player/NPC (fixed stat block). Fortune role required.")
 @app_commands.describe(
@@ -7777,7 +4740,6 @@ async def creature_attack_cmd(
         await interaction.response.send_message(embed=embed)
         await _combat_log(guild, f"Creature Attack: {cr.name} → {t_name} MISS (roll {outcome['total']} vs TN {outcome['tn']})")
 
-
 # ===========================================================================
 # /dm category — organise NPCs & creatures into named groups
 # ===========================================================================
@@ -7785,7 +4747,6 @@ _ENTITY_TYPE_CHOICES = [
     app_commands.Choice(name="NPC", value="npc"),
     app_commands.Choice(name="Creature", value="creature"),
 ]
-
 
 async def _category_autocomplete(
     interaction: discord.Interaction, current: str,
@@ -7798,7 +4759,6 @@ async def _category_autocomplete(
         app_commands.Choice(name=c.name, value=c.name)
         for c in cats if cur in c.name.lower()
     ][:25]
-
 
 @dm_category.command(name="create", description="Create a new category. Fortune role required.")
 @app_commands.describe(name="Category name (e.g. 'Bandits', 'Town Guards', 'Wildlife').")
@@ -7814,7 +4774,6 @@ async def category_create(interaction: discord.Interaction, name: app_commands.R
         return
     await interaction.response.send_message(f"\U0001f4c1 Created category **{cat.name}**.")
 
-
 @dm_category.command(name="delete", description="Delete a category (members are NOT deleted). Fortune role required.")
 @app_commands.describe(name="Category to delete.")
 @app_commands.autocomplete(name=_category_autocomplete)
@@ -7829,7 +4788,6 @@ async def category_delete(interaction: discord.Interaction, name: str) -> None:
         return
     store.delete_category(cat.id)
     await interaction.response.send_message(f"\U0001f4c1 Deleted category **{cat.name}**.", ephemeral=True)
-
 
 @dm_category.command(name="rename", description="Rename a category. Fortune role required.")
 @app_commands.describe(name="Current category name.", new_name="New name.")
@@ -7851,7 +4809,6 @@ async def category_rename(
         await interaction.response.send_message(f"Category **{new_name}** already exists.", ephemeral=True)
         return
     await interaction.response.send_message(f"\U0001f4c1 Renamed **{cat.name}** → **{new_name.strip()}**.")
-
 
 @dm_category.command(name="add", description="Add an NPC or creature to a category. Fortune role required.")
 @app_commands.describe(
@@ -7892,7 +4849,6 @@ async def category_add(
         f"\U0001f4c1 Added {kind.name} **{name}** to **{cat.name}**.",
     )
 
-
 @dm_category.command(name="remove", description="Remove an NPC or creature from a category. Fortune role required.")
 @app_commands.describe(
     category="Which category.", kind="NPC or creature.", name="Name to remove.",
@@ -7921,7 +4877,6 @@ async def category_remove(
         f"\U0001f4c1 Removed {kind.name} **{name}** from **{cat.name}**.", ephemeral=True,
     )
 
-
 @dm_category.command(name="list", description="List all categories on this server.")
 async def category_list(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
@@ -7941,7 +4896,6 @@ async def category_list(interaction: discord.Interaction) -> None:
     else:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
-
 
 @dm_category.command(name="view", description="View all members of a category.")
 @app_commands.describe(category="Which category to view.")
@@ -7969,7 +4923,6 @@ async def category_view(interaction: discord.Interaction, category: str) -> None
     else:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
-
 
 @dm_category.command(name="bulk_add", description="Add multiple NPCs or creatures to a category at once. Fortune role required.")
 @app_commands.describe(
@@ -8026,7 +4979,6 @@ async def category_bulk_add(
         ephemeral=True,
     )
 
-
 @dm_category.command(name="bulk_remove", description="Remove multiple NPCs or creatures from a category at once. Fortune role required.")
 @app_commands.describe(
     category="Which category.",
@@ -8069,7 +5021,6 @@ async def category_bulk_remove(
         f"\U0001f4c1 **{cat.name}** — {kind.name} bulk remove\n" + "\n".join(parts),
         ephemeral=True,
     )
-
 
 @dm_category.command(name="spawn", description="Spawn all creature templates in a category as instances. Fortune role required.")
 @app_commands.describe(category="Which category to spawn creatures from.")
@@ -8120,11 +5071,9 @@ async def category_spawn(interaction: discord.Interaction, category: str) -> Non
         f"👹 Category **{cat.name}** — spawn\n" + "\n".join(parts),
     )
 
-
 # ===========================================================================
 # /xp group: Experience: DMs grant, players spend to advance (L5R 4e RAW)
 # ===========================================================================
-
 
 async def _buy_named(interaction, member, name, mastery_level, attr, label, emoji, note="", cost=None):
     """Shared handler for Kata / Kiho / memorised Spell (cost = 1 x Mastery Level unless overridden)."""
@@ -8152,7 +5101,6 @@ async def _buy_named(interaction, member, name, mastery_level, attr, label, emoj
         f"{emoji} **{c.name}** learns the {label} **{name}** (ML {mastery_level}) for **{cost}** XP.{note}\n"
         f"XP left {c.xp:g}", embed=build_sheet_embed(rec))
 
-
 @sheet_xp.command(name="grant", description="Grant (or correct) a player's Experience. Fortune role required.")
 @app_commands.describe(member="The player to grant XP to.", amount="XP amount (negative to correct).", reason="Optional note.")
 async def xp_grant(interaction: discord.Interaction, member: discord.Member, amount: app_commands.Range[float, -100000.0, 100000.0], reason: str | None = None) -> None:
@@ -8170,7 +5118,6 @@ async def xp_grant(interaction: discord.Interaction, member: discord.Member, amo
     await interaction.response.send_message(
         f"✨ {member.mention}'s **{rec.character.name}** {'gains' if amount >= 0 else 'loses'} "
         f"**{abs(amount):g}** XP -> **{rec.character.xp:g}** available{note}")
-
 
 @sheet_xp.command(name="balance", description="Show a character's available Experience.")
 @app_commands.describe(member="Whose XP to show (Fortune). Omit for your own.")
@@ -8191,7 +5138,6 @@ async def xp_balance(interaction: discord.Interaction, member: discord.Member | 
     await interaction.response.send_message(
         f"**{c.name}** - XP available **{c.xp:g}**, spent {c.xp_spent:g}. "
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}).", ephemeral=True)
-
 
 @sheet_xp.command(name="trait", description="Spend XP to raise a Trait or Void (RAW: Trait N x4, Void N x6).")
 @app_commands.describe(trait="Which Trait (or Void) to raise.", member="Advance another player's character (Fortune).")
@@ -8225,7 +5171,6 @@ async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[
         f"\U0001F300 **{c.name}** raises **{label}** to rank **{new_rank}** for **{cost}** XP.\n"
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}", embed=build_sheet_embed(rec))
 
-
 @sheet_xp.command(name="skill", description="Spend XP to raise or learn a Skill (RAW: new rank x1).")
 @app_commands.describe(skill="Skill name.", member="Advance another player's character (Fortune).")
 async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[str, 1, 40], member: discord.Member | None = None) -> None:
@@ -8256,7 +5201,6 @@ async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[s
         f"\U0001F4D8 **{c.name}** raises **{skill_name}** to rank **{new_rank}** for **{cost}** XP.\n"
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}", embed=build_sheet_embed(rec))
 
-
 @sheet_xp.command(name="emphasis", description="Spend 2 XP to add a Skill Emphasis (max ceil(rank/2) per skill).")
 @app_commands.describe(skill="The skill to add an Emphasis to.", emphasis="The Emphasis (e.g. Katana).", member="Advance another player's character (Fortune).")
 async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Range[str, 1, 40], emphasis: app_commands.Range[str, 1, 40], member: discord.Member | None = None) -> None:
@@ -8285,7 +5229,6 @@ async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Rang
         f"\U0001F3AF **{c.name}** gains **{skill_name} (Emphasis: {emph})** for **{cost}** XP. XP left {c.xp:g}",
         embed=build_sheet_embed(rec))
 
-
 @sheet_xp.command(name="kata", description="Learn a Kata (cost = 1 x Mastery Level).")
 @app_commands.describe(
     name="Kata name (catalog match auto-fills the Mastery Level).",
@@ -8308,7 +5251,6 @@ async def xp_kata(
         return
     canonical = rec["name"] if rec else name.strip()
     await _buy_named(interaction, member, canonical, ml, "katas", "kata", "\U0001F94B")
-
 
 @sheet_xp.command(name="kiho", description="Learn a Kiho (cost = 1 x Mastery Level; non-Brotherhood pay 1.5x, ceil).")
 @app_commands.describe(
@@ -8337,7 +5279,6 @@ async def xp_kiho(
     note = " *(non-Brotherhood monk: 1.5x cost, per s38a.)*" if non_brotherhood else ""
     await _buy_named(interaction, member, canonical, ml, "kiho", "kiho", "✋", note=note, cost=cost)
 
-
 @sheet_xp.command(name="spell", description="Memorise a spell so no scroll is needed (cost = 1 x Mastery Level).")
 @app_commands.describe(
     name="Spell name (catalog match auto-fills the Mastery Level).",
@@ -8360,7 +5301,6 @@ async def xp_spell(
         return
     canonical = spell["name"] if spell else name.strip()
     await _buy_named(interaction, member, canonical, ml, "spells_known", "spell", "\U0001F4DC")
-
 
 @sheet_xp.command(name="advantage", description="Buy an Advantage with XP (cost = its point value).")
 @app_commands.describe(
@@ -8418,7 +5358,6 @@ async def xp_advantage(
     if param_hint and ":" not in input_name:
         msg += f"\n*Hint: use `{adv['name']}: <{param_hint}>` to record the chosen option.*"
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
 
 @sheet_xp.command(name="remove_disadvantage", description="Buy off a Disadvantage with XP (cost = 2x its point value).")
 @app_commands.describe(
@@ -8481,7 +5420,6 @@ async def xp_remove_disadvantage(
         embed=build_sheet_embed(rec),
     )
 
-
 @sheet_xp.command(name="costs", description="Show the Experience cost reference (L5R 4e RAW).")
 async def xp_costs(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
@@ -8493,7 +5431,6 @@ async def xp_costs(interaction: discord.Interaction) -> None:
 # ===========================================================================
 # /school group: schools & techniques (GDD s29)
 # ===========================================================================
-
 
 @sheet.command(name="learn", description="Record the techniques your school grants up to your School Rank.")
 @app_commands.describe(
@@ -8541,7 +5478,6 @@ async def school_learn(
         msg = f"**{c.name}** already knows all **{s['name']}** techniques up to Rank {c.school_rank}."
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-
 # ===========================================================================
 # /spell group: spells & elements (GDD s32–s37)
 # ===========================================================================
@@ -8552,7 +5488,6 @@ _ELEMENT_COLORS = {
     "fire": discord.Color.red(), "water": discord.Color.blue(),
     "void": discord.Color.purple(), "all": discord.Color.teal(),
 }
-
 
 def build_spell_embed(s: dict) -> discord.Embed:
     color = _ELEMENT_COLORS.get(s["element"].lower(), discord.Color.teal())
@@ -8574,7 +5509,6 @@ def build_spell_embed(s: dict) -> discord.Embed:
     if s["effect"]:
         embed.add_field(name="Effect", value=s["effect"][:1024], inline=False)
     return embed
-
 
 @spell_group.command(name="list", description="List spells by element (or a summary).")
 @app_commands.describe(element="Air, Earth, Fire, Water, Void, All. Omit for a summary.")
@@ -8605,7 +5539,6 @@ async def spell_list(interaction: discord.Interaction, element: str | None = Non
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
-
 @spell_group.command(name="search", description="Search spells by name, element, or keyword.")
 @app_commands.describe(query="Name, element, or keyword fragment.")
 async def spell_search(interaction: discord.Interaction, query: str) -> None:
@@ -8621,7 +5554,6 @@ async def spell_search(interaction: discord.Interaction, query: str) -> None:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
-
 @spell_group.command(name="view", description="Show a spell's element, mastery, range, and effect.")
 @app_commands.describe(name="The spell to view.")
 @app_commands.autocomplete(name=_spell_autocomplete)
@@ -8633,7 +5565,6 @@ async def spell_view(interaction: discord.Interaction, name: str) -> None:
         )
         return
     await interaction.response.send_message(embed=build_spell_embed(s))
-
 
 @spell_group.command(name="cast", description="Roll a Spell Casting Roll: (Ring + School Rank) keep Ring vs TN.")
 @app_commands.describe(
@@ -8789,7 +5720,6 @@ async def spell_cast(
             embed.add_field(name="Effect", value=effect_text, inline=False)
     await interaction.response.send_message(embed=embed)
 
-
 @spell_group.command(name="resist", description="Target resists a spell: Willpower roll vs TN. Fortune role required.")
 @app_commands.describe(
     target="Character resisting the spell.",
@@ -8859,7 +5789,6 @@ async def spell_resist(
     )
     await interaction.response.send_message(embed=embed)
 
-
 @spell_group.command(name="interrupt", description="Willpower check when a caster is hit mid-cast. Disrupted = slot refunded. Fortune role required.")
 @app_commands.describe(
     caster="Character being interrupted.",
@@ -8924,7 +5853,6 @@ async def spell_interrupt(
         inline=False,
     )
     await interaction.response.send_message(embed=embed)
-
 
 @spell_group.command(name="importune", description="Entreat the kami for a spell you don't have: Spellcraft/Ring, then cast at higher TN.")
 @app_commands.describe(
@@ -9097,356 +6025,6 @@ async def spell_importune(
     embed.color = discord.Color.gold() if cast_success else discord.Color.greyple()
     await interaction.response.send_message(embed=embed)
 
-
-# ---------------------------------------------------------------------------
-# Phase 42: Stance Tracking (#1)
-# ---------------------------------------------------------------------------
-
-_STANCE_CHOICES = [
-    app_commands.Choice(name="Attack (standard)", value="attack"),
-    app_commands.Choice(name="Full Attack (+2k1 hit, −10 ATN, no ranged)", value="full_attack"),
-    app_commands.Choice(name="Defense (+Air+Defense to ATN, no attacks)", value="defense"),
-    app_commands.Choice(name="Full Defense (use /combat full_defense)", value="full_defense"),
-    app_commands.Choice(name="Center (forfeit actions, +1k1+Void next)", value="center"),
-]
-
-
-@combat_group.command(name="stance", description="Declare your stance for this turn (persists until your next turn).")
-@app_commands.describe(
-    name="Combatant name.",
-    stance="Stance to adopt.",
-)
-@app_commands.choices(stance=_STANCE_CHOICES)
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_stance(
-    interaction: discord.Interaction,
-    name: str,
-    stance: app_commands.Choice[str],
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(name)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
-        return
-    if stance.value not in encounter.VALID_STANCES:
-        valid = ", ".join(s.replace("_", " ").title() for s in sorted(encounter.VALID_STANCES))
-        await interaction.response.send_message(f"Invalid stance. Valid: {valid}.", ephemeral=True)
-        return
-    if stance.value == "full_defense":
-        await interaction.response.send_message(
-            f"Use `/combat full_defense combatant:{cb.name}` instead — Full Defense requires a Defense/Reflexes roll (Complex Action).",
-            ephemeral=True,
-        )
-        return
-    blocked, block_reason = condition_effects.invalid_stance(cb.conditions, stance.value)
-    if blocked:
-        await interaction.response.send_message(f"**{cb.name}** cannot use that stance: {block_reason}", ephemeral=True)
-        return
-    cb.stance = stance.value
-    if stance.value == "center":
-        cb.center_bonus_available = False
-        cb.center_init_boost = 0
-    _save_encounter(str(interaction.guild_id), enc)
-    label = stance.name
-    effects = combat.stance_effects(stance.value)
-    msg = f"**{cb.name}** adopts **{label}** stance."
-    if effects:
-        msg += f"\n{effects}"
-    await interaction.response.send_message(msg)
-    await _combat_log(str(interaction.guild_id), f"Stance: {cb.name} → {label}")
-
-
-@combat_turn.command(name="init", description="Adjust a combatant's initiative value (Fortune).")
-@app_commands.describe(
-    name="Combatant name.",
-    value="New initiative total.",
-)
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_init(
-    interaction: discord.Interaction,
-    name: str,
-    value: app_commands.Range[int, -100, 200],
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(name)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
-        return
-    old = cb.initiative
-    cb.initiative = value
-    enc._sort()
-    if enc.started:
-        cur = enc.current()
-        if cur is not None:
-            enc.turn_index = enc.combatants.index(cur)
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"**{cb.name}** initiative {old} → **{value}**\n{_render_encounter(enc, guild)}"
-    )
-
-
-@combat_turn.command(name="hold", description="Mark a combatant as holding their action (Fortune).")
-@app_commands.describe(name="Combatant name.")
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_hold(interaction: discord.Interaction, name: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(name)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
-        return
-    blocked, block_reason = condition_effects.cannot_act(cb.conditions)
-    if blocked:
-        await interaction.response.send_message(f"**{cb.name}** cannot act: {block_reason}", ephemeral=True)
-        return
-    guild = str(interaction.guild_id)
-    current = enc.current()
-    is_current = enc.started and current is not None and current.name.lower() == cb.name.lower()
-
-    if cb.held:
-        cb.held = False
-        _save_encounter(guild, enc)
-        await interaction.response.send_message(
-            f"**{cb.name}** is no longer holding their action.\n{_render_encounter(enc, guild)}"
-        )
-        await _combat_log(guild, f"Hold: {cb.name} released")
-        return
-
-    cb.held = True
-    if is_current:
-        prev_round = enc.round
-        next_cb = enc.advance()
-        _save_encounter(guild, enc)
-        mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
-        parts = [f"⏸️ **{cb.name}** holds their action."]
-        parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
-        if next_cb.center_bonus_available:
-            rec = _resolve_combatant_record(guild, next_cb)
-            vr = rec.character.void_ring if rec else "?"
-            parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
-        reminders = condition_effects.condition_reminders(next_cb.conditions)
-        if reminders:
-            parts.append("\n".join(reminders))
-        parts.append(_render_encounter(enc, guild))
-        await interaction.response.send_message("\n\n".join(parts))
-        if enc.round != prev_round:
-            await _combat_log(guild, f"--- Round {enc.round} ---")
-        await _combat_log(guild, f"Hold: {cb.name} held (auto-advance)")
-        cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
-        await _combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
-    else:
-        _save_encounter(guild, enc)
-        await interaction.response.send_message(
-            f"⏸️ **{cb.name}** is holding their action.\n{_render_encounter(enc, guild)}"
-        )
-        await _combat_log(guild, f"Hold: {cb.name} held")
-
-
-@combat_turn.command(name="delay", description="Mark a combatant as delaying (Fortune).")
-@app_commands.describe(name="Combatant name.", new_initiative="Optional new initiative value.")
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_delay(
-    interaction: discord.Interaction,
-    name: str,
-    new_initiative: app_commands.Range[int, -100, 200] | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(name)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
-        return
-    blocked, block_reason = condition_effects.cannot_act(cb.conditions)
-    if blocked:
-        await interaction.response.send_message(f"**{cb.name}** cannot act: {block_reason}", ephemeral=True)
-        return
-    guild = str(interaction.guild_id)
-    current = enc.current()
-    is_current = enc.started and current is not None and current.name.lower() == cb.name.lower()
-
-    if cb.delayed:
-        cb.delayed = False
-        _save_encounter(guild, enc)
-        await interaction.response.send_message(
-            f"**{cb.name}** is no longer delaying.\n{_render_encounter(enc, guild)}"
-        )
-        await _combat_log(guild, f"Delay: {cb.name} released")
-        return
-
-    cb.delayed = True
-    init_note = ""
-
-    if is_current:
-        prev_round = enc.round
-        next_cb = enc.advance()
-        if new_initiative is not None:
-            cb.initiative = new_initiative
-            enc._sort()
-            enc.turn_index = enc.combatants.index(next_cb)
-            init_note = f" (init → {cb.initiative})"
-        _save_encounter(guild, enc)
-        mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
-        parts = [f"⏳ **{cb.name}** delays their action{init_note}."]
-        parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
-        if next_cb.center_bonus_available:
-            rec = _resolve_combatant_record(guild, next_cb)
-            vr = rec.character.void_ring if rec else "?"
-            parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
-        reminders = condition_effects.condition_reminders(next_cb.conditions)
-        if reminders:
-            parts.append("\n".join(reminders))
-        parts.append(_render_encounter(enc, guild))
-        await interaction.response.send_message("\n\n".join(parts))
-        if enc.round != prev_round:
-            await _combat_log(guild, f"--- Round {enc.round} ---")
-        await _combat_log(guild, f"Delay: {cb.name} delayed (auto-advance){init_note}")
-        cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
-        await _combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
-    else:
-        if new_initiative is not None:
-            cb.initiative = new_initiative
-            enc._sort()
-            if current is not None:
-                enc.turn_index = enc.combatants.index(current)
-            init_note = f" (init → {cb.initiative})"
-        _save_encounter(guild, enc)
-        await interaction.response.send_message(
-            f"⏳ **{cb.name}** is delaying{init_note}.\n{_render_encounter(enc, guild)}"
-        )
-        await _combat_log(guild, f"Delay: {cb.name} delayed{init_note}")
-
-
-@combat_turn.command(name="act", description="A held/delayed combatant takes their action now (Fortune).")
-@app_commands.describe(name="Combatant name.")
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_act(interaction: discord.Interaction, name: str) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(name)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
-        return
-    if not cb.held and not cb.delayed:
-        await interaction.response.send_message(f"**{cb.name}** is not held or delayed.", ephemeral=True)
-        return
-    was = "held" if cb.held else "delayed"
-    cb.held = False
-    cb.delayed = False
-    cb.actions_used = 0
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"**{cb.name}** acts now (was {was}).\n{_render_encounter(enc, guild)}"
-    )
-    await _combat_log(guild, f"Act: {cb.name} (was {was})")
-
-
-@combat_turn.command(name="done", description="End your turn (or a named combatant's turn). Advances to the next combatant.")
-@app_commands.describe(name="Combatant whose turn to end (Fortune only). Omit to end your own character's turn.")
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_turn_done(
-    interaction: discord.Interaction,
-    name: str | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None or not enc.combatants:
-        return
-    if not enc.started:
-        await interaction.response.send_message("Encounter has not started yet. Use `/combat next` to begin.", ephemeral=True)
-        return
-    current = enc.current()
-    if current is None:
-        await interaction.response.send_message("No current combatant.", ephemeral=True)
-        return
-    is_dm = _is_dm(interaction)
-    if name is not None:
-        if not is_dm:
-            await interaction.response.send_message(
-                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to end another combatant's turn.", ephemeral=True
-            )
-            return
-        if current.name.lower() != name.lower():
-            await interaction.response.send_message(
-                f"It is not **{name}**'s turn. Current turn: **{current.name}**.", ephemeral=True
-            )
-            return
-    else:
-        uid = str(interaction.user.id)
-        if current.owner_id != uid and not is_dm:
-            await interaction.response.send_message(
-                f"It is not your turn. Current turn: **{current.name}**.", ephemeral=True
-            )
-            return
-    ended_name = current.name
-    prev_round = enc.round
-    next_cb = enc.advance()
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
-    parts = [f"**{ended_name}**'s turn is done."]
-    parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
-    if next_cb.center_bonus_available:
-        rec = _resolve_combatant_record(guild, next_cb)
-        vr = rec.character.void_ring if rec else "?"
-        parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
-    reminders = condition_effects.condition_reminders(next_cb.conditions)
-    if reminders:
-        parts.append("\n".join(reminders))
-    parts.append(_render_encounter(enc, guild))
-    await interaction.response.send_message("\n\n".join(parts))
-    if enc.round != prev_round:
-        await _combat_log(guild, f"--- Round {enc.round} ---")
-    await _combat_log(guild, f"Turn done: {ended_name}")
-    cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
-    await _combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
-
-
-@combat_turn.command(name="surprise", description="Toggle the surprise round flag on the current encounter (Fortune).")
-async def combat_surprise(interaction: discord.Interaction) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    enc.surprise_round = not enc.surprise_round
-    guild = str(interaction.guild_id)
-    _save_encounter(guild, enc)
-    state = "ON" if enc.surprise_round else "OFF"
-    await interaction.response.send_message(f"Surprise round: **{state}**\n{_render_encounter(enc, guild)}")
-
-
 # ---------------------------------------------------------------------------
 # Phase 42: Taint Progression (#14)
 # ---------------------------------------------------------------------------
@@ -9513,126 +6091,6 @@ async def taint_command(
         if taint.social_penalty(c):
             embed.add_field(name="Social Penalty", value=f"TN +{taint.social_penalty(c)}", inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-# ---------------------------------------------------------------------------
-# Phase 42: Mass Battle (#3)
-# ---------------------------------------------------------------------------
-
-
-
-
-@combat_battle.command(name="roll", description="Battle/Perception roll to determine engagement level. Fortune role required.")
-@app_commands.describe(
-    name="Character name.",
-    tn="Battle TN set by DM (10-15 winning, 15-20 even, 20-30 losing, 30+ desperate).",
-    member="Player whose character to use.",
-    is_npc="Target is an NPC.",
-    bonus="Flat bonus (advantages, terrain, etc.).",
-)
-async def battle_roll(
-    interaction: discord.Interaction,
-    name: str,
-    tn: app_commands.Range[int, 5, 100],
-    member: discord.Member | None = None,
-    is_npc: bool = False,
-    bonus: int = 0,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    guild = str(interaction.guild_id)
-    rec = _resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
-    if rec is None:
-        await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
-        return
-    c = rec.character
-    battle_skill = c.skills.get("Battle", 0)
-    wp = stats.wound_penalty(c)
-    result = mass_battle.resolve_battle_roll(c.perception, battle_skill, tn, engine, bonus + wp)
-    info = result["engagement_info"]
-    embed = discord.Embed(
-        title=f"Mass Battle: {c.name}",
-        color=discord.Color.red() if result["engagement"] in ("heavily_engaged", "heroic") else discord.Color.orange(),
-    )
-    embed.add_field(name="Roll", value=f"({result['rolled']}k{result['kept']}) = **{result['total']}** vs TN {tn}", inline=False)
-    embed.add_field(name="Engagement", value=f"**{info['name']}**", inline=True)
-    embed.add_field(name="Margin", value=f"{result['margin']:+d}", inline=True)
-    embed.add_field(name="Description", value=info["description"], inline=False)
-    dice_str = _format_dice(result["dice"])
-    embed.add_field(name="Dice", value=dice_str, inline=False)
-    await interaction.response.send_message(embed=embed)
-
-
-@combat_battle.command(name="damage", description="Roll incidental damage from a mass battle round. Fortune role required.")
-@app_commands.describe(engagement="Engagement level from the battle roll.")
-@app_commands.choices(engagement=[
-    app_commands.Choice(name="Reserves (0 damage)", value="reserves"),
-    app_commands.Choice(name="Disengaged (1k1)", value="disengaged"),
-    app_commands.Choice(name="Engaged (2k1)", value="engaged"),
-    app_commands.Choice(name="Heavily Engaged (3k2)", value="heavily_engaged"),
-    app_commands.Choice(name="Heroic (4k3)", value="heroic"),
-])
-async def battle_damage(
-    interaction: discord.Interaction,
-    engagement: app_commands.Choice[str],
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    result = mass_battle.resolve_battle_turn_damage(engagement.value, engine)
-    if result["damage"] == 0:
-        await interaction.response.send_message(f"**{engagement.name}**: no incidental damage this round.")
-        return
-    embed = discord.Embed(title=f"Mass Battle Damage: {engagement.name}", color=discord.Color.dark_red())
-    embed.add_field(name="Damage", value=f"**{result['damage']}** ({result['rolled']}k{result['kept']})", inline=True)
-    if result["dice"]:
-        embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
-    embed.set_footer(text="Apply with /sheet wound or /npc wound, subtracting armor Reduction.")
-    await interaction.response.send_message(embed=embed)
-
-
-# ---------------------------------------------------------------------------
-# Phase 42: Mounted Combat (#10)
-# ---------------------------------------------------------------------------
-
-@combat_group.command(name="mount", description="Mount or dismount (sets/clears Mounted condition). Fortune role required.")
-@app_commands.describe(
-    name="Combatant name.",
-    dismount="Dismount instead of mounting.",
-)
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_mount(
-    interaction: discord.Interaction,
-    name: str,
-    dismount: bool = False,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(name)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
-        return
-    if dismount:
-        cb.conditions.discard("mounted")
-        _save_encounter(str(interaction.guild_id), enc)
-        await interaction.response.send_message(f"**{cb.name}** dismounts.")
-    else:
-        cb.conditions.add("mounted")
-        _save_encounter(str(interaction.guild_id), enc)
-        await interaction.response.send_message(
-            f"**{cb.name}** mounts up. Mounted combat: +1k0 damage on melee "
-            f"vs unmounted, +1 rolled die on Horsemanship checks. Mounted archery "
-            f"at −1k0 unless Mounted Archery emphasis."
-        )
-
 
 # ---------------------------------------------------------------------------
 # Phase 42: Crafting Extended (#6)
@@ -9733,8 +6191,6 @@ async def craft_extended(
     embed.set_footer(text="DM: track cumulative total across rolls. Each roll = one crafting period.")
     await interaction.response.send_message(embed=embed)
 
-
-
 # ---------------------------------------------------------------------------
 # Phase 42: Spell Damage (#8 partial)
 # ---------------------------------------------------------------------------
@@ -9811,219 +6267,6 @@ async def spell_damage(
         embed.set_footer(text="Add target: to route damage through the DM-approval gate.")
         await interaction.response.send_message(embed=embed)
 
-
-# ---------------------------------------------------------------------------
-# Phase 42: Multiple Attacks / Action Economy (#9)
-# ---------------------------------------------------------------------------
-
-@combat_group.command(name="action", description="Track action usage this turn (Simple or Complex). Fortune role required.")
-@app_commands.describe(
-    name="Combatant name.",
-    action_type="Type of action being taken.",
-)
-@app_commands.choices(action_type=[
-    app_commands.Choice(name="Simple Action (1 of 2)", value="simple"),
-    app_commands.Choice(name="Complex Action (uses both)", value="complex"),
-    app_commands.Choice(name="Free Action (no cost)", value="free"),
-    app_commands.Choice(name="Reset (undo)", value="reset"),
-])
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_action(
-    interaction: discord.Interaction,
-    name: str,
-    action_type: app_commands.Choice[str],
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(name)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
-        return
-    if action_type.value == "reset":
-        cb.actions_used = 0
-        _save_encounter(str(interaction.guild_id), enc)
-        await interaction.response.send_message(f"**{cb.name}**: actions reset.")
-        return
-    if action_type.value == "free":
-        await interaction.response.send_message(f"**{cb.name}** takes a Free Action.")
-        return
-    if action_type.value == "complex":
-        if cb.actions_used > 0:
-            await interaction.response.send_message(f"**{cb.name}** has already used an action this turn.", ephemeral=True)
-            return
-        cb.actions_used = 2
-        _save_encounter(str(interaction.guild_id), enc)
-        await interaction.response.send_message(f"**{cb.name}** takes a **Complex Action** (turn used).")
-    else:
-        if cb.actions_used >= 2:
-            await interaction.response.send_message(f"**{cb.name}** has no actions remaining this turn.", ephemeral=True)
-            return
-        cb.actions_used += 1
-        _save_encounter(str(interaction.guild_id), enc)
-        remaining = 2 - cb.actions_used
-        await interaction.response.send_message(
-            f"**{cb.name}** takes a **Simple Action** ({remaining} action{'s' if remaining != 1 else ''} remaining)."
-        )
-
-
-# ---------------------------------------------------------------------------
-# Phase 63: Combat Enhancements — cover, notes, env_damage
-# ---------------------------------------------------------------------------
-
-@combat_group.command(name="cover", description="Set a combatant's cover/terrain Armor TN bonus. Fortune role required.")
-@app_commands.describe(
-    name="Combatant name.",
-    bonus="Armor TN modifier from cover/terrain (positive = harder to hit, 0 = clear).",
-)
-@app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_cover(
-    interaction: discord.Interaction,
-    name: str,
-    bonus: app_commands.Range[int, -30, 30],
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    cb = enc.find(name)
-    if cb is None:
-        await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
-        return
-    cb.cover_bonus = bonus
-    _save_encounter(str(interaction.guild_id), enc)
-    if bonus == 0:
-        await interaction.response.send_message(
-            f"**{cb.name}**: cover cleared.\n\n{_render_encounter(enc, str(interaction.guild_id))}"
-        )
-    else:
-        sign = "+" if bonus > 0 else ""
-        await interaction.response.send_message(
-            f"**{cb.name}**: cover set to **{sign}{bonus}** Armor TN.\n\n"
-            f"{_render_encounter(enc, str(interaction.guild_id))}"
-        )
-
-
-@combat_group.command(name="notes", description="Set or clear environment notes for this encounter. Fortune role required.")
-@app_commands.describe(text="Environment description (leave blank to clear).")
-async def combat_notes(
-    interaction: discord.Interaction,
-    text: str = "",
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    enc.notes = text.strip()
-    _save_encounter(str(interaction.guild_id), enc)
-    if enc.notes:
-        await interaction.response.send_message(
-            f"📍 Environment: *{enc.notes}*\n\n{_render_encounter(enc, str(interaction.guild_id))}"
-        )
-    else:
-        await interaction.response.send_message(
-            f"📍 Environment notes cleared.\n\n{_render_encounter(enc, str(interaction.guild_id))}"
-        )
-
-
-@combat_group.command(name="env_damage", description="Apply environmental damage to combatants. Fortune role required.")
-@app_commands.describe(
-    amount="Raw damage to apply.",
-    targets='Comma-separated combatant names, or "all".',
-    reason="Source of damage (fire, falling, etc.).",
-    ignore_reduction="Skip armor reduction (default: no — reduction applies).",
-)
-async def combat_env_damage(
-    interaction: discord.Interaction,
-    amount: app_commands.Range[int, 1, 500],
-    targets: str,
-    reason: str = "",
-    ignore_reduction: bool = False,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    enc = await _require_encounter(interaction)
-    if enc is None:
-        return
-    guild = str(interaction.guild_id)
-    if targets.strip().lower() == "all":
-        target_list = [cb.name for cb in enc.combatants]
-    else:
-        target_list = [t.strip() for t in targets.split(",") if t.strip()]
-    if not target_list:
-        await interaction.response.send_message("No targets specified.", ephemeral=True)
-        return
-
-    results: list[str] = []
-    not_found: list[str] = []
-    reason_tag = f" ({reason})" if reason else ""
-
-    for tname in target_list:
-        cb = enc.find(tname)
-        if cb is None:
-            not_found.append(tname)
-            continue
-        rec = _resolve_combatant_record(guild, cb)
-        if rec is not None:
-            reduction = 0 if ignore_reduction else rec.character.armor_reduction
-            applied = combat.apply_damage(rec.character, amount, reduction)
-            store.save(rec)
-            dead_tag = " 💀 **DEAD**" if applied["is_dead"] else ""
-            results.append(
-                f"**{cb.name}**: {amount} raw − {reduction} red = "
-                f"**{applied['final_damage']}** wounds → "
-                f"**{applied['new_wound_level']}** ({rec.character.wounds_taken}){dead_tag}"
-            )
-            await _combat_log(
-                guild,
-                f"Env Damage: {cb.name}{reason_tag} "
-                f"{applied['final_damage']} wounds [{applied['new_wound_level']}]"
-                f"{' DEAD' if applied['is_dead'] else ''}",
-            )
-        else:
-            cre_rec = store.get_creature_by_name(guild, tname)
-            if cre_rec is not None:
-                cr = cre_rec.creature
-                reduction = 0 if ignore_reduction else cr.reduction
-                final = max(0, amount - reduction)
-                cr.wounds_taken += final
-                is_dead = cr.wounds_taken >= cr.wounds_dead
-                store.save_creature(cre_rec)
-                dead_tag = " 💀 **DEAD**" if is_dead else ""
-                results.append(
-                    f"**{cb.name}**: {amount} raw − {reduction} red = "
-                    f"**{final}** wounds → {cr.wounds_taken}/{cr.wounds_dead}{dead_tag}"
-                )
-                await _combat_log(
-                    guild,
-                    f"Env Damage: {cb.name}{reason_tag} "
-                    f"{final} wounds [{cr.wounds_taken}/{cr.wounds_dead}]"
-                    f"{' DEAD' if is_dead else ''}",
-                )
-            else:
-                results.append(f"**{cb.name}**: *(no sheet — damage not tracked)*")
-
-    parts = [f"💥 **Environmental Damage**: {amount}{reason_tag}"]
-    if ignore_reduction:
-        parts[0] += " *(ignores reduction)*"
-    parts.extend(results)
-    if not_found:
-        parts.append(f"Not found: {', '.join(not_found)}")
-    await interaction.response.send_message("\n".join(parts))
-
-
 # ---------------------------------------------------------------------------
 # Phase 42: Courtier/Social Influence (#5)
 # ---------------------------------------------------------------------------
@@ -10049,7 +6292,6 @@ async def influence_track(
     embed.add_field(name=name, value=f"{sign}{change} Influence" + (f": {reason}" if reason else ""), inline=False)
     embed.set_footer(text="DM: track cumulative influence totals for the court scene. Use /social for Courtier/Etiquette checks.")
     await interaction.response.send_message(embed=embed)
-
 
 # ---------------------------------------------------------------------------
 # Phase 47: Medicine Treatment (wound healing with DM gate)
@@ -10134,14 +6376,12 @@ class MedicineTreatView(discord.ui.View):
         else:
             await interaction.followup.send(msg)
 
-
 MEDICINE_TN = {
     "wound_treatment": 15,
     "disease_diagnosis": 15,
     "poison_treatment": 20,
     "antidote_preparation": 20,
 }
-
 
 @dm.command(name="log_channel", description="Set the channel where combat events are logged (Kami only).")
 @app_commands.describe(channel="The text channel to post combat log entries to.")
@@ -10161,7 +6401,6 @@ async def dm_log_channel(
         f"will be logged there automatically."
     )
 
-
 @dm.command(name="clear_log", description="Stop logging combat events (Kami only).")
 async def dm_clear_log(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
@@ -10171,7 +6410,6 @@ async def dm_clear_log(interaction: discord.Interaction) -> None:
         return
     store.clear_log_channel(str(interaction.guild_id))
     await interaction.response.send_message("Combat log channel cleared. Events will no longer be logged.", ephemeral=True)
-
 
 @dm.command(name="approval_channel", description="Set the DM channel where damage/healing approvals are routed (Kami only).")
 @app_commands.describe(channel="The DM-only text channel for approval requests.")
@@ -10191,7 +6429,6 @@ async def dm_approval_channel(
         f"Results will be posted back in the combat room."
     )
 
-
 @dm.command(name="clear_approval", description="Stop routing approvals to a DM channel (Kami only).")
 async def dm_clear_approval(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
@@ -10201,7 +6438,6 @@ async def dm_clear_approval(interaction: discord.Interaction) -> None:
         return
     store.clear_approval_channel(str(interaction.guild_id))
     await interaction.response.send_message("Approval channel cleared. Damage approvals will appear inline.", ephemeral=True)
-
 
 @dm.command(name="treat", description="Medicine treatment: healer rolls, DM approves healing. L5R 4e Medicine rules.")
 @app_commands.describe(
@@ -10310,12 +6546,11 @@ async def dm_treat(
         embed.set_footer(text="L5R 4e: a failed Medicine check cannot be re-attempted on the same patient until the next day.")
         await interaction.response.send_message(embed=embed)
 
-
 # ---------------------------------------------------------------------------
 # Phase 47: Character Import/Export
 # ---------------------------------------------------------------------------
 
-@sheet.command(name="export", description="Export your active character sheet as JSON (for backup or sharing).")
+@sheet_data.command(name="export", description="Export your active character sheet as JSON (for backup or sharing).")
 @app_commands.describe(
     member="Export another player's character (Fortune).",
 )
@@ -10349,8 +6584,7 @@ async def sheet_export(
             ephemeral=True,
         )
 
-
-@sheet.command(name="import_sheet", description="Import a character from JSON (paste the JSON or attach a .json file).")
+@sheet_data.command(name="import_sheet", description="Import a character from JSON (paste the JSON or attach a .json file).")
 @app_commands.describe(
     json_data="Paste the character JSON here (or attach a .json file instead).",
 )
@@ -10404,13 +6638,11 @@ async def sheet_import(
         embed=embed,
     )
 
-
 # ===========================================================================
 # /macro: saved rolls
 # ===========================================================================
 
 macro_group = app_commands.Group(name="macro", description="Save and use frequently-rolled dice pools.")
-
 
 async def _macro_autocomplete(
     interaction: discord.Interaction, current: str
@@ -10423,7 +6655,6 @@ async def _macro_autocomplete(
         app_commands.Choice(name=m.name, value=m.name)
         for m in macros if cur in m.name.lower()
     ][:25]
-
 
 @macro_group.command(name="save", description="Save a roll macro (e.g. /macro save name:attack rolled:7 kept:3 modifier:5).")
 @app_commands.describe(
@@ -10454,7 +6685,6 @@ async def macro_save(
         ephemeral=True,
     )
 
-
 @macro_group.command(name="list", description="List your saved macros.")
 async def macro_list(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
@@ -10473,7 +6703,6 @@ async def macro_list(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
         f"💾 **Your macros ({len(macros)}): **\n" + "\n".join(lines), ephemeral=True
     )
-
 
 @macro_group.command(name="roll", description="Roll a saved macro.")
 @app_commands.describe(name="Which macro to roll.")
@@ -10501,7 +6730,6 @@ async def macro_roll(interaction: discord.Interaction, name: str) -> None:
     _log_roll(interaction.channel_id, interaction.user.display_name, title, total)
     await interaction.response.send_message(embed=embed)
 
-
 @macro_group.command(name="delete", description="Delete a saved macro.")
 @app_commands.describe(name="Which macro to delete.")
 @app_commands.autocomplete(name=_macro_autocomplete)
@@ -10516,9 +6744,7 @@ async def macro_delete(interaction: discord.Interaction, name: str) -> None:
         return
     await interaction.response.send_message(f"🗑️ Deleted macro **{name}**.", ephemeral=True)
 
-
 client.tree.add_command(macro_group)
-
 
 # ===========================================================================
 # /compare: side-by-side character comparison
@@ -10614,7 +6840,6 @@ async def compare_characters(
     )
     await interaction.response.send_message(embed=embed)
 
-
 # ===========================================================================
 # /history: recent roll log for this channel
 # ===========================================================================
@@ -10646,7 +6871,6 @@ async def roll_history(
         f"📜 **Recent rolls** (last {len(recent)}):\n" + "\n".join(lines),
         ephemeral=True,
     )
-
 
 # ---------------------------------------------------------------------------
 #  Server setup (Kami-only) & character submission
@@ -10785,7 +7009,6 @@ class CharacterApprovalView(discord.ui.View):
                 f"Please speak with a DM for details and feel free to submit again."
             )
 
-
 @client.tree.command(name="submit", description="Submit a character for DM approval (use in the lobby).")
 @app_commands.describe(
     character_name="Your character's full name (e.g. Bayushi Kachiko).",
@@ -10858,9 +7081,7 @@ async def submit_character(
         ephemeral=True,
     )
 
-
 setup_group = app_commands.Group(name="setup", description="Server setup commands (Kami only).")
-
 
 @setup_group.command(name="server", description="Create the server channel structure (Lobby, OOC, IC, DM categories). Kami only.")
 async def setup_server(interaction: discord.Interaction) -> None:
@@ -11080,7 +7301,6 @@ async def setup_server(interaction: discord.Interaction) -> None:
     )
     await interaction.followup.send(summary, ephemeral=True)
 
-
 # ---------------------------------------------------------------------------
 #  Rules reference — pinned embeds posted by /setup server
 # ---------------------------------------------------------------------------
@@ -11212,7 +7432,6 @@ async def _post_rules_reference(channel: discord.TextChannel) -> None:
     msg = await channel.send(embed=ring_embed)
     await msg.pin()
 
-
 # ---------------------------------------------------------------------------
 #  /dm announce — post an event to announcements with RSVP
 # ---------------------------------------------------------------------------
@@ -11268,7 +7487,6 @@ async def dm_announce(
         f"Announcement posted in {target_ch.mention}.", ephemeral=True,
     )
 
-
 # ---------------------------------------------------------------------------
 #  /roster — player character directory
 # ---------------------------------------------------------------------------
@@ -11314,7 +7532,6 @@ async def roster(interaction: discord.Interaction) -> None:
         embed.set_footer(text=f"Showing first 25 of {len(pcs)} characters.")
     await interaction.response.send_message(embed=embed)
 
-
 cog_checks.init(
     store=store,
     engine=engine,
@@ -11325,6 +7542,26 @@ cog_checks.init(
     log_roll=_log_roll,
     npc_owner=NPC_OWNER,
     skill_autocomplete=_skill_autocomplete,
+)
+
+cog_combat.init(
+    store=store,
+    engine=engine,
+    encounters=encounters,
+    npc_owner=NPC_OWNER,
+    require_guild=_require_guild,
+    require_dm_role=_require_dm_role,
+    require_encounter=_require_encounter,
+    resolve_combatant_record=_resolve_combatant_record,
+    resolve_duelist=_resolve_duelist,
+    format_dice=_format_dice,
+    combat_log=_combat_log,
+    save_encounter=_save_encounter,
+    delete_encounter=_delete_encounter,
+    npc_autocomplete=_npc_autocomplete,
+    weapon_autocomplete=_weapon_autocomplete,
+    creature_instance_autocomplete=_creature_instance_autocomplete,
+    category_autocomplete=_category_autocomplete,
 )
 
 ref_commands.init(
@@ -11347,12 +7584,11 @@ ref_commands.init(
 
 client.tree.add_command(sheet)
 client.tree.add_command(dm)
-client.tree.add_command(combat_group)
+client.tree.add_command(cog_combat.combat_group)
 client.tree.add_command(spell_group)
 client.tree.add_command(cog_checks.check)
 client.tree.add_command(ref_commands.ref)
 client.tree.add_command(setup_group)
-
 
 def main() -> None:
     if not TOKEN:
@@ -11361,7 +7597,6 @@ def main() -> None:
             "bot token, or export DISCORD_BOT_TOKEN in the environment. See README.md."
         )
     client.run(TOKEN)
-
 
 if __name__ == "__main__":
     main()
