@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 59: Extraordinary Weapon Qualities (s39 Crafting Specials)
+## Status: Phase 60: Armor Catalog (s39 Armor Reference)
 
 **Help & Navigation**
 
@@ -773,6 +773,31 @@ Reduction below 0.
 **Swift** adds +5 to the initiative total at join time (baked into the
 Combatant's base initiative), so it flows through `effective_initiative`
 alongside Void and Center Stance bonuses.
+
+**Armor Catalog** (GDD s39 — full reference with `/ref armor`)
+
+All 7 armor types from GDD s39 are browsable with full details: TN bonus,
+Reduction, cost (koku), type (heavy/light), and special penalties.
+
+| Command | What it does |
+|---|---|
+| `/ref armor list` | All 7 armor types with TN, Reduction, cost, and heavy flag. |
+| `/ref armor view` | Detailed embed for one armor type (autocomplete). |
+| `/ref armor search` | Search by name substring. |
+
+| Armor | TN Bonus | Reduction | Cost | Special |
+|---|---|---|---|---|
+| Bogu | +0 | 1 | 1 koku | — |
+| Ashigaru | +3 | 1 | 5 koku | — |
+| Tatami | +4 | 1 | 10 koku | — |
+| Light | +5 | 3 | 25 koku | Athletics/Stealth TN +5 |
+| Heavy | +10 | 5 | 40 koku | Agility/Reflexes skill TN +5 |
+| Tetsu-Do | +13 | 8 | 100 koku | Heavy. Agi/Ref TN +10 (+5 if Str 5+) |
+| Riding | +12/+4 | 4 | 55 koku | +12 mounted, +4 on foot. Agi/Ref TN +5 except mounted |
+
+Armor is also included in the unified `/ref search` results alongside weapons,
+spells, schools, kata, kiho, advantages, and creatures. Equipping armor via
+`/sheet armor` now shows the cost and special penalty text.
 
 **Rooms** (private play rooms: each is a Discord **private thread**)
 

@@ -128,15 +128,15 @@ WEAPON_CATALOG: dict[str, dict] = {
     "teppo": {"rolled": 3, "kept": 3, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Large", "armor_tn_mult": 0, "ignore_armor_reduction": True},
 }
 
-# Armor catalog (verbatim from simulation/armor_system.gd ARMOR_CATALOG).
+# Armor catalog (verbatim from GDD s39 and simulation/armor_system.gd).
 ARMOR_CATALOG: dict[str, dict] = {
-    "bogu": {"tn_bonus": 0, "reduction": 1, "is_heavy": False, "penalty_kind": "none"},
-    "ashigaru": {"tn_bonus": 3, "reduction": 1, "is_heavy": False, "penalty_kind": "none"},
-    "tatami": {"tn_bonus": 4, "reduction": 1, "is_heavy": False, "penalty_kind": "none"},
-    "light": {"tn_bonus": 5, "reduction": 3, "is_heavy": False, "penalty_kind": "athletics_stealth"},
-    "heavy": {"tn_bonus": 10, "reduction": 5, "is_heavy": True, "penalty_kind": "agi_ref"},
-    "tetsu_do": {"tn_bonus": 13, "reduction": 8, "is_heavy": True, "penalty_kind": "agi_ref_iron"},
-    "riding": {"tn_bonus": 4, "reduction": 4, "is_heavy": False, "penalty_kind": "agi_ref_not_mounted"},
+    "bogu": {"tn_bonus": 0, "reduction": 1, "is_heavy": False, "penalty_kind": "none", "cost": 1, "special": ""},
+    "ashigaru": {"tn_bonus": 3, "reduction": 1, "is_heavy": False, "penalty_kind": "none", "cost": 5, "special": ""},
+    "tatami": {"tn_bonus": 4, "reduction": 1, "is_heavy": False, "penalty_kind": "none", "cost": 10, "special": ""},
+    "light": {"tn_bonus": 5, "reduction": 3, "is_heavy": False, "penalty_kind": "athletics_stealth", "cost": 25, "special": "Increases TN of Athletics and Stealth rolls by +5."},
+    "heavy": {"tn_bonus": 10, "reduction": 5, "is_heavy": True, "penalty_kind": "agi_ref", "cost": 40, "special": "Increases TN of all Agility and Reflexes skill rolls by +5."},
+    "tetsu_do": {"tn_bonus": 13, "reduction": 8, "is_heavy": True, "penalty_kind": "agi_ref_iron", "cost": 100, "special": "Counts as Heavy Armor. Increases TN of all Agility/Reflexes skill rolls by +10 (+5 if Strength 5+)."},
+    "riding": {"tn_bonus": 4, "reduction": 4, "is_heavy": False, "penalty_kind": "agi_ref_not_mounted", "cost": 55, "tn_bonus_mounted": 12, "special": "Armor TN +12 on horseback, +4 otherwise. Increases TN of Agility/Reflexes skill rolls by +5 except when mounted."},
 }
 
 

@@ -3004,7 +3004,10 @@ async def sheet_armor(
         c.armor_tn_bonus = spec["tn_bonus"]
         c.armor_reduction = spec["reduction"]
         heavy = " (heavy)" if spec["is_heavy"] else ""
-        msg = f"**{c.name}** equips **{a}**{heavy}: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}."
+        cost_note = f" · {spec['cost']} koku" if spec.get("cost") else ""
+        msg = f"**{c.name}** equips **{a}**{heavy}: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}{cost_note}."
+        if spec.get("special"):
+            msg += f"\n⚠️ {spec['special']}"
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
@@ -7037,7 +7040,7 @@ async def lore_check(
 # ===========================================================================
 @ref.command(
     name="search",
-    description="Search across all catalogs at once: spells, schools, kata, kiho, advantages, weapons, creatures.",
+    description="Search across all catalogs at once: spells, schools, kata, kiho, advantages, weapons, armor, creatures.",
 )
 @app_commands.describe(
     query="Search term (matches names, elements, categories).",
@@ -7082,6 +7085,10 @@ async def lookup(
             size = w.get("size", "")
             skill = w.get("skill", "")
             results.append(("Weapon", wname.replace("_", " ").title(), f"{skill}, {size}"))
+
+    for aname, a in combat.ARMOR_CATALOG.items():
+        if q in aname:
+            results.append(("Armor", aname.replace("_", " ").title(), f"TN +{a['tn_bonus']}, Red {a['reduction']}, {a['cost']} koku"))
 
     if not results:
         await interaction.response.send_message(f"No results for **{query}**.", ephemeral=True)
@@ -7183,7 +7190,7 @@ _HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
     ("Reference (/ref)", [
         ("/ref search", "Search all catalogs at once (spells, schools, kata, etc.)."),
         ("/ref weapon list / view", "Browse the 44 weapons."),
-        ("/ref armor list", "Browse the 7 armor types."),
+        ("/ref armor list / view / search", "Browse the 7 armor types (TN, Reduction, cost, specials)."),
         ("/ref school list / search / view", "Browse 347 schools and techniques."),
         ("/ref advantage list / search / view", "Browse 149 advantages & disadvantages."),
         ("/ref kata list / search / view", "Browse 43 Kata."),
@@ -9745,15 +9752,70 @@ async def weapon_view(interaction: discord.Interaction, name: str) -> None:
 
 
 
-@ref_armor.command(name="list", description="List all armor types.")
+@ref_armor.command(name="list", description="List all armor types with TN bonus, Reduction, and cost.")
 async def armor_list(interaction: discord.Interaction) -> None:
-    lines = [
-        f"• **{a}**: Armor TN +{s['tn_bonus']}, Reduction {s['reduction']}"
-        + (" · heavy" if s["is_heavy"] else "")
-        for a, s in combat.ARMOR_CATALOG.items()
-    ]
+    lines = []
+    for a, s in combat.ARMOR_CATALOG.items():
+        tn = f"+{s['tn_bonus']}"
+        if s.get("tn_bonus_mounted"):
+            tn = f"+{s['tn_bonus']}/+{s['tn_bonus_mounted']} mounted"
+        line = f"• **{a}**: TN {tn}, Red {s['reduction']}, {s['cost']} koku"
+        if s["is_heavy"]:
+            line += " · heavy"
+        lines.append(line)
     await interaction.response.send_message(
-        "🛡️ **Armor** (equip with `/sheet armor`):\n" + "\n".join(lines), ephemeral=True
+        f"🛡️ **Armor** ({len(combat.ARMOR_CATALOG)} types · equip with `/sheet armor`):\n" + "\n".join(lines), ephemeral=True
+    )
+
+
+def _build_armor_embed(name: str, s: dict) -> discord.Embed:
+    embed = discord.Embed(title=f"🛡️ {name}", color=discord.Color.blue())
+    tn_val = f"+{s['tn_bonus']}"
+    if s.get("tn_bonus_mounted"):
+        tn_val = f"+{s['tn_bonus']} (on foot) / +{s['tn_bonus_mounted']} (mounted)"
+    embed.add_field(name="Armor TN Bonus", value=tn_val, inline=True)
+    embed.add_field(name="Reduction", value=str(s["reduction"]), inline=True)
+    embed.add_field(name="Cost", value=f"{s['cost']} koku", inline=True)
+    embed.add_field(name="Type", value="Heavy" if s["is_heavy"] else "Light", inline=True)
+    if s.get("special"):
+        embed.add_field(name="Special", value=s["special"], inline=False)
+    return embed
+
+
+@ref_armor.command(name="view", description="Show detailed info for one armor type.")
+@app_commands.describe(name="Armor name.")
+@app_commands.autocomplete(name=_armor_autocomplete)
+async def armor_view(interaction: discord.Interaction, name: str) -> None:
+    key = name.lower().strip()
+    s = combat.ARMOR_CATALOG.get(key)
+    if s is None:
+        await interaction.response.send_message(
+            f"No armor named **{name}**. See `/ref armor list`.", ephemeral=True
+        )
+        return
+    await interaction.response.send_message(embed=_build_armor_embed(key, s), ephemeral=True)
+
+
+@ref_armor.command(name="search", description="Search armor by name substring.")
+@app_commands.describe(query="Part of the armor name to search for.")
+async def armor_search(interaction: discord.Interaction, query: str) -> None:
+    q = query.lower().strip()
+    matches = [(a, s) for a, s in combat.ARMOR_CATALOG.items() if q in a]
+    if not matches:
+        await interaction.response.send_message(f"No armor matching **{query}**.", ephemeral=True)
+        return
+    if len(matches) == 1:
+        a, s = matches[0]
+        await interaction.response.send_message(embed=_build_armor_embed(a, s), ephemeral=True)
+        return
+    lines = []
+    for a, s in matches:
+        tn = f"+{s['tn_bonus']}"
+        if s.get("tn_bonus_mounted"):
+            tn = f"+{s['tn_bonus']}/+{s['tn_bonus_mounted']} mounted"
+        lines.append(f"• **{a}**: TN {tn}, Red {s['reduction']}, {s['cost']} koku")
+    await interaction.response.send_message(
+        f"🛡️ **Armor matching \"{query}\"** ({len(matches)} results):\n" + "\n".join(lines), ephemeral=True
     )
 
 
