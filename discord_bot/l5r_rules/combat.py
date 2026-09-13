@@ -107,6 +107,12 @@ WEAPON_CATALOG: dict[str, dict] = {
     "shuriken": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
     "tsubute": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
     "blowgun": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Medium", "no_explode": True, "armor_tn_mult": 3},
+    # Thrown variants — same weapon used as a ranged attack (Reflexes, not Agility).
+    # Select the _thrown entry when the weapon is hurled instead of wielded in melee.
+    "wakizashi_thrown": {"rolled": 2, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "reflexes", "melee": False, "size": "Small"},
+    "yari_thrown": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "reflexes", "melee": False, "size": "Large"},
+    "nage_yari_thrown": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "reflexes", "melee": False, "size": "Large"},
+    "mai_chong_thrown": {"rolled": 0, "kept": 3, "strength_adds": True, "skill": "Spears", "trait": "reflexes", "melee": False, "size": "Large"},
     # Unarmed
     "unarmed": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Jiujutsu", "trait": "agility", "melee": True, "size": "Small"},
     # Firearms (Teppoudo / Intelligence). General rule: ignore armor TN + armor Reduction.

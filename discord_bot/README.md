@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 56: Full s39 Weapon Specials (Firearms, Katana Void, Kyoketsu-shogi, All Prior)
+## Status: Phase 57: Full s39 Weapon Specials (Thrown, Firearms, Katana Void, Kyoketsu-shogi, All Prior)
 
 **Help & Navigation**
 
@@ -679,6 +679,23 @@ removal of the weapon from play.
 Lance uses DR 1k2 (non-charging). Full DR 3k4 requires a mounted charge,
 which is not yet modeled — the DM can use `bonus_tn:` to remove the penalty
 and override DR manually for a charge.
+
+**Thrown Weapon Variants** (GDD s39)
+
+Melee weapons that can be thrown have separate `_thrown` catalog entries. Select
+the thrown entry (e.g. `yari_thrown`) to make a ranged attack with that weapon.
+Thrown attacks use **Reflexes** (ranged trait) instead of Agility, with the
+weapon's normal skill. Range is DM-adjudicated.
+
+| Weapon | Melee DR | Thrown DR | Range | Skill |
+|---|---|---|---|---|
+| `wakizashi` / `wakizashi_thrown` | 2k2 | 2k2 | 20' | Kenjutsu |
+| `yari` / `yari_thrown` | 2k2 | **1k2** | 50' | Spears |
+| `nage_yari` / `nage_yari_thrown` | 1k2 | 1k2 | 50' | Spears |
+| `mai_chong` / `mai_chong_thrown` | 0k3 | 0k3 | 25' | Spears |
+
+Shuriken (25') and tsubute (30') are already in the catalog as ranged weapons
+(Ninjutsu / Agility, `no_explode`). They have no separate melee entry.
 
 **Katana Void Damage** (GDD s39): pass `void_damage:True` on `/attack` with a
 katana. The VP is spent at damage resolution time (not attack time), adding
