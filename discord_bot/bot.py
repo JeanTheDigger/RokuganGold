@@ -455,6 +455,54 @@ def _build_creature_template_embed(cr: creature.Creature) -> discord.Embed:
     return embed
 
 
+_TRAIT_ABBREV = {
+    "reflexes": "Ref", "awareness": "Awa", "stamina": "Sta", "willpower": "Wil",
+    "agility": "Agi", "intelligence": "Int", "strength": "Str", "perception": "Per",
+}
+
+
+def _creature_compact_summary(cr: creature.Creature) -> str:
+    ring_parts: list[str] = []
+    for ring_name, (trait_a, trait_b) in _RING_TRAITS.items():
+        ring_val = getattr(cr, ring_name)
+        overrides: list[str] = []
+        if trait_a in cr.traits:
+            overrides.append(f"{_TRAIT_ABBREV[trait_a]} {cr.traits[trait_a]}")
+        if trait_b in cr.traits:
+            overrides.append(f"{_TRAIT_ABBREV[trait_b]} {cr.traits[trait_b]}")
+        label = ring_name.capitalize()[:1]
+        if overrides:
+            ring_parts.append(f"{label} {ring_val} ({', '.join(overrides)})")
+        else:
+            ring_parts.append(f"{label} {ring_val}")
+    rings = " · ".join(ring_parts)
+    atk = f"{cr.attack_rolled}k{cr.attack_kept}"
+    if cr.attack_flat:
+        atk += f"+{cr.attack_flat}"
+    dmg = f"{cr.damage_rolled}k{cr.damage_kept}"
+    if cr.damage_flat:
+        dmg += f"+{cr.damage_flat}"
+    combat = (
+        f"Init {cr.initiative_rolled}k{cr.initiative_kept} | "
+        f"{cr.attack_name or 'Atk'}: {atk} / Dmg: {dmg}\n"
+        f"TN **{cr.armor_tn}** · Red **{cr.reduction}**"
+    )
+    if cr.fear > 0:
+        combat += f" · Fear **{cr.fear}**"
+    if cr.wound_thresholds:
+        thr = ", ".join(str(t) for t in cr.wound_thresholds)
+        wounds = f"Thresholds: {thr} → Dead {cr.wounds_dead}"
+    else:
+        wounds = f"Dead at {cr.wounds_dead}"
+    specials = creature.creature_special_notes(cr)
+    lines = [rings, combat, wounds]
+    if specials:
+        lines.extend(specials)
+    if cr.tags:
+        lines.append(", ".join(f"`{t}`" for t in cr.tags))
+    return "\n".join(lines)
+
+
 async def _resolve_active_for_edit(
     interaction: discord.Interaction, member: discord.Member | None
 ) -> tuple[storage.CharacterRecord | None, str | None]:
@@ -3557,6 +3605,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("\U0001f409", "Creatures", "Bestiary creature management.", [
         ("/dm creature catalog", "Search bestiary templates"),
         ("/dm creature info", "Full stat block of a template"),
+        ("/dm creature compare", "Compare two templates side-by-side"),
         ("/dm creature spawn", "Spawn a creature from a template"),
         ("/dm creature view / list", "View or list spawned creatures"),
         ("/dm creature attack", "Creature attacks a PC/NPC"),
@@ -8519,6 +8568,37 @@ async def creature_info(interaction: discord.Interaction, template: str) -> None
         )
         return
     await interaction.response.send_message(embed=_build_creature_template_embed(tmpl), ephemeral=True)
+
+
+@dm_creature.command(name="compare", description="Compare two bestiary templates side-by-side. Fortune role required.")
+@app_commands.describe(template_a="First creature template.", template_b="Second creature template.")
+@app_commands.autocomplete(template_a=_creature_template_autocomplete, template_b=_creature_template_autocomplete)
+async def creature_compare(interaction: discord.Interaction, template_a: str, template_b: str) -> None:
+    if not _guild_ok(interaction):
+        await interaction.response.send_message("Please use this in a server channel.", ephemeral=True)
+        return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to compare creature templates.",
+            ephemeral=True,
+        )
+        return
+    a = creature.CREATURE_CATALOG.get(template_a)
+    b = creature.CREATURE_CATALOG.get(template_b)
+    if a is None:
+        await interaction.response.send_message(f"Unknown template `{template_a}`.", ephemeral=True)
+        return
+    if b is None:
+        await interaction.response.send_message(f"Unknown template `{template_b}`.", ephemeral=True)
+        return
+    embed = discord.Embed(
+        title=f"\U0001f479 {a.name}  vs  {b.name}",
+        color=discord.Color.dark_purple(),
+    )
+    embed.add_field(name=f"⚔️ {a.name}", value=_creature_compact_summary(a), inline=False)
+    embed.add_field(name=f"⚔️ {b.name}", value=_creature_compact_summary(b), inline=False)
+    embed.set_footer(text=f"{template_a}  vs  {template_b}")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 @dm_creature.command(name="spawn", description="Spawn a creature instance from a template. Fortune role required.")

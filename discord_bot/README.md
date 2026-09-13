@@ -11,7 +11,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 ---
 
-## Status: Phase 61: Creature Template Info (Bestiary Viewer)
+## Status: Phase 61: Creature Template Info & Compare (Bestiary Viewer)
 
 **Help & Navigation**
 
@@ -969,6 +969,7 @@ python3 l5r_rules/dice.py     # runs a built-in validation of the dice rules
 | Command | What it does |
 |---|---|
 | `/dm creature info` | Full stat block of a bestiary template: rings with overridden traits, initiative, attack/damage (including flat bonuses), Armor TN, Reduction, Fear, wound track with level ranges, special abilities (invulnerability, spirit, undead, fear), and all tags. Ephemeral, DM-only. Uses existing template autocomplete. |
+| `/dm creature compare` | Side-by-side comparison of two bestiary templates in one embed. Each creature shown as a compact stat summary (abbreviated traits, attack/damage, TN, wounds, specials, tags). Useful for DM encounter prep. Ephemeral, DM-only. |
 
 The embed shows:
 - **Rings** — e.g. "Air **1** (Reflexes 3) · Earth **2** · Fire **1** (Agility 3) · Water **3**" — trait overrides in parentheses, non-overridden rings shown clean
