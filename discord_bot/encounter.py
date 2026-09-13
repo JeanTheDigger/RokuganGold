@@ -141,8 +141,11 @@ class Encounter:
         self.combatants.sort(key=lambda c: (c.effective_initiative, c.reflexes), reverse=True)
 
     def add(self, combatant: Combatant) -> None:
+        current = self.current() if self.started else None
         self.combatants.append(combatant)
         self._sort()
+        if current is not None:
+            self.turn_index = self.combatants.index(current)
 
     def remove(self, name: str) -> bool:
         before = len(self.combatants)

@@ -1337,6 +1337,7 @@ class DamageView(discord.ui.View):
                     def_c = enc.find(target.name)
                     if def_c:
                         def_c.conditions.add("prone")
+                        _save_encounter(str(interaction.guild_id), enc)
             embed = discord.Embed(
                 title="🥋 Knockdown",
                 color=discord.Color.green() if kd["knocked_down"] else discord.Color.greyple(),
@@ -2909,14 +2910,35 @@ class _PaginatorView(discord.ui.View):
 
 
 def _paginate(lines: list[str], header: str, *, per_page: int = 15) -> list[str]:
-    """Split lines into pages with a header and page indicator."""
+    """Split lines into pages with a header and page indicator.
+
+    Also enforces the Discord 2000-char message limit: if a page exceeds
+    1900 chars (leaving room for the footer), it splits at the last line
+    that fits."""
     total_pages = max(1, math.ceil(len(lines) / per_page))
-    pages = []
+    raw_pages: list[list[str]] = []
     for i in range(total_pages):
-        chunk = lines[i * per_page : (i + 1) * per_page]
-        footer = f"\n*Page {i + 1}/{total_pages}*" if total_pages > 1 else ""
-        pages.append(header + "\n".join(chunk) + footer)
-    return pages
+        raw_pages.append(lines[i * per_page : (i + 1) * per_page])
+    pages: list[list[str]] = []
+    for chunk in raw_pages:
+        current: list[str] = []
+        current_len = len(header)
+        for line in chunk:
+            line_len = len(line) + 1
+            if current and current_len + line_len > 1900:
+                pages.append(current)
+                current = [line]
+                current_len = len(header) + line_len
+            else:
+                current.append(line)
+                current_len += line_len
+        if current:
+            pages.append(current)
+    result = []
+    for i, chunk in enumerate(pages):
+        footer = f"\n*Page {i + 1}/{len(pages)}*" if len(pages) > 1 else ""
+        result.append(header + "\n".join(chunk) + footer)
+    return result
 
 
 @sheet.command(name="trait", description="Set a Trait (or Void) on the active character.")
@@ -4196,7 +4218,10 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         if enc.surprise_round:
             header += " *(Surprise Round)*"
     notes_line = f"\n📍 *{enc.notes}*" if enc.notes else ""
-    return header + notes_line + "\n" + "\n".join(lines)
+    result = header + notes_line + "\n" + "\n".join(lines)
+    if len(result) > 1950:
+        result = result[:1950] + "\n*(truncated — use `/combat summary` for full view)*"
+    return result
 
 
 @combat_group.command(name="start", description="Start a fresh initiative tracker in this channel.")
@@ -11096,6 +11121,12 @@ async def combat_stance(
     if not _guild_ok(interaction):
         await interaction.response.send_message("Use in a server channel.", ephemeral=True)
         return
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to change stances.",
+            ephemeral=True,
+        )
+        return
     enc = encounters.get(interaction.channel_id)
     if enc is None:
         await interaction.response.send_message("No encounter in this channel.", ephemeral=True)
@@ -13895,7 +13926,7 @@ async def roster(interaction: discord.Interaction) -> None:
         color=0xC4A747,
         description=f"**{len(pcs)}** active characters on this server.",
     )
-    for owner_id, rec in pcs:
+    for owner_id, rec in pcs[:25]:
         c = rec.character
         clan_str = c.clan if c.clan else "—"
         school_str = c.school if c.school else "—"
