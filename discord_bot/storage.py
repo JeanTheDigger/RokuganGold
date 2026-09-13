@@ -25,6 +25,19 @@ from dataclasses import dataclass
 from l5r_rules.character import Character
 from l5r_rules.creature import Creature
 
+_VERSION_TABLE = """\
+CREATE TABLE IF NOT EXISTS schema_version (
+    id      INTEGER PRIMARY KEY CHECK (id = 1),
+    version INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 0);
+"""
+
+_MIGRATIONS: list[str] = [
+    # 1: add description column to rooms
+    "ALTER TABLE rooms ADD COLUMN description TEXT NOT NULL DEFAULT '';",
+]
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS characters (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -214,10 +227,20 @@ class Store:
         self._lock = threading.Lock()
         with self._lock, self._conn:
             self._conn.executescript(_SCHEMA)
+            self._conn.executescript(_VERSION_TABLE)
+            self._run_migrations()
+
+    # -- migrations ------------------------------------------------------------
+    def _run_migrations(self) -> None:
+        row = self._conn.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
+        current = row["version"]
+        for i in range(current, len(_MIGRATIONS)):
+            version = i + 1
             try:
-                self._conn.execute("ALTER TABLE rooms ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+                self._conn.executescript(_MIGRATIONS[i])
             except sqlite3.OperationalError:
                 pass
+            self._conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (version,))
 
     # -- internal helpers ------------------------------------------------------
     def _row_to_record(self, row: sqlite3.Row) -> CharacterRecord:
