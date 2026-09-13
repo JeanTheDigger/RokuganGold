@@ -1166,6 +1166,7 @@ async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dic
                 return
             result = heritage.roll_heritage(clan)
             state["heritage_result"] = f"{result['name']}: {result['effect']}"
+            state["heritage_grants"] = result.get("grants", {})
             await _go_to_school_choice(btn_inter, state)
 
         async def on_skip(btn_inter: discord.Interaction) -> None:
@@ -1701,6 +1702,10 @@ def _materialize_character(state: dict) -> Character:
             for base_spell in ("Sense", "Commune", "Summon"):
                 if base_spell not in char.spells_known:
                     char.spells_known.insert(0, base_spell)
+
+    heritage_grants = state.get("heritage_grants", {})
+    if heritage_grants:
+        heritage.apply_heritage(char, {"grants": heritage_grants})
 
     spent, _ = _calc_chargen_xp(state)
     char.xp_spent = float(spent)
