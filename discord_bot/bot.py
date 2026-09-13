@@ -45,6 +45,7 @@ NPC_OWNER = "npc"
 ROLE_KAMI = "Kami"
 ROLE_FORTUNE = "Fortune"
 ROLE_APPROVED = "Approved"
+CAT_PLAYER_SUPPORT = "Player Support"
 
 # Rokugani calendar: 12 months (zodiac animals), 28 days each, 4 seasons.
 ROKUGANI_MONTHS: tuple[tuple[str, str], ...] = (
@@ -2471,12 +2472,12 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
     if remaining > 0:
         embed.set_footer(text=f"Warning: {remaining} XP unspent! Consider spending it before submitting.")
 
-    sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
-    school_report = schools.apply_to_character(Character(), sch) if sch else None
-    wildcards = school_report.get("wildcards", []) if school_report else []
-    if wildcards:
-        embed.add_field(name="Wildcard Skills (DM assigns)",
-                        value="\n".join(f"- {w}" for w in wildcards)[:1024], inline=False)
+    wc_picks = state.get("wildcard_picks", [])
+    resolved_picks = [p for p in wc_picks if p.get("skill") != "(auto-skipped)"]
+    if resolved_picks:
+        wc_lines = [f"- {p['skill']} (Rank {p['rank']})" for p in resolved_picks]
+        embed.add_field(name="Wildcard Skills (player chosen)",
+                        value="\n".join(wc_lines)[:1024], inline=False)
 
     view = _ChargenView(state)
     submit_btn = discord.ui.Button(label="Submit for Approval", style=discord.ButtonStyle.success, emoji="📋", row=0)
@@ -2620,6 +2621,52 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
     )
 
 
+async def _create_player_support_channel(
+    guild: discord.Guild, member: discord.Member, character_name: str,
+) -> str | None:
+    """Create a private channel in Player Support for a newly approved character.
+
+    Returns a note string on success/failure, or None if the category doesn't exist.
+    """
+    support_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT)
+    if support_cat is None:
+        return None
+    channel_name = character_name.lower().replace(" ", "-")
+    everyone = guild.default_role
+    bot_member = guild.me
+    fortune_role = discord.utils.get(guild.roles, name=ROLE_FORTUNE)
+    kami_role = discord.utils.get(guild.roles, name=ROLE_KAMI)
+    overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_channels=True,
+            manage_messages=True,
+        ),
+        member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+        ),
+    }
+    for r in (fortune_role, kami_role):
+        if r:
+            overwrites[r] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+                manage_messages=True,
+            )
+    try:
+        ch = await support_cat.create_text_channel(
+            channel_name, overwrites=overwrites,
+            topic=f"Private channel for {character_name} — speak with Staff here.",
+            reason=f"Player support channel for approved character '{character_name}'",
+        )
+        await ch.send(
+            f"Welcome, {member.mention}! This is your private channel to communicate "
+            f"with the Staff about **{character_name}**. Only you and Staff can see this."
+        )
+        return f"Support channel #{ch.name} created."
+    except discord.Forbidden:
+        return "Could not create support channel — bot lacks permission."
+
+
 class _FullCharacterApprovalView(_DisableableView):
     """DM approval view for fully-built character sheets from the wizard."""
 
@@ -2695,16 +2742,19 @@ class _FullCharacterApprovalView(_DisableableView):
                     pass
             store.delete_creation_channel(guild_id, owner_id)
 
+        support_note = await _create_player_support_channel(guild, member, state["name"])
+
         self._disable()
         await interaction.response.edit_message(view=self)
 
+        support_info = f"\n{support_note}" if support_note else ""
         embed = discord.Embed(
             title="✅ Character Approved (Full Sheet)",
             color=discord.Color.green(),
             description=(
                 f"**{member.mention}**'s character **{state['name']}** has been approved.\n"
                 f"Full character sheet created with all traits, skills, advantages, "
-                f"and spells applied.{nick_note}"
+                f"and spells applied.{nick_note}{support_info}"
             ),
         )
         embed.set_footer(text=f"Approved by {interaction.user.display_name}")
@@ -2904,6 +2954,17 @@ class _DeleteConfirmView(discord.ui.View):
                     role_notes.append("Nickname reset.")
                 except discord.Forbidden:
                     role_notes.append("Could not reset nickname — bot lacks permission.")
+
+            support_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT)
+            if support_cat:
+                channel_slug = char.name.lower().replace(" ", "-")
+                support_ch = discord.utils.get(support_cat.text_channels, name=channel_slug)
+                if support_ch:
+                    try:
+                        await support_ch.delete(reason=f"Character '{char.name}' deleted")
+                        role_notes.append(f"Support channel #{channel_slug} deleted.")
+                    except discord.Forbidden:
+                        role_notes.append("Could not delete support channel — bot lacks permission.")
 
         extra = ("\n" + "\n".join(role_notes)) if role_notes else ""
         await interaction.response.edit_message(
@@ -8754,6 +8815,7 @@ class CharacterApprovalView(_DisableableView):
             await member.edit(nick=self.character_name, reason=f"Character approved: {self.character_name}")
         except discord.Forbidden:
             nick_note = "\n(Could not change nickname — the bot's role may be too low or the member is the server owner.)"
+        support_note = await _create_player_support_channel(guild, member, self.character_name)
         self._disable()
         await interaction.response.edit_message(view=self)
 
@@ -8770,13 +8832,14 @@ class CharacterApprovalView(_DisableableView):
             sheet_parts.append(f"Family: **{family_entry['name']}** ({family_report})")
         sheet_info = "\n".join(sheet_parts) if sheet_parts else "No school/family catalog match — sheet starts with base stats."
 
+        support_info = f"\n{support_note}" if support_note else ""
         embed = discord.Embed(
             title="✅ Character Approved",
             color=discord.Color.green(),
             description=(
                 f"**{member.mention}**'s character **{self.character_name}** has been approved.\n"
                 f"They now have the **{ROLE_APPROVED}** role, their nickname has been set, "
-                f"and their character sheet has been created.{nick_note}"
+                f"and their character sheet has been created.{nick_note}{support_info}"
             ),
         )
         embed.add_field(name="Sheet Created", value=sheet_info, inline=False)
@@ -9440,7 +9503,28 @@ async def _setup_server_inner(
         except discord.Forbidden:
             pass
 
-    # --- 5. Staff Members (Fortune + Kami only) ---
+    # --- 5. Player Support (per-player private channels, created on approval) ---
+    ps_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        bot_member: discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, manage_channels=True,
+            manage_messages=True,
+        ),
+    }
+    for r in dm_roles:
+        ps_overwrites[r] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+            manage_messages=True,
+        )
+    ps_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT)
+    if ps_cat is None:
+        ps_cat = await guild.create_category(CAT_PLAYER_SUPPORT, overwrites=ps_overwrites, reason="Server setup")
+        created_items.append("Player Support category")
+    else:
+        await ps_cat.edit(overwrites=ps_overwrites, reason="Server setup: update permissions")
+        existing_items.append("Player Support")
+
+    # --- 6. Staff Members (Fortune + Kami only) ---
     dm_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
         everyone: discord.PermissionOverwrite(view_channel=False),
         bot_member: discord.PermissionOverwrite(
@@ -9473,13 +9557,16 @@ async def _setup_server_inner(
     if approvals_ch_disc:
         store.set_approval_channel(str(guild.id), str(approvals_ch_disc.id))
 
-    # --- Push Staff Members to the very bottom ---
+    # --- Position Player Support just above Staff Members, Staff Members always last ---
     max_pos = max((c.position for c in guild.categories), default=0)
-    if dm_cat.position < max_pos:
-        try:
-            await dm_cat.edit(position=max_pos + 1, reason="Server setup: Staff Members always last")
-        except (discord.Forbidden, discord.HTTPException):
-            pass
+    try:
+        await dm_cat.edit(position=max_pos + 1, reason="Server setup: Staff Members always last")
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+    try:
+        await ps_cat.edit(position=dm_cat.position - 1, reason="Server setup: Player Support above Staff Members")
+    except (discord.Forbidden, discord.HTTPException):
+        pass
 
     # --- Summary ---
     summary_parts = ["**Server setup complete!**\n"]
