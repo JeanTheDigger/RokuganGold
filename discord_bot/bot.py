@@ -107,6 +107,9 @@ class RokuganBot(discord.Client):
             self.tree.copy_global_to(guild=guild)
             synced = await self.tree.sync(guild=guild)
             log.info("Synced %d commands to dev guild %s", len(synced), GUILD_ID)
+            self.tree.clear_commands(guild=None)
+            await self.tree.sync()
+            log.info("Cleared stale global commands")
         else:
             synced = await self.tree.sync()
             log.info("Synced %d global commands (may take up to ~1h to appear)", len(synced))
