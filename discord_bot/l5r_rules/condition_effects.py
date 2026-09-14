@@ -150,7 +150,25 @@ def invalid_stance(conditions: set[str], stance: str) -> tuple[bool, str]:
         return True, "**Fatigued:** Full Attack Stance is not available while fatigued"
     if "mounted" in conditions and stance == "full_attack":
         return True, "**Mounted:** Full Attack Stance is not available while mounted"
+    if "prone" in conditions and stance not in ("defense", "attack"):
+        return True, "**Prone:** only Attack and Defense stances are available while prone"
     return False, ""
+
+
+def contested_roll_modifier(conditions: set[str]) -> tuple[int, int, list[str]]:
+    """(rolled_mod, flat_mod, notes) for contested Strength/Trait rolls.
+
+    Dazed: -3k0 to all actions (GDD s40).
+    Fatigued: +5 TN to physical Trait rolls (GDD s40), applied as -5 flat."""
+    rolled = flat = 0
+    notes: list[str] = []
+    if "dazed" in conditions:
+        rolled -= 3
+        notes.append("Dazed -3k0")
+    if "fatigued" in conditions:
+        flat -= 5
+        notes.append("Fatigued -5 (physical Trait roll)")
+    return rolled, flat, notes
 
 
 def condition_reminders(conditions: set[str]) -> list[str]:

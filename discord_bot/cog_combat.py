@@ -469,7 +469,14 @@ class DamageView(discord.ui.View):
         target = target_rec.character
 
         if self.maneuver == "disarm":
-            dis = combat.resolve_disarm(attacker, target, _d.engine)
+            enc_dis = _d.encounters.get(self.channel_id)
+            atk_cb = enc_dis.find(attacker.name) if enc_dis else None
+            def_cb = enc_dis.find(target.name) if enc_dis else None
+            a_conds = atk_cb.conditions if atk_cb else set()
+            d_conds = def_cb.conditions if def_cb else set()
+            ar, af, _ = condition_effects.contested_roll_modifier(a_conds)
+            dr, df, _ = condition_effects.contested_roll_modifier(d_conds)
+            dis = combat.resolve_disarm(attacker, target, _d.engine, ar, af, dr, df)
             applied = combat.apply_damage(target, dis["damage"], target.armor_reduction)
             void_line = ""
             if void_reduce:
@@ -666,14 +673,22 @@ class DamageView(discord.ui.View):
         knockdown_line = ""
         kd_result = None
         if self.maneuver == "knockdown":
-            kd_result = combat.resolve_knockdown(attacker, target, _d.engine)
-            if kd_result["knocked_down"]:
-                enc_kd = _d.encounters.get(self.channel_id)
-                if enc_kd:
-                    def_c = enc_kd.find(target.name)
-                    if def_c:
-                        def_c.conditions.add("prone")
-                        _d.save_encounter(str(interaction.guild_id), enc_kd)
+            enc_kd = _d.encounters.get(self.channel_id)
+            atk_cb = enc_kd.find(attacker.name) if enc_kd else None
+            def_cb = enc_kd.find(target.name) if enc_kd else None
+            a_conds = atk_cb.conditions if atk_cb else set()
+            d_conds = def_cb.conditions if def_cb else set()
+            ar, af, _ = condition_effects.contested_roll_modifier(a_conds)
+            dr, df, _ = condition_effects.contested_roll_modifier(d_conds)
+            kd_result = combat.resolve_knockdown(
+                attacker, target, _d.engine, atk_rolled_mod=ar, atk_flat_mod=af,
+                def_rolled_mod=dr, def_flat_mod=df,
+            )
+            if kd_result["knocked_down"] and enc_kd:
+                def_c = enc_kd.find(target.name)
+                if def_c:
+                    def_c.conditions.add("prone")
+                    _d.save_encounter(str(interaction.guild_id), enc_kd)
             kd_verdict = (
                 f"**{self.target_name} is knocked prone!**" if kd_result["knocked_down"]
                 else f"{self.target_name} keeps their feet."
@@ -2806,6 +2821,17 @@ async def duel_assess(
         return
 
     ca, cb_char = rec_a.character, rec_b.character
+
+    enc = _d.encounters.get(ch)
+    for duelist_char, duelist_label in ((ca, duelist_a), (cb_char, duelist_b)):
+        cb_enc = enc.find(duelist_char.name) if enc else None
+        if cb_enc and "dazed" in cb_enc.conditions:
+            await interaction.response.send_message(
+                f"**{duelist_label}** is Dazed and cannot perform an Iaijutsu duel (GDD s40).",
+                ephemeral=True,
+            )
+            return
+
     ir_a = stats.insight_rank(ca)
     ir_b = stats.insight_rank(cb_char)
     wp_a = stats.wound_penalty(ca)

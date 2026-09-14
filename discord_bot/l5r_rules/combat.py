@@ -560,14 +560,19 @@ def roll_initiative(character: Character, dice_engine: DiceEngine,
     return dice_engine.roll_and_keep(max(1, rolled), max(1, kept))
 
 
-def resolve_disarm(attacker: Character, defender: Character, dice_engine: DiceEngine) -> dict:
+def resolve_disarm(
+    attacker: Character, defender: Character, dice_engine: DiceEngine,
+    atk_rolled_mod: int = 0, atk_flat_mod: int = 0,
+    def_rolled_mod: int = 0, def_flat_mod: int = 0,
+) -> dict:
     """Disarm (s40): 2k1 damage regardless of weapon, plus a contested Strength
-    roll (Strength k Strength, non-exploding, + wound penalties). Attacker wins ties-broken by >."""
+    roll (Strength k Strength, non-exploding, + wound penalties + conditions).
+    Attacker wins ties-broken by >."""
     dmg = dice_engine.roll_damage(2, 1)
-    a = dice_engine.roll_and_keep(max(attacker.strength, 1), max(attacker.strength, 1), False)
-    d = dice_engine.roll_and_keep(max(defender.strength, 1), max(defender.strength, 1), False)
-    a_total = a.total + stats.wound_penalty(attacker)
-    d_total = d.total + stats.wound_penalty(defender)
+    a = dice_engine.roll_and_keep(max(attacker.strength + atk_rolled_mod, 1), max(attacker.strength, 1), False)
+    d = dice_engine.roll_and_keep(max(defender.strength + def_rolled_mod, 1), max(defender.strength, 1), False)
+    a_total = a.total + stats.wound_penalty(attacker) + atk_flat_mod
+    d_total = d.total + stats.wound_penalty(defender) + def_flat_mod
     return {
         "damage": dmg["raw"],
         "damage_dice": dmg["dice"],
@@ -578,14 +583,17 @@ def resolve_disarm(attacker: Character, defender: Character, dice_engine: DiceEn
 
 
 def resolve_knockdown(
-    attacker: Character, defender: Character, dice_engine: DiceEngine, is_quadruped: bool = False
+    attacker: Character, defender: Character, dice_engine: DiceEngine,
+    is_quadruped: bool = False,
+    atk_rolled_mod: int = 0, atk_flat_mod: int = 0,
+    def_rolled_mod: int = 0, def_flat_mod: int = 0,
 ) -> dict:
-    """Knockdown (s40): contested Strength roll (non-exploding, + wound penalties);
-    a quadruped defender adds +4. No inherent damage."""
-    a = dice_engine.roll_and_keep(max(attacker.strength, 1), max(attacker.strength, 1), False)
-    d = dice_engine.roll_and_keep(max(defender.strength, 1), max(defender.strength, 1), False)
-    a_total = a.total + stats.wound_penalty(attacker)
-    d_total = d.total + stats.wound_penalty(defender) + (4 if is_quadruped else 0)
+    """Knockdown (s40): contested Strength roll (non-exploding, + wound penalties
+    + conditions); a quadruped defender adds +4."""
+    a = dice_engine.roll_and_keep(max(attacker.strength + atk_rolled_mod, 1), max(attacker.strength, 1), False)
+    d = dice_engine.roll_and_keep(max(defender.strength + def_rolled_mod, 1), max(defender.strength, 1), False)
+    a_total = a.total + stats.wound_penalty(attacker) + atk_flat_mod
+    d_total = d.total + stats.wound_penalty(defender) + def_flat_mod + (4 if is_quadruped else 0)
     return {
         "attacker_roll": a_total,
         "defender_roll": d_total,
