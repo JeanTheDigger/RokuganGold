@@ -355,10 +355,10 @@ class DamageView(discord.ui.View):
                 uncapped, uncap_note = technique_effects.feint_uncapped(attacker)
                 if uncapped:
                     fb = self.attack_margin // 2
-                    feint_line = f"\nFeint bonus **+{fb}** (uncapped)"
+                    feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, uncapped)"
                 else:
                     fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
-                    feint_line = f"\nFeint bonus **+{fb}**"
+                    feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
                 raw += fb
                 if uncap_note:
                     feint_line += f"\n⚑ {uncap_note}"
