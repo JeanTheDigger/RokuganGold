@@ -3004,10 +3004,7 @@ async def duel_strike(
 
     atk = rec_a.character
     tgt = rec_t.character
-    wp = combat.get_weapon(weapon)
-    if wp is None:
-        await interaction.response.send_message(f"No weapon named **{weapon}**.", ephemeral=True)
-        return
+    wp = combat.get_weapon_profile(weapon)
     target_tn = combat.armor_tn(tgt, "center", bonus_tn)
     wound_pen = stats.wound_penalty(atk)
     result = combat.resolve_iaijutsu_strike(
