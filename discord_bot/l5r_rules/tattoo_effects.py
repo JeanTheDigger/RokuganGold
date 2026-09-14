@@ -71,17 +71,6 @@ def defender_reduction_bonus(defender: Character) -> tuple[int, list[str]]:
         v = stats.ring_value(defender, "earth")
         bonus += v
         notes.append(f"Crab Tattoo +{v} Reduction (Earth Ring)")
-    if active == "bear":
-        choice = (getattr(defender, "bear_tattoo_choice", "") or "").lower()
-        if choice == "stamina":
-            sr = defender.school_rank
-            boosted_stam = defender.stamina + sr
-            effective_earth = min(boosted_stam, defender.willpower)
-            base_earth = min(defender.stamina, defender.willpower)
-            earth_delta = effective_earth - base_earth
-            if earth_delta > 0:
-                bonus += earth_delta
-                notes.append(f"Bear Tattoo +{earth_delta} Reduction (Earth Ring {base_earth}→{effective_earth} via +{sr} Stamina)")
     return bonus, notes
 
 

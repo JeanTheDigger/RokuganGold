@@ -149,9 +149,9 @@ def attacker_roll_flat_bonus(attacker: Character, maneuver: str, increased_damag
     if k == "north wind style" and increased_damage > 0:
         v = stats.ring_value(attacker, "air")
         return v, f"North Wind +{v} to attack (Increased Damage)"
-    if k == "south wind style" and maneuver == "knockdown":
+    if k == "south wind style" and maneuver in ("knockdown", "called_shot"):
         v = stats.ring_value(attacker, "air")
-        return v, f"South Wind +{v} to attack (Knockdown)"
+        return v, f"South Wind +{v} to attack ({maneuver.replace('_', ' ').title()})"
     return 0, ""
 
 

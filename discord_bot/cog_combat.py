@@ -732,53 +732,120 @@ class DamageView(discord.ui.View):
     async def _second_attack(
         self,
         interaction: discord.Interaction,
-        attacker_rec: storage.CharacterRecord,
-        target_rec: storage.CharacterRecord,
+        attacker_rec: _storage_mod.CharacterRecord,
+        target_rec: _storage_mod.CharacterRecord,
     ) -> None:
-        """Roll the free second attack granted by Extra Attack (s40)."""
+        """Roll the free second attack granted by Extra Attack (s40).
+
+        Applies all passive/always-on combat modifiers (techniques, kata,
+        tattoos, kiho, advantages, conditions, armor penalty, weapon quality)
+        to both attacker and defender. Skips one-shot/rate-limited effects
+        (center stance, void spend, striking as fire, strength in arms)."""
         attacker = attacker_rec.character
         target = target_rec.character
         wp = combat.get_weapon_profile(self.weapon)
         is_melee = wp.get("melee", True)
         enc = _d.encounters.get(self.channel_id)
-        def_conds = set()
-        dc = None
-        if enc:
-            dc = enc.find(target.name)
-            if dc:
-                def_conds = dc.conditions
-        cond_tn_ovr, cond_tn_notes = condition_effects.defender_armor_tn_override(
-            def_conds, target.reflexes, target.armor_tn_bonus, is_melee,
-        )
-        cond_def_mod, _ = condition_effects.defender_armor_tn_mod(def_conds, is_melee)
+        atk_combatant = enc.find(attacker.name) if enc else None
+        def_combatant = enc.find(target.name) if enc else None
+        atk_init = self.atk_init
+        def_init = self.def_init
+        a_stance = self.attacker_stance
+        d_stance = self.defender_stance
+        notes: list[str] = []
+
+        # --- Defender TN modifiers ---
+        def_conds = def_combatant.conditions if def_combatant else set()
+        def_bonus = 0
+        def_kata_b, def_kata_n = kata_effects.defender_armor_tn_bonus(target, d_stance)
+        def_bonus += def_kata_b
+        if def_kata_n:
+            notes.append(def_kata_n)
+        def_tech_b, def_tech_n = technique_effects.defender_armor_tn_bonus(
+            target, d_stance, atk_init, def_init, attacker=attacker)
+        def_bonus += def_tech_b; notes.extend(def_tech_n)
+        def_mast_b, def_mast_n = skill_mastery.defender_armor_tn_bonus(target)
+        def_bonus += def_mast_b; notes.extend(def_mast_n)
+        def_adv_b, def_adv_n = advantage_effects.defender_armor_tn_mod(target)
+        def_bonus += def_adv_b; notes.extend(def_adv_n)
+        def_kiho_b, def_kiho_n = kiho_effects.defender_armor_tn_bonus(target)
+        def_bonus += def_kiho_b; notes.extend(def_kiho_n)
+        def_tat_b, def_tat_n = tattoo_effects.defender_armor_tn_bonus(target)
+        def_bonus += def_tat_b; notes.extend(def_tat_n)
+        cond_def_mod, cond_def_n = condition_effects.defender_armor_tn_mod(def_conds, is_melee)
+        notes.extend(cond_def_n)
         guard_mod2 = 0
-        fd_bonus2 = dc.full_defense_bonus if dc else 0
-        void_tn_bonus2 = dc.void_armor_tn_bonus if dc else 0
-        cover_mod2 = dc.cover_bonus if dc else 0
+        fd_bonus2 = def_combatant.full_defense_bonus if def_combatant else 0
+        void_tn_bonus2 = def_combatant.void_armor_tn_bonus if def_combatant else 0
+        cover_mod2 = def_combatant.cover_bonus if def_combatant else 0
         if enc:
             for gc in enc.combatants:
                 if gc.guarding.lower() == target.name.lower():
                     guard_mod2 += 10
-            if dc and dc.guarding:
+            if def_combatant and def_combatant.guarding:
                 guard_mod2 -= 5
+        dw_def_bonus2 = 0
+        if target.equipped_weapon and target.off_hand_weapon:
+            dw_def_bonus2 = stats.insight_rank(target)
         arrow_tn_adj2, _ = combat.arrow_armor_tn_mod(self.weapon, target.armor_tn_bonus)
+        tn_extras = cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + cover_mod2 + arrow_tn_adj2 + dw_def_bonus2
+        cond_tn_ovr, cond_tn_notes = condition_effects.defender_armor_tn_override(
+            def_conds, target.reflexes, target.armor_tn_bonus, is_melee)
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + cover_mod2 + arrow_tn_adj2
+            tn = cond_tn_ovr + tn_extras
+            notes.extend(cond_tn_notes)
         else:
-            tn = combat.armor_tn(target, self.defender_stance) + cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + cover_mod2 + arrow_tn_adj2
-        outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, _d.engine)
+            tn = combat.armor_tn(target, d_stance, def_bonus + tn_extras)
+
+        # --- Attacker modifiers ---
+        bonus_rolled = bonus_kept = atk_flat = 0
+        t_r, t_k, t_f, t_n = technique_effects.attacker_attack_dice(
+            attacker, wp, self.weapon, a_stance, atk_init, def_init,
+            defender=target, maneuver="none")
+        bonus_rolled += t_r; bonus_kept += t_k; atk_flat += t_f; notes.extend(t_n)
+        tat_r, tat_k, tat_f, tat_n = tattoo_effects.attacker_attack_dice(attacker, wp)
+        bonus_rolled += tat_r; bonus_kept += tat_k; atk_flat += tat_f; notes.extend(tat_n)
+        adv_r, adv_k, adv_f, adv_n = advantage_effects.attacker_attack_dice(attacker, wp)
+        bonus_rolled += adv_r; bonus_kept += adv_k; atk_flat += adv_f; notes.extend(adv_n)
+        for mod_fn in (advantage_effects.attacker_wound_penalty_mod,
+                       kiho_effects.attacker_wound_penalty_mod,
+                       tattoo_effects.attacker_wound_penalty_mod,
+                       technique_effects.attacker_wound_penalty_mod):
+            wp_mod, wp_n = mod_fn(attacker)
+            if wp_mod:
+                atk_flat += wp_mod; notes.extend(wp_n)
+        atk_conds = atk_combatant.conditions if atk_combatant else set()
+        cr, ck, cf, cn = condition_effects.attacker_attack_dice(atk_conds, wp)
+        bonus_rolled += cr; bonus_kept += ck; atk_flat += cf; notes.extend(cn)
+        arm_pen, arm_note = combat.armor_attack_penalty(attacker)
+        if arm_pen:
+            atk_flat += arm_pen; notes.append(arm_note)
+        if combat.has_weapon_quality(attacker, self.weapon, "balanced"):
+            bonus_rolled += 1; notes.append("Balanced: +1k0 attack")
+        # Technique trait override (e.g. Falcon's Strike: Perception for bow).
+        trait_ovr, trait_ovr_name = None, ""
+        to_val, to_name, to_note = technique_effects.attacker_trait_override(attacker, wp)
+        if to_val is not None:
+            trait_ovr, trait_ovr_name = to_val, to_name
+            notes.append(to_note)
+
+        outcome = combat.resolve_attack(
+            attacker, self.weapon, tn, 0, _d.engine,
+            attacker_stance=a_stance,
+            bonus_rolled=bonus_rolled, bonus_kept=bonus_kept, extra_flat=atk_flat,
+            trait_override=trait_ovr, trait_override_name=trait_ovr_name,
+        )
         hit = outcome["hit"]
         embed2 = discord.Embed(
             title="⚔️ Extra Attack: 2nd strike",
             color=discord.Color.green() if hit else discord.Color.light_grey(),
         )
-        embed2.add_field(
-            name="Attack Roll",
-            value=f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+        detail = (f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
                   f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
-                  f": {'**HIT**' if hit else 'miss'}",
-            inline=False,
-        )
+                  f": {'**HIT**' if hit else 'miss'}")
+        if notes:
+            detail += "\n" + " · ".join(notes)
+        embed2.add_field(name="Attack Roll", value=detail, inline=False)
         if hit:
             view2 = DamageView(
                 attacker_rec.id, target_rec.id, self.weapon, 0,
@@ -803,27 +870,67 @@ class DamageView(discord.ui.View):
     async def _second_attack_creature(
         self,
         interaction: discord.Interaction,
-        attacker_rec: storage.CharacterRecord,
-        cre_rec: storage.CreatureRecord,
+        attacker_rec: _storage_mod.CharacterRecord,
+        cre_rec: _storage_mod.CreatureRecord,
     ) -> None:
         """Roll the free second attack against a creature (Extra Attack, s40)."""
         attacker = attacker_rec.character
+        wp = combat.get_weapon_profile(self.weapon)
         enc2 = _d.encounters.get(self.channel_id)
+        atk_combatant = enc2.find(attacker.name) if enc2 else None
         dc2 = enc2.find(cre_rec.creature.name) if enc2 else None
+        notes: list[str] = []
+
         tn = cre_rec.creature.armor_tn + (dc2.cover_bonus if dc2 else 0)
-        outcome = combat.resolve_attack(attacker, self.weapon, tn, 0, _d.engine)
+
+        # --- Attacker modifiers ---
+        bonus_rolled = bonus_kept = atk_flat = 0
+        t_r, t_k, t_f, t_n = technique_effects.attacker_attack_dice(
+            attacker, wp, self.weapon, self.attacker_stance,
+            self.atk_init, self.def_init, defender=None, maneuver="none")
+        bonus_rolled += t_r; bonus_kept += t_k; atk_flat += t_f; notes.extend(t_n)
+        tat_r, tat_k, tat_f, tat_n = tattoo_effects.attacker_attack_dice(attacker, wp)
+        bonus_rolled += tat_r; bonus_kept += tat_k; atk_flat += tat_f; notes.extend(tat_n)
+        adv_r, adv_k, adv_f, adv_n = advantage_effects.attacker_attack_dice(attacker, wp)
+        bonus_rolled += adv_r; bonus_kept += adv_k; atk_flat += adv_f; notes.extend(adv_n)
+        for mod_fn in (advantage_effects.attacker_wound_penalty_mod,
+                       kiho_effects.attacker_wound_penalty_mod,
+                       tattoo_effects.attacker_wound_penalty_mod,
+                       technique_effects.attacker_wound_penalty_mod):
+            wp_mod, wp_n = mod_fn(attacker)
+            if wp_mod:
+                atk_flat += wp_mod; notes.extend(wp_n)
+        atk_conds = atk_combatant.conditions if atk_combatant else set()
+        cr, ck, cf, cn = condition_effects.attacker_attack_dice(atk_conds, wp)
+        bonus_rolled += cr; bonus_kept += ck; atk_flat += cf; notes.extend(cn)
+        arm_pen, arm_note = combat.armor_attack_penalty(attacker)
+        if arm_pen:
+            atk_flat += arm_pen; notes.append(arm_note)
+        if combat.has_weapon_quality(attacker, self.weapon, "balanced"):
+            bonus_rolled += 1; notes.append("Balanced: +1k0 attack")
+        trait_ovr, trait_ovr_name = None, ""
+        to_val, to_name, to_note = technique_effects.attacker_trait_override(attacker, wp)
+        if to_val is not None:
+            trait_ovr, trait_ovr_name = to_val, to_name
+            notes.append(to_note)
+
+        outcome = combat.resolve_attack(
+            attacker, self.weapon, tn, 0, _d.engine,
+            attacker_stance=self.attacker_stance,
+            bonus_rolled=bonus_rolled, bonus_kept=bonus_kept, extra_flat=atk_flat,
+            trait_override=trait_ovr, trait_override_name=trait_ovr_name,
+        )
         hit = outcome["hit"]
         embed2 = discord.Embed(
             title="⚔️ Extra Attack: 2nd strike",
             color=discord.Color.green() if hit else discord.Color.light_grey(),
         )
-        embed2.add_field(
-            name="Attack Roll",
-            value=f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+        detail = (f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
                   f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
-                  f": {'**HIT**' if hit else 'miss'}",
-            inline=False,
-        )
+                  f": {'**HIT**' if hit else 'miss'}")
+        if notes:
+            detail += "\n" + " · ".join(notes)
+        embed2.add_field(name="Attack Roll", value=detail, inline=False)
         if hit:
             view2 = DamageView(
                 attacker_rec.id, None, self.weapon, 0,

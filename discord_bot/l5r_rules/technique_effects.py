@@ -42,7 +42,6 @@ _PEASANT_WEAPONS = frozenset({
 })
 _SAMURAI_WEAPONS = frozenset({
     "katana", "wakizashi", "bokken", "shinai", "naginata",
-    "bajozutsu", "kakiyari",
 })
 _NINJA_WEAPONS = frozenset({
     "ninja_to", "shuriken", "tsubute", "blowgun",
