@@ -38,6 +38,10 @@ _PEASANT_WEAPONS = frozenset({
     "kusarigama", "kyoketsu_shogi", "manrikikusari",
     "kama", "sai", "jitte", "ono",
 })
+_SAMURAI_WEAPONS = frozenset({
+    "katana", "wakizashi", "bokken", "shinai", "naginata",
+    "bajozutsu", "kakiyari",
+})
 
 
 def _known(character: Character) -> set[str]:
@@ -110,6 +114,20 @@ def attacker_attack_dice(
         rolled += 2; kept += 2; notes.append("Fast and Furious +2k2 attack (target lower Initiative)")
     if "the way of the mantis" in known:
         rolled += 1; notes.append("The Way of the Mantis +1k0 attack")
+    if "the eternal stone unleashed" in known and wname in ("unarmed", "improvised"):
+        rolled += 1; notes.append("The Eternal Stone Unleashed +1k0 attack (unarmed/improvised)")
+    if "honor of the lion" in known and attacker_stance == "full_attack":
+        rolled += 1; notes.append("Honor of the Lion +1k0 attack (Full Attack Stance)")
+    if "no regrets" in known and _is_bow(weapon_profile):
+        v = stats.ring_value(attacker, "air") // 2
+        if v:
+            rolled += v; notes.append(f"No Regrets +{v}k0 attack (½ Air Ring, bow)")
+    if "heart of the mountains" in known and not weapon_profile.get("melee"):
+        v = math.ceil(attacker.skills.get("Athletics", attacker.skills.get("athletics", 0)) / 2)
+        if v:
+            rolled += v; notes.append(f"Heart of the Mountains +{v}k0 attack (½ Athletics, ranged)")
+    if "the blessings of heaven" in known and wname in _SAMURAI_WEAPONS:
+        rolled += 1; notes.append("The Blessings of Heaven +1k0 attack (Samurai weapon)")
     return rolled, kept, flat, notes
 
 
@@ -123,7 +141,23 @@ def attacker_trait_override(attacker: Character, weapon_profile: dict) -> tuple[
     return None, "", ""
 
 
-def attacker_damage(attacker: Character, weapon_profile: dict, weapon_name: str) -> tuple[int, int, int, list[str]]:
+def attacker_wound_penalty_mod(attacker: Character) -> tuple[int, list[str]]:
+    """(flat_bonus, notes) counteracting wound penalties on attack rolls.
+    Toku's Lesson: wound penalties reduced by Willpower + 2*SR."""
+    known = _known(attacker)
+    bonus = 0
+    notes: list[str] = []
+    if "toku's lesson" in known:
+        v = attacker.willpower + 2 * max(1, attacker.school_rank)
+        bonus += v; notes.append(f"Toku's Lesson: wound penalties reduced by {v} (Will {attacker.willpower} + 2×SR {attacker.school_rank})")
+    return bonus, notes
+
+
+def attacker_damage(
+    attacker: Character, weapon_profile: dict, weapon_name: str,
+    attacker_stance: str = "",
+    atk_init: int | None = None, def_init: int | None = None,
+) -> tuple[int, int, int, list[str]]:
     """(extra_rolled, extra_kept, flat_bonus, notes) for the damage roll."""
     known = _known(attacker)
     rolled = kept = flat = 0
@@ -131,6 +165,9 @@ def attacker_damage(attacker: Character, weapon_profile: dict, weapon_name: str)
     skill = _skill(weapon_profile)
     wname = weapon_name.lower().strip()
     melee = bool(weapon_profile.get("melee"))
+    target_lower = atk_init is not None and def_init is not None and def_init < atk_init
+    main = (getattr(attacker, "equipped_weapon", "") or "").lower().strip()
+    off = (getattr(attacker, "off_hand_weapon", "") or "").lower().strip()
 
     if "the way of the crab" in known and skill == "heavy weapons":
         rolled += 1; notes.append("The Way of the Crab +1k0 damage (Heavy Weapons)")
@@ -152,6 +189,25 @@ def attacker_damage(attacker: Character, weapon_profile: dict, weapon_name: str)
         notes.append(f"Strength of the Forest +{attacker.stamina} damage (Stamina, melee)")
     if "aligned with the elements" in known and skill == "kenjutsu" and _no_armor(attacker):
         rolled += 1; notes.append("Aligned With the Elements +1k0 damage (sword, no armour)")
+    if "the eternal stone unleashed" in known and wname in ("unarmed", "improvised"):
+        rolled += 1; notes.append("The Eternal Stone Unleashed +1k0 damage (unarmed/improvised)")
+    if "way of drunken fists" in known and (wname == "unarmed" or _is_small(weapon_profile)):
+        rolled += 1; notes.append("Way of Drunken Fists +1k0 damage (unarmed/Small)")
+    if "waves rush to shore" in known and wname == "kama" and main == "kama" and off == "kama":
+        rolled += 3; notes.append("Waves Rush to Shore +3k0 damage (kama in each hand)")
+    if "one blade, both hands" in known and wname == "tanto" and not off:
+        rolled += 3; kept += 1; notes.append("One Blade, Both Hands +3k1 damage (tanto, off-hand empty)")
+    if "the charge of the boar" in known and skill == "spears":
+        kept += 1; notes.append("The Charge of the Boar +0k1 damage (spear)")
+    if "fast and furious" in known and target_lower:
+        rolled += 2; kept += 2; notes.append("Fast and Furious +2k2 damage (target lower Initiative)")
+    if "deny the horde" in known and attacker_stance == "full_attack":
+        rolled += 3; notes.append("Deny the Horde +3k0 damage (Full Attack)")
+    if "moto cannot yield" in known and attacker_stance == "full_attack" and \
+            (wname in _SAMURAI_WEAPONS or _is_two_handed_melee(weapon_profile)):
+        v = attacker.strength // 2
+        if v:
+            kept += v; notes.append(f"Moto Cannot Yield +0k{v} damage (½ Strength, Full Attack, Samurai/two-handed)")
     return rolled, kept, flat, notes
 
 
@@ -168,6 +224,11 @@ def attacker_reduction_ignored(attacker: Character, weapon_profile: dict, weapon
         ignore = _IGNORE_ALL; notes.append("Harmony and Precision ignores all Reduction (katana/wakizashi)")
     if "crushing blow" in known and wname == "unarmed":
         ignore += 1; notes.append("Crushing Blow ignores 1 Reduction (unarmed)")
+    if "claws of the falcon" in known:
+        ignore += 5; notes.append("Claws of the Falcon ignores 5 Reduction")
+    if "one blade, both hands" in known and wname == "tanto" and \
+            not (getattr(attacker, "off_hand_weapon", "") or "").strip():
+        ignore = _IGNORE_ALL; notes.append("One Blade, Both Hands ignores armor Reduction (tanto, off-hand empty)")
     return ignore, notes
 
 
@@ -216,6 +277,42 @@ def defender_armor_tn_bonus(
         off_wf = (getattr(defender, "off_hand_weapon", "") or "").lower().strip() == "war_fan"
         if (main_wf or off_wf) and wfr:
             bonus += wfr; notes.append(f"Folds of the Iron Fan +{wfr} Armor TN (War Fan rank)")
+    if "the commander's fan" in known:
+        wfr = defender.skills.get("War Fan", defender.skills.get("war fan", 0))
+        def_main = defender.equipped_weapon.lower().strip()
+        def_off = (getattr(defender, "off_hand_weapon", "") or "").lower().strip()
+        has_wf = def_main == "war_fan" or def_off == "war_fan"
+        wf_only = (def_main == "war_fan" and not def_off) or (def_off == "war_fan" and not def_main)
+        if has_wf and wfr:
+            if defender_stance in ("defense", "full_defense") or wf_only:
+                bonus += wfr
+                notes.append(f"The Commander's Fan +{wfr} Armor TN (War Fan rank, Defense/only)")
+            else:
+                v = math.ceil(wfr / 2)
+                if v:
+                    bonus += v; notes.append(f"The Commander's Fan +{v} Armor TN (½ War Fan rank)")
+    if "waves rush to shore" in known:
+        def_main = defender.equipped_weapon.lower().strip()
+        def_off = (getattr(defender, "off_hand_weapon", "") or "").lower().strip()
+        if def_main == "kama" and def_off == "kama":
+            kr = defender.skills.get("Knives", defender.skills.get("knives", 0))
+            if kr:
+                bonus += kr; notes.append(f"Waves Rush to Shore +{kr} Armor TN (Knives rank, kama pair)")
+    if "iron feather" in known:
+        armor = (getattr(defender, "armor_name", "") or "").lower().strip()
+        if not armor or armor in ("light armor", "light", "ashigaru", "ashigaru armor"):
+            sr = defender.skills.get("Stealth", defender.skills.get("stealth", 0))
+            if sr:
+                bonus += sr; notes.append(f"Iron Feather +{sr} Armor TN (Stealth rank, light/no armour)")
+    if "way of the iron crane" in known and defender_stance in ("defense", "full_defense"):
+        def_wpn_skill = ""
+        from . import combat as _combat
+        def_wp = _combat.get_weapon_profile(defender.equipped_weapon)
+        def_wpn_skill = str(def_wp.get("skill", "")).lower()
+        if def_wpn_skill == "heavy weapons":
+            hw = defender.skills.get("Heavy Weapons", defender.skills.get("heavy weapons", 0))
+            if hw:
+                bonus += hw; notes.append(f"Way of the Iron Crane +{hw} Armor TN (Heavy Weapons rank, Defense)")
     return bonus, notes
 
 
@@ -237,6 +334,11 @@ def defender_reduction_bonus(defender: Character) -> tuple[int, list[str]]:
             _no_armor(defender):
         v = max(1, defender.school_rank) + 2
         bonus += v; notes.append(f"Aligned With the Elements +{v} Reduction (sword, no armour)")
+    if "power within and without" in known and _no_armor(defender) and \
+            not (getattr(defender, "active_kiho", None) or []) and \
+            not (getattr(defender, "active_tattoo", "") or "").strip():
+        v = 3 + stats.ring_value(defender, "void")
+        bonus += v; notes.append(f"Power Within and Without +{v} Reduction (3 + Void Ring, no armour/kiho/tattoo)")
     return bonus, notes
 
 

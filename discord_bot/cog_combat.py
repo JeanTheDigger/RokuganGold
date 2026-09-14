@@ -159,6 +159,9 @@ class DamageView(discord.ui.View):
         source_channel_id: int = 0,
         weapon_material: str = "normal",
         void_damage: bool = False,
+        attacker_stance: str = "",
+        atk_init: int | None = None,
+        def_init: int | None = None,
     ) -> None:
         super().__init__(timeout=1800)  # 30 min
         self.attacker_id = attacker_id
@@ -176,6 +179,9 @@ class DamageView(discord.ui.View):
         self.source_channel_id = source_channel_id
         self.weapon_material = weapon_material
         self.void_damage = void_damage
+        self.attacker_stance = attacker_stance
+        self.atk_init = atk_init
+        self.def_init = def_init
         # Relabel the primary button to match the maneuver, and hide the Void
         # button when it would be nonsensical (knockdown has no damage roll;
         # creature targets have no VP pool).
@@ -285,7 +291,9 @@ class DamageView(discord.ui.View):
             extra_rolled += bg_roll
             tp_roll, tp_kept, tp_note = combat.teppoudo_damage_bonus(attacker, self.weapon)
             extra_rolled += tp_roll
-            t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
+            t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(
+                attacker, wp, self.weapon, self.attacker_stance, self.atk_init, self.def_init,
+            )
             extra_rolled += t_roll
             t_kept += tp_kept
             if bg_note:
@@ -546,7 +554,9 @@ class DamageView(discord.ui.View):
         extra_rolled += bg_roll
         tp_roll, tp_kept, tp_note = combat.teppoudo_damage_bonus(attacker, self.weapon)
         extra_rolled += tp_roll
-        t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(attacker, wp, self.weapon)
+        t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(
+            attacker, wp, self.weapon, self.attacker_stance, self.atk_init, self.def_init,
+        )
         extra_rolled += t_roll
         t_kept += tp_kept
         if bg_note:
@@ -777,6 +787,8 @@ class DamageView(discord.ui.View):
                 channel_id=self.channel_id,
                 source_channel_id=self.source_channel_id,
                 weapon_material=self.weapon_material,
+                attacker_stance=self.attacker_stance,
+                atk_init=self.atk_init, def_init=self.def_init,
             )
             await interaction.followup.send(
                 content="A DM can authorize the 2nd attack's damage below.",
@@ -820,6 +832,8 @@ class DamageView(discord.ui.View):
                 channel_id=self.channel_id,
                 source_channel_id=self.source_channel_id,
                 weapon_material=self.weapon_material,
+                attacker_stance=self.attacker_stance,
+                atk_init=self.atk_init, def_init=self.def_init,
             )
             await interaction.followup.send(
                 content="A DM can authorize the 2nd attack's damage below.",
@@ -1216,6 +1230,12 @@ async def attack(
         atk_flat += tat_wp_mod
         kata_notes.extend(tat_wp_notes)
 
+    # Technique wound-penalty modifier (Toku's Lesson).
+    tech_wp_mod, tech_wp_notes = technique_effects.attacker_wound_penalty_mod(attacker)
+    if tech_wp_mod:
+        atk_flat += tech_wp_mod
+        kata_notes.extend(tech_wp_notes)
+
     # Condition-based attack modifiers (GDD s40: Blinded, Dazed, Fatigued, Mounted, Prone).
     atk_conds = atk_combatant.conditions if atk_combatant else set()
     cond_rolled, cond_kept, cond_flat, cond_atk_notes = condition_effects.attacker_attack_dice(
@@ -1451,6 +1471,7 @@ async def attack(
                 called_shot_raises=cs_raises, channel_id=interaction.channel_id,
                 source_channel_id=src_ch_id, weapon_material=mat,
                 void_damage=void_damage,
+                attacker_stance=a_stance, atk_init=atk_init, def_init=def_init,
             )
         else:
             view = DamageView(
@@ -1459,6 +1480,7 @@ async def attack(
                 called_shot_raises=cs_raises, channel_id=interaction.channel_id,
                 source_channel_id=src_ch_id, weapon_material=mat,
                 void_damage=void_damage,
+                attacker_stance=a_stance, atk_init=atk_init, def_init=def_init,
             )
         prompt = {
             "disarm": "A DM can resolve the disarm below.",
