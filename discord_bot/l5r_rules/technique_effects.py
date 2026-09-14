@@ -93,6 +93,7 @@ def attacker_attack_dice(
     atk_init: int | None = None, def_init: int | None = None,
     defender: Character | None = None,
     maneuver: str = "none",
+    defender_stance: str = "",
 ) -> tuple[int, int, int, list[str]]:
     """(bonus_rolled, bonus_kept, flat_bonus, notes) added to the attack roll."""
     known = _known(attacker)
@@ -192,6 +193,22 @@ def attacker_attack_dice(
         arm_bonus = getattr(defender, "armor_tn_bonus", 0)
         if arm_bonus:
             flat += arm_bonus; notes.append(f"Seeking Weakness +{arm_bonus} attack (ignore armor TN, Small weapon)")
+    if "way of the iron crane" in known and attacker_stance == "attack" and \
+            skill == "heavy weapons" and defender_stance in ("attack", "full_attack"):
+        rolled += 1; kept += 1; notes.append("Way of the Iron Crane +1k1 attack (Heavy Weapon, Attack vs Attack/Full Attack)")
+    if "cracks within the elements" in known and defender is not None:
+        rings = [stats.ring_value(defender, r) for r in ("air", "earth", "fire", "water")]
+        gap = 2 * (max(rings) - min(rings))
+        if gap:
+            flat += gap; notes.append(f"Cracks Within the Elements +{gap} attack (2×(highest {max(rings)} − lowest {min(rings)}))")
+    if defender is not None and weapon_profile.get("melee"):
+        def_known = _known(defender)
+        if "the way of air" in def_known:
+            def_wname = (getattr(defender, "equipped_weapon", "") or "").lower().strip()
+            if not def_wname or def_wname == "unarmed":
+                air = stats.ring_value(attacker, "air")
+                if air:
+                    rolled -= air; notes.append(f"The Way of Air −{air}k0 attack (defender unarmed, attacker Air {air})")
     return rolled, kept, flat, notes
 
 
@@ -497,7 +514,28 @@ def maneuver_free_raises(
     if "the arrow knows the way" in known and maneuver == "called_shot":
         if weapon_profile is not None and _is_bow(weapon_profile):
             free += 1; notes.append("The Arrow Knows the Way: Called Shot 1 free Raise (bow)")
+    if "fist and blade" in known and maneuver == "knockdown":
+        if weapon_profile is not None and _skill(weapon_profile) == "kenjutsu":
+            free += 1; notes.append("Fist and Blade: Knockdown costs 1 less Raise (sword)")
+    if "reichin's style" in known and maneuver == "feint":
+        free += 1; notes.append("Reichin's Style: Feint costs 1 less Raise")
+    if "strike with the soul" in known and maneuver == "extra_attack":
+        if weapon_profile is not None and _skill(weapon_profile) in _SPEAR_POLEARM:
+            free += 2; notes.append("Strike With the Soul: Extra Attack costs 2 fewer Raises (spear/polearm)")
+    if "no regrets" in known and maneuver == "called_shot":
+        if weapon_profile is not None and _is_bow(weapon_profile):
+            free += 1; notes.append("No Regrets: Called Shot costs 1 less Raise (bow)")
+    if "the way of the archer" in known and maneuver == "called_shot":
+        if weapon_profile is not None and _is_bow(weapon_profile):
+            free += 1; notes.append("The Way of the Archer: Called Shot costs half Raises (bow)")
     return free, notes
+
+
+def feint_uncapped(attacker: Character) -> tuple[bool, str]:
+    """(uncapped, note): Reichin's Style removes the Feint damage cap (5×IR)."""
+    if "reichin's style" in _known(attacker):
+        return True, "Reichin's Style: Feint damage uncapped"
+    return False, ""
 
 
 def off_hand_penalty_removed(

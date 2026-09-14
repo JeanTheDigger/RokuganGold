@@ -352,9 +352,16 @@ class DamageView(discord.ui.View):
             raw = dmg["raw_damage"]
             feint_line = ""
             if self.maneuver == "feint":
-                fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
+                uncapped, uncap_note = technique_effects.feint_uncapped(attacker)
+                if uncapped:
+                    fb = self.attack_margin // 2
+                    feint_line = f"\nFeint bonus **+{fb}** (uncapped)"
+                else:
+                    fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
+                    feint_line = f"\nFeint bonus **+{fb}**"
                 raw += fb
-                feint_line = f"\nFeint bonus **+{fb}**"
+                if uncap_note:
+                    feint_line += f"\n⚑ {uncap_note}"
             scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
             raw += scorp_bonus
             cre_base_red = cre_rec.creature.reduction
@@ -616,9 +623,16 @@ class DamageView(discord.ui.View):
         raw = dmg["raw_damage"]
         feint_line = ""
         if self.maneuver == "feint":
-            fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
+            uncapped, uncap_note = technique_effects.feint_uncapped(attacker)
+            if uncapped:
+                fb = self.attack_margin // 2
+                feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, uncapped)"
+            else:
+                fb = combat.compute_feint_bonus(self.attack_margin, stats.insight_rank(attacker))
+                feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
             raw += fb
-            feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
+            if uncap_note:
+                feint_line += f"\n⚑ {uncap_note}"
         crab_bonus, crab_note = kata_effects.defender_reduction_bonus(target, self.defender_stance)
         tech_red, tech_red_notes = technique_effects.defender_reduction_bonus(target, self.defender_stance)
         kiho_red, kiho_red_notes = kiho_effects.defender_reduction_bonus(target)
@@ -801,7 +815,7 @@ class DamageView(discord.ui.View):
         bonus_rolled = bonus_kept = atk_flat = 0
         t_r, t_k, t_f, t_n = technique_effects.attacker_attack_dice(
             attacker, wp, self.weapon, a_stance, atk_init, def_init,
-            defender=target, maneuver="none")
+            defender=target, maneuver="none", defender_stance=d_stance)
         bonus_rolled += t_r; bonus_kept += t_k; atk_flat += t_f; notes.extend(t_n)
         tat_r, tat_k, tat_f, tat_n = tattoo_effects.attacker_attack_dice(attacker, wp)
         bonus_rolled += tat_r; bonus_kept += tat_k; atk_flat += tat_f; notes.extend(tat_n)
@@ -1297,7 +1311,7 @@ async def attack(
     t_rolled, t_kept, t_flat, t_notes = technique_effects.attacker_attack_dice(
         attacker, atk_weapon_profile, weapon, a_stance, atk_init, def_init,
         defender=target_rec.character if target_rec else None,
-        maneuver=man,
+        maneuver=man, defender_stance=d_stance,
     )
     bonus_rolled += t_rolled
     bonus_kept += t_kept
