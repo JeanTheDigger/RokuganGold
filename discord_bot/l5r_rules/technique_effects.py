@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import math
 
-from . import stats
+from . import enums, stats
 from .character import Character
 
 _SPEAR_POLEARM = frozenset({"spears", "polearms"})
@@ -51,6 +51,9 @@ _KNIFE_WEAPONS = frozenset({
 })
 _MONK_WEAPONS = frozenset({
     "unarmed", "bisento", "bo",
+})
+_KSHATRIYA_WEAPON_SKILLS = frozenset({
+    "kenjutsu", "jiujutsu", "spears", "kyujutsu",
 })
 
 
@@ -201,6 +204,10 @@ def attacker_attack_dice(
         gap = 2 * (max(rings) - min(rings))
         if gap:
             flat += gap; notes.append(f"Cracks Within the Elements +{gap} attack (2×(highest {max(rings)} − lowest {min(rings)}))")
+    if "the kaiu method" in known and skill == "war fans":
+        rolled += 1; notes.append("The Kaiu Method +1k0 attack (War Fan, School Skill)")
+    if "the strength of indra" in known and skill in _KSHATRIYA_WEAPON_SKILLS:
+        rolled += 1; notes.append(f"The Strength of Indra +1k0 attack ({skill}, School Weapon Skill)")
     if defender is not None and weapon_profile.get("melee"):
         def_known = _known(defender)
         if "the way of air" in def_known:
@@ -231,6 +238,16 @@ def attacker_wound_penalty_mod(attacker: Character) -> tuple[int, list[str]]:
     if "toku's lesson" in known:
         v = attacker.willpower + 2 * max(1, attacker.school_rank)
         bonus += v; notes.append(f"Toku's Lesson: wound penalties reduced by {v} (Will {attacker.willpower} + 2×SR {attacker.school_rank})")
+    if "moto's strength" in known:
+        theology = attacker.skills.get("Lore: Theology", attacker.skills.get("lore: theology", 0))
+        if theology:
+            idx = stats.wound_level_index(attacker)
+            ignore_levels = 2 * theology
+            effective_idx = max(0, idx - ignore_levels)
+            offset = enums.WOUND_PENALTIES[effective_idx] - enums.WOUND_PENALTIES[idx]
+            if offset:
+                bonus += offset
+                notes.append(f"Moto's Strength: ignore {ignore_levels} wound levels (Theology {theology}×2)")
     return bonus, notes
 
 
@@ -655,3 +672,42 @@ def iaijutsu_strike_reduction(character: Character) -> tuple[int, list[str]]:
         bonus += v
         notes.append(f"Warrior of Earth +{v} Reduction (Earth×3, duel Strike)")
     return bonus, notes
+
+
+# ---------------------------------------------------------------------------
+# Initiative modifiers (s29)
+# ---------------------------------------------------------------------------
+
+
+def initiative_bonus(character: Character) -> tuple[int, list[str]]:
+    """Flat bonus added to the initiative roll total."""
+    known = _known(character)
+    bonus = 0
+    notes: list[str] = []
+    if "dance the razor's edge" in known:
+        v = character.skills.get("Stealth", character.skills.get("stealth", 0))
+        if v:
+            bonus += v
+            notes.append(f"Dance the Razor's Edge +{v} Initiative (Stealth rank)")
+    return bonus, notes
+
+
+# ---------------------------------------------------------------------------
+# Defender maneuver TN increase (s29)
+# ---------------------------------------------------------------------------
+
+
+def defender_maneuver_tn_increase(
+    defender: Character,
+    maneuver: str,
+) -> tuple[int, list[str]]:
+    """Extra raises the attacker must pay when using a maneuver against this
+    defender. Returns (extra_raises, notes)."""
+    known = _known(defender)
+    extra = 0
+    notes: list[str] = []
+    if "wisdom the wind brings" in known and maneuver in ("feint", "disarm"):
+        sr = max(1, defender.school_rank)
+        extra += sr
+        notes.append(f"Wisdom the Wind Brings +{sr * 5} TN vs {maneuver} ({sr} raises, Kitsuki SR)")
+    return extra, notes

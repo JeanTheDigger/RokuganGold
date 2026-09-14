@@ -1206,6 +1206,14 @@ async def attack(
             atk_combatant.used_this_turn.add("extra_attack")
     maneuver_raises = combat.MANEUVER_RAISES.get(man, 0)
 
+    # Defender technique: extra maneuver raises (Kitsuki Wisdom the Wind Brings, s29.3).
+    # Applied before free-raise reductions so mastery/tattoo/technique free raises can offset.
+    kitsuki_notes: list[str] = []
+    if target_creature_rec is None and target_rec is not None and man in ("feint", "disarm"):
+        def_extra, kitsuki_notes = technique_effects.defender_maneuver_tn_increase(target_rec.character, man)
+        if def_extra:
+            maneuver_raises += def_extra
+
     # Void Point spend: +1k1 on the attack roll (decrement the pool now).
     void_line = ""
     bonus_rolled = bonus_kept = 0
@@ -1233,6 +1241,7 @@ async def attack(
 
     # Active-kata combat modifiers (GDD s30; deterministic subset only).
     kata_notes: list[str] = []          # effects auto-applied to this roll
+    kata_notes.extend(kitsuki_notes)
     rl_used_notes: list[str] = []       # rate-limited effects already spent this Turn/Round
     attacker = attacker_rec.character
     atk_init = atk_combatant.initiative if atk_combatant else None
@@ -1722,14 +1731,16 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
 
     result = combat.roll_initiative(rec.character, _d.engine)
     swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
-    init_total = result.total + swift_bonus
+    tech_init, tech_init_notes = technique_effects.initiative_bonus(rec.character)
+    init_total = result.total + swift_bonus + tech_init
     swift_detail = f" +5 Swift" if swift_bonus else ""
+    tech_init_detail = "".join(f" +{n}" for n in tech_init_notes)
     enc = _get_or_create(interaction.channel_id)
     enc.remove(rec.character.name)  # re-join re-rolls
     enc.add(encounter.Combatant(
         name=rec.character.name,
         initiative=init_total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
+        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}",
         owner_id=str(owner.id),
         is_npc=False,
         reflexes=rec.character.reflexes,
@@ -1912,14 +1923,16 @@ async def combat_npc(interaction: discord.Interaction, name: str) -> None:
         return
     result = combat.roll_initiative(rec.character, _d.engine)
     swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
-    init_total = result.total + swift_bonus
+    tech_init, tech_init_notes = technique_effects.initiative_bonus(rec.character)
+    init_total = result.total + swift_bonus + tech_init
     swift_detail = f" +5 Swift" if swift_bonus else ""
+    tech_init_detail = "".join(f" +{n}" for n in tech_init_notes)
     enc = _get_or_create(interaction.channel_id)
     enc.remove(rec.character.name)
     enc.add(encounter.Combatant(
         name=rec.character.name,
         initiative=init_total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
+        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}",
         owner_id=None,
         is_npc=True,
         reflexes=rec.character.reflexes,
@@ -3151,13 +3164,15 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
                 continue
             result = combat.roll_initiative(rec.character, _d.engine)
             swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
-            init_total = result.total + swift_bonus
+            ti, tin = technique_effects.initiative_bonus(rec.character)
+            init_total = result.total + swift_bonus + ti
             swift_detail = f" +5 Swift" if swift_bonus else ""
+            tech_init_detail = "".join(f" +{n}" for n in tin)
             enc.remove(rec.character.name)
             enc.add(encounter.Combatant(
                 name=rec.character.name,
                 initiative=init_total,
-                initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
+                initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}",
                 owner_id=None,
                 is_npc=True,
                 reflexes=rec.character.reflexes,
@@ -3213,13 +3228,15 @@ async def combat_room(interaction: discord.Interaction) -> None:
             continue
         result = combat.roll_initiative(char_rec.character, _d.engine)
         swift_bonus = 5 if "swift" in char_rec.character.weapon_qualities else 0
-        init_total = result.total + swift_bonus
+        ti, tin = technique_effects.initiative_bonus(char_rec.character)
+        init_total = result.total + swift_bonus + ti
         swift_detail = f" +5 Swift" if swift_bonus else ""
+        tech_init_detail = "".join(f" +{n}" for n in tin)
         enc.remove(char_rec.character.name)
         enc.add(encounter.Combatant(
             name=char_rec.character.name,
             initiative=init_total,
-            initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}",
+            initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}",
             owner_id=uid,
             is_npc=False,
             reflexes=char_rec.character.reflexes,
