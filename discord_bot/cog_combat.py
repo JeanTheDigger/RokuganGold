@@ -1307,6 +1307,12 @@ async def attack(
         maneuver_raises = max(0, maneuver_raises - tat_free)
         kata_notes.extend(tat_free_notes)
 
+    # Technique: Kikage Zumi R4 Knockdown discount (s29.3).
+    tech_free, tech_free_notes = technique_effects.maneuver_free_raises(attacker, weapon, man)
+    if tech_free:
+        maneuver_raises = max(0, maneuver_raises - tech_free)
+        kata_notes.extend(tech_free_notes)
+
     # Guard maneuver TN modifiers (s40): guarded target gets +10 per guarder, guarder gets -5.
     guard_mod = 0
     if enc and target_rec is not None:

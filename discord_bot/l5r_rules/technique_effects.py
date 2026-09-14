@@ -42,10 +42,26 @@ _SAMURAI_WEAPONS = frozenset({
     "katana", "wakizashi", "bokken", "shinai", "naginata",
     "bajozutsu", "kakiyari",
 })
+_NINJA_WEAPONS = frozenset({
+    "ninja_to", "shuriken", "tsubute", "blowgun",
+})
+_KNIFE_WEAPONS = frozenset({
+    "tanto", "aiguchi", "sai", "jitte", "kama",
+})
 
 
 def _known(character: Character) -> set[str]:
-    return {t.lower().strip() for t in getattr(character, "techniques", [])}
+    raw = getattr(character, "techniques", [])
+    result: set[str] = set()
+    for t in raw:
+        lowered = t.lower().strip()
+        result.add(lowered.rstrip(":").rstrip())
+        colon_pos = lowered.find(": ")
+        if colon_pos > 0:
+            name_part = lowered[colon_pos + 2:].strip()
+            if name_part:
+                result.add(name_part)
+    return result
 
 
 def _skill(weapon_profile: dict) -> str:
@@ -128,6 +144,8 @@ def attacker_attack_dice(
             rolled += v; notes.append(f"Heart of the Mountains +{v}k0 attack (½ Athletics, ranged)")
     if "the blessings of heaven" in known and wname in _SAMURAI_WEAPONS:
         rolled += 1; notes.append("The Blessings of Heaven +1k0 attack (Samurai weapon)")
+    if "never beyond my reach" in known and wname in _NINJA_WEAPONS:
+        rolled += 1; kept += 1; notes.append("Never Beyond My Reach +1k1 attack (Ninja weapon)")
     return rolled, kept, flat, notes
 
 
@@ -208,6 +226,13 @@ def attacker_damage(
         v = attacker.strength // 2
         if v:
             kept += v; notes.append(f"Moto Cannot Yield +0k{v} damage (½ Strength, Full Attack, Samurai/two-handed)")
+    if "the hitomi kikage zumi order" in known and wname == "unarmed" and attacker.school_rank >= 4:
+        rolled += 1; kept += 1; notes.append("Kikage Zumi R4 +1k1 damage (unarmed)")
+    if "never beyond my reach" in known and wname in _NINJA_WEAPONS:
+        rolled += 1; kept += 1; notes.append("Never Beyond My Reach +1k1 damage (Ninja weapon)")
+    if "master of the quick blade" in known and wname in _KNIFE_WEAPONS:
+        if main in _KNIFE_WEAPONS and off in _KNIFE_WEAPONS:
+            rolled += 1; kept += 1; notes.append("Master of the Quick Blade +1k1 damage (knife in each hand)")
     return rolled, kept, flat, notes
 
 
@@ -313,6 +338,9 @@ def defender_armor_tn_bonus(
             hw = defender.skills.get("Heavy Weapons", defender.skills.get("heavy weapons", 0))
             if hw:
                 bonus += hw; notes.append(f"Way of the Iron Crane +{hw} Armor TN (Heavy Weapons rank, Defense)")
+    if "the hitomi kikage zumi order" in known:
+        bonus += defender.reflexes
+        notes.append(f"Kikage Zumi R1 +{defender.reflexes} Armor TN (Reflexes)")
     return bonus, notes
 
 
@@ -340,6 +368,19 @@ def defender_reduction_bonus(defender: Character) -> tuple[int, list[str]]:
         v = 3 + stats.ring_value(defender, "void")
         bonus += v; notes.append(f"Power Within and Without +{v} Reduction (3 + Void Ring, no armour/kiho/tattoo)")
     return bonus, notes
+
+
+def maneuver_free_raises(
+    attacker: Character, weapon_name: str, maneuver: str,
+) -> tuple[int, list[str]]:
+    """(free_raises, notes) that reduce a maneuver's raise cost.
+    Kikage Zumi R4: Knockdown costs 1 less Raise unarmed."""
+    known = _known(attacker)
+    wname = weapon_name.lower().strip()
+    if "the hitomi kikage zumi order" in known and attacker.school_rank >= 4 \
+            and maneuver == "knockdown" and wname == "unarmed":
+        return 1, ["Kikage Zumi R4: Knockdown costs 1 less Raise (unarmed)"]
+    return 0, []
 
 
 def off_hand_penalty_removed(
