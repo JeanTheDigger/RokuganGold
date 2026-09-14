@@ -914,6 +914,32 @@ async def _npc_autocomplete(
     names = [r.character.name for r in recs if cur in r.character.name.lower()]
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
+async def _any_character_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    """Autocomplete across all PCs and NPCs in the guild."""
+    if interaction.guild_id is None:
+        return []
+    guild = str(interaction.guild_id)
+    cur = current.lower().strip()
+    names: list[str] = []
+    for _, rec in store.list_active_pcs(guild):
+        if cur in rec.character.name.lower():
+            names.append(rec.character.name)
+    for rec in store.list_by_owner(guild, NPC_OWNER):
+        if cur in rec.character.name.lower():
+            names.append(rec.character.name)
+    return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
+
+def _find_any_character(guild: str, name: str) -> storage.CharacterRecord | None:
+    rec = store.get_by_name(guild, NPC_OWNER, name)
+    if rec is not None:
+        return rec
+    for _, pc_rec in store.list_active_pcs(guild):
+        if pc_rec.character.name.lower() == name.lower():
+            return pc_rec
+    return None
+
 async def _creature_template_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -4266,33 +4292,6 @@ async def dm_setdate(
     )
     await interaction.response.send_message(embed=embed)
     await _update_date_display(guild, date_str, reason="The calendar has been set.")
-
-async def _any_character_autocomplete(
-    interaction: discord.Interaction, current: str
-) -> list[app_commands.Choice[str]]:
-    """Autocomplete across all PCs and NPCs in the guild."""
-    if interaction.guild_id is None:
-        return []
-    guild = str(interaction.guild_id)
-    cur = current.lower().strip()
-    names: list[str] = []
-    for _, rec in store.list_active_pcs(guild):
-        if cur in rec.character.name.lower():
-            names.append(rec.character.name)
-    for rec in store.list_by_owner(guild, NPC_OWNER):
-        if cur in rec.character.name.lower():
-            names.append(rec.character.name)
-    return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
-
-def _find_any_character(guild: str, name: str) -> storage.CharacterRecord | None:
-    rec = store.get_by_name(guild, NPC_OWNER, name)
-    if rec is not None:
-        return rec
-    for _, pc_rec in store.list_active_pcs(guild):
-        if pc_rec.character.name.lower() == name.lower():
-            return pc_rec
-    return None
-
 
 def _parse_advdis_name(raw: str, kind: str) -> tuple[dict | None, str]:
     """Parse an advantage/disadvantage name with optional parameter.
