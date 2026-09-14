@@ -211,3 +211,58 @@ def resolve_battle_table(
         "glory": glory,
         "event": event,
     }
+
+
+def resolve_general_contest(
+    perception_a: int,
+    battle_a: int,
+    perception_b: int,
+    battle_b: int,
+    dice_engine: DiceEngine,
+    bonus_a: int = 0,
+    bonus_b: int = 0,
+) -> dict:
+    """Contested Battle/Perception roll between opposing generals (RAW L5R 4e).
+
+    Each general rolls Battle/Perception. Compare totals:
+      - Difference >= 5: higher side is Winning, lower is Losing
+      - Difference < 5: Stalemate
+    GM applies bonuses for terrain, numbers, prior Heroic Opportunities.
+    """
+    rolled_a = perception_a + battle_a
+    kept_a = perception_a
+    explodes_a = battle_a > 0
+    result_a = dice_engine.roll_and_keep(
+        max(1, rolled_a), max(1, kept_a), explodes_a,
+    )
+    total_a = result_a.total + bonus_a
+
+    rolled_b = perception_b + battle_b
+    kept_b = perception_b
+    explodes_b = battle_b > 0
+    result_b = dice_engine.roll_and_keep(
+        max(1, rolled_b), max(1, kept_b), explodes_b,
+    )
+    total_b = result_b.total + bonus_b
+
+    diff = total_a - total_b
+    if diff >= 5:
+        status_a, status_b = "winning", "losing"
+    elif diff <= -5:
+        status_a, status_b = "losing", "winning"
+    else:
+        status_a, status_b = "stalemate", "stalemate"
+
+    return {
+        "total_a": total_a,
+        "total_b": total_b,
+        "diff": diff,
+        "status_a": status_a,
+        "status_b": status_b,
+        "dice_a": result_a,
+        "dice_b": result_b,
+        "rolled_a": rolled_a,
+        "kept_a": kept_a,
+        "rolled_b": rolled_b,
+        "kept_b": kept_b,
+    }

@@ -3853,6 +3853,86 @@ async def battle_table(
     await interaction.response.send_message(embed=embed)
 
 
+@combat_battle.command(name="status", description="Contested Battle/Perception between generals to determine Army Status. Fortune role required.")
+@app_commands.describe(
+    general_a="General of Side A (character name).",
+    general_b="General of Side B (character name).",
+    a_is_npc="Side A general is a stored NPC.",
+    b_is_npc="Side B general is a stored NPC.",
+    a_member="Side A general belongs to this player.",
+    b_member="Side B general belongs to this player.",
+    bonus_a="Flat bonus for Side A (terrain, numbers, Heroic Opportunities, etc.).",
+    bonus_b="Flat bonus for Side B (terrain, numbers, Heroic Opportunities, etc.).",
+)
+async def battle_status(
+    interaction: discord.Interaction,
+    general_a: str,
+    general_b: str,
+    a_is_npc: bool = False,
+    b_is_npc: bool = False,
+    a_member: discord.Member | None = None,
+    b_member: discord.Member | None = None,
+    bonus_a: int = 0,
+    bonus_b: int = 0,
+) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    if not await _d.require_dm_role(interaction):
+        return
+    guild = str(interaction.guild_id)
+    rec_a = _d.resolve_duelist(guild, interaction.channel_id, general_a, a_is_npc, a_member)
+    if rec_a is None:
+        await interaction.response.send_message(f"General **{general_a}** not found.", ephemeral=True)
+        return
+    rec_b = _d.resolve_duelist(guild, interaction.channel_id, general_b, b_is_npc, b_member)
+    if rec_b is None:
+        await interaction.response.send_message(f"General **{general_b}** not found.", ephemeral=True)
+        return
+    ca, cb = rec_a.character, rec_b.character
+    wp_a = stats.wound_penalty(ca)
+    wp_b = stats.wound_penalty(cb)
+    battle_a = ca.skills.get("Battle", 0)
+    battle_b = cb.skills.get("Battle", 0)
+    result = mass_battle.resolve_general_contest(
+        ca.perception, battle_a, cb.perception, battle_b,
+        _d.engine, bonus_a + wp_a, bonus_b + wp_b,
+    )
+
+    status_a = mass_battle.ARMY_STATUS_NAMES.get(result["status_a"], result["status_a"])
+    status_b = mass_battle.ARMY_STATUS_NAMES.get(result["status_b"], result["status_b"])
+
+    if result["status_a"] == "winning":
+        color = discord.Color.blue()
+    elif result["status_b"] == "winning":
+        color = discord.Color.red()
+    else:
+        color = discord.Color.greyple()
+
+    embed = discord.Embed(title="Army Status: Contested Battle/Perception", color=color)
+
+    a_line = f"({result['rolled_a']}k{result['kept_a']}) = **{result['total_a']}**"
+    eff_a = bonus_a + wp_a
+    if eff_a != 0:
+        a_line += f" (mod {eff_a:+d})"
+    embed.add_field(name=f"{ca.name}", value=f"{a_line}\nStatus: **{status_a}**", inline=True)
+
+    b_line = f"({result['rolled_b']}k{result['kept_b']}) = **{result['total_b']}**"
+    eff_b = bonus_b + wp_b
+    if eff_b != 0:
+        b_line += f" (mod {eff_b:+d})"
+    embed.add_field(name=f"{cb.name}", value=f"{b_line}\nStatus: **{status_b}**", inline=True)
+
+    embed.add_field(name="Margin", value=f"{result['diff']:+d} (need ±5 for Winning/Losing)", inline=False)
+
+    dice_a = _d.format_dice(result["dice_a"])
+    dice_b = _d.format_dice(result["dice_b"])
+    embed.add_field(name=f"{ca.name} Dice", value=dice_a, inline=True)
+    embed.add_field(name=f"{cb.name} Dice", value=dice_b, inline=True)
+
+    embed.set_footer(text="Use the resulting status with /combat battle table for individual PCs.")
+    await interaction.response.send_message(embed=embed)
+
+
 # ---------------------------------------------------------------------------
 # Phase 42: Mounted Combat (#10)
 # ---------------------------------------------------------------------------
