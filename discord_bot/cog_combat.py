@@ -1190,6 +1190,7 @@ async def attack(
     t_rolled, t_kept, t_flat, t_notes = technique_effects.attacker_attack_dice(
         attacker, atk_weapon_profile, weapon, a_stance, atk_init, def_init,
         defender=target_rec.character if target_rec else None,
+        maneuver=man,
     )
     bonus_rolled += t_rolled
     bonus_kept += t_kept

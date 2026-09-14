@@ -93,6 +93,7 @@ def attacker_attack_dice(
     attacker: Character, weapon_profile: dict, weapon_name: str, attacker_stance: str,
     atk_init: int | None = None, def_init: int | None = None,
     defender: Character | None = None,
+    maneuver: str = "none",
 ) -> tuple[int, int, int, list[str]]:
     """(bonus_rolled, bonus_kept, flat_bonus, notes) added to the attack roll."""
     known = _known(attacker)
@@ -163,6 +164,13 @@ def attacker_attack_dice(
             def_fire = stats.ring_value(defender, "fire")
             if atk_fire > def_fire:
                 flat += 5; notes.append(f"The Hand of the Heavens +5 attack (Free Raise; Fire {atk_fire} > {def_fire}, {wname})")
+    if "howl of the cliff's edge" in known and wname == "kusarigama" and maneuver in ("knockdown", "disarm"):
+        rolled += 2; kept += 1; notes.append(f"Howl of the Cliff's Edge +2k1 attack (kusarigama {maneuver})")
+    if "smoke and mirrors" in known and wname == "machi_kanshisha" and maneuver in ("knockdown", "disarm"):
+        flat += 5; notes.append(f"Smoke and Mirrors +5 attack (Free Raise; iron pipe {maneuver})")
+    if "no course but one" in known and defender is not None:
+        if int(defender.status) > stats.honor_rank(defender):
+            flat += 5; notes.append(f"No Course but One +5 attack (Free Raise; target Status {int(defender.status)} > Honor {stats.honor_rank(defender)})")
     return rolled, kept, flat, notes
 
 
@@ -251,6 +259,8 @@ def attacker_damage(
     if "master of the quick blade" in known and wname in _KNIFE_WEAPONS:
         if main in _KNIFE_WEAPONS and off in _KNIFE_WEAPONS:
             rolled += 1; kept += 1; notes.append("Master of the Quick Blade +1k1 damage (knife in each hand)")
+    if "the path of one" in known and wname in _PEASANT_WEAPONS:
+        rolled += 1; notes.append(f"The Path of One +1k0 damage (Peasant weapon)")
     if "purity in purpose & deed" in known:
         def_honor = stats.honor_rank(defender) if defender is not None else 0
         diff = stats.honor_rank(attacker) - def_honor
