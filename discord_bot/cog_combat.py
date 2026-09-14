@@ -3753,6 +3753,106 @@ async def battle_damage(
     await interaction.response.send_message(embed=embed)
 
 
+@combat_battle.command(name="table", description="Battle Table roll — individual experience in mass battle (GDD s47). Fortune role required.")
+@app_commands.describe(
+    name="Character name.",
+    army_status="Army Status for the character's side this round.",
+    engagement="Character's declared engagement level this round.",
+    member="Player whose character to use.",
+    is_npc="Target is an NPC.",
+    bonus="Flat bonus (advantages, terrain, wound penalties applied automatically).",
+)
+@app_commands.choices(
+    army_status=[
+        app_commands.Choice(name="Winning (+10% Health advantage)", value="winning"),
+        app_commands.Choice(name="Stalemate (within 10%)", value="stalemate"),
+        app_commands.Choice(name="Losing (-10% Health behind)", value="losing"),
+    ],
+    engagement=[
+        app_commands.Choice(name="Reserves (behind the lines)", value="reserves"),
+        app_commands.Choice(name="Disengaged (near but not in combat)", value="disengaged"),
+        app_commands.Choice(name="Engaged (in the thick of battle)", value="engaged"),
+        app_commands.Choice(name="Heavily Engaged (at the very front)", value="heavily_engaged"),
+    ],
+)
+async def battle_table(
+    interaction: discord.Interaction,
+    name: str,
+    army_status: app_commands.Choice[str],
+    engagement: app_commands.Choice[str],
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: int = 0,
+) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    if not await _d.require_dm_role(interaction):
+        return
+    guild = str(interaction.guild_id)
+    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    if rec is None:
+        await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
+        return
+    c = rec.character
+    battle_skill = c.skills.get("Battle", 0)
+    water = stats.water_ring(c)
+    wp = stats.wound_penalty(c)
+    result = mass_battle.resolve_battle_table(
+        water, battle_skill, army_status.value, engagement.value, _d.engine, bonus + wp,
+    )
+
+    color = discord.Color.green()
+    if result["event"] == "heroic":
+        color = discord.Color.gold()
+    elif result["event"] == "duel":
+        color = discord.Color.purple()
+    elif result["wounds_dice"] >= 4:
+        color = discord.Color.red()
+    elif result["wounds_dice"] >= 2:
+        color = discord.Color.orange()
+
+    embed = discord.Embed(title=f"Battle Table: {c.name}", color=color)
+
+    roll_parts = f"1d10 ({result['die_result'].total}) + Water {water} + Battle {battle_skill}"
+    effective_bonus = bonus + wp
+    if effective_bonus != 0:
+        roll_parts += f" + mod {effective_bonus:+d}"
+        if wp != 0:
+            roll_parts += f" (wound {wp:+d})"
+    roll_parts += f" = **{result['total']}** (band {result['row_band']})"
+    embed.add_field(name="Roll", value=roll_parts, inline=False)
+
+    status_label = mass_battle.ARMY_STATUS_NAMES.get(army_status.value, army_status.value)
+    eng_label = mass_battle.ENGAGEMENT_NAMES.get(engagement.value, engagement.value)
+    embed.add_field(name="Army Status", value=status_label, inline=True)
+    embed.add_field(name="Engagement", value=eng_label, inline=True)
+    embed.add_field(name="Column", value=str(result["column"]), inline=True)
+
+    lines: list[str] = []
+    if result["wounds_dice"] > 0:
+        lines.append(
+            f"**{result['wounds_dice']}W** ({result['wounds_dice']}k{result['wounds_dice']}) "
+            f"= **{result['wound_damage']} damage**"
+        )
+    else:
+        lines.append("**0W** — no wounds this round")
+    if result["glory"] > 0:
+        lines.append(f"**+{result['glory']} Glory**")
+    else:
+        lines.append("No Glory")
+    if result["event"] == "duel":
+        lines.append("⚔️ **DUEL** — encounter an enemy of roughly equal skill!")
+    elif result["event"] == "heroic":
+        lines.append("✨ **HEROIC OPPORTUNITY** — a chance to change the battle!")
+    embed.add_field(name="Result", value="\n".join(lines), inline=False)
+
+    if result["wound_roll"]:
+        embed.add_field(name="Wound Dice", value=_d.format_dice(result["wound_roll"]), inline=False)
+
+    embed.set_footer(text="Apply wounds with /sheet wound or /npc wound, subtracting armor Reduction.")
+    await interaction.response.send_message(embed=embed)
+
+
 # ---------------------------------------------------------------------------
 # Phase 42: Mounted Combat (#10)
 # ---------------------------------------------------------------------------
