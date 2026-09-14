@@ -19,9 +19,11 @@ kiho). Those stay DM-adjudicated: their full text is on the sheet via
 verbatim from the s29 LOCKED text; nothing is auto-applied on a condition the
 engine cannot actually check.
 
-Initiative- and Honor-comparison techniques apply only when the needed data is
-available (both combatants in the `/combat` encounter; the attacker passed in);
-otherwise they fall through to DM adjudication.
+Initiative-, Honor-, and Fire-Ring-comparison techniques apply only when the
+needed data is available (both combatants in the `/combat` encounter; both
+attacker and defender Characters passed in); otherwise they fall through to DM
+adjudication. Tengoku's Fist "Monk property" gate covers only the explicitly
+named weapons (unarmed, bisento, bo); other Monk-property weapons fall through.
 """
 
 from __future__ import annotations
@@ -47,6 +49,9 @@ _NINJA_WEAPONS = frozenset({
 })
 _KNIFE_WEAPONS = frozenset({
     "tanto", "aiguchi", "sai", "jitte", "kama",
+})
+_MONK_WEAPONS = frozenset({
+    "unarmed", "bisento", "bo",
 })
 
 
@@ -87,6 +92,7 @@ def _no_armor(character: Character) -> bool:
 def attacker_attack_dice(
     attacker: Character, weapon_profile: dict, weapon_name: str, attacker_stance: str,
     atk_init: int | None = None, def_init: int | None = None,
+    defender: Character | None = None,
 ) -> tuple[int, int, int, list[str]]:
     """(bonus_rolled, bonus_kept, flat_bonus, notes) added to the attack roll."""
     known = _known(attacker)
@@ -146,6 +152,17 @@ def attacker_attack_dice(
         rolled += 1; notes.append("The Blessings of Heaven +1k0 attack (Samurai weapon)")
     if "never beyond my reach" in known and wname in _NINJA_WEAPONS:
         rolled += 1; kept += 1; notes.append("Never Beyond My Reach +1k1 attack (Ninja weapon)")
+    if "purity in purpose & deed" in known:
+        def_honor = stats.honor_rank(defender) if defender is not None else 0
+        diff = stats.honor_rank(attacker) - def_honor
+        if diff > 0:
+            flat += diff; notes.append(f"Purity in Purpose & Deed +{diff} attack (Honor Rank {stats.honor_rank(attacker)} vs {def_honor})")
+    if "the hand of the heavens" in known and wname in _MONK_WEAPONS:
+        if defender is not None:
+            atk_fire = stats.ring_value(attacker, "fire")
+            def_fire = stats.ring_value(defender, "fire")
+            if atk_fire > def_fire:
+                flat += 5; notes.append(f"The Hand of the Heavens +5 attack (Free Raise; Fire {atk_fire} > {def_fire}, {wname})")
     return rolled, kept, flat, notes
 
 
@@ -175,6 +192,7 @@ def attacker_damage(
     attacker: Character, weapon_profile: dict, weapon_name: str,
     attacker_stance: str = "",
     atk_init: int | None = None, def_init: int | None = None,
+    defender: Character | None = None,
 ) -> tuple[int, int, int, list[str]]:
     """(extra_rolled, extra_kept, flat_bonus, notes) for the damage roll."""
     known = _known(attacker)
@@ -233,6 +251,11 @@ def attacker_damage(
     if "master of the quick blade" in known and wname in _KNIFE_WEAPONS:
         if main in _KNIFE_WEAPONS and off in _KNIFE_WEAPONS:
             rolled += 1; kept += 1; notes.append("Master of the Quick Blade +1k1 damage (knife in each hand)")
+    if "purity in purpose & deed" in known:
+        def_honor = stats.honor_rank(defender) if defender is not None else 0
+        diff = stats.honor_rank(attacker) - def_honor
+        if diff > 0:
+            flat += diff; notes.append(f"Purity in Purpose & Deed +{diff} damage (Honor Rank {stats.honor_rank(attacker)} vs {def_honor})")
     return rolled, kept, flat, notes
 
 

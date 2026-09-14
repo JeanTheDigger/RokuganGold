@@ -556,6 +556,7 @@ class DamageView(discord.ui.View):
         extra_rolled += tp_roll
         t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(
             attacker, wp, self.weapon, self.attacker_stance, self.atk_init, self.def_init,
+            defender=target,
         )
         extra_rolled += t_roll
         t_kept += tp_kept
@@ -1187,7 +1188,8 @@ async def attack(
 
     # Attacker's known Techniques: extra attack dice / flat bonus to the roll.
     t_rolled, t_kept, t_flat, t_notes = technique_effects.attacker_attack_dice(
-        attacker, atk_weapon_profile, weapon, a_stance, atk_init, def_init
+        attacker, atk_weapon_profile, weapon, a_stance, atk_init, def_init,
+        defender=target_rec.character if target_rec else None,
     )
     bonus_rolled += t_rolled
     bonus_kept += t_kept
