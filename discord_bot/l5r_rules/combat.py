@@ -550,12 +550,13 @@ CALLED_SHOT_PARTS = {
 }
 
 
-def roll_initiative(character: Character, dice_engine: DiceEngine):
+def roll_initiative(character: Character, dice_engine: DiceEngine,
+                    bonus_rolled: int = 0, bonus_kept: int = 0):
     """Initiative Roll & Keep: (Reflexes + Insight Rank) keep Reflexes
-    (character_stats.gd get_initiative_rolled / _kept)."""
+    plus optional bonus dice from school techniques."""
     ir = stats.insight_rank(character)
-    rolled = character.reflexes + ir
-    kept = character.reflexes
+    rolled = character.reflexes + ir + bonus_rolled
+    kept = character.reflexes + bonus_kept
     return dice_engine.roll_and_keep(max(1, rolled), max(1, kept))
 
 

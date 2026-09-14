@@ -1729,18 +1729,20 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
         await interaction.response.send_message(f"{who} no active character. Use `/sheet create` first.", ephemeral=True)
         return
 
-    result = combat.roll_initiative(rec.character, _d.engine)
+    idr, idk, idn = technique_effects.initiative_dice_bonus(rec.character)
+    result = combat.roll_initiative(rec.character, _d.engine, idr, idk)
     swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
     tech_init, tech_init_notes = technique_effects.initiative_bonus(rec.character)
     init_total = result.total + swift_bonus + tech_init
     swift_detail = f" +5 Swift" if swift_bonus else ""
     tech_init_detail = "".join(f" +{n}" for n in tech_init_notes)
+    dice_detail = "".join(f" [{n}]" for n in idn)
     enc = _get_or_create(interaction.channel_id)
     enc.remove(rec.character.name)  # re-join re-rolls
     enc.add(encounter.Combatant(
         name=rec.character.name,
         initiative=init_total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}",
+        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}",
         owner_id=str(owner.id),
         is_npc=False,
         reflexes=rec.character.reflexes,
@@ -1921,18 +1923,20 @@ async def combat_npc(interaction: discord.Interaction, name: str) -> None:
     if rec is None:
         await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
         return
-    result = combat.roll_initiative(rec.character, _d.engine)
+    idr, idk, idn = technique_effects.initiative_dice_bonus(rec.character)
+    result = combat.roll_initiative(rec.character, _d.engine, idr, idk)
     swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
     tech_init, tech_init_notes = technique_effects.initiative_bonus(rec.character)
     init_total = result.total + swift_bonus + tech_init
     swift_detail = f" +5 Swift" if swift_bonus else ""
     tech_init_detail = "".join(f" +{n}" for n in tech_init_notes)
+    dice_detail = "".join(f" [{n}]" for n in idn)
     enc = _get_or_create(interaction.channel_id)
     enc.remove(rec.character.name)
     enc.add(encounter.Combatant(
         name=rec.character.name,
         initiative=init_total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}",
+        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}",
         owner_id=None,
         is_npc=True,
         reflexes=rec.character.reflexes,
@@ -3162,17 +3166,19 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
             if rec is None:
                 not_found.append(f"NPC {ename}")
                 continue
-            result = combat.roll_initiative(rec.character, _d.engine)
+            idr, idk, idn = technique_effects.initiative_dice_bonus(rec.character)
+            result = combat.roll_initiative(rec.character, _d.engine, idr, idk)
             swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
             ti, tin = technique_effects.initiative_bonus(rec.character)
             init_total = result.total + swift_bonus + ti
             swift_detail = f" +5 Swift" if swift_bonus else ""
             tech_init_detail = "".join(f" +{n}" for n in tin)
+            dice_detail = "".join(f" [{n}]" for n in idn)
             enc.remove(rec.character.name)
             enc.add(encounter.Combatant(
                 name=rec.character.name,
                 initiative=init_total,
-                initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}",
+                initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}",
                 owner_id=None,
                 is_npc=True,
                 reflexes=rec.character.reflexes,
@@ -3226,17 +3232,19 @@ async def combat_room(interaction: discord.Interaction) -> None:
         if char_rec is None:
             skipped.append(f"<@{uid}>")
             continue
-        result = combat.roll_initiative(char_rec.character, _d.engine)
+        idr, idk, idn = technique_effects.initiative_dice_bonus(char_rec.character)
+        result = combat.roll_initiative(char_rec.character, _d.engine, idr, idk)
         swift_bonus = 5 if "swift" in char_rec.character.weapon_qualities else 0
         ti, tin = technique_effects.initiative_bonus(char_rec.character)
         init_total = result.total + swift_bonus + ti
         swift_detail = f" +5 Swift" if swift_bonus else ""
         tech_init_detail = "".join(f" +{n}" for n in tin)
+        dice_detail = "".join(f" [{n}]" for n in idn)
         enc.remove(char_rec.character.name)
         enc.add(encounter.Combatant(
             name=char_rec.character.name,
             initiative=init_total,
-            initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}",
+            initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}",
             owner_id=uid,
             is_npc=False,
             reflexes=char_rec.character.reflexes,

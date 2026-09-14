@@ -689,7 +689,35 @@ def initiative_bonus(character: Character) -> tuple[int, list[str]]:
         if v:
             bonus += v
             notes.append(f"Dance the Razor's Edge +{v} Initiative (Stealth rank)")
+    if "always be ready" in known:
+        bonus += 3
+        notes.append("Always Be Ready +3 Initiative Score")
+    if "the way of the crane" in known:
+        v = 2 * character.skills.get("Iaijutsu", character.skills.get("iaijutsu", 0))
+        if v:
+            bonus += v
+            notes.append(f"The Way of the Crane +{v} Initiative (2× Iaijutsu)")
     return bonus, notes
+
+
+def initiative_dice_bonus(character: Character) -> tuple[int, int, list[str]]:
+    """(bonus_rolled, bonus_kept, notes) extra dice added to the Initiative roll."""
+    known = _known(character)
+    rolled = kept = 0
+    notes: list[str] = []
+    if "the way of the scorpion" in known:
+        rolled += 1; kept += 1
+        notes.append("The Way of the Scorpion +1k1 Initiative")
+    if "speed of my sisters" in known:
+        rolled += 1
+        notes.append("Speed of My Sisters +1k0 Initiative")
+    if "master of the quick blade" in known:
+        main = (getattr(character, "equipped_weapon", "") or "").lower().strip()
+        off = (getattr(character, "off_hand_weapon", "") or "").lower().strip()
+        if main in _KNIFE_WEAPONS and off in _KNIFE_WEAPONS:
+            rolled += 1
+            notes.append("Master of the Quick Blade +1k0 Initiative (knife in each hand)")
+    return rolled, kept, notes
 
 
 # ---------------------------------------------------------------------------
