@@ -596,7 +596,7 @@ class DamageView(discord.ui.View):
         elif self.void_damage:
             t_dmg_notes.append("Katana: no Void Points for +1k1 damage")
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
-        t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
+        t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon, defender=target)
         ignore += t_ignore
         enc = _d.encounters.get(self.channel_id)
         enc_round = enc.round if enc else None
@@ -620,7 +620,7 @@ class DamageView(discord.ui.View):
             raw += fb
             feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
         crab_bonus, crab_note = kata_effects.defender_reduction_bonus(target, self.defender_stance)
-        tech_red, tech_red_notes = technique_effects.defender_reduction_bonus(target)
+        tech_red, tech_red_notes = technique_effects.defender_reduction_bonus(target, self.defender_stance)
         kiho_red, kiho_red_notes = kiho_effects.defender_reduction_bonus(target)
         tat_red, tat_red_notes = tattoo_effects.defender_reduction_bonus(target)
         scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
@@ -1418,7 +1418,7 @@ async def attack(
         kata_notes.extend(tat_free_notes)
 
     # Technique: Kikage Zumi R4 Knockdown discount (s29.3).
-    tech_free, tech_free_notes = technique_effects.maneuver_free_raises(attacker, weapon, man)
+    tech_free, tech_free_notes = technique_effects.maneuver_free_raises(attacker, weapon, man, weapon_profile=atk_weapon_profile)
     if tech_free:
         maneuver_raises = max(0, maneuver_raises - tech_free)
         kata_notes.extend(tech_free_notes)

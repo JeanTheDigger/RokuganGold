@@ -170,6 +170,28 @@ def attacker_attack_dice(
     if "no course but one" in known and defender is not None:
         if int(defender.status) > stats.honor_rank(defender):
             flat += 5; notes.append(f"No Course but One +5 attack (Free Raise; target Status {int(defender.status)} > Honor {stats.honor_rank(defender)})")
+    if "rain of death" in known:
+        if _is_bow(weapon_profile):
+            rolled += 2; kept += 2; notes.append("Rain of Death +2k2 attack (bow)")
+        else:
+            rolled += 1; notes.append("Rain of Death +1k0 attack")
+    if "shinsei's smile" in known and defender is not None:
+        wp_pen = stats.wound_penalty(defender)
+        if wp_pen < 0:
+            v = (-wp_pen) // 2
+            if v:
+                flat += v; notes.append(f"Shinsei's Smile +{v} attack (½ opponent wound penalty {wp_pen})")
+    if "the strength of one man" in known and defender is not None:
+        if stats.insight_rank(defender) > stats.insight_rank(attacker):
+            rolled += 1; kept += 1; notes.append("The Strength of One Man +1k1 attack (higher Insight Rank)")
+    if "crushing blow" in known and wname == "unarmed" and defender is not None:
+        arm_bonus = getattr(defender, "armor_tn_bonus", 0)
+        if arm_bonus:
+            flat += arm_bonus; notes.append(f"Crushing Blow +{arm_bonus} attack (ignore armor TN, unarmed)")
+    if "seeking weakness" in known and _is_small(weapon_profile) and defender is not None:
+        arm_bonus = getattr(defender, "armor_tn_bonus", 0)
+        if arm_bonus:
+            flat += arm_bonus; notes.append(f"Seeking Weakness +{arm_bonus} attack (ignore armor TN, Small weapon)")
     return rolled, kept, flat, notes
 
 
@@ -260,6 +282,28 @@ def attacker_damage(
             rolled += 1; kept += 1; notes.append("Master of the Quick Blade +1k1 damage (knife in each hand)")
     if "the path of one" in known and wname in _PEASANT_WEAPONS:
         rolled += 1; notes.append(f"The Path of One +1k0 damage (Peasant weapon)")
+    if "spotting the prey" in known and _is_bow(weapon_profile) and wname == "yumi":
+        from . import combat as _combat
+        base_rolled = _combat.get_weapon_profile("yumi").get("rolled", 2)
+        delta = attacker.perception - base_rolled
+        if delta != 0:
+            rolled += delta
+            notes.append(f"Spotting the Prey: Perception {attacker.perception} replaces bow Strength {base_rolled} for damage ({delta:+d}k0)")
+    if "the strength of one man" in known and defender is not None:
+        if stats.insight_rank(defender) > stats.insight_rank(attacker):
+            rolled += 1; kept += 1; notes.append("The Strength of One Man +1k1 damage (higher Insight Rank)")
+    if "weaken the resistance" in known and defender is not None:
+        has_armor_red = getattr(defender, "armor_reduction", 0) > 0
+        tech_red_val, _ = defender_reduction_bonus(defender)
+        if not has_armor_red and tech_red_val <= 0:
+            rolled += 1; notes.append("Weaken the Resistance +1k0 damage (opponent has no armor/technique Reduction)")
+    if "hold the passes" in known and not weapon_profile.get("melee", True):
+        thrown_skill = _skill(weapon_profile)
+        if thrown_skill in ("athletics", "knives"):
+            if wname in ("nage_yari", "nage-yari", "rock"):
+                rolled += 1; kept += 1; notes.append(f"Hold the Passes +1k1 damage (thrown {wname})")
+            else:
+                rolled += 1; notes.append("Hold the Passes +1k0 damage (thrown weapon)")
     if "purity in purpose & deed" in known:
         def_honor = stats.honor_rank(defender) if defender is not None else 0
         diff = stats.honor_rank(attacker) - def_honor
@@ -268,7 +312,10 @@ def attacker_damage(
     return rolled, kept, flat, notes
 
 
-def attacker_reduction_ignored(attacker: Character, weapon_profile: dict, weapon_name: str = "") -> tuple[int, list[str]]:
+def attacker_reduction_ignored(
+    attacker: Character, weapon_profile: dict, weapon_name: str = "",
+    defender: Character | None = None,
+) -> tuple[int, list[str]]:
     """Amount of the target's Reduction ignored by the attacker's Techniques."""
     known = _known(attacker)
     ignore = 0
@@ -286,6 +333,16 @@ def attacker_reduction_ignored(attacker: Character, weapon_profile: dict, weapon
     if "one blade, both hands" in known and wname == "tanto" and \
             not (getattr(attacker, "off_hand_weapon", "") or "").strip():
         ignore = _IGNORE_ALL; notes.append("One Blade, Both Hands ignores armor Reduction (tanto, off-hand empty)")
+    if "weaken the resistance" in known and defender is not None:
+        armor_red = getattr(defender, "armor_reduction", 0)
+        tech_red_val, _ = defender_reduction_bonus(defender)
+        total = armor_red + tech_red_val
+        if total > 0:
+            ignore += total; notes.append(f"Weaken the Resistance ignores {total} Reduction (armor {armor_red} + technique {tech_red_val})")
+    if "seeking weakness" in known and _is_small(weapon_profile) and defender is not None:
+        armor_red = getattr(defender, "armor_reduction", 0)
+        if armor_red > 0:
+            ignore += armor_red; notes.append(f"Seeking Weakness ignores {armor_red} armor Reduction (Small weapon)")
     return ignore, notes
 
 
@@ -373,10 +430,16 @@ def defender_armor_tn_bonus(
     if "the hitomi kikage zumi order" in known:
         bonus += defender.reflexes
         notes.append(f"Kikage Zumi R1 +{defender.reflexes} Armor TN (Reflexes)")
+    if "speed of the hare" in known and defender_stance not in ("full_attack", "center"):
+        ath = defender.skills.get("Athletics", defender.skills.get("athletics", 0))
+        if ath:
+            bonus += ath; notes.append(f"Speed of the Hare +{ath} Armor TN (Athletics rank)")
     return bonus, notes
 
 
-def defender_reduction_bonus(defender: Character) -> tuple[int, list[str]]:
+def defender_reduction_bonus(
+    defender: Character, defender_stance: str = "attack",
+) -> tuple[int, list[str]]:
     """(extra Reduction, notes) from the DEFENDER's known Techniques."""
     known = _known(defender)
     bonus = 0
@@ -399,20 +462,42 @@ def defender_reduction_bonus(defender: Character) -> tuple[int, list[str]]:
             not (getattr(defender, "active_tattoo", "") or "").strip():
         v = 3 + stats.ring_value(defender, "void")
         bonus += v; notes.append(f"Power Within and Without +{v} Reduction (3 + Void Ring, no armour/kiho/tattoo)")
+    if "the way of magari-yarijutsu" in known and defender_stance in ("center", "defense", "full_defense"):
+        from . import combat as _combat
+        eq = (defender.equipped_weapon or "").strip()
+        if eq:
+            wp = _combat.get_weapon_profile(eq)
+            wpn_skill = str(wp.get("skill", "")).lower()
+            if wpn_skill in _SPEAR_POLEARM:
+                sr = defender.skills.get("Spears", defender.skills.get("spears",
+                     defender.skills.get("Polearms", defender.skills.get("polearms", 0))))
+                v = math.ceil(sr / 2)
+                if v:
+                    bonus += v; notes.append(f"Way of Magari-Yarijutsu +{v} Reduction (½ {wpn_skill.title()} rank, {defender_stance.title()})")
     return bonus, notes
 
 
 def maneuver_free_raises(
     attacker: Character, weapon_name: str, maneuver: str,
+    weapon_profile: dict | None = None,
 ) -> tuple[int, list[str]]:
-    """(free_raises, notes) that reduce a maneuver's raise cost.
-    Kikage Zumi R4: Knockdown costs 1 less Raise unarmed."""
+    """(free_raises, notes) that reduce a maneuver's raise cost."""
     known = _known(attacker)
     wname = weapon_name.lower().strip()
+    free = 0
+    notes: list[str] = []
     if "the hitomi kikage zumi order" in known and attacker.school_rank >= 4 \
             and maneuver == "knockdown" and wname == "unarmed":
-        return 1, ["Kikage Zumi R4: Knockdown costs 1 less Raise (unarmed)"]
-    return 0, []
+        free += 1; notes.append("Kikage Zumi R4: Knockdown costs 1 less Raise (unarmed)")
+    if "pincers and tail" in known and maneuver == "feint":
+        free += 1; notes.append("Pincers and Tail: Feint costs 1 less Raise")
+    if "wearing down the mountain" in known and maneuver == "extra_attack" and \
+            wname in ("unarmed", "improvised"):
+        free += 2; notes.append("Wearing Down the Mountain: Extra Attack costs 2 fewer Raises (unarmed/improvised)")
+    if "the arrow knows the way" in known and maneuver == "called_shot":
+        if weapon_profile is not None and _is_bow(weapon_profile):
+            free += 1; notes.append("The Arrow Knows the Way: Called Shot 1 free Raise (bow)")
+    return free, notes
 
 
 def off_hand_penalty_removed(
