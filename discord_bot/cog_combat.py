@@ -3764,9 +3764,9 @@ async def battle_damage(
 )
 @app_commands.choices(
     army_status=[
-        app_commands.Choice(name="Winning (+10% Health advantage)", value="winning"),
-        app_commands.Choice(name="Stalemate (within 10%)", value="stalemate"),
-        app_commands.Choice(name="Losing (-10% Health behind)", value="losing"),
+        app_commands.Choice(name="Winning (general won contest by 5+)", value="winning"),
+        app_commands.Choice(name="Stalemate (contest margin < 5)", value="stalemate"),
+        app_commands.Choice(name="Losing (general lost contest by 5+)", value="losing"),
     ],
     engagement=[
         app_commands.Choice(name="Reserves (behind the lines)", value="reserves"),
