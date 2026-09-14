@@ -162,6 +162,7 @@ class DamageView(discord.ui.View):
         attacker_stance: str = "",
         atk_init: int | None = None,
         def_init: int | None = None,
+        duel_strike_reduction: int = 0,
     ) -> None:
         super().__init__(timeout=1800)  # 30 min
         self.attacker_id = attacker_id
@@ -182,6 +183,7 @@ class DamageView(discord.ui.View):
         self.attacker_stance = attacker_stance
         self.atk_init = atk_init
         self.def_init = def_init
+        self.duel_strike_reduction = duel_strike_reduction
         # Relabel the primary button to match the maneuver, and hide the Void
         # button when it would be nonsensical (knockdown has no damage roll;
         # creature targets have no VP pool).
@@ -658,10 +660,11 @@ class DamageView(discord.ui.View):
             if true_sub > 0:
                 true_note = f"True: Reduction −{true_sub} (wielder Strength {attacker.strength})"
                 base_red = max(0, base_red - attacker.strength)
+        duel_red_note = f"Warrior of Earth +{self.duel_strike_reduction} Reduction (duel Strike)" if self.duel_strike_reduction else ""
         kata_line = "".join(
-            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes, *tat_red_notes) if n
+            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, duel_red_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes, *tat_red_notes) if n
         )
-        reduction = max(0, base_red - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red + tat_red)
+        reduction = max(0, base_red - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red + tat_red + self.duel_strike_reduction)
         if wp.get("ignore_all_reduction"):
             reduction = 0
         applied = combat.apply_damage(target, raw, reduction)
@@ -2799,11 +2802,22 @@ async def duel_assess(
     wp_a = stats.wound_penalty(ca)
     wp_b = stats.wound_penalty(cb_char)
 
+    tr_a, tk_a, tf_a, tn_a = technique_effects.iaijutsu_roll_bonus(ca, "assessment")
+    tr_b, tk_b, tf_b, tn_b = technique_effects.iaijutsu_roll_bonus(cb_char, "assessment")
+    ex9_a, ex9n_a = technique_effects.iaijutsu_explode_9(ca, "assessment")
+    ex9_b, ex9n_b = technique_effects.iaijutsu_explode_9(cb_char, "assessment")
+    tech_notes_a = tn_a + ex9n_a
+    tech_notes_b = tn_b + ex9n_b
+
     res_a = combat.resolve_iaijutsu_assessment(
-        ca.awareness, ca.skills.get("Iaijutsu", 0), ir_b, _d.engine, extra_flat=wp_a,
+        ca.awareness, ca.skills.get("Iaijutsu", 0), ir_b, _d.engine,
+        extra_flat=wp_a + tf_a, bonus_rolled=tr_a, bonus_kept=tk_a,
+        explode_9=ex9_a,
     )
     res_b = combat.resolve_iaijutsu_assessment(
-        cb_char.awareness, cb_char.skills.get("Iaijutsu", 0), ir_a, _d.engine, extra_flat=wp_b,
+        cb_char.awareness, cb_char.skills.get("Iaijutsu", 0), ir_a, _d.engine,
+        extra_flat=wp_b + tf_b, bonus_rolled=tr_b, bonus_kept=tk_b,
+        explode_9=ex9_b,
     )
 
     diff_ab = res_a["total"] - res_b["total"]
@@ -2832,12 +2846,19 @@ async def duel_assess(
         chosen = available[: reveals]
         return "Learned " + str(reveals) + ":\n" + "\n".join(chosen)
 
+    def _duel_notes(wp, tech_notes):
+        parts = []
+        if wp:
+            parts.append(f"wound penalty {wp}")
+        parts.extend(tech_notes)
+        return f"\n({', '.join(parts)})" if parts else ""
+
     embed.add_field(
         name=f"{ca.name}: Assessment",
         value=(
             f"{res_a['rolled']}k{res_a['kept']} → **{res_a['total']}** vs TN **{res_a['tn']}**"
             f": {'**SUCCESS**' if res_a['success'] else '**FAILED**'}"
-            + (f" (wound penalty {wp_a})" if wp_a else "")
+            + _duel_notes(wp_a, tech_notes_a)
             + "\n" + _reveal_text(res_a, cb_char)
         ),
         inline=False,
@@ -2847,7 +2868,7 @@ async def duel_assess(
         value=(
             f"{res_b['rolled']}k{res_b['kept']} → **{res_b['total']}** vs TN **{res_b['tn']}**"
             f": {'**SUCCESS**' if res_b['success'] else '**FAILED**'}"
-            + (f" (wound penalty {wp_b})" if wp_b else "")
+            + _duel_notes(wp_b, tech_notes_b)
             + "\n" + _reveal_text(res_b, ca)
         ),
         inline=False,
@@ -2904,13 +2925,25 @@ async def duel_focus(
     wp_a = stats.wound_penalty(ca)
     wp_b = stats.wound_penalty(cb_char)
 
+    tr_a, tk_a, tf_a, tn_a = technique_effects.iaijutsu_roll_bonus(ca, "focus")
+    tr_b, tk_b, tf_b, tn_b = technique_effects.iaijutsu_roll_bonus(cb_char, "focus")
+    ex9_a, ex9n_a = technique_effects.iaijutsu_explode_9(ca, "focus")
+    ex9_b, ex9n_b = technique_effects.iaijutsu_explode_9(cb_char, "focus")
+    wt_a, rd_a, ftn_a = technique_effects.iaijutsu_focus_thresholds(ca)
+    wt_b, rd_b, ftn_b = technique_effects.iaijutsu_focus_thresholds(cb_char)
+    tech_notes_a = tn_a + ex9n_a + ftn_a
+    tech_notes_b = tn_b + ex9n_b + ftn_b
+
     result = combat.resolve_iaijutsu_focus(
         ca.void_ring, ca.skills.get("Iaijutsu", 0),
         cb_char.void_ring, cb_char.skills.get("Iaijutsu", 0),
         _d.engine,
-        bonus_rolled_a=bonus_r_a, bonus_kept_a=bonus_k_a,
-        bonus_rolled_b=bonus_r_b, bonus_kept_b=bonus_k_b,
-        extra_flat_a=wp_a, extra_flat_b=wp_b,
+        bonus_rolled_a=bonus_r_a + tr_a, bonus_kept_a=bonus_k_a + tk_a,
+        bonus_rolled_b=bonus_r_b + tr_b, bonus_kept_b=bonus_k_b + tk_b,
+        extra_flat_a=wp_a + tf_a, extra_flat_b=wp_b + tf_b,
+        explode_9_a=ex9_a, explode_9_b=ex9_b,
+        win_threshold_a=wt_a, win_threshold_b=wt_b,
+        raise_divisor_a=rd_a, raise_divisor_b=rd_b,
     )
 
     embed = discord.Embed(title="⚔️ Iaijutsu Duel: Focus", color=discord.Color.dark_gold())
@@ -2920,10 +2953,12 @@ async def duel_focus(
         a_mods.append("+1k1 Assessment")
     if wp_a:
         a_mods.append(f"wound {wp_a}")
+    a_mods.extend(tech_notes_a)
     if b_focus_bonus:
         b_mods.append("+1k1 Assessment")
     if wp_b:
         b_mods.append(f"wound {wp_b}")
+    b_mods.extend(tech_notes_b)
     a_notes = f" ({', '.join(a_mods)})" if a_mods else ""
     b_notes = f" ({', '.join(b_mods)})" if b_mods else ""
     embed.add_field(
@@ -2941,7 +2976,7 @@ async def duel_focus(
     fs = result["first_striker"]
     if fs == "kharmic":
         outcome = (
-            f"Neither exceeds by 5: **Kharmic Strike** (simultaneous).\n"
+            f"Margin **{diff}** — neither exceeds their threshold: **Kharmic Strike** (simultaneous).\n"
             f"Both attack at the same time; the cause is considered dropped."
         )
     else:
@@ -3005,11 +3040,17 @@ async def duel_strike(
     atk = rec_a.character
     tgt = rec_t.character
     wp = combat.get_weapon_profile(weapon)
-    target_tn = combat.armor_tn(tgt, "center", bonus_tn)
     wound_pen = stats.wound_penalty(atk)
+
+    tr, tk, tf, tech_notes = technique_effects.iaijutsu_roll_bonus(atk, "strike")
+    def_tn_bonus, def_tn_notes = technique_effects.defender_armor_tn_bonus(tgt, "center")
+    target_tn = combat.armor_tn(tgt, "center", bonus_tn) + def_tn_bonus
+    duel_red, duel_red_notes = technique_effects.iaijutsu_strike_reduction(tgt)
+
     result = combat.resolve_iaijutsu_strike(
         atk.reflexes, atk.skills.get("Iaijutsu", 0), target_tn, _d.engine,
-        free_raises=free_raises, extra_flat=wound_pen,
+        free_raises=free_raises, extra_flat=wound_pen + tf,
+        bonus_rolled=tr, bonus_kept=tk,
     )
     hit = result["hit"]
     embed = discord.Embed(
@@ -3025,6 +3066,9 @@ async def duel_strike(
         notes.append(f"wound penalty {wound_pen}")
     if free_raises:
         notes.append(f"{free_raises} Free Raise{'s' if free_raises != 1 else ''} from Focus")
+    notes.extend(tech_notes)
+    notes.extend(def_tn_notes)
+    notes.extend(duel_red_notes)
     if notes:
         roll_text += f"\n({', '.join(notes)})"
     embed.add_field(name="Strike Roll", value=roll_text, inline=False)
@@ -3041,6 +3085,7 @@ async def duel_strike(
             maneuver="none",
             attack_margin=result["margin"],
             channel_id=interaction.channel_id,
+            duel_strike_reduction=duel_red,
         )
     else:
         embed.set_footer(text="The strike misses.")

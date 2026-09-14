@@ -563,3 +563,95 @@ def off_hand_penalty_removed(
         return True, False, ["Folds of the Iron Fan: no off-hand penalty (war fan)"]
 
     return False, False, []
+
+
+# ---------------------------------------------------------------------------
+# Iaijutsu duel modifiers (s29)
+# ---------------------------------------------------------------------------
+
+
+def iaijutsu_roll_bonus(
+    character: Character,
+    roll_type: str,
+) -> tuple[int, int, int, list[str]]:
+    """(bonus_rolled, bonus_kept, flat_bonus, notes) for iaijutsu duel rolls.
+
+    roll_type: "assessment", "focus", or "strike".
+    Center Stance is assumed for all iaijutsu duel rolls.
+    """
+    known = _known(character)
+    rolled = kept = flat = 0
+    notes: list[str] = []
+
+    if "the calm in midst of thunder" in known:
+        v = character.skills.get("Kenjutsu", character.skills.get("kenjutsu", 0))
+        if v:
+            flat += v
+            notes.append(f"Calm in Midst of Thunder +{v} (Kenjutsu rank, Center Stance)")
+
+    if "the gaze of sun tao" in known:
+        v = stats.honor_rank(character)
+        if v:
+            flat += v
+            notes.append(f"Gaze of Sun Tao +{v} (Honor Rank)")
+
+    if roll_type == "assessment":
+        if "the purity of justice" in known:
+            v = character.skills.get("Investigation", character.skills.get("investigation", 0))
+            if v:
+                flat += v
+                notes.append(f"Purity of Justice +{v} Assessment (Investigation rank)")
+
+    if roll_type == "focus":
+        if "the way of the crane" in known:
+            sr = max(1, character.school_rank)
+            rolled += 1; kept += 1; flat += sr
+            notes.append(f"Way of the Crane +1k1+{sr} Focus (Center Stance)")
+        if "mirumoto's strength" in known:
+            rolled += 1; kept += 1
+            notes.append("Mirumoto's Strength +1k1 Focus (always)")
+
+    if roll_type == "strike":
+        if "the way of the crane" in known:
+            sr = max(1, character.school_rank)
+            rolled += 1; kept += 1; flat += sr
+            notes.append(f"Way of the Crane +1k1+{sr} Strike (Center Stance)")
+
+    return rolled, kept, flat, notes
+
+
+def iaijutsu_explode_9(
+    character: Character,
+    roll_type: str,
+) -> tuple[bool, list[str]]:
+    """Whether the character's iaijutsu dice explode on 9+ (instead of 10).
+
+    roll_type: "assessment" or "focus". Kakita's Strength applies to both.
+    """
+    known = _known(character)
+    if roll_type in ("assessment", "focus") and "kakita's strength" in known:
+        return True, ["Kakita's Strength: dice explode on 9+ (" + roll_type + ")"]
+    return False, []
+
+
+def iaijutsu_focus_thresholds(character: Character) -> tuple[int, int, list[str]]:
+    """(win_margin, raise_divisor, notes) for Focus resolution.
+
+    Default (5, 5). First and Last Strike: (3, 3).
+    """
+    known = _known(character)
+    if "first and last strike" in known:
+        return 3, 3, ["First and Last Strike: win by 3+, Free Raise per 3"]
+    return 5, 5, []
+
+
+def iaijutsu_strike_reduction(character: Character) -> tuple[int, list[str]]:
+    """Extra Reduction during the Strike step of an iaijutsu duel."""
+    known = _known(character)
+    bonus = 0
+    notes: list[str] = []
+    if "warrior of earth" in known:
+        v = stats.ring_value(character, "earth") * 3
+        bonus += v
+        notes.append(f"Warrior of Earth +{v} Reduction (Earth×3, duel Strike)")
+    return bonus, notes

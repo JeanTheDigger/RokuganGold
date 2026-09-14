@@ -622,12 +622,17 @@ def resolve_iaijutsu_assessment(
     dice_engine: DiceEngine,
     raises: int = 0,
     extra_flat: int = 0,
+    bonus_rolled: int = 0,
+    bonus_kept: int = 0,
+    explode_9: bool = False,
 ) -> dict:
     """Iaijutsu (Assessment)/Awareness roll vs TN 10 + opponent IR×5."""
-    rolled = awareness + iaijutsu_skill
-    kept = awareness
+    rolled = awareness + iaijutsu_skill + bonus_rolled
+    kept = awareness + bonus_kept
     explodes = iaijutsu_skill > 0
-    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
+    result = dice_engine.roll_and_keep(
+        max(1, rolled), max(1, kept), explodes, explode_9=explode_9,
+    )
     total = result.total + extra_flat
     tn = iaijutsu_assessment_tn(opponent_insight_rank) + raises * 5
     success = total >= tn
@@ -657,31 +662,44 @@ def resolve_iaijutsu_focus(
     bonus_kept_b: int = 0,
     extra_flat_a: int = 0,
     extra_flat_b: int = 0,
+    explode_9_a: bool = False,
+    explode_9_b: bool = False,
+    win_threshold_a: int = 5,
+    win_threshold_b: int = 5,
+    raise_divisor_a: int = 5,
+    raise_divisor_b: int = 5,
 ) -> dict:
     """Contested Iaijutsu (Focus)/Void roll.
 
     Returns who strikes first and how many Free Raises.
-    If neither wins by 5+, kharmic strike (simultaneous)."""
+    win_threshold controls the margin needed to strike first (default 5;
+    Kakita R3 First and Last Strike uses 3). raise_divisor controls the
+    Free-Raise-per-margin step (default 5; First and Last Strike uses 3).
+    Thresholds are per-duelist — asymmetric when only one has the technique."""
     r_a = void_a + iaijutsu_a + bonus_rolled_a
     k_a = void_a + bonus_kept_a
     r_b = void_b + iaijutsu_b + bonus_rolled_b
     k_b = void_b + bonus_kept_b
     explodes_a = iaijutsu_a > 0
     explodes_b = iaijutsu_b > 0
-    roll_a = dice_engine.roll_and_keep(max(1, r_a), max(1, k_a), explodes_a)
-    roll_b = dice_engine.roll_and_keep(max(1, r_b), max(1, k_b), explodes_b)
+    roll_a = dice_engine.roll_and_keep(
+        max(1, r_a), max(1, k_a), explodes_a, explode_9=explode_9_a,
+    )
+    roll_b = dice_engine.roll_and_keep(
+        max(1, r_b), max(1, k_b), explodes_b, explode_9=explode_9_b,
+    )
     total_a = roll_a.total + extra_flat_a
     total_b = roll_b.total + extra_flat_b
     diff = total_a - total_b
-    if abs(diff) < 5:
-        first_striker = "kharmic"
-        free_raises = 0
-    elif diff >= 5:
+    free_raises = 0
+    if diff > 0 and diff >= win_threshold_a:
         first_striker = "a"
-        free_raises = (abs(diff) - 5) // 5
-    else:
+        free_raises = (diff - win_threshold_a) // raise_divisor_a
+    elif diff < 0 and abs(diff) >= win_threshold_b:
         first_striker = "b"
-        free_raises = (abs(diff) - 5) // 5
+        free_raises = (abs(diff) - win_threshold_b) // raise_divisor_b
+    else:
+        first_striker = "kharmic"
     return {
         "a_total": total_a,
         "b_total": total_b,
@@ -704,10 +722,12 @@ def resolve_iaijutsu_strike(
     dice_engine: DiceEngine,
     free_raises: int = 0,
     extra_flat: int = 0,
+    bonus_rolled: int = 0,
+    bonus_kept: int = 0,
 ) -> dict:
     """Iaijutsu/Reflexes attack roll vs target's normal Armor TN."""
-    rolled = reflexes + iaijutsu_skill
-    kept = reflexes
+    rolled = reflexes + iaijutsu_skill + bonus_rolled
+    kept = reflexes + bonus_kept
     explodes = iaijutsu_skill > 0
     result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
     total = result.total + extra_flat
