@@ -2575,6 +2575,7 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
     view.add_item(back_disadv_btn)
     view.add_item(back_skills_btn)
 
+    sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
     is_shugenja = sch and sch.get("affinity")
     if is_shugenja:
         back_spells_btn = discord.ui.Button(label="Back: Spells", style=discord.ButtonStyle.secondary, row=2)
