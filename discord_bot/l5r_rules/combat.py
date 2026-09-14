@@ -171,14 +171,16 @@ def roll_full_defense(
     defense_skill: int,
     dice_engine: DiceEngine,
     wound_penalty: int = 0,
+    extra_rolled: int = 0,
+    extra_flat: int = 0,
 ) -> dict:
     """Full Defense Stance (s40): Defense/Reflexes roll, add half (rounded up)
     to Armor TN until the character's next Turn. Complex Action."""
-    rolled = reflexes + defense_skill
+    rolled = reflexes + defense_skill + extra_rolled
     kept = reflexes
     explodes = defense_skill > 0
     result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
-    total = result.total + wound_penalty
+    total = result.total + wound_penalty + extra_flat
     bonus = max(0, math.ceil(total / 2))
     return {
         "total": total,
@@ -216,11 +218,12 @@ def resolve_grapple_initiate(
     target_tn: int,
     dice_engine: DiceEngine,
     extra_flat: int = 0,
+    extra_rolled: int = 0,
 ) -> dict:
     """Grapple initiation attack: Jiujutsu/Agility vs modified Armor TN."""
     agility = attacker.agility
     jiujutsu = attacker.skills.get("Jiujutsu", 0)
-    rolled = agility + jiujutsu
+    rolled = agility + jiujutsu + extra_rolled
     kept = agility
     explodes = jiujutsu > 0
     wound_pen = stats.wound_penalty(attacker)
@@ -246,18 +249,22 @@ def resolve_grapple_control(
     dice_engine: DiceEngine,
     wound_penalty_a: int = 0,
     wound_penalty_b: int = 0,
+    extra_rolled_a: int = 0,
+    extra_flat_a: int = 0,
+    extra_rolled_b: int = 0,
+    extra_flat_b: int = 0,
 ) -> dict:
     """Contested Jiujutsu/Strength roll for grapple control."""
-    rolled_a = strength_a + jiujutsu_a
+    rolled_a = strength_a + jiujutsu_a + extra_rolled_a
     kept_a = strength_a
-    rolled_b = strength_b + jiujutsu_b
+    rolled_b = strength_b + jiujutsu_b + extra_rolled_b
     kept_b = strength_b
     explodes_a = jiujutsu_a > 0
     explodes_b = jiujutsu_b > 0
     result_a = dice_engine.roll_and_keep(max(1, rolled_a), max(1, kept_a), explodes_a)
     result_b = dice_engine.roll_and_keep(max(1, rolled_b), max(1, kept_b), explodes_b)
-    total_a = result_a.total + wound_penalty_a
-    total_b = result_b.total + wound_penalty_b
+    total_a = result_a.total + wound_penalty_a + extra_flat_a
+    total_b = result_b.total + wound_penalty_b + extra_flat_b
     winner = "a"
     if total_b > total_a:
         winner = "b"

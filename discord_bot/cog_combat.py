@@ -2132,6 +2132,10 @@ async def combat_full_defense(
     if blocked:
         await interaction.response.send_message(f"**{cb.name}** cannot act: {block_reason}", ephemeral=True)
         return
+    stance_blocked, stance_reason = condition_effects.invalid_stance(cb.conditions, "full_defense")
+    if stance_blocked:
+        await interaction.response.send_message(f"**{cb.name}** cannot use Full Defense: {stance_reason}", ephemeral=True)
+        return
     if cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
@@ -2155,7 +2159,9 @@ async def combat_full_defense(
         )
         return
     wp = stats.wound_penalty(rec.character) if rec is not None else 0
-    result = combat.roll_full_defense(ref, def_sk, _d.engine, wound_penalty=wp)
+    cr, cf, _ = condition_effects.contested_roll_modifier(cb.conditions)
+    result = combat.roll_full_defense(ref, def_sk, _d.engine, wound_penalty=wp,
+                                      extra_rolled=cr, extra_flat=cf)
     cb.full_defense_bonus = result["bonus"]
     cb.stance = "full_defense"
     cb.actions_used = 2
@@ -2390,7 +2396,9 @@ async def grapple_initiate(
             f"**{atk_cb.name}** has already used actions this turn ({atk_cb.actions_used}/2). "
             f"Use `/fight action reset` to override.", ephemeral=True)
         return
-    outcome = combat.resolve_grapple_initiate(atk_rec.character, tn, _d.engine)
+    ar, af, _ = condition_effects.contested_roll_modifier(atk_cb.conditions)
+    outcome = combat.resolve_grapple_initiate(atk_rec.character, tn, _d.engine,
+                                              extra_flat=af, extra_rolled=ar)
     hit = outcome["hit"]
     equipped = atk_rec.character.equipped_weapon
     grapple_weapon_note = ""
@@ -2420,12 +2428,15 @@ async def grapple_initiate(
         jiu_b = def_rec.character.skills.get("Jiujutsu", 0)
         wp_a = stats.wound_penalty(atk_rec.character)
         wp_b = stats.wound_penalty(def_rec.character)
-        contest = combat.resolve_grapple_control(str_a, jiu_a, str_b, jiu_b, _d.engine, wp_a, wp_b)
+        cr_a, cf_a, _ = condition_effects.contested_roll_modifier(atk_cb.conditions)
+        cr_b, cf_b, _ = condition_effects.contested_roll_modifier(def_cb.conditions)
+        contest = combat.resolve_grapple_control(str_a, jiu_a, str_b, jiu_b, _d.engine, wp_a, wp_b,
+                                                 cr_a, cf_a, cr_b, cf_b)
         atk_wins = contest["winner"] in ("a", "tie")
         embed.add_field(
             name="2. Contested Strength (Jiujutsu/Strength)",
-            value=f"{atk_cb.name}: ({str_a + jiu_a}k{str_a}) → **{contest['total_a']}**\n"
-                  f"{def_cb.name}: ({str_b + jiu_b}k{str_b}) → **{contest['total_b']}**\n"
+            value=f"{atk_cb.name}: ({str_a + jiu_a + cr_a}k{str_a}) → **{contest['total_a']}**\n"
+                  f"{def_cb.name}: ({str_b + jiu_b + cr_b}k{str_b}) → **{contest['total_b']}**\n"
                   f"{'**Attacker wins** — grapple established!' if atk_wins else '**Defender resists** — grab fails!'}",
             inline=False,
         )
@@ -2492,7 +2503,10 @@ async def grapple_control(
     jiu_b = rec_b.character.skills.get("Jiujutsu", 0)
     wp_a = stats.wound_penalty(rec_a.character)
     wp_b = stats.wound_penalty(rec_b.character)
-    result = combat.resolve_grapple_control(str_a, jiu_a, str_b, jiu_b, _d.engine, wp_a, wp_b)
+    ar_a, af_a, _ = condition_effects.contested_roll_modifier(cb_a.conditions)
+    ar_b, af_b, _ = condition_effects.contested_roll_modifier(cb_b.conditions)
+    result = combat.resolve_grapple_control(str_a, jiu_a, str_b, jiu_b, _d.engine, wp_a, wp_b,
+                                            ar_a, af_a, ar_b, af_b)
     if result["winner"] == "a":
         winner, loser = cb_a.name, cb_b.name
     elif result["winner"] == "b":
@@ -2506,12 +2520,12 @@ async def grapple_control(
     )
     embed.add_field(
         name=cb_a.name,
-        value=f"({str_a + jiu_a}k{str_a}) → **{result['total_a']}**",
+        value=f"({str_a + jiu_a + ar_a}k{str_a}) → **{result['total_a']}**",
         inline=True,
     )
     embed.add_field(
         name=cb_b.name,
-        value=f"({str_b + jiu_b}k{str_b}) → **{result['total_b']}**",
+        value=f"({str_b + jiu_b + ar_b}k{str_b}) → **{result['total_b']}**",
         inline=True,
     )
     if loser:
@@ -2701,9 +2715,9 @@ async def grapple_break(
     if cb is None:
         await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
         return
-    if "stunned" in cb.conditions:
-        await interaction.response.send_message(
-            f"**{cb.name}** cannot act: **Stunned** (recovers Earth TN 20 at Reactions Stage)", ephemeral=True)
+    blocked, block_reason = condition_effects.cannot_act(cb.conditions)
+    if blocked:
+        await interaction.response.send_message(f"**{cb.name}** cannot act: {block_reason}", ephemeral=True)
         return
     guild = str(interaction.guild_id)
 
@@ -2745,7 +2759,10 @@ async def grapple_break(
     jiu_ctrl = rec_opp.character.skills.get("Jiujutsu", 0)
     wp_def = stats.wound_penalty(rec_cb.character)
     wp_ctrl = stats.wound_penalty(rec_opp.character)
-    result = combat.resolve_grapple_control(str_def, jiu_def, str_ctrl, jiu_ctrl, _d.engine, wp_def, wp_ctrl)
+    ar_def, af_def, _ = condition_effects.contested_roll_modifier(cb.conditions)
+    ar_ctrl, af_ctrl, _ = condition_effects.contested_roll_modifier(opp_cb.conditions)
+    result = combat.resolve_grapple_control(str_def, jiu_def, str_ctrl, jiu_ctrl, _d.engine, wp_def, wp_ctrl,
+                                            ar_def, af_def, ar_ctrl, af_ctrl)
     defender_wins = result["winner"] == "a"
     cb.actions_used = 2
     embed = discord.Embed(
@@ -2836,6 +2853,12 @@ async def duel_assess(
     ir_b = stats.insight_rank(cb_char)
     wp_a = stats.wound_penalty(ca)
     wp_b = stats.wound_penalty(cb_char)
+    cb_a_enc = enc.find(ca.name) if enc else None
+    cb_b_enc = enc.find(cb_char.name) if enc else None
+    conds_a = cb_a_enc.conditions if cb_a_enc else set()
+    conds_b = cb_b_enc.conditions if cb_b_enc else set()
+    cr_a, cf_a, _ = condition_effects.contested_roll_modifier(conds_a)
+    cr_b, cf_b, _ = condition_effects.contested_roll_modifier(conds_b)
 
     tr_a, tk_a, tf_a, tn_a = technique_effects.iaijutsu_roll_bonus(ca, "assessment")
     tr_b, tk_b, tf_b, tn_b = technique_effects.iaijutsu_roll_bonus(cb_char, "assessment")
@@ -2846,12 +2869,12 @@ async def duel_assess(
 
     res_a = combat.resolve_iaijutsu_assessment(
         ca.awareness, ca.skills.get("Iaijutsu", 0), ir_b, _d.engine,
-        extra_flat=wp_a + tf_a, bonus_rolled=tr_a, bonus_kept=tk_a,
+        extra_flat=wp_a + tf_a + cf_a, bonus_rolled=tr_a + cr_a, bonus_kept=tk_a,
         explode_9=ex9_a,
     )
     res_b = combat.resolve_iaijutsu_assessment(
         cb_char.awareness, cb_char.skills.get("Iaijutsu", 0), ir_a, _d.engine,
-        extra_flat=wp_b + tf_b, bonus_rolled=tr_b, bonus_kept=tk_b,
+        extra_flat=wp_b + tf_b + cf_b, bonus_rolled=tr_b + cr_b, bonus_kept=tk_b,
         explode_9=ex9_b,
     )
 
@@ -2953,6 +2976,23 @@ async def duel_focus(
         return
 
     ca, cb_char = rec_a.character, rec_b.character
+
+    enc = _d.encounters.get(ch)
+    for duelist_char, duelist_label in ((ca, duelist_a), (cb_char, duelist_b)):
+        cb_enc = enc.find(duelist_char.name) if enc else None
+        if cb_enc and "dazed" in cb_enc.conditions:
+            await interaction.response.send_message(
+                f"**{duelist_label}** is Dazed and cannot perform an Iaijutsu duel (GDD s40).",
+                ephemeral=True,
+            )
+            return
+    cb_a_enc = enc.find(ca.name) if enc else None
+    cb_b_enc = enc.find(cb_char.name) if enc else None
+    conds_a = cb_a_enc.conditions if cb_a_enc else set()
+    conds_b = cb_b_enc.conditions if cb_b_enc else set()
+    cr_a, cf_a, _ = condition_effects.contested_roll_modifier(conds_a)
+    cr_b, cf_b, _ = condition_effects.contested_roll_modifier(conds_b)
+
     bonus_r_a = 1 if a_focus_bonus else 0
     bonus_k_a = 1 if a_focus_bonus else 0
     bonus_r_b = 1 if b_focus_bonus else 0
@@ -2973,9 +3013,9 @@ async def duel_focus(
         ca.void_ring, ca.skills.get("Iaijutsu", 0),
         cb_char.void_ring, cb_char.skills.get("Iaijutsu", 0),
         _d.engine,
-        bonus_rolled_a=bonus_r_a + tr_a, bonus_kept_a=bonus_k_a + tk_a,
-        bonus_rolled_b=bonus_r_b + tr_b, bonus_kept_b=bonus_k_b + tk_b,
-        extra_flat_a=wp_a + tf_a, extra_flat_b=wp_b + tf_b,
+        bonus_rolled_a=bonus_r_a + tr_a + cr_a, bonus_kept_a=bonus_k_a + tk_a,
+        bonus_rolled_b=bonus_r_b + tr_b + cr_b, bonus_kept_b=bonus_k_b + tk_b,
+        extra_flat_a=wp_a + tf_a + cf_a, extra_flat_b=wp_b + tf_b + cf_b,
         explode_9_a=ex9_a, explode_9_b=ex9_b,
         win_threshold_a=wt_a, win_threshold_b=wt_b,
         raise_divisor_a=rd_a, raise_divisor_b=rd_b,
@@ -3077,6 +3117,11 @@ async def duel_strike(
     wp = combat.get_weapon_profile(weapon)
     wound_pen = stats.wound_penalty(atk)
 
+    enc = _d.encounters.get(ch)
+    atk_enc = enc.find(atk.name) if enc else None
+    atk_conds = atk_enc.conditions if atk_enc else set()
+    cr, cf, _ = condition_effects.contested_roll_modifier(atk_conds)
+
     tr, tk, tf, tech_notes = technique_effects.iaijutsu_roll_bonus(atk, "strike")
     def_tn_bonus, def_tn_notes = technique_effects.defender_armor_tn_bonus(tgt, "center")
     target_tn = combat.armor_tn(tgt, "center", bonus_tn) + def_tn_bonus
@@ -3084,8 +3129,8 @@ async def duel_strike(
 
     result = combat.resolve_iaijutsu_strike(
         atk.reflexes, atk.skills.get("Iaijutsu", 0), target_tn, _d.engine,
-        free_raises=free_raises, extra_flat=wound_pen + tf,
-        bonus_rolled=tr, bonus_kept=tk,
+        free_raises=free_raises, extra_flat=wound_pen + tf + cf,
+        bonus_rolled=tr + cr, bonus_kept=tk,
     )
     hit = result["hit"]
     embed = discord.Embed(
