@@ -131,7 +131,7 @@ _MANEUVER_APPLY_LABEL = {
     "feint": "Roll & Apply Damage (Feint)",
     "increased_damage": "Roll & Apply Damage",
     "disarm": "Resolve Disarm (2k1 + Strength)",
-    "knockdown": "Resolve Knockdown (Strength)",
+    "knockdown": "Roll Damage + Knockdown",
     "called_shot": "Roll & Apply Damage (Called Shot)",
     "extra_attack": "Roll & Apply Damage (1st Attack)",
 }
@@ -187,7 +187,7 @@ class DamageView(discord.ui.View):
         # Relabel the primary button to match the maneuver, and hide the Void
         # button when it would be nonsensical (knockdown has no damage roll;
         # creature targets have no VP pool).
-        hide_void = maneuver == "knockdown" or target_creature_id is not None
+        hide_void = target_creature_id is not None
         to_remove = []
         for child in self.children:
             if isinstance(child, discord.ui.Button) and child.style == discord.ButtonStyle.danger:
@@ -468,41 +468,6 @@ class DamageView(discord.ui.View):
         attacker = attacker_rec.character
         target = target_rec.character
 
-        if self.maneuver == "knockdown":
-            kd = combat.resolve_knockdown(attacker, target, _d.engine)
-            if kd["knocked_down"]:
-                enc = _d.encounters.get(self.channel_id)
-                if enc:
-                    def_c = enc.find(target.name)
-                    if def_c:
-                        def_c.conditions.add("prone")
-                        _d.save_encounter(str(interaction.guild_id), enc)
-            embed = discord.Embed(
-                title="🥋 Knockdown",
-                color=discord.Color.green() if kd["knocked_down"] else discord.Color.greyple(),
-            )
-            embed.add_field(
-                name="Contested Strength",
-                value=f"{self.attacker_name} **{kd['attacker_roll']}** vs "
-                f"{self.target_name} **{kd['defender_roll']}**",
-                inline=False,
-            )
-            verdict = (
-                f"**{self.target_name} is knocked prone!**" if kd["knocked_down"]
-                else f"{self.target_name} keeps their feet."
-            )
-            embed.add_field(name="Result", value=verdict, inline=False)
-            embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
-            self._disable()
-            await interaction.response.edit_message(view=self)
-            await self._post_result(interaction, embed)
-            result_tag = "knocked prone" if kd["knocked_down"] else "resisted"
-            await _d.combat_log(
-                str(interaction.guild_id),
-                f"Knockdown: {self.attacker_name} → {self.target_name} ({result_tag})",
-            )
-            return
-
         if self.maneuver == "disarm":
             dis = combat.resolve_disarm(attacker, target, _d.engine)
             applied = combat.apply_damage(target, dis["damage"], target.armor_reduction)
@@ -698,6 +663,26 @@ class DamageView(discord.ui.View):
                 phoenix_line = f"\n🔥 {phx}"
         _d.store.save(target_rec)
 
+        knockdown_line = ""
+        kd_result = None
+        if self.maneuver == "knockdown":
+            kd_result = combat.resolve_knockdown(attacker, target, _d.engine)
+            if kd_result["knocked_down"]:
+                enc_kd = _d.encounters.get(self.channel_id)
+                if enc_kd:
+                    def_c = enc_kd.find(target.name)
+                    if def_c:
+                        def_c.conditions.add("prone")
+                        _d.save_encounter(str(interaction.guild_id), enc_kd)
+            kd_verdict = (
+                f"**{self.target_name} is knocked prone!**" if kd_result["knocked_down"]
+                else f"{self.target_name} keeps their feet."
+            )
+            knockdown_line = (
+                f"\n🥋 Contested Strength: {self.attacker_name} **{kd_result['attacker_roll']}** vs "
+                f"{self.target_name} **{kd_result['defender_roll']}**: {kd_verdict}"
+            )
+
         called_shot_line = ""
         if self.maneuver == "called_shot" and self.called_shot_raises > 0:
             part = combat.CALLED_SHOT_PARTS.get(
@@ -726,7 +711,7 @@ class DamageView(discord.ui.View):
             ),
             inline=False,
         )
-        embed.add_field(name="Result", value=self._wound_status(target_rec, applied) + heal_line + phoenix_line, inline=False)
+        embed.add_field(name="Result", value=self._wound_status(target_rec, applied) + heal_line + phoenix_line + knockdown_line, inline=False)
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
         await interaction.response.edit_message(view=self)
@@ -742,6 +727,13 @@ class DamageView(discord.ui.View):
             f"Damage: {self.attacker_name} → {self.target_name} ({self.weapon}){man_tag}{cs_tag} "
             f"{applied['final_damage']} wounds [{applied['new_wound_level']}]{dead_tag}",
         )
+
+        if self.maneuver == "knockdown" and kd_result is not None:
+            kd_tag = "knocked prone" if kd_result["knocked_down"] else "resisted"
+            await _d.combat_log(
+                str(interaction.guild_id),
+                f"Knockdown: {self.attacker_name} → {self.target_name} ({kd_tag})",
+            )
 
         if self.maneuver == "extra_attack" and not applied["is_dead"]:
             await self._second_attack(interaction, attacker_rec, target_rec)
