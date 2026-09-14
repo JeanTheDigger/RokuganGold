@@ -9671,8 +9671,36 @@ async def _setup_server_inner(
         existing_items.append("Lobby")
     existing_names = {ch.name for ch in lobby_cat.text_channels}
     if "lore" not in existing_names:
-        await lobby_cat.create_text_channel("lore")
+        lore_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+            everyone: discord.PermissionOverwrite(
+                view_channel=True, send_messages=False, read_message_history=True,
+            ),
+            bot_member: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_messages=True,
+            ),
+        }
+        for r in dm_roles:
+            lore_overwrites[r] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True,
+            )
+        await lobby_cat.create_text_channel("lore", overwrites=lore_overwrites)
         created_items.append("#lore")
+    else:
+        lore_ch = discord.utils.get(lobby_cat.text_channels, name="lore")
+        if lore_ch is not None:
+            lore_overwrites = {
+                everyone: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=False, read_message_history=True,
+                ),
+                bot_member: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, manage_messages=True,
+                ),
+            }
+            for r in dm_roles:
+                lore_overwrites[r] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, read_message_history=True,
+                )
+            await lore_ch.edit(overwrites=lore_overwrites, reason="Server setup: staff-only lore")
     if "welcome" not in existing_names:
         welcome_ch = await lobby_cat.create_text_channel("welcome")
         welcome_embed = discord.Embed(
@@ -9811,6 +9839,26 @@ async def _setup_server_inner(
             )
         await ooc_cat.create_text_channel("announcements", overwrites=announce_overwrites)
         created_items.append("#announcements")
+    else:
+        ann_ch = discord.utils.get(ooc_cat.text_channels, name="announcements")
+        if ann_ch is not None:
+            announce_overwrites = {
+                everyone: discord.PermissionOverwrite(view_channel=False),
+                approved_role: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=False, read_message_history=True,
+                    add_reactions=True,
+                ),
+                bot_member: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, manage_messages=True,
+                    embed_links=True,
+                ),
+            }
+            for r in dm_roles:
+                announce_overwrites[r] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, read_message_history=True,
+                    manage_messages=True,
+                )
+            await ann_ch.edit(overwrites=announce_overwrites, reason="Server setup: staff-only announcements")
     if "rules-reference" not in existing_names:
         rules_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
             everyone: discord.PermissionOverwrite(view_channel=False),
@@ -9828,6 +9876,23 @@ async def _setup_server_inner(
         rules_ch = await ooc_cat.create_text_channel("rules-reference", overwrites=rules_overwrites)
         await _post_rules_reference(rules_ch)
         created_items.append("#rules-reference")
+    else:
+        rules_ch = discord.utils.get(ooc_cat.text_channels, name="rules-reference")
+        if rules_ch is not None:
+            rules_overwrites = {
+                everyone: discord.PermissionOverwrite(view_channel=False),
+                approved_role: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=False, read_message_history=True,
+                ),
+                bot_member: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, manage_messages=True,
+                ),
+            }
+            for r in dm_roles:
+                rules_overwrites[r] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, read_message_history=True,
+                )
+            await rules_ch.edit(overwrites=rules_overwrites, reason="Server setup: staff-only rules-reference")
 
     # Order OOC channels: announcements, general, off-topic, rules-reference
     _OOC_ORDER = ["announcements", "general", "off-topic", "rules-reference"]
