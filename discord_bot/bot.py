@@ -6430,9 +6430,43 @@ async def creature_attack_cmd(
 
     cr = cre_rec.creature
     enc = encounters.get(interaction.channel_id)
-    def_cb = enc.find(target_rec.character.name) if enc else None
-    cre_cover = def_cb.cover_bonus if def_cb else 0
-    tn = combat.armor_tn(target_rec.character, "attack", bonus_tn + cre_cover)
+    tgt = target_rec.character
+    def_cb = enc.find(tgt.name) if enc else None
+    # Same defender Armor TN assembly as /fight attack: live stance, Full
+    # Defense, Void armor, Guard, cover and conditions from the encounter.
+    tn_notes: list[str] = []
+    d_stance = def_cb.stance if def_cb else "attack"
+    tn_mod = bonus_tn
+    if def_cb:
+        if def_cb.full_defense_bonus:
+            tn_mod += def_cb.full_defense_bonus
+            tn_notes.append(f"Full Defense +{def_cb.full_defense_bonus}")
+        if def_cb.void_armor_tn_bonus:
+            tn_mod += def_cb.void_armor_tn_bonus
+            tn_notes.append(f"Void Armor +{def_cb.void_armor_tn_bonus}")
+        if def_cb.cover_bonus:
+            tn_mod += def_cb.cover_bonus
+            tn_notes.append(f"Cover {def_cb.cover_bonus:+d}")
+        for gc in enc.combatants:
+            if gc.guarding.lower() == tgt.name.lower():
+                tn_mod += 10
+                tn_notes.append(f"Guarded by {gc.name} +10")
+        if def_cb.guarding:
+            tn_mod -= 5
+            tn_notes.append(f"Guarding {def_cb.guarding} −5")
+    def_conds = def_cb.conditions if def_cb else set()
+    cond_def_mod, cond_def_notes = condition_effects.defender_armor_tn_mod(def_conds, True)
+    tn_notes.extend(cond_def_notes)
+    cond_tn_ovr, cond_tn_notes = condition_effects.defender_armor_tn_override(
+        def_conds, tgt.reflexes, tgt.armor_tn_bonus, True,
+    )
+    if cond_tn_ovr is not None:
+        tn = cond_tn_ovr + cond_def_mod + tn_mod
+        tn_notes.extend(cond_tn_notes)
+    else:
+        tn = combat.armor_tn(tgt, d_stance, tn_mod + cond_def_mod)
+        if d_stance != "attack":
+            tn_notes.append(f"{d_stance.replace('_', ' ').title()} stance")
     outcome = creature.creature_attack(cr, tn, engine, raises)
     hit = outcome["success"]
     t_name = target_rec.character.name
@@ -6451,6 +6485,8 @@ async def creature_attack_cmd(
         f"(margin {outcome['margin']:+d})",
         inline=False,
     )
+    if tn_notes:
+        embed.add_field(name="Defender Armor TN modifiers", value=" · ".join(tn_notes)[:1024], inline=False)
     if hit:
         view = CreatureAttackView(cre_rec.id, target_rec.id, cr.name, t_name)
         await interaction.response.send_message(
