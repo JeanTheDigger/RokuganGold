@@ -1708,6 +1708,9 @@ class _ChargenResumeView(views_base.PersistentView):
         if str(interaction.user.id) != self.user_id and not _is_dm(interaction):
             await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
             return
+        if not self.claim():
+            await interaction.response.send_message("Already resumed.", ephemeral=True)
+            return
         raw = store.get_creation_state(self.guild_id, self.user_id)
         if not raw:
             self._disable()
@@ -3069,6 +3072,9 @@ class _FullCharacterApprovalView(_DisableableView):
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
             return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         guild = interaction.guild
         if guild is None:
             return
@@ -3158,6 +3164,9 @@ class _FullCharacterApprovalView(_DisableableView):
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.danger, emoji="❌")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
+            return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         self._disable()
         await interaction.response.edit_message(view=self)
@@ -3329,13 +3338,15 @@ async def sheet_list(interaction: discord.Interaction, member: discord.Member | 
     )
 
 
-@sheet.command(name="delete", description="Delete a character (yours, or a player's if you are a DM).")
+@sheet.command(name="delete", description="Delete a character sheet (players: ask staff). [Fortune]")
 @app_commands.describe(name="Character name.", member="Owner of the character [Fortune]")
 @app_commands.autocomplete(name=_own_character_autocomplete)
 async def sheet_delete(
     interaction: discord.Interaction, name: str, member: discord.Member | None = None
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     owner_target = interaction.user
@@ -6353,6 +6364,9 @@ class CreatureAttackView(_DisableableView):
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
             return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         cre_rec = store.get_creature_by_id(self.creature_id)
         target_rec = store.get_by_id(self.target_char_id)
         if cre_rec is None:
@@ -6412,6 +6426,9 @@ class CreatureAttackView(_DisableableView):
     async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
             return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         self._disable()
         await interaction.response.edit_message(view=self)
         await interaction.followup.send(
@@ -6453,17 +6470,26 @@ class SpellDamageView(_DisableableView):
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
             return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         await self._resolve(interaction, void_reduce=False)
 
     @discord.ui.button(label="Void Reduce (−10)", style=discord.ButtonStyle.primary, emoji="🔮")
     async def void_reduce(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
             return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         await self._resolve(interaction, void_reduce=True)
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
+            return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         msg = (
             f"🛡️ {interaction.user.display_name} denied: "
@@ -6578,6 +6604,9 @@ class DmDamageView(_DisableableView):
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
             return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         rec = store.get_by_id(self.target_id)
         if rec is None:
             await interaction.response.send_message("Target no longer exists.", ephemeral=True)
@@ -6671,6 +6700,9 @@ class DmDamageView(_DisableableView):
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
             return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         if self.void_reduced:
             rec = store.get_by_id(self.target_id)
             if rec is not None:
@@ -6710,6 +6742,9 @@ class DmHealView(_DisableableView):
     @discord.ui.button(label="Apply Healing", style=discord.ButtonStyle.success, emoji="💚")
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
+            return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         rec = store.get_by_id(self.target_id)
         if rec is None:
@@ -6765,6 +6800,9 @@ class DmHealView(_DisableableView):
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="❌")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
+            return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         msg = (
             f"❌ {interaction.user.display_name} denied: "
@@ -9266,6 +9304,9 @@ class MedicineTreatView(_DisableableView):
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
             return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         rec = store.get_by_id(self.target_id)
         if rec is None:
             await interaction.response.send_message("Target no longer exists.", ephemeral=True)
@@ -9311,6 +9352,9 @@ class MedicineTreatView(_DisableableView):
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
+            return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         msg = (
             f"🛡️ {interaction.user.display_name} denied: "

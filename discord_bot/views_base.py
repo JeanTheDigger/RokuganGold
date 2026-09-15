@@ -58,8 +58,18 @@ class PersistentView(discord.ui.View):
         super().__init__(timeout=None)
         self._persist_args: dict = {}
         self._persist_message_id: int | None = None
+        self._claimed = False
+
+    def claim(self) -> bool:
+        """Take the view's one final action. False if a click already took it.
+        Synchronous check-and-set, so two near-simultaneous clicks cannot both win."""
+        if self._claimed:
+            return False
+        self._claimed = True
+        return True
 
     def _disable(self) -> None:
+        self._claimed = True
         for child in self.children:
             child.disabled = True
         self.stop()

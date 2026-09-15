@@ -271,17 +271,26 @@ class DamageView(views_base.PersistentView):
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _d.require_dm_role(interaction):
             return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         await self._resolve_damage(interaction, void_reduce=False)
 
     @discord.ui.button(label="Void Reduce (−10 wounds)", style=discord.ButtonStyle.primary, emoji="🔮")
     async def void_reduce_apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _d.require_dm_role(interaction):
             return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         await self._resolve_damage(interaction, void_reduce=True)
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _d.require_dm_role(interaction):
+            return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         msg = (
             f"🛡️ {interaction.user.display_name} denied the effect: "
@@ -1032,6 +1041,9 @@ class DamageView(views_base.PersistentView):
     @discord.ui.button(label="No Effect", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _d.require_dm_role(interaction):
+            return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         msg = (
             f"🛡️ {interaction.user.display_name} ruled **no effect** on "
@@ -1807,6 +1819,12 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
 async def combat_start(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return
+    existing = _d.encounters.get(interaction.channel_id)
+    if existing is not None and (existing.started or existing.combatants or existing.roster) and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            "A fight is already set up in this channel. Only staff can restart it (`/combat end` first).", ephemeral=True,
+        )
+        return
     enc = encounter.Encounter(channel_id=interaction.channel_id)
     _d.encounters[interaction.channel_id] = enc
     guild = str(interaction.guild_id)
@@ -1848,6 +1866,12 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
     if await _d.refuse_if_cannot_act(interaction, rec.character):
         return
     enc = _d.encounters.get(interaction.channel_id)
+    if enc is not None and enc.find(rec.character.name) is not None and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            f"**{rec.character.name}** is already in initiative. Re-rolling initiative is a staff call "
+            f"(`/combat join member:` by Fortune).", ephemeral=True,
+        )
+        return
     if enc is not None and enc.roster and not _d.is_dm(interaction) and not enc.roster_allows(str(owner.id)):
         status = enc.roster.get(str(owner.id))
         why = "declined the roster (press **Join** on it to change your mind)" if status == "declined" else \
@@ -2268,6 +2292,17 @@ async def combat_next(interaction: discord.Interaction) -> None:
         return
     enc = await _d.require_encounter(interaction)
     if enc is None or not enc.combatants:
+        return
+    uid = str(interaction.user.id)
+    cur = enc.current()
+    may_advance = _d.is_dm(interaction) or (
+        (enc.started and cur is not None and cur.owner_id == uid) or (not enc.started and enc.organizer_id == uid)
+    )
+    if not may_advance:
+        await interaction.response.send_message(
+            "Only staff, the player whose turn it is, or the roster organizer (to open the fight) can advance. "
+            "End your own turn with `/combat turn done`.", ephemeral=True,
+        )
         return
     prev_round = enc.round
     current = enc.advance()
@@ -2694,6 +2729,9 @@ class ConditionView(views_base.PersistentView):
         if not _d.is_dm(interaction):
             await interaction.response.send_message(f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can approve conditions.", ephemeral=True)
             return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         enc = _d.encounters.get(self.channel_id)
         cb = enc.find(self.target_name) if enc else None
         if cb is None:
@@ -2714,6 +2752,9 @@ class ConditionView(views_base.PersistentView):
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not _d.is_dm(interaction):
             await interaction.response.send_message(f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can deny conditions.", ephemeral=True)
+            return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         await _d.combat_log(self.guild_id, f"Condition: {self.target_name} {self.condition.title()} denied by {interaction.user.display_name}")
         await self._finish(interaction, f"❌ {self._label()}: denied by {interaction.user.display_name}.")
