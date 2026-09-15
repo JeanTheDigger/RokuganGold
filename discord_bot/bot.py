@@ -914,6 +914,30 @@ async def _combat_log(guild_id: str, message: str) -> None:
     except Exception:
         pass
 
+async def _xp_log(guild_id: str, message: str) -> bool:
+    """Post a line to the Kami-only XP log channel. False if none is configured."""
+    ch_id = store.get_xp_log_channel(guild_id)
+    if ch_id is None:
+        return False
+    channel = client.get_channel(int(ch_id))
+    if channel is None:
+        return False
+    try:
+        await channel.send(message[:2000], allowed_mentions=discord.AllowedMentions.none())
+    except Exception:
+        return False
+    return True
+
+async def _xp_spend_log(interaction: discord.Interaction, rec: storage.CharacterRecord, changed: bool) -> None:
+    """XP spends go to the XP log too, with the fields they bought."""
+    if not changed:
+        return
+    guild = str(interaction.guild_id)
+    snaps = store.list_undo(guild, rec.character.name, limit=1)
+    diff = "; ".join(_sheet_diff(snaps[0].data, rec.character.to_dict())) if snaps and snaps[0].entity_id == rec.id else ""
+    who = interaction.user.display_name + ("" if rec.owner_id == str(interaction.user.id) else " (staff)")
+    await _xp_log(guild, f"XP SPEND: {who} · {rec.character.name} · {diff[:600]}")
+
 def _save_encounter(guild_id: str, enc: encounter.Encounter) -> None:
     store.save_encounter(str(enc.channel_id), guild_id, json.dumps(enc.to_dict()))
 
@@ -3429,7 +3453,7 @@ def _paginate(lines: list[str], header: str, *, per_page: int = 15) -> list[str]
         result.append(header + "\n".join(chunk) + footer)
     return result
 
-@stat_group.command(name="trait", description="Set a Trait (or Void) on the active character.")
+@stat_group.command(name="trait", description="Set a Trait (or Void) on the active character. [Fortune]")
 @app_commands.describe(
     trait="Which Trait to set.", value="New value (0-10).",
     member="Target player [Fortune]. Omit for your own active character.",
@@ -3442,6 +3466,8 @@ async def sheet_trait(
     member: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3456,7 +3482,7 @@ async def sheet_trait(
         f"Set **{label}** to **{value}** on **{rec.character.name}**.{rank_msg}", embed=build_sheet_embed(rec)
     )
 
-@stat_group.command(name="skill", description="Set skill ranks. Single: skill='Kenjutsu' rank=3. Bulk: skill='Kenjutsu 3, Courtier 2'.")
+@stat_group.command(name="skill", description="Set skill ranks. Single: skill='Kenjutsu' rank=3. Bulk: skill='Kenjutsu 3, Courtier 2'. [Fortune]")
 @app_commands.describe(
     skill="Skill name, or bulk list: 'Kenjutsu 3, Courtier 2, Etiquette 1'.",
     rank="Rank 0-10 (0 removes). Omit when using bulk format.",
@@ -3469,6 +3495,8 @@ async def sheet_skill(
     member: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3509,7 +3537,7 @@ async def sheet_skill(
     await _audit_stat(interaction, rec, "stat skill", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@stat_group.command(name="set", description="Set a numeric field (honor, glory, void points, armor, etc.).")
+@stat_group.command(name="set", description="Set a numeric field (honor, glory, void points, armor, etc.). [Fortune]")
 @app_commands.describe(
     field="Which field to set.", value="New value.",
     member="Target player [Fortune]. Omit for your own active character.",
@@ -3522,6 +3550,8 @@ async def sheet_set(
     member: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3614,7 +3644,7 @@ async def sheet_wield(
         f"🗡️ **{c.name}** wields **{c.equipped_weapon}**{off}.", embed=build_sheet_embed(rec)
     )
 
-@stat_group.command(name="armor", description="Equip armor (sets Armor TN bonus & Reduction), or 'none' to remove.")
+@stat_group.command(name="armor", description="Equip armor (sets Armor TN bonus & Reduction), or 'none' to remove. [Fortune]")
 @app_commands.describe(armor="Armor type (bogu/ashigaru/tatami/light/heavy/tetsu_do/riding, or 'none').", member="Target player [Fortune]")
 @app_commands.autocomplete(armor=_armor_autocomplete)
 async def sheet_armor(
@@ -3623,6 +3653,8 @@ async def sheet_armor(
     member: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3664,7 +3696,7 @@ async def _quality_autocomplete(
     low = current.lower()
     return [c for c in _QUALITY_CHOICES if low in c.value][:25]
 
-@stat_group.command(name="quality", description="Set extraordinary weapon qualities on the equipped weapon.")
+@stat_group.command(name="quality", description="Set extraordinary weapon qualities on the equipped weapon. [Fortune]")
 @app_commands.describe(
     qualities="Comma-separated qualities: balanced, radiant, signature, swift, true, unbreakable.",
     clear="Remove all weapon qualities.",
@@ -3678,6 +3710,8 @@ async def sheet_quality(
     member: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3778,7 +3812,7 @@ async def sheet_koku(
     await _audit_stat(interaction, rec, "stat koku", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@stat_group.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free: no XP).")
+@stat_group.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free: no XP). [Fortune]")
 @app_commands.describe(
     name="Advantage name. For parameterised advantages, include the parameter: 'Weakness: Willpower', 'Seven Fortunes' Blessing: Daikoku'.",
     remove="Remove it instead.",
@@ -3789,6 +3823,8 @@ async def sheet_advantage(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3811,7 +3847,7 @@ async def sheet_advantage(
     await _audit_stat(interaction, rec, "stat advantage", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@stat_group.command(name="disadvantage", description="Record (or remove) a Disadvantage on your sheet (grants XP: DM /xp grant).")
+@stat_group.command(name="disadvantage", description="Record (or remove) a Disadvantage on your sheet (grants XP: DM /xp grant). [Fortune]")
 @app_commands.describe(
     name="Disadvantage name. For parameterised disadvantages, include the parameter: 'Weakness: Willpower', 'Doubt: Kenjutsu'.",
     remove="Remove it instead.",
@@ -3822,6 +3858,8 @@ async def sheet_disadvantage(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3845,13 +3883,15 @@ async def sheet_disadvantage(
     await _audit_stat(interaction, rec, "stat disadvantage", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@sheet_kata_grp.command(name="learn", description="Record (or remove) a Kata on your sheet (free: no XP; use /xp kata to buy).")
+@sheet_kata_grp.command(name="learn", description="Record (or remove) a Kata on your sheet (free: no XP; use /xp kata to buy). [Fortune]")
 @app_commands.describe(name="Kata name.", remove="Remove it instead.", member="Target player [Fortune]")
 @app_commands.autocomplete(name=_kata_autocomplete)
 async def sheet_kata(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -3870,13 +3910,15 @@ async def sheet_kata(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@sheet_kiho_grp.command(name="learn", description="Record (or remove) a Kiho on your sheet (free: no XP; use /xp kiho to buy).")
+@sheet_kiho_grp.command(name="learn", description="Record (or remove) a Kiho on your sheet (free: no XP; use /xp kiho to buy). [Fortune]")
 @app_commands.describe(name="Kiho name.", remove="Remove it instead.", member="Target player [Fortune]")
 @app_commands.autocomplete(name=_kiho_autocomplete)
 async def sheet_kiho(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -4158,7 +4200,7 @@ async def sheet_tattoo_activate(
     )
 
 
-@sheet.command(name="wound", description="Apply wounds to the active character (raw, no armor reduction here).")
+@sheet.command(name="wound", description="Apply wounds to the active character (raw, no armor reduction here). [Fortune]")
 @app_commands.describe(
     amount="Wounds to apply.",
     member="Target player [Fortune]. Omit for your own active character.",
@@ -4169,6 +4211,8 @@ async def sheet_wound(
     member: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -4191,7 +4235,7 @@ async def sheet_wound(
         embed=build_sheet_embed(rec),
     )
 
-@sheet.command(name="heal", description="Heal wounds on the active character.")
+@sheet.command(name="heal", description="Heal wounds on the active character. [Fortune]")
 @app_commands.describe(
     amount="Wounds to heal.",
     member="Target player [Fortune]. Omit for your own active character.",
@@ -4202,6 +4246,8 @@ async def sheet_heal(
     member: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
@@ -5254,7 +5300,7 @@ async def void_status(
 
 _HELP_BLURBS: dict[str, str] = {
     "sheet": "Create and manage your character sheet (create, view, activate, wounds, Void, Kata, Kiho, export).",
-    "stat": "Edit your active character: traits, skills, gear, armor, inventory, koku, advantages.",
+    "stat": "Your gear and purse: equip, wield, items, koku. Traits, skills, armor and advantages are set by Fortune; players advance with /xp.",
     "xp": "Spend Experience on traits, skills, emphases, kata, kiho, spells and advantages.",
     "roll": "Roll & Keep dice, with optional TN, Raises and Emphasis.",
     "dice": "Quick dice shorthand: 5k3, 7k2+5.",
@@ -7849,7 +7895,8 @@ async def _buy_named(interaction, member, name, mastery_level, attr, label, emoj
     lst.append(name)
     c.xp -= cost
     c.xp_spent += cost
-    store.save(rec)
+    changed = store.save(rec, note="xp spend")
+    await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
         f"{emoji} **{c.name}** learns the {label} **{name}** (ML {mastery_level}) for **{cost}** XP.{note}\n"
         f"XP left {c.xp:g}", embed=build_sheet_embed(rec))
@@ -7865,12 +7912,23 @@ async def xp_grant(interaction: discord.Interaction, member: discord.Member, amo
     if rec is None:
         await interaction.response.send_message(f"{member.display_name} has no active character.", ephemeral=True)
         return
+    before = rec.character.xp
     rec.character.xp = max(0.0, rec.character.xp + float(amount))
-    store.save(rec)
+    store.save(rec, note="xp grant")
     note = f" - *{reason}*" if reason else ""
     await interaction.response.send_message(
         f"✨ {member.mention}'s **{rec.character.name}** {'gains' if amount >= 0 else 'loses'} "
         f"**{abs(amount):g}** XP -> **{rec.character.xp:g}** available{note}")
+    logged = await _xp_log(
+        str(interaction.guild_id),
+        f"XP GRANT: {interaction.user.display_name} → {rec.character.name} ({member.display_name}) "
+        f"{'+' if amount >= 0 else ''}{amount:g} · {before:g} → {rec.character.xp:g}" + (f" · {reason}" if reason else ""),
+    )
+    if not logged:
+        await interaction.followup.send(
+            "⚠️ This grant was not logged: no XP log channel is set. A Kami can set one with `/dm xp_log_channel`.",
+            ephemeral=True,
+        )
 
 @xp_group.command(name="balance", description="Show a character's available Experience.")
 @app_commands.describe(member="Whose XP to show [Fortune]. Omit for your own.")
@@ -7919,7 +7977,8 @@ async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[
     c.xp -= cost
     c.xp_spent += cost
     rank_msg = _check_insight_rank_advance(c)
-    store.save(rec)
+    changed = store.save(rec, note="xp spend")
+    await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
         f"\U0001F300 **{c.name}** raises **{label}** to rank **{new_rank}** for **{cost}** XP.\n"
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}", embed=build_sheet_embed(rec))
@@ -7949,7 +8008,8 @@ async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[s
     c.xp -= cost
     c.xp_spent += cost
     rank_msg = _check_insight_rank_advance(c)
-    store.save(rec)
+    changed = store.save(rec, note="xp spend")
+    await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
         f"\U0001F4D8 **{c.name}** raises **{skill_name}** to rank **{new_rank}** for **{cost}** XP.\n"
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}", embed=build_sheet_embed(rec))
@@ -7977,7 +8037,8 @@ async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Rang
     advancement.apply_emphasis(c, skill_name, emph)
     c.xp -= cost
     c.xp_spent += cost
-    store.save(rec)
+    changed = store.save(rec, note="xp spend")
+    await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
         f"\U0001F3AF **{c.name}** gains **{skill_name} (Emphasis: {emph})** for **{cost}** XP. XP left {c.xp:g}",
         embed=build_sheet_embed(rec))
@@ -8105,7 +8166,8 @@ async def xp_advantage(
     c.advantages.append(canonical)
     c.xp -= cost
     c.xp_spent += cost
-    store.save(rec)
+    changed = store.save(rec, note="xp spend")
+    await _xp_spend_log(interaction, rec, changed)
     msg = f"🌸 **{c.name}** gains the advantage **{canonical}** for **{cost}** XP. XP left {c.xp:g}"
     param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(adv["name"])
     if param_hint and ":" not in input_name:
@@ -8166,7 +8228,8 @@ async def xp_remove_disadvantage(
     c.disadvantages = [d for d in c.disadvantages if d.lower() != canonical.lower()]
     c.xp -= cost
     c.xp_spent += cost
-    store.save(rec)
+    changed = store.save(rec, note="xp spend")
+    await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
         f"**{c.name}** overcomes the disadvantage **{canonical}** for **{cost}** XP "
         f"(2x base {base_cost}). XP left {c.xp:g}",
@@ -9191,6 +9254,25 @@ MEDICINE_TN = {
     "antidote_preparation": 20,
 }
 
+@dm.command(name="xp_log_channel", description="Set (or clear) the Kami-only channel logging XP grants and spends [Kami]")
+@app_commands.describe(channel="The Kami-only text channel. Omit to stop logging XP.")
+async def dm_xp_log_channel(interaction: discord.Interaction, channel: discord.TextChannel | None = None) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not _is_kami(interaction):
+        await interaction.response.send_message(f"Only the **{ROLE_KAMI}** role can set the XP log channel.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    if channel is None:
+        store.clear_xp_log_channel(guild)
+        await interaction.response.send_message("XP logging stopped.", ephemeral=True)
+        return
+    store.set_xp_log_channel(guild, str(channel.id))
+    await interaction.response.send_message(
+        f"XP log channel set to {channel.mention}: every `/xp grant` and every XP spend is recorded there. "
+        f"Make sure only **{ROLE_KAMI}** can see that channel.", ephemeral=True,
+    )
+
 @dm.command(name="log_channel", description="Set the channel where combat events are logged [Kami]")
 @app_commands.describe(channel="The text channel to post combat log entries to.")
 async def dm_log_channel(
@@ -9464,7 +9546,7 @@ async def sheet_export(
             ephemeral=True,
         )
 
-@sheet_data.command(name="import", description="Import a character from JSON (paste the JSON or attach a .json file).")
+@sheet_data.command(name="import", description="Import a character from JSON (paste the JSON or attach a .json file). [Fortune]")
 @app_commands.describe(
     json_data="Paste the character JSON here (or attach a .json file instead).",
 )
@@ -9473,6 +9555,8 @@ async def sheet_import(
     json_data: str | None = None,
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     owner = str(interaction.user.id)
@@ -10710,6 +10794,20 @@ async def _setup_server_inner(
     dmg_ch_disc = discord.utils.get(dm_cat.text_channels, name="damage-approvals")
     if dmg_ch_disc:
         store.set_damage_approval_channel(str(guild.id), str(dmg_ch_disc.id))
+    if "xp-log" not in existing_names:
+        xp_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+            everyone: discord.PermissionOverwrite(view_channel=False),
+            bot_member: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
+            kami_role: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+        }
+        for r in dm_roles:
+            if r != kami_role:
+                xp_overwrites[r] = discord.PermissionOverwrite(view_channel=False)
+        await dm_cat.create_text_channel("xp-log", overwrites=xp_overwrites, reason="Server setup: Kami-only XP log")
+        created_items.append("#xp-log (Kami only: XP grants and spends)")
+    xp_ch_disc = discord.utils.get(dm_cat.text_channels, name="xp-log")
+    if xp_ch_disc:
+        store.set_xp_log_channel(str(guild.id), str(xp_ch_disc.id))
 
     # --- Position Player Support just above Staff Members, Staff Members always last ---
     max_pos = max((c.position for c in guild.categories), default=0)

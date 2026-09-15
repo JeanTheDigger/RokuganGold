@@ -108,6 +108,13 @@ CREATE INDEX IF NOT EXISTS idx_undo_entity ON undo_snapshots (guild_id, entity_n
     "ALTER TABLE pending_views ADD COLUMN channel_id TEXT NOT NULL DEFAULT '';",
     # 8: character-creation wizard state, so a wizard can resume after idling or a restart
     "ALTER TABLE creation_channels ADD COLUMN state TEXT NOT NULL DEFAULT '';",
+    # 9: Kami-only XP log channel (who granted Experience to whom)
+    """\
+CREATE TABLE IF NOT EXISTS xp_log_channels (
+    guild_id   TEXT NOT NULL PRIMARY KEY,
+    channel_id TEXT NOT NULL
+);
+""",
 ]
 
 # How many before-states to keep per character/creature for /dm undo.
@@ -810,6 +817,26 @@ class Store:
             self._conn.execute(
                 "DELETE FROM combat_log_channels WHERE guild_id = ?", (guild_id,)
             )
+
+    # -- XP log channel (Kami only) --------------------------------------------
+    def set_xp_log_channel(self, guild_id: str, channel_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO xp_log_channels (guild_id, channel_id) VALUES (?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
+                (guild_id, channel_id),
+            )
+
+    def get_xp_log_channel(self, guild_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT channel_id FROM xp_log_channels WHERE guild_id = ?", (guild_id,)
+            ).fetchone()
+        return row["channel_id"] if row else None
+
+    def clear_xp_log_channel(self, guild_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM xp_log_channels WHERE guild_id = ?", (guild_id,))
 
     # -- DM approval channel ---------------------------------------------------
     def set_approval_channel(self, guild_id: str, channel_id: str) -> None:
