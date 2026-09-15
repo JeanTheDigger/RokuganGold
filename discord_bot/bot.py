@@ -1751,9 +1751,9 @@ def _materialize_character(state: dict) -> Character:
     if heritage_grants:
         heritage.apply_heritage(char, {"grants": heritage_grants})
 
-    spent, _ = _calc_chargen_xp(state)
+    spent, remaining = _calc_chargen_xp(state)
     char.xp_spent = float(spent)
-    char.xp = 0.0
+    char.xp = float(max(0, remaining))
 
     if state.get("concept"):
         char.notes = state["concept"]
@@ -2519,7 +2519,7 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
     embed.add_field(name="XP", value=f"{spent} spent, {remaining} unspent", inline=True)
 
     if remaining > 0:
-        embed.set_footer(text=f"Warning: {remaining} XP unspent! Consider spending it before submitting.")
+        embed.set_footer(text=f"{remaining} XP unspent: it carries over to your sheet as spendable XP.")
 
     wc_picks = state.get("wildcard_picks", [])
     resolved_picks = [p for p in wc_picks if p.get("skill") != "(auto-skipped)"]
