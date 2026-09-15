@@ -5389,17 +5389,20 @@ async def help_command(
         embeds[0].title = f"Rokugan Bot: /{cmd.name} ({len(leaves)})"
         if blurb:
             embeds[0].description = blurb + "\n\n" + (embeds[0].description or "")
-        await interaction.response.send_message(embeds=embeds[:10], ephemeral=True)
+        # One embed per message: Discord caps a single message at 6000 characters across embeds.
+        await interaction.response.send_message(embed=embeds[0], ephemeral=True)
+        for extra in embeds[1:]:
+            await interaction.followup.send(embed=extra, ephemeral=True)
         return
-    embed = discord.Embed(
-        title="Rokugan Bot: Command Reference",
-        description=_HELP_START + "\n\nUse `/help category:` to list every command in a group. All game math is L5R 4th Edition.",
-        color=discord.Color.gold(),
-    )
+    # Overview: one line per group in the body (an embed holds at most 25 fields,
+    # and there are more groups than that).
+    lines = []
     for cmd in top:
         n = len(_help_leaves(cmd))
-        label = f"/{cmd.name}" + (f" ({n})" if n > 1 else "")
-        embed.add_field(name=label, value=_HELP_BLURBS.get(cmd.name, cmd.description)[:1024], inline=False)
+        label = f"**/{cmd.name}**" + (f" ({n})" if n > 1 else "")
+        lines.append(f"{label} — {str(_HELP_BLURBS.get(cmd.name, cmd.description))}")
+    body = _HELP_START + "\n\nUse `/help category:` to list every command in a group. All game math is L5R 4th Edition.\n\n" + "\n".join(lines)
+    embed = discord.Embed(title="Rokugan Bot: Command Reference", description=body[:4096], color=discord.Color.gold())
     embed.set_footer(text="Tip: /help category:combat")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
