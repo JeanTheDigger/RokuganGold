@@ -30,26 +30,27 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 **Character sheets** (each sheet is linked to your Discord account, per server)
 
+Players roll their own `/check` commands (skill, stealth, social, lore, craft, medicine, fear, honor, poison, horsemanship, investigate) for their active character; the **Fortune** role is only needed to roll for someone else or an NPC. `/help` is generated from the live command list and never goes stale.
+
 | Command | What it does |
 |---|---|
 | `/sheet create` | Make a character and set it active. Pass a `school:` from the catalog (autocomplete) and it **auto-fills** the school's Benefit trait, starting skills (with free emphases), Honor, clan, and type: a Hida Bushi in one command. Any-choice skill slots ("any one Bugei Skill") are reported for you to fill. Without a school, Traits start at 2. |
 | `/sheet view` | Show a sheet: rings (derived as min of two traits), wounds & wound level, Insight & Rank, standing, gear, skills. `member:` shows another player's (DM only). |
 | `/sheet list` | List your characters (active one marked). |
 | `/sheet activate` | Choose which of your characters is active. |
-| `/sheet trait` | Set a Trait or Void (0–10). |
-| `/sheet skill` | Set a skill rank (0 removes it). |
-| `/sheet set` | Set a numeric field: honor, glory, status, infamy, taint, koku, age, school rank, void points, armor TN/reduction. |
+| `/stat trait` | Set a Trait or Void (0–10). |
+| `/stat skill` | Set a skill rank (0 removes it). |
+| `/stat set` | Set a numeric field: honor, glory, status, infamy, taint, koku, age, school rank, void points, armor TN/reduction. |
 | `/sheet wound` / `/sheet heal` | Apply or heal wounds; shows the wound-level change. |
-| `/sheet export` | Export your active character as JSON (for backup or sharing between servers). |
-| `/sheet import_sheet` | Import a character from JSON (paste from `/sheet export`). |
+| `/sheet data export` | Export your active character as JSON (for backup or sharing between servers). |
+| `/sheet data import` | Import a character from JSON (paste from `/sheet data export`). |
 | `/sheet delete` | Delete a character. |
 
 **DM (game master) accounts**
 
 | Command | What it does |
 |---|---|
-| `/dm grant` / `/dm revoke` | Server admins make/unmake a member a DM. |
-| `/dm list` | Show this server's DMs. |
+| Fortune / Kami roles | DMs are members with the **Fortune** Discord role; **Kami** is the admin role. `/dm roles` shows who has them. |
 | `/dm new_day` | **DM** advances the in-game day: full VP refresh, natural healing (Stamina x 2 wounds), and spell slot refresh (Ring + School Rank per element) for all active PCs. No real-time connection: the DM decides when a new day dawns. |
 | `/dm damage` | **DM** applies raw damage to any PC or NPC: posts the pending effect publicly with Approve / Deny buttons. Damage respects Reduction. |
 | `/dm heal` | **DM** heals wounds on any PC or NPC: posts pending healing with Approve / Deny buttons. |
@@ -59,10 +60,9 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 | `/dm pending` | **DM** lists every approval still waiting (attack, spell, DM damage/heal, creature damage, Medicine treatment, character submissions) with age and a jump link. Every approval prompt now pings the **Fortune** role (make the role mentionable, or give the bot *Mention Everyone*). |
 | `/dm log_channel` | **DM** sets a text channel for automatic combat event logging. Attacks, damage, turn advances, conditions, stances, grapple/duel events are posted as compact one-line entries. |
 | `/dm clear_log` | **DM** removes the combat log channel: events stop being logged. |
-| `/party` | DM-only roster of every active PC: school, rings, wounds, VP, honor/glory/status, wielded weapon. Gold embed with player mention. |
+| `/dm party` | DM-only roster of every active PC: school, rings, wounds, VP, honor/glory/status, wielded weapon. Gold embed with player mention. |
 
-A **DM**: a server admin, anyone with *Manage Server*, or a member granted via
-`/dm grant`: can `view`, edit (`trait`/`skill`/`set`/`wound`/`heal`), and
+A **DM** (the **Fortune** role, or **Kami** for admins) can `view`, edit (`/stat`, `/sheet wound`, `/sheet heal`) and
 `delete` **any** player's active character by adding `member:@player`. Everyone
 else can only manage their own. Sheets are scoped **per server**, so one bot can
 run many separate games without them mixing.
@@ -73,7 +73,7 @@ healing, conditions) requires explicit DM approval. The bot calculates everythin
 posts the result publicly in the channel with the relevant rule, and presents
 Approve / Deny buttons that only a DM can click. This applies to:
 
-- **Attack damage** (`/attack` → DM clicks "Roll & Apply Damage" or "Deny")
+- **Attack damage** (`/fight attack` → DM clicks "Roll & Apply Damage" or "Deny")
 - **Spell damage** (`/spell_damage` with `target:` → DM clicks "Apply Damage" or "Deny")
 - **Creature attacks** (`/creature attack` → DM clicks "Apply Creature Damage" or "No Damage")
 - **Arbitrary damage** (`/dm damage` → DM clicks "Apply Damage" or "Deny")
@@ -124,17 +124,17 @@ their Type and Atemi flag).
 | `/kiho list` · `/kiho search` · `/kiho view` | Browse Kiho by element/Mastery, with Type and effect. |
 | `/sheet kata` · `/sheet kiho` | Record/remove a Kata or Kiho on the sheet (free): e.g. one granted at creation. Buy with XP via `/xp kata`/`/xp kiho` instead. |
 | `/sheet kata_activate` | Set your **active Kata** (Simple Action; only one active: s30). Blank name drops it. |
-| `/sheet kiho_activate` | Activate/deactivate a **Kiho**: one Internal / one Kharmic / one Mystical at a time, Martial stacks (s38). |
+| `/sheet kiho activate` | Activate/deactivate a **Kiho**: one Internal / one Kharmic / one Mystical at a time, Martial stacks (s38). |
 
 `/xp kata` and `/xp kiho` autocomplete real names and **auto-fill the Mastery
 Level**, so the RAW cost is computed for you.
 
 **Active-Kata combat effects**: the active Kata (⚑ on the sheet) feeds straight
-into `/attack`. The bot auto-applies the **deterministic subset** it can compute
+into `/fight attack`. The bot auto-applies the **deterministic subset** it can compute
 faithfully from the sheet, the chosen stance, the maneuver, and the weapon
 (main- and off-hand, via `/sheet wield`): **14 Kata**:
 
-| Kata | Auto-applied in `/attack` |
+| Kata | Auto-applied in `/fight attack` |
 |---|---|
 | Striking as Air | Defense Stance → target Armor TN **+Air Ring** |
 | Reckless Abandon Style | Full Attack Stance → Armor TN **+Fire Ring** |
@@ -152,13 +152,13 @@ faithfully from the sheet, the chosen stance, the maneuver, and the weapon
 | Strength of the Crab | Attack Stance + wearing armor → **+2 Reduction** |
 
 Weapon-conditional Kata read what the character is **wielding**: set that with
-`/sheet wield weapon: off_hand:` (it also becomes `/attack`'s default weapon).
+`/sheet wield weapon: off_hand:` (it also becomes `/fight attack`'s default weapon).
 
 **Rate-limited Kata: enforced while a `/combat` encounter is running.** The
 initiative tracker now carries real round/turn state (it resets each combatant's
 *once-per-Turn* abilities when their turn begins and everyone's *once-per-Round*
 abilities at the top of a new Round). When the attacker is a combatant in the
-channel's encounter, `/attack` applies these and marks them spent; attack again
+channel's encounter, `/fight attack` applies these and marks them spent; attack again
 in the same Turn/Round and it says "already used." **Without** a tracked
 encounter the bot can't count rounds, so they fall back to a DM reminder:
 
@@ -177,7 +177,7 @@ ally/guard effects. **Most
 Kiho** remain DM-adjudicated reminders (activation cost: a Void Point or
 Meditation/Void roll: and durations are DM-adjudicated); their category limits
 (one Internal/Kharmic/Mystical, Martial stacks) *are* enforced by
-`/sheet kiho_activate`. The **6 deterministic Kiho** whose effects the bot can
+`/sheet kiho activate`. The **6 deterministic Kiho** whose effects the bot can
 compute faithfully are auto-applied (see the Kiho combat effects table below);
 auto-applied Kiho are suppressed from the reminder list to reduce noise.
 
@@ -193,11 +193,11 @@ and full effect text.
 | `/sheet advantage` · `/sheet disadvantage` | Record/remove on the sheet (free): e.g. at creation. Taking a Disadvantage tells you the XP it grants; a DM applies that with `/xp grant`. |
 
 **Auto-applied Advantage & Disadvantage combat effects**: when a character has
-one of the entries below, `/attack` applies the modifier automatically, the same
+one of the entries below, `/fight attack` applies the modifier automatically, the same
 way it does for Kata and Techniques (`l5r_rules/advantage_effects.py`). **12
 effects across 10 entries:**
 
-| Advantage / Disadvantage | Auto-applied in `/attack` |
+| Advantage / Disadvantage | Auto-applied in `/fight attack` |
 |---|---|
 | Large | melee with a Large weapon → damage **+1k0** |
 | Hands of Stone | unarmed → damage **+0k1** |
@@ -220,10 +220,10 @@ Failure of Bushido (Void-spend restrictions), and Magic Resistance (spell
 combat not modelled).
 
 **Auto-applied Kiho combat effects**: when a character has one of the kiho
-below **active** (`/sheet kiho_activate`), `/attack` applies the modifier
+below **active** (`/sheet kiho activate`), `/fight attack` applies the modifier
 automatically (`l5r_rules/kiho_effects.py`). **6 effects across 6 kiho:**
 
-| Kiho | Auto-applied in `/attack` |
+| Kiho | Auto-applied in `/fight attack` |
 |---|---|
 | Soul of the Four Winds | defender Armor TN **+Insight Rank + Air Ring** |
 | Musubi | defender Armor TN **+Water Ring + Staves Rank** (staff equipped) |
@@ -240,11 +240,11 @@ Soul, Earth Palm), cumulative tracking (Rising Mountain), action-economy changes
 from the reminder line to reduce noise.
 
 **Auto-applied Condition effects**: when a combatant has a condition set via
-`/combat condition_set`, `/attack` applies the modifier automatically
+`/combat condition set`, `/fight attack` applies the modifier automatically
 (`l5r_rules/condition_effects.py`). Successful Knockdown maneuvers auto-set
 Prone on the target. **15 effects across 7 conditions:**
 
-| Condition | Auto-applied in `/attack` |
+| Condition | Auto-applied in `/fight attack` |
 |---|---|
 | Blinded | attacker: melee **−1k1**, ranged **−3k3**; defender Armor TN = **Reflexes + 5 + armor** |
 | Dazed | attacker: **−3k0** to all actions |
@@ -287,14 +287,14 @@ Every school **and path** and its techniques are in the bot: **347 entries**
 | `/school list` | Overall summary (basic/advanced/alternate + per-clan counts), or `clan:` for that clan's entries grouped by category. |
 | `/school search` | Find schools/paths by name or clan (each tagged basic / adv / path). |
 | `/school view` | An entry's Benefit, Skills, Honor, Outfit, Affinity, Prerequisites, and every Technique (Rank + name + full effect text). |
-| `/school learn` | Record the techniques your school grants **up to your School Rank** onto your sheet (RAW: techniques come free with rank at a dojo). Uses your sheet's school, or pass `school_name:`. |
+| `/sheet learn` | Record the techniques your school grants **up to your School Rank** onto your sheet (RAW: techniques come free with rank at a dojo). Uses your sheet's school, or pass `school_name:`. |
 
 Only **Basic Schools** appear in `/sheet create` and `/npc generate` autocomplete
 (you start as a Basic School; Advanced Schools and Alternate Paths are transitions
 a character moves into later).
 
 **Auto-applied Technique effects**: the techniques a character has recorded
-(`/school learn`) feed into `/attack`. The bot auto-applies **every s29 Technique
+(`/sheet learn`) feed into `/fight attack`. The bot auto-applies **every s29 Technique
 whose condition it can actually evaluate**: a modifier gated only on stance, the
 weapon, armour worn, an Initiative or Honor comparison, or a trait scalar : 
 **36 techniques** in all (`l5r_rules/technique_effects.py`). The remaining ~600
@@ -331,13 +331,13 @@ technique shape in the source: the `- Rank N: Name:` ladder, dash- and inline
 `- Technique: Name: effect` shugenja form. s29.15 (the LOCKED courtier framework)
 is skipped: its two schools already appear in the clan files.
 
-**Weapon Skill Masteries** (GDD s24, auto-applied in `/attack`)
+**Weapon Skill Masteries** (GDD s24, auto-applied in `/fight attack`)
 
 Every weapon skill has mastery abilities at Ranks 3, 5, and 7. The bot
 auto-applies the **18** whose conditions it can evaluate from the sheet, the
 weapon, and the encounter state (`l5r_rules/skill_mastery.py`):
 
-| Skill | Rank | Auto-applied in `/attack` |
+| Skill | Rank | Auto-applied in `/fight attack` |
 |---|---|---|
 | Kenjutsu | 3 | sword damage **+1k0** |
 | Kenjutsu | 7 | sword damage dice **explode on 9+** |
@@ -391,10 +391,10 @@ Mastery Level**: so the RAW cost (1 × Mastery Level) is computed for you.
 | `/weapon list` · `/weapon view` | Browse all **44 weapons** (damage rating, skill, trait, size). |
 | `/armor list` | The **7 armor types** with Armor TN bonus and Reduction. |
 | `/sheet equip` | Add/remove a weapon on your character's gear list (autocomplete). |
-| `/sheet wield` | Set the weapon(s) in hand: `weapon:` (main) and optional `off_hand:`. This is `/attack`'s **default weapon** and gates defender weapon-conditional Kata (Crane, Dragon). `unwield:true` goes unarmed. |
+| `/sheet wield` | Set the weapon(s) in hand: `weapon:` (main) and optional `off_hand:`. This is `/fight attack`'s **default weapon** and gates defender weapon-conditional Kata (Crane, Dragon). `unwield:true` goes unarmed. |
 | `/sheet armor` | Equip an armor type: sets the sheet's **Armor TN bonus** and **Reduction** automatically (e.g. Light → +5 TN, Reduction 3; Heavy → +10, 5); `none` removes it. |
 
-Weapon damage (used by `/attack`) and armor Reduction/Armor-TN (used by combat)
+Weapon damage (used by `/fight attack`) and armor Reduction/Armor-TN (used by combat)
 now come from the full catalogs: Ashigaru +3/1, Tatami +4/1, Light +5/3, Heavy
 +10/5, Tetsu-do +13/8, Riding +4/4, Bogu +0/1.
 
@@ -402,7 +402,7 @@ now come from the full catalogs: Ashigaru +3/1, Tatami +4/1, Light +5/3, Heavy
 
 | Command | What it does |
 |---|---|
-| `/attack` | Your active character attacks another player's. Rolls **to hit**: `(Agility + weapon skill) keep Agility` (Reflexes for bows) vs the target's **Armor TN** (`Reflexes×5 + 5 + armor`), minus your wound penalty, with raises and stances. |
+| `/fight attack` | Your active character attacks another player's. Rolls **to hit**: `(Agility + weapon skill) keep Agility` (Reflexes for bows) vs the target's **Armor TN** (`Reflexes×5 + 5 + armor`), minus your wound penalty, with raises and stances. |
 
 On a **hit**, the message shows **DM-only buttons**:
 
@@ -414,7 +414,7 @@ On a **hit**, the message shows **DM-only buttons**:
 Only a DM can press them, so the flow is exactly *"a player submits an attack; if
 it lands, the DM authorizes the outcome."*
 
-`/attack` options: `weapon` (autocomplete), `raises` (+5 TN each),
+`/fight attack` options: `weapon` (autocomplete), `raises` (+5 TN each),
 `increased_damage` (+5 TN and +1 damage die each), `maneuver`, `spend_void`,
 `attacker_stance`, `defender_stance`, `bonus_tn` (DM situational modifier), and
 `weapon_material` (jade/crystal/obsidian/nemuranai — bypasses creature Invulnerability).
@@ -451,13 +451,13 @@ it lands, the DM authorizes the outcome."*
 | *(automatic)* Stale-turn nudge | Once per turn, if the current actor has not ended their turn after **10 minutes**, the bot pings them in the fight channel with the commands to move on. Constant `STALE_TURN_MINUTES` in `bot.py`. |
 | `/combat recap` / summary on `/combat end` | Fight tally kept on the encounter (survives restarts): per participant hits/attacks, damage dealt and taken (counted when a DM approves it), healing, kills, Void spent, and wound level at join → now. `/combat end` posts the final summary with rounds, elapsed time, the fallen, and callouts for most damage dealt, most taken, and most accurate (3+ attacks); one compact line per participant also goes to the combat log. `/dm undo` rolls back sheets, not the tally. |
 
-**Raises and Emphases (GDD s41 / s24, enforced):** called Raises on an attack (including a maneuver's cost after Free Raises) or a spell may not exceed the caster's **Void Ring**; an **Unskilled** attack may not use Raises of any kind (called, maneuver or Free). Every `/check` command takes an optional `emphasis` (autocompleted from the sheet) that must be on the sheet for that Skill and rerolls 1s once; `/fight attack` applies a weapon Emphasis (e.g. Kenjutsu: Katana) automatically, as does `/assess investigate` with its emphasis choice.
+**Raises and Emphases (enforced):** called Raises on an attack (including a maneuver's cost after Free Raises) or a spell may not exceed the caster's **Void Ring**; an **Unskilled** attack may not use Raises of any kind (called, maneuver or Free). Every `/check` command takes an optional `emphasis` (autocompleted from the sheet) that must be on the sheet for that Skill and rerolls 1s once; `/fight attack` applies a weapon Emphasis (e.g. Kenjutsu: Katana) automatically, as does `/check investigate` with its emphasis choice.
 | `/combat join` | Add your active character; rolls initiative `(Reflexes + Insight Rank) keep Reflexes`. DMs can add a player with `member:`. |
 | `/combat add` | Add an NPC/monster by `name`, `reflexes`, `insight_rank` (rolls its initiative). DM only. |
 | `/combat next` | Advance to the next combatant; wraps and bumps the round. |
 | `/combat status` | Show the current order and whose turn it is. |
 | `/combat remove` / `/combat end` | Drop a combatant / end the encounter. |
-| `/combat condition_set` | Apply a condition to a combatant (DM only). 8 choices: Blinded, Dazed, Entangled, Fatigued, Grappled, Mounted, Prone, Stunned. |
+| `/combat condition set` | Apply a condition to a combatant (DM only). 8 choices: Blinded, Dazed, Entangled, Fatigued, Grappled, Mounted, Prone, Stunned. |
 | `/combat condition_clear` | Remove a condition from a combatant (DM only). |
 | `/combat conditions` | Show a combatant's active conditions and their DM-adjudicated effects. |
 | `/combat guard` | Guard another combatant (DM only). Ward gets +10 Armor TN, guarder gets −5. Clears on guarder's next turn. |
@@ -469,7 +469,7 @@ fight; sheets and wounds are in the database and persist). Each combatant also
 carries **round/turn usage state**, **active conditions**, and **guard state** : 
 `/combat next` resets the incoming actor's once-per-Turn abilities, guard
 assignment, and, at the top of a new Round, everyone's once-per-Round abilities : 
-which is what lets `/attack` enforce rate-limited Kata (see the Active-Kata
+which is what lets `/fight attack` enforce rate-limited Kata (see the Active-Kata
 section). Conditions display inline in the initiative listing (e.g. `[dazed,
 prone]`), active guards show as `🛡️→WardName`, and Full Defense as
 `🛡️FD+N`.
@@ -545,7 +545,7 @@ Stealth vs Investigation) is already handled by `/contest`.
 | `/npc view` · `/npc list` · `/npc delete` | View / roster / remove NPCs (delete is DM-only). |
 | `/npc trait` · `/npc skill` · `/npc set` · `/npc wound` · `/npc heal` · `/npc rename` | Edit a generated NPC field-by-field (DM only): same fields as the `/sheet` editors. |
 
-NPCs plug into combat: `/combat npc name:` adds one to initiative, and `/attack`
+NPCs plug into combat: `/combat npc name:` adds one to initiative, and `/fight attack`
 takes `target_npc:` (fight an NPC) and `attacker_npc:` (a DM runs a monster
 against a player). NPCs are stored per server and never mix with player sheets.
 
@@ -558,7 +558,7 @@ NPCs can be tuned field-by-field with the `/npc` editors above.
 
 *Still faithful-core:* deterministic subsets of **Kata**, **School Techniques**,
 **Skill Masteries**, **Advantages/Disadvantages**, **Kiho**, and **Conditions**
-now auto-apply in `/attack` (see the tables above); the rest of Kata, most
+now auto-apply in `/fight attack` (see the tables above); the rest of Kata, most
 Techniques, and most Kiho stay DM-adjudicated (shown as reminders; technique
 text on the sheet via `/school view`). **Void Point damage reduction** adds a
 second button on every hit: DM clicks "Void Reduce" to spend 1 VP and subtract
@@ -612,7 +612,7 @@ that dies at `wounds_dead`).
 | `/creature wound` · `/creature heal` | Adjust a creature's wounds directly. |
 | `/creature attack` | A creature attacks a player/NPC (fixed attack vs their Armor TN); on a hit, a **DM-only** button applies the creature's fixed damage. |
 
-Players fight creatures through the normal `/attack` with `target_creature:`: the
+Players fight creatures through the normal `/fight attack` with `target_creature:`: the
 attacker rolls their weapon as usual, and the DM-authorized damage goes onto the
 creature's wound track (plain hit or Feint; Disarm/Knockdown against creatures
 aren't wired). `/combat creature` drops a spawned creature into initiative.
@@ -626,7 +626,7 @@ hazard is excluded. `l5r_rules/creature_catalog.py` is generated: don't hand-edi
 it; re-run the extractor to refresh.
 
 **Creature Special Abilities (GDD s54.0)** — auto-applied when dealing damage to
-creatures via `/attack target_creature:`:
+creatures via `/fight attack target_creature:`:
 
 | Tag | Effect | Bypassed by |
 |---|---|---|
@@ -636,7 +636,7 @@ creatures via `/attack target_creature:`:
 | `spirit` | Half damage from non-jade weapons and non-Jade/Crystal spells | jade/crystal/obsidian weapon (or Jade/Crystal spell) |
 | `undead` | No wound penalties; immune to Fear; functional until Dead | (DM reminder only) |
 
-Specify `weapon_material:` on `/attack` to indicate jade/crystal/obsidian/nemuranai.
+Specify `weapon_material:` on `/fight attack` to indicate jade/crystal/obsidian/nemuranai.
 Creature spawn/view embeds now show "Special Abilities" for creatures with these tags.
 
 **Bokken weapon special** (GDD s39): targets hit by a bokken have their armor
@@ -644,7 +644,7 @@ Reduction doubled before applying damage. Auto-applied in both PC-vs-PC and
 PC-vs-creature damage paths.
 
 **Arrow & blowgun specials** (GDD s39): select the arrow type as your weapon in
-`/attack` to apply its special effect. Arrow entries in the weapon catalog use
+`/fight attack` to apply its special effect. Arrow entries in the weapon catalog use
 Kyujutsu/Reflexes like bows.
 
 | Weapon | DR | Armor TN Effect | Other |
@@ -719,7 +719,7 @@ weapon's normal skill. Range is DM-adjudicated.
 Shuriken (25') and tsubute (30') are already in the catalog as ranged weapons
 (Ninjutsu / Agility, `no_explode`). They have no separate melee entry.
 
-**Katana Void Damage** (GDD s39): pass `void_damage:True` on `/attack` with a
+**Katana Void Damage** (GDD s39): pass `void_damage:True` on `/fight attack` with a
 katana. The VP is spent at damage resolution time (not attack time), adding
 **+1k1** to the damage roll. If the attacker has no VP when damage resolves, a
 "no Void Points" note appears and no bonus is applied. Only the katana catalog
@@ -763,7 +763,7 @@ qualities apply only if the weapon used matches the character's `equipped_weapon
 
 | Quality | Effect | Auto-applied? |
 |---|---|---|
-| **Balanced** | +1k0 to attack rolls | Yes — added to rolled dice in `/attack` |
+| **Balanced** | +1k0 to attack rolls | Yes — added to rolled dice in `/fight attack` |
 | **Radiant** | Counts as jade (bypasses creature Invulnerability) | Yes — treated as jade material in creature damage path |
 | **Signature** | Bears the creator's personal stamp (flavor only) | N/A — no mechanical effect |
 | **Swift** | +5 Initiative | Yes — added at `/combat join`/`npc`/`room` time |
@@ -772,7 +772,7 @@ qualities apply only if the weapon used matches the character's `equipped_weapon
 
 Quality names are validated against `WEAPON_QUALITIES` in `combat.py`. Invalid
 names are rejected. Qualities are displayed as `[balanced, swift]` after the
-weapon name in `/sheet view`, `/whoami`, and `/party`.
+weapon name in `/sheet view`, `/whoami`, and `/dm party`.
 
 **True** subtracts the wielder's Strength from the target's Reduction (both
 armor-based and creature natural Reduction). The subtraction happens after
@@ -819,7 +819,7 @@ spells, schools, kata, kiho, advantages, and creatures. Equipping armor via
 | `/room close` | Archive the room (host or DM only). |
 
 Because a room *is* a channel, everything else works inside it with no extra
-steps: `/sheet`, `/roll`, `/attack`, and `/combat` all just work in the thread,
+steps: `/sheet`, `/roll`, `/fight attack`, and `/combat` all just work in the thread,
 and each room's initiative tracker is naturally separate (initiative is
 per-channel). So a DM can run several games at once in one server, each in its
 own room.
@@ -868,16 +868,16 @@ effects of each stance when declared. Initiative ties now break by **Reflexes**
 `/modifiers` is a quick-reference card for **terrain and range modifiers**: cover
 (+10/+20 TN), range increments (+10 TN each beyond the first), higher ground
 (+1k0), darkness, mounted vs foot, and prone targets: with a note on how to apply
-them via the `/attack bonus_tn:` parameter. `/calledshot` shows the Called Shot
+them via the `/fight attack bonus_tn:` parameter. `/ref calledshot` shows the Called Shot
 raise-cost table (1–4 raises → limb, hand/foot, head, eye/ear/finger) and DM-adjudicated
 effects for each body part. `/dm treat` adds a full **Medicine treatment workflow**:
 the DM picks a healer and patient, the healer rolls Medicine/Intelligence vs a TN
 (wound treatment TN 15, disease diagnosis TN 15, poison treatment TN 20, antidote
 TN 20), and on success the DM authorizes healing (Intelligence × 2 wounds by
 default, overridable). Failed treatment follows the L5R 4e rule that it cannot be
-re-attempted until the next day. `/sheet export` dumps the active character as JSON
+re-attempted until the next day. `/sheet data export` dumps the active character as JSON
 (inline for small sheets, as a `.json` file attachment for large ones), and
-`/sheet import_sheet` creates a character from pasted JSON: enabling backup,
+`/sheet data import` creates a character from pasted JSON: enabling backup,
 sharing between servers, and pre-built character loading.
 
 **Family bonuses** are auto-applied at `/sheet create`: pick a `family:` from
@@ -898,7 +898,7 @@ delaying their action: the encounter display shows ⏸️HELD / ⏳DELAYED marke
 resets action economy, and logs the event to the combat log channel.
 
 **Combatant autocomplete**: all combat commands that take a combatant name
-(`/combat stance`, `/combat condition_set`, `/combat guard`, etc.) now offer
+(`/combat stance`, `/combat condition set`, `/combat guard`, etc.) now offer
 Discord autocomplete, so DMs pick from a dropdown rather than typing names.
 
 **Encounter persistence**: encounters are saved to the database on every state

@@ -1102,14 +1102,14 @@ _WEAPON_MATERIAL_CHOICES = [
 combat_group = app_commands.Group(name="combat", description="Track combat initiative and turn order.")
 combat_condition = app_commands.Group(name="condition", description="Apply, clear, or view conditions.", parent=combat_group)
 combat_turn = app_commands.Group(name="turn", description="Initiative adjustments: hold, delay, act, surprise.", parent=combat_group)
-combat_void = app_commands.Group(name="void", description="Round-level Void Point combat effects (s25).", parent=combat_group)
+combat_void = app_commands.Group(name="void", description="Round-level Void Point combat effects.", parent=combat_group)
 
 fight_group = app_commands.Group(name="fight", description="Attack, stance, and defense actions.")
 combat_env = app_commands.Group(name="env", description="Environment effects: cover, notes, damage.", parent=fight_group)
 
 engage_group = app_commands.Group(name="engage", description="Grapple, duel, and mass battle subsystems.")
-combat_grapple = app_commands.Group(name="grapple", description="Grappling subsystem (s40).", parent=engage_group)
-combat_duel = app_commands.Group(name="duel", description="Iaijutsu dueling (s40).", parent=engage_group)
+combat_grapple = app_commands.Group(name="grapple", description="Grappling subsystem.", parent=engage_group)
+combat_duel = app_commands.Group(name="duel", description="Iaijutsu dueling.", parent=engage_group)
 combat_battle = app_commands.Group(name="battle", description="Mass Battle system.", parent=engage_group)
 
 
@@ -1121,7 +1121,7 @@ combat_battle = app_commands.Group(name="battle", description="Mass Battle syste
     target="The player to attack (their active character). Or use target_npc / target_creature.",
     target_npc="Attack a stored NPC by name (instead of a player).",
     target_creature="Attack a spawned creature by name (instead of a player).",
-    attacker_npc="Attack WITH a stored NPC instead of your own character (Fortune).",
+    attacker_npc="Attack WITH a stored NPC instead of your own character [Fortune]",
     weapon="Weapon for this attack. Defaults to your wielded weapon (`/sheet wield`), else katana.",
     raises="Called Raises: each adds +5 to the target's Armor TN.",
     increased_damage="Increased Damage raises: each adds +5 TN AND +1 damage die on a hit.",
@@ -1132,7 +1132,7 @@ combat_battle = app_commands.Group(name="battle", description="Mass Battle syste
     defender_stance="Target's stance (affects their Armor TN).",
     bonus_tn="Situational +/- to the target's Armor TN (DM discretion).",
     weapon_material="Weapon material (jade/crystal/obsidian bypass Invulnerability; nemuranai too).",
-    off_hand="Attack with your off-hand weapon instead of main hand (applies off-hand penalty per s40).",
+    off_hand="Attack with your off-hand weapon instead of main hand (applies off-hand penalty).",
 )
 @app_commands.choices(
     attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES, maneuver=_MANEUVER_CHOICES,
@@ -1291,7 +1291,7 @@ async def attack(
     if _atk_char.skills.get(_atk_skill, 0) == 0 and (raises or increased_damage or maneuver_raises):
         await interaction.response.send_message(
             f"**{_atk_char.name}** is Unskilled in {_atk_skill}: an Unskilled Roll may not benefit from "
-            "Raises of any kind, called, maneuver or Free (s41). Attack without them.",
+            "Raises of any kind, called, maneuver or Free. Attack without them.",
             ephemeral=True,
         )
         return
@@ -1306,7 +1306,7 @@ async def attack(
         await interaction.response.send_message(
             f"Too many Raises: **{_called}** called (raises {raises} + increased damage {increased_damage}"
             f" + maneuver {_man_called} after Free Raises) but the maximum per roll is the Void Ring, "
-            f"**{combat.max_raises(_atk_char)}** (s41).",
+            f"**{combat.max_raises(_atk_char)}**.",
             ephemeral=True,
         )
         return
@@ -1332,7 +1332,7 @@ async def attack(
     atk_weapon_profile = combat.get_weapon_profile(weapon)
     if void_damage and not atk_weapon_profile.get("void_damage"):
         await interaction.response.send_message(
-            f"**{weapon}** does not support void_damage — only katana can spend VP for +1k1 damage (GDD s39).",
+            f"**{weapon}** does not support void_damage — only katana can spend VP for +1k1 damage.",
             ephemeral=True,
         )
         return
@@ -1825,7 +1825,7 @@ def _get_or_create(channel_id: int) -> encounter.Encounter:
 
 
 @combat_group.command(name="join", description="Add a character to initiative (rolls initiative).")
-@app_commands.describe(member="Add another player's active character (Fortune). Omit for your own.")
+@app_commands.describe(member="Add another player's active character [Fortune]. Omit for your own.")
 async def combat_join(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -1952,7 +1952,7 @@ class RosterView(views_base.PersistentView):
                 continue
             rec = _d.store.get_active(self.guild_id, uid)
             if rec is None:
-                notes.append(f"<@{uid}>: no active character (`/sheet use`), not added")
+                notes.append(f"<@{uid}>: no active character (`/sheet create`), not added")
                 continue
             if stats.is_dead(rec.character) or stats.wound_level_name(rec.character) == "Out":
                 notes.append(f"<@{uid}>: **{rec.character.name}** cannot act ({stats.wound_level_name(rec.character)}), not added")
@@ -2410,7 +2410,7 @@ async def combat_end(interaction: discord.Interaction) -> None:
     await _d.combat_log(guild, "--- Encounter ended --- " + (" | ".join(logs) if logs else ""))
 
 
-@combat_group.command(name="summary", description="Compact overview of all combatants' key stats. Fortune role required.")
+@combat_group.command(name="summary", description="Compact overview of all combatants' key stats. [Fortune]")
 async def combat_summary(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -2467,7 +2467,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-@combat_group.command(name="npc", description="Add a stored NPC to initiative (rolls its initiative). Fortune role required.")
+@combat_group.command(name="npc", description="Add a stored NPC to initiative (rolls its initiative). [Fortune]")
 @app_commands.describe(name="The NPC to add.")
 async def combat_npc(interaction: discord.Interaction, name: str) -> None:
     if not await _d.require_guild(interaction):
@@ -2508,7 +2508,7 @@ _CONDITION_CHOICES = [
 ]
 
 
-@combat_condition.command(name="set", description="Apply a condition to a combatant (Fortune).")
+@combat_condition.command(name="set", description="Apply a condition to a combatant [Fortune]")
 @app_commands.describe(
     name="The combatant to affect.",
     condition="The condition to apply.",
@@ -2540,7 +2540,7 @@ async def combat_condition_set(
     await _d.combat_log(str(interaction.guild_id), f"Condition: {c.name} +{condition.name}")
 
 
-@combat_condition.command(name="clear", description="Remove a condition from a combatant (Fortune).")
+@combat_condition.command(name="clear", description="Remove a condition from a combatant [Fortune]")
 @app_commands.describe(
     name="The combatant to affect.",
     condition="The condition to remove.",
@@ -2597,7 +2597,7 @@ async def combat_conditions(interaction: discord.Interaction, name: str) -> None
 
 
 @fight_group.command(name="status", description="Your compact combat card: wounds, penalty, Void, stance, conditions, Armor TN.")
-@app_commands.describe(member="Another player's active character (Fortune).")
+@app_commands.describe(member="Another player's active character [Fortune]")
 async def fight_status(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -2692,7 +2692,7 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
         return
     if g.stance in ("full_attack", "full_defense", "center"):
         reasons = {
-            "full_attack": "Guard is not available in Full Attack Stance (s40).",
+            "full_attack": "Guard is not available in Full Attack Stance.",
             "full_defense": "Only Free Actions allowed in Full Defense Stance.",
             "center": "All Actions are forfeited in Center Stance.",
         }
@@ -2952,7 +2952,7 @@ async def combat_void_swap(interaction: discord.Interaction, spender: str, targe
     )
     await _d.combat_log(guild, f"Void Swap: {cb_s.name} ↔ {cb_t.name} initiative ({c.current_void_points} VP left)")
 
-@combat_grapple.command(name="initiate", description="Initiate a Grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus). Fortune role required.")
+@combat_grapple.command(name="initiate", description="Initiate a Grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus). [Fortune]")
 @app_commands.describe(
     attacker="The combatant initiating the grapple.",
     target="The target being grappled.",
@@ -3025,7 +3025,7 @@ async def grapple_initiate(
     if equipped:
         wp = combat.get_weapon_profile(equipped)
         if wp.get("grapple_capable"):
-            grapple_weapon_note = f"\n✓ {equipped.replace('_', ' ').title()}: can initiate grapple while armed (s39)"
+            grapple_weapon_note = f"\n✓ {equipped.replace('_', ' ').title()}: can initiate grapple while armed"
         else:
             grapple_weapon_note = f"\n⚠️ {equipped.replace('_', ' ').title()} is not grapple-capable — must drop/sheathe to grapple (DM adjudicates)"
     embed = discord.Embed(
@@ -3084,7 +3084,7 @@ async def grapple_initiate(
     await _d.combat_log(guild, f"Grapple: {atk_cb.name} → {def_cb.name} {tag}")
 
 
-@combat_grapple.command(name="control", description="Contested Jiujutsu/Strength roll for grapple control. Fortune role required.")
+@combat_grapple.command(name="control", description="Contested Jiujutsu/Strength roll for grapple control. [Fortune]")
 @app_commands.describe(
     combatant_a="First grapple participant.",
     combatant_b="Second grapple participant.",
@@ -3157,7 +3157,7 @@ async def grapple_control(
     await _d.combat_log(guild, f"Grapple Control: {winner} wins")
 
 
-@combat_grapple.command(name="hit", description="Grapple Hit: unarmed damage on a grappled opponent (no attack roll). Fortune role required.")
+@combat_grapple.command(name="hit", description="Grapple Hit: unarmed damage on a grappled opponent (no attack roll). [Fortune]")
 @app_commands.describe(
     attacker="The combatant in control (dealing damage).",
     target="The grapple participant receiving damage.",
@@ -3221,7 +3221,7 @@ async def grapple_hit(
     await view.persist(await interaction.original_response())
 
 
-@combat_grapple.command(name="throw", description="Grapple Throw: target becomes Prone and leaves the grapple. Fortune role required.")
+@combat_grapple.command(name="throw", description="Grapple Throw: target becomes Prone and leaves the grapple. [Fortune]")
 @app_commands.describe(
     thrower="The combatant in control (throwing).",
     target="The combatant being thrown.",
@@ -3271,7 +3271,7 @@ async def grapple_throw(
     await _d.combat_log(guild, f"Grapple Throw: {thrower_cb.name} throws {target_cb.name} (both prone, grapple ends)")
 
 
-@combat_grapple.command(name="pin", description="Grapple Pin: immobilize the target (Complex Action, controller only). Fortune role required.")
+@combat_grapple.command(name="pin", description="Grapple Pin: immobilize the target (Complex Action, controller only). [Fortune]")
 @app_commands.describe(
     controller="The combatant in control.",
     target="The grapple participant being pinned.",
@@ -3429,7 +3429,7 @@ async def grapple_break(
 
 
 
-@combat_duel.command(name="assess", description="Assessment stage: both duelists roll Iaijutsu(Assessment)/Awareness. Fortune role required.")
+@combat_duel.command(name="assess", description="Assessment stage: both duelists roll Iaijutsu(Assessment)/Awareness. [Fortune]")
 @app_commands.describe(
     duelist_a="First duelist (combatant name or character).",
     duelist_b="Second duelist (combatant name or character).",
@@ -3471,7 +3471,7 @@ async def duel_assess(
         cb_enc = enc.find(duelist_char.name) if enc else None
         if cb_enc and "dazed" in cb_enc.conditions:
             await interaction.response.send_message(
-                f"**{duelist_label}** is Dazed and cannot perform an Iaijutsu duel (GDD s40).",
+                f"**{duelist_label}** is Dazed and cannot perform an Iaijutsu duel.",
                 ephemeral=True,
             )
             return
@@ -3570,7 +3570,7 @@ async def duel_assess(
     await _d.combat_log(str(interaction.guild_id), f"Duel Assess: {ca.name} vs {cb_char.name}")
 
 
-@combat_duel.command(name="focus", description="Focus stage: contested Iaijutsu(Focus)/Void roll. Fortune role required.")
+@combat_duel.command(name="focus", description="Focus stage: contested Iaijutsu(Focus)/Void roll. [Fortune]")
 @app_commands.describe(
     duelist_a="First duelist.",
     duelist_b="Second duelist.",
@@ -3616,7 +3616,7 @@ async def duel_focus(
         cb_enc = enc.find(duelist_char.name) if enc else None
         if cb_enc and "dazed" in cb_enc.conditions:
             await interaction.response.send_message(
-                f"**{duelist_label}** is Dazed and cannot perform an Iaijutsu duel (GDD s40).",
+                f"**{duelist_label}** is Dazed and cannot perform an Iaijutsu duel.",
                 ephemeral=True,
             )
             return
@@ -3712,7 +3712,7 @@ async def duel_focus(
         await _d.combat_log(str(interaction.guild_id), f"Duel Focus: {winner} strikes first (margin {diff})")
 
 
-@combat_duel.command(name="strike", description="Strike stage: Iaijutsu/Reflexes attack roll + damage. Fortune role required.")
+@combat_duel.command(name="strike", description="Strike stage: Iaijutsu/Reflexes attack roll + damage. [Fortune]")
 @app_commands.describe(
     attacker="The duelist striking.",
     target="The opponent being struck.",
@@ -3826,7 +3826,7 @@ async def duel_strike(
     tag = "HIT" if hit else "MISS"
     await _d.combat_log(guild, f"Duel Strike: {atk.name} → {tgt.name} ({weapon}) {tag} (roll {result['total']} vs TN {result['tn']})")
 
-@combat_group.command(name="creature", description="Add a spawned creature to initiative (rolls its initiative). Fortune role required.")
+@combat_group.command(name="creature", description="Add a spawned creature to initiative (rolls its initiative). [Fortune]")
 @app_commands.describe(name="The creature to add.")
 async def combat_creature(interaction: discord.Interaction, name: str) -> None:
     if not await _d.require_guild(interaction):
@@ -3859,7 +3859,7 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
 
 @combat_group.command(
     name="category",
-    description="Add all NPCs and creatures in a category to initiative. Fortune role required.",
+    description="Add all NPCs and creatures in a category to initiative. [Fortune]",
 )
 @app_commands.describe(category="Which category to add.")
 async def combat_category(interaction: discord.Interaction, category: str) -> None:
@@ -3928,7 +3928,7 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
 
 @combat_group.command(
     name="room",
-    description="Add all room members' active characters to initiative. Fortune role required.",
+    description="Add all room members' active characters to initiative. [Fortune]",
 )
 async def combat_room(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
@@ -4046,7 +4046,7 @@ async def combat_stance(
     await _d.combat_log(str(interaction.guild_id), f"Stance: {cb.name} → {label}")
 
 
-@combat_turn.command(name="init", description="Adjust a combatant's initiative value (Fortune).")
+@combat_turn.command(name="init", description="Adjust a combatant's initiative value [Fortune]")
 @app_commands.describe(
     name="Combatant name.",
     value="New initiative total.",
@@ -4082,7 +4082,7 @@ async def combat_init(
     )
 
 
-@combat_turn.command(name="hold", description="Mark a combatant as holding their action (Fortune).")
+@combat_turn.command(name="hold", description="Mark a combatant as holding their action [Fortune]")
 @app_commands.describe(name="Combatant name.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_hold(interaction: discord.Interaction, name: str) -> None:
@@ -4144,7 +4144,7 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         await _d.combat_log(guild, f"Hold: {cb.name} held")
 
 
-@combat_turn.command(name="delay", description="Mark a combatant as delaying (Fortune).")
+@combat_turn.command(name="delay", description="Mark a combatant as delaying [Fortune]")
 @app_commands.describe(name="Combatant name.", new_initiative="Optional new initiative value.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_delay(
@@ -4223,7 +4223,7 @@ async def combat_delay(
         await _d.combat_log(guild, f"Delay: {cb.name} delayed{init_note}")
 
 
-@combat_turn.command(name="act", description="A held/delayed combatant takes their action now (Fortune).")
+@combat_turn.command(name="act", description="A held/delayed combatant takes their action now [Fortune]")
 @app_commands.describe(name="Combatant name.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_act(interaction: discord.Interaction, name: str) -> None:
@@ -4315,7 +4315,7 @@ async def combat_turn_done(
     await _d.combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
 
 
-@combat_turn.command(name="surprise", description="Toggle the surprise round flag on the current encounter (Fortune).")
+@combat_turn.command(name="surprise", description="Toggle the surprise round flag on the current encounter [Fortune]")
 async def combat_surprise(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -4337,7 +4337,7 @@ async def combat_surprise(interaction: discord.Interaction) -> None:
 
 
 
-@combat_battle.command(name="roll", description="Battle/Perception roll to determine engagement level. Fortune role required.")
+@combat_battle.command(name="roll", description="Battle/Perception roll to determine engagement level. [Fortune]")
 @app_commands.describe(
     name="Character name.",
     tn="Battle TN set by DM (10-15 winning, 15-20 even, 20-30 losing, 30+ desperate).",
@@ -4389,7 +4389,7 @@ async def battle_roll(
     await interaction.response.send_message(embed=embed)
 
 
-@combat_battle.command(name="damage", description="Roll incidental damage from a mass battle round. Fortune role required.")
+@combat_battle.command(name="damage", description="Roll incidental damage from a mass battle round. [Fortune]")
 @app_commands.describe(engagement="Engagement level from the battle roll.")
 @app_commands.choices(engagement=[
     app_commands.Choice(name="Reserves (0 damage)", value="reserves"),
@@ -4418,7 +4418,7 @@ async def battle_damage(
     await interaction.response.send_message(embed=embed)
 
 
-@combat_battle.command(name="table", description="Battle Table roll — individual experience in mass battle (GDD s47). Fortune role required.")
+@combat_battle.command(name="table", description="Battle Table roll — individual experience in mass battle. [Fortune]")
 @app_commands.describe(
     name="Character name.",
     army_status="Army Status for the character's side this round.",
@@ -4520,7 +4520,7 @@ async def battle_table(
     await interaction.response.send_message(embed=embed)
 
 
-@combat_battle.command(name="status", description="Contested Battle/Perception between generals to determine Army Status. Fortune role required.")
+@combat_battle.command(name="status", description="Contested Battle/Perception between generals to determine Army Status. [Fortune]")
 @app_commands.describe(
     general_a="General of Side A (character name).",
     general_b="General of Side B (character name).",
@@ -4606,7 +4606,7 @@ async def battle_status(
 # Phase 42: Mounted Combat (#10)
 # ---------------------------------------------------------------------------
 
-@fight_group.command(name="mount", description="Mount or dismount (sets/clears Mounted condition). Fortune role required.")
+@fight_group.command(name="mount", description="Mount or dismount (sets/clears Mounted condition). [Fortune]")
 @app_commands.describe(
     name="Combatant name.",
     dismount="Dismount instead of mounting.",
@@ -4645,7 +4645,7 @@ async def combat_mount(
 # Phase 42: Multiple Attacks / Action Economy (#9)
 # ---------------------------------------------------------------------------
 
-@fight_group.command(name="action", description="Track action usage this turn (Simple or Complex). Fortune role required.")
+@fight_group.command(name="action", description="Track action usage this turn (Simple or Complex). [Fortune]")
 @app_commands.describe(
     name="Combatant name.",
     action_type="Type of action being taken.",
@@ -4704,7 +4704,7 @@ async def combat_action(
 # Phase 63: Combat Enhancements — cover, notes, env_damage
 # ---------------------------------------------------------------------------
 
-@combat_env.command(name="cover", description="Set a combatant's cover/terrain Armor TN bonus. Fortune role required.")
+@combat_env.command(name="cover", description="Set a combatant's cover/terrain Armor TN bonus. [Fortune]")
 @app_commands.describe(
     name="Combatant name.",
     bonus="Armor TN modifier from cover/terrain (positive = harder to hit, 0 = clear).",
@@ -4740,7 +4740,7 @@ async def combat_cover(
         )
 
 
-@combat_env.command(name="notes", description="Set or clear environment notes for this encounter. Fortune role required.")
+@combat_env.command(name="notes", description="Set or clear environment notes for this encounter. [Fortune]")
 @app_commands.describe(text="Environment description (leave blank to clear).")
 async def combat_notes(
     interaction: discord.Interaction,
@@ -4765,7 +4765,7 @@ async def combat_notes(
         )
 
 
-@combat_env.command(name="damage", description="Apply environmental damage to combatants. Fortune role required.")
+@combat_env.command(name="damage", description="Apply environmental damage to combatants. [Fortune]")
 @app_commands.describe(
     amount="Raw damage to apply.",
     targets='Comma-separated combatant names, or "all".',

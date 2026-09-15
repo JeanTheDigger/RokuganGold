@@ -292,7 +292,7 @@ async def _refuse_if_cannot_act(interaction: discord.Interaction, c: Character) 
         return True
     if stats.wound_level_name(c) == "Out":
         await interaction.response.send_message(
-            f"😵 **{c.name}** is **Out** — unconscious (s22.3) — and cannot act until healed above that level.",
+            f"😵 **{c.name}** is **Out** — unconscious — and cannot act until healed above that level.",
             ephemeral=True,
         )
         return True
@@ -724,7 +724,7 @@ async def ping(interaction: discord.Interaction) -> None:
         f"🎋 Alive. Gateway latency {round(client.latency * 1000)} ms.", ephemeral=True
     )
 
-@client.tree.command(name="sync", description="Re-sync all slash commands with Discord (Kami only).")
+@client.tree.command(name="sync", description="Re-sync all slash commands with Discord [Kami]")
 async def sync_commands(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -1232,7 +1232,7 @@ sheet = app_commands.Group(name="sheet", description="Create and manage L5R 4e c
 sheet_void = app_commands.Group(name="void", description="Void Point management: spend, refresh, status.", parent=sheet)
 sheet_kata_grp = app_commands.Group(name="kata", description="Record and activate Kata.", parent=sheet)
 sheet_kiho_grp = app_commands.Group(name="kiho", description="Record and activate Kiho.", parent=sheet)
-sheet_tattoo_grp = app_commands.Group(name="tattoo", description="Manage Togashi tattoos (s57.25).", parent=sheet)
+sheet_tattoo_grp = app_commands.Group(name="tattoo", description="Manage Togashi tattoos.", parent=sheet)
 sheet_data = app_commands.Group(name="data", description="Export / import character sheets.", parent=sheet)
 stat_group = app_commands.Group(name="stat", description="Set traits, skills, equipment, and inventory on your character.")
 xp_group = app_commands.Group(name="xp", description="Grant and spend Experience to advance characters.")
@@ -2979,9 +2979,7 @@ class _FullCharacterApprovalView(_DisableableView):
             )
 
 
-@sheet.command(name="wizard", description="Step-by-step guided character creation.")
-@app_commands.describe(name="Your character's name.")
-async def sheet_wizard(
+async def sheet_wizard(  # legacy in-channel wizard, no longer registered as a command
     interaction: discord.Interaction,
     name: app_commands.Range[str, 1, 64],
 ) -> None:
@@ -3026,8 +3024,26 @@ async def sheet_view(interaction: discord.Interaction, member: discord.Member | 
             return
     await interaction.response.send_message(embed=build_sheet_embed(rec), ephemeral=True)
 
+@sheet.command(name="activate", description="Choose which of your characters is the active one.")
+@app_commands.describe(name="One of your characters (see /sheet list).")
+async def sheet_activate(interaction: discord.Interaction, name: app_commands.Range[str, 1, 64]) -> None:
+    if not await _require_guild(interaction):
+        return
+    guild = str(interaction.guild_id)
+    uid = str(interaction.user.id)
+    rec = store.get_by_name(guild, uid, name)
+    if rec is None:
+        mine = ", ".join(r.character.name for r in store.list_by_owner(guild, uid)) or "none yet (`/sheet create`)"
+        await interaction.response.send_message(f"You have no character called **{name}**. Yours: {mine}.", ephemeral=True)
+        return
+    if stats.is_dead(rec.character):
+        await interaction.response.send_message(f"💀 **{rec.character.name}** is dead and cannot be your active character.", ephemeral=True)
+        return
+    store.set_active(guild, uid, rec.id)
+    await interaction.response.send_message(f"✅ **{rec.character.name}** is now your active character.", ephemeral=True)
+
 @sheet.command(name="list", description="List your characters (or a player's, if you are a DM).")
-@app_commands.describe(member="Whose characters to list (Fortune). Omit for your own.")
+@app_commands.describe(member="Whose characters to list [Fortune]. Omit for your own.")
 async def sheet_list(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
     if not await _require_guild(interaction):
         return
@@ -3060,7 +3076,7 @@ async def sheet_list(interaction: discord.Interaction, member: discord.Member | 
 
 
 @sheet.command(name="delete", description="Delete a character (yours, or a player's if you are a DM).")
-@app_commands.describe(name="Character name.", member="Owner of the character (Fortune).")
+@app_commands.describe(name="Character name.", member="Owner of the character [Fortune]")
 @app_commands.autocomplete(name=_own_character_autocomplete)
 async def sheet_delete(
     interaction: discord.Interaction, name: str, member: discord.Member | None = None
@@ -3262,7 +3278,7 @@ def _paginate(lines: list[str], header: str, *, per_page: int = 15) -> list[str]
 @stat_group.command(name="trait", description="Set a Trait (or Void) on the active character.")
 @app_commands.describe(
     trait="Which Trait to set.", value="New value (0-10).",
-    member="Target player (Fortune). Omit for your own active character.",
+    member="Target player [Fortune]. Omit for your own active character.",
 )
 @app_commands.choices(trait=_TRAIT_CHOICES)
 async def sheet_trait(
@@ -3289,7 +3305,7 @@ async def sheet_trait(
 @app_commands.describe(
     skill="Skill name, or bulk list: 'Kenjutsu 3, Courtier 2, Etiquette 1'.",
     rank="Rank 0-10 (0 removes). Omit when using bulk format.",
-    member="Target player (Fortune). Omit for your own active character.",
+    member="Target player [Fortune]. Omit for your own active character.",
 )
 async def sheet_skill(
     interaction: discord.Interaction,
@@ -3340,7 +3356,7 @@ async def sheet_skill(
 @stat_group.command(name="set", description="Set a numeric field (honor, glory, void points, armor, etc.).")
 @app_commands.describe(
     field="Which field to set.", value="New value.",
-    member="Target player (Fortune). Omit for your own active character.",
+    member="Target player [Fortune]. Omit for your own active character.",
 )
 @app_commands.choices(field=_SET_CHOICES)
 async def sheet_set(
@@ -3362,7 +3378,7 @@ async def sheet_set(
     )
 
 @stat_group.command(name="equip", description="Add (or remove) a weapon on your character's gear.")
-@app_commands.describe(weapon="Weapon name.", remove="Remove it instead of adding.", member="Target player (Fortune).")
+@app_commands.describe(weapon="Weapon name.", remove="Remove it instead of adding.", member="Target player [Fortune]")
 @app_commands.autocomplete(weapon=_weapon_autocomplete)
 async def sheet_equip(
     interaction: discord.Interaction,
@@ -3394,12 +3410,12 @@ async def sheet_equip(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@stat_group.command(name="wield", description="Set the weapon(s) you're wielding:/attack's default weapon and defender Kata gates (s30).")
+@stat_group.command(name="wield", description="Set the weapon(s) in hand: the default for /fight attack and for defensive Kata.")
 @app_commands.describe(
     weapon="Main-hand weapon (start typing for suggestions).",
     off_hand="Off-hand weapon, e.g. wakizashi for a daisho. Blank clears the off hand.",
     unwield="Lower both weapons (go unarmed).",
-    member="Target player (Fortune).",
+    member="Target player [Fortune]",
 )
 @app_commands.autocomplete(weapon=_weapon_autocomplete, off_hand=_weapon_autocomplete)
 async def sheet_wield(
@@ -3439,7 +3455,7 @@ async def sheet_wield(
     )
 
 @stat_group.command(name="armor", description="Equip armor (sets Armor TN bonus & Reduction), or 'none' to remove.")
-@app_commands.describe(armor="Armor type (bogu/ashigaru/tatami/light/heavy/tetsu_do/riding, or 'none').", member="Target player (Fortune).")
+@app_commands.describe(armor="Armor type (bogu/ashigaru/tatami/light/heavy/tetsu_do/riding, or 'none').", member="Target player [Fortune]")
 @app_commands.autocomplete(armor=_armor_autocomplete)
 async def sheet_armor(
     interaction: discord.Interaction,
@@ -3487,11 +3503,11 @@ async def _quality_autocomplete(
     low = current.lower()
     return [c for c in _QUALITY_CHOICES if low in c.value][:25]
 
-@stat_group.command(name="quality", description="Set extraordinary weapon qualities on the equipped weapon (s39 crafting).")
+@stat_group.command(name="quality", description="Set extraordinary weapon qualities on the equipped weapon.")
 @app_commands.describe(
     qualities="Comma-separated qualities: balanced, radiant, signature, swift, true, unbreakable.",
     clear="Remove all weapon qualities.",
-    member="Target player (Fortune).",
+    member="Target player [Fortune]",
 )
 @app_commands.autocomplete(qualities=_quality_autocomplete)
 async def sheet_quality(
@@ -3541,7 +3557,7 @@ async def sheet_quality(
 @stat_group.command(name="item", description="Add or remove items from your inventory (quantity supported).")
 @app_commands.describe(
     name="Item name.", quantity="How many (default 1).",
-    remove="Remove instead of adding.", member="Target player (Fortune).",
+    remove="Remove instead of adding.", member="Target player [Fortune]",
 )
 async def sheet_item(
     interaction: discord.Interaction, name: str,
@@ -3566,7 +3582,7 @@ async def sheet_item(
 @app_commands.describe(
     amount="Koku to add (positive) or spend (negative).",
     reason="Why (e.g. 'bought katana', 'reward from lord').",
-    member="Target player (Fortune).",
+    member="Target player [Fortune]",
 )
 async def sheet_koku(
     interaction: discord.Interaction,
@@ -3601,7 +3617,7 @@ async def sheet_koku(
 @app_commands.describe(
     name="Advantage name. For parameterised advantages, include the parameter: 'Weakness: Willpower', 'Seven Fortunes' Blessing: Daikoku'.",
     remove="Remove it instead.",
-    member="Target player (Fortune).",
+    member="Target player [Fortune]",
 )
 @app_commands.autocomplete(name=_advantage_autocomplete)
 async def sheet_advantage(
@@ -3633,7 +3649,7 @@ async def sheet_advantage(
 @app_commands.describe(
     name="Disadvantage name. For parameterised disadvantages, include the parameter: 'Weakness: Willpower', 'Doubt: Kenjutsu'.",
     remove="Remove it instead.",
-    member="Target player (Fortune).",
+    member="Target player [Fortune]",
 )
 @app_commands.autocomplete(name=_disadvantage_autocomplete)
 async def sheet_disadvantage(
@@ -3663,7 +3679,7 @@ async def sheet_disadvantage(
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 @sheet_kata_grp.command(name="learn", description="Record (or remove) a Kata on your sheet (free: no XP; use /xp kata to buy).")
-@app_commands.describe(name="Kata name.", remove="Remove it instead.", member="Target player (Fortune).")
+@app_commands.describe(name="Kata name.", remove="Remove it instead.", member="Target player [Fortune]")
 @app_commands.autocomplete(name=_kata_autocomplete)
 async def sheet_kata(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
@@ -3688,7 +3704,7 @@ async def sheet_kata(
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 @sheet_kiho_grp.command(name="learn", description="Record (or remove) a Kiho on your sheet (free: no XP; use /xp kiho to buy).")
-@app_commands.describe(name="Kiho name.", remove="Remove it instead.", member="Target player (Fortune).")
+@app_commands.describe(name="Kiho name.", remove="Remove it instead.", member="Target player [Fortune]")
 @app_commands.autocomplete(name=_kiho_autocomplete)
 async def sheet_kiho(
     interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
@@ -3712,10 +3728,10 @@ async def sheet_kiho(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@sheet_kata_grp.command(name="activate", description="Set your active Kata (Simple Action; only one active: s30). Blank name drops it.")
+@sheet_kata_grp.command(name="activate", description="Set your active Kata (Simple Action; only one active). Blank name drops it.")
 @app_commands.describe(
     name="A Kata your character knows. Leave blank to drop the active Kata.",
-    member="Target player (Fortune).",
+    member="Target player [Fortune]",
 )
 @app_commands.autocomplete(name=_kata_autocomplete)
 async def sheet_kata_activate(
@@ -3755,11 +3771,11 @@ async def sheet_kata_activate(
         f"🥋 **{c.name}** assumes the Kata **{canonical}**.{note}", embed=build_sheet_embed(rec)
     )
 
-@sheet_kiho_grp.command(name="activate", description="Activate/deactivate a Kiho (one Internal/Kharmic/Mystical; Martial stacks: s38).")
+@sheet_kiho_grp.command(name="activate", description="Activate/deactivate a Kiho (one Internal/Kharmic/Mystical; Martial stacks).")
 @app_commands.describe(
     name="A Kiho your character knows.",
     off="Deactivate it instead.",
-    member="Target player (Fortune).",
+    member="Target player [Fortune]",
 )
 @app_commands.autocomplete(name=_kiho_autocomplete)
 async def sheet_kiho_activate(
@@ -3816,8 +3832,8 @@ async def sheet_kiho_activate(
 # /sheet tattoo — Togashi tattoo management (s57.25)
 # ---------------------------------------------------------------------------
 
-@sheet_tattoo_grp.command(name="add", description="Grant a Togashi tattoo ability to a character. Fortune role required.")
-@app_commands.describe(name="Tattoo name (e.g. bamboo, crab, mountain).", member="Target player (Fortune).")
+@sheet_tattoo_grp.command(name="add", description="Grant a Togashi tattoo ability to a character. [Fortune]")
+@app_commands.describe(name="Tattoo name (e.g. bamboo, crab, mountain).", member="Target player [Fortune]")
 @app_commands.autocomplete(name=_tattoo_autocomplete)
 async def sheet_tattoo_add(
     interaction: discord.Interaction, name: str, member: discord.Member | None = None,
@@ -3849,8 +3865,8 @@ async def sheet_tattoo_add(
     )
 
 
-@sheet_tattoo_grp.command(name="remove", description="Remove a tattoo from a character. Fortune role required.")
-@app_commands.describe(name="Tattoo to remove.", member="Target player (Fortune).")
+@sheet_tattoo_grp.command(name="remove", description="Remove a tattoo from a character. [Fortune]")
+@app_commands.describe(name="Tattoo to remove.", member="Target player [Fortune]")
 @app_commands.autocomplete(name=_tattoo_autocomplete)
 async def sheet_tattoo_remove(
     interaction: discord.Interaction, name: str, member: discord.Member | None = None,
@@ -3884,9 +3900,9 @@ async def sheet_tattoo_remove(
 @app_commands.describe(
     name="Tattoo to activate.",
     off="Deactivate the current tattoo.",
-    choice="Bear only: 'stamina' (+SR Stamina) or 'strength' (+ceil(SR/2) Strength).",
+    choice="Bear only: 'stamina' (+School Rank Stamina) or 'strength' (+half School Rank Strength, rounded up).",
     skill="Lion only: Bugei skill to boost by +SR ranks (e.g. Kenjutsu, Heavy Weapons).",
-    member="Target player (Fortune).",
+    member="Target player [Fortune]",
 )
 @app_commands.choices(choice=[
     app_commands.Choice(name="Stamina (+School Rank)", value="stamina"),
@@ -3978,7 +3994,7 @@ async def sheet_tattoo_activate(
 @sheet.command(name="wound", description="Apply wounds to the active character (raw, no armor reduction here).")
 @app_commands.describe(
     amount="Wounds to apply.",
-    member="Target player (Fortune). Omit for your own active character.",
+    member="Target player [Fortune]. Omit for your own active character.",
 )
 async def sheet_wound(
     interaction: discord.Interaction,
@@ -4011,7 +4027,7 @@ async def sheet_wound(
 @sheet.command(name="heal", description="Heal wounds on the active character.")
 @app_commands.describe(
     amount="Wounds to heal.",
-    member="Target player (Fortune). Omit for your own active character.",
+    member="Target player [Fortune]. Omit for your own active character.",
 )
 async def sheet_heal(
     interaction: discord.Interaction,
@@ -4048,7 +4064,7 @@ creature_group = app_commands.Group(name="creature", description="Spawn and run 
 room_group = app_commands.Group(name="room", description="Create private play rooms and invite people.")
 category_group = app_commands.Group(name="category", description="Organise NPCs and creatures into named groups.")
 location_group = app_commands.Group(name="location", description="Create and manage in-character areas and locations.")
-location_area_group = app_commands.Group(name="area", description="Manage location areas (Discord categories). Fortune role required.", parent=location_group)
+location_area_group = app_commands.Group(name="area", description="Manage location areas (Discord categories). [Fortune]", parent=location_group)
 
 # ---------------------------------------------------------------------------
 # /dm wizard: interactive DM command menu
@@ -4138,12 +4154,12 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/check skill", "Generic Skill/Trait vs TN"),
         ("/check contest", "Contested roll between two characters"),
         ("/check cooperative", "Cooperative check: helpers assist primary"),
-        ("/assess fear / honor", "Fear or Honor Roll"),
-        ("/assess stealth / investigate", "Stealth or Investigation"),
-        ("/assess social", "Social skill check (auto-selects trait)"),
-        ("/examine craft / lore", "Craft or Lore check"),
-        ("/examine poison / medicine", "Poison resistance or Medicine"),
-        ("/examine horsemanship", "Mounted maneuver check"),
+        ("/check fear / honor", "Fear or Honor Roll"),
+        ("/check stealth / investigate", "Stealth or Investigation"),
+        ("/check social", "Social skill check (auto-selects trait)"),
+        ("/check craft / lore", "Craft or Lore check"),
+        ("/check poison / medicine", "Poison resistance or Medicine"),
+        ("/check horsemanship", "Mounted maneuver check"),
     ]),
     ("\U0001fa78", "Damage, Healing & Taint", "Manage character health.", [
         ("/dm damage", "Apply damage to a character"),
@@ -4440,7 +4456,7 @@ def _advance_calendar(guild_id: str) -> str | None:
     store.set_calendar(guild_id, year, month, day)
     return _format_rokugani_date(year, month, day)
 
-@dm.command(name="setdate", description="Set the Rokugani calendar date (Fortune+).")
+@dm.command(name="setdate", description="Set the Rokugani calendar date [Fortune]")
 @app_commands.describe(
     year="Year number (Isawa Calendar).",
     month="Month (1-12): Hare, Dragon, Serpent, Horse, Goat, Monkey, Rooster, Dog, Boar, Rat, Ox, Tiger.",
@@ -4641,7 +4657,7 @@ async def dm_heal(
 # /grapple group: grappling subsystem (s40)
 # ===========================================================================
 
-@dm.command(name="revive", description="Staff override: undo a death caused by a bug. Fortune/Kami role required; logged.")
+@dm.command(name="revive", description="Reverse a death caused by a bug (logged). [Fortune]")
 @app_commands.describe(
     target="Character name (PC or NPC).",
     reason="Why this death is being reversed (required; written to the combat log).",
@@ -4711,7 +4727,7 @@ def _undo_diff(entity_type: str, old: dict, new: dict) -> list[str]:
         lines.append("also: " + ", ".join(others))
     return lines or ["no visible difference"]
 
-@dm.command(name="undo", description="Roll back the last change to a character or creature (wounds, heal, Taint…). Fortune+.")
+@dm.command(name="undo", description="Roll back the last change to a character or creature (wounds, heal, Taint…). [Fortune]")
 @app_commands.describe(
     target="Character or creature name. Leave empty for the most recent change on this server.",
     preview="Show the last few recorded changes instead of undoing anything.",
@@ -4815,7 +4831,7 @@ def _pending_summary(kind: str, state: str) -> str:
         return f"{src} → {tgt}"
     return str(tgt or src or "")
 
-@dm.command(name="pending", description="List approvals still waiting for a DM, with jump links (Fortune+).")
+@dm.command(name="pending", description="List approvals still waiting for a DM, with jump links [Fortune]")
 async def dm_pending(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -4874,7 +4890,7 @@ def _resolve_duelist(
 @app_commands.describe(
     reason="What the VP is for (e.g. '+1k1 on Investigation check').",
     member="Player spending VP (uses their active character). Omit = yourself.",
-    npc_name="NPC name (Fortune).",
+    npc_name="NPC name [Fortune]",
 )
 async def void_spend(
     interaction: discord.Interaction,
@@ -4923,7 +4939,7 @@ async def void_spend(
 @app_commands.describe(
     mode="How VP are being refreshed.",
     member="Player refreshing (uses their active character). Omit = yourself.",
-    npc_name="NPC name (Fortune).",
+    npc_name="NPC name [Fortune]",
     tn="Meditation TN (only for meditation mode; default 20).",
 )
 @app_commands.choices(mode=[
@@ -5024,7 +5040,7 @@ async def void_refresh(
 @sheet_void.command(name="status", description="Show current Void Points for a character.")
 @app_commands.describe(
     member="Player to check (uses their active character). Omit = yourself.",
-    npc_name="NPC name (Fortune).",
+    npc_name="NPC name [Fortune]",
 )
 async def void_status(
     interaction: discord.Interaction,
@@ -5055,7 +5071,7 @@ async def void_status(
     vp_cap = taint.void_point_cap(c)
     bar_full = "🟣" * c.current_void_points
     bar_empty = "⚫" * max(0, vp_cap - c.current_void_points)
-    cap_note = f"\n  Taint Rank {taint.taint_rank(c)}: maximum reduced by 1 (s42)" if vp_cap < c.max_void_points else ""
+    cap_note = f"\n  Taint Rank {taint.taint_rank(c)}: maximum reduced by 1" if vp_cap < c.max_void_points else ""
     await interaction.response.send_message(
         f"🌀 **{c.name}**: Void Points: **{c.current_void_points}/{vp_cap}**\n"
         f"  {bar_full}{bar_empty}\n"
@@ -5067,204 +5083,117 @@ async def void_status(
 # /help: categorized command reference
 # ===========================================================================
 
-_HELP_CATEGORIES: list[tuple[str, list[tuple[str, str]]]] = [
-    ("Getting Started", [
-        ("/submit", "Start character creation (opens a private wizard channel)."),
-        ("/sheet wizard", "Same as /submit — step-by-step guided character creation."),
-        ("/sheet view", "View your character sheet (private)."),
-        ("/whoami", "Quick glance at your active character's status."),
-        ("/roster", "Show all approved player characters on this server."),
-        ("/date", "Show the current in-game Rokugani calendar date."),
-        ("/ping", "Check the bot is alive (shows latency)."),
-        ("/help", "Show this command reference."),
-    ]),
-    ("Dice & Macros", [
-        ("/roll", "Roll & Keep: XkY, optional TN, raises, emphasis, unskilled."),
-        ("/dice", "Quick shorthand: '5k3', '7k2+5'. Same as /roll but faster."),
-        ("/macro save", "Save a frequently-used dice pool."),
-        ("/macro roll", "Roll a saved macro."),
-        ("/macro list / delete", "List or delete your macros."),
-        ("/compare", "Side-by-side character comparison."),
-        ("/history", "Recent dice rolls in this channel."),
-    ]),
-    ("Character Sheets", [
-        ("/sheet create", "Create a character (opens a wizard channel)."),
-        ("/sheet view", "View a sheet (yours, or another player's if Fortune)."),
-        ("/sheet list", "List your characters (or a player's if Fortune)."),
-        ("/sheet delete", "Delete a character (yours, or a player's if Fortune)."),
-        ("/sheet owner", "Show who owns a character (PC player or NPC)."),
-        ("/sheet wound / heal", "Apply or heal wounds on your character."),
-        ("/sheet learn", "Record techniques up to your School Rank."),
-        ("/sheet data export / import_sheet", "Backup and restore characters as JSON."),
-    ]),
-    ("Stats & Gear", [
-        ("/stat trait", "Set a Trait (Strength, Agility, etc.) or Void."),
-        ("/stat skill", "Set skill ranks (single or bulk: 'Kenjutsu 3, Courtier 2')."),
-        ("/stat set", "Set a numeric field (honor, glory, status, armor, etc.)."),
-        ("/stat equip / wield", "Add weapons and set what you're wielding."),
-        ("/stat armor / quality", "Equip armor or set weapon qualities."),
-        ("/stat item / koku", "Add/remove inventory items or manage money."),
-        ("/stat advantage / disadvantage", "Record advantages or disadvantages."),
-        ("/sheet kata learn / activate", "Record or activate Kata."),
-        ("/sheet kiho learn / activate", "Record or activate Kiho."),
-        ("/sheet tattoo add / remove / activate", "Manage Togashi tattoos (s57.25)."),
-        ("/sheet void spend / refresh / status", "Manage Void Points."),
-    ]),
-    ("XP & Advancement", [
-        ("/xp grant", "Grant XP to a character (Fortune)."),
-        ("/xp balance", "Show a character's available XP."),
-        ("/xp trait / skill / emphasis", "Spend XP to raise a Trait, Skill, or add Emphasis."),
-        ("/xp kata / kiho / spell", "Spend XP to learn Kata, Kiho, or memorize Spells."),
-        ("/xp advantage / remove_disadvantage", "Buy an Advantage or buy off a Disadvantage."),
-        ("/xp costs", "Show the XP cost reference table (L5R 4e RAW)."),
-    ]),
-    ("Play Rooms", [
-        ("/room create", "Create a private play room (thread). You become the host."),
-        ("/room invite / kick", "Add or remove members (host or Fortune only)."),
-        ("/room describe", "Set or update the room's pinned description."),
-        ("/room members", "List who's in the room and any placed NPCs."),
-        ("/room list", "List all open rooms on the server."),
-        ("/room close", "Archive and lock the room (host or Fortune)."),
-    ]),
-    ("Combat", [
-        ("/fight attack", "Attack a character, NPC, or creature."),
-        ("/fight stance / guard / full_defense", "Set stance or defensive actions."),
-        ("/fight action / mount", "Action tracking and mounting."),
-        ("/fight env cover / notes / damage", "Environment effects on combatants."),
-        ("/combat start / end", "Start or end an encounter."),
-        ("/combat join / add / npc / creature", "Add combatants to initiative."),
-        ("/combat category / room", "Add a whole group or room to initiative (Fortune)."),
-        ("/combat next / summary / status / remove", "Manage turn order."),
-        ("/combat condition set / clear / list", "Apply or remove conditions."),
-        ("/combat turn init / hold / delay / act / done", "Turn management (Fortune)."),
-        ("/combat turn surprise", "Toggle surprise round (Fortune)."),
-        ("/combat void armor / initiative / swap", "Spend VP for combat bonuses."),
-        ("/engage grapple initiate / control / ...", "Grappling sub-system (Fortune)."),
-        ("/engage duel assess / focus / strike", "Iaijutsu dueling (Fortune)."),
-        ("/engage battle roll / damage", "Mass Battle engagement and damage."),
-    ]),
-    ("Spells", [
-        ("/spell list / search / view", "Browse 287 spells by element or keyword."),
-        ("/spell cast", "Cast a spell: (Ring + School Rank) keep Ring vs TN."),
-        ("/spell resist", "Spell resistance: Willpower roll vs TN (Fortune)."),
-        ("/spell interrupt", "Willpower check when caster is hit mid-cast (Fortune)."),
-        ("/spell importune", "Entreat kami for an unknown spell at higher TN (Fortune)."),
-        ("/spell damage", "Roll spell damage dice (Fortune)."),
-    ]),
-    ("Checks (Fortune)", [
-        ("/check skill", "Generic Skill/Trait check (DM picks trait)."),
-        ("/check contest", "Contested Skill/Trait roll between two characters."),
-        ("/check cooperative", "Cooperative check: helpers at TN+5, success gives +1k0."),
-        ("/assess fear / honor", "Fear or Honor Roll."),
-        ("/assess stealth / investigate / social", "Stealth, Investigation, or Social checks."),
-        ("/examine craft / lore", "Craft/Intelligence or Lore/Intelligence."),
-        ("/examine poison / medicine", "Poison resistance or Medicine check."),
-        ("/examine horsemanship", "Horsemanship/Agility (mounted maneuver)."),
-    ]),
-    ("NPCs (Fortune)", [
-        ("/npc generate", "Generate an NPC samurai from a Clan/School/Rank template."),
-        ("/npc view / list / delete", "View, list, or delete NPCs."),
-        ("/npc rename / clone / notes", "Rename, clone, or annotate NPCs."),
-        ("/npc place / dismiss / say", "Place NPCs in rooms and speak as them."),
-        ("/npc-edit trait / skill / set", "Edit NPC traits, skills, or numeric fields."),
-        ("/npc-edit wound / heal", "Apply or heal NPC wounds."),
-        ("/npc-edit equip / item / spell", "Manage NPC weapons, inventory, and spells."),
-        ("/npc-edit feature / affinity", "Add features (advantages, kata, etc.) or set affinity."),
-    ]),
-    ("Creatures (Fortune)", [
-        ("/creature catalog / search", "Search the bestiary for creature templates."),
-        ("/creature info / compare", "View or compare creature stat blocks."),
-        ("/creature spawn / list / view / delete", "Spawn and manage creature instances."),
-        ("/creature wound / heal", "Apply or heal creature wounds."),
-        ("/creature attack", "A creature attacks a player/NPC (fixed stat block)."),
-        ("/category create / delete / rename", "Organize NPCs and creatures into groups."),
-        ("/category add / remove / view / list", "Manage group members."),
-        ("/category bulk_add / bulk_remove / spawn", "Bulk operations on groups."),
-    ]),
-    ("DM Tools (Fortune/Kami)", [
-        ("/dm wizard", "Interactive command menu: browse all DM actions."),
-        ("/dm party / roles", "Overview of all PCs, or show Fortune/Kami holders."),
-        ("/dm new_day / setdate", "Advance a day (refresh all) or set the calendar date."),
-        ("/dm damage / heal / treat", "Apply damage, heal wounds, or run Medicine checks."),
-        ("/dm taint", "View or modify a character's Shadowlands Taint."),
-        ("/dm influence", "Track court Influence Points."),
-        ("/dm craft_extended", "Multi-step extended crafting rolls with quality tiers."),
-        ("/dm announce", "Post a session/event announcement with RSVP reactions."),
-        ("/dm approval_channel / clear_approval", "Set character submission approval channel (Kami)."),
-        ("/dm damage_channel / clear_damage_channel", "Set damage/healing approval channel (Kami)."),
-        ("/dm log_channel / clear_log", "Set combat event log channel (Kami)."),
-        ("/dm date_channel / clear_date_channel", "Set pinned date display channel (Kami)."),
-        ("/location area create / delete / list", "Manage RP areas (Discord categories)."),
-        ("/location area fix-permissions", "Repair visibility on all RP areas (Kami)."),
-        ("/location create / describe / list / close", "Manage RP locations (channels in areas)."),
-    ]),
-    ("Reference (/ref)", [
-        ("/ref search", "Search all catalogs at once (spells, schools, kata, etc.)."),
-        ("/ref weapon list / view", "Browse the 44 weapons."),
-        ("/ref armor list / view / search", "Browse the 7 armor types."),
-        ("/ref school list / search / view", "Browse 347 schools and techniques."),
-        ("/ref advantage list / search / view", "Browse 149 advantages & disadvantages."),
-        ("/ref kata list / search / view", "Browse 43 Kata."),
-        ("/ref kiho list / search / view", "Browse 73 Kiho."),
-        ("/ref tattoo list / view / search", "Browse 25 Togashi tattoos (s57.25)."),
-        ("/ref family list / search", "Browse 47 families and Trait bonuses."),
-        ("/ref heritage roll / table", "Heritage Table rolls (Great Clans)."),
-        ("/ref modifiers / calledshot", "Combat modifier and Called Shot reference."),
-        ("/ref atn / encumbrance", "Armor TN breakdown and carrying capacity."),
-        ("/ref ancestors / dual_wield / travel", "Other reference info."),
-    ]),
-    ("Server Setup (Kami)", [
-        ("/setup server", "Create the full server structure (categories, channels, roles)."),
-        ("/sync", "Re-sync all slash commands with Discord."),
-    ]),
+_HELP_BLURBS: dict[str, str] = {
+    "sheet": "Create and manage your character sheet (create, view, activate, wounds, Void, Kata, Kiho, export).",
+    "stat": "Edit your active character: traits, skills, gear, armor, inventory, koku, advantages.",
+    "xp": "Spend Experience on traits, skills, emphases, kata, kiho, spells and advantages.",
+    "roll": "Roll & Keep dice, with optional TN, Raises and Emphasis.",
+    "dice": "Quick dice shorthand: 5k3, 7k2+5.",
+    "macro": "Save and roll your usual dice pools.",
+    "history": "Recent rolls in this channel.",
+    "check": "Skill, trait and situational checks for your character. Rolling for others or NPCs needs Fortune.",
+    "combat": "Initiative and turn order. Your own actions are under /fight; grapples, duels and battles under /engage.",
+    "fight": "Your actions in a fight: attack, stance, guard, full defense, your status card.",
+    "engage": "Grapple, Iaijutsu duel and mass battle subsystems (run by Fortune).",
+    "spell": "Browse spells, cast, resist, importune, spell damage.",
+    "players": "Directory of approved player characters.",
+    "compare": "Compare two characters side by side.",
+    "whoami": "Quick glance at your active character.",
+    "room": "Private play rooms (threads) with invites.",
+    "location": "In-character areas and location channels.",
+    "date": "The current Rokugani calendar date.",
+    "npc": "Stored NPCs: generate, view, place in rooms, speak as them [Fortune].",
+    "npc-edit": "Edit NPC stats and gear [Fortune].",
+    "creature": "Bestiary creatures: spawn, wound, attack [Fortune].",
+    "category": "Group NPCs and creatures for bulk actions [Fortune].",
+    "dm": "Fortune and Kami tools: approvals, new day, damage, undo, revive, channels.",
+    "ref": "Rules reference: weapons, armor, schools, families, kata, kiho, advantages, tattoos.",
+    "setup": "Server setup [Kami].",
+    "sync": "Re-sync slash commands [Kami].",
+    "ping": "Is the bot alive?",
+    "help": "This overview.",
+}
+_HELP_ORDER: list[str] = [
+    "help", "sheet", "stat", "xp", "roll", "dice", "macro", "history", "check", "combat", "fight", "engage",
+    "spell", "players", "compare", "whoami", "room", "location", "date", "npc", "npc-edit", "creature",
+    "category", "dm", "ref", "setup", "sync", "ping",
 ]
+_HELP_START = (
+    "**New here?** `/sheet create` makes a character, `/players` shows who is around, `/roll` rolls dice, "
+    "`/check skill` rolls a skill for your character. In a fight: `/combat` runs initiative, `/fight` is what "
+    "you do on your turn, `/engage` covers grapples, duels and battles. **[Fortune]** = DM role, **[Kami]** = admin."
+)
+
+def _help_leaves(cmd: app_commands.Command | app_commands.Group, path: str = "") -> list[tuple[str, str]]:
+    p = f"{path} {cmd.name}".strip()
+    if isinstance(cmd, app_commands.Group):
+        out: list[tuple[str, str]] = []
+        for sub in cmd.commands:
+            out.extend(_help_leaves(sub, p))
+        return out
+    return [(f"/{p}", cmd.description)]
+
+def _help_top() -> list[app_commands.Command | app_commands.Group]:
+    cmds = {c.name: c for c in client.tree.get_commands()}
+    ordered = [cmds.pop(n) for n in _HELP_ORDER if n in cmds]
+    return ordered + [cmds[n] for n in sorted(cmds)]
+
+async def _help_category_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    cur = (current or "").lower()
+    return [app_commands.Choice(name=f"/{c.name}", value=c.name) for c in _help_top() if cur in c.name][:25]
 
 @client.tree.command(
     name="help",
-    description="Show all bot commands, organized by category.",
+    description="All bot commands by group, always current. Pick a group to see every command in it.",
 )
-@app_commands.describe(
-    category="Show only this category (omit for the full overview).",
-)
-@app_commands.choices(category=[
-    app_commands.Choice(name=cat, value=cat) for cat, _ in _HELP_CATEGORIES
-])
+@app_commands.describe(category="A command group, e.g. combat (omit for the overview).")
+@app_commands.autocomplete(category=_help_category_autocomplete)
 async def help_command(
     interaction: discord.Interaction,
-    category: app_commands.Choice[str] | None = None,
+    category: str | None = None,
 ) -> None:
+    top = _help_top()
     if category:
-        for cat_name, cmds in _HELP_CATEGORIES:
-            if cat_name == category.value:
-                embed = discord.Embed(
-                    title=f"Rokugan Bot: {cat_name}",
-                    color=discord.Color.gold(),
-                )
-                lines = [f"`{cmd}`: {desc}" for cmd, desc in cmds]
-                embed.description = "\n".join(lines)
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-                return
-        await interaction.response.send_message("Category not found.", ephemeral=True)
+        key = category.strip().lstrip("/").lower()
+        cmd = next((c for c in top if c.name == key), None)
+        if cmd is None:
+            await interaction.response.send_message(f"No command group called **{category}**. Try `/help` for the list.", ephemeral=True)
+            return
+        leaves = _help_leaves(cmd)
+        lines = [f"`{path}`: {desc}" for path, desc in leaves]
+        blurb = _HELP_BLURBS.get(cmd.name, "")
+        embeds: list[discord.Embed] = []
+        chunk: list[str] = []
+        size = len(blurb) + 2
+        for line in lines:
+            if size + len(line) + 1 > 3900 and chunk:
+                embeds.append(discord.Embed(description="\n".join(chunk), color=discord.Color.gold()))
+                chunk, size = [], 0
+            chunk.append(line); size += len(line) + 1
+        embeds.append(discord.Embed(description="\n".join(chunk), color=discord.Color.gold()))
+        embeds[0].title = f"Rokugan Bot: /{cmd.name} ({len(leaves)})"
+        if blurb:
+            embeds[0].description = blurb + "\n\n" + (embeds[0].description or "")
+        await interaction.response.send_message(embeds=embeds[:10], ephemeral=True)
         return
-
     embed = discord.Embed(
         title="Rokugan Bot: Command Reference",
-        description="Use `/help category:` to expand a section. All game math is L5R 4th Edition RAW.",
+        description=_HELP_START + "\n\nUse `/help category:` to list every command in a group. All game math is L5R 4th Edition.",
         color=discord.Color.gold(),
     )
-    for cat_name, cmds in _HELP_CATEGORIES:
-        summary = ", ".join(f"`{cmd}`" for cmd, _ in cmds[:4])
-        if len(cmds) > 4:
-            summary += f" *… +{len(cmds) - 4} more*"
-        embed.add_field(name=f"{cat_name} ({len(cmds)})", value=summary, inline=False)
-    embed.set_footer(text="Tip: /help category:Combat to expand a section.")
+    for cmd in top:
+        n = len(_help_leaves(cmd))
+        label = f"/{cmd.name}" + (f" ({n})" if n > 1 else "")
+        embed.add_field(name=label, value=_HELP_BLURBS.get(cmd.name, cmd.description)[:1024], inline=False)
+    embed.set_footer(text="Tip: /help category:combat")
     await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 # ===========================================================================
 # /npc group: generate and manage NPC characters (s22.4 templates)
 # ===========================================================================
 
-@npc_group.command(name="generate", description="Generate an NPC samurai from a Clan/Family/School/Rank template. Fortune role required.")
+@npc_group.command(name="generate", description="Generate an NPC samurai from a Clan/Family/School/Rank template. [Fortune]")
 @app_commands.describe(
     name="NPC name.",
     insight_rank="Insight Rank 1–5 (power level; higher = stronger).",
@@ -5363,7 +5292,7 @@ async def npc_list(interaction: discord.Interaction) -> None:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view)
 
-@npc_group.command(name="delete", description="Delete a stored NPC. Fortune role required.")
+@npc_group.command(name="delete", description="Delete a stored NPC. [Fortune]")
 @app_commands.describe(name="The NPC to delete.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_delete(interaction: discord.Interaction, name: str) -> None:
@@ -5390,7 +5319,7 @@ def _resolve_npc(
         return None, f"No NPC named **{name}**."
     return rec, None
 
-@npc_edit_group.command(name="trait", description="Set a Trait (or Void) on an NPC. Fortune role required.")
+@npc_edit_group.command(name="trait", description="Set a Trait (or Void) on an NPC. [Fortune]")
 @app_commands.describe(name="NPC name.", trait="Which Trait.", value="New value (0-10).")
 @app_commands.choices(trait=_TRAIT_CHOICES)
 @app_commands.autocomplete(name=_npc_autocomplete)
@@ -5411,7 +5340,7 @@ async def npc_trait(
         f"Set **{label}** to **{value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
     )
 
-@npc_edit_group.command(name="skill", description="Set a skill rank on an NPC (0 removes it). Fortune role required.")
+@npc_edit_group.command(name="skill", description="Set a skill rank on an NPC (0 removes it). [Fortune]")
 @app_commands.describe(name="NPC name.", skill="Skill name.", rank="Rank 0-10 (0 removes).")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_skill(
@@ -5434,7 +5363,7 @@ async def npc_skill(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@npc_edit_group.command(name="set", description="Set a numeric field on an NPC (honor, armor, void points, etc.). Fortune role required.")
+@npc_edit_group.command(name="set", description="Set a numeric field on an NPC (honor, armor, void points, etc.). [Fortune]")
 @app_commands.describe(name="NPC name.", field="Which field.", value="New value.")
 @app_commands.choices(field=_SET_CHOICES)
 @app_commands.autocomplete(name=_npc_autocomplete)
@@ -5454,7 +5383,7 @@ async def npc_set(
         f"Updated **{field.value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
     )
 
-@npc_edit_group.command(name="wound", description="Apply wounds to an NPC. Fortune role required.")
+@npc_edit_group.command(name="wound", description="Apply wounds to an NPC. [Fortune]")
 @app_commands.describe(name="NPC name.", amount="Wounds to apply.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_wound(
@@ -5481,7 +5410,7 @@ async def npc_wound(
         embed=build_sheet_embed(rec),
     )
 
-@npc_edit_group.command(name="heal", description="Heal wounds on an NPC. Fortune role required.")
+@npc_edit_group.command(name="heal", description="Heal wounds on an NPC. [Fortune]")
 @app_commands.describe(name="NPC name.", amount="Wounds to heal.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_heal(
@@ -5504,7 +5433,7 @@ async def npc_heal(
         embed=build_sheet_embed(rec),
     )
 
-@npc_group.command(name="rename", description="Rename an NPC. Fortune role required.")
+@npc_group.command(name="rename", description="Rename an NPC. [Fortune]")
 @app_commands.describe(name="Current NPC name.", new_name="New name.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_rename(
@@ -5555,7 +5484,7 @@ async def _room_npc_autocomplete(
         for n in sorted(names) if cur in n.lower()
     ][:25]
 
-@npc_group.command(name="place", description="Place an NPC in this room (run inside a room thread). Fortune role required.")
+@npc_group.command(name="place", description="Place an NPC in this room (run inside a room thread). [Fortune]")
 @app_commands.describe(name="NPC to place in the room.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_place(interaction: discord.Interaction, name: str) -> None:
@@ -5577,7 +5506,7 @@ async def npc_place(interaction: discord.Interaction, name: str) -> None:
         f"NPCs present: {npc_list}"
     )
 
-@npc_group.command(name="dismiss", description="Remove an NPC from this room. Fortune role required.")
+@npc_group.command(name="dismiss", description="Remove an NPC from this room. [Fortune]")
 @app_commands.describe(name="NPC to remove from the room.")
 @app_commands.autocomplete(name=_room_npc_autocomplete)
 async def npc_dismiss(interaction: discord.Interaction, name: str) -> None:
@@ -5605,7 +5534,7 @@ async def npc_dismiss(interaction: discord.Interaction, name: str) -> None:
         f"🎭 **{matched}** leaves **{room.name}**.\nNPCs present: {npc_list}"
     )
 
-@npc_group.command(name="say", description="Speak as an NPC (posts as their name via webhook). Fortune role required.")
+@npc_group.command(name="say", description="Speak as an NPC (posts as their name via webhook). [Fortune]")
 @app_commands.describe(name="Which NPC speaks.", message="What they say.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_say(interaction: discord.Interaction, name: str, message: app_commands.Range[str, 1, 2000]) -> None:
@@ -5644,7 +5573,7 @@ async def npc_say(interaction: discord.Interaction, name: str, message: app_comm
 
 # --- NPC inventory, spells, notes, clone -----------------------------------
 
-@npc_edit_group.command(name="item", description="Add or remove items from an NPC's inventory. Fortune role required.")
+@npc_edit_group.command(name="item", description="Add or remove items from an NPC's inventory. [Fortune]")
 @app_commands.describe(
     name="NPC name.", item="Item name.",
     quantity="How many (default 1).", remove="Remove instead of adding.",
@@ -5666,7 +5595,7 @@ async def npc_item(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@npc_edit_group.command(name="spell", description="Add or remove a spell from an NPC's known spell list. Fortune role required.")
+@npc_edit_group.command(name="spell", description="Add or remove a spell from an NPC's known spell list. [Fortune]")
 @app_commands.describe(
     name="NPC name.", spell="Spell name to add or remove.", remove="Remove instead of adding.",
 )
@@ -5700,7 +5629,7 @@ async def npc_spell(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@npc_group.command(name="notes", description="Set or clear notes on an NPC. Fortune role required.")
+@npc_group.command(name="notes", description="Set or clear notes on an NPC. [Fortune]")
 @app_commands.describe(
     name="NPC name.", text="Notes text (omit or leave empty to clear).",
 )
@@ -5720,7 +5649,7 @@ async def npc_notes(
         msg = f"Notes cleared on **{rec.character.name}**."
     await interaction.response.send_message(msg, ephemeral=True)
 
-@npc_group.command(name="clone", description="Clone an NPC with a new name. Fortune role required.")
+@npc_group.command(name="clone", description="Clone an NPC with a new name. [Fortune]")
 @app_commands.describe(name="NPC to clone.", new_name="Name for the clone.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_clone(
@@ -5745,7 +5674,7 @@ async def npc_clone(
         embed=build_sheet_embed(new_rec),
     )
 
-@npc_edit_group.command(name="equip", description="Set an NPC's equipped weapon and/or armor name. Fortune role required.")
+@npc_edit_group.command(name="equip", description="Set an NPC's equipped weapon and/or armor name. [Fortune]")
 @app_commands.describe(
     name="NPC name.",
     weapon="Equipped weapon name (empty to clear).",
@@ -5882,7 +5811,7 @@ _ELEMENT_CHOICES = [
     for e in ("Air", "Earth", "Fire", "Water", "Void", "(clear)")
 ]
 
-@npc_edit_group.command(name="affinity", description="Set an NPC's affinity and/or deficiency element. Fortune role required.")
+@npc_edit_group.command(name="affinity", description="Set an NPC's affinity and/or deficiency element. [Fortune]")
 @app_commands.describe(
     name="NPC name.",
     affinity_element="Affinity element (choose '(clear)' to remove).",
@@ -5970,7 +5899,7 @@ async def room_create(
     )
     await thread.send(
         f"🏮 Welcome to **{name}**. {interaction.user.mention} is the host. "
-        f"Play happens here:`/sheet`, `/roll`, `/attack`, and `/combat` all work inside this room."
+        f"Play happens here:`/sheet`, `/roll`, `/fight attack`, and `/combat` all work inside this room."
     )
     if description:
         embed = discord.Embed(title=name, description=description, color=0xC4A747)
@@ -6089,7 +6018,7 @@ async def room_list(interaction: discord.Interaction) -> None:
         )
     await interaction.response.send_message("🏮 **Open rooms: **\n" + "\n".join(lines[:40]), ephemeral=True)
 
-@room_group.command(name="close", description="Close this room (archives the thread). Host or Fortune role required.")
+@room_group.command(name="close", description="Close this room (archives the thread). Host or Fortune.")
 async def room_close(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -6600,7 +6529,7 @@ async def creature_catalog(interaction: discord.Interaction, search: str | None 
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
-@creature_group.command(name="search", description="Search bestiary templates with detailed output. Fortune role required.")
+@creature_group.command(name="search", description="Search bestiary templates with detailed output. [Fortune]")
 @app_commands.describe(query="Search by name, id, or tag (e.g. 'oni', 'bear', 'spirit').")
 async def creature_search(interaction: discord.Interaction, query: str) -> None:
     if not await _require_guild(interaction):
@@ -6655,7 +6584,7 @@ async def creature_search(interaction: discord.Interaction, query: str) -> None:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
-@creature_group.command(name="info", description="View the full stat block of a bestiary template (without spawning). Fortune role required.")
+@creature_group.command(name="info", description="View the full stat block of a bestiary template (without spawning). [Fortune]")
 @app_commands.describe(template="Which creature template to look up.")
 @app_commands.autocomplete(template=_creature_template_autocomplete)
 async def creature_info(interaction: discord.Interaction, template: str) -> None:
@@ -6671,7 +6600,7 @@ async def creature_info(interaction: discord.Interaction, template: str) -> None
         return
     await interaction.response.send_message(embed=_build_creature_template_embed(tmpl), ephemeral=True)
 
-@creature_group.command(name="compare", description="Compare two bestiary templates side-by-side. Fortune role required.")
+@creature_group.command(name="compare", description="Compare two bestiary templates side-by-side. [Fortune]")
 @app_commands.describe(template_a="First creature template.", template_b="Second creature template.")
 @app_commands.autocomplete(template_a=_creature_template_autocomplete, template_b=_creature_template_autocomplete)
 async def creature_compare(interaction: discord.Interaction, template_a: str, template_b: str) -> None:
@@ -6696,7 +6625,7 @@ async def creature_compare(interaction: discord.Interaction, template_a: str, te
     embed.set_footer(text=f"{template_a}  vs  {template_b}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@creature_group.command(name="spawn", description="Spawn a creature instance from a template. Fortune role required.")
+@creature_group.command(name="spawn", description="Spawn a creature instance from a template. [Fortune]")
 @app_commands.describe(template="Which creature template.", name="Instance name (default: the template's name).")
 @app_commands.autocomplete(template=_creature_template_autocomplete)
 async def creature_spawn(interaction: discord.Interaction, template: str, name: str | None = None) -> None:
@@ -6756,7 +6685,7 @@ async def creature_view(interaction: discord.Interaction, name: str) -> None:
         return
     await interaction.response.send_message(embed=build_creature_embed(rec))
 
-@creature_group.command(name="delete", description="Remove a spawned creature. Fortune role required.")
+@creature_group.command(name="delete", description="Remove a spawned creature. [Fortune]")
 @app_commands.describe(name="The creature to remove.")
 @app_commands.autocomplete(name=_creature_instance_autocomplete)
 async def creature_delete(interaction: discord.Interaction, name: str) -> None:
@@ -6767,7 +6696,7 @@ async def creature_delete(interaction: discord.Interaction, name: str) -> None:
     store.delete_creature(rec.id)
     await interaction.response.send_message(f"Removed creature **{rec.creature.name}**.", ephemeral=True)
 
-@creature_group.command(name="wound", description="Apply wounds to a creature directly (no reduction). Fortune role required.")
+@creature_group.command(name="wound", description="Apply wounds to a creature directly (no reduction). [Fortune]")
 @app_commands.describe(name="The creature.", amount="Wounds to apply.")
 @app_commands.autocomplete(name=_creature_instance_autocomplete)
 async def creature_wound(
@@ -6789,7 +6718,7 @@ async def creature_wound(
         embed=build_creature_embed(rec),
     )
 
-@creature_group.command(name="heal", description="Heal a creature's wounds. Fortune role required.")
+@creature_group.command(name="heal", description="Heal a creature's wounds. [Fortune]")
 @app_commands.describe(name="The creature.", amount="Wounds to heal.")
 @app_commands.autocomplete(name=_creature_instance_autocomplete)
 async def creature_heal(
@@ -6806,7 +6735,7 @@ async def creature_heal(
         embed=build_creature_embed(rec),
     )
 
-@creature_group.command(name="attack", description="A creature attacks a player/NPC (fixed stat block). Fortune role required.")
+@creature_group.command(name="attack", description="A creature attacks a player/NPC (fixed stat block). [Fortune]")
 @app_commands.describe(
     creature_name="The attacking creature.",
     target="The player to attack (their active character).",
@@ -6946,7 +6875,7 @@ async def _category_autocomplete(
         for c in cats if cur in c.name.lower()
     ][:25]
 
-@category_group.command(name="create", description="Create a new category. Fortune role required.")
+@category_group.command(name="create", description="Create a new category. [Fortune]")
 @app_commands.describe(name="Category name (e.g. 'Bandits', 'Town Guards', 'Wildlife').")
 async def category_create(interaction: discord.Interaction, name: app_commands.Range[str, 1, 64]) -> None:
     if not await _require_guild(interaction):
@@ -6960,7 +6889,7 @@ async def category_create(interaction: discord.Interaction, name: app_commands.R
         return
     await interaction.response.send_message(f"\U0001f4c1 Created category **{cat.name}**.")
 
-@category_group.command(name="delete", description="Delete a category (members are NOT deleted). Fortune role required.")
+@category_group.command(name="delete", description="Delete a category (members are NOT deleted). [Fortune]")
 @app_commands.describe(name="Category to delete.")
 @app_commands.autocomplete(name=_category_autocomplete)
 async def category_delete(interaction: discord.Interaction, name: str) -> None:
@@ -6975,7 +6904,7 @@ async def category_delete(interaction: discord.Interaction, name: str) -> None:
     store.delete_category(cat.id)
     await interaction.response.send_message(f"\U0001f4c1 Deleted category **{cat.name}**.", ephemeral=True)
 
-@category_group.command(name="rename", description="Rename a category. Fortune role required.")
+@category_group.command(name="rename", description="Rename a category. [Fortune]")
 @app_commands.describe(name="Current category name.", new_name="New name.")
 @app_commands.autocomplete(name=_category_autocomplete)
 async def category_rename(
@@ -6996,7 +6925,7 @@ async def category_rename(
         return
     await interaction.response.send_message(f"\U0001f4c1 Renamed **{cat.name}** → **{new_name.strip()}**.")
 
-@category_group.command(name="add", description="Add an NPC or creature to a category. Fortune role required.")
+@category_group.command(name="add", description="Add an NPC or creature to a category. [Fortune]")
 @app_commands.describe(
     category="Which category.", kind="NPC or creature.", name="Name of the NPC or creature.",
 )
@@ -7035,7 +6964,7 @@ async def category_add(
         f"\U0001f4c1 Added {kind.name} **{name}** to **{cat.name}**.",
     )
 
-@category_group.command(name="remove", description="Remove an NPC or creature from a category. Fortune role required.")
+@category_group.command(name="remove", description="Remove an NPC or creature from a category. [Fortune]")
 @app_commands.describe(
     category="Which category.", kind="NPC or creature.", name="Name to remove.",
 )
@@ -7110,7 +7039,7 @@ async def category_view(interaction: discord.Interaction, category: str) -> None
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
-@category_group.command(name="bulk_add", description="Add multiple NPCs or creatures to a category at once. Fortune role required.")
+@category_group.command(name="bulk_add", description="Add multiple NPCs or creatures to a category at once. [Fortune]")
 @app_commands.describe(
     category="Which category.",
     kind="NPC or creature.",
@@ -7165,7 +7094,7 @@ async def category_bulk_add(
         ephemeral=True,
     )
 
-@category_group.command(name="bulk_remove", description="Remove multiple NPCs or creatures from a category at once. Fortune role required.")
+@category_group.command(name="bulk_remove", description="Remove multiple NPCs or creatures from a category at once. [Fortune]")
 @app_commands.describe(
     category="Which category.",
     kind="NPC or creature.",
@@ -7208,7 +7137,7 @@ async def category_bulk_remove(
         ephemeral=True,
     )
 
-@category_group.command(name="spawn", description="Spawn all creature templates in a category as instances. Fortune role required.")
+@category_group.command(name="spawn", description="Spawn all creature templates in a category as instances. [Fortune]")
 @app_commands.describe(category="Which category to spawn creatures from.")
 @app_commands.autocomplete(category=_category_autocomplete)
 async def category_spawn(interaction: discord.Interaction, category: str) -> None:
@@ -7274,7 +7203,7 @@ async def _location_area_autocomplete(
     ][:25]
 
 
-@location_area_group.command(name="create", description="Create a new location area (Discord category). Fortune role required.")
+@location_area_group.command(name="create", description="Create a new location area (Discord category). [Fortune]")
 @app_commands.describe(
     name="Area name (becomes the Discord category name).",
     description="Description of the area (posted in a read-only #description channel).",
@@ -7398,7 +7327,7 @@ async def location_area_create(
     await interaction.response.send_message(" ".join(parts))
 
 
-@location_area_group.command(name="delete", description="Delete a location area and all its locations. Fortune role required.")
+@location_area_group.command(name="delete", description="Delete a location area and all its locations. [Fortune]")
 @app_commands.describe(name="Area to delete.")
 @app_commands.autocomplete(name=_location_area_autocomplete)
 async def location_area_delete(
@@ -7457,7 +7386,7 @@ async def location_area_list(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
 
-@location_area_group.command(name="fix-permissions", description="Repair permissions on all location areas (hides them from non-Approved). Kami role required.")
+@location_area_group.command(name="fix-permissions", description="Repair permissions on all location areas (hides them from non-Approved). [Kami]")
 async def location_area_fix_permissions(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -7517,7 +7446,7 @@ async def location_area_fix_permissions(interaction: discord.Interaction) -> Non
     )
 
 
-@location_group.command(name="create", description="Create a location (text channel) in an area. Fortune role required.")
+@location_group.command(name="create", description="Create a location (text channel) in an area. [Fortune]")
 @app_commands.describe(
     area="Which area to create the location in.",
     name="Location name (becomes the channel name).",
@@ -7749,7 +7678,7 @@ async def _buy_named(interaction, member, name, mastery_level, attr, label, emoj
         f"{emoji} **{c.name}** learns the {label} **{name}** (ML {mastery_level}) for **{cost}** XP.{note}\n"
         f"XP left {c.xp:g}", embed=build_sheet_embed(rec))
 
-@xp_group.command(name="grant", description="Grant (or correct) a player's Experience. Fortune role required.")
+@xp_group.command(name="grant", description="Grant (or correct) a player's Experience. [Fortune]")
 @app_commands.describe(member="The player to grant XP to.", amount="XP amount (negative to correct).", reason="Optional note.")
 async def xp_grant(interaction: discord.Interaction, member: discord.Member, amount: app_commands.Range[float, -100000.0, 100000.0], reason: str | None = None) -> None:
     if not await _require_guild(interaction):
@@ -7768,7 +7697,7 @@ async def xp_grant(interaction: discord.Interaction, member: discord.Member, amo
         f"**{abs(amount):g}** XP -> **{rec.character.xp:g}** available{note}")
 
 @xp_group.command(name="balance", description="Show a character's available Experience.")
-@app_commands.describe(member="Whose XP to show (Fortune). Omit for your own.")
+@app_commands.describe(member="Whose XP to show [Fortune]. Omit for your own.")
 async def xp_balance(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
     if not await _require_guild(interaction):
         return
@@ -7788,7 +7717,7 @@ async def xp_balance(interaction: discord.Interaction, member: discord.Member | 
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}).", ephemeral=True)
 
 @xp_group.command(name="trait", description="Spend XP to raise a Trait or Void (RAW: Trait N x4, Void N x6).")
-@app_commands.describe(trait="Which Trait (or Void) to raise.", member="Advance another player's character (Fortune).")
+@app_commands.describe(trait="Which Trait (or Void) to raise.", member="Advance another player's character [Fortune]")
 @app_commands.choices(trait=_TRAIT_CHOICES)
 async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[str], member: discord.Member | None = None) -> None:
     if not await _require_guild(interaction):
@@ -7820,7 +7749,7 @@ async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}", embed=build_sheet_embed(rec))
 
 @xp_group.command(name="skill", description="Spend XP to raise or learn a Skill (RAW: new rank x1).")
-@app_commands.describe(skill="Skill name.", member="Advance another player's character (Fortune).")
+@app_commands.describe(skill="Skill name.", member="Advance another player's character [Fortune]")
 async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[str, 1, 40], member: discord.Member | None = None) -> None:
     if not await _require_guild(interaction):
         return
@@ -7849,8 +7778,8 @@ async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[s
         f"\U0001F4D8 **{c.name}** raises **{skill_name}** to rank **{new_rank}** for **{cost}** XP.\n"
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}", embed=build_sheet_embed(rec))
 
-@xp_group.command(name="emphasis", description="Spend 2 XP to add a Skill Emphasis (max ceil(rank/2) per skill).")
-@app_commands.describe(skill="The skill to add an Emphasis to.", emphasis="The Emphasis (e.g. Katana).", member="Advance another player's character (Fortune).")
+@xp_group.command(name="emphasis", description="Spend 2 XP to add a Skill Emphasis (at most half the Skill rank, rounded up).")
+@app_commands.describe(skill="The skill to add an Emphasis to.", emphasis="The Emphasis (e.g. Katana).", member="Advance another player's character [Fortune]")
 async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Range[str, 1, 40], emphasis: app_commands.Range[str, 1, 40], member: discord.Member | None = None) -> None:
     if not await _require_guild(interaction):
         return
@@ -7881,7 +7810,7 @@ async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Rang
 @app_commands.describe(
     name="Kata name (catalog match auto-fills the Mastery Level).",
     mastery_level="Its Mastery Level (optional if the kata is in the catalog).",
-    member="Advance another player's character (Fortune).",
+    member="Advance another player's character [Fortune]",
 )
 @app_commands.autocomplete(name=_kata_autocomplete)
 async def xp_kata(
@@ -7904,8 +7833,8 @@ async def xp_kata(
 @app_commands.describe(
     name="Kiho name (catalog match auto-fills the Mastery Level).",
     mastery_level="Its Mastery Level (optional if the kiho is in the catalog).",
-    non_brotherhood="Set True if the buyer is not a Brotherhood monk (1.5x cost, per s38a).",
-    member="Advance another player's character (Fortune).",
+    non_brotherhood="Set True if the buyer is not a Brotherhood monk (1.5x cost,).",
+    member="Advance another player's character [Fortune]",
 )
 @app_commands.autocomplete(name=_kiho_autocomplete)
 async def xp_kiho(
@@ -7924,14 +7853,14 @@ async def xp_kiho(
         return
     canonical = rec["name"] if rec else name.strip()
     cost = advancement.kiho_cost(ml, non_brotherhood)
-    note = " *(non-Brotherhood monk: 1.5x cost, per s38a.)*" if non_brotherhood else ""
+    note = " *(non-Brotherhood monk: 1.5x cost,)*" if non_brotherhood else ""
     await _buy_named(interaction, member, canonical, ml, "kiho", "kiho", "✋", note=note, cost=cost)
 
 @xp_group.command(name="spell", description="Memorise a spell so no scroll is needed (cost = 1 x Mastery Level).")
 @app_commands.describe(
     name="Spell name (catalog match auto-fills the Mastery Level).",
     mastery_level="Its Mastery Level (optional if the spell is in the catalog).",
-    member="Advance another player's character (Fortune).",
+    member="Advance another player's character [Fortune]",
 )
 @app_commands.autocomplete(name=_spell_autocomplete)
 async def xp_spell(
@@ -7954,7 +7883,7 @@ async def xp_spell(
 @app_commands.describe(
     name="Advantage name.",
     points="Point cost: required only for 'Variable'-cost advantages.",
-    member="Advance another player's character (Fortune).",
+    member="Advance another player's character [Fortune]",
 )
 @app_commands.autocomplete(name=_advantage_autocomplete)
 async def xp_advantage(
@@ -8011,7 +7940,7 @@ async def xp_advantage(
 @app_commands.describe(
     name="Disadvantage name (must be on the character's sheet).",
     points="Point value of the disadvantage (required if not in catalog or Variable cost).",
-    member="Target another player's character (Fortune).",
+    member="Target another player's character [Fortune]",
 )
 @app_commands.autocomplete(name=_disadvantage_autocomplete)
 async def xp_remove_disadvantage(
@@ -8083,7 +8012,7 @@ async def xp_costs(interaction: discord.Interaction) -> None:
 @sheet.command(name="learn", description="Record the techniques your school grants up to your School Rank.")
 @app_commands.describe(
     school_name="School to learn from (defaults to your sheet's school).",
-    member="Do this for another player (Fortune).",
+    member="Do this for another player [Fortune]",
 )
 @app_commands.autocomplete(school_name=_school_autocomplete)
 async def school_learn(
@@ -8129,7 +8058,7 @@ async def school_learn(
 # ===========================================================================
 # /spell group: spells & elements (GDD s32–s37)
 # ===========================================================================
-spell_group = app_commands.Group(name="spell", description="Browse spells by element and mastery (GDD s32-s37).")
+spell_group = app_commands.Group(name="spell", description="Browse spells by element and mastery.")
 
 _ELEMENT_COLORS = {
     "air": discord.Color.light_grey(), "earth": discord.Color.dark_gold(),
@@ -8220,8 +8149,8 @@ async def spell_view(interaction: discord.Interaction, name: str) -> None:
     raises="Called raises on the casting roll.",
     spend_void="Spend a Void Point for +1k1.",
     conceal="Conceal the casting with Stealth/Agility (result = observers' detection TN).",
-    attacker_npc="Cast as a stored NPC (Fortune).",
-    member="Cast as another player's character (Fortune).",
+    attacker_npc="Cast as a stored NPC [Fortune]",
+    member="Cast as another player's character [Fortune]",
 )
 @app_commands.autocomplete(name=_spell_autocomplete)
 async def spell_cast(
@@ -8268,7 +8197,7 @@ async def spell_cast(
     if raises < 0 or raises > combat.max_raises(caster):
         await interaction.response.send_message(
             f"Too many Raises: {raises} called but the maximum per roll is the Void Ring, "
-            f"**{combat.max_raises(caster)}** (s41).", ephemeral=True,
+            f"**{combat.max_raises(caster)}**.", ephemeral=True,
         )
         return
     element = s["element"].lower()
@@ -8381,7 +8310,7 @@ async def spell_cast(
             embed.add_field(name="Effect", value=effect_text, inline=False)
     await interaction.response.send_message(embed=embed)
 
-@spell_group.command(name="resist", description="Target resists a spell: Willpower roll vs TN. Fortune role required.")
+@spell_group.command(name="resist", description="Target resists a spell: Willpower roll vs TN. [Fortune]")
 @app_commands.describe(
     target="Character resisting the spell.",
     tn="Target Number for the resistance roll.",
@@ -8450,7 +8379,7 @@ async def spell_resist(
     )
     await interaction.response.send_message(embed=embed)
 
-@spell_group.command(name="interrupt", description="Willpower check when a caster is hit mid-cast. Disrupted = slot refunded. Fortune role required.")
+@spell_group.command(name="interrupt", description="Willpower check when a caster is hit mid-cast. Disrupted = slot refunded. [Fortune]")
 @app_commands.describe(
     caster="Character being interrupted.",
     element="Element of the spell being cast (for slot refund if disrupted).",
@@ -8520,8 +8449,8 @@ async def spell_interrupt(
     name="Spell name (auto-complete from the catalog).",
     raises="Called raises on the casting roll (not the Spellcraft check).",
     spend_void="Spend a Void Point for +1k1 on the casting roll.",
-    attacker_npc="Importune as a stored NPC (Fortune).",
-    member="Importune as another player's character (Fortune).",
+    attacker_npc="Importune as a stored NPC [Fortune]",
+    member="Importune as another player's character [Fortune]",
 )
 @app_commands.autocomplete(name=_spell_autocomplete)
 async def spell_importune(
@@ -8565,7 +8494,7 @@ async def spell_importune(
     if raises < 0 or raises > combat.max_raises(caster):
         await interaction.response.send_message(
             f"Too many Raises: {raises} called but the maximum per roll is the Void Ring, "
-            f"**{combat.max_raises(caster)}** (s41).", ephemeral=True,
+            f"**{combat.max_raises(caster)}**.", ephemeral=True,
         )
         return
     element = s["element"].lower()
@@ -8699,7 +8628,7 @@ async def spell_importune(
 # Phase 42: Taint Progression (#14)
 # ---------------------------------------------------------------------------
 
-@dm.command(name="taint", description="View or modify a character's Shadowlands Taint (Fortune+).")
+@dm.command(name="taint", description="View or modify a character's Shadowlands Taint [Fortune]")
 @app_commands.describe(
     name="Character name.",
     add="Taint points to add (can be negative to remove).",
@@ -8778,7 +8707,7 @@ async def taint_command(
 # Phase 42: Crafting Extended (#6)
 # ---------------------------------------------------------------------------
 
-@dm.command(name="craft_extended", description="Extended crafting roll: cumulative multi-step project (Fortune+).")
+@dm.command(name="craft_extended", description="Extended crafting roll: cumulative multi-step project [Fortune]")
 @app_commands.describe(
     name="Character name.",
     skill="Craft/Artisan skill name.",
@@ -8879,7 +8808,7 @@ async def craft_extended(
 # Phase 42: Spell Damage (#8 partial)
 # ---------------------------------------------------------------------------
 
-@spell_group.command(name="damage", description="Roll spell damage dice (for offensive spells). Fortune role required.")
+@spell_group.command(name="damage", description="Roll spell damage dice (for offensive spells). [Fortune]")
 @app_commands.describe(
     rolled="Number of dice to roll (from spell description, e.g. Fire Ring for Fires of Purity).",
     kept="Number of dice to keep.",
@@ -8952,7 +8881,7 @@ async def spell_damage(
 # Phase 42: Courtier/Social Influence (#5)
 # ---------------------------------------------------------------------------
 
-@dm.command(name="influence", description="Track Influence Points during a court scene. Fortune role required.")
+@dm.command(name="influence", description="Track Influence Points during a court scene. [Fortune]")
 @app_commands.describe(
     name="Character name.",
     change="Influence points to add (negative to subtract).",
@@ -9068,7 +8997,7 @@ MEDICINE_TN = {
     "antidote_preparation": 20,
 }
 
-@dm.command(name="log_channel", description="Set the channel where combat events are logged (Kami only).")
+@dm.command(name="log_channel", description="Set the channel where combat events are logged [Kami]")
 @app_commands.describe(channel="The text channel to post combat log entries to.")
 async def dm_log_channel(
     interaction: discord.Interaction,
@@ -9086,7 +9015,7 @@ async def dm_log_channel(
         f"will be logged there automatically."
     )
 
-@dm.command(name="clear_log", description="Stop logging combat events (Kami only).")
+@dm.command(name="clear_log", description="Stop logging combat events [Kami]")
 async def dm_clear_log(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -9096,7 +9025,7 @@ async def dm_clear_log(interaction: discord.Interaction) -> None:
     store.clear_log_channel(str(interaction.guild_id))
     await interaction.response.send_message("Combat log channel cleared. Events will no longer be logged.", ephemeral=True)
 
-@dm.command(name="date_channel", description="Set the channel for the pinned date display (Kami only).")
+@dm.command(name="date_channel", description="Set the channel for the pinned date display [Kami]")
 @app_commands.describe(channel="The text channel where the date will be pinned and updated.")
 async def dm_date_channel(
     interaction: discord.Interaction,
@@ -9124,7 +9053,7 @@ async def dm_date_channel(
         f"will update automatically when time advances."
     )
 
-@dm.command(name="clear_date_channel", description="Stop updating the date display channel (Kami only).")
+@dm.command(name="clear_date_channel", description="Stop updating the date display channel [Kami]")
 async def dm_clear_date_channel(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -9134,7 +9063,7 @@ async def dm_clear_date_channel(interaction: discord.Interaction) -> None:
     store.clear_date_channel(str(interaction.guild_id))
     await interaction.response.send_message("Date channel cleared. The pinned message will no longer update.", ephemeral=True)
 
-@dm.command(name="approval_channel", description="Set the channel for character submission approvals (Kami only).")
+@dm.command(name="approval_channel", description="Set the channel for character submission approvals [Kami]")
 @app_commands.describe(channel="The DM-only text channel for character submissions.")
 async def dm_approval_channel(
     interaction: discord.Interaction,
@@ -9151,7 +9080,7 @@ async def dm_approval_channel(
         f"Character submissions will be routed there for DM review."
     )
 
-@dm.command(name="clear_approval", description="Stop routing character approvals to a DM channel (Kami only).")
+@dm.command(name="clear_approval", description="Stop routing character approvals to a DM channel [Kami]")
 async def dm_clear_approval(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -9161,7 +9090,7 @@ async def dm_clear_approval(interaction: discord.Interaction) -> None:
     store.clear_approval_channel(str(interaction.guild_id))
     await interaction.response.send_message("Character approval channel cleared.", ephemeral=True)
 
-@dm.command(name="damage_channel", description="Set the channel for damage/healing approvals (Kami only).")
+@dm.command(name="damage_channel", description="Set the channel for damage/healing approvals [Kami]")
 @app_commands.describe(channel="The DM-only text channel for damage approval requests.")
 async def dm_damage_channel(
     interaction: discord.Interaction,
@@ -9179,7 +9108,7 @@ async def dm_damage_channel(
         f"Results will be posted back in the combat room."
     )
 
-@dm.command(name="clear_damage_channel", description="Stop routing damage approvals to a separate channel (Kami only).")
+@dm.command(name="clear_damage_channel", description="Stop routing damage approvals to a separate channel [Kami]")
 async def dm_clear_damage_channel(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -9309,7 +9238,7 @@ async def dm_treat(
 
 @sheet_data.command(name="export", description="Export your active character sheet as JSON (for backup or sharing).")
 @app_commands.describe(
-    member="Export another player's character (Fortune).",
+    member="Export another player's character [Fortune]",
 )
 async def sheet_export(
     interaction: discord.Interaction,
@@ -9341,7 +9270,7 @@ async def sheet_export(
             ephemeral=True,
         )
 
-@sheet_data.command(name="import_sheet", description="Import a character from JSON (paste the JSON or attach a .json file).")
+@sheet_data.command(name="import", description="Import a character from JSON (paste the JSON or attach a .json file).")
 @app_commands.describe(
     json_data="Paste the character JSON here (or attach a .json file instead).",
 )
@@ -9907,8 +9836,8 @@ class _ChargenNameModal(discord.ui.Modal, title="Character Creation"):
         )
 
 
-@client.tree.command(name="submit", description="Start character creation — opens a private wizard channel.")
 async def submit_character(interaction: discord.Interaction) -> None:
+    # Kept for the persistent lobby button; the slash command is /sheet create.
     if not await _require_guild(interaction):
         return
     await _start_chargen_wizard(interaction)
@@ -9930,9 +9859,9 @@ class _ChargenButtonView(discord.ui.View):
         await _start_chargen_wizard(interaction)
 
 
-setup_group = app_commands.Group(name="setup", description="Server setup commands (Kami only).")
+setup_group = app_commands.Group(name="setup", description="Server setup commands [Kami]")
 
-@setup_group.command(name="server", description="Create the server channel structure (Lobby, OOC, IC, DM categories). Kami only.")
+@setup_group.command(name="server", description="Create the server channel structure (Lobby, OOC, IC, DM categories). [Kami]")
 async def setup_server(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -10609,7 +10538,7 @@ async def _setup_server_inner(
     if not deleted_dupes and not deleted_channels and not created_items and not areas_fixed:
         summary_parts.append("Everything was already in order. Permissions refreshed.")
     summary_parts.append(
-        f"\nPlayers use `/submit` in the lobby to apply. "
+        f"\nPlayers use `/sheet create` to apply. "
         f"DMs approve or deny from the approvals channel."
     )
     await interaction.followup.send("\n".join(summary_parts), ephemeral=True)
@@ -10749,7 +10678,7 @@ async def _post_rules_reference(channel: discord.TextChannel) -> None:
 #  /dm announce — post an event to announcements with RSVP
 # ---------------------------------------------------------------------------
 
-@dm.command(name="announce", description="Post a session/event announcement with RSVP reactions (Fortune+).")
+@dm.command(name="announce", description="Post a session/event announcement with RSVP reactions [Fortune]")
 @app_commands.describe(
     title="Event title (e.g. 'Court of the Crane — Session 5').",
     description="Event details (what, where, when, etc.).",
@@ -10801,11 +10730,11 @@ async def dm_announce(
     )
 
 # ---------------------------------------------------------------------------
-#  /roster — player character directory
+#  /players — player character directory
 # ---------------------------------------------------------------------------
 
-@client.tree.command(name="roster", description="Show all approved player characters on this server.")
-async def roster(interaction: discord.Interaction) -> None:
+@client.tree.command(name="players", description="Show all approved player characters on this server.")
+async def players_cmd(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
     guild_id = str(interaction.guild_id)
@@ -10859,6 +10788,8 @@ cog_checks.init(
     refuse_if_cannot_act=_refuse_if_cannot_act,
     fear_penalty=_fear_penalty,
     set_fear_penalty=_set_fear_penalty,
+    is_dm=_is_dm,
+    role_fortune=ROLE_FORTUNE,
 )
 
 cog_combat.init(
@@ -10923,8 +10854,6 @@ client.tree.add_command(cog_combat.fight_group)
 client.tree.add_command(cog_combat.engage_group)
 client.tree.add_command(spell_group)
 client.tree.add_command(cog_checks.check)
-client.tree.add_command(cog_checks.assess)
-client.tree.add_command(cog_checks.examine)
 client.tree.add_command(ref_commands.ref)
 client.tree.add_command(setup_group)
 

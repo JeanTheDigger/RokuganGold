@@ -95,7 +95,7 @@ ref_kiho = app_commands.Group(name="kiho", description="Kiho by element and mast
 ref_school = app_commands.Group(name="school", description="School catalog: benefit, skills, techniques.", parent=ref)
 ref_family = app_commands.Group(name="family", description="Family catalog (character creation bonuses).", parent=ref)
 ref_heritage = app_commands.Group(name="heritage", description="Heritage table rolls (L5R 4e).", parent=ref)
-ref_tattoo = app_commands.Group(name="tattoo", description="Togashi tattoo abilities (s57.25).", parent=ref)
+ref_tattoo = app_commands.Group(name="tattoo", description="Togashi tattoo abilities.", parent=ref)
 
 
 # ---------------------------------------------------------------------------
@@ -633,7 +633,7 @@ async def kiho_view(interaction: discord.Interaction, name: str) -> None:
 # /ref heritage — heritage table rolls
 # ---------------------------------------------------------------------------
 
-@ref_heritage.command(name="roll", description="Roll on a clan's Heritage Table (1d10). Fortune role required.")
+@ref_heritage.command(name="roll", description="Roll on a clan's Heritage Table (1d10). [Fortune]")
 @app_commands.describe(clan="Clan name (Crab, Crane, Dragon, Lion, Mantis, Phoenix, Scorpion, Unicorn).")
 async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
     if not await _d.require_guild(interaction):
@@ -707,7 +707,7 @@ async def encumbrance_check(
 # /ref atn — Armor TN breakdown
 # ---------------------------------------------------------------------------
 
-@ref.command(name="atn", description="Show Armor TN breakdown for your active character.")
+@ref.command(name="armor_tn", description="Show Armor TN breakdown for your active character.")
 @app_commands.describe(
     target="Character name (Fortune: omit to see your own).",
 )
@@ -1008,7 +1008,7 @@ async def modifiers_ref(interaction: discord.Interaction) -> None:
     embed.add_field(
         name="How to Apply",
         value=(
-            "Use the `bonus_tn:` parameter on `/attack` for situational modifiers.\n"
+            "Use the `bonus_tn:` parameter on `/fight attack` for situational modifiers.\n"
             "Positive = harder to hit (cover, range). Negative = easier (prone target in melee)."
         ),
         inline=False,
@@ -1041,7 +1041,7 @@ async def calledshot_ref(interaction: discord.Interaction) -> None:
     )
     embed.add_field(
         name="Usage",
-        value="Use `/attack maneuver: Called Shot raises: N`: the raise cost is added to TN automatically.",
+        value="Use `/fight attack maneuver: Called Shot raises: N`: the raise cost is added to TN automatically.",
         inline=False,
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -1059,7 +1059,7 @@ async def tattoo_list(interaction: discord.Interaction) -> None:
         t = tattoo_catalog.TATTOO_CATALOG[n]
         tag = " (passive)" if t["passive"] else ""
         lines.append(f"• **{t['name']}**{tag}")
-    text = f"🐉 **{len(names)} Togashi Tattoos** (s57.25):\n" + "\n".join(lines)
+    text = f"🐉 **{len(names)} Togashi Tattoos**:\n" + "\n".join(lines)
     await interaction.response.send_message(text[:1990], ephemeral=True)
 
 

@@ -32,6 +32,8 @@ class _Deps:
     refuse_if_cannot_act: object
     fear_penalty: object
     set_fear_penalty: object
+    is_dm: object
+    ROLE_FORTUNE: str
     NPC_OWNER: str
 
 
@@ -53,6 +55,8 @@ def init(
     refuse_if_cannot_act,
     fear_penalty,
     set_fear_penalty,
+    is_dm,
+    role_fortune,
 ) -> None:
     _d.store = store
     _d.engine = engine
@@ -65,6 +69,8 @@ def init(
     _d.refuse_if_cannot_act = refuse_if_cannot_act
     _d.fear_penalty = fear_penalty
     _d.set_fear_penalty = set_fear_penalty
+    _d.is_dm = is_dm
+    _d.ROLE_FORTUNE = role_fortune
     _d.NPC_OWNER = npc_owner
 
     # Wire autocompletes programmatically
@@ -195,6 +201,35 @@ async def _emphasis_autocomplete(interaction: discord.Interaction, current: str)
     return [app_commands.Choice(name=e, value=e) for e in emphs if cur in e.lower()][:25]
 
 
+async def _resolve_roller(interaction: discord.Interaction, name: str | None, is_npc: bool,
+                          member: discord.Member | None):
+    """The character to roll for. With no name, member or NPC flag it is the
+    caller's active character. Anyone may roll for their own character; another
+    player's character or an NPC needs the Fortune role. Sends the error itself."""
+    guild = str(interaction.guild_id)
+    uid = str(interaction.user.id)
+    if not name and member is None and not is_npc:
+        rec = _d.store.get_active(guild, uid)
+        if rec is None:
+            await interaction.response.send_message(
+                "You have no active character. Create one with `/sheet create`, or give a `name:`.", ephemeral=True,
+            )
+            return None
+        return rec
+    rec = _d.resolve_duelist(guild, interaction.channel_id, name or "", is_npc, member)
+    if rec is None:
+        who = name or (member.display_name if member is not None else "that character")
+        await interaction.response.send_message(f"No character found for **{who}**.", ephemeral=True)
+        return None
+    if rec.owner_id != uid and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            f"You can roll for your own character. Rolling for **{rec.character.name}** needs the "
+            f"**{_d.ROLE_FORTUNE}** role.", ephemeral=True,
+        )
+        return None
+    return rec
+
+
 def _emphasis_for(c, skill_name: str, requested: str | None) -> tuple[str | None, str | None]:
     """(matched Emphasis, error). An Emphasis must be on the sheet for that Skill;
     it rerolls 1s once (GDD s04.5 / s24.0)."""
@@ -250,9 +285,7 @@ def _build_check_embed(
 # Group definition
 # ---------------------------------------------------------------------------
 
-check = app_commands.Group(name="check", description="Skill, contested, and cooperative checks (L5R 4e).")
-assess = app_commands.Group(name="assess", description="Fear, honor, stealth, investigation, and social checks.")
-examine = app_commands.Group(name="examine", description="Craft, lore, horsemanship, poison, and medicine checks.")
+check = app_commands.Group(name="check", description="Skill, trait, contested and situational checks for a character.")
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +294,7 @@ examine = app_commands.Group(name="examine", description="Craft, lore, horsemans
 
 @check.command(
     name="contest",
-    description="Contested Skill/Trait roll between two characters. Fortune role required.",
+    description="Contested Skill/Trait roll between two characters. [Fortune]",
 )
 @app_commands.describe(
     name_a="First participant name (encounter combatant or NPC).",
@@ -413,17 +446,17 @@ async def contest(
 
 
 # ---------------------------------------------------------------------------
-# /assess fear
+# /check fear
 # ---------------------------------------------------------------------------
 
-@assess.command(
+@check.command(
     name="fear",
-    description="Fear check: Willpower vs TN 5 + (Fear Rank x 5). Fortune role required.",
+    description="Fear check: Willpower vs TN 5 + (Fear Rank x 5).",
 )
 @app_commands.describe(
-    name="Character making the check (encounter combatant or NPC name).",
+    name="Character to roll for (default: your active character). Others or NPCs need the Fortune role.",
     fear_rank="Fear Rank of the source (1-10, sets TN to 5 + rank x 5).",
-    member="Player making the check (uses their active character).",
+    member="Roll for another player's active character [Fortune]",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, etc.).",
     spend_void="Spend a Void Point for +1k1.",
@@ -431,8 +464,8 @@ async def contest(
 )
 async def fear_check(
     interaction: discord.Interaction,
-    name: str,
     fear_rank: app_commands.Range[int, 1, 10],
+    name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
@@ -441,19 +474,16 @@ async def fear_check(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     guild = str(interaction.guild_id)
-    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
-        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
         return
     if tattoo_effects.is_fear_immune(c):
         await interaction.response.send_message(
-            f"**{c.name}** is immune to Fear (Mantis Tattoo, s57.25). No roll needed.",
+            f"**{c.name}** is immune to Fear (Mantis Tattoo). No roll needed.",
             ephemeral=True,
         )
         return
@@ -516,36 +546,33 @@ async def fear_check(
 
 
 # ---------------------------------------------------------------------------
-# /assess honor
+# /check honor
 # ---------------------------------------------------------------------------
 
-@assess.command(
+@check.command(
     name="honor",
-    description="Honor Roll: roll Honor Rank dice, keep 1, vs a TN. Fortune role required.",
+    description="Honor Roll: roll Honor Rank dice, keep 1, vs a TN.",
 )
 @app_commands.describe(
-    name="Character making the check (encounter combatant or NPC name).",
+    name="Character to roll for (default: your active character). Others or NPCs need the Fortune role.",
     tn="Target Number to resist (DM sets this based on temptation).",
-    member="Player making the check (uses their active character).",
+    member="Roll for another player's active character [Fortune]",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, situational).",
 )
 async def honor_roll(
     interaction: discord.Interaction,
-    name: str,
     tn: app_commands.Range[int, 1, 100],
+    name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     guild = str(interaction.guild_id)
-    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
-        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
@@ -577,15 +604,15 @@ async def honor_roll(
 
 
 # ---------------------------------------------------------------------------
-# /examine poison
+# /check poison
 # ---------------------------------------------------------------------------
 
-@examine.command(
+@check.command(
     name="poison",
-    description="Poison resistance: Stamina vs TN (Strength x 5). Fortune role required.",
+    description="Poison resistance: Stamina vs TN (Strength x 5).",
 )
 @app_commands.describe(
-    name="Character resisting the poison (encounter combatant or NPC name).",
+    name="Character to roll for (default: your active character). Others or NPCs need the Fortune role.",
     strength="Poison Strength rating (1-10; TN = Strength x 5).",
     member="Player resisting (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
@@ -595,8 +622,8 @@ async def honor_roll(
 )
 async def poison_resist(
     interaction: discord.Interaction,
-    name: str,
     strength: app_commands.Range[int, 1, 10],
+    name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
@@ -605,12 +632,9 @@ async def poison_resist(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     guild = str(interaction.guild_id)
-    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
-        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
@@ -653,28 +677,28 @@ async def poison_resist(
 
 
 # ---------------------------------------------------------------------------
-# /examine medicine
+# /check medicine
 # ---------------------------------------------------------------------------
 
-@examine.command(
+@check.command(
     name="medicine",
-    description="Medicine/Intelligence check vs a TN (treat wounds, poison, disease). Fortune role required.",
+    description="Medicine/Intelligence check vs a TN (treat wounds, poison, disease).",
 )
 @app_commands.describe(
-    name="Character making the check (encounter combatant or NPC name).",
+    name="Character to roll for (default: your active character). Others or NPCs need the Fortune role.",
     tn="Target Number for the treatment.",
-    member="Player making the check (uses their active character).",
+    member="Roll for another player's active character [Fortune]",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, tools, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Medicine 0 as 1 (removes unskilled penalty).",
-    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once.",
     reason="What is being treated (for display).",
 )
 async def medicine_check(
     interaction: discord.Interaction,
-    name: str,
     tn: app_commands.Range[int, 1, 100],
+    name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
@@ -685,15 +709,12 @@ async def medicine_check(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
-        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
@@ -750,29 +771,29 @@ async def medicine_check(
 
 @check.command(
     name="skill",
-    description="Generic Skill/Trait check vs a TN. DM picks the trait and skill. Fortune role required.",
+    description="Generic Skill/Trait check vs a TN. DM picks the trait and skill.",
 )
 @app_commands.describe(
-    name="Character making the check (encounter combatant or NPC name).",
+    name="Character to roll for (default: your active character). Others or NPCs need the Fortune role.",
     trait="Trait for the roll (the kept dice).",
     skill="Skill name (case-sensitive, e.g. 'Athletics'). Rank is read from the character sheet.",
     tn="Target Number.",
-    member="Player making the check (uses their active character).",
+    member="Roll for another player's active character [Fortune]",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, situational, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
-    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once.",
     reason="Label shown with the roll.",
     secret="Secret roll: result shown only to you (the DM), not the channel.",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
 async def skill_check_cmd(
     interaction: discord.Interaction,
-    name: str,
     trait: app_commands.Choice[str],
     skill: str,
     tn: app_commands.Range[int, 1, 200],
+    name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
@@ -784,12 +805,9 @@ async def skill_check_cmd(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     guild = str(interaction.guild_id)
-    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
-        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
@@ -840,12 +858,12 @@ async def skill_check_cmd(
     skill="Skill name (e.g. 'Athletics').",
     tn="Target Number for the primary check.",
     helpers="Helper characters (comma-separated names, e.g. 'Akodo Toturi, Bayushi Shoju').",
-    member="Player making the check (uses their active character).",
+    member="Roll for another player's active character [Fortune]",
     is_npc="Primary character is an NPC.",
     bonus="Flat bonus to the primary roll.",
     spend_void="Spend a Void Point for +1k1 on the primary roll.",
     void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
-    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once.",
     reason="Label shown with the roll.",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
@@ -964,29 +982,29 @@ async def check_cooperative(
 
 
 # ---------------------------------------------------------------------------
-# /assess stealth
+# /check stealth
 # ---------------------------------------------------------------------------
 
-@assess.command(
+@check.command(
     name="stealth",
-    description="Stealth/Agility check vs a TN. Fortune role required.",
+    description="Stealth/Agility check vs a TN.",
 )
 @app_commands.describe(
-    name="Character attempting stealth.",
+    name="Character to roll for (default: your active character). Others or NPCs need the Fortune role.",
     tn="Target Number (DM sets based on conditions, observer alertness, etc.).",
-    member="Player making the check (uses their active character).",
+    member="Roll for another player's active character [Fortune]",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (cover, darkness, distractions, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Stealth 0 as 1 (removes unskilled penalty).",
-    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once.",
     reason="Label (e.g. 'sneaking past the guards').",
     secret="Secret roll: result shown only to you (the DM).",
 )
 async def stealth_check(
     interaction: discord.Interaction,
-    name: str,
     tn: app_commands.Range[int, 1, 200],
+    name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
@@ -998,15 +1016,12 @@ async def stealth_check(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
-        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
@@ -1042,18 +1057,18 @@ async def stealth_check(
 
 
 # ---------------------------------------------------------------------------
-# /assess investigate
+# /check investigate
 # ---------------------------------------------------------------------------
 
-@assess.command(
+@check.command(
     name="investigate",
-    description="Investigation/Perception check vs a TN. Fortune role required.",
+    description="Investigation/Perception check vs a TN.",
 )
 @app_commands.describe(
-    name="Character investigating.",
+    name="Character to roll for (default: your active character). Others or NPCs need the Fortune role.",
     tn="Target Number.",
     emphasis="Investigation Emphasis: if on the sheet, 1s are rerolled once.",
-    member="Player making the check (uses their active character).",
+    member="Roll for another player's active character [Fortune]",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, tools, etc.).",
     spend_void="Spend a Void Point for +1k1.",
@@ -1064,8 +1079,8 @@ async def stealth_check(
 @app_commands.choices(emphasis=_INVESTIGATION_EMPHASIS)
 async def investigate_check(
     interaction: discord.Interaction,
-    name: str,
     tn: app_commands.Range[int, 1, 200],
+    name: str | None = None,
     emphasis: app_commands.Choice[str] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
@@ -1077,15 +1092,12 @@ async def investigate_check(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
-        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
@@ -1124,31 +1136,31 @@ async def investigate_check(
 
 
 # ---------------------------------------------------------------------------
-# /assess social
+# /check social
 # ---------------------------------------------------------------------------
 
-@assess.command(
+@check.command(
     name="social",
-    description="Social skill check vs a TN. Auto-selects the correct trait. Fortune role required.",
+    description="Social skill check vs a TN. Auto-selects the correct trait.",
 )
 @app_commands.describe(
-    name="Character making the social check.",
+    name="Character to roll for (default: your active character). Others or NPCs need the Fortune role.",
     skill="Social skill (auto-selects the correct trait).",
     tn="Target Number.",
-    member="Player making the check (uses their active character).",
+    member="Roll for another player's active character [Fortune]",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (Status, Honor, Void Point, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
-    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once.",
     reason="Label (e.g. 'convincing the magistrate').",
 )
 @app_commands.choices(skill=_SOCIAL_SKILLS)
 async def social_check(
     interaction: discord.Interaction,
-    name: str,
     skill: app_commands.Choice[str],
     tn: app_commands.Range[int, 1, 200],
+    name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
@@ -1159,15 +1171,12 @@ async def social_check(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
-        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
@@ -1202,30 +1211,30 @@ async def social_check(
 
 
 # ---------------------------------------------------------------------------
-# /examine craft
+# /check craft
 # ---------------------------------------------------------------------------
 
-@examine.command(
+@check.command(
     name="craft",
-    description="Artisan or Craft skill / Intelligence check vs a TN. Fortune role required.",
+    description="Artisan or Craft skill / Intelligence check vs a TN.",
 )
 @app_commands.describe(
-    name="Character making the craft check.",
+    name="Character to roll for (default: your active character). Others or NPCs need the Fortune role.",
     skill="Skill name as it appears on the sheet (e.g. 'Artisan: Painting', 'Craft: Weaponsmithing').",
     tn="Target Number.",
-    member="Player making the check (uses their active character).",
+    member="Roll for another player's active character [Fortune]",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (tools, workshop, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
-    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once.",
     reason="Label (e.g. 'forging a katana').",
 )
 async def craft_check(
     interaction: discord.Interaction,
-    name: str,
     skill: str,
     tn: app_commands.Range[int, 1, 200],
+    name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
@@ -1236,15 +1245,12 @@ async def craft_check(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
-        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
@@ -1274,30 +1280,30 @@ async def craft_check(
 
 
 # ---------------------------------------------------------------------------
-# /examine lore
+# /check lore
 # ---------------------------------------------------------------------------
 
-@examine.command(
+@check.command(
     name="lore",
-    description="Lore/Intelligence check vs a TN. Fortune role required.",
+    description="Lore/Intelligence check vs a TN.",
 )
 @app_commands.describe(
-    name="Character making the knowledge check.",
+    name="Character to roll for (default: your active character). Others or NPCs need the Fortune role.",
     specialty="Lore specialty as on the sheet (e.g. 'Lore: Heraldry', 'Lore: Shadowlands').",
     tn="Target Number.",
-    member="Player making the check (uses their active character).",
+    member="Roll for another player's active character [Fortune]",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (library, scrolls, advantages, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
-    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once.",
     reason="Label (e.g. 'identifying the creature').",
 )
 async def lore_check(
     interaction: discord.Interaction,
-    name: str,
     specialty: str,
     tn: app_commands.Range[int, 1, 200],
+    name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
@@ -1308,15 +1314,12 @@ async def lore_check(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
-        await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
@@ -1346,25 +1349,25 @@ async def lore_check(
 
 
 # ---------------------------------------------------------------------------
-# /examine horsemanship
+# /check horsemanship
 # ---------------------------------------------------------------------------
 
-@examine.command(name="horsemanship", description="Horsemanship/Agility check (mounted combat maneuver). Fortune role required.")
+@check.command(name="horsemanship", description="Horsemanship/Agility check (mounted combat maneuver).")
 @app_commands.describe(
-    name="Character name.",
+    name="Character to roll for (default: your active character). Others or NPCs need the Fortune role.",
     tn="Target Number.",
     member="Player whose character to use.",
     is_npc="Target is an NPC.",
     bonus="Flat bonus.",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Horsemanship 0 as 1 (removes unskilled penalty).",
-    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once.",
     reason="Label (e.g. 'charge', 'leap obstacle', 'stay mounted').",
 )
 async def horsemanship_check(
     interaction: discord.Interaction,
-    name: str,
     tn: app_commands.Range[int, 1, 200],
+    name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: int = 0,
@@ -1375,12 +1378,9 @@ async def horsemanship_check(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     guild = str(interaction.guild_id)
-    rec = _d.resolve_duelist(guild, interaction.channel_id, name, is_npc, member)
+    rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
-        await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
