@@ -2016,7 +2016,127 @@ class _RosterPickView(discord.ui.View):
             allowed_mentions=discord.AllowedMentions(users=True),
         )
         await view.persist(msg)
+        enc.roster_message_id = msg.id
+        _d.save_encounter(guild, enc)
         await _d.combat_log(guild, f"--- Encounter roster set up by {self.organizer.display_name} ({len(enc.roster)} invited) ---")
+
+
+async def _fetch_roster_message(enc: encounter.Encounter) -> discord.Message | None:
+    """The roster message for this encounter, if it can still be fetched."""
+    if not enc.roster_message_id:
+        return None
+    channel = _d.bot_client.get_channel(enc.channel_id)
+    if channel is None:
+        return None
+    try:
+        return await channel.fetch_message(enc.roster_message_id)
+    except (discord.HTTPException, AttributeError):
+        return None
+
+
+async def _refresh_roster_message(enc: encounter.Encounter) -> None:
+    msg = await _fetch_roster_message(enc)
+    if msg is not None:
+        try:
+            await msg.edit(content=_render_roster(enc), allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
+
+
+async def _require_roster(interaction: discord.Interaction) -> encounter.Encounter | None:
+    """The channel's rostered encounter if the user is its organizer or staff; else an error."""
+    enc = _d.encounters.get(interaction.channel_id)
+    if enc is None or not enc.roster:
+        await interaction.response.send_message("No encounter roster here. Start one with `/combat setup`.", ephemeral=True)
+        return None
+    if str(interaction.user.id) != enc.organizer_id and not _d.is_dm(interaction):
+        await interaction.response.send_message("Only the roster's organizer or staff can do that.", ephemeral=True)
+        return None
+    return enc
+
+
+combat_roster = app_commands.Group(name="roster", description="Manage an encounter roster (organizer or staff).", parent=combat_group)
+
+
+@combat_roster.command(name="add", description="Invite another player to this channel's encounter roster.")
+@app_commands.describe(member="The player to invite (they still press Join).")
+async def combat_roster_add(interaction: discord.Interaction, member: discord.Member) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    enc = await _require_roster(interaction)
+    if enc is None:
+        return
+    if member.bot:
+        await interaction.response.send_message("Bots do not fight.", ephemeral=True)
+        return
+    uid = str(member.id)
+    if enc.roster.get(uid) in encounter.ROSTER_IN:
+        await interaction.response.send_message(f"{member.display_name} is already in.", ephemeral=True)
+        return
+    enc.roster[uid] = "pending"
+    _d.save_encounter(str(interaction.guild_id), enc)
+    await _refresh_roster_message(enc)
+    await interaction.response.send_message(
+        f"{member.mention}: you have been invited to the encounter here. Press **Join** on the roster to enter"
+        + (" (it rolls your initiative at once)." if enc.roster_begun else "."),
+        allowed_mentions=discord.AllowedMentions(users=[member]),
+    )
+
+
+@combat_roster.command(name="remove", description="Uninvite a player who is not in initiative yet.")
+@app_commands.describe(member="The player to take off the roster.")
+async def combat_roster_remove(interaction: discord.Interaction, member: discord.Member) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    enc = await _require_roster(interaction)
+    if enc is None:
+        return
+    uid = str(member.id)
+    if uid not in enc.roster:
+        await interaction.response.send_message(f"{member.display_name} is not on the roster.", ephemeral=True)
+        return
+    if any(c.owner_id == uid for c in enc.combatants):
+        await interaction.response.send_message(
+            f"{member.display_name} is already in initiative; staff can remove them with `/combat remove`.", ephemeral=True,
+        )
+        return
+    if enc.roster[uid] == "forced" and not _d.is_dm(interaction):
+        await interaction.response.send_message("Staff forced that player in; only staff can uninvite them.", ephemeral=True)
+        return
+    del enc.roster[uid]
+    _d.save_encounter(str(interaction.guild_id), enc)
+    await _refresh_roster_message(enc)
+    await interaction.response.send_message(f"{member.display_name} taken off the roster.")
+
+
+@combat_roster.command(name="close", description="Close a roster that has not begun (organizer or staff).")
+async def combat_roster_close(interaction: discord.Interaction) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    enc = await _require_roster(interaction)
+    if enc is None:
+        return
+    if (enc.roster_begun or enc.combatants or enc.started) and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            "This encounter has begun; only staff can end it (`/combat end`).", ephemeral=True,
+        )
+        return
+    msg = await _fetch_roster_message(enc)
+    _d.encounters.pop(interaction.channel_id, None)
+    _d.delete_encounter(interaction.channel_id)
+    if msg is not None:
+        view = RosterView(str(interaction.guild_id), interaction.channel_id)
+        view._persist_message_id = msg.id
+        view._disable()
+        try:
+            await msg.edit(content=_render_roster(enc) + "\n*(Roster closed.)*", view=view,
+                           allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
+    else:
+        _d.store.delete_pending_view(str(enc.roster_message_id))
+    await interaction.response.send_message("🛡️ Encounter roster closed.")
+    await _d.combat_log(str(interaction.guild_id), f"--- Encounter roster closed by {interaction.user.display_name} ---")
 
 
 @combat_group.command(name="setup", description="Set up an encounter roster: pick who is in, players accept or decline, then begin.")

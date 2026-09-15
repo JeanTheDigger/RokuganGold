@@ -149,6 +149,7 @@ class Encounter:
     roster: dict[str, str] = field(default_factory=dict)
     organizer_id: str = ""
     roster_begun: bool = False   # Begin was pressed: late accepts roll in at once
+    roster_message_id: int = 0   # the roster message with the buttons (0 = unknown)
 
     def roster_allows(self, user_id: str) -> bool:
         """True if this user may join initiative: no roster, or accepted/forced."""
@@ -269,6 +270,7 @@ class Encounter:
             "roster": dict(self.roster),
             "organizer_id": self.organizer_id,
             "roster_begun": self.roster_begun,
+            "roster_message_id": self.roster_message_id,
         }
 
     @classmethod
@@ -283,6 +285,7 @@ class Encounter:
             roster=dict(d.get("roster", {})),
             organizer_id=d.get("organizer_id", ""),
             roster_begun=d.get("roster_begun", False),
+            roster_message_id=d.get("roster_message_id", 0),
         )
         enc.combatants = [Combatant.from_dict(c) for c in d.get("combatants", [])]
         return enc
