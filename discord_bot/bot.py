@@ -8679,7 +8679,11 @@ async def spell_cast(
             embed.set_footer(text=f"This spell can impose: {cond_names}. Press a button to ask a DM to apply it to {tgt_cb.name}.")
         else:
             embed.set_footer(text=f"This spell can impose: {cond_names}. Cast with target: (a combatant here) for one-click requests, or use /fight condition.")
-    await interaction.response.send_message(embed=embed, view=prompt_view)
+    # discord.py's interaction response rejects view=None (only a real view or omitted).
+    if prompt_view is not None:
+        await interaction.response.send_message(embed=embed, view=prompt_view)
+    else:
+        await interaction.response.send_message(embed=embed)
 
 @spell_group.command(name="resist", description="Target resists a spell: Willpower roll vs TN. [Fortune]")
 @app_commands.describe(

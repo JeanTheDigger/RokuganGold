@@ -4078,12 +4078,14 @@ async def duel_strike(
     else:
         embed.set_footer(text="The strike misses.")
 
-    await interaction.response.send_message(
-        content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the strike's damage below." if view is not None else None,
-        embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
-    )
     if view is not None:
+        await interaction.response.send_message(
+            content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the strike's damage below.",
+            embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+        )
         await view.persist(await interaction.original_response())
+    else:
+        await interaction.response.send_message(embed=embed)
     tag = "HIT" if hit else "MISS"
     await _d.combat_log(guild, f"Duel Strike: {atk.name} → {tgt.name} ({weapon}) {tag} (roll {result['total']} vs TN {result['tn']})")
 
