@@ -90,9 +90,6 @@ class DiceEngine:
         if rolled <= 0 or kept <= 0:
             return DiceResult([], [], 0)
 
-        if kept > rolled:
-            kept = rolled
-
         # Ten Dice Rule (GDD s41 / L5R 4e): never roll or keep more than 10.
         # Every 2 extra rolled dice become 1 kept die while kept < 10; any
         # rolled die that cannot convert (an odd leftover, or all of them
@@ -110,6 +107,9 @@ class DiceEngine:
         if kept > 10:
             overflow_bonus += (kept - 10) * 2
             kept = 10
+        # Clamp after the conversion so 10k12 still yields 10k10 +4 (s41).
+        if kept > rolled:
+            kept = rolled
 
         all_dice: list[int] = []
         explosion_count = 0
