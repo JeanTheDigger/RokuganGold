@@ -6046,13 +6046,13 @@ class DmDamageView(_DisableableView):
     KIND = "dm_damage"
 
     def __init__(self, target_id: int, target_name: str, amount: int, reason: str,
-                 source_channel_id: int = 0) -> None:
+                 source_channel_id: int = 0, void_reduced: bool = False) -> None:
         super().__init__(timeout=1800)
         self.target_id = target_id
         self.target_name = target_name
         self.amount = amount
         self.reason = reason
-        self.void_reduced = False
+        self.void_reduced = void_reduced
         self.source_channel_id = source_channel_id
 
     @discord.ui.button(label="Apply Damage", style=discord.ButtonStyle.danger, emoji="💥")
@@ -6137,6 +6137,9 @@ class DmDamageView(_DisableableView):
         self.amount = max(0, self.amount - 10)
         self.void_reduced = True
         store.save(rec)
+        # Re-persist so the reduction survives a restart before Apply/Deny.
+        self._persist_args.update(amount=self.amount, void_reduced=True)
+        await self.persist(interaction.message)
         await interaction.response.send_message(
             f"🔮 **{self.target_name}** spends 1 VP → damage reduced to **{self.amount}**. "
             f"({c.current_void_points}/{c.max_void_points} VP left). "

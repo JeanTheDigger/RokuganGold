@@ -159,11 +159,17 @@ class Encounter:
             # Re-point turn_index at the same actor after the list shrank.
             self.turn_index = self.combatants.index(current)
         elif self.combatants:
-            self.turn_index %= len(self.combatants)
-            # The removed actor's turn is over; the actor now in that slot is
-            # beginning theirs and must not inherit stale per-turn state.
-            if self.started:
-                self._begin_turn(self.combatants[self.turn_index])
+            if self.started and self.turn_index >= len(self.combatants):
+                # The removed actor was last in the order: their turn ending
+                # also ends the Round, so cross the boundary properly.
+                self.turn_index = len(self.combatants) - 1
+                self.advance()
+            else:
+                self.turn_index %= len(self.combatants)
+                # The removed actor's turn is over; the actor now in that slot
+                # is beginning theirs and must not inherit stale per-turn state.
+                if self.started:
+                    self._begin_turn(self.combatants[self.turn_index])
         else:
             self.turn_index = 0
         return True
