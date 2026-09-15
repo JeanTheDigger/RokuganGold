@@ -1664,7 +1664,7 @@ class _WizardView(discord.ui.View):
         return True
 
     async def on_timeout(self) -> None:
-        if not self.state.get("full_wizard"):
+        if not self.state.get("full_wizard") or self.state.get("submitted"):
             return
         key = (str(self.state.get("guild_id", "")), str(self.state.get("user_id", "")))
         if _active_wizard_views.get(key) is not self:
@@ -1717,6 +1717,11 @@ class _ChargenResumeView(views_base.PersistentView):
             return
         state = json.loads(raw)
         self._disable()
+        if state.get("submitted"):
+            await interaction.response.edit_message(
+                content=_SUBMITTED_TEXT.format(name=state.get("name", "your character")), view=self,
+            )
+            return
         await _cg_resume(interaction, state)
 
 # ---------------------------------------------------------------------------
@@ -2902,9 +2907,31 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
     )
 
 
+_SUBMITTED_TEXT = (
+    "📋 Thank you! **{name}** has been submitted and staff are looking into it. "
+    "You'll be notified here when a decision is made. Nothing else is needed from you for now."
+)
+
+
+def _cg_lock_after_submit(state: dict) -> None:
+    """Mark a wizard as submitted, save it, and stop its live view so nothing can re-open it."""
+    state["submitted"] = True
+    state["submitted_at"] = time.time()
+    _cg_save(state)
+    key = (str(state.get("guild_id", "")), str(state.get("user_id", "")))
+    live = _active_wizard_views.pop(key, None)
+    if live is not None:
+        live.stop()
+
+
 async def _submit_for_approval(interaction: discord.Interaction, state: dict) -> None:
     """Send the completed character to the approval channel for DM review."""
     guild_id = state["guild_id"]
+    if state.get("submitted"):
+        await interaction.response.send_message(
+            _SUBMITTED_TEXT.format(name=state.get("name", "your character")), ephemeral=True,
+        )
+        return
     approval_ch_id = store.get_approval_channel(guild_id)
     if not approval_ch_id:
         await interaction.response.send_message(
@@ -2968,14 +2995,14 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
         character_state=state,
         lobby_channel_id=int(state.get("channel_id", interaction.channel_id)),
     )
+    _cg_lock_after_submit(state)   # before posting: a second click cannot race the first
     await view.persist(await approval_ch.send(
         content=f"{_dm_ping(approval_ch.guild)}New character submission awaiting review.",
         embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
     ))
 
     await interaction.response.edit_message(
-        content=f"📋 Your character **{state['name']}** has been submitted for DM review! "
-                f"You'll be notified when a decision is made.",
+        content=_SUBMITTED_TEXT.format(name=state["name"]),
         embed=None, view=None,
     )
 
@@ -3149,12 +3176,30 @@ class _FullCharacterApprovalView(_DisableableView):
         )
         embed.set_footer(text=f"Denied by {interaction.user.display_name}")
         await interaction.followup.send(embed=embed)
+        # Re-open the applicant's wizard so they can fix the sheet and submit again.
+        applicant = str(self.applicant_id)
+        guild_id = str(interaction.guild_id)
+        raw = store.get_creation_state(guild_id, applicant)
+        resume_view = None
+        if raw:
+            try:
+                saved = json.loads(raw)
+                saved["submitted"] = False
+                saved.pop("submitted_at", None)
+                store.save_creation_state(guild_id, applicant, json.dumps(saved, default=str))
+                resume_view = _ChargenResumeView(guild_id, applicant)
+            except ValueError:
+                resume_view = None
         lobby = client.get_channel(self.lobby_channel_id)
         if lobby and member:
-            await lobby.send(
+            msg = await lobby.send(
                 f"❌ {member.mention}, your character **{self.character_state['name']}** was not approved. "
-                f"Please speak with a DM for details and feel free to submit again."
+                f"Please speak with a DM for details"
+                + (", then press **Resume** to adjust the sheet and submit again." if resume_view else " and feel free to submit again."),
+                view=resume_view,
             )
+            if resume_view is not None:
+                await resume_view.persist(msg)
 
 
 async def sheet_wizard(  # legacy in-channel wizard, no longer registered as a command
@@ -10077,6 +10122,11 @@ async def _start_chargen_wizard(interaction: discord.Interaction) -> None:
                     saved = json.loads(raw)
                 except ValueError:
                     saved = {}
+                if saved.get("submitted"):
+                    await interaction.response.send_message(
+                        _SUBMITTED_TEXT.format(name=saved.get("name", "your character")), ephemeral=True,
+                    )
+                    return
                 label = _CHARGEN_STEP_LABELS.get(saved.get("step", ""), "where you left off")
                 view = _ChargenResumeView(guild_id, user_id)
                 msg = await existing_ch.send(
