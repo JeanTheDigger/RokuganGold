@@ -97,3 +97,70 @@ def check_threshold_crossing(old_taint: float, new_taint: float, character: Char
             result["madness"] = madness_roll()
         return result
     return None
+
+
+# --- Rank effects and periodic resistance (s42) ------------------------------
+
+# Days between periodic Taint resistance rolls, by Rank (s42: once per month at
+# Rank 0-1, twice per month at Rank 2, weekly at Rank 3, daily at Rank 4).
+# The Lost (Rank 5+) no longer roll. A Rokugani month is 28 days.
+PERIODIC_ROLL_DAYS: dict[int, int] = {0: 28, 1: 28, 2: 14, 3: 7, 4: 1}
+
+_SOCIAL_SKILLS = {"courtier", "etiquette", "intimidation", "temptation", "sincerity", "perform"}
+
+
+def periodic_roll_interval(rank: int) -> int | None:
+    return PERIODIC_ROLL_DAYS.get(rank)
+
+
+def periodic_roll_tn(rank: int) -> int:
+    """s42: TN 5 at Rank 0, +5 per Rank thereafter."""
+    return 5 + 5 * rank
+
+
+def void_point_cap(character: Character) -> int:
+    """Maximum Void Points after Taint: Rank 4+ reduces the maximum by 1 (s42)."""
+    cap = character.max_void_points
+    if taint_rank(character) >= 4:
+        cap -= 1
+    return max(0, cap)
+
+
+def social_roll_penalty(character: Character, skill_name: str) -> tuple[int, list[str]]:
+    """(rolled-dice delta, notes) for a Social Skill roll: -1k0 at Rank 3, -2k0 at Rank 4+ (s42)."""
+    base = (skill_name or "").split(":")[0].strip().lower()
+    if base not in _SOCIAL_SKILLS:
+        return 0, []
+    pen = social_penalty(character)
+    if not pen:
+        return 0, []
+    return -pen, [f"Taint Rank {taint_rank(character)}: -{pen}k0 (Social Skill)"]
+
+
+def has_jade_petal_tea(character: Character) -> bool:
+    return any("jade petal tea" in name.lower() and qty > 0 for name, qty in character.inventory.items())
+
+
+def resolve_periodic_roll(character: Character, dice_engine) -> dict:
+    """The periodic Taint resistance roll (s42): Earth Ring roll vs TN 5 + 5 x Rank;
+    Jade Petal Tea adds +2k2. Failure adds 1 Point (0.1) of Taint. Mutates the
+    character's taint on failure and returns the details."""
+    rank = taint_rank(character)
+    earth = stats.earth_ring(character)
+    tea = has_jade_petal_tea(character)
+    rolled = earth + (2 if tea else 0)
+    kept = earth + (2 if tea else 0)
+    tn = periodic_roll_tn(rank)
+    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept))
+    success = result.total >= tn
+    crossing = None
+    old = character.taint
+    if not success:
+        character.taint = round(character.taint + 0.1, 1)
+        crossing = check_threshold_crossing(old, character.taint, character)
+    return {
+        "rank": rank, "rolled": rolled, "kept": kept, "tn": tn,
+        "total": result.total, "dice": result, "success": success,
+        "tea": tea, "old_taint": old, "new_taint": character.taint,
+        "crossing": crossing,
+    }

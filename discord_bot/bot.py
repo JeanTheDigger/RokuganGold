@@ -349,7 +349,8 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         value=(
             f"Honor {c.honor:g} · Glory {c.glory:g} · Status {c.status:g} · Infamy {c.infamy:g}\n"
             f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) · "
-            f"Void Points {c.current_void_points}/{c.max_void_points}\n"
+            f"Void Points {c.current_void_points}/{taint.void_point_cap(c)}"
+            + (" (Taint: max -1)" if taint.void_point_cap(c) < c.max_void_points else "") + "\n"
             f"XP available: **{c.xp:g}** (spent {c.xp_spent:g})"
         ),
         inline=False,
@@ -4245,12 +4246,38 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         if healed > 0:
             parts.append(f"healed {healed} wounds ({c.wounds_taken} left)")
         vp_old = c.current_void_points
-        c.current_void_points = c.max_void_points
-        if vp_old < c.max_void_points:
-            parts.append(f"VP {vp_old} → {c.max_void_points}/{c.max_void_points}")
+        vp_cap = taint.void_point_cap(c)
+        c.current_void_points = vp_cap
+        if vp_old < vp_cap:
+            parts.append(f"VP {vp_old} → {vp_cap}/{vp_cap}")
+        if vp_cap < c.max_void_points:
+            parts.append(f"Taint Rank {taint.taint_rank(c)}: max VP -1")
         for element in SPELL_ELEMENTS:
             c.spell_slots[element] = stats.spell_slot_max(c, element)
         c.void_spell_bonus = stats.void_bonus_max(c)
+        # s42 periodic Taint resistance: cadence by Rank, Earth roll vs TN 5 + 5 x Rank.
+        if c.taint > 0:
+            interval = taint.periodic_roll_interval(taint.taint_rank(c))
+            if interval is not None:
+                c.taint_days_since_roll += 1
+                if c.taint_days_since_roll >= interval:
+                    c.taint_days_since_roll = 0
+                    tr = taint.resolve_periodic_roll(c, engine)
+                    tea = " +2k2 Jade Petal Tea" if tr["tea"] else ""
+                    if tr["success"]:
+                        parts.append(f"Taint resisted ({tr['rolled']}k{tr['kept']}{tea} = {tr['total']} vs TN {tr['tn']})")
+                    else:
+                        line = (f"☠️ Taint roll failed ({tr['rolled']}k{tr['kept']}{tea} = {tr['total']} vs TN {tr['tn']}): "
+                                f"Taint {tr['old_taint']:g} → **{tr['new_taint']:g}**")
+                        if tr["crossing"]:
+                            line += f" — **Rank {tr['crossing']['new_rank']}**: {tr['crossing']['description']}"
+                            if "mutation" in tr["crossing"]:
+                                line += f" Mutation: {tr['crossing']['mutation']}."
+                            if "madness" in tr["crossing"]:
+                                line += f" Madness: {tr['crossing']['madness']}."
+                        parts.append(line)
+                else:
+                    parts.append(f"Taint roll in {interval - c.taint_days_since_roll} day(s)")
         store.save(rec)
         slots_str = ", ".join(
             f"{e.title()} {c.spell_slots[e]}" for e in SPELL_ELEMENTS
@@ -4683,18 +4710,20 @@ async def void_refresh(
             await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
             return
     c = rec.character
+    vp_cap = taint.void_point_cap(c)
+    cap_note = f" (Taint Rank {taint.taint_rank(c)}: max VP -1)" if vp_cap < c.max_void_points else ""
     if mode.value == "rest":
         old = c.current_void_points
-        c.current_void_points = c.max_void_points
+        c.current_void_points = vp_cap
         store.save(rec)
         await interaction.response.send_message(
             f"🌀 **{c.name}** rests and recovers all Void Points.\n"
-            f"  VP: {old} → **{c.current_void_points}/{c.max_void_points}**"
+            f"  VP: {old} → **{c.current_void_points}/{vp_cap}**{cap_note}"
         )
     else:
-        if c.current_void_points >= c.max_void_points:
+        if c.current_void_points >= vp_cap:
             await interaction.response.send_message(
-                f"**{c.name}** is already at full VP ({c.current_void_points}/{c.max_void_points}).",
+                f"**{c.name}** is already at full VP ({c.current_void_points}/{vp_cap}){cap_note}.",
                 ephemeral=True,
             )
             return
@@ -4708,7 +4737,7 @@ async def void_refresh(
         total = result.total + wp
         success = total >= meditation_tn
         if success:
-            c.current_void_points = min(c.current_void_points + 1, c.max_void_points)
+            c.current_void_points = min(c.current_void_points + 1, vp_cap)
         store.save(rec)
         embed = discord.Embed(
             title=f"🧘 Meditation: {c.name}",
@@ -4772,12 +4801,14 @@ async def void_status(
             await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
             return
     c = rec.character
+    vp_cap = taint.void_point_cap(c)
     bar_full = "🟣" * c.current_void_points
-    bar_empty = "⚫" * (c.max_void_points - c.current_void_points)
+    bar_empty = "⚫" * max(0, vp_cap - c.current_void_points)
+    cap_note = f"\n  Taint Rank {taint.taint_rank(c)}: maximum reduced by 1 (s42)" if vp_cap < c.max_void_points else ""
     await interaction.response.send_message(
-        f"🌀 **{c.name}**: Void Points: **{c.current_void_points}/{c.max_void_points}**\n"
+        f"🌀 **{c.name}**: Void Points: **{c.current_void_points}/{vp_cap}**\n"
         f"  {bar_full}{bar_empty}\n"
-        f"  Void Ring: **{c.void_ring}**",
+        f"  Void Ring: **{c.void_ring}**{cap_note}",
         ephemeral=True,
     )
 
@@ -8449,6 +8480,18 @@ async def taint_command(
         embed.add_field(name="Status", value=taint.taint_description(rank), inline=False)
         if taint.social_penalty(c):
             embed.add_field(name="Social Penalty", value=f"-{taint.social_penalty(c)}k0 to Social Skill rolls", inline=True)
+        if rank >= 4:
+            embed.add_field(name="Void Points", value=f"maximum -1 → {taint.void_point_cap(c)}", inline=True)
+        interval = taint.periodic_roll_interval(rank)
+        if c.taint > 0 and interval is not None:
+            due = max(0, interval - c.taint_days_since_roll)
+            tea = " · Jade Petal Tea +2k2" if taint.has_jade_petal_tea(c) else ""
+            embed.add_field(
+                name="Resistance Roll",
+                value=f"Earth {stats.earth_ring(c)}k{stats.earth_ring(c)} vs TN {taint.periodic_roll_tn(rank)} "
+                      f"every {interval} day(s) — next in {due} day(s) (via /dm new_day){tea}",
+                inline=False,
+            )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ---------------------------------------------------------------------------

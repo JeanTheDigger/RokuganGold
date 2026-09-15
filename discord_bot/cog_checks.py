@@ -10,7 +10,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 
-from l5r_rules import combat, enums, stats
+from l5r_rules import combat, enums, stats, taint
 from l5r_rules import advantage_effects
 from l5r_rules import tattoo_effects
 import storage as _storage_mod
@@ -281,6 +281,11 @@ async def contest(
     soh_rb, soh_fb, soh_nb = advantage_effects.strength_of_honor(cb, skill_a)
     adv_ra += soh_ra; adv_fa += soh_fa; adv_notes_a = adv_notes_a + soh_na
     adv_rb += soh_rb; adv_fb += soh_fb; adv_notes_b = adv_notes_b + soh_nb
+    # s42: Taint Rank 3/4 lose rolled dice on Social Skill rolls.
+    tp_ra, tp_na = taint.social_roll_penalty(ca, skill_a)
+    tp_rb, tp_nb = taint.social_roll_penalty(cb, skill_b)
+    adv_ra += tp_ra; adv_notes_a = adv_notes_a + tp_na
+    adv_rb += tp_rb; adv_notes_b = adv_notes_b + tp_nb
     void_ra, void_ka, void_spent_a, void_line_a, sk_a = _try_spend_void(
         ca, void_a, skill_name=skill_a, sk=sk_a,
         void_unskilled=void_unskilled_a, void_param_label="void_a",
@@ -694,6 +699,8 @@ async def skill_check_cmd(
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
+    tp_r, tp_notes = taint.social_roll_penalty(c, skill)
+    adv_r += tp_r; adv_notes = adv_notes + tp_notes
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
@@ -1040,6 +1047,8 @@ async def social_check(
     sk = c.skills.get(skill.value, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill.value, trait_attr)
+    tp_r, tp_notes = taint.social_roll_penalty(c, skill.value)
+    adv_r += tp_r; adv_notes = adv_notes + tp_notes
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=skill.value, sk=sk, void_unskilled=void_unskilled,
     )

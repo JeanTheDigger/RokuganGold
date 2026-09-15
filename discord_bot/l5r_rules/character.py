@@ -88,8 +88,10 @@ class Character:
     off_hand_weapon: str = ""
     weapon_qualities: list[str] = field(default_factory=list)
 
-    # -- Shadowlands Taint --
+    # -- Shadowlands Taint (s42). Days since the last periodic resistance roll;
+    #    advanced by /dm new_day and reset when the roll is made. --
     taint: float = 0.0
+    taint_days_since_roll: int = 0
 
     # -- Togashi Tattoos (s57.25) --
     tattoos: list[str] = field(default_factory=list)
