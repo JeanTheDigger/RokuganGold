@@ -276,6 +276,11 @@ async def contest(
     adv_rb, adv_kb, adv_fb, adv_notes_b = advantage_effects.skill_check_modifiers(
         cb, skill_b, trait_b.value, is_contested=True, opponent_skill=skill_a,
     )
+    # GDD s46: the side resisting Intimidation or Temptation adds Honor Rank.
+    soh_ra, soh_fa, soh_na = advantage_effects.strength_of_honor(ca, skill_b)
+    soh_rb, soh_fb, soh_nb = advantage_effects.strength_of_honor(cb, skill_a)
+    adv_ra += soh_ra; adv_fa += soh_fa; adv_notes_a = adv_notes_a + soh_na
+    adv_rb += soh_rb; adv_fb += soh_fb; adv_notes_b = adv_notes_b + soh_nb
     void_ra, void_ka, void_spent_a, void_line_a, sk_a = _try_spend_void(
         ca, void_a, skill_name=skill_a, sk=sk_a,
         void_unskilled=void_unskilled_a, void_param_label="void_a",
@@ -383,7 +388,11 @@ async def fear_check(
         return
     wp = stats.wound_penalty(c)
     void_r, void_k, void_spent, void_line, _ = _try_spend_void(c, spend_void)
-    result = combat.resolve_fear_check(c.willpower, fear_rank, _d.engine, bonus=bonus + wp, extra_rolled=void_r, extra_kept=void_k)
+    soh_r, soh_f, soh_notes = advantage_effects.strength_of_honor(c, "fear")
+    result = combat.resolve_fear_check(
+        c.willpower, fear_rank, _d.engine, bonus=bonus + wp + soh_f,
+        extra_rolled=void_r + soh_r, extra_kept=void_k,
+    )
     if void_spent:
         _d.store.save(rec)
     success = result["success"]
@@ -394,10 +403,13 @@ async def fear_check(
     )
     wp_str = f" {wp}" if wp else ""
     bonus_str = f" {bonus:+d}" if bonus else ""
+    soh_str = f" +{soh_f}" if soh_f else ""
     roll_text = (
-        f"Willpower ({result['rolled']}k{result['kept']}{wp_str}{bonus_str})"
+        f"Willpower ({result['rolled']}k{result['kept']}{wp_str}{bonus_str}{soh_str})"
         f" vs TN **{tn}** (Fear {fear_rank})"
     )
+    if soh_notes:
+        roll_text += "\n" + " · ".join(soh_notes)
     if void_line:
         roll_text += f"\n{void_line}"
     embed.add_field(name="Roll", value=roll_text, inline=False)

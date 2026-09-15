@@ -210,6 +210,32 @@ def permanent_wound_floor(character: Character) -> tuple[bool, str]:
 
 _SOCIAL_SKILLS = {"courtier", "etiquette", "intimidation", "temptation", "sincerity", "perform"}
 
+_HONOR_RESISTS = {"fear", "intimidation", "temptation"}
+
+
+def strength_of_honor(character: Character, resisting: str) -> tuple[int, int, list[str]]:
+    """(extra_rolled, flat_bonus, notes) when resisting Fear, Intimidation or
+    Temptation. GDD s46 "The Strength of Honor": add Honor Rank to the total.
+    s45 Student of Shourido: +5 instead of Honor Rank. s45 Balance: an extra
+    +1k0 when Honor Rank is added against Intimidation or Temptation."""
+    what = (resisting or "").lower().strip()
+    if what not in _HONOR_RESISTS:
+        return 0, 0, []
+    notes: list[str] = []
+    rolled = flat = 0
+    if _has_adv(character, "Student of Shourido"):
+        flat = 5
+        notes.append("Student of Shourido +5 (instead of Honor Rank)")
+        return rolled, flat, notes
+    hr = stats.honor_rank(character)
+    if hr:
+        flat = hr
+        notes.append(f"Strength of Honor +{hr} (Honor Rank vs {what.title()})")
+        if what in ("intimidation", "temptation") and _has_adv(character, "Balance"):
+            rolled = 1
+            notes.append("Balance +1k0 (resisting with Honor)")
+    return rolled, flat, notes
+
 
 def skill_check_modifiers(
     character: Character,
