@@ -9883,12 +9883,12 @@ async def _start_chargen_wizard(interaction: discord.Interaction) -> None:
                     ephemeral=True,
                 )
                 return
-            await interaction.response.send_message(
-                f"You already have an active character creation channel: {existing_ch.mention}. "
-                f"Finish or cancel that one first.",
-                ephemeral=True,
-            )
-            return
+            # A wizard channel with no saved state predates resumable wizards (or
+            # its state was lost): its controls are dead, so clear it and start over.
+            try:
+                await existing_ch.delete(reason="Stale character creation wizard replaced")
+            except discord.HTTPException:
+                pass
         store.delete_creation_channel(guild_id, user_id)
 
     await interaction.response.send_modal(_ChargenNameModal(interaction))
