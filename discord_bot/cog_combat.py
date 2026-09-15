@@ -29,7 +29,10 @@ class _Deps:
     engine: object  # DiceEngine
     encounters: dict
     NPC_OWNER: str
+    ROLE_FORTUNE: str
+    ROLE_KAMI: str
     bot_client: discord.Client
+    is_dm: object
     require_guild: object
     require_dm_role: object
     require_encounter: object
@@ -54,7 +57,10 @@ def init(
     engine: object,
     encounters: dict,
     npc_owner: str,
+    role_fortune: str,
+    role_kami: str,
     bot_client: discord.Client,
+    is_dm,
     require_guild,
     require_dm_role,
     require_encounter,
@@ -73,7 +79,10 @@ def init(
     _d.engine = engine
     _d.encounters = encounters
     _d.NPC_OWNER = npc_owner
+    _d.ROLE_FORTUNE = role_fortune
+    _d.ROLE_KAMI = role_kami
     _d.bot_client = bot_client
+    _d.is_dm = is_dm
     _d.require_guild = require_guild
     _d.require_dm_role = require_dm_role
     _d.require_encounter = require_encounter
@@ -212,7 +221,7 @@ class DamageView(discord.ui.View):
         else:
             await interaction.followup.send(content=text or None, embed=embed)
 
-    def _wound_status(self, target_rec: storage.CharacterRecord, applied: dict) -> str:
+    def _wound_status(self, target_rec: _storage_mod.CharacterRecord, applied: dict) -> str:
         c = target_rec.character
         if applied["level_changed"]:
             status = (
@@ -1773,7 +1782,7 @@ async def combat_add(
         return
     if not await _d.require_dm_role(interaction):
         return
-    result = engine.roll_and_keep(reflexes + insight_rank, reflexes)
+    result = _d.engine.roll_and_keep(reflexes + insight_rank, reflexes)
     enc = _get_or_create(interaction.channel_id)
     enc.remove(name)
     enc.add(encounter.Combatant(
@@ -3114,7 +3123,6 @@ async def duel_strike(
 
     atk = rec_a.character
     tgt = rec_t.character
-    wp = combat.get_weapon_profile(weapon)
     wound_pen = stats.wound_penalty(atk)
 
     enc = _d.encounters.get(ch)
@@ -3616,11 +3624,11 @@ async def combat_turn_done(
     if current is None:
         await interaction.response.send_message("No current combatant.", ephemeral=True)
         return
-    is_dm = _is_dm(interaction)
+    is_dm = _d.is_dm(interaction)
     if name is not None:
         if not is_dm:
             await interaction.response.send_message(
-                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to end another combatant's turn.", ephemeral=True
+                f"You need the **{_d.ROLE_FORTUNE}** (or **{_d.ROLE_KAMI}**) role to end another combatant's turn.", ephemeral=True
             )
             return
         if current.name.lower() != name.lower():

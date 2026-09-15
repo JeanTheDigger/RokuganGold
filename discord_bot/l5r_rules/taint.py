@@ -8,6 +8,8 @@ L5R 4e Core Rulebook p.274-276.
 
 from __future__ import annotations
 
+import random
+
 from . import stats
 from .character import Character
 
@@ -70,15 +72,13 @@ def social_penalty(character: Character) -> int:
     return 0
 
 
-def mutation_roll(rng: "random.Random | None" = None) -> str:
+def mutation_roll(rng: random.Random | None = None) -> str:
     """Roll a random mutation (d10 on the mutations table)."""
-    import random
     return (rng or random).choice(MUTATIONS)
 
 
-def madness_roll(rng: "random.Random | None" = None) -> str:
+def madness_roll(rng: random.Random | None = None) -> str:
     """Roll a random madness effect."""
-    import random
     return (rng or random).choice(MADNESS)
 
 

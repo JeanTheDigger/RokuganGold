@@ -160,9 +160,23 @@ class Encounter:
             self.turn_index = self.combatants.index(current)
         elif self.combatants:
             self.turn_index %= len(self.combatants)
+            # The removed actor's turn is over; the actor now in that slot is
+            # beginning theirs and must not inherit stale per-turn state.
+            if self.started:
+                self._begin_turn(self.combatants[self.turn_index])
         else:
             self.turn_index = 0
         return True
+
+    @staticmethod
+    def _begin_turn(cur: Combatant) -> None:
+        cur.used_this_turn.clear()
+        cur.guarding = ""
+        cur.full_defense_bonus = 0
+        cur.stance = "attack"
+        cur.actions_used = 0
+        cur.held = False
+        cur.delayed = False
 
     def current(self) -> Combatant | None:
         if not self.combatants:
@@ -186,7 +200,13 @@ class Encounter:
         +10 Initiative and a one-roll bonus for the coming Round (s40)."""
         if not self.combatants:
             return None
-        self.started = True
+        if not self.started:
+            # Opening the fight: the top of the order acts first, so do not
+            # step past them.
+            self.started = True
+            self.turn_index = 0
+            self._begin_turn(self.current())
+            return self.current()
         self.turn_index += 1
         if self.turn_index >= len(self.combatants):
             self.turn_index = 0
@@ -211,13 +231,7 @@ class Encounter:
             self.surprise_round = False
         cur = self.current()
         if cur is not None:
-            cur.used_this_turn.clear()
-            cur.guarding = ""
-            cur.full_defense_bonus = 0
-            cur.stance = "attack"
-            cur.actions_used = 0
-            cur.held = False
-            cur.delayed = False
+            self._begin_turn(cur)
         return cur
 
     def to_dict(self) -> dict:
