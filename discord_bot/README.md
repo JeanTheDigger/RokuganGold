@@ -611,7 +611,7 @@ aren't wired). `/combat creature` drops a spawned creature into initiative.
 bestiary files by `tools/extract_bestiary.py` (re-runnable): ~42 animals, ~41
 Shadowlands beasts, ~38 oni, ~20 undead, ~53 spirits, plus kenku, tsuno, nezumi,
 ningyo, and named antagonists (the Lost). Creatures whose sheet uses the human
-wound track (`Earth×2`) are handled correctly; one non-combat environmental
+wound track (Healthy `Earth×5`, then `Earth×2` per level, as for PCs) are handled correctly; one non-combat environmental
 hazard is excluded. `l5r_rules/creature_catalog.py` is generated: don't hand-edit
 it; re-run the extractor to refresh.
 

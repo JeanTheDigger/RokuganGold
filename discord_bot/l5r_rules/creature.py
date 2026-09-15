@@ -71,12 +71,15 @@ def _build_catalog() -> dict[str, Creature]:
             continue
         d = dict(raw)
         # A creature stored with wounds_dead == 0 uses the human wound track
-        # ("human_wounds" tag): Earth ring x 2 per level, 8 levels to death : 
-        # the same LOCKED formula as PCs (character_stats.gd). Derive it here.
+        # ("human_wounds" tag), derived like a PC (stats.py, RAW): Healthy
+        # holds Earth x 5, each later level Earth x 2. Thresholds are the
+        # inclusive upper bound of Healthy..Down; Out ends at Earth x 19 and
+        # one more wound is Dead.
         if int(d.get("wounds_dead", 0)) <= 0:
-            per = max(1, int(d.get("earth", 2))) * 2
-            d["wound_thresholds"] = [per * i for i in range(1, 8)]
-            d["wounds_dead"] = per * 8
+            earth = max(1, int(d.get("earth", 2)))
+            healthy, step = earth * 5, earth * 2
+            d["wound_thresholds"] = [healthy + step * i for i in range(7)]
+            d["wounds_dead"] = healthy + step * 7 + 1
         out[d["template_id"]] = Creature(**d)
     return out
 
