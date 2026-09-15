@@ -7,6 +7,7 @@ format_dice, combat_log, encounter save/load) are injected via init().
 
 from __future__ import annotations
 
+import re
 import time as _time
 
 import discord
@@ -1774,7 +1775,10 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         detail = f"  ·  {c.initiative_detail}" if c.initiative_detail else ""
         stance_str = f"  ⚔️{c.stance.replace('_', ' ').title()}" if c.stance != "attack" else ""
         acts = f"  [{c.actions_used}/2 acts]" if enc.started and c.actions_used > 0 else ""
-        cond = f"  [{', '.join(sorted(c.conditions))}]" if c.conditions else ""
+        cond_labels = [
+            f"{k}({c.rounds_left(k, enc.round)}r)" if k in c.condition_expiry else k for k in sorted(c.conditions)
+        ]
+        cond = f"  [{', '.join(cond_labels)}]" if c.conditions else ""
         guard = f"  🛡️→{c.guarding}" if c.guarding else ""
         fd = f"  🛡️FD+{c.full_defense_bonus}" if c.full_defense_bonus else ""
         void_atn = f"  🌀ATN+{c.void_armor_tn_bonus}" if c.void_armor_tn_bonus else ""
@@ -2265,6 +2269,7 @@ async def combat_next(interaction: discord.Interaction) -> None:
     _d.save_encounter(guild, enc)
     mention = f"<@{current.owner_id}> " if current.owner_id and not current.is_npc else ""
     parts = [f"➡️ {mention}It is now **{current.name}**'s turn."]
+    parts.extend(_expiry_notes(enc))
     if current.center_bonus_available:
         rec = _d.resolve_combatant_record(guild, current)
         vr = rec.character.void_ring if rec else "?"
@@ -2508,10 +2513,15 @@ _CONDITION_CHOICES = [
 ]
 
 
-@combat_condition.command(name="set", description="Apply a condition to a combatant [Fortune]")
+def _expiry_notes(enc: encounter.Encounter) -> list[str]:
+    return [f"⌛ {line} ended." for line in enc.last_expired]
+
+
+@combat_condition.command(name="set", description="Apply a condition to a combatant, optionally for a number of Rounds [Fortune]")
 @app_commands.describe(
     name="The combatant to affect.",
     condition="The condition to apply.",
+    rounds="How many Rounds it lasts (ends at the start of that Round). Omit = until cleared.",
 )
 @app_commands.choices(condition=_CONDITION_CHOICES)
 @app_commands.autocomplete(name=_combatant_autocomplete)
@@ -2519,6 +2529,7 @@ async def combat_condition_set(
     interaction: discord.Interaction,
     name: str,
     condition: app_commands.Choice[str],
+    rounds: app_commands.Range[int, 1, 20] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -2531,13 +2542,14 @@ async def combat_condition_set(
     if c is None:
         await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
         return
-    c.conditions.add(condition.value)
+    c.set_condition(condition.value, rounds or 0, enc.round)
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
+    dur = f" for {rounds} Round(s)" if rounds else ""
     await interaction.response.send_message(
-        f"**{c.name}** is now **{condition.name}**.\n\n{_render_encounter(enc, guild)}"
+        f"**{c.name}** is now **{condition.name}**{dur}.\n\n{_render_encounter(enc, guild)}"
     )
-    await _d.combat_log(str(interaction.guild_id), f"Condition: {c.name} +{condition.name}")
+    await _d.combat_log(str(interaction.guild_id), f"Condition: {c.name} +{condition.name}{dur}")
 
 
 @combat_condition.command(name="clear", description="Remove a condition from a combatant [Fortune]")
@@ -2563,7 +2575,7 @@ async def combat_condition_clear(
     if c is None:
         await interaction.response.send_message(f"No combatant named **{name}**.", ephemeral=True)
         return
-    c.conditions.discard(condition.value)
+    c.clear_condition(condition.value)
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     await interaction.response.send_message(
@@ -2588,12 +2600,210 @@ async def combat_conditions(interaction: discord.Interaction, name: str) -> None
     if not c.conditions:
         await interaction.response.send_message(f"**{c.name}** has no active conditions.", ephemeral=True)
         return
-    cond_list = ", ".join(sorted(c.conditions))
+    cond_list = ", ".join(
+        f"{k} ({c.rounds_left(k, enc.round)} Round(s) left)" if k in c.condition_expiry else k for k in sorted(c.conditions)
+    )
     reminders = condition_effects.condition_reminders(c.conditions)
     lines = f"**{c.name}** conditions: {cond_list}"
     if reminders:
         lines += "\n" + "\n".join(reminders)
     await interaction.response.send_message(lines, ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# Condition requests: applied only when a DM approves (same pattern as damage)
+# ---------------------------------------------------------------------------
+
+_SPELL_CONDITION_WORDS = ("prone", "dazed", "stunned", "blinded", "entangled", "fatigued")
+_NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
+
+
+def spell_conditions(effect_text: str) -> list[tuple[str, int]]:
+    """(condition, rounds) pairs a spell's effect text states plainly; rounds 0 = unstated.
+    Only conditions the tracker knows; a duration is taken only from 'for N Round(s)'
+    in the same sentence."""
+    found: dict[str, int] = {}
+    for sentence in re.split(r"(?<=[.;])\s+", effect_text or ""):
+        low = sentence.lower()
+        hits = {w: [m.start() for m in re.finditer(rf"\b{w}\b", low)] for w in _SPELL_CONDITION_WORDS}
+        hits = {w: pos for w, pos in hits.items() if pos}
+        if not hits:
+            continue
+        # "for N Rounds" belongs to the condition named just before it; Prone is
+        # never timed (it ends when the character stands up).
+        timed: dict[str, int] = {}
+        for m in re.finditer(r"for (\d+|one|two|three|four|five) rounds?", low):
+            n = int(m.group(1)) if m.group(1).isdigit() else _NUM_WORDS.get(m.group(1), 0)
+            before = [(max(p for p in pos if p < m.start()), w) for w, pos in hits.items() if any(p < m.start() for p in pos)]
+            if before and n:
+                _, w = max(before)
+                if w != "prone":
+                    timed.setdefault(w, n)
+        for w in _SPELL_CONDITION_WORDS:
+            if w in hits and w not in found:
+                found[w] = timed.get(w, 0)
+    return list(found.items())
+
+
+class ConditionView(views_base.PersistentView):
+    """Apply / Deny buttons for a requested condition; Fortune only."""
+
+    KIND = "condition_request"
+
+    def __init__(self, guild_id: str, channel_id: int, target_name: str, condition: str,
+                 rounds: int = 0, source: str = "", requester_id: int = 0) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.target_name = target_name
+        self.condition = condition
+        self.rounds = rounds
+        self.source = source
+        self.requester_id = requester_id
+
+    def _label(self) -> str:
+        dur = f" for {self.rounds} Round(s)" if self.rounds else ""
+        return f"**{self.condition.title()}**{dur} on **{self.target_name}**"
+
+    async def _finish(self, interaction: discord.Interaction, line: str) -> None:
+        self._disable()
+        try:
+            await interaction.response.edit_message(content=line, view=self, allowed_mentions=discord.AllowedMentions.none())
+        except discord.HTTPException:
+            pass
+        if interaction.channel_id != self.channel_id:
+            ch = _d.bot_client.get_channel(self.channel_id)
+            if ch is not None:
+                try:
+                    await ch.send(line, allowed_mentions=discord.AllowedMentions.none())
+                except discord.HTTPException:
+                    pass
+
+    @discord.ui.button(label="Apply", style=discord.ButtonStyle.success, emoji="✅")
+    async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can approve conditions.", ephemeral=True)
+            return
+        enc = _d.encounters.get(self.channel_id)
+        cb = enc.find(self.target_name) if enc else None
+        if cb is None:
+            self._disable()
+            await interaction.response.edit_message(
+                content=f"⚠️ {self._label()}: **{self.target_name}** is no longer in that channel's initiative; nothing applied.",
+                view=self, allowed_mentions=discord.AllowedMentions.none(),
+            )
+            return
+        cb.set_condition(self.condition, self.rounds, enc.round)
+        _d.save_encounter(self.guild_id, enc)
+        src = f" ({self.source})" if self.source else ""
+        dur = f" {self.rounds}r" if self.rounds else ""
+        await _d.combat_log(self.guild_id, f"Condition: {cb.name} +{self.condition.title()}{dur}{src} approved by {interaction.user.display_name}")
+        await self._finish(interaction, f"✅ {self._label()}{src}: applied by {interaction.user.display_name}.")
+
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can deny conditions.", ephemeral=True)
+            return
+        await _d.combat_log(self.guild_id, f"Condition: {self.target_name} {self.condition.title()} denied by {interaction.user.display_name}")
+        await self._finish(interaction, f"❌ {self._label()}: denied by {interaction.user.display_name}.")
+
+
+async def post_condition_request(
+    guild: str, channel_id: int, requester: discord.abc.User, target_name: str, condition: str,
+    rounds: int, source: str,
+) -> tuple[str, discord.Embed | None, ConditionView | None]:
+    """Build the approval. With a damage-approval channel configured the request is
+    posted there and only a confirmation line comes back; otherwise the caller sends
+    (content, embed, view) in place and persists the view."""
+    view = ConditionView(guild, channel_id, target_name, condition, rounds, source, requester.id)
+    dur = f" for {rounds} Round(s)" if rounds else " (until cleared)"
+    embed = discord.Embed(
+        title=f"🩹 Condition request: {condition.title()} on {target_name}",
+        description=f"**Duration:**{dur}\n**Source:** {source or 'not given'}\n**Requested by:** {requester.mention}\n**Fight:** <#{channel_id}>",
+        color=discord.Color.orange(),
+    )
+    prompt = f"{_d.dm_ping(_d.bot_client.get_guild(int(guild)))}A DM can apply the condition below."
+    approval_ch_id = _d.store.get_damage_approval_channel(guild) or _d.store.get_approval_channel(guild)
+    approval_ch = _d.bot_client.get_channel(int(approval_ch_id)) if approval_ch_id else None
+    if approval_ch is not None:
+        msg = await approval_ch.send(content=prompt, embed=embed, view=view, allowed_mentions=_PING_MENTIONS)
+        await view.persist(msg)
+        return f"🩹 Condition request ({condition.title()} on **{target_name}**) sent to the DM channel.", None, None
+    return prompt, embed, view
+
+
+@fight_group.command(name="condition", description="Ask a DM to apply a condition (Dazed, Prone…) to a combatant; applied on approval.")
+@app_commands.describe(
+    target="The combatant to affect (must be in this channel's initiative).",
+    condition="The condition.",
+    rounds="How many Rounds it should last. Omit = until cleared.",
+    source="What causes it (spell, technique, terrain…).",
+)
+@app_commands.choices(condition=_CONDITION_CHOICES)
+@app_commands.autocomplete(target=_combatant_autocomplete)
+async def fight_condition(
+    interaction: discord.Interaction,
+    target: str,
+    condition: app_commands.Choice[str],
+    rounds: app_commands.Range[int, 1, 20] | None = None,
+    source: app_commands.Range[str, 0, 100] | None = None,
+) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    enc = await _d.require_encounter(interaction)
+    if enc is None:
+        return
+    cb = enc.find(target)
+    if cb is None:
+        await interaction.response.send_message(f"No combatant named **{target}** here.", ephemeral=True)
+        return
+    if condition.value in cb.conditions:
+        await interaction.response.send_message(f"**{cb.name}** is already {condition.name}.", ephemeral=True)
+        return
+    content, embed, view = await post_condition_request(
+        str(interaction.guild_id), interaction.channel_id, interaction.user, cb.name, condition.value, rounds or 0, source or "",
+    )
+    if view is None:
+        await interaction.response.send_message(content)
+        return
+    await interaction.response.send_message(content=content, embed=embed, view=view, allowed_mentions=_PING_MENTIONS)
+    await view.persist(await interaction.original_response())
+
+
+class SpellConditionPromptView(discord.ui.View):
+    """Buttons under a successful cast: request each condition the spell names."""
+
+    def __init__(self, guild_id: str, channel_id: int, target_name: str, caster_id: int,
+                 spell_name: str, conds: list[tuple[str, int]]) -> None:
+        super().__init__(timeout=900)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.target_name = target_name
+        self.caster_id = caster_id
+        self.spell_name = spell_name
+        for cond, rounds in conds[:4]:
+            label = f"Request {cond.title()}" + (f" ({rounds} Round{'s' if rounds != 1 else ''})" if rounds else "")
+            btn = discord.ui.Button(label=label, style=discord.ButtonStyle.primary, emoji="🩹")
+            btn.callback = self._make_callback(btn, cond, rounds)
+            self.add_item(btn)
+
+    def _make_callback(self, btn: discord.ui.Button, cond: str, rounds: int):
+        async def cb(interaction: discord.Interaction) -> None:
+            if interaction.user.id != self.caster_id and not _d.is_dm(interaction):
+                await interaction.response.send_message("Only the caster or a DM can request this.", ephemeral=True)
+                return
+            btn.disabled = True
+            await interaction.response.edit_message(view=self)
+            content, embed, view = await post_condition_request(
+                self.guild_id, self.channel_id, interaction.user, self.target_name, cond, rounds, self.spell_name,
+            )
+            if view is None:
+                await interaction.followup.send(content)
+                return
+            msg = await interaction.followup.send(content=content, embed=embed, view=view, allowed_mentions=_PING_MENTIONS, wait=True)
+            await view.persist(msg)
+        return cb
 
 
 @fight_group.command(name="status", description="Your compact combat card: wounds, penalty, Void, stance, conditions, Armor TN.")
@@ -4122,6 +4332,7 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
         parts = [f"⏸️ **{cb.name}** holds their action."]
         parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
+        parts.extend(_expiry_notes(enc))
         if next_cb.center_bonus_available:
             rec = _d.resolve_combatant_record(guild, next_cb)
             vr = rec.character.void_ring if rec else "?"
@@ -4195,6 +4406,7 @@ async def combat_delay(
         mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
         parts = [f"⏳ **{cb.name}** delays their action{init_note}."]
         parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
+        parts.extend(_expiry_notes(enc))
         if next_cb.center_bonus_available:
             rec = _d.resolve_combatant_record(guild, next_cb)
             vr = rec.character.void_ring if rec else "?"
@@ -4299,6 +4511,7 @@ async def combat_turn_done(
     mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
     parts = [f"**{ended_name}**'s turn is done."]
     parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
+    parts.extend(_expiry_notes(enc))
     if next_cb.center_bonus_available:
         rec = _d.resolve_combatant_record(guild, next_cb)
         vr = rec.character.void_ring if rec else "?"

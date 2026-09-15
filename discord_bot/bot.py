@@ -4813,7 +4813,7 @@ async def dm_undo(
 _PENDING_KIND_LABELS: dict[str, str] = {
     "attack_damage": "⚔️ Attack damage", "spell_damage": "📜 Spell damage", "dm_damage": "💥 DM damage",
     "dm_heal": "💚 DM healing", "creature_attack": "🐾 Creature damage", "medicine_treat": "💊 Medicine treatment",
-    "char_approval": "📝 Character approval",
+    "char_approval": "📝 Character approval", "condition_request": "🩹 Condition request",
 }
 
 def _pending_summary(kind: str, state: str) -> str:
@@ -4826,6 +4826,8 @@ def _pending_summary(kind: str, state: str) -> str:
         return str(cs.get("name") or cs.get("character_name") or "new character")
     names = [args.get(k) for k in ("attacker_name", "healer_name", "attacker", "caster_name")]
     tgt = args.get("target_name") or args.get("name") or args.get("target")
+    if kind == "condition_request" and tgt:
+        return f"{str(args.get('condition', '')).title()} on {tgt}"
     src = next((n for n in names if n), None)
     if src and tgt:
         return f"{src} → {tgt}"
@@ -8151,13 +8153,15 @@ async def spell_view(interaction: discord.Interaction, name: str) -> None:
     conceal="Conceal the casting with Stealth/Agility (result = observers' detection TN).",
     attacker_npc="Cast as a stored NPC [Fortune]",
     member="Cast as another player's character [Fortune]",
+    target="Combatant the spell is aimed at: enables Request-condition buttons for Dazed, Prone, etc.",
 )
-@app_commands.autocomplete(name=_spell_autocomplete)
+@app_commands.autocomplete(name=_spell_autocomplete, target=cog_combat._combatant_autocomplete)
 async def spell_cast(
     interaction: discord.Interaction,
     name: str,
     raises: int = 0,
     spend_void: bool = False,
+    target: str | None = None,
     conceal: bool = False,
     attacker_npc: str | None = None,
     member: discord.Member | None = None,
@@ -8308,7 +8312,20 @@ async def spell_cast(
         if s.get("effect"):
             effect_text = s["effect"][:1024]
             embed.add_field(name="Effect", value=effect_text, inline=False)
-    await interaction.response.send_message(embed=embed)
+    prompt_view = None
+    conds = cog_combat.spell_conditions(s.get("effect", "")) if success else []
+    if conds:
+        enc_here = encounters.get(interaction.channel_id)
+        tgt_cb = enc_here.find(target) if (enc_here and target) else None
+        cond_names = ", ".join(c.title() for c, _ in conds)
+        if tgt_cb is not None:
+            prompt_view = cog_combat.SpellConditionPromptView(
+                guild, interaction.channel_id, tgt_cb.name, interaction.user.id, s["name"], conds,
+            )
+            embed.set_footer(text=f"This spell can impose: {cond_names}. Press a button to ask a DM to apply it to {tgt_cb.name}.")
+        else:
+            embed.set_footer(text=f"This spell can impose: {cond_names}. Cast with target: (a combatant here) for one-click requests, or use /fight condition.")
+    await interaction.response.send_message(embed=embed, view=prompt_view)
 
 @spell_group.command(name="resist", description="Target resists a spell: Willpower roll vs TN. [Fortune]")
 @app_commands.describe(

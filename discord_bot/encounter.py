@@ -73,6 +73,25 @@ class Combatant:
     # Failed Fear check (GDD s46): -Xk0 to all rolls until the encounter ends
     # or the source is removed. X = the Fear Rank failed against.
     fear_penalty: int = 0
+    # Timed conditions: condition -> the Round at whose start it clears.
+    # Conditions without an entry last until cleared by hand.
+    condition_expiry: dict[str, int] = field(default_factory=dict)
+
+    def set_condition(self, condition: str, rounds: int, current_round: int) -> None:
+        """Apply a condition; rounds > 0 makes it end at the start of Round current + rounds."""
+        self.conditions.add(condition)
+        if rounds > 0:
+            self.condition_expiry[condition] = current_round + rounds
+        else:
+            self.condition_expiry.pop(condition, None)
+
+    def clear_condition(self, condition: str) -> None:
+        self.conditions.discard(condition)
+        self.condition_expiry.pop(condition, None)
+
+    def rounds_left(self, condition: str, current_round: int) -> int | None:
+        exp = self.condition_expiry.get(condition)
+        return None if exp is None else max(0, exp - current_round)
 
     @property
     def effective_initiative(self) -> int:
@@ -110,6 +129,7 @@ class Combatant:
             "center_init_boost": self.center_init_boost,
             "cover_bonus": self.cover_bonus,
             "fear_penalty": self.fear_penalty,
+            "condition_expiry": dict(self.condition_expiry),
         }
 
     @classmethod
@@ -136,6 +156,7 @@ class Combatant:
             center_init_boost=d.get("center_init_boost", 0),
             cover_bonus=d.get("cover_bonus", 0),
             fear_penalty=d.get("fear_penalty", 0),
+            condition_expiry={k: int(v) for k, v in d.get("condition_expiry", {}).items()},
         )
 
 
@@ -163,6 +184,18 @@ class Encounter:
     started_at: float = 0.0
     tally: dict[str, dict] = field(default_factory=dict)
     deaths: list[str] = field(default_factory=list)
+    # Conditions that ended at the last round boundary ("Name: Dazed"); transient.
+    last_expired: list[str] = field(default_factory=list)
+
+    def expire_conditions(self) -> list[str]:
+        """Clear timed conditions due at the current Round. Returns 'Name: Condition' lines."""
+        ended: list[str] = []
+        for c in self.combatants:
+            for cond, exp in list(c.condition_expiry.items()):
+                if exp <= self.round:
+                    c.clear_condition(cond)
+                    ended.append(f"{c.name}: {cond.title()}")
+        return ended
 
     def tally_for(self, name: str) -> dict:
         """The tally row for a name (canonical combatant spelling when known), created empty."""
@@ -268,6 +301,7 @@ class Encounter:
         combatant's once-per-Round abilities at the top of a new Round.
         At the round boundary, combatants who were in Center Stance gain
         +10 Initiative and a one-roll bonus for the coming Round (s40)."""
+        self.last_expired = []
         if not self.combatants:
             return None
         if not self.started:
@@ -283,6 +317,7 @@ class Encounter:
         if self.turn_index >= len(self.combatants):
             self.turn_index = 0
             self.round += 1
+            self.last_expired = self.expire_conditions()
             resort = False
             for c in self.combatants:
                 c.used_this_round.clear()
