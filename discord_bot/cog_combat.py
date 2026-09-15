@@ -346,7 +346,7 @@ class DamageView(views_base.PersistentView):
                 extra_rolled += 1
                 t_kept += 1
                 t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
-                _d.store.save(attacker_rec)
+                _d.store.save(attacker_rec, note="Void Point spent (katana damage)")
             elif self.void_damage:
                 t_dmg_notes.append("Katana: no Void Points for +1k1 damage")
             ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
@@ -411,9 +411,9 @@ class DamageView(views_base.PersistentView):
                 heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
                 if heal_amt:
                     attacker.wounds_taken = max(0, attacker.wounds_taken - heal_amt)
-                    _d.store.save(attacker_rec)
+                    _d.store.save(attacker_rec, note="post-kill heal")
                     heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
-            _d.store.save_creature(cre_rec)
+            _d.store.save_creature(cre_rec, note="attack damage")
             if applied["is_dead"]:
                 await _d.on_death(str(interaction.guild_id), cre_rec.creature.name, None, None)
             cr = cre_rec.creature
@@ -512,7 +512,7 @@ class DamageView(views_base.PersistentView):
                     void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
                 else:
                     void_line = "\n🔮 No Void Points available: full damage applied"
-            _d.store.save(target_rec)
+            _d.store.save(target_rec, note="attack damage")
             if applied["is_dead"]:
                 await _d.on_death(str(interaction.guild_id), target.name, target_rec.owner_id, target_rec.id)
             embed = discord.Embed(
@@ -593,7 +593,7 @@ class DamageView(views_base.PersistentView):
             extra_rolled += 1
             t_kept += 1
             t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
-            _d.store.save(attacker_rec)
+            _d.store.save(attacker_rec, note="Void Point spent (katana damage)")
         elif self.void_damage:
             t_dmg_notes.append("Katana: no Void Points for +1k1 damage")
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
@@ -681,14 +681,14 @@ class DamageView(views_base.PersistentView):
             heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
             if heal_amt:
                 attacker.wounds_taken = max(0, attacker.wounds_taken - heal_amt)
-                _d.store.save(attacker_rec)
+                _d.store.save(attacker_rec, note="post-kill heal")
                 heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
         phoenix_line = ""
         if applied["new_wound_level"] in ("Down", "Out", "Dead"):
             phx = tattoo_effects.phoenix_heal_reminder(target)
             if phx:
                 phoenix_line = f"\n🔥 {phx}"
-        _d.store.save(target_rec)
+        _d.store.save(target_rec, note="attack damage")
         if applied["is_dead"]:
             await _d.on_death(str(interaction.guild_id), target.name, target_rec.owner_id, target_rec.id)
 
@@ -4221,7 +4221,7 @@ async def combat_env_damage(
         if rec is not None:
             reduction = 0 if ignore_reduction else rec.character.armor_reduction
             applied = combat.apply_damage(rec.character, amount, reduction)
-            _d.store.save(rec)
+            _d.store.save(rec, note="environmental damage")
             if applied["is_dead"]:
                 await _d.on_death(guild, rec.character.name, rec.owner_id, rec.id)
             dead_tag = " 💀 **DEAD**" if applied["is_dead"] else ""
@@ -4244,7 +4244,7 @@ async def combat_env_damage(
                 final = max(0, amount - reduction)
                 cr.wounds_taken += final
                 is_dead = cr.wounds_taken >= cr.wounds_dead
-                _d.store.save_creature(cre_rec)
+                _d.store.save_creature(cre_rec, note="environmental damage")
                 if is_dead:
                     await _d.on_death(guild, cr.name, None, None)
                 dead_tag = " 💀 **DEAD**" if is_dead else ""

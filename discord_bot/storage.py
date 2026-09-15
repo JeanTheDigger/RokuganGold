@@ -90,7 +90,24 @@ CREATE TABLE IF NOT EXISTS pending_views (
     created_at REAL NOT NULL
 );
 """,
+    # 6: undo snapshots — the state of a character/creature row before each save
+    """\
+CREATE TABLE IF NOT EXISTS undo_snapshots (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id    TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    entity_id   INTEGER NOT NULL,
+    entity_name TEXT NOT NULL,
+    note        TEXT NOT NULL DEFAULT '',
+    data        TEXT NOT NULL,
+    created_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_undo_entity ON undo_snapshots (guild_id, entity_name COLLATE NOCASE, created_at);
+""",
 ]
+
+# How many before-states to keep per character/creature for /dm undo.
+UNDO_KEEP_PER_ENTITY: int = 20
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS characters (
@@ -249,6 +266,20 @@ class CreatureRecord:
 
 
 @dataclass
+class UndoRecord:
+    """A saved before-state of a character or creature row (for /dm undo)."""
+
+    id: int
+    guild_id: str
+    entity_type: str      # "character" or "creature"
+    entity_id: int
+    entity_name: str
+    note: str
+    data: dict
+    created_at: float
+
+
+@dataclass
 class CategoryRecord:
     """A named grouping for NPCs and/or creatures."""
 
@@ -384,9 +415,12 @@ class Store:
             ).fetchall()
         return [self._row_to_record(r) for r in rows]
 
-    def save(self, record: CharacterRecord) -> None:
+    def save(self, record: CharacterRecord, note: str = "") -> None:
+        """Write the character. The row's previous state is kept as an undo
+        snapshot (labelled `note`) when the data actually changes."""
         payload = json.dumps(record.character.to_dict())
         with self._lock, self._conn:
+            self._snapshot("characters", "character", record.id, record.guild_id, payload, note)
             self._conn.execute(
                 "UPDATE characters SET data = ?, name = ?, updated_at = ? WHERE id = ?",
                 (payload, record.character.name, time.time(), record.id),
@@ -396,6 +430,10 @@ class Store:
         with self._lock, self._conn:
             # active_characters FK CASCADE handles cleanup automatically
             self._conn.execute("DELETE FROM characters WHERE id = ?", (character_id,))
+            self._conn.execute(
+                "DELETE FROM undo_snapshots WHERE entity_type = 'character' AND entity_id = ?",
+                (character_id,),
+            )
 
     # -- active-character link -------------------------------------------------
     def set_active(self, guild_id: str, user_id: str, character_id: int) -> None:
@@ -633,17 +671,103 @@ class Store:
             ).fetchall()
         return [self._row_to_creature(r) for r in rows]
 
-    def save_creature(self, record: CreatureRecord) -> None:
+    def save_creature(self, record: CreatureRecord, note: str = "") -> None:
+        """Write the creature, keeping its previous state as an undo snapshot."""
         payload = json.dumps(record.creature.to_dict())
         with self._lock, self._conn:
+            self._snapshot("creatures", "creature", record.id, record.guild_id, payload, note)
             self._conn.execute(
                 "UPDATE creatures SET data = ?, name = ? WHERE id = ?",
                 (payload, record.creature.name, record.id),
             )
 
+    # -- undo snapshots (/dm undo) ---------------------------------------------
+    def _snapshot(self, table: str, entity_type: str, entity_id: int, guild_id: str,
+                  new_payload: str, note: str) -> None:
+        """Inside the caller's lock/transaction: store the row's current data as
+        an undo snapshot if the new payload differs, then trim old snapshots."""
+        row = self._conn.execute(
+            f"SELECT name, data FROM {table} WHERE id = ?", (entity_id,)
+        ).fetchone()
+        if row is None or row["data"] == new_payload:
+            return
+        self._conn.execute(
+            "INSERT INTO undo_snapshots (guild_id, entity_type, entity_id, entity_name, note, data, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (guild_id, entity_type, entity_id, row["name"], note or "sheet change", row["data"], time.time()),
+        )
+        self._conn.execute(
+            "DELETE FROM undo_snapshots WHERE entity_type = ? AND entity_id = ? AND id NOT IN ("
+            "SELECT id FROM undo_snapshots WHERE entity_type = ? AND entity_id = ? "
+            "ORDER BY id DESC LIMIT ?)",
+            (entity_type, entity_id, entity_type, entity_id, UNDO_KEEP_PER_ENTITY),
+        )
+
+    def _row_to_undo(self, row: sqlite3.Row) -> UndoRecord:
+        return UndoRecord(
+            id=row["id"], guild_id=row["guild_id"], entity_type=row["entity_type"],
+            entity_id=row["entity_id"], entity_name=row["entity_name"], note=row["note"],
+            data=json.loads(row["data"]), created_at=row["created_at"],
+        )
+
+    def list_undo(self, guild_id: str, name: str | None = None, limit: int = 5) -> list[UndoRecord]:
+        """Newest-first undo snapshots in a guild, optionally for one name (case-insensitive)."""
+        with self._lock:
+            if name is None:
+                rows = self._conn.execute(
+                    "SELECT * FROM undo_snapshots WHERE guild_id = ? ORDER BY id DESC LIMIT ?",
+                    (guild_id, limit),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM undo_snapshots WHERE guild_id = ? AND entity_name = ? COLLATE NOCASE "
+                    "ORDER BY id DESC LIMIT ?",
+                    (guild_id, name, limit),
+                ).fetchall()
+        return [self._row_to_undo(r) for r in rows]
+
+    def apply_undo(self, snapshot_id: int) -> tuple[UndoRecord | None, bool]:
+        """Restore a snapshot into its character/creature row and drop the
+        snapshot (no new snapshot is taken: undo is a stack, not a toggle).
+        Returns (snapshot, restored); restored is False if the row is gone."""
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT * FROM undo_snapshots WHERE id = ?", (snapshot_id,)
+            ).fetchone()
+            if row is None:
+                return None, False
+            snap = self._row_to_undo(row)
+            table = "characters" if snap.entity_type == "character" else "creatures"
+            name = snap.data.get("name", snap.entity_name)
+            try:
+                if table == "characters":
+                    cur = self._conn.execute(
+                        "UPDATE characters SET data = ?, name = ?, updated_at = ? WHERE id = ?",
+                        (json.dumps(snap.data), name, time.time(), snap.entity_id),
+                    )
+                else:
+                    cur = self._conn.execute(
+                        "UPDATE creatures SET data = ?, name = ? WHERE id = ?",
+                        (json.dumps(snap.data), name, snap.entity_id),
+                    )
+            except sqlite3.IntegrityError:
+                # Restoring an old name that another sheet now uses: keep the
+                # snapshot so the DM can rename the other sheet and retry.
+                return snap, False
+            self._conn.execute("DELETE FROM undo_snapshots WHERE id = ?", (snapshot_id,))
+            return snap, cur.rowcount > 0
+
+    def purge_undo(self, older_than: float) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM undo_snapshots WHERE created_at < ?", (older_than,))
+
     def delete_creature(self, creature_id: int) -> None:
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM creatures WHERE id = ?", (creature_id,))
+            self._conn.execute(
+                "DELETE FROM undo_snapshots WHERE entity_type = 'creature' AND entity_id = ?",
+                (creature_id,),
+            )
 
     # -- combat log channel ----------------------------------------------------
     def set_log_channel(self, guild_id: str, channel_id: str) -> None:

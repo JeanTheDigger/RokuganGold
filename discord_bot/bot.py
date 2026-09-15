@@ -18,6 +18,7 @@ import logging
 import math
 import os
 import re
+import time
 from collections import defaultdict, deque
 from time import monotonic
 
@@ -87,6 +88,8 @@ store = storage.Store(DB_PATH)
 
 # In-memory initiative encounters, keyed by Discord channel id (see encounter.py).
 encounters: dict[int, encounter.Encounter] = {}
+# Undo snapshots (/dm undo) older than this are purged at startup.
+UNDO_MAX_AGE_SECONDS: float = 30 * 24 * 3600
 
 # In-memory roll history: channel_id → deque of (timestamp, user_display, description, total).
 _roll_history: dict[int, deque] = defaultdict(lambda: deque(maxlen=50))
@@ -134,6 +137,7 @@ class RokuganBot(discord.Client):
             log.info("Restored %d encounter(s) from database.", len(encounters))
         if not getattr(self, "_views_restored", False):
             self._views_restored = True
+            store.purge_undo(time.time() - UNDO_MAX_AGE_SECONDS)
             restored = views_base.restore_all(self)
             if restored:
                 log.info("Re-attached %d pending approval view(s).", restored)
@@ -3933,7 +3937,7 @@ async def sheet_wound(
         return
     old = stats.wound_level_name(c)
     c.wounds_taken += amount
-    store.save(rec)
+    store.save(rec, note="wound")
     new = stats.wound_level_name(c)
     crossed = f"  ({old} → **{new}**)" if new != old else ""
     dead = ""
@@ -3967,7 +3971,7 @@ async def sheet_heal(
         return
     old = stats.wound_level_name(c)
     c.wounds_taken = max(0, c.wounds_taken - amount)
-    store.save(rec)
+    store.save(rec, note="heal")
     new = stats.wound_level_name(c)
     crossed = f"  ({old} → **{new}**)" if new != old else ""
     await interaction.response.send_message(
@@ -4307,7 +4311,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
                         parts.append(line)
                 else:
                     parts.append(f"Taint roll in {interval - c.taint_days_since_roll} day(s)")
-        store.save(rec)
+        store.save(rec, note="new day")
         slots_str = ", ".join(
             f"{e.title()} {c.spell_slots[e]}" for e in SPELL_ELEMENTS
         )
@@ -4608,7 +4612,7 @@ async def dm_revive(
     c.wounds_taken = wounds if wounds is not None else stats.total_wound_capacity(c)
     if stats.is_dead(c):
         c.wounds_taken = stats.total_wound_capacity(c)
-    store.save(rec)
+    store.save(rec, note="revive")
     notes = [f"wounds {old} → {c.wounds_taken} ({stats.wound_level_name(c)})"]
     if rec.owner_id != NPC_OWNER and store.get_active(guild, rec.owner_id) is None:
         store.set_active(guild, rec.owner_id, rec.id)
@@ -4620,6 +4624,115 @@ async def dm_revive(
         color=discord.Color.teal(),
     )
     embed.set_footer(text=f"Staff override by {interaction.user.display_name} — logged")
+    await interaction.response.send_message(embed=embed)
+
+def _undo_diff(entity_type: str, old: dict, new: dict) -> list[str]:
+    """Human-readable differences between two saved states, key fields first."""
+    lines: list[str] = []
+    if entity_type == "character":
+        oc, nc = Character.from_dict(old), Character.from_dict(new)
+        if oc.wounds_taken != nc.wounds_taken:
+            lines.append(f"wounds {oc.wounds_taken} ({stats.wound_level_name(oc)}) → {nc.wounds_taken} ({stats.wound_level_name(nc)})")
+        watched = [
+            ("taint", "Taint"), ("current_void_points", "Void Points"), ("xp", "XP"),
+            ("honor", "Honor"), ("glory", "Glory"), ("status", "Status"), ("infamy", "Infamy"),
+            ("koku", "koku"), ("name", "name"),
+        ]
+        skip = {"wounds_taken"}
+    else:
+        oc, nc = None, None
+        watched = [("wounds_taken", "wounds"), ("name", "name")]
+        skip = set()
+    for key, label in watched:
+        if old.get(key) != new.get(key):
+            lines.append(f"{label} {old.get(key)} → {new.get(key)}")
+        skip.add(key)
+    others = sorted(k for k in set(old) | set(new) if k not in skip and old.get(k) != new.get(k))
+    if others:
+        lines.append("also: " + ", ".join(others))
+    return lines or ["no visible difference"]
+
+@dm.command(name="undo", description="Roll back the last change to a character or creature (wounds, heal, Taint…). Fortune+.")
+@app_commands.describe(
+    target="Character or creature name. Leave empty for the most recent change on this server.",
+    preview="Show the last few recorded changes instead of undoing anything.",
+)
+@app_commands.autocomplete(target=_any_character_autocomplete)
+async def dm_undo(
+    interaction: discord.Interaction,
+    target: str | None = None,
+    preview: bool = False,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    guild = str(interaction.guild_id)
+    snaps = store.list_undo(guild, target, limit=5 if preview else 1)
+    if not snaps:
+        who = f" for **{target}**" if target else ""
+        await interaction.response.send_message(f"Nothing recorded to undo{who}.", ephemeral=True)
+        return
+    now = time.time()
+    if preview:
+        lines = []
+        for sn in snaps:
+            cur = store.get_by_id(sn.entity_id) if sn.entity_type == "character" else store.get_creature_by_id(sn.entity_id)
+            if cur is None:
+                effect = "entity deleted since"
+            else:
+                cur_d = cur.character.to_dict() if sn.entity_type == "character" else cur.creature.to_dict()
+                effect = "; ".join(_undo_diff(sn.entity_type, cur_d, sn.data))
+            age = int((now - sn.created_at) // 60)
+            lines.append(f"• **{sn.entity_name}** — {sn.note} ({age} min ago)\n  ↩ would restore: {effect}")
+        embed = discord.Embed(
+            title="↩ Undo preview (newest first)",
+            description="\n".join(lines)[:4000],
+            color=discord.Color.greyple(),
+        )
+        embed.set_footer(text="Run /dm undo with the name to roll back the newest entry for that character.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+    sn = snaps[0]
+    cur = store.get_by_id(sn.entity_id) if sn.entity_type == "character" else store.get_creature_by_id(sn.entity_id)
+    if cur is None:
+        store.apply_undo(sn.id)  # drops the orphaned snapshot
+        await interaction.response.send_message(
+            f"**{sn.entity_name}** was deleted after that change; nothing to restore.", ephemeral=True,
+        )
+        return
+    before_d = cur.character.to_dict() if sn.entity_type == "character" else cur.creature.to_dict()
+    _, restored = store.apply_undo(sn.id)
+    if not restored:
+        await interaction.response.send_message(
+            f"That change could not be restored: **{sn.entity_name}** would take back a name another sheet "
+            "now uses. Rename the other sheet and run `/dm undo` again.", ephemeral=True,
+        )
+        return
+    notes = _undo_diff(sn.entity_type, before_d, sn.data)
+    if sn.entity_type == "character":
+        after = store.get_by_id(sn.entity_id)
+        was_dead = stats.is_dead(Character.from_dict(before_d))
+        now_dead = stats.is_dead(after.character)
+        if now_dead and not was_dead:
+            notes += await _on_death(guild, after.character.name, after.owner_id, after.id)
+        elif was_dead and not now_dead:
+            if after.owner_id != NPC_OWNER and store.get_active(guild, after.owner_id) is None:
+                store.set_active(guild, after.owner_id, after.id)
+                notes.append("set as the player's active character again")
+            notes.append("not re-added to any initiative list: use `/combat add` if needed")
+    else:
+        after_cr = store.get_creature_by_id(sn.entity_id).creature
+        if after_cr.wounds_taken >= after_cr.wounds_dead and before_d.get("wounds_taken", 0) < after_cr.wounds_dead:
+            notes += await _on_death(guild, after_cr.name, None, None)
+    await _combat_log(guild, f"UNDO: {sn.entity_name} ({sn.note}) by {interaction.user.display_name} — {'; '.join(notes)}")
+    embed = discord.Embed(
+        title=f"↩ Undone: {sn.note} on {sn.entity_name}",
+        description="\n".join(f"• {n}" for n in notes),
+        color=discord.Color.dark_teal(),
+    )
+    remaining = len(store.list_undo(guild, sn.entity_name, limit=storage.UNDO_KEEP_PER_ENTITY))
+    embed.set_footer(text=f"Staff action by {interaction.user.display_name} — logged. {remaining} earlier change(s) still undoable for {sn.entity_name}.")
     await interaction.response.send_message(embed=embed)
 
 def _resolve_combatant_record(guild: str, cb: encounter.Combatant) -> storage.CharacterRecord | None:
@@ -5247,7 +5360,7 @@ async def npc_wound(
         return
     old = stats.wound_level_name(c)
     c.wounds_taken += amount
-    store.save(rec)
+    store.save(rec, note="wound")
     new = stats.wound_level_name(c)
     crossed = f"  ({old} → **{new}**)" if new != old else ""
     dead = ""
@@ -5274,7 +5387,7 @@ async def npc_heal(
         return
     old = stats.wound_level_name(c)
     c.wounds_taken = max(0, c.wounds_taken - amount)
-    store.save(rec)
+    store.save(rec, note="heal")
     new = stats.wound_level_name(c)
     crossed = f"  ({old} → **{new}**)" if new != old else ""
     await interaction.response.send_message(
@@ -5918,7 +6031,7 @@ class CreatureAttackView(_DisableableView):
             return
         dmg = creature.creature_damage(cre_rec.creature, engine)
         applied = combat.apply_damage(target_rec.character, dmg["raw"], target_rec.character.armor_reduction)
-        store.save(target_rec)
+        store.save(target_rec, note="creature attack damage")
         c = target_rec.character
         death_line = ""
         if applied["is_dead"]:
@@ -6052,7 +6165,7 @@ class SpellDamageView(_DisableableView):
                     void_line = f"\n🔮 Void Point: **−{void_saved}** wounds ({rec.character.current_void_points} VP left)"
                 else:
                     void_line = "\n🔮 No Void Points available: full damage applied"
-        store.save(rec)
+        store.save(rec, note="spell damage")
         c = rec.character
         death_line = ""
         if applied["is_dead"]:
@@ -6124,7 +6237,7 @@ class DmDamageView(_DisableableView):
             await interaction.response.send_message("Target no longer exists.", ephemeral=True)
             return
         applied = combat.apply_damage(rec.character, self.amount, rec.character.armor_reduction)
-        store.save(rec)
+        store.save(rec, note="DM damage")
         c = rec.character
         death_line = ""
         if applied["is_dead"]:
@@ -6196,7 +6309,7 @@ class DmDamageView(_DisableableView):
         c.current_void_points -= 1
         self.amount = max(0, self.amount - 10)
         self.void_reduced = True
-        store.save(rec)
+        store.save(rec, note="Void Point spent (damage reduction)")
         # Re-persist so the reduction survives a restart before Apply/Deny.
         self._persist_args.update(amount=self.amount, void_reduced=True)
         await self.persist(interaction.message)
@@ -6214,7 +6327,7 @@ class DmDamageView(_DisableableView):
             rec = store.get_by_id(self.target_id)
             if rec is not None:
                 rec.character.current_void_points += 1
-                store.save(rec)
+                store.save(rec, note="Void Point refunded (damage denied)")
         msg = (
             f"🛡️ {interaction.user.display_name} denied: "
             f"no damage applied to **{self.target_name}**."
@@ -6265,7 +6378,7 @@ class DmHealView(_DisableableView):
         c.wounds_taken = max(0, c.wounds_taken - self.amount)
         healed = old_wounds - c.wounds_taken
         new_level = stats.wound_level_name(c)
-        store.save(rec)
+        store.save(rec, note="DM heal")
         embed = discord.Embed(
             title="💚 Healing applied",
             color=discord.Color.green(),
@@ -6546,7 +6659,7 @@ async def creature_wound(
         await interaction.response.send_message(err, ephemeral=True)
         return
     applied = creature.apply_damage_to_creature(rec.creature, amount, reduction=0)
-    store.save_creature(rec)
+    store.save_creature(rec, note="wound")
     dead = ""
     if applied["is_dead"]:
         notes = await _on_death(str(interaction.guild_id), rec.creature.name, None, None)
@@ -6568,7 +6681,7 @@ async def creature_heal(
         await interaction.response.send_message(err, ephemeral=True)
         return
     rec.creature.wounds_taken = max(0, rec.creature.wounds_taken - amount)
-    store.save_creature(rec)
+    store.save_creature(rec, note="heal")
     await interaction.response.send_message(
         f"**{rec.creature.name}** healed **{amount}** → {rec.creature.wounds_taken}/{rec.creature.wounds_dead}",
         embed=build_creature_embed(rec),
@@ -8489,7 +8602,7 @@ async def taint_command(
     if add is not None:
         old_taint = c.taint
         c.taint = max(0.0, c.taint + add * 0.1)
-        store.save(rec)
+        store.save(rec, note="Taint change")
         crossing = taint.check_threshold_crossing(old_taint, c.taint, c)
         embed = discord.Embed(title=f"Taint: {c.name}", color=discord.Color.dark_purple())
         embed.add_field(name="Taint", value=f"{old_taint:g} → **{c.taint:g}**", inline=True)
@@ -8766,7 +8879,7 @@ class MedicineTreatView(_DisableableView):
             return
         old_level = stats.wound_level_name(c)
         c.wounds_taken = max(0, c.wounds_taken - self.wounds_healed)
-        store.save(rec)
+        store.save(rec, note="Medicine treatment")
         new_level = stats.wound_level_name(c)
         embed = discord.Embed(title="💚 Treatment Applied", color=discord.Color.green())
         crossed = f" ({old_level} → **{new_level}**)" if old_level != new_level else ""

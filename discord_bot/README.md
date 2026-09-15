@@ -54,6 +54,8 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 | `/dm damage` | **DM** applies raw damage to any PC or NPC: posts the pending effect publicly with Approve / Deny buttons. Damage respects Reduction. |
 | `/dm heal` | **DM** heals wounds on any PC or NPC: posts pending healing with Approve / Deny buttons. |
 | `/dm treat` | **DM** calls for a Medicine treatment: the healer rolls Medicine/Intelligence vs a TN (wound treatment TN 15, poison TN 20, etc.), and on success the DM authorizes the healing (Intelligence x 2 wounds by default). |
+| `/dm revive` | **DM** staff override: reverses a death caused by a bug (required reason, written to the combat log). Sets the character to the top of the Out level unless a wound total is given and re-activates the player's sheet. |
+| `/dm undo` | **DM** rolls back the last recorded change to a character or creature (wound, heal, damage approval, Taint change, new day, sheet edit…). Every save keeps the previous state as an undo entry (last 20 per sheet, purged after 30 days). `preview:true` lists the newest entries and what each would restore; omit the name to undo the newest change on the server. Undoing a death or a revive runs the usual bookkeeping (initiative removal / re-activation). |
 | `/dm log_channel` | **DM** sets a text channel for automatic combat event logging. Attacks, damage, turn advances, conditions, stances, grapple/duel events are posted as compact one-line entries. |
 | `/dm clear_log` | **DM** removes the combat log channel: events stop being logged. |
 | `/party` | DM-only roster of every active PC: school, rings, wounds, VP, honor/glory/status, wielded weapon. Gold embed with player mention. |
