@@ -28,6 +28,7 @@ class _Deps:
     resolve_duelist: object
     format_dice: object
     log_roll: object
+    refuse_if_dead: object
     NPC_OWNER: str
 
 
@@ -45,6 +46,7 @@ def init(
     log_roll,
     npc_owner: str,
     skill_autocomplete,
+    refuse_if_dead,
 ) -> None:
     _d.store = store
     _d.engine = engine
@@ -53,6 +55,7 @@ def init(
     _d.resolve_duelist = resolve_duelist
     _d.format_dice = format_dice
     _d.log_roll = log_roll
+    _d.refuse_if_dead = refuse_if_dead
     _d.NPC_OWNER = npc_owner
 
     # Wire autocompletes programmatically
@@ -259,6 +262,8 @@ async def contest(
         await interaction.response.send_message(f"No character found for **{name_b}**.", ephemeral=True)
         return
     ca, cb = rec_a.character, rec_b.character
+    if await _d.refuse_if_dead(interaction, ca) or await _d.refuse_if_dead(interaction, cb):
+        return
     tv_a = stats.trait_value(ca, trait_a.value)
     tv_b = stats.trait_value(cb, trait_b.value)
     sk_a = ca.skills.get(skill_a, 0)
@@ -368,6 +373,8 @@ async def fear_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     if tattoo_effects.is_fear_immune(c):
         await interaction.response.send_message(
             f"**{c.name}** is immune to Fear (Mantis Tattoo, s57.25). No roll needed.",
@@ -437,6 +444,8 @@ async def honor_roll(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     hr = stats.honor_rank(c)
     result = combat.resolve_honor_roll(hr, tn, _d.engine, bonus=bonus)
     success = result["success"]
@@ -500,6 +509,8 @@ async def poison_resist(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "poison_resist", "stamina")
     void_r, void_k, void_spent, void_line, _ = _try_spend_void(c, spend_void, skill_name="poison_resist")
@@ -578,6 +589,8 @@ async def medicine_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     medicine_skill = c.skills.get("Medicine", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Medicine", "intelligence")
@@ -663,6 +676,8 @@ async def skill_check_cmd(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     tv = stats.trait_value(c, trait.value)
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
@@ -732,6 +747,8 @@ async def check_cooperative(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
@@ -856,6 +873,8 @@ async def stealth_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     sk = c.skills.get("Stealth", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Stealth", "agility")
@@ -926,6 +945,8 @@ async def investigate_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     sk = c.skills.get("Investigation", 0)
     wp = stats.wound_penalty(c)
     emp_name = emphasis.value if emphasis else None
@@ -1000,6 +1021,8 @@ async def social_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     trait_attr = _SOCIAL_TRAIT_MAP[skill.value]
     tv = stats.trait_value(c, trait_attr)
     sk = c.skills.get(skill.value, 0)
@@ -1064,6 +1087,8 @@ async def craft_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, "intelligence")
@@ -1125,6 +1150,8 @@ async def lore_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     sk = c.skills.get(specialty, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, specialty, "intelligence")
@@ -1178,6 +1205,8 @@ async def horsemanship_check(
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return

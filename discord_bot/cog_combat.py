@@ -33,6 +33,8 @@ class _Deps:
     ROLE_KAMI: str
     bot_client: discord.Client
     is_dm: object
+    refuse_if_dead: object
+    on_death: object
     require_guild: object
     require_dm_role: object
     require_encounter: object
@@ -61,6 +63,8 @@ def init(
     role_kami: str,
     bot_client: discord.Client,
     is_dm,
+    refuse_if_dead,
+    on_death,
     require_guild,
     require_dm_role,
     require_encounter,
@@ -83,6 +87,8 @@ def init(
     _d.ROLE_KAMI = role_kami
     _d.bot_client = bot_client
     _d.is_dm = is_dm
+    _d.refuse_if_dead = refuse_if_dead
+    _d.on_death = on_death
     _d.require_guild = require_guild
     _d.require_dm_role = require_dm_role
     _d.require_encounter = require_encounter
@@ -407,6 +413,8 @@ class DamageView(discord.ui.View):
                     _d.store.save(attacker_rec)
                     heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
             _d.store.save_creature(cre_rec)
+            if applied["is_dead"]:
+                await _d.on_death(str(interaction.guild_id), cre_rec.creature.name, None, None)
             cr = cre_rec.creature
             cre_cs_line = ""
             if self.maneuver == "called_shot" and self.called_shot_raises > 0:
@@ -504,6 +512,8 @@ class DamageView(discord.ui.View):
                 else:
                     void_line = "\n🔮 No Void Points available: full damage applied"
             _d.store.save(target_rec)
+            if applied["is_dead"]:
+                await _d.on_death(str(interaction.guild_id), target.name, target_rec.owner_id, target_rec.id)
             embed = discord.Embed(
                 title="🗡️ Disarm",
                 color=discord.Color.green() if dis["disarmed"] else discord.Color.orange(),
@@ -678,6 +688,8 @@ class DamageView(discord.ui.View):
             if phx:
                 phoenix_line = f"\n🔥 {phx}"
         _d.store.save(target_rec)
+        if applied["is_dead"]:
+            await _d.on_death(str(interaction.guild_id), target.name, target_rec.owner_id, target_rec.id)
 
         knockdown_line = ""
         kd_result = None
@@ -1135,6 +1147,8 @@ async def attack(
                 "You have no active character. Use `/sheet create` first.", ephemeral=True
             )
             return
+    if await _d.refuse_if_dead(interaction, attacker_rec.character):
+        return
 
     # Weapon: off_hand flag overrides to off-hand weapon; else explicit, else wielded, else katana.
     if off_hand:
@@ -1173,6 +1187,13 @@ async def attack(
         await interaction.response.send_message(
             "Pick a target: `target:` (player), `target_npc:`, or `target_creature:`.", ephemeral=True
         )
+        return
+    if target_creature_rec is not None and creature.creature_is_dead(target_creature_rec.creature):
+        await interaction.response.send_message(
+            f"💀 **{target_creature_rec.creature.name}** has already been slain.", ephemeral=True
+        )
+        return
+    if target_rec is not None and await _d.refuse_if_dead(interaction, target_rec.character):
         return
 
     a_stance_explicit = attacker_stance.value if attacker_stance else None
@@ -1743,6 +1764,8 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
     if rec is None:
         who = "You have" if owner.id == interaction.user.id else f"{owner.display_name} has"
         await interaction.response.send_message(f"{who} no active character. Use `/sheet create` first.", ephemeral=True)
+        return
+    if await _d.refuse_if_dead(interaction, rec.character):
         return
 
     idr, idk, idn = technique_effects.initiative_dice_bonus(rec.character)
@@ -2386,6 +2409,8 @@ async def grapple_initiate(
             "Both combatants need stored character sheets for grapple initiation.", ephemeral=True
         )
         return
+    if await _d.refuse_if_dead(interaction, atk_rec.character) or await _d.refuse_if_dead(interaction, def_rec.character):
+        return
     d_stance = defender_stance.value if defender_stance else "attack"
     tn = combat.grapple_initiate_tn(def_rec.character, d_stance, bonus_tn)
     extra_tn = 0
@@ -2847,6 +2872,8 @@ async def duel_assess(
         return
 
     ca, cb_char = rec_a.character, rec_b.character
+    if await _d.refuse_if_dead(interaction, ca) or await _d.refuse_if_dead(interaction, cb_char):
+        return
 
     enc = _d.encounters.get(ch)
     for duelist_char, duelist_label in ((ca, duelist_a), (cb_char, duelist_b)):
@@ -2985,6 +3012,8 @@ async def duel_focus(
         return
 
     ca, cb_char = rec_a.character, rec_b.character
+    if await _d.refuse_if_dead(interaction, ca) or await _d.refuse_if_dead(interaction, cb_char):
+        return
 
     enc = _d.encounters.get(ch)
     for duelist_char, duelist_label in ((ca, duelist_a), (cb_char, duelist_b)):
@@ -3123,6 +3152,8 @@ async def duel_strike(
 
     atk = rec_a.character
     tgt = rec_t.character
+    if await _d.refuse_if_dead(interaction, atk) or await _d.refuse_if_dead(interaction, tgt):
+        return
     wound_pen = stats.wound_penalty(atk)
 
     enc = _d.encounters.get(ch)
@@ -3192,6 +3223,9 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
     rec = _d.store.get_creature_by_name(str(interaction.guild_id), name)
     if rec is None:
         await interaction.response.send_message(f"No creature named **{name}**.", ephemeral=True)
+        return
+    if creature.creature_is_dead(rec.creature):
+        await interaction.response.send_message(f"💀 **{rec.creature.name}** has been slain.", ephemeral=True)
         return
     result = creature.roll_creature_initiative(rec.creature, _d.engine)
     enc = _get_or_create(interaction.channel_id)
@@ -3715,6 +3749,8 @@ async def battle_roll(
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     battle_skill = c.skills.get("Battle", 0)
     wp = stats.wound_penalty(c)
     result = mass_battle.resolve_battle_roll(c.perception, battle_skill, tn, _d.engine, bonus + wp)
@@ -3809,6 +3845,8 @@ async def battle_table(
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
     c = rec.character
+    if await _d.refuse_if_dead(interaction, c):
+        return
     battle_skill = c.skills.get("Battle", 0)
     water = stats.water_ring(c)
     wp = stats.wound_penalty(c)
@@ -3904,6 +3942,8 @@ async def battle_status(
         await interaction.response.send_message(f"General **{general_b}** not found.", ephemeral=True)
         return
     ca, cb = rec_a.character, rec_b.character
+    if await _d.refuse_if_dead(interaction, ca) or await _d.refuse_if_dead(interaction, cb):
+        return
     wp_a = stats.wound_penalty(ca)
     wp_b = stats.wound_penalty(cb)
     battle_a = ca.skills.get("Battle", 0)
@@ -4155,6 +4195,8 @@ async def combat_env_damage(
             reduction = 0 if ignore_reduction else rec.character.armor_reduction
             applied = combat.apply_damage(rec.character, amount, reduction)
             _d.store.save(rec)
+            if applied["is_dead"]:
+                await _d.on_death(guild, rec.character.name, rec.owner_id, rec.id)
             dead_tag = " 💀 **DEAD**" if applied["is_dead"] else ""
             results.append(
                 f"**{cb.name}**: {amount} raw − {reduction} red = "
@@ -4176,6 +4218,8 @@ async def combat_env_damage(
                 cr.wounds_taken += final
                 is_dead = cr.wounds_taken >= cr.wounds_dead
                 _d.store.save_creature(cre_rec)
+                if is_dead:
+                    await _d.on_death(guild, cr.name, None, None)
                 dead_tag = " 💀 **DEAD**" if is_dead else ""
                 results.append(
                     f"**{cb.name}**: {amount} raw − {reduction} red = "

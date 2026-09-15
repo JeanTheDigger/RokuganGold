@@ -397,6 +397,21 @@ class Store:
                 (guild_id, user_id, character_id),
             )
 
+    def clear_active(self, guild_id: str, user_id: str, character_id: int) -> None:
+        """Stop `character_id` being the user's active character (no-op if it isn't)."""
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM active_characters WHERE guild_id = ? AND user_id = ? AND character_id = ?",
+                (guild_id, user_id, character_id),
+            )
+
+    def encounter_guild(self, channel_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT guild_id FROM encounters WHERE channel_id = ?", (channel_id,)
+            ).fetchone()
+        return row["guild_id"] if row else None
+
     def get_active(self, guild_id: str, user_id: str) -> CharacterRecord | None:
         with self._lock:
             row = self._conn.execute(

@@ -225,6 +225,41 @@ async def _require_encounter(interaction: discord.Interaction) -> encounter.Enco
     )
     return None
 
+async def _refuse_if_dead(interaction: discord.Interaction, c: Character) -> bool:
+    """Ephemeral refusal for actions by or on a dead character. True = refused."""
+    if not stats.is_dead(c):
+        return False
+    await interaction.response.send_message(
+        f"💀 **{c.name}** is dead. PC death is permanent; Staff may use `/dm revive` only to undo a bug.",
+        ephemeral=True,
+    )
+    return True
+
+async def _on_death(guild_id: str, name: str, owner_id: str | None, record_id: int | None) -> list[str]:
+    """Bookkeeping when a character or creature dies: drop it from every
+    initiative tracker in this guild and, for a PC, stop it being the
+    player's active character. Returns note lines for the announcement."""
+    notes: list[str] = []
+    for enc in list(encounters.values()):
+        if store.encounter_guild(str(enc.channel_id)) != guild_id:
+            continue
+        cb = enc.find(name)
+        if cb is None:
+            continue
+        if owner_id and owner_id != NPC_OWNER and cb.owner_id not in (None, owner_id):
+            continue
+        enc.remove(name)
+        _save_encounter(guild_id, enc)
+        if "removed from initiative" not in notes:
+            notes.append("removed from initiative")
+    if owner_id and owner_id != NPC_OWNER and record_id is not None:
+        active = store.get_active(guild_id, owner_id)
+        if active is not None and active.id == record_id:
+            store.clear_active(guild_id, owner_id, record_id)
+            notes.append("no longer the player's active character")
+    await _combat_log(guild_id, f"DEATH: {name}" + (f" ({'; '.join(notes)})" if notes else ""))
+    return notes
+
 async def _resolve_active(
     interaction: discord.Interaction, member: discord.Member | None
 ) -> storage.CharacterRecord | None:
@@ -2917,7 +2952,7 @@ async def sheet_list(interaction: discord.Interaction, member: discord.Member | 
         )
         return
     lines = [
-        f"{'▶️ ' if r.id == active_id else '• '}**{r.character.name}** "
+        f"{'▶️ ' if r.id == active_id else '• '}{'💀 ' if stats.is_dead(r.character) else ''}**{r.character.name}** "
         f": {r.character.clan or ' '} {r.character.school_type}"
         for r in records
     ]
@@ -2945,6 +2980,12 @@ async def sheet_delete(
         rec = store.get_by_name_guild(guild, name)
     if rec is None:
         await interaction.response.send_message(f"No character named **{name}** found.", ephemeral=True)
+        return
+    if stats.is_dead(rec.character) and not _is_dm(interaction):
+        await interaction.response.send_message(
+            f"💀 **{rec.character.name}** is dead. Only Staff can remove a dead character's sheet.",
+            ephemeral=True,
+        )
         return
     view = _DeleteConfirmView(rec, interaction.user.id)
     await interaction.response.send_message(
@@ -3853,12 +3894,17 @@ async def sheet_wound(
         await interaction.response.send_message(err, ephemeral=True)
         return
     c = rec.character
+    if await _refuse_if_dead(interaction, c):
+        return
     old = stats.wound_level_name(c)
     c.wounds_taken += amount
     store.save(rec)
     new = stats.wound_level_name(c)
     crossed = f"  ({old} → **{new}**)" if new != old else ""
-    dead = "  💀 **DEAD**" if stats.is_dead(c) else ""
+    dead = ""
+    if stats.is_dead(c):
+        death_notes = await _on_death(str(interaction.guild_id), c.name, rec.owner_id, rec.id)
+        dead = "  💀 **DEAD**" + "".join(f"\n💀 {n}" for n in death_notes)
     await interaction.response.send_message(
         f"**{c.name}** takes **{amount}** wounds → {c.wounds_taken} total{crossed}{dead}",
         embed=build_sheet_embed(rec),
@@ -4469,6 +4515,54 @@ async def dm_heal(
 # /grapple group: grappling subsystem (s40)
 # ===========================================================================
 
+@dm.command(name="revive", description="Staff override: undo a death caused by a bug. Kami role required; logged.")
+@app_commands.describe(
+    target="Character name (PC or NPC).",
+    reason="Why this death is being reversed (required; written to the combat log).",
+    wounds="Wounds to set the character to (default: the top of the Out level, alive but Out).",
+)
+@app_commands.autocomplete(target=_any_character_autocomplete)
+async def dm_revive(
+    interaction: discord.Interaction,
+    target: str,
+    reason: app_commands.Range[str, 5, 200],
+    wounds: app_commands.Range[int, 0, 9999] | None = None,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not _is_kami(interaction):
+        await interaction.response.send_message(
+            f"Reviving a character is a **{ROLE_KAMI}**-only override for bugs. PC death is permanent.",
+            ephemeral=True,
+        )
+        return
+    guild = str(interaction.guild_id)
+    rec = _find_any_character(guild, target)
+    if rec is None:
+        await interaction.response.send_message(f"No character named **{target}**.", ephemeral=True)
+        return
+    c = rec.character
+    if not stats.is_dead(c):
+        await interaction.response.send_message(f"**{c.name}** is not dead ({stats.wound_level_name(c)}).", ephemeral=True)
+        return
+    old = c.wounds_taken
+    c.wounds_taken = wounds if wounds is not None else stats.total_wound_capacity(c)
+    if stats.is_dead(c):
+        c.wounds_taken = stats.total_wound_capacity(c)
+    store.save(rec)
+    notes = [f"wounds {old} → {c.wounds_taken} ({stats.wound_level_name(c)})"]
+    if rec.owner_id != NPC_OWNER and store.get_active(guild, rec.owner_id) is None:
+        store.set_active(guild, rec.owner_id, rec.id)
+        notes.append("set as the player's active character again")
+    await _combat_log(guild, f"REVIVE: {c.name} by {interaction.user.display_name} — {reason} ({'; '.join(notes)})")
+    embed = discord.Embed(
+        title=f"🕊️ Revived: {c.name}",
+        description=f"**Reason:** {reason}\n" + "\n".join(f"• {n}" for n in notes),
+        color=discord.Color.teal(),
+    )
+    embed.set_footer(text=f"Staff override by {interaction.user.display_name} — logged")
+    await interaction.response.send_message(embed=embed)
+
 def _resolve_combatant_record(guild: str, cb: encounter.Combatant) -> storage.CharacterRecord | None:
     """Look up a stored character record from a Combatant (PC or NPC)."""
     if cb.is_npc:
@@ -4973,7 +5067,7 @@ async def npc_list(interaction: discord.Interaction) -> None:
         )
         return
     lines = [
-        f"• **{r.character.name}**: {r.character.clan or ' '} {r.character.school_type} "
+        f"• {'💀 ' if stats.is_dead(r.character) else ''}**{r.character.name}**: {r.character.clan or ' '} {r.character.school_type} "
         f"(Rank {r.character.school_rank})"
         for r in recs
     ]
@@ -5086,12 +5180,17 @@ async def npc_wound(
         await interaction.response.send_message(err, ephemeral=True)
         return
     c = rec.character
+    if await _refuse_if_dead(interaction, c):
+        return
     old = stats.wound_level_name(c)
     c.wounds_taken += amount
     store.save(rec)
     new = stats.wound_level_name(c)
     crossed = f"  ({old} → **{new}**)" if new != old else ""
-    dead = "  💀 **DEAD**" if stats.is_dead(c) else ""
+    dead = ""
+    if stats.is_dead(c):
+        death_notes = await _on_death(str(interaction.guild_id), c.name, rec.owner_id, rec.id)
+        dead = "  💀 **DEAD**" + "".join(f"\n💀 {n}" for n in death_notes)
     await interaction.response.send_message(
         f"**{c.name}** takes **{amount}** wounds → {c.wounds_taken} total{crossed}{dead}",
         embed=build_sheet_embed(rec),
@@ -5108,6 +5207,8 @@ async def npc_heal(
         await interaction.response.send_message(err, ephemeral=True)
         return
     c = rec.character
+    if await _refuse_if_dead(interaction, c):
+        return
     old = stats.wound_level_name(c)
     c.wounds_taken = max(0, c.wounds_taken - amount)
     store.save(rec)
@@ -5754,6 +5855,10 @@ class CreatureAttackView(_DisableableView):
         applied = combat.apply_damage(target_rec.character, dmg["raw"], target_rec.character.armor_reduction)
         store.save(target_rec)
         c = target_rec.character
+        death_line = ""
+        if applied["is_dead"]:
+            notes = await _on_death(str(interaction.guild_id), c.name, target_rec.owner_id, target_rec.id)
+            death_line = "".join(f"\n💀 {n}" for n in notes)
         embed = discord.Embed(
             title="👹 Creature damage applied",
             color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
@@ -5775,7 +5880,7 @@ class CreatureAttackView(_DisableableView):
         else:
             status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
         if applied["is_dead"]:
-            status += "  💀 **DEAD**"
+            status += "  💀 **DEAD**" + death_line
         embed.add_field(name="Result", value=status, inline=False)
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
@@ -5882,6 +5987,10 @@ class SpellDamageView(_DisableableView):
                     void_line = "\n🔮 No Void Points available: full damage applied"
         store.save(rec)
         c = rec.character
+        death_line = ""
+        if applied["is_dead"]:
+            notes = await _on_death(str(interaction.guild_id), c.name, rec.owner_id, rec.id)
+            death_line = "".join(f"\n💀 {n}" for n in notes)
         embed = discord.Embed(
             title=f"📜 {self.reason or 'Spell Damage'}: applied",
             color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.dark_magenta(),
@@ -5903,7 +6012,7 @@ class SpellDamageView(_DisableableView):
         else:
             status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
         if applied["is_dead"]:
-            status += "  💀 **DEAD**"
+            status += "  💀 **DEAD**" + death_line
         embed.add_field(name="Result", value=status, inline=False)
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
@@ -5948,6 +6057,10 @@ class DmDamageView(_DisableableView):
         applied = combat.apply_damage(rec.character, self.amount, rec.character.armor_reduction)
         store.save(rec)
         c = rec.character
+        death_line = ""
+        if applied["is_dead"]:
+            notes = await _on_death(str(interaction.guild_id), c.name, rec.owner_id, rec.id)
+            death_line = "".join(f"\n💀 {n}" for n in notes)
         embed = discord.Embed(
             title="💥 Damage applied",
             color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
@@ -5970,7 +6083,7 @@ class DmDamageView(_DisableableView):
         else:
             status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
         if applied["is_dead"]:
-            status += "  💀 **DEAD**"
+            status += "  💀 **DEAD**" + death_line
         embed.add_field(name="Result", value=status, inline=False)
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
@@ -6360,8 +6473,11 @@ async def creature_wound(
         return
     applied = creature.apply_damage_to_creature(rec.creature, amount, reduction=0)
     store.save_creature(rec)
+    dead = ""
+    if applied["is_dead"]:
+        notes = await _on_death(str(interaction.guild_id), rec.creature.name, None, None)
+        dead = "  💀 **SLAIN**" + "".join(f"\n💀 {n}" for n in notes)
     crossed = f"  ({applied['old_wound_level']} → **{applied['new_wound_level']}**)" if applied["level_changed"] else ""
-    dead = "  💀 **SLAIN**" if applied["is_dead"] else ""
     await interaction.response.send_message(
         f"**{rec.creature.name}** takes **{amount}** → {rec.creature.wounds_taken}/{rec.creature.wounds_dead}{crossed}{dead}",
         embed=build_creature_embed(rec),
@@ -6429,6 +6545,11 @@ async def creature_attack_cmd(
         return
 
     cr = cre_rec.creature
+    if creature.creature_is_dead(cr):
+        await interaction.response.send_message(f"💀 **{cr.name}** has been slain.", ephemeral=True)
+        return
+    if await _refuse_if_dead(interaction, target_rec.character):
+        return
     enc = encounters.get(interaction.channel_id)
     tgt = target_rec.character
     def_cb = enc.find(tgt.name) if enc else None
@@ -7834,6 +7955,8 @@ async def spell_cast(
             )
             return
     caster = rec.character
+    if await _refuse_if_dead(interaction, caster):
+        return
     element = s["element"].lower()
     ring_val = stats.ring_value(caster, element)
     affinity = caster.affinity_element.lower() == element if caster.affinity_element else False
@@ -8118,6 +8241,8 @@ async def spell_importune(
             await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
             return
     caster = rec.character
+    if await _refuse_if_dead(interaction, caster):
+        return
     element = s["element"].lower()
     ring_val = stats.ring_value(caster, element)
     ml = s["mastery"]
@@ -8350,6 +8475,8 @@ async def craft_extended(
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
     c = rec.character
+    if await _refuse_if_dead(interaction, c):
+        return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
@@ -8759,6 +8886,8 @@ async def dm_treat(
         return
     hc = healer_rec.character
     pc = patient_rec.character
+    if await _refuse_if_dead(interaction, hc):
+        return
     if stats.is_dead(pc):
         await interaction.response.send_message(f"**{pc.name}** is dead. PC death is permanent.", ephemeral=True)
         return
@@ -10382,6 +10511,7 @@ cog_checks.init(
     log_roll=_log_roll,
     npc_owner=NPC_OWNER,
     skill_autocomplete=_skill_autocomplete,
+    refuse_if_dead=_refuse_if_dead,
 )
 
 cog_combat.init(
@@ -10393,6 +10523,8 @@ cog_combat.init(
     role_kami=ROLE_KAMI,
     bot_client=client,
     is_dm=_is_dm,
+    refuse_if_dead=_refuse_if_dead,
+    on_death=_on_death,
     require_guild=_require_guild,
     require_dm_role=_require_dm_role,
     require_encounter=_require_encounter,
