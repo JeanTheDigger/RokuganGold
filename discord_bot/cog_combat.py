@@ -2295,14 +2295,15 @@ async def combat_next(interaction: discord.Interaction) -> None:
         return
     uid = str(interaction.user.id)
     cur = enc.current()
-    may_advance = _d.is_dm(interaction) or (
-        (enc.started and cur is not None and cur.owner_id == uid) or (not enc.started and enc.organizer_id == uid)
-    )
+    if enc.started:
+        may_advance = _d.is_dm(interaction) or (cur is not None and cur.owner_id == uid)
+        why = "Only staff or the player whose turn it is can advance. End your own turn with `/combat turn done`."
+    else:
+        # Opening the fight: staff, the roster organizer, or anyone who has a combatant in it.
+        may_advance = _d.is_dm(interaction) or enc.organizer_id == uid or any(c.owner_id == uid for c in enc.combatants)
+        why = "Only staff, the roster organizer, or someone in this fight can open it."
     if not may_advance:
-        await interaction.response.send_message(
-            "Only staff, the player whose turn it is, or the roster organizer (to open the fight) can advance. "
-            "End your own turn with `/combat turn done`.", ephemeral=True,
-        )
+        await interaction.response.send_message(why, ephemeral=True)
         return
     prev_round = enc.round
     current = enc.advance()
