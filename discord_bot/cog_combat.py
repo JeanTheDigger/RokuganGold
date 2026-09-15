@@ -3715,7 +3715,14 @@ async def battle_roll(
         title=f"Mass Battle: {c.name}",
         color=discord.Color.red() if result["engagement"] in ("heavily_engaged", "heroic") else discord.Color.orange(),
     )
-    embed.add_field(name="Roll", value=f"({result['rolled']}k{result['kept']}) = **{result['total']}** vs TN {tn}", inline=False)
+    roll_line = f"({result['rolled']}k{result['kept']}) = **{result['total']}** vs TN {tn}"
+    effective_bonus = bonus + wp
+    if effective_bonus != 0:
+        roll_line += f" (mod {effective_bonus:+d}"
+        if wp != 0:
+            roll_line += f", wound {wp:+d}"
+        roll_line += ")"
+    embed.add_field(name="Roll", value=roll_line, inline=False)
     embed.add_field(name="Engagement", value=f"**{info['name']}**", inline=True)
     embed.add_field(name="Margin", value=f"{result['margin']:+d}", inline=True)
     embed.add_field(name="Description", value=info["description"], inline=False)

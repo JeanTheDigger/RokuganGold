@@ -108,7 +108,7 @@ def resolve_battle_roll(
     result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
     total = result.total + bonus
     margin = total - tn
-    if margin < -10:
+    if margin <= -10:
         level = "reserves"
     elif margin < 0:
         level = "disengaged"
