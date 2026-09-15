@@ -35,6 +35,7 @@ Players roll their own `/check` commands (skill, stealth, social, lore, craft, m
 | Command | What it does |
 |---|---|
 | `/sheet create` | Make a character and set it active. Pass a `school:` from the catalog (autocomplete) and it **auto-fills** the school's Benefit trait, starting skills (with free emphases), Honor, clan, and type: a Hida Bushi in one command. Any-choice skill slots ("any one Bugei Skill") are reported for you to fill. Without a school, Traits start at 2. |
+| Wizard resume | The creation wizard saves its state at every step. If it sits idle for an hour, the message gains a **Resume** button; after a bot restart, `/sheet create` (or the lobby button) posts a Resume button in your private channel. Nothing is lost. |
 | `/sheet view` | Show a sheet: rings (derived as min of two traits), wounds & wound level, Insight & Rank, standing, gear, skills. `member:` shows another player's (DM only). |
 | `/sheet list` | List your characters (active one marked). |
 | `/sheet activate` | Choose which of your characters is active. |

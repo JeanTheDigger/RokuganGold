@@ -1326,6 +1326,7 @@ class _FamilySelect(discord.ui.Select):
         await _go_to_heritage_or_school(interaction, self.state)
 
 async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dict) -> None:
+    state["step"] = "heritage"
     clan = state["clan"]
     if clan in heritage.HERITAGE_TABLES:
         view = _WizardView(state)
@@ -1360,6 +1361,7 @@ async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dic
         await _go_to_school_choice(interaction, state)
 
 async def _go_to_school_choice(interaction: discord.Interaction, state: dict) -> None:
+    state["step"] = "school"
     view = _WizardView(state)
     same_btn = discord.ui.Button(label=f"{state['clan']} Schools", style=discord.ButtonStyle.primary)
     diff_btn = discord.ui.Button(label="Different School (5 pts)", style=discord.ButtonStyle.secondary)
@@ -1532,13 +1534,100 @@ async def _show_confirmation(interaction: discord.Interaction, state: dict) -> N
         embed=preview_embed, view=view,
     )
 
+# Character-creation wizard views: one live view per (guild, user); an hour of
+# idle time; on expiry the message gets a persistent Resume button; state is
+# saved on every render so a wizard survives idling and bot restarts.
+CHARGEN_IDLE_SECONDS: int = 3600
+_active_wizard_views: dict[tuple[str, str], "discord.ui.View"] = {}
+
+_CHARGEN_STEP_LABELS: dict[str, str] = {
+    "clan": "1/10 Clan", "heritage": "3/10 Heritage", "school": "4/10 School", "wildcards": "4/10 School skills",
+    "traits": "5/10 Traits", "advantages": "6/10 Advantages", "disadvantages": "7/10 Disadvantages",
+    "skills": "8/10 Skills", "spells": "9/10 Spells", "review": "10/10 Review",
+}
+
+
+def _cg_save(state: dict) -> None:
+    """Persist the wizard state (called on every render)."""
+    if not state.get("full_wizard"):
+        return
+    try:
+        store.save_creation_state(str(state["guild_id"]), str(state["user_id"]), json.dumps(state, default=str))
+    except (TypeError, ValueError, KeyError):
+        log.warning("Could not save chargen state for %s", state.get("user_id"), exc_info=True)
+
+
 class _WizardView(discord.ui.View):
     def __init__(self, state: dict):
-        super().__init__(timeout=300)
+        super().__init__(timeout=CHARGEN_IDLE_SECONDS)
         self.state = state
+        key = (str(state.get("guild_id", "")), str(state.get("user_id", "")))
+        prev = _active_wizard_views.get(key)
+        if prev is not None and prev is not self:
+            prev.stop()  # an older step's view must not time out onto the current message
+        _active_wizard_views[key] = self
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.message is not None:
+            self.state["message_id"] = interaction.message.id
+            self.state["channel_id"] = interaction.channel_id
+        return True
 
     async def on_timeout(self) -> None:
-        pass
+        if not self.state.get("full_wizard"):
+            return
+        key = (str(self.state.get("guild_id", "")), str(self.state.get("user_id", "")))
+        if _active_wizard_views.get(key) is not self:
+            return
+        mid, cid = self.state.get("message_id"), self.state.get("channel_id")
+        if not mid or not cid:
+            return
+        channel = client.get_channel(int(cid))
+        if channel is None:
+            return
+        try:
+            msg = await channel.fetch_message(int(mid))
+        except discord.HTTPException:
+            return
+        view = _ChargenResumeView(str(self.state["guild_id"]), str(self.state["user_id"]))
+        try:
+            await msg.edit(
+                content=(msg.content or "") + "\n\n⌛ This wizard has been idle for an hour. Press **Resume** to carry on where you left off.",
+                view=view,
+            )
+            await view.persist(msg)
+        except discord.HTTPException:
+            pass
+
+
+_ChargenView = _WizardView
+
+
+class _ChargenResumeView(views_base.PersistentView):
+    """A single Resume button that reloads a saved wizard and shows its last step."""
+
+    KIND = "chargen_resume"
+
+    def __init__(self, guild_id: str, user_id: str) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.user_id = user_id
+
+    @discord.ui.button(label="Resume wizard", style=discord.ButtonStyle.primary, emoji="▶️")
+    async def resume(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if str(interaction.user.id) != self.user_id and not _is_dm(interaction):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        raw = store.get_creation_state(self.guild_id, self.user_id)
+        if not raw:
+            self._disable()
+            await interaction.response.edit_message(
+                content="No character creation in progress. Start one with `/sheet create`.", view=self,
+            )
+            return
+        state = json.loads(raw)
+        self._disable()
+        await _cg_resume(interaction, state)
 
 # ---------------------------------------------------------------------------
 # Full character-creation wizard (runs in a private channel via /submit)
@@ -1786,6 +1875,7 @@ def _calc_chargen_xp(state: dict) -> tuple[int, int]:
 
 
 def _chargen_embed(state: dict) -> discord.Embed:
+    _cg_save(state)
     """Full-wizard progress embed showing all chargen state."""
     spent, remaining = _calc_chargen_xp(state)
     embed = discord.Embed(
@@ -1889,15 +1979,6 @@ def _materialize_character(state: dict) -> Character:
     return char
 
 
-class _ChargenView(discord.ui.View):
-    def __init__(self, state: dict):
-        super().__init__(timeout=1800)
-        self.state = state
-
-    async def on_timeout(self) -> None:
-        pass
-
-
 # --- Step 4b: Wildcard school skill picks ---
 class _WildcardSkillSelect(discord.ui.Select):
     def __init__(self, state: dict, eligible: list[str], slot_idx: int, rank: int):
@@ -1934,6 +2015,7 @@ class _WildcardCategorySelect(discord.ui.Select):
 
 
 async def _chargen_wildcards(interaction: discord.Interaction, state: dict) -> None:
+    state["step"] = "wildcards"
     slots = state.get("wildcard_slots", [])
     picks = state.get("wildcard_picks", [])
     slot_idx = len(picks)
@@ -2072,6 +2154,7 @@ class _TraitRaiseSelect(discord.ui.Select):
 
 
 async def _chargen_traits(interaction: discord.Interaction, state: dict) -> None:
+    state["step"] = "traits"
     view = _ChargenView(state)
     view.add_item(_TraitRaiseSelect(state))
 
@@ -2193,6 +2276,7 @@ class _AdvCategorySelect(discord.ui.Select):
 
 
 async def _chargen_advantages(interaction: discord.Interaction, state: dict) -> None:
+    state["step"] = "advantages"
     view = _ChargenView(state)
     view.add_item(_AdvCategorySelect(state))
 
@@ -2309,6 +2393,7 @@ class _DisadvCategorySelect(discord.ui.Select):
 
 
 async def _chargen_disadvantages(interaction: discord.Interaction, state: dict) -> None:
+    state["step"] = "disadvantages"
     view = _ChargenView(state)
     view.add_item(_DisadvCategorySelect(state))
 
@@ -2429,6 +2514,7 @@ async def _chargen_skills_category(interaction: discord.Interaction, state: dict
 
 
 async def _chargen_skills(interaction: discord.Interaction, state: dict) -> None:
+    state["step"] = "skills"
     view = _ChargenView(state)
     view.add_item(_SkillCategorySelect(state))
 
@@ -2516,6 +2602,7 @@ class _SpellSelect(discord.ui.Select):
 
 
 async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None:
+    state["step"] = "spells"
     sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
     allot = _parse_spell_allotment(sch) if sch else None
     if allot is None:
@@ -2601,6 +2688,7 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
 
 # --- Step 10: Review & Submit ---
 async def _chargen_review(interaction: discord.Interaction, state: dict) -> None:
+    state["step"] = "review"
     char = _materialize_character(state)
     spent, remaining = _calc_chargen_xp(state)
 
@@ -9727,6 +9815,28 @@ class CharacterApprovalView(_DisableableView):
                 f"Please speak with a DM for details and feel free to submit again."
             )
 
+async def _cg_resume(interaction: discord.Interaction, state: dict) -> None:
+    """Show the wizard's last step again on the message this interaction came from."""
+    if interaction.message is not None:
+        state["message_id"] = interaction.message.id
+        state["channel_id"] = interaction.channel_id
+    step = state.get("step", "clan")
+    if step in ("clan", "family"):
+        view = _WizardView(state)
+        view.add_item(_ClanSelect(state))
+        await interaction.response.edit_message(
+            content=f"Resuming **{state.get('name', 'your character')}**.\n**Step 1/10**: Choose your Clan.",
+            embed=_chargen_embed(state), view=view,
+        )
+        return
+    handlers = {
+        "heritage": _go_to_heritage_or_school, "school": _go_to_school_choice, "wildcards": _chargen_wildcards,
+        "traits": _chargen_traits, "advantages": _chargen_advantages, "disadvantages": _chargen_disadvantages,
+        "skills": _chargen_skills, "spells": _chargen_spells, "review": _chargen_review,
+    }
+    await handlers.get(step, _chargen_traits)(interaction, state)
+
+
 async def _start_chargen_wizard(interaction: discord.Interaction) -> None:
     """Shared entry point: open a private channel and pop the name modal."""
     guild = interaction.guild
@@ -9754,6 +9864,25 @@ async def _start_chargen_wizard(interaction: discord.Interaction) -> None:
     if existing_ch_id:
         existing_ch = client.get_channel(int(existing_ch_id))
         if existing_ch:
+            raw = store.get_creation_state(guild_id, user_id)
+            if raw:
+                try:
+                    saved = json.loads(raw)
+                except ValueError:
+                    saved = {}
+                label = _CHARGEN_STEP_LABELS.get(saved.get("step", ""), "where you left off")
+                view = _ChargenResumeView(guild_id, user_id)
+                msg = await existing_ch.send(
+                    f"{interaction.user.mention} Your wizard for **{saved.get('name', 'your character')}** is waiting "
+                    f"at step {label}. Press **Resume** to continue.",
+                    view=view,
+                )
+                await view.persist(msg)
+                await interaction.response.send_message(
+                    f"You already have a character in progress. Continue in {existing_ch.mention} (a Resume button is waiting there).",
+                    ephemeral=True,
+                )
+                return
             await interaction.response.send_message(
                 f"You already have an active character creation channel: {existing_ch.mention}. "
                 f"Finish or cancel that one first.",
@@ -9838,13 +9967,16 @@ class _ChargenNameModal(discord.ui.Modal, title="Character Creation"):
             "chosen_spells": [],
             "concept": concept_text,
         }
+        state["step"] = "clan"
         view = _WizardView(state)
         view.add_item(_ClanSelect(state))
-        await priv_channel.send(
+        first_msg = await priv_channel.send(
             content=f"Welcome, {interaction.user.mention}! Let's build **{character_name}**.\n"
                     f"**Step 1/10**: Choose your Clan.",
             embed=_chargen_embed(state), view=view,
         )
+        state["message_id"] = first_msg.id
+        _cg_save(state)
 
         await interaction.followup.send(
             f"Your private character creation channel has been created: {priv_channel.mention}\n"

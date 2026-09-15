@@ -106,6 +106,8 @@ CREATE INDEX IF NOT EXISTS idx_undo_entity ON undo_snapshots (guild_id, entity_n
 """,
     # 7: pending approval views remember their channel (for /dm pending jump links)
     "ALTER TABLE pending_views ADD COLUMN channel_id TEXT NOT NULL DEFAULT '';",
+    # 8: character-creation wizard state, so a wizard can resume after idling or a restart
+    "ALTER TABLE creation_channels ADD COLUMN state TEXT NOT NULL DEFAULT '';",
 ]
 
 # How many before-states to keep per character/creature for /dm undo.
@@ -894,6 +896,21 @@ class Store:
                 (guild_id, user_id),
             ).fetchone()
         return row["channel_id"] if row else None
+
+    def save_creation_state(self, guild_id: str, user_id: str, state_json: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE creation_channels SET state = ? WHERE guild_id = ? AND user_id = ?",
+                (state_json, guild_id, user_id),
+            )
+
+    def get_creation_state(self, guild_id: str, user_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT state FROM creation_channels WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
+            ).fetchone()
+        return row["state"] if row and row["state"] else None
 
     def delete_creation_channel(self, guild_id: str, user_id: str) -> None:
         with self._lock, self._conn:
