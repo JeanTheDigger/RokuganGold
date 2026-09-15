@@ -35,6 +35,7 @@ class _Deps:
     bot_client: discord.Client
     is_dm: object
     refuse_if_dead: object
+    refuse_if_cannot_act: object
     on_death: object
     require_guild: object
     require_dm_role: object
@@ -65,6 +66,7 @@ def init(
     bot_client: discord.Client,
     is_dm,
     refuse_if_dead,
+    refuse_if_cannot_act,
     on_death,
     require_guild,
     require_dm_role,
@@ -89,6 +91,7 @@ def init(
     _d.bot_client = bot_client
     _d.is_dm = is_dm
     _d.refuse_if_dead = refuse_if_dead
+    _d.refuse_if_cannot_act = refuse_if_cannot_act
     _d.on_death = on_death
     _d.require_guild = require_guild
     _d.require_dm_role = require_dm_role
@@ -1145,7 +1148,7 @@ async def attack(
                 "You have no active character. Use `/sheet create` first.", ephemeral=True
             )
             return
-    if await _d.refuse_if_dead(interaction, attacker_rec.character):
+    if await _d.refuse_if_cannot_act(interaction, attacker_rec.character):
         return
 
     # Weapon: off_hand flag overrides to off-hand weapon; else explicit, else wielded, else katana.
@@ -1416,6 +1419,11 @@ async def attack(
     bonus_kept += cond_kept
     atk_flat += cond_flat
     kata_notes.extend(cond_atk_notes)
+
+    # Failed Fear check (GDD s46): -Xk0 to all rolls until the encounter ends.
+    if atk_combatant is not None and atk_combatant.fear_penalty:
+        bonus_rolled -= atk_combatant.fear_penalty
+        kata_notes.append(f"Fear: -{atk_combatant.fear_penalty}k0 (failed Fear check)")
 
     # Armor attack penalty (s39: Heavy −5, Tetsu-Do −10/−5; Hida R1 exempt).
     armor_pen, armor_note = combat.armor_attack_penalty(attacker)
@@ -1709,8 +1717,9 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         held = "  ⏸️HELD" if c.held else ""
         delayed = "  ⏳DELAYED" if c.delayed else ""
         cover = f"  🪨Cover{'+' if c.cover_bonus > 0 else ''}{c.cover_bonus}" if c.cover_bonus else ""
+        fear = f"  😨-{c.fear_penalty}k0" if c.fear_penalty else ""
         init_val = c.effective_initiative
-        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{held}{delayed}")
+        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{fear}{held}{delayed}")
     header = f"⚔️ **Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
@@ -1764,7 +1773,7 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
         who = "You have" if owner.id == interaction.user.id else f"{owner.display_name} has"
         await interaction.response.send_message(f"{who} no active character. Use `/sheet create` first.", ephemeral=True)
         return
-    if await _d.refuse_if_dead(interaction, rec.character):
+    if await _d.refuse_if_cannot_act(interaction, rec.character):
         return
 
     idr, idk, idn = technique_effects.initiative_dice_bonus(rec.character)
@@ -2408,7 +2417,7 @@ async def grapple_initiate(
             "Both combatants need stored character sheets for grapple initiation.", ephemeral=True
         )
         return
-    if await _d.refuse_if_dead(interaction, atk_rec.character) or await _d.refuse_if_dead(interaction, def_rec.character):
+    if await _d.refuse_if_cannot_act(interaction, atk_rec.character) or await _d.refuse_if_dead(interaction, def_rec.character):
         return
     d_stance = defender_stance.value if defender_stance else "attack"
     tn = combat.grapple_initiate_tn(def_rec.character, d_stance, bonus_tn)
@@ -2430,6 +2439,7 @@ async def grapple_initiate(
             f"Use `/fight action reset` to override.", ephemeral=True)
         return
     ar, af, _ = condition_effects.contested_roll_modifier(atk_cb.conditions)
+    ar -= atk_cb.fear_penalty
     outcome = combat.resolve_grapple_initiate(atk_rec.character, tn, _d.engine,
                                               extra_flat=af, extra_rolled=ar)
     hit = outcome["hit"]
@@ -2538,6 +2548,7 @@ async def grapple_control(
     wp_b = stats.wound_penalty(rec_b.character)
     ar_a, af_a, _ = condition_effects.contested_roll_modifier(cb_a.conditions)
     ar_b, af_b, _ = condition_effects.contested_roll_modifier(cb_b.conditions)
+    ar_a -= cb_a.fear_penalty; ar_b -= cb_b.fear_penalty
     result = combat.resolve_grapple_control(str_a, jiu_a, str_b, jiu_b, _d.engine, wp_a, wp_b,
                                             ar_a, af_a, ar_b, af_b)
     if result["winner"] == "a":
@@ -2872,7 +2883,7 @@ async def duel_assess(
         return
 
     ca, cb_char = rec_a.character, rec_b.character
-    if await _d.refuse_if_dead(interaction, ca) or await _d.refuse_if_dead(interaction, cb_char):
+    if await _d.refuse_if_cannot_act(interaction, ca) or await _d.refuse_if_cannot_act(interaction, cb_char):
         return
 
     enc = _d.encounters.get(ch)
@@ -2902,6 +2913,11 @@ async def duel_assess(
     ex9_b, ex9n_b = technique_effects.iaijutsu_explode_9(cb_char, "assessment")
     tech_notes_a = tn_a + ex9n_a
     tech_notes_b = tn_b + ex9n_b
+    fear_a = cb_a_enc.fear_penalty if cb_a_enc else 0
+    fear_b = cb_b_enc.fear_penalty if cb_b_enc else 0
+    cr_a -= fear_a; cr_b -= fear_b
+    if fear_a: tech_notes_a = tech_notes_a + [f"Fear -{fear_a}k0"]
+    if fear_b: tech_notes_b = tech_notes_b + [f"Fear -{fear_b}k0"]
 
     res_a = combat.resolve_iaijutsu_assessment(
         ca.awareness, ca.skills.get("Iaijutsu", 0), ir_b, _d.engine,
@@ -3012,7 +3028,7 @@ async def duel_focus(
         return
 
     ca, cb_char = rec_a.character, rec_b.character
-    if await _d.refuse_if_dead(interaction, ca) or await _d.refuse_if_dead(interaction, cb_char):
+    if await _d.refuse_if_cannot_act(interaction, ca) or await _d.refuse_if_cannot_act(interaction, cb_char):
         return
 
     enc = _d.encounters.get(ch)
@@ -3046,6 +3062,11 @@ async def duel_focus(
     wt_b, rd_b, ftn_b = technique_effects.iaijutsu_focus_thresholds(cb_char)
     tech_notes_a = tn_a + ex9n_a + ftn_a
     tech_notes_b = tn_b + ex9n_b + ftn_b
+    fear_a = cb_a_enc.fear_penalty if cb_a_enc else 0
+    fear_b = cb_b_enc.fear_penalty if cb_b_enc else 0
+    cr_a -= fear_a; cr_b -= fear_b
+    if fear_a: tech_notes_a = tech_notes_a + [f"Fear -{fear_a}k0"]
+    if fear_b: tech_notes_b = tech_notes_b + [f"Fear -{fear_b}k0"]
 
     result = combat.resolve_iaijutsu_focus(
         ca.void_ring, ca.skills.get("Iaijutsu", 0),
@@ -3152,7 +3173,7 @@ async def duel_strike(
 
     atk = rec_a.character
     tgt = rec_t.character
-    if await _d.refuse_if_dead(interaction, atk) or await _d.refuse_if_dead(interaction, tgt):
+    if await _d.refuse_if_cannot_act(interaction, atk) or await _d.refuse_if_cannot_act(interaction, tgt):
         return
     wound_pen = stats.wound_penalty(atk)
 
@@ -3162,6 +3183,10 @@ async def duel_strike(
     cr, cf, _ = condition_effects.contested_roll_modifier(atk_conds)
 
     tr, tk, tf, tech_notes = technique_effects.iaijutsu_roll_bonus(atk, "strike")
+    fear_s = atk_enc.fear_penalty if atk_enc else 0
+    cr -= fear_s
+    if fear_s:
+        tech_notes = tech_notes + [f"Fear -{fear_s}k0"]
     def_tn_bonus, def_tn_notes = technique_effects.defender_armor_tn_bonus(tgt, "center")
     target_tn = combat.armor_tn(tgt, "center", bonus_tn) + def_tn_bonus
     duel_red, duel_red_notes = technique_effects.iaijutsu_strike_reduction(tgt)
@@ -3751,7 +3776,7 @@ async def battle_roll(
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     battle_skill = c.skills.get("Battle", 0)
     wp = stats.wound_penalty(c)
@@ -3847,7 +3872,7 @@ async def battle_table(
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     battle_skill = c.skills.get("Battle", 0)
     water = stats.water_ring(c)
@@ -3944,7 +3969,7 @@ async def battle_status(
         await interaction.response.send_message(f"General **{general_b}** not found.", ephemeral=True)
         return
     ca, cb = rec_a.character, rec_b.character
-    if await _d.refuse_if_dead(interaction, ca) or await _d.refuse_if_dead(interaction, cb):
+    if await _d.refuse_if_cannot_act(interaction, ca) or await _d.refuse_if_cannot_act(interaction, cb):
         return
     wp_a = stats.wound_penalty(ca)
     wp_b = stats.wound_penalty(cb)

@@ -238,6 +238,35 @@ async def _refuse_if_dead(interaction: discord.Interaction, c: Character) -> boo
     )
     return True
 
+async def _refuse_if_cannot_act(interaction: discord.Interaction, c: Character) -> bool:
+    """Actor-side gate: dead, or Out (unconscious, s22.3). True = refused."""
+    if await _refuse_if_dead(interaction, c):
+        return True
+    if stats.wound_level_name(c) == "Out":
+        await interaction.response.send_message(
+            f"😵 **{c.name}** is **Out** — unconscious (s22.3) — and cannot act until healed above that level.",
+            ephemeral=True,
+        )
+        return True
+    return False
+
+def _fear_penalty(channel_id: int, name: str) -> int:
+    """Rolled dice lost to a failed Fear check, from the channel's encounter (0 if untracked)."""
+    enc = encounters.get(channel_id)
+    cb = enc.find(name) if enc else None
+    return cb.fear_penalty if cb else 0
+
+def _set_fear_penalty(guild_id: str, channel_id: int, name: str, rank: int) -> bool:
+    """Record (rank > 0, keeping the worse of old/new) or clear (rank == 0) a
+    combatant's Fear penalty. False if the character is not in this channel's encounter."""
+    enc = encounters.get(channel_id)
+    cb = enc.find(name) if enc else None
+    if cb is None:
+        return False
+    cb.fear_penalty = max(cb.fear_penalty, rank) if rank > 0 else 0
+    _save_encounter(guild_id, enc)
+    return True
+
 async def _on_death(guild_id: str, name: str, owner_id: str | None, record_id: int | None) -> list[str]:
     """Bookkeeping when a character or creature dies: drop it from every
     initiative tracker in this guild and, for a PC, stop it being the
@@ -8001,7 +8030,7 @@ async def spell_cast(
             )
             return
     caster = rec.character
-    if await _refuse_if_dead(interaction, caster):
+    if await _refuse_if_cannot_act(interaction, caster):
         return
     element = s["element"].lower()
     ring_val = stats.ring_value(caster, element)
@@ -8036,6 +8065,8 @@ async def spell_cast(
             return
         caster.current_void_points -= 1
         extra_rolled = extra_kept = 1
+    fear_r = _fear_penalty(interaction.channel_id, caster.name)
+    extra_rolled -= fear_r
     result = combat.resolve_spell_casting(
         ring_val, caster.school_rank, s["mastery"], engine,
         affinity=affinity, deficiency=deficiency,
@@ -8067,6 +8098,8 @@ async def spell_cast(
         notes.append(f"Void Point: +1k1 ({caster.current_void_points} VP left)")
     if wound_pen:
         notes.append(f"Wound penalty: {wound_pen}")
+    if fear_r:
+        notes.append(f"Fear: -{fear_r}k0 (failed Fear check)")
     if used_bonus_slot:
         bonus_max = stats.void_bonus_max(caster)
         notes.append(f"Void bonus slot used ({caster.void_spell_bonus}/{bonus_max} left)")
@@ -8287,7 +8320,7 @@ async def spell_importune(
             await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
             return
     caster = rec.character
-    if await _refuse_if_dead(interaction, caster):
+    if await _refuse_if_cannot_act(interaction, caster):
         return
     element = s["element"].lower()
     ring_val = stats.ring_value(caster, element)
@@ -8533,7 +8566,7 @@ async def craft_extended(
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
     c = rec.character
-    if await _refuse_if_dead(interaction, c):
+    if await _refuse_if_cannot_act(interaction, c):
         return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
@@ -8947,7 +8980,7 @@ async def dm_treat(
         return
     hc = healer_rec.character
     pc = patient_rec.character
-    if await _refuse_if_dead(interaction, hc):
+    if await _refuse_if_cannot_act(interaction, hc):
         return
     if stats.is_dead(pc):
         await interaction.response.send_message(f"**{pc.name}** is dead. PC death is permanent.", ephemeral=True)
@@ -10574,6 +10607,9 @@ cog_checks.init(
     npc_owner=NPC_OWNER,
     skill_autocomplete=_skill_autocomplete,
     refuse_if_dead=_refuse_if_dead,
+    refuse_if_cannot_act=_refuse_if_cannot_act,
+    fear_penalty=_fear_penalty,
+    set_fear_penalty=_set_fear_penalty,
 )
 
 cog_combat.init(
@@ -10586,6 +10622,7 @@ cog_combat.init(
     bot_client=client,
     is_dm=_is_dm,
     refuse_if_dead=_refuse_if_dead,
+    refuse_if_cannot_act=_refuse_if_cannot_act,
     on_death=_on_death,
     require_guild=_require_guild,
     require_dm_role=_require_dm_role,

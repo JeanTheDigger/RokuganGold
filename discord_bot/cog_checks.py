@@ -29,6 +29,9 @@ class _Deps:
     format_dice: object
     log_roll: object
     refuse_if_dead: object
+    refuse_if_cannot_act: object
+    fear_penalty: object
+    set_fear_penalty: object
     NPC_OWNER: str
 
 
@@ -47,6 +50,9 @@ def init(
     npc_owner: str,
     skill_autocomplete,
     refuse_if_dead,
+    refuse_if_cannot_act,
+    fear_penalty,
+    set_fear_penalty,
 ) -> None:
     _d.store = store
     _d.engine = engine
@@ -56,6 +62,9 @@ def init(
     _d.format_dice = format_dice
     _d.log_roll = log_roll
     _d.refuse_if_dead = refuse_if_dead
+    _d.refuse_if_cannot_act = refuse_if_cannot_act
+    _d.fear_penalty = fear_penalty
+    _d.set_fear_penalty = set_fear_penalty
     _d.NPC_OWNER = npc_owner
 
     # Wire autocompletes programmatically
@@ -143,6 +152,14 @@ def _try_spend_void(
                 void_spent = True
                 void_line = f"\U0001f300 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     return void_r, void_k, void_spent, void_line, sk
+
+
+def _fear(interaction: discord.Interaction, c, adv_r: int, adv_notes: list[str]) -> tuple[int, list[str]]:
+    """Apply a tracked failed-Fear penalty (GDD s46: -Xk0 to all rolls) to a check's rolled dice."""
+    fr = _d.fear_penalty(interaction.channel_id, c.name)
+    if fr:
+        return adv_r - fr, adv_notes + [f"Fear: -{fr}k0 (failed Fear check)"]
+    return adv_r, adv_notes
 
 
 def _build_check_embed(
@@ -262,7 +279,7 @@ async def contest(
         await interaction.response.send_message(f"No character found for **{name_b}**.", ephemeral=True)
         return
     ca, cb = rec_a.character, rec_b.character
-    if await _d.refuse_if_dead(interaction, ca) or await _d.refuse_if_dead(interaction, cb):
+    if await _d.refuse_if_cannot_act(interaction, ca) or await _d.refuse_if_cannot_act(interaction, cb):
         return
     tv_a = stats.trait_value(ca, trait_a.value)
     tv_b = stats.trait_value(cb, trait_b.value)
@@ -286,6 +303,8 @@ async def contest(
     tp_rb, tp_nb = taint.social_roll_penalty(cb, skill_b)
     adv_ra += tp_ra; adv_notes_a = adv_notes_a + tp_na
     adv_rb += tp_rb; adv_notes_b = adv_notes_b + tp_nb
+    adv_ra, adv_notes_a = _fear(interaction, ca, adv_ra, adv_notes_a)
+    adv_rb, adv_notes_b = _fear(interaction, cb, adv_rb, adv_notes_b)
     void_ra, void_ka, void_spent_a, void_line_a, sk_a = _try_spend_void(
         ca, void_a, skill_name=skill_a, sk=sk_a,
         void_unskilled=void_unskilled_a, void_param_label="void_a",
@@ -363,6 +382,7 @@ async def contest(
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, etc.).",
     spend_void="Spend a Void Point for +1k1.",
+    clear="Clear this character's Fear penalty instead of rolling (source removed).",
 )
 async def fear_check(
     interaction: discord.Interaction,
@@ -372,6 +392,7 @@ async def fear_check(
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
+    clear: bool = False,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -383,7 +404,7 @@ async def fear_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     if tattoo_effects.is_fear_immune(c):
         await interaction.response.send_message(
@@ -391,17 +412,32 @@ async def fear_check(
             ephemeral=True,
         )
         return
+    if clear:
+        cleared = _d.set_fear_penalty(guild, interaction.channel_id, c.name, 0)
+        await interaction.response.send_message(
+            f"😌 Fear penalty cleared for **{c.name}**." if cleared
+            else f"**{c.name}** is not in this channel's encounter; nothing to clear.",
+        )
+        return
     wp = stats.wound_penalty(c)
     void_r, void_k, void_spent, void_line, _ = _try_spend_void(c, spend_void)
     soh_r, soh_f, soh_notes = advantage_effects.strength_of_honor(c, "fear")
+    prev_fear = _d.fear_penalty(interaction.channel_id, c.name)
+    if prev_fear:
+        soh_notes = soh_notes + [f"Fear: -{prev_fear}k0 (earlier failed Fear check)"]
     result = combat.resolve_fear_check(
         c.willpower, fear_rank, _d.engine, bonus=bonus + wp + soh_f,
-        extra_rolled=void_r + soh_r, extra_kept=void_k,
+        extra_rolled=void_r + soh_r - prev_fear, extra_kept=void_k,
     )
     if void_spent:
         _d.store.save(rec)
     success = result["success"]
     tn = result["tn"]
+    # GDD s46: failure = -Xk0 (X = Fear Rank) to all rolls until the encounter
+    # ends; failing by 15+ is catastrophic (flee or cower, GM's call).
+    tracked = False
+    if not success:
+        tracked = _d.set_fear_penalty(guild, interaction.channel_id, c.name, fear_rank)
     embed = discord.Embed(
         title=f"😨 Fear Check: {c.name}",
         color=discord.Color.green() if success else discord.Color.dark_red(),
@@ -419,7 +455,13 @@ async def fear_check(
         roll_text += f"\n{void_line}"
     embed.add_field(name="Roll", value=roll_text, inline=False)
     embed.add_field(name="Dice", value=_d.format_dice(result["dice"]), inline=False)
-    verdict = "✅ **Resists the Fear!**" if success else "❌ **Fails!** Must flee or cower."
+    if success:
+        verdict = "✅ **Resists the Fear!**"
+    else:
+        verdict = f"❌ **Fails!** -{fear_rank}k0 to all rolls until the encounter ends"
+        verdict += " (tracked on the initiative list)." if tracked else " (not in an encounter here: DM tracks it)."
+        if result["margin"] <= -15:
+            verdict += "\n💥 **Catastrophic failure (15+):** overwhelmed — flees or cowers helplessly (GM's determination)."
     embed.add_field(
         name="Result",
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
@@ -461,7 +503,7 @@ async def honor_roll(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     hr = stats.honor_rank(c)
     result = combat.resolve_honor_roll(hr, tn, _d.engine, bonus=bonus)
@@ -526,10 +568,11 @@ async def poison_resist(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "poison_resist", "stamina")
+    adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     void_r, void_k, void_spent, void_line, _ = _try_spend_void(c, spend_void, skill_name="poison_resist")
     result = combat.resolve_poison_resist(c.stamina, strength, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
     if void_spent:
@@ -606,11 +649,12 @@ async def medicine_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     medicine_skill = c.skills.get("Medicine", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Medicine", "intelligence")
+    adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     void_r, void_k, void_spent, void_line, medicine_skill = _try_spend_void(
         c, spend_void, skill_name="Medicine", sk=medicine_skill, void_unskilled=void_unskilled,
     )
@@ -693,12 +737,13 @@ async def skill_check_cmd(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     tv = stats.trait_value(c, trait.value)
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
+    adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     tp_r, tp_notes = taint.social_roll_penalty(c, skill)
     adv_r += tp_r; adv_notes = adv_notes + tp_notes
     if spend_void and void_unskilled:
@@ -766,7 +811,7 @@ async def check_cooperative(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
@@ -804,6 +849,7 @@ async def check_cooperative(
     applied = min(successes, max_helpers)
     helper_rolled = applied
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
+    adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=skill, sk=sk, void_unskilled=void_unskilled,
     )
@@ -892,11 +938,12 @@ async def stealth_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     sk = c.skills.get("Stealth", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Stealth", "agility")
+    adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name="Stealth", sk=sk, void_unskilled=void_unskilled,
     )
@@ -964,7 +1011,7 @@ async def investigate_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     sk = c.skills.get("Investigation", 0)
     wp = stats.wound_penalty(c)
@@ -972,6 +1019,7 @@ async def investigate_check(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(
         c, "Investigation", "perception", emphasis=emp_name,
     )
+    adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name="Investigation", sk=sk, void_unskilled=void_unskilled,
     )
@@ -1040,7 +1088,7 @@ async def social_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     trait_attr = _SOCIAL_TRAIT_MAP[skill.value]
     tv = stats.trait_value(c, trait_attr)
@@ -1049,6 +1097,7 @@ async def social_check(
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill.value, trait_attr)
     tp_r, tp_notes = taint.social_roll_penalty(c, skill.value)
     adv_r += tp_r; adv_notes = adv_notes + tp_notes
+    adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=skill.value, sk=sk, void_unskilled=void_unskilled,
     )
@@ -1108,11 +1157,12 @@ async def craft_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, "intelligence")
+    adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=skill, sk=sk, void_unskilled=void_unskilled,
     )
@@ -1171,11 +1221,12 @@ async def lore_check(
         await interaction.response.send_message(f"No character found for **{name}**.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     sk = c.skills.get(specialty, 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, specialty, "intelligence")
+    adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=specialty, sk=sk, void_unskilled=void_unskilled,
     )
@@ -1226,7 +1277,7 @@ async def horsemanship_check(
         await interaction.response.send_message(f"Character **{name}** not found.", ephemeral=True)
         return
     c = rec.character
-    if await _d.refuse_if_dead(interaction, c):
+    if await _d.refuse_if_cannot_act(interaction, c):
         return
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
@@ -1234,6 +1285,7 @@ async def horsemanship_check(
     skill_rank = c.skills.get("Horsemanship", 0)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Horsemanship", "agility")
+    adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     void_r, void_k, void_spent, void_line, skill_rank = _try_spend_void(
         c, spend_void, skill_name="Horsemanship", sk=skill_rank, void_unskilled=void_unskilled,
     )

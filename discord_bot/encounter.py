@@ -63,6 +63,9 @@ class Combatant:
     center_init_boost: int = 0           # +10 Initiative for one Round; clears at round boundary
     # Cover/terrain bonus: DM-set Armor TN modifier. Persists until DM changes it.
     cover_bonus: int = 0
+    # Failed Fear check (GDD s46): -Xk0 to all rolls until the encounter ends
+    # or the source is removed. X = the Fear Rank failed against.
+    fear_penalty: int = 0
 
     @property
     def effective_initiative(self) -> int:
@@ -99,6 +102,7 @@ class Combatant:
             "center_bonus_available": self.center_bonus_available,
             "center_init_boost": self.center_init_boost,
             "cover_bonus": self.cover_bonus,
+            "fear_penalty": self.fear_penalty,
         }
 
     @classmethod
@@ -124,6 +128,7 @@ class Combatant:
             center_bonus_available=d.get("center_bonus_available", False),
             center_init_boost=d.get("center_init_boost", 0),
             cover_bonus=d.get("cover_bonus", 0),
+            fear_penalty=d.get("fear_penalty", 0),
         )
 
 
