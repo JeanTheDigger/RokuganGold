@@ -7944,7 +7944,7 @@ async def spell_resist(
         store.save(rec)
     rolled = willpower + extra_rolled
     kept = willpower + extra_kept
-    result = engine.roll_and_keep(max(1, rolled), max(1, kept), False)
+    result = engine.roll_and_keep(max(1, rolled), max(1, kept))
     wound_pen = stats.wound_penalty(c)
     total = result.total + wound_pen
     success = total >= tn
@@ -7967,7 +7967,7 @@ async def spell_resist(
         embed.add_field(name="Modifiers", value=" · ".join(notes), inline=False)
     embed.add_field(
         name="Rule",
-        value="L5R 4e: target rolls raw Willpower (no skill, no explosion) vs the spell's TN.",
+        value="L5R 4e: target rolls raw Willpower (a Trait Roll: no skill, dice explode) vs the spell's TN.",
         inline=False,
     )
     await interaction.response.send_message(embed=embed)
@@ -8000,7 +8000,7 @@ async def spell_interrupt(
     tn = (5 + damage) if damage > 0 else 10
     willpower = c.willpower
     wound_pen = stats.wound_penalty(c)
-    result = engine.roll_and_keep(max(1, willpower), max(1, willpower), False)
+    result = engine.roll_and_keep(max(1, willpower), max(1, willpower))
     total = result.total + wound_pen
     success = total >= tn
     embed = discord.Embed(

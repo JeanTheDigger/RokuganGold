@@ -576,8 +576,8 @@ def resolve_disarm(
     roll (Strength k Strength, non-exploding, + wound penalties + conditions).
     Attacker wins ties-broken by >."""
     dmg = dice_engine.roll_damage(2, 1)
-    a = dice_engine.roll_and_keep(max(attacker.strength + atk_rolled_mod, 1), max(attacker.strength, 1), False)
-    d = dice_engine.roll_and_keep(max(defender.strength + def_rolled_mod, 1), max(defender.strength, 1), False)
+    a = dice_engine.roll_and_keep(max(attacker.strength + atk_rolled_mod, 1), max(attacker.strength, 1))
+    d = dice_engine.roll_and_keep(max(defender.strength + def_rolled_mod, 1), max(defender.strength, 1))
     a_total = a.total + stats.wound_penalty(attacker) + atk_flat_mod
     d_total = d.total + stats.wound_penalty(defender) + def_flat_mod
     return {
@@ -597,8 +597,8 @@ def resolve_knockdown(
 ) -> dict:
     """Knockdown (s40): contested Strength roll (non-exploding, + wound penalties
     + conditions); a quadruped defender adds +4."""
-    a = dice_engine.roll_and_keep(max(attacker.strength + atk_rolled_mod, 1), max(attacker.strength, 1), False)
-    d = dice_engine.roll_and_keep(max(defender.strength + def_rolled_mod, 1), max(defender.strength, 1), False)
+    a = dice_engine.roll_and_keep(max(attacker.strength + atk_rolled_mod, 1), max(attacker.strength, 1))
+    d = dice_engine.roll_and_keep(max(defender.strength + def_rolled_mod, 1), max(defender.strength, 1))
     a_total = a.total + stats.wound_penalty(attacker) + atk_flat_mod
     d_total = d.total + stats.wound_penalty(defender) + def_flat_mod + (4 if is_quadruped else 0)
     return {
@@ -822,12 +822,12 @@ def resolve_fear_check(
     extra_kept: int = 0,
 ) -> dict:
     """Fear check: Willpower roll vs TN 5 + (Fear Rank × 5).
-    Willpower is both rolled and kept (trait-only, no skill: never explodes).
-    L5R 4e core: Fear rating gives a TN, character rolls raw Willpower."""
+    Willpower is both rolled and kept. A Trait Roll explodes as normal
+    (L5R 4e: only Unskilled Skill rolls forgo exploding dice)."""
     tn = 5 + fear_rank * 5
     rolled = max(1, willpower + extra_rolled)
     kept = max(1, willpower + extra_kept)
-    result = dice_engine.roll_and_keep(rolled, kept, False)
+    result = dice_engine.roll_and_keep(rolled, kept)
     total = result.total + bonus
     return {
         "success": total >= tn,
@@ -851,10 +851,10 @@ def resolve_honor_roll(
     bonus: int = 0,
 ) -> dict:
     """Honor Roll: roll Honor Rank dice, keep 1, vs a TN.
-    L5R 4e core: a character resists temptation or dishonor by rolling
-    their Honor Rank in dice and keeping one. No explosion (not a skill)."""
+    Dice explode as on any Trait Roll (L5R 4e: only Unskilled Skill rolls
+    forgo exploding dice)."""
     rolled = max(1, honor_rank)
-    result = dice_engine.roll_and_keep(rolled, 1, False)
+    result = dice_engine.roll_and_keep(rolled, 1)
     total = result.total + bonus
     return {
         "success": total >= tn,
@@ -880,11 +880,12 @@ def resolve_poison_resist(
     extra_kept: int = 0,
 ) -> dict:
     """Poison resistance: Stamina roll vs TN (Poison Strength × 5).
-    Stamina is trait-only (rolled = kept = Stamina, no explosion)."""
+    Stamina is trait-only (rolled = kept = Stamina); a Trait Roll explodes
+    as normal (L5R 4e: only Unskilled Skill rolls forgo exploding dice)."""
     tn = poison_strength * 5
     rolled = max(1, stamina + extra_rolled)
     kept = max(1, stamina + extra_kept)
-    result = dice_engine.roll_and_keep(rolled, kept, False)
+    result = dice_engine.roll_and_keep(rolled, kept)
     total = result.total + bonus
     return {
         "success": total >= tn,

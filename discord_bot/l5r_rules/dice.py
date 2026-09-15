@@ -7,8 +7,9 @@ this module reproduces its rules exactly:
   - Roll & Keep (roll N dice, keep the K highest, sum the kept)
   - Exploding 10s (and 9-or-10 for high-rank techniques via ``explode_9``)
   - Emphasis (reroll any initial 1 once; the new face stands)
-  - The L5R4e 10-dice cap: never roll or keep more than 10; every excess die
-    converts to a flat +2 bonus on the final total ("overflow bonus")
+  - The Ten Dice Rule (GDD s41): never roll or keep more than 10; extra rolled
+    dice become kept dice at 2:1, and dice that cannot convert are +2 each
+    ("overflow bonus")
   - Unskilled rolls do not explode (handled by callers passing ``explodes=False``)
   - Hungry Blade / initial-8 bonus explosion via ``explode_8``
 
@@ -92,12 +93,20 @@ class DiceEngine:
         if kept > rolled:
             kept = rolled
 
-        # L5R4e 10-dice cap: never roll or keep more than 10. Each excess die
-        # converts to a flat +2 bonus on the final total.
+        # Ten Dice Rule (GDD s41 / L5R 4e): never roll or keep more than 10.
+        # Every 2 extra rolled dice become 1 kept die while kept < 10; any
+        # rolled die that cannot convert (an odd leftover, or all of them
+        # once kept is 10) is +2. Each kept die beyond 10 is +2.
+        # s41 examples: 12k4 -> 10k5; 13k9 -> 10k10 +2; 10k12 -> 10k10 +4;
+        # 14k12 -> 10k10 +12.
         overflow_bonus = 0
         if rolled > 10:
-            overflow_bonus += (rolled - 10) * 2
+            extra_rolled = rolled - 10
             rolled = 10
+            while extra_rolled >= 2 and kept < 10:
+                kept += 1
+                extra_rolled -= 2
+            overflow_bonus += extra_rolled * 2
         if kept > 10:
             overflow_bonus += (kept - 10) * 2
             kept = 10
@@ -266,15 +275,19 @@ if __name__ == "__main__":
     r = eng.roll_and_keep(3, 9, explodes=False)
     assert len(r.kept_dice) == 3 and len(r.dropped_dice) == 0
 
-    # 3. 10-dice cap overflow: 12k5 -> roll capped 10 (+2*2=+4), keep 5.
+    # 3. Ten Dice Rule: 12k5 -> 10k6 (2 extra rolled dice = 1 kept die).
     r = eng.roll_and_keep(12, 5, explodes=False)
-    assert r.overflow_bonus == 4
-    assert len(r.kept_dice) == 5
-    assert r.total == sum(r.kept_dice) + 4
+    assert r.overflow_bonus == 0
+    assert len(r.kept_dice) == 6
+    assert r.total == sum(r.kept_dice)
 
-    # 4. keep overflow too: 12k12 -> roll 10 (+4), keep 10 (+4) = +8 total.
-    r = eng.roll_and_keep(12, 12, explodes=False)
-    assert r.overflow_bonus == 8
+    # 4. s41 examples: 13k9 -> 10k10 +2; 10k12 -> 10k10 +4; 14k12 -> 10k10 +12.
+    r = eng.roll_and_keep(13, 9, explodes=False)
+    assert len(r.kept_dice) == 10 and r.overflow_bonus == 2
+    r = eng.roll_and_keep(10, 12, explodes=False)
+    assert len(r.kept_dice) == 10 and r.overflow_bonus == 4
+    r = eng.roll_and_keep(14, 12, explodes=False)
+    assert len(r.kept_dice) == 10 and r.overflow_bonus == 12
 
     # 5. Non-exploding dice never exceed 10 per die.
     r = eng.roll_and_keep(10, 10, explodes=False)
