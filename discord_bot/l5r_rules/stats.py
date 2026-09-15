@@ -4,9 +4,13 @@ Faithful port of the relevant parts of `simulation/character_stats.gd` and
 `simulation/wound_system.gd`:
 
   - Ring = min of its two Traits (Void standalone)
-  - Wound threshold per level = Earth ring x 2
-  - 9 wound levels (Healthy .. Dead); level index = (wounds - 1) // threshold
-  - Total capacity = threshold x 8 (Dead beyond Out)
+  - Wound track (L5R 4e RAW, owner decision 2026-09-15): Healthy holds
+    Earth x 5 wounds; each of the seven following levels (Nicked .. Out)
+    holds Earth x 2. Dead is anything beyond Out.
+    (The Godot simulation and GDD s22.3 use Earth x 2 for every level; the
+    bot deliberately follows the tabletop rule instead.)
+  - 9 wound levels (Healthy .. Dead)
+  - Total capacity = Earth x 5 + Earth x 2 x 7 (Dead beyond Out)
   - Insight = (sum of the five Rings) x 10 + total skill ranks
   - Insight Rank ladder: R1@0, R2@150, then +25 per rank
 
@@ -37,20 +41,27 @@ def earth_ring(c: Character) -> int:
     return ring_value(c, "earth")
 
 
+def healthy_wound_threshold(c: Character) -> int:
+    """Wounds the Healthy level holds (RAW: Earth x 5)."""
+    return earth_ring(c) * 5
+
+
 def wound_threshold_per_level(c: Character) -> int:
+    """Wounds each level after Healthy holds (RAW: Earth x 2)."""
     return earth_ring(c) * 2
 
 
 def wound_level_index(c: Character) -> int:
-    threshold = wound_threshold_per_level(c)
-    if threshold <= 0:
+    healthy = healthy_wound_threshold(c)
+    step = wound_threshold_per_level(c)
+    if step <= 0:
         return 8  # Earth 0 -> Dead
     effective = c.wounds_taken
     if any(d.lower() == "permanent wound" for d in c.disadvantages):
-        effective = max(effective, threshold + 1)
-    if effective <= 0:
-        return 0  # Healthy
-    idx = (effective - 1) // threshold
+        effective = max(effective, healthy + 1)
+    if effective <= healthy:
+        return 0  # Healthy (a full level is still that level)
+    idx = 1 + (effective - healthy - 1) // step
     return min(idx, 8)
 
 
@@ -63,7 +74,8 @@ def wound_penalty(c: Character) -> int:
 
 
 def total_wound_capacity(c: Character) -> int:
-    return wound_threshold_per_level(c) * 8
+    """Wounds at which Out is full; one more is Dead."""
+    return healthy_wound_threshold(c) + wound_threshold_per_level(c) * 7
 
 
 def is_dead(c: Character) -> bool:

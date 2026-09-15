@@ -296,11 +296,12 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     lvl = stats.wound_level_name(c)
     pen = stats.wound_penalty(c)
     cap = stats.total_wound_capacity(c)
+    healthy = stats.healthy_wound_threshold(c)
     per = stats.wound_threshold_per_level(c)
     track = stats.wound_track(c)
     wound_line = (
         f"**{lvl}**" + (f" ({pen} penalty)" if pen else "")
-        + f"\n{c.wounds_taken} / {cap} wounds  ·  {per} per level"
+        + f"\n{c.wounds_taken} / {cap} wounds  ·  Healthy {healthy}, then {per} per level"
         + f"\n{track}"
     )
     embed.add_field(name="Wounds", value=wound_line, inline=True)
