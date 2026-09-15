@@ -162,6 +162,18 @@ def _fear(interaction: discord.Interaction, c, adv_r: int, adv_notes: list[str])
     return adv_r, adv_notes
 
 
+def _emphasis_for(c, skill_name: str, requested: str | None) -> tuple[str | None, str | None]:
+    """(matched Emphasis, error). An Emphasis must be on the sheet for that Skill;
+    it rerolls 1s once (GDD s04.5 / s24.0)."""
+    if not requested:
+        return None, None
+    emph = combat.emphasis_match(c, skill_name, requested)
+    if emph:
+        return emph, None
+    have = ", ".join(c.emphases.get(skill_name, [])) or "none"
+    return None, f"**{c.name}** has no *{requested.strip()}* Emphasis in {skill_name} (sheet: {have})."
+
+
 def _build_check_embed(
     title: str,
     c_name: str,
@@ -623,6 +635,7 @@ async def poison_resist(
     bonus="Flat bonus (advantages, tools, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Medicine 0 as 1 (removes unskilled penalty).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
     reason="What is being treated (for display).",
 )
 async def medicine_check(
@@ -634,6 +647,7 @@ async def medicine_check(
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
+    emphasis: str | None = None,
     reason: str | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -655,10 +669,16 @@ async def medicine_check(
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Medicine", "intelligence")
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
+    emph, emph_err = _emphasis_for(c, "Medicine", emphasis)
+    if emph_err:
+        await interaction.response.send_message(emph_err, ephemeral=True)
+        return
+    if emph:
+        adv_notes = adv_notes + [f"Emphasis ({emph}): 1s rerolled once"]
     void_r, void_k, void_spent, void_line, medicine_skill = _try_spend_void(
         c, spend_void, skill_name="Medicine", sk=medicine_skill, void_unskilled=void_unskilled,
     )
-    result = combat.resolve_medicine_check(c.intelligence, medicine_skill, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    result = combat.resolve_medicine_check(c.intelligence, medicine_skill, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
     success = result["success"]
@@ -709,6 +729,7 @@ async def medicine_check(
     bonus="Flat bonus (advantages, situational, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
     reason="Label shown with the roll.",
     secret="Secret roll: result shown only to you (the DM), not the channel.",
 )
@@ -724,6 +745,7 @@ async def skill_check_cmd(
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
+    emphasis: str | None = None,
     reason: str | None = None,
     secret: bool = False,
 ) -> None:
@@ -749,10 +771,16 @@ async def skill_check_cmd(
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
+    emph, emph_err = _emphasis_for(c, skill, emphasis)
+    if emph_err:
+        await interaction.response.send_message(emph_err, ephemeral=True)
+        return
+    if emph:
+        adv_notes = adv_notes + [f"Emphasis ({emph}): 1s rerolled once"]
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=skill, sk=sk, void_unskilled=void_unskilled,
     )
-    result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
@@ -784,6 +812,7 @@ async def skill_check_cmd(
     bonus="Flat bonus to the primary roll.",
     spend_void="Spend a Void Point for +1k1 on the primary roll.",
     void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
     reason="Label shown with the roll.",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
@@ -799,6 +828,7 @@ async def check_cooperative(
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
+    emphasis: str | None = None,
     reason: str | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -850,10 +880,16 @@ async def check_cooperative(
     helper_rolled = applied
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
+    emph, emph_err = _emphasis_for(c, skill, emphasis)
+    if emph_err:
+        await interaction.response.send_message(emph_err, ephemeral=True)
+        return
+    if emph:
+        adv_notes = adv_notes + [f"Emphasis ({emph}): 1s rerolled once"]
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=skill, sk=sk, void_unskilled=void_unskilled,
     )
-    result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=helper_rolled + adv_r + void_r, extra_kept=adv_k + void_k)
+    result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=helper_rolled + adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     result["rolled"] = tv + sk + helper_rolled + adv_r + void_r
     result["kept"] = tv + adv_k + void_k
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
@@ -910,6 +946,7 @@ async def check_cooperative(
     bonus="Flat bonus (cover, darkness, distractions, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Stealth 0 as 1 (removes unskilled penalty).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
     reason="Label (e.g. 'sneaking past the guards').",
     secret="Secret roll: result shown only to you (the DM).",
 )
@@ -922,6 +959,7 @@ async def stealth_check(
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
+    emphasis: str | None = None,
     reason: str | None = None,
     secret: bool = False,
 ) -> None:
@@ -944,10 +982,16 @@ async def stealth_check(
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Stealth", "agility")
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
+    emph, emph_err = _emphasis_for(c, "Stealth", emphasis)
+    if emph_err:
+        await interaction.response.send_message(emph_err, ephemeral=True)
+        return
+    if emph:
+        adv_notes = adv_notes + [f"Emphasis ({emph}): 1s rerolled once"]
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name="Stealth", sk=sk, void_unskilled=void_unskilled,
     )
-    result = combat.resolve_skill_check(c.agility, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    result = combat.resolve_skill_check(c.agility, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
     skill_label = f"Stealth {sk}" if sk > 0 else "Stealth (unskilled)"
@@ -975,7 +1019,7 @@ async def stealth_check(
 @app_commands.describe(
     name="Character investigating.",
     tn="Target Number.",
-    emphasis="Investigation emphasis (display/reminder: DM adjudicates emphasis reroll).",
+    emphasis="Investigation Emphasis: if on the sheet, 1s are rerolled once.",
     member="Player making the check (uses their active character).",
     is_npc="Character is an NPC (look up by name).",
     bonus="Flat bonus (advantages, tools, etc.).",
@@ -1020,10 +1064,13 @@ async def investigate_check(
         c, "Investigation", "perception", emphasis=emp_name,
     )
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
+    inv_emph = combat.emphasis_match(c, "Investigation", emp_name)
+    if inv_emph:
+        adv_notes = adv_notes + [f"Emphasis ({inv_emph}): 1s rerolled once"]
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name="Investigation", sk=sk, void_unskilled=void_unskilled,
     )
-    result = combat.resolve_skill_check(c.perception, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    result = combat.resolve_skill_check(c.perception, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(inv_emph))
     if void_spent:
         _d.store.save(rec)
     has_emphasis = emp_name and emp_name in c.emphases.get("Investigation", [])
@@ -1060,6 +1107,7 @@ async def investigate_check(
     bonus="Flat bonus (Status, Honor, Void Point, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
     reason="Label (e.g. 'convincing the magistrate').",
 )
 @app_commands.choices(skill=_SOCIAL_SKILLS)
@@ -1073,6 +1121,7 @@ async def social_check(
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
+    emphasis: str | None = None,
     reason: str | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -1098,10 +1147,16 @@ async def social_check(
     tp_r, tp_notes = taint.social_roll_penalty(c, skill.value)
     adv_r += tp_r; adv_notes = adv_notes + tp_notes
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
+    emph, emph_err = _emphasis_for(c, skill.value, emphasis)
+    if emph_err:
+        await interaction.response.send_message(emph_err, ephemeral=True)
+        return
+    if emph:
+        adv_notes = adv_notes + [f"Emphasis ({emph}): 1s rerolled once"]
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=skill.value, sk=sk, void_unskilled=void_unskilled,
     )
-    result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
     skill_label = f"{skill.value} {sk}" if sk > 0 else f"{skill.value} (unskilled)"
@@ -1130,6 +1185,7 @@ async def social_check(
     bonus="Flat bonus (tools, workshop, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
     reason="Label (e.g. 'forging a katana').",
 )
 async def craft_check(
@@ -1142,6 +1198,7 @@ async def craft_check(
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
+    emphasis: str | None = None,
     reason: str | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -1163,10 +1220,16 @@ async def craft_check(
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, "intelligence")
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
+    emph, emph_err = _emphasis_for(c, skill, emphasis)
+    if emph_err:
+        await interaction.response.send_message(emph_err, ephemeral=True)
+        return
+    if emph:
+        adv_notes = adv_notes + [f"Emphasis ({emph}): 1s rerolled once"]
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=skill, sk=sk, void_unskilled=void_unskilled,
     )
-    result = combat.resolve_skill_check(c.intelligence, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    result = combat.resolve_skill_check(c.intelligence, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
@@ -1194,6 +1257,7 @@ async def craft_check(
     bonus="Flat bonus (library, scrolls, advantages, etc.).",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Skill 0 as 1 (removes unskilled penalty).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
     reason="Label (e.g. 'identifying the creature').",
 )
 async def lore_check(
@@ -1206,6 +1270,7 @@ async def lore_check(
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
+    emphasis: str | None = None,
     reason: str | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -1227,10 +1292,16 @@ async def lore_check(
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, specialty, "intelligence")
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
+    emph, emph_err = _emphasis_for(c, specialty, emphasis)
+    if emph_err:
+        await interaction.response.send_message(emph_err, ephemeral=True)
+        return
+    if emph:
+        adv_notes = adv_notes + [f"Emphasis ({emph}): 1s rerolled once"]
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=specialty, sk=sk, void_unskilled=void_unskilled,
     )
-    result = combat.resolve_skill_check(c.intelligence, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    result = combat.resolve_skill_check(c.intelligence, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
     skill_label = f"{specialty} {sk}" if sk > 0 else f"{specialty} (unskilled)"
@@ -1254,6 +1325,7 @@ async def lore_check(
     bonus="Flat bonus.",
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Spend a Void Point to treat Horsemanship 0 as 1 (removes unskilled penalty).",
+    emphasis="Skill Emphasis to apply (must be on the sheet): rerolls 1s once (s24).",
     reason="Label (e.g. 'charge', 'leap obstacle', 'stay mounted').",
 )
 async def horsemanship_check(
@@ -1265,6 +1337,7 @@ async def horsemanship_check(
     bonus: int = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
+    emphasis: str | None = None,
     reason: str = "",
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -1286,10 +1359,16 @@ async def horsemanship_check(
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Horsemanship", "agility")
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
+    emph, emph_err = _emphasis_for(c, "Horsemanship", emphasis)
+    if emph_err:
+        await interaction.response.send_message(emph_err, ephemeral=True)
+        return
+    if emph:
+        adv_notes = adv_notes + [f"Emphasis ({emph}): 1s rerolled once"]
     void_r, void_k, void_spent, void_line, skill_rank = _try_spend_void(
         c, spend_void, skill_name="Horsemanship", sk=skill_rank, void_unskilled=void_unskilled,
     )
-    result = combat.resolve_skill_check(c.agility, skill_rank, tn, _d.engine, bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
+    result = combat.resolve_skill_check(c.agility, skill_rank, tn, _d.engine, bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
     embed = _build_check_embed(

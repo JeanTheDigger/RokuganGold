@@ -8145,6 +8145,12 @@ async def spell_cast(
     caster = rec.character
     if await _refuse_if_cannot_act(interaction, caster):
         return
+    if raises < 0 or raises > combat.max_raises(caster):
+        await interaction.response.send_message(
+            f"Too many Raises: {raises} called but the maximum per roll is the Void Ring, "
+            f"**{combat.max_raises(caster)}** (s41).", ephemeral=True,
+        )
+        return
     element = s["element"].lower()
     ring_val = stats.ring_value(caster, element)
     affinity = caster.affinity_element.lower() == element if caster.affinity_element else False
@@ -8434,6 +8440,12 @@ async def spell_importune(
             return
     caster = rec.character
     if await _refuse_if_cannot_act(interaction, caster):
+        return
+    if raises < 0 or raises > combat.max_raises(caster):
+        await interaction.response.send_message(
+            f"Too many Raises: {raises} called but the maximum per roll is the Void Ring, "
+            f"**{combat.max_raises(caster)}** (s41).", ephemeral=True,
+        )
         return
     element = s["element"].lower()
     ring_val = stats.ring_value(caster, element)

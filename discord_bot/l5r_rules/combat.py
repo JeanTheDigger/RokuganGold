@@ -336,6 +336,33 @@ def get_weapon_profile(weapon_name: str) -> dict:
     return WEAPON_CATALOG.get(weapon_name.lower().strip(), DEFAULT_WEAPON)
 
 
+def max_raises(character: Character) -> int:
+    """GDD s41: maximum called Raises per roll = Void Ring (Free Raises do not count)."""
+    return character.void_ring
+
+
+def emphasis_match(character: Character, skill_name: str, requested: str | None) -> str | None:
+    """The sheet's Emphasis in `skill_name` matching `requested` (case-insensitive), or None."""
+    if not requested:
+        return None
+    want = requested.strip().lower()
+    for emph in character.emphases.get(skill_name, []):
+        if emph.lower() == want:
+            return emph
+    return None
+
+
+def weapon_emphasis(character: Character, weapon_name: str) -> str | None:
+    """The Emphasis on the weapon's Skill that names this weapon (e.g. Kenjutsu:
+    Katana), or None. An Emphasis rerolls 1s once (GDD s04.5 / s24.0)."""
+    skill_name = get_weapon_profile(weapon_name).get("skill", "Kenjutsu")
+    want = weapon_name.lower().strip().replace("_", " ")
+    for emph in character.emphases.get(skill_name, []):
+        if emph.lower().replace("_", " ") == want:
+            return emph
+    return None
+
+
 def armor_tn(target: Character, defender_stance: str = "attack", extra: int = 0) -> int:
     """Target's Armor TN. Base = Reflexes x 5 + 5 + armor bonus (CharacterStats.get_armor_tn),
     plus the defender's stance. `extra` is a DM-supplied situational modifier."""
@@ -437,6 +464,7 @@ def resolve_attack(
     extra_flat: int = 0,
     trait_override: int | None = None,
     trait_override_name: str = "",
+    emphasis: bool = False,
 ) -> dict:
     """Resolve one attack roll vs a Target Number. `increased_damage` are raises
     spent on the Increased Damage maneuver: they raise the TN like any called
@@ -468,9 +496,10 @@ def resolve_attack(
     total_raises = raises + increased_damage
     explodes = skill_rank > 0
 
-    result = dice_engine.roll_check(max(1, rolled), max(1, kept), target_armor_tn, total_raises, flat_bonus, explodes)
+    result = dice_engine.roll_check(max(1, rolled), max(1, kept), target_armor_tn, total_raises, flat_bonus, explodes, emphasis)
     return {
         "hit": result["success"],
+        "emphasis": emphasis,
         "roll": result["total"],
         "target_tn": result["tn"],
         "margin": result["margin"],
@@ -910,14 +939,16 @@ def resolve_skill_check(
     bonus: int = 0,
     extra_rolled: int = 0,
     extra_kept: int = 0,
+    emphasis: bool = False,
 ) -> dict:
     """Generic Skill/Trait check vs a TN. Roll (trait + skill) keep trait.
     Explodes only if skilled (skill > 0). extra_rolled/extra_kept add dice
-    from advantages without inflating both rolled and kept."""
+    from advantages without inflating both rolled and kept. `emphasis`
+    rerolls 1s once (s04.5 / s24.0)."""
     rolled = trait + skill + extra_rolled
     kept = trait + extra_kept
     explodes = skill > 0
-    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
+    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes, emphasis)
     total = result.total + bonus
     return {
         "success": total >= tn,
@@ -942,13 +973,14 @@ def resolve_medicine_check(
     bonus: int = 0,
     extra_rolled: int = 0,
     extra_kept: int = 0,
+    emphasis: bool = False,
 ) -> dict:
     """Medicine/Intelligence check vs a TN. Used for treating poison, disease,
     wounds, etc. Explodes only if skilled."""
     rolled = intelligence + medicine_skill + extra_rolled
     kept = intelligence + extra_kept
     explodes = medicine_skill > 0
-    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
+    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes, emphasis)
     total = result.total + bonus
     return {
         "success": total >= tn,

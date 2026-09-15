@@ -880,6 +880,7 @@ class DamageView(views_base.PersistentView):
             attacker_stance=a_stance,
             bonus_rolled=bonus_rolled, bonus_kept=bonus_kept, extra_flat=atk_flat,
             trait_override=trait_ovr, trait_override_name=trait_ovr_name,
+            emphasis=bool(combat.weapon_emphasis(attacker, self.weapon)),
         )
         hit = outcome["hit"]
         embed2 = discord.Embed(
@@ -965,6 +966,7 @@ class DamageView(views_base.PersistentView):
             attacker_stance=self.attacker_stance,
             bonus_rolled=bonus_rolled, bonus_kept=bonus_kept, extra_flat=atk_flat,
             trait_override=trait_ovr, trait_override_name=trait_ovr_name,
+            emphasis=bool(combat.weapon_emphasis(attacker, self.weapon)),
         )
         hit = outcome["hit"]
         embed2 = discord.Embed(
@@ -1252,6 +1254,35 @@ async def attack(
         if def_extra:
             maneuver_raises += def_extra
 
+    # GDD s41: an Unskilled Roll may not benefit from Raises of any kind (called,
+    # maneuver or Free), and called Raises (a maneuver's cost counts, after Free
+    # Raises) may not exceed the Void Ring. Checked before any Void Point is spent.
+    _atk_char = attacker_rec.character
+    _atk_profile = combat.get_weapon_profile(weapon)
+    _atk_skill = _atk_profile.get("skill", "Kenjutsu")
+    if _atk_char.skills.get(_atk_skill, 0) == 0 and (raises or increased_damage or maneuver_raises):
+        await interaction.response.send_message(
+            f"**{_atk_char.name}** is Unskilled in {_atk_skill}: an Unskilled Roll may not benefit from "
+            "Raises of any kind, called, maneuver or Free (s41). Attack without them.",
+            ephemeral=True,
+        )
+        return
+    _free = (
+        skill_mastery.maneuver_free_raises(_atk_char, _atk_profile, weapon, man)[0]
+        + tattoo_effects.maneuver_free_raises(_atk_char, man)[0]
+        + technique_effects.maneuver_free_raises(_atk_char, weapon, man, weapon_profile=_atk_profile)[0]
+    )
+    _man_called = max(0, maneuver_raises - _free)
+    _called = raises + increased_damage + _man_called
+    if _called > combat.max_raises(_atk_char):
+        await interaction.response.send_message(
+            f"Too many Raises: **{_called}** called (raises {raises} + increased damage {increased_damage}"
+            f" + maneuver {_man_called} after Free Raises) but the maximum per roll is the Void Ring, "
+            f"**{combat.max_raises(_atk_char)}** (s41).",
+            ephemeral=True,
+        )
+        return
+
     # Void Point spend: +1k1 on the attack roll (decrement the pool now).
     void_line = ""
     bonus_rolled = bonus_kept = 0
@@ -1282,6 +1313,10 @@ async def attack(
     kata_notes.extend(kitsuki_notes)
     rl_used_notes: list[str] = []       # rate-limited effects already spent this Turn/Round
     attacker = attacker_rec.character
+    # Emphasis on this weapon (e.g. Kenjutsu: Katana): reroll 1s once (s04.5 / s24.0).
+    atk_emphasis = combat.weapon_emphasis(attacker, weapon)
+    if atk_emphasis:
+        kata_notes.append(f"Emphasis ({atk_emphasis}): 1s rerolled once")
     atk_init = atk_combatant.initiative if atk_combatant else None
     def_combatant = enc.find(target_rec.character.name) if (enc and target_rec is not None) else None
     def_init = def_combatant.initiative if def_combatant else None
@@ -1578,6 +1613,7 @@ async def attack(
         attacker, weapon, tn, raises + maneuver_raises, _d.engine,
         attacker_stance=a_stance, increased_damage=increased_damage,
         bonus_rolled=bonus_rolled, bonus_kept=bonus_kept, extra_flat=atk_flat,
+        emphasis=bool(atk_emphasis),
         trait_override=trait_ovr, trait_override_name=trait_ovr_name,
     )
 
