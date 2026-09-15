@@ -3202,23 +3202,54 @@ async def sheet_view(interaction: discord.Interaction, member: discord.Member | 
             return
     await interaction.response.send_message(embed=build_sheet_embed(rec), ephemeral=True)
 
-@sheet.command(name="activate", description="Choose which of your characters is the active one.")
-@app_commands.describe(name="One of your characters (see /sheet list).")
+async def _activate_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    """Staff only: their own characters plus every stored NPC."""
+    if interaction.guild_id is None or not _is_dm(interaction):
+        return []
+    guild = str(interaction.guild_id)
+    cur = (current or "").lower().strip()
+    mine = [r.character.name for r in store.list_by_owner(guild, str(interaction.user.id))]
+    npcs = [r.character.name for r in store.list_by_owner(guild, NPC_OWNER)]
+    out = [app_commands.Choice(name=n, value=n) for n in mine if cur in n.lower()]
+    out += [app_commands.Choice(name=f"NPC: {n}", value=n) for n in sorted(npcs) if cur in n.lower()]
+    return out[:25]
+
+@sheet.command(name="activate", description="Staff: act as one of your characters or as a stored NPC (commands without a name use it).")
+@app_commands.describe(name="Your character, or an NPC's name.")
+@app_commands.autocomplete(name=_activate_autocomplete)
 async def sheet_activate(interaction: discord.Interaction, name: app_commands.Range[str, 1, 64]) -> None:
     if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     uid = str(interaction.user.id)
+    if not _is_dm(interaction):
+        await interaction.response.send_message(
+            "Each player has one character, so there is nothing to switch to. If yours needs replacing, ask staff.",
+            ephemeral=True,
+        )
+        return
     rec = store.get_by_name(guild, uid, name)
+    as_npc = False
     if rec is None:
-        mine = ", ".join(r.character.name for r in store.list_by_owner(guild, uid)) or "none yet (`/sheet create`)"
-        await interaction.response.send_message(f"You have no character called **{name}**. Yours: {mine}.", ephemeral=True)
+        rec = store.get_by_name(guild, NPC_OWNER, name)
+        as_npc = rec is not None
+    if rec is None:
+        mine = ", ".join(r.character.name for r in store.list_by_owner(guild, uid)) or "none"
+        await interaction.response.send_message(
+            f"No character or NPC called **{name}**. Yours: {mine}. NPCs: see `/npc list`.", ephemeral=True,
+        )
         return
     if stats.is_dead(rec.character):
-        await interaction.response.send_message(f"💀 **{rec.character.name}** is dead and cannot be your active character.", ephemeral=True)
+        await interaction.response.send_message(f"💀 **{rec.character.name}** is dead and cannot be made active.", ephemeral=True)
         return
     store.set_active(guild, uid, rec.id)
-    await interaction.response.send_message(f"✅ **{rec.character.name}** is now your active character.", ephemeral=True)
+    if as_npc:
+        await interaction.response.send_message(
+            f"🎭 You are now acting as **{rec.character.name}** (NPC): attacks, checks, spells and `/fight status` "
+            f"without a name use it. `/sheet activate` your own character to switch back.", ephemeral=True,
+        )
+    else:
+        await interaction.response.send_message(f"✅ **{rec.character.name}** is now your active character.", ephemeral=True)
 
 @sheet.command(name="list", description="List your characters (or a player's, if you are a DM).")
 @app_commands.describe(member="Whose characters to list [Fortune]. Omit for your own.")
@@ -5299,7 +5330,7 @@ async def void_status(
 # ===========================================================================
 
 _HELP_BLURBS: dict[str, str] = {
-    "sheet": "Create and manage your character sheet (create, view, activate, wounds, Void, Kata, Kiho, export).",
+    "sheet": "Your character sheet: create, view, Void, Kata, Kiho, export. One character per player; staff use activate to act as NPCs.",
     "stat": "Your gear and purse: equip, wield, items, koku. Traits, skills, armor and advantages are set by Fortune; players advance with /xp.",
     "xp": "Spend Experience on traits, skills, emphases, kata, kiho, spells and advantages.",
     "roll": "Roll & Keep dice, with optional TN, Raises and Emphasis.",

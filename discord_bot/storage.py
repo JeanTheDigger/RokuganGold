@@ -523,9 +523,9 @@ class Store:
             rows = self._conn.execute(
                 "SELECT a.user_id, c.* FROM active_characters a JOIN characters c "
                 "ON c.id = a.character_id "
-                "WHERE a.guild_id = ? AND a.user_id != ? "
+                "WHERE a.guild_id = ? AND a.user_id != ? AND c.owner_id != ? "
                 "ORDER BY c.name COLLATE NOCASE",
-                (guild_id, "npc"),
+                (guild_id, "npc", "npc"),
             ).fetchall()
         return [(r["user_id"], self._row_to_record(r)) for r in rows]
 
