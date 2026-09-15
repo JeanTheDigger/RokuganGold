@@ -2115,6 +2115,23 @@ async def _refresh_roster_message(enc: encounter.Encounter) -> None:
             pass
 
 
+async def _close_roster_message(enc: encounter.Encounter, guild: str, note: str = "Roster closed.") -> None:
+    """Disable the roster message's buttons and drop its persisted view."""
+    if not enc.roster or not enc.roster_message_id:
+        return
+    msg = await _fetch_roster_message(enc)
+    view = RosterView(guild, enc.channel_id)
+    view._persist_message_id = enc.roster_message_id
+    view._disable()   # also forgets the pending-view row
+    if msg is None:
+        return
+    try:
+        await msg.edit(content=_render_roster(enc) + f"\n*({note})*", view=view,
+                       allowed_mentions=discord.AllowedMentions.none())
+    except discord.HTTPException:
+        pass
+
+
 async def _require_roster(interaction: discord.Interaction) -> encounter.Encounter | None:
     """The channel's rostered encounter if the user is its organizer or staff; else an error."""
     enc = _d.encounters.get(interaction.channel_id)
@@ -2193,20 +2210,9 @@ async def combat_roster_close(interaction: discord.Interaction) -> None:
             "This encounter has begun; only staff can end it (`/combat end`).", ephemeral=True,
         )
         return
-    msg = await _fetch_roster_message(enc)
+    await _close_roster_message(enc, str(interaction.guild_id))
     _d.encounters.pop(interaction.channel_id, None)
     _d.delete_encounter(interaction.channel_id)
-    if msg is not None:
-        view = RosterView(str(interaction.guild_id), interaction.channel_id)
-        view._persist_message_id = msg.id
-        view._disable()
-        try:
-            await msg.edit(content=_render_roster(enc) + "\n*(Roster closed.)*", view=view,
-                           allowed_mentions=discord.AllowedMentions.none())
-        except discord.HTTPException:
-            pass
-    else:
-        _d.store.delete_pending_view(str(enc.roster_message_id))
     await interaction.response.send_message("🛡️ Encounter roster closed.")
     await _d.combat_log(str(interaction.guild_id), f"--- Encounter roster closed by {interaction.user.display_name} ---")
 
@@ -2409,6 +2415,7 @@ async def combat_end(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
     embed, logs = _render_summary(enc, guild, final=True)
+    await _close_roster_message(enc, guild, "Encounter ended.")
     _d.encounters.pop(interaction.channel_id, None)
     _d.delete_encounter(interaction.channel_id)
     await interaction.response.send_message(content="⚔️ Encounter ended.", embed=embed)

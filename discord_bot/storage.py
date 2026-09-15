@@ -419,16 +419,18 @@ class Store:
             ).fetchall()
         return [self._row_to_record(r) for r in rows]
 
-    def save(self, record: CharacterRecord, note: str = "") -> None:
+    def save(self, record: CharacterRecord, note: str = "") -> bool:
         """Write the character. The row's previous state is kept as an undo
-        snapshot (labelled `note`) when the data actually changes."""
+        snapshot (labelled `note`) when the data actually changes. Returns
+        True if the data changed."""
         payload = json.dumps(record.character.to_dict())
         with self._lock, self._conn:
-            self._snapshot("characters", "character", record.id, record.guild_id, payload, note)
+            changed = self._snapshot("characters", "character", record.id, record.guild_id, payload, note)
             self._conn.execute(
                 "UPDATE characters SET data = ?, name = ?, updated_at = ? WHERE id = ?",
                 (payload, record.character.name, time.time(), record.id),
             )
+        return changed
 
     def delete(self, character_id: int) -> None:
         with self._lock, self._conn:
@@ -698,14 +700,15 @@ class Store:
 
     # -- undo snapshots (/dm undo) ---------------------------------------------
     def _snapshot(self, table: str, entity_type: str, entity_id: int, guild_id: str,
-                  new_payload: str, note: str) -> None:
+                  new_payload: str, note: str) -> bool:
         """Inside the caller's lock/transaction: store the row's current data as
-        an undo snapshot if the new payload differs, then trim old snapshots."""
+        an undo snapshot if the new payload differs, then trim old snapshots.
+        Returns True if a snapshot was taken (the data changed)."""
         row = self._conn.execute(
             f"SELECT name, data FROM {table} WHERE id = ?", (entity_id,)
         ).fetchone()
         if row is None or row["data"] == new_payload:
-            return
+            return False
         self._conn.execute(
             "INSERT INTO undo_snapshots (guild_id, entity_type, entity_id, entity_name, note, data, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -717,6 +720,7 @@ class Store:
             "ORDER BY id DESC LIMIT ?)",
             (entity_type, entity_id, entity_type, entity_id, UNDO_KEEP_PER_ENTITY),
         )
+        return True
 
     def _row_to_undo(self, row: sqlite3.Row) -> UndoRecord:
         return UndoRecord(

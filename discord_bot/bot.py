@@ -196,8 +196,37 @@ views_base.init(store)
 
 
 # ===========================================================================
-# Global error handler
+# Global error handlers (slash commands, buttons/menus, modals)
 # ===========================================================================
+_COMPONENT_ERROR_TEXT = (
+    "Something went wrong with that control. The error has been logged; "
+    "try again, or tell a DM what you pressed."
+)
+
+async def _send_component_error(interaction: discord.Interaction) -> None:
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(_COMPONENT_ERROR_TEXT, ephemeral=True)
+        else:
+            await interaction.response.send_message(_COMPONENT_ERROR_TEXT, ephemeral=True)
+    except discord.HTTPException:
+        pass
+
+async def _view_on_error(self: discord.ui.View, interaction: discord.Interaction, error: Exception,
+                         item: discord.ui.Item) -> None:
+    label = getattr(item, "label", None) or getattr(item, "placeholder", None) or type(item).__name__
+    log.error("Unhandled error in view %s [%s]: %s", type(self).__name__, label, error, exc_info=error)
+    await _send_component_error(interaction)
+
+async def _modal_on_error(self: discord.ui.Modal, interaction: discord.Interaction, error: Exception) -> None:
+    log.error("Unhandled error in modal %s: %s", type(self).__name__, error, exc_info=error)
+    await _send_component_error(interaction)
+
+# Every view and modal in the bot (library defaults only print to stderr and
+# leave the user with Discord's bare "This interaction failed").
+discord.ui.View.on_error = _view_on_error
+discord.ui.Modal.on_error = _modal_on_error
+
 async def _on_app_command_error(
     interaction: discord.Interaction, error: app_commands.AppCommandError
 ) -> None:
@@ -314,6 +343,43 @@ def _set_fear_penalty(guild_id: str, channel_id: int, name: str, rank: int) -> b
     cb.fear_penalty = max(cb.fear_penalty, rank) if rank > 0 else 0
     _save_encounter(guild_id, enc)
     return True
+
+def _sheet_diff(old: dict, new: dict) -> list[str]:
+    """Readable field-by-field differences between two saved sheets."""
+    out: list[str] = []
+    for key in sorted(set(old) | set(new)):
+        a, b = old.get(key), new.get(key)
+        if a == b:
+            continue
+        if isinstance(a, dict) or isinstance(b, dict):
+            a, b = a or {}, b or {}
+            for k in sorted(set(a) | set(b)):
+                if a.get(k) != b.get(k):
+                    out.append(f"{key}.{k} {a.get(k, '—')} → {b.get(k, '—')}")
+        elif isinstance(a, list) or isinstance(b, list):
+            a, b = a or [], b or []
+            added = [x for x in b if x not in a]; removed = [x for x in a if x not in b]
+            if added:
+                out.append(f"{key} +{', '.join(map(str, added))}")
+            if removed:
+                out.append(f"{key} −{', '.join(map(str, removed))}")
+        else:
+            out.append(f"{key} {a} → {b}")
+    return out
+
+async def _audit_stat(interaction: discord.Interaction, rec: storage.CharacterRecord, what: str,
+                      changed: bool = True) -> None:
+    """One combat-log line per sheet edit: who edited whose sheet and what changed.
+    `changed` is Store.save()'s return value: the undo snapshot it just took is the before-state."""
+    guild = str(interaction.guild_id)
+    changes: list[str] = []
+    if changed:
+        snaps = store.list_undo(guild, rec.character.name, limit=1)
+        if snaps and snaps[0].entity_id == rec.id:
+            changes = _sheet_diff(snaps[0].data, rec.character.to_dict())
+    who = interaction.user.display_name + ("" if rec.owner_id == str(interaction.user.id) else " (staff)")
+    detail = "; ".join(changes)[:600] if changes else "no change"
+    await _combat_log(guild, f"EDIT: {who} · {rec.character.name} · {what} · {detail}")
 
 def _tally(channel_id: int | None, name: str, key: str, amount: int = 1) -> None:
     """Add to the fight tally of this channel's encounter (no-op if none / unknown name)."""
@@ -3383,7 +3449,8 @@ async def sheet_trait(
         return
     rec.character.set_trait(trait.value, value)
     rank_msg = _check_insight_rank_advance(rec.character)
-    store.save(rec)
+    changed = store.save(rec, note="stat trait")
+    await _audit_stat(interaction, rec, "stat trait", changed)
     label = "Void" if trait.value == "void" else trait.value.capitalize()
     await interaction.response.send_message(
         f"Set **{label}** to **{value}** on **{rec.character.name}**.{rank_msg}", embed=build_sheet_embed(rec)
@@ -3438,7 +3505,8 @@ async def sheet_skill(
                 changes.append(f"**{sname}** {srank}")
         msg = f"Set on **{rec.character.name}**: {', '.join(changes)}."
     msg += _check_insight_rank_advance(rec.character)
-    store.save(rec)
+    changed = store.save(rec, note="stat skill")
+    await _audit_stat(interaction, rec, "stat skill", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 @stat_group.command(name="set", description="Set a numeric field (honor, glory, void points, armor, etc.).")
@@ -3460,7 +3528,8 @@ async def sheet_set(
         await interaction.response.send_message(err, ephemeral=True)
         return
     _apply_numeric_field(rec.character, field.value, value)
-    store.save(rec)
+    changed = store.save(rec, note="stat set")
+    await _audit_stat(interaction, rec, "stat set", changed)
     await interaction.response.send_message(
         f"Updated **{field.value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
     )
@@ -3495,7 +3564,8 @@ async def sheet_equip(
             c.weapons.append(w)
         prof = combat.WEAPON_CATALOG[w]
         msg = f"**{c.name}** equips **{w}** (DR {prof['rolled']}k{prof['kept']}, {prof['skill']})."
-    store.save(rec)
+    changed = store.save(rec, note="stat equip")
+    await _audit_stat(interaction, rec, "stat equip", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 @stat_group.command(name="wield", description="Set the weapon(s) in hand: the default for /fight attack and for defensive Kata.")
@@ -3523,7 +3593,8 @@ async def sheet_wield(
     if unwield:
         c.equipped_weapon = ""
         c.off_hand_weapon = ""
-        store.save(rec)
+        changed = store.save(rec, note="stat wield")
+        await _audit_stat(interaction, rec, "stat wield", changed)
         await interaction.response.send_message(
             f"**{c.name}** lowers their weapons (unarmed).", embed=build_sheet_embed(rec)
         )
@@ -3536,7 +3607,8 @@ async def sheet_wield(
         )
         return
     c.off_hand_weapon = off_hand.lower().strip() if off_hand and off_hand.strip() else ""
-    store.save(rec)
+    changed = store.save(rec, note="stat wield")
+    await _audit_stat(interaction, rec, "stat wield", changed)
     off = f" + **{c.off_hand_weapon}** (off hand)" if c.off_hand_weapon else ""
     await interaction.response.send_message(
         f"🗡️ **{c.name}** wields **{c.equipped_weapon}**{off}.", embed=build_sheet_embed(rec)
@@ -3578,7 +3650,8 @@ async def sheet_armor(
         msg = f"**{c.name}** equips **{a}**{heavy}: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}{cost_note}."
         if spec.get("special"):
             msg += f"\n⚠️ {spec['special']}"
-    store.save(rec)
+    changed = store.save(rec, note="stat armor")
+    await _audit_stat(interaction, rec, "stat armor", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 _QUALITY_CHOICES = [
@@ -3613,7 +3686,8 @@ async def sheet_quality(
     c = rec.character
     if clear:
         c.weapon_qualities = []
-        store.save(rec)
+        changed = store.save(rec, note="stat quality")
+        await _audit_stat(interaction, rec, "stat quality", changed)
         await interaction.response.send_message(
             f"Cleared all weapon qualities from **{c.name}**.", embed=build_sheet_embed(rec)
         )
@@ -3635,7 +3709,8 @@ async def sheet_quality(
         )
         return
     c.weapon_qualities = sorted(set(parsed))
-    store.save(rec)
+    changed = store.save(rec, note="stat quality")
+    await _audit_stat(interaction, rec, "stat quality", changed)
     q_list = ", ".join(c.weapon_qualities)
     wpn = c.equipped_weapon or "(no weapon equipped)"
     await interaction.response.send_message(
@@ -3663,7 +3738,8 @@ async def sheet_item(
     if not ok:
         await interaction.response.send_message(msg, ephemeral=True)
         return
-    store.save(rec)
+    changed = store.save(rec, note="stat item")
+    await _audit_stat(interaction, rec, "stat item", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 @stat_group.command(name="koku", description="Add or spend koku (money). Negative amount spends.")
@@ -3698,7 +3774,8 @@ async def sheet_koku(
         label = f"Spent **{abs(amount):g}** koku"
     why = f" ({reason})" if reason else ""
     msg = f"\U0001F4B0 **{c.name}**: {label}{why}. Balance: **{c.koku:g}** koku."
-    store.save(rec)
+    changed = store.save(rec, note="stat koku")
+    await _audit_stat(interaction, rec, "stat koku", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 @stat_group.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free: no XP).")
@@ -3730,7 +3807,8 @@ async def sheet_advantage(
         param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(base)
         if param_hint and ":" not in name:
             msg += f"\n*Hint: this advantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
-    store.save(rec)
+    changed = store.save(rec, note="stat advantage")
+    await _audit_stat(interaction, rec, "stat advantage", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 @stat_group.command(name="disadvantage", description="Record (or remove) a Disadvantage on your sheet (grants XP: DM /xp grant).")
@@ -3763,7 +3841,8 @@ async def sheet_disadvantage(
         param_hint = advantage_effects.PARAMETERISED_DISADVANTAGES.get(base)
         if param_hint and ":" not in name:
             msg += f"\n*Hint: this disadvantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
-    store.save(rec)
+    changed = store.save(rec, note="stat disadvantage")
+    await _audit_stat(interaction, rec, "stat disadvantage", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 @sheet_kata_grp.command(name="learn", description="Record (or remove) a Kata on your sheet (free: no XP; use /xp kata to buy).")
@@ -6231,10 +6310,12 @@ class SpellDamageView(_DisableableView):
         kept: int,
         bonus: int,
         source_channel_id: int = 0,
+        caster_name: str = "",
     ) -> None:
         super().__init__(timeout=1800)
         self.target_id = target_id
         self.target_name = target_name
+        self.caster_name = caster_name
         self.raw_damage = raw_damage
         self.dice_text = dice_text
         self.reason = reason
@@ -6300,7 +6381,12 @@ class SpellDamageView(_DisableableView):
                 else:
                     void_line = "\n🔮 No Void Points available: full damage applied"
         store.save(rec, note="spell damage")
-        _tally(self.source_channel_id or interaction.channel_id, rec.character.name, "taken", applied["final_damage"])
+        ch_for_tally = self.source_channel_id or interaction.channel_id
+        _tally(ch_for_tally, rec.character.name, "taken", applied["final_damage"])
+        if self.caster_name:
+            _tally(ch_for_tally, self.caster_name, "dealt", applied["final_damage"])
+            if applied["is_dead"]:
+                _tally(ch_for_tally, self.caster_name, "kills")
         c = rec.character
         death_line = ""
         if applied["is_dead"]:
@@ -8920,7 +9006,9 @@ async def craft_extended(
     bonus="Flat damage bonus.",
     target="Target character name (shows DM-approval buttons to apply).",
     reason="Spell name or label.",
+    caster="The caster (a combatant here): credits the damage and any kill in the fight summary.",
 )
+@app_commands.autocomplete(caster=cog_combat._combatant_autocomplete)
 async def spell_damage(
     interaction: discord.Interaction,
     rolled: app_commands.Range[int, 1, 30],
@@ -8928,6 +9016,7 @@ async def spell_damage(
     bonus: int = 0,
     target: str | None = None,
     reason: str = "",
+    caster: str | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -8959,7 +9048,7 @@ async def spell_damage(
                 target_id=rec.id, target_name=rec.character.name,
                 raw_damage=total, dice_text=_format_dice(result),
                 reason=reason, rolled=rolled, kept=kept, bonus=bonus,
-                source_channel_id=src_ch_id,
+                source_channel_id=src_ch_id, caster_name=(caster or "").strip(),
             )
             owner_ping = f" <@{rec.owner_id}>" if rec.owner_id != NPC_OWNER else ""
             if approval_ch:
