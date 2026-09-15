@@ -1743,7 +1743,8 @@ async def combat_start(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
         "⚔️ New encounter started. Add combatants with `/combat join` (your character) "
         "or `/combat add` (an NPC), then `/combat next` to begin.\n"
-        "Players end their turn with `/combat turn done`."
+        "Players end their turn with `/combat turn done`. "
+        "(For an invite-and-accept roster use `/combat setup` instead.)"
     )
     await _d.combat_log(guild, "--- Encounter started ---")
 
@@ -1775,7 +1776,23 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
         return
     if await _d.refuse_if_cannot_act(interaction, rec.character):
         return
+    enc = _d.encounters.get(interaction.channel_id)
+    if enc is not None and enc.roster and not _d.is_dm(interaction) and not enc.roster_allows(str(owner.id)):
+        status = enc.roster.get(str(owner.id))
+        why = "declined the roster (press **Join** on it to change your mind)" if status == "declined" else \
+              "have not accepted the roster yet (press **Join** on it)" if status == "pending" else \
+              "are not on this encounter's roster: ask the organizer or staff to add you"
+        await interaction.response.send_message(f"You {why}.", ephemeral=True)
+        return
 
+    enc, init_total = _join_record(guild, interaction.channel_id, str(owner.id), rec)
+    await interaction.response.send_message(_render_encounter(enc, guild))
+    await _d.combat_log(guild, f"Joined: {rec.character.name} (Init {init_total})")
+
+
+def _join_record(guild: str, channel_id: int, owner_id: str, rec: _storage_mod.CharacterRecord) -> tuple[encounter.Encounter, int]:
+    """Roll initiative for a stored character and place it in the channel's
+    encounter (re-joining re-rolls). Returns (encounter, initiative total)."""
     idr, idk, idn = technique_effects.initiative_dice_bonus(rec.character)
     result = combat.roll_initiative(rec.character, _d.engine, idr, idk)
     swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
@@ -1784,19 +1801,236 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
     swift_detail = f" +5 Swift" if swift_bonus else ""
     tech_init_detail = "".join(f" +{n}" for n in tech_init_notes)
     dice_detail = "".join(f" [{n}]" for n in idn)
-    enc = _get_or_create(interaction.channel_id)
+    enc = _get_or_create(channel_id)
     enc.remove(rec.character.name)  # re-join re-rolls
     enc.add(encounter.Combatant(
         name=rec.character.name,
         initiative=init_total,
         initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}",
-        owner_id=str(owner.id),
+        owner_id=owner_id,
         is_npc=False,
         reflexes=rec.character.reflexes,
     ))
     _d.save_encounter(guild, enc)
-    await interaction.response.send_message(_render_encounter(enc, guild))
-    await _d.combat_log(guild, f"Joined: {rec.character.name} (Init {init_total})")
+    return enc, init_total
+
+
+# ---------------------------------------------------------------------------
+# Encounter roster (/combat setup): who is in the fight, by consent or by staff
+# ---------------------------------------------------------------------------
+
+_ROSTER_ICON = {"pending": "⏳", "accepted": "✅", "declined": "❌", "forced": "🔒"}
+
+
+def _render_roster(enc: encounter.Encounter) -> str:
+    counts = {k: 0 for k in _ROSTER_ICON}
+    lines = []
+    for uid, status in enc.roster.items():
+        counts[status] = counts.get(status, 0) + 1
+        in_init = any(c.owner_id == uid for c in enc.combatants)
+        lines.append(f"{_ROSTER_ICON.get(status, '❔')} <@{uid}> — {status}{' · in initiative' if in_init else ''}")
+    head = f"🛡️ **Encounter roster** (organizer: <@{enc.organizer_id}>)"
+    tally = f"✅ {counts['accepted']}  ⏳ {counts['pending']}  ❌ {counts['declined']}  🔒 {counts['forced']}"
+    if enc.roster_begun:
+        tail = "Begun: accepted players are in initiative. Late **Join** rolls you in at once."
+    else:
+        tail = ("Invited players: press **Join** or **Decline**. Staff: **Force** requires everyone in. "
+                "Organizer/staff: **Begin** rolls initiative for all who are in.")
+    return "\n".join([head, *lines, "", tally, tail])
+
+
+class RosterView(views_base.PersistentView):
+    """Join / Decline / Force / Begin buttons under an encounter roster message."""
+
+    KIND = "encounter_roster"
+
+    def __init__(self, guild_id: str, channel_id: int) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        enc = _d.encounters.get(channel_id) if hasattr(_d, "encounters") else None
+        if enc is not None and enc.roster_begun:
+            self.begin.disabled = True
+
+    async def _enc(self, interaction: discord.Interaction) -> encounter.Encounter | None:
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None or not enc.roster:
+            self._disable()
+            try:
+                await interaction.response.edit_message(
+                    content=(interaction.message.content if interaction.message else "") + "\n*(This roster is closed.)*",
+                    view=self, allowed_mentions=discord.AllowedMentions.none(),
+                )
+            except discord.HTTPException:
+                pass
+            return None
+        return enc
+
+    async def _refresh(self, interaction: discord.Interaction, enc: encounter.Encounter, extra: str = "") -> None:
+        _d.save_encounter(self.guild_id, enc)
+        if enc.roster_begun:
+            self.begin.disabled = True
+        await interaction.response.edit_message(
+            content=_render_roster(enc), view=self, allowed_mentions=discord.AllowedMentions.none(),
+        )
+        if extra:
+            await interaction.followup.send(extra, allowed_mentions=discord.AllowedMentions.none())
+
+    async def _roll_in(self, interaction: discord.Interaction, enc: encounter.Encounter, user_ids: list[str]) -> list[str]:
+        """Roll initiative for these rostered users' active characters. Returns note lines."""
+        notes: list[str] = []
+        for uid in user_ids:
+            if any(c.owner_id == uid for c in enc.combatants):
+                continue
+            rec = _d.store.get_active(self.guild_id, uid)
+            if rec is None:
+                notes.append(f"<@{uid}>: no active character (`/sheet use`), not added")
+                continue
+            if stats.is_dead(rec.character) or stats.wound_level_name(rec.character) == "Out":
+                notes.append(f"<@{uid}>: **{rec.character.name}** cannot act ({stats.wound_level_name(rec.character)}), not added")
+                continue
+            _, total = _join_record(self.guild_id, self.channel_id, uid, rec)
+            notes.append(f"**{rec.character.name}**: Init {total}")
+            await _d.combat_log(self.guild_id, f"Joined: {rec.character.name} (Init {total})")
+        return notes
+
+    @discord.ui.button(label="Join", style=discord.ButtonStyle.success, emoji="✅")
+    async def join(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = await self._enc(interaction)
+        if enc is None:
+            return
+        uid = str(interaction.user.id)
+        if uid not in enc.roster:
+            await interaction.response.send_message(
+                "You are not on this roster. Ask the organizer to set it up again with you, or staff to add you with `/combat join`.",
+                ephemeral=True,
+            )
+            return
+        if enc.roster[uid] != "forced":
+            enc.roster[uid] = "accepted"
+        extra = ""
+        if enc.roster_begun:
+            notes = await self._roll_in(interaction, enc, [uid])
+            extra = "\n".join(notes) + "\n" + _render_encounter(enc, self.guild_id) if notes else ""
+        await self._refresh(interaction, enc, extra)
+
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.secondary, emoji="❌")
+    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = await self._enc(interaction)
+        if enc is None:
+            return
+        uid = str(interaction.user.id)
+        if uid not in enc.roster:
+            await interaction.response.send_message("You are not on this roster; nothing to decline.", ephemeral=True)
+            return
+        if enc.roster[uid] == "forced":
+            await interaction.response.send_message("Staff have required you to join this encounter.", ephemeral=True)
+            return
+        if any(c.owner_id == uid for c in enc.combatants):
+            await interaction.response.send_message(
+                "You are already in initiative. Staff can remove you with `/combat remove`.", ephemeral=True,
+            )
+            return
+        enc.roster[uid] = "declined"
+        await self._refresh(interaction, enc)
+
+    @discord.ui.button(label="Force (staff)", style=discord.ButtonStyle.danger, emoji="🔒")
+    async def force(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can force players into an encounter.", ephemeral=True,
+            )
+            return
+        enc = await self._enc(interaction)
+        if enc is None:
+            return
+        forced = [uid for uid, st in enc.roster.items() if st in ("pending", "declined")]
+        for uid in forced:
+            enc.roster[uid] = "forced"
+        extra = ""
+        if forced and enc.roster_begun:
+            notes = await self._roll_in(interaction, enc, forced)
+            extra = "\n".join(notes) + "\n" + _render_encounter(enc, self.guild_id) if notes else ""
+        await self._refresh(interaction, enc, extra)
+        if forced:
+            await _d.combat_log(self.guild_id, f"Roster: {interaction.user.display_name} forced {len(forced)} player(s) in")
+
+    @discord.ui.button(label="Begin", style=discord.ButtonStyle.primary, emoji="⚔️")
+    async def begin(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = await self._enc(interaction)
+        if enc is None:
+            return
+        if str(interaction.user.id) != enc.organizer_id and not _d.is_dm(interaction):
+            await interaction.response.send_message("Only the organizer or staff can begin the encounter.", ephemeral=True)
+            return
+        if enc.roster_begun:
+            await interaction.response.send_message("Already begun. Late players use **Join**.", ephemeral=True)
+            return
+        ready = [uid for uid, st in enc.roster.items() if st in encounter.ROSTER_IN]
+        if not ready:
+            await interaction.response.send_message("Nobody has accepted yet.", ephemeral=True)
+            return
+        enc.roster_begun = True
+        notes = await self._roll_in(interaction, enc, ready)
+        pending = sum(1 for st in enc.roster.values() if st == "pending")
+        tail = f"\n⏳ {pending} invited player(s) have not answered; they can still press **Join**." if pending else ""
+        extra = ("\n".join(notes) + "\n" + _render_encounter(enc, self.guild_id)
+                 + "\nStaff: add NPCs with `/combat add`, `/combat npc` or `/combat creature`, then `/combat next`." + tail)
+        await self._refresh(interaction, enc, extra)
+        await _d.combat_log(self.guild_id, f"Roster begun by {interaction.user.display_name}: {len(notes)} rolled")
+
+
+class _RosterPickView(discord.ui.View):
+    """Ephemeral member picker shown by /combat setup."""
+
+    def __init__(self, organizer: discord.Member) -> None:
+        super().__init__(timeout=600)
+        self.organizer = organizer
+
+    @discord.ui.select(cls=discord.ui.UserSelect, placeholder="Who is in this encounter?", min_values=1, max_values=25)
+    async def pick(self, interaction: discord.Interaction, select: discord.ui.UserSelect) -> None:
+        if interaction.user.id != self.organizer.id:
+            await interaction.response.send_message("Only the organizer can pick the roster.", ephemeral=True)
+            return
+        guild = str(interaction.guild_id)
+        existing = _d.encounters.get(interaction.channel_id)
+        if existing is not None and existing.started:
+            await interaction.response.send_message("A fight is already running here. `/combat end` it first.", ephemeral=True)
+            return
+        enc = encounter.Encounter(channel_id=interaction.channel_id)
+        enc.organizer_id = str(self.organizer.id)
+        for user in select.values:
+            if getattr(user, "bot", False):
+                continue
+            enc.roster[str(user.id)] = "accepted" if user.id == self.organizer.id else "pending"
+        if not enc.roster:
+            await interaction.response.send_message("Pick at least one player (bots do not fight).", ephemeral=True)
+            return
+        _d.encounters[interaction.channel_id] = enc
+        _d.save_encounter(guild, enc)
+        self.stop()
+        await interaction.response.edit_message(content="Roster posted below.", view=None)
+        view = RosterView(guild, interaction.channel_id)
+        msg = await interaction.followup.send(
+            _render_roster(enc), view=view, wait=True,
+            allowed_mentions=discord.AllowedMentions(users=True),
+        )
+        await view.persist(msg)
+        await _d.combat_log(guild, f"--- Encounter roster set up by {self.organizer.display_name} ({len(enc.roster)} invited) ---")
+
+
+@combat_group.command(name="setup", description="Set up an encounter roster: pick who is in, players accept or decline, then begin.")
+async def combat_setup(interaction: discord.Interaction) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    existing = _d.encounters.get(interaction.channel_id)
+    if existing is not None and existing.started:
+        await interaction.response.send_message("A fight is already running here. `/combat end` it first.", ephemeral=True)
+        return
+    await interaction.response.send_message(
+        "Pick the players for this encounter (you may include yourself). Staff add NPCs and creatures after **Begin**.",
+        view=_RosterPickView(interaction.user), ephemeral=True,
+    )
 
 
 @combat_group.command(name="add", description="Add an NPC/monster to initiative by its Reflexes and Insight Rank.")

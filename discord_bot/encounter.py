@@ -20,6 +20,9 @@ VALID_CONDITIONS: frozenset[str] = frozenset({
     "grappled", "mounted", "pinned", "prone", "stunned",
 })
 
+# Roster statuses that put a player into initiative (see Encounter.roster).
+ROSTER_IN: frozenset[str] = frozenset({"accepted", "forced"})
+
 VALID_STANCES: frozenset[str] = frozenset({
     "attack", "full_attack", "defense", "full_defense", "center",
 })
@@ -141,6 +144,15 @@ class Encounter:
     started: bool = False
     surprise_round: bool = False
     notes: str = ""
+    # Encounter roster (/combat setup): Discord user id -> "pending",
+    # "accepted", "declined" or "forced". Empty = no roster (open encounter).
+    roster: dict[str, str] = field(default_factory=dict)
+    organizer_id: str = ""
+    roster_begun: bool = False   # Begin was pressed: late accepts roll in at once
+
+    def roster_allows(self, user_id: str) -> bool:
+        """True if this user may join initiative: no roster, or accepted/forced."""
+        return not self.roster or self.roster.get(user_id) in ROSTER_IN
 
     def _sort(self) -> None:
         self.combatants.sort(key=lambda c: (c.effective_initiative, c.reflexes), reverse=True)
@@ -254,6 +266,9 @@ class Encounter:
             "started": self.started,
             "surprise_round": self.surprise_round,
             "notes": self.notes,
+            "roster": dict(self.roster),
+            "organizer_id": self.organizer_id,
+            "roster_begun": self.roster_begun,
         }
 
     @classmethod
@@ -265,6 +280,9 @@ class Encounter:
             started=d.get("started", False),
             surprise_round=d.get("surprise_round", False),
             notes=d.get("notes", ""),
+            roster=dict(d.get("roster", {})),
+            organizer_id=d.get("organizer_id", ""),
+            roster_begun=d.get("roster_begun", False),
         )
         enc.combatants = [Combatant.from_dict(c) for c in d.get("combatants", [])]
         return enc
