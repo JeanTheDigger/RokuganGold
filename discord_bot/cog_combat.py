@@ -37,6 +37,7 @@ class _Deps:
     refuse_if_dead: object
     refuse_if_cannot_act: object
     on_death: object
+    dm_ping: object
     require_guild: object
     require_dm_role: object
     require_encounter: object
@@ -53,6 +54,7 @@ class _Deps:
 
 
 _d = _Deps()
+_PING_MENTIONS = discord.AllowedMentions(roles=True, users=True, everyone=False)
 
 
 def init(
@@ -68,6 +70,7 @@ def init(
     refuse_if_dead,
     refuse_if_cannot_act,
     on_death,
+    dm_ping,
     require_guild,
     require_dm_role,
     require_encounter,
@@ -93,6 +96,7 @@ def init(
     _d.refuse_if_dead = refuse_if_dead
     _d.refuse_if_cannot_act = refuse_if_cannot_act
     _d.on_death = on_death
+    _d.dm_ping = dm_ping
     _d.require_guild = require_guild
     _d.require_dm_role = require_dm_role
     _d.require_encounter = require_encounter
@@ -906,7 +910,8 @@ class DamageView(views_base.PersistentView):
                 atk_init=self.atk_init, def_init=self.def_init,
             )
             await view2.persist(await interaction.followup.send(
-                content="A DM can authorize the 2nd attack's damage below.",
+                content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the 2nd attack's damage below.",
+                allowed_mentions=_PING_MENTIONS,
                 embed=embed2, view=view2,
             ))
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
@@ -992,7 +997,8 @@ class DamageView(views_base.PersistentView):
                 atk_init=self.atk_init, def_init=self.def_init,
             )
             await view2.persist(await interaction.followup.send(
-                content="A DM can authorize the 2nd attack's damage below.",
+                content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the 2nd attack's damage below.",
+                allowed_mentions=_PING_MENTIONS,
                 embed=embed2, view=view2,
             ))
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
@@ -1712,12 +1718,12 @@ async def attack(
         if approval_ch:
             embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
             embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-            await view.persist(await approval_ch.send(content=prompt, embed=embed, view=view))
+            await view.persist(await approval_ch.send(content=f"{_d.dm_ping(interaction.guild)}{prompt}", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
             await interaction.response.send_message(
                 f"⚔️ **{a_name}** hit **{t_name}** — damage approval pending in the DM channel.{owner_ping}"
             )
         else:
-            await interaction.response.send_message(content=f"{prompt}{owner_ping}", embed=embed, view=view)
+            await interaction.response.send_message(content=f"{_d.dm_ping(interaction.guild)}{prompt}{owner_ping}", embed=embed, view=view, allowed_mentions=_PING_MENTIONS)
             await view.persist(await interaction.original_response())
         await _d.combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) HIT (roll {outcome['roll']} vs TN {outcome['target_tn']})")
     else:
@@ -2477,6 +2483,71 @@ async def combat_conditions(interaction: discord.Interaction, name: str) -> None
     await interaction.response.send_message(lines, ephemeral=True)
 
 
+@fight_group.command(name="status", description="Your compact combat card: wounds, penalty, Void, stance, conditions, Armor TN.")
+@app_commands.describe(member="Another player's active character (Fortune).")
+async def fight_status(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    guild = str(interaction.guild_id)
+    if member is not None and member.id != interaction.user.id:
+        if not await _d.require_dm_role(interaction):
+            return
+        owner = member
+    else:
+        owner = interaction.user
+    rec = _d.store.get_active(guild, str(owner.id))
+    if rec is None:
+        await interaction.response.send_message("No active character. Use `/sheet use` first.", ephemeral=True)
+        return
+    c = rec.character
+    enc = _d.encounters.get(interaction.channel_id)
+    cb = enc.find(c.name) if enc else None
+    level = stats.wound_level_name(c)
+    lines = [
+        f"❤️ Wounds **{c.wounds_taken}/{stats.total_wound_capacity(c)}** — **{level}** (penalty {stats.wound_penalty(c):+d} to rolls)",
+        f"🔮 Void **{c.current_void_points}/{c.max_void_points}**",
+        f"🗡️ Weapon **{c.equipped_weapon or 'katana'}**" + (f" · off-hand {c.off_hand_weapon}" if c.off_hand_weapon else ""),
+    ]
+    stance = cb.stance if cb else "attack"
+    tn = combat.armor_tn(c, stance)
+    tn_notes = [f"stance {stance}"]
+    if cb:
+        if cb.full_defense_bonus:
+            tn += cb.full_defense_bonus; tn_notes.append(f"Full Defense +{cb.full_defense_bonus}")
+        if cb.void_armor_tn_bonus:
+            tn += cb.void_armor_tn_bonus; tn_notes.append(f"Void +{cb.void_armor_tn_bonus}")
+        if cb.cover_bonus:
+            tn += cb.cover_bonus; tn_notes.append(f"cover {cb.cover_bonus:+d}")
+        if cb.guarding:
+            tn -= 5; tn_notes.append(f"guarding {cb.guarding} −5")
+    lines.append(f"🛡️ Armor TN **{tn}** ({', '.join(tn_notes)}; guard/condition modifiers applied per attack)")
+    if cb and enc:
+        acts = {0: "none used", 1: "1 Simple used", 2: "done"}.get(cb.actions_used, str(cb.actions_used))
+        turn = "▶️ **your turn**" if enc.started and enc.current() is cb else f"Round {enc.round}"
+        lines.append(f"⚔️ {turn} · init **{cb.effective_initiative}** · stance **{cb.stance}** · actions: {acts}")
+        extras = []
+        if cb.conditions:
+            extras.append("conditions: " + ", ".join(sorted(cb.conditions)))
+        if cb.fear_penalty:
+            extras.append(f"😨 Fear −{cb.fear_penalty}k0")
+        if cb.held:
+            extras.append("holding")
+        if cb.delayed:
+            extras.append("delayed")
+        if cb.center_bonus_available:
+            extras.append("Center bonus ready (+1k1 + Void)")
+        if extras:
+            lines.append("• " + " · ".join(extras))
+    else:
+        lines.append("Not on this channel's initiative list.")
+    if stats.is_dead(c):
+        lines.append("💀 **Dead.**")
+    elif level == "Out":
+        lines.append("😵 **Out**: unconscious, cannot act.")
+    embed = discord.Embed(title=f"🧾 {c.name}", description="\n".join(lines), color=discord.Color.dark_gold())
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 @fight_group.command(name="guard", description="Guard another combatant (+10 Armor TN to ward, −5 to you). Lasts until your next turn.")
 @app_commands.describe(
     guarder="The combatant doing the guarding.",
@@ -3027,7 +3098,10 @@ async def grapple_hit(
         defender_stance="attack",
         channel_id=interaction.channel_id,
     )
-    await interaction.response.send_message(embed=embed, view=view)
+    await interaction.response.send_message(
+        content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the damage below.",
+        embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+    )
     await view.persist(await interaction.original_response())
 
 
@@ -3624,7 +3698,10 @@ async def duel_strike(
     else:
         embed.set_footer(text="The strike misses.")
 
-    await interaction.response.send_message(embed=embed, view=view)
+    await interaction.response.send_message(
+        content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the strike's damage below." if view is not None else None,
+        embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+    )
     if view is not None:
         await view.persist(await interaction.original_response())
     tag = "HIT" if hit else "MISS"

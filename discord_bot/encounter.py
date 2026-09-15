@@ -12,6 +12,7 @@ l5r_rules.combat.roll_initiative and hands the totals here.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 
@@ -150,6 +151,10 @@ class Encounter:
     organizer_id: str = ""
     roster_begun: bool = False   # Begin was pressed: late accepts roll in at once
     roster_message_id: int = 0   # the roster message with the buttons (0 = unknown)
+    # Stale-turn nudge: when the current turn began (wall clock) and whether the
+    # bot has already nudged the actor this turn.
+    turn_started_at: float = 0.0
+    nudged: bool = False
 
     def roster_allows(self, user_id: str) -> bool:
         """True if this user may join initiative: no roster, or accepted/forced."""
@@ -192,8 +197,9 @@ class Encounter:
             self.turn_index = 0
         return True
 
-    @staticmethod
-    def _begin_turn(cur: Combatant) -> None:
+    def _begin_turn(self, cur: Combatant) -> None:
+        self.turn_started_at = time.time()
+        self.nudged = False
         cur.used_this_turn.clear()
         cur.guarding = ""
         cur.full_defense_bonus = 0
@@ -271,6 +277,8 @@ class Encounter:
             "organizer_id": self.organizer_id,
             "roster_begun": self.roster_begun,
             "roster_message_id": self.roster_message_id,
+            "turn_started_at": self.turn_started_at,
+            "nudged": self.nudged,
         }
 
     @classmethod
@@ -286,6 +294,8 @@ class Encounter:
             organizer_id=d.get("organizer_id", ""),
             roster_begun=d.get("roster_begun", False),
             roster_message_id=d.get("roster_message_id", 0),
+            turn_started_at=d.get("turn_started_at", 0.0),
+            nudged=d.get("nudged", False),
         )
         enc.combatants = [Combatant.from_dict(c) for c in d.get("combatants", [])]
         return enc

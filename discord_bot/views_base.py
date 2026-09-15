@@ -79,7 +79,9 @@ class PersistentView(discord.ui.View):
             log.warning("Could not serialise %s view state; it will not survive a restart", self.KIND)
             return
         guild_id = str(message.guild.id) if message.guild else ""
-        _store.save_pending_view(str(message.id), guild_id, self.KIND, state)
+        channel = getattr(message, "channel", None)
+        channel_id = str(channel.id) if channel is not None and getattr(channel, "id", None) else ""
+        _store.save_pending_view(str(message.id), guild_id, self.KIND, state, channel_id)
 
     def forget(self) -> None:
         if self._persist_message_id is not None and _store is not None:

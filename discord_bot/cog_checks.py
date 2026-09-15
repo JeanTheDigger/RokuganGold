@@ -68,6 +68,9 @@ def init(
     _d.NPC_OWNER = npc_owner
 
     # Wire autocompletes programmatically
+    for cmd in (skill_check_cmd, check_cooperative, stealth_check, social_check, craft_check,
+                lore_check, horsemanship_check, medicine_check):
+        cmd.autocomplete("emphasis")(_emphasis_autocomplete)
     skill_check_cmd.autocomplete("skill")(skill_autocomplete)
     check_cooperative.autocomplete("skill")(skill_autocomplete)
     craft_check.autocomplete("skill")(skill_autocomplete)
@@ -160,6 +163,36 @@ def _fear(interaction: discord.Interaction, c, adv_r: int, adv_notes: list[str])
     if fr:
         return adv_r - fr, adv_notes + [f"Fear: -{fr}k0 (failed Fear check)"]
     return adv_r, adv_notes
+
+
+_FIXED_SKILL_BY_COMMAND: dict[str, str] = {"stealth": "Stealth", "horsemanship": "Horsemanship", "medicine": "Medicine"}
+
+
+async def _emphasis_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    """Offer the Emphases the check's character has in the Skill being rolled."""
+    ns = interaction.namespace
+    cmd_name = interaction.command.name if interaction.command else ""
+    skill = _FIXED_SKILL_BY_COMMAND.get(cmd_name) or getattr(ns, "skill", None) or getattr(ns, "specialty", None)
+    if isinstance(skill, app_commands.Choice):
+        skill = skill.value
+    if not skill or interaction.guild_id is None:
+        return []
+    guild = str(interaction.guild_id)
+    rec = None
+    try:
+        name = getattr(ns, "name", None) or ""
+        if name or getattr(ns, "member", None) is not None:
+            rec = _d.resolve_duelist(guild, interaction.channel_id, name, bool(getattr(ns, "is_npc", False)),
+                                     getattr(ns, "member", None))
+    except Exception:
+        rec = None
+    if rec is None:
+        rec = _d.store.get_active(guild, str(interaction.user.id))
+    if rec is None:
+        return []
+    cur = (current or "").lower()
+    emphs = rec.character.emphases.get(str(skill), [])
+    return [app_commands.Choice(name=e, value=e) for e in emphs if cur in e.lower()][:25]
 
 
 def _emphasis_for(c, skill_name: str, requested: str | None) -> tuple[str | None, str | None]:

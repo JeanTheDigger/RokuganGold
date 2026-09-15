@@ -24,6 +24,7 @@ from time import monotonic
 
 import discord
 from discord import app_commands
+from discord.ext import tasks
 
 import encounter
 import cog_checks
@@ -90,6 +91,16 @@ store = storage.Store(DB_PATH)
 encounters: dict[int, encounter.Encounter] = {}
 # Undo snapshots (/dm undo) older than this are purged at startup.
 UNDO_MAX_AGE_SECONDS: float = 30 * 24 * 3600
+# Stale-turn nudge: re-ping the current actor once after this many minutes.
+STALE_TURN_MINUTES: int = 10
+# Mentions allowed on approval / nudge messages (role pings need the Fortune role
+# to be mentionable, or the bot to hold Mention Everyone).
+_PING_MENTIONS = discord.AllowedMentions(roles=True, users=True, everyone=False)
+
+def _dm_ping(guild: discord.Guild | None) -> str:
+    """The Fortune role mention (plus a space) for approval prompts, or ''."""
+    role = discord.utils.get(guild.roles, name=ROLE_FORTUNE) if guild else None
+    return f"{role.mention} " if role else ""
 
 # In-memory roll history: channel_id → deque of (timestamp, user_display, description, total).
 _roll_history: dict[int, deque] = defaultdict(lambda: deque(maxlen=50))
@@ -100,6 +111,37 @@ WEBHOOK_NAME = "Rokugan NPC"
 
 def _log_roll(channel_id: int, user: str, description: str, total: int | str) -> None:
     _roll_history[channel_id].append((monotonic(), user, description, total))
+
+@tasks.loop(minutes=1)
+async def _stale_turn_check() -> None:
+    """Once per turn, nudge the current actor after STALE_TURN_MINUTES of silence."""
+    now = time.time()
+    for channel_id, enc in list(encounters.items()):
+        try:
+            if not enc.started or enc.nudged or not enc.combatants or not enc.turn_started_at:
+                continue
+            if now - enc.turn_started_at < STALE_TURN_MINUTES * 60:
+                continue
+            cur = enc.current()
+            if cur is None:
+                continue
+            enc.nudged = True
+            guild_id = store.encounter_guild(str(channel_id))
+            if guild_id:
+                _save_encounter(guild_id, enc)
+            channel = client.get_channel(channel_id)
+            if channel is None:
+                continue
+            mention = f"<@{cur.owner_id}> " if cur.owner_id and not cur.is_npc else ""
+            await channel.send(
+                f"⏰ {mention}**{cur.name}**'s turn has been waiting {STALE_TURN_MINUTES} min (Round {enc.round}). "
+                f"Act, then `/combat turn done`. Staff can `/combat turn done name:{cur.name}` or `/combat next`.",
+                allowed_mentions=_PING_MENTIONS,
+            )
+        except Exception:
+            # One bad encounter or channel must not stop the loop for everyone.
+            log.warning("Stale-turn nudge failed for channel %s", channel_id, exc_info=True)
+
 
 class RokuganBot(discord.Client):
     def __init__(self) -> None:
@@ -135,6 +177,8 @@ class RokuganBot(discord.Client):
                 log.warning("Failed to restore encounter for channel %s", ch_id_str)
         if encounters:
             log.info("Restored %d encounter(s) from database.", len(encounters))
+        if not _stale_turn_check.is_running():
+            _stale_turn_check.start()
         if not getattr(self, "_views_restored", False):
             self._views_restored = True
             store.purge_undo(time.time() - UNDO_MAX_AGE_SECONDS)
@@ -2734,7 +2778,10 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
         character_state=state,
         lobby_channel_id=int(state.get("channel_id", interaction.channel_id)),
     )
-    await view.persist(await approval_ch.send(embed=embed, view=view))
+    await view.persist(await approval_ch.send(
+        content=f"{_dm_ping(approval_ch.guild)}New character submission awaiting review.",
+        embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+    ))
 
     await interaction.response.edit_message(
         content=f"📋 Your character **{state['name']}** has been submitted for DM review! "
@@ -4501,14 +4548,14 @@ async def dm_damage(
     if approval_ch:
         embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
         embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-        await view.persist(await approval_ch.send(content="A DM can authorize the damage below.", embed=embed, view=view))
+        await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the damage below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
         await interaction.response.send_message(
             f"💥 Pending damage on **{c.name}** — approval routed to the DM channel.{owner_ping}"
         )
     else:
         await interaction.response.send_message(
-            content=f"A DM can authorize the damage below.{owner_ping}",
-            embed=embed, view=view,
+            content=f"{_dm_ping(interaction.guild)}A DM can authorize the damage below.{owner_ping}",
+            embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
         )
         await view.persist(await interaction.original_response())
 
@@ -4567,14 +4614,14 @@ async def dm_heal(
     if approval_ch:
         embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
         embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-        await view.persist(await approval_ch.send(content="A DM can authorize the healing below.", embed=embed, view=view))
+        await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the healing below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
         await interaction.response.send_message(
             f"💚 Pending healing on **{c.name}** — approval routed to the DM channel.{owner_ping}"
         )
     else:
         await interaction.response.send_message(
-            content=f"A DM can authorize the healing below.{owner_ping}",
-            embed=embed, view=view,
+            content=f"{_dm_ping(interaction.guild)}A DM can authorize the healing below.{owner_ping}",
+            embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
         )
         await view.persist(await interaction.original_response())
 
@@ -4734,6 +4781,55 @@ async def dm_undo(
     remaining = len(store.list_undo(guild, sn.entity_name, limit=storage.UNDO_KEEP_PER_ENTITY))
     embed.set_footer(text=f"Staff action by {interaction.user.display_name} — logged. {remaining} earlier change(s) still undoable for {sn.entity_name}.")
     await interaction.response.send_message(embed=embed)
+
+_PENDING_KIND_LABELS: dict[str, str] = {
+    "attack_damage": "⚔️ Attack damage", "spell_damage": "📜 Spell damage", "dm_damage": "💥 DM damage",
+    "dm_heal": "💚 DM healing", "creature_attack": "🐾 Creature damage", "medicine_treat": "💊 Medicine treatment",
+    "char_approval": "📝 Character approval",
+}
+
+def _pending_summary(kind: str, state: str) -> str:
+    try:
+        args = json.loads(state).get("args", {})
+    except (ValueError, AttributeError):
+        args = {}
+    if kind == "char_approval":
+        cs = args.get("character_state") or {}
+        return str(cs.get("name") or cs.get("character_name") or "new character")
+    names = [args.get(k) for k in ("attacker_name", "healer_name", "attacker", "caster_name")]
+    tgt = args.get("target_name") or args.get("name") or args.get("target")
+    src = next((n for n in names if n), None)
+    if src and tgt:
+        return f"{src} → {tgt}"
+    return str(tgt or src or "")
+
+@dm.command(name="pending", description="List approvals still waiting for a DM, with jump links (Fortune+).")
+async def dm_pending(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    guild = str(interaction.guild_id)
+    rows = [r for r in store.list_pending_views(guild) if r[2] in _PENDING_KIND_LABELS]
+    if not rows:
+        await interaction.response.send_message("✅ Nothing is waiting for a DM.", ephemeral=True)
+        return
+    now = time.time()
+    lines = []
+    for message_id, channel_id, kind, state, created_at in rows[:15]:
+        age = int((now - created_at) // 60)
+        age_s = f"{age} min" if age < 120 else f"{age // 60} h"
+        link = f"[open](https://discord.com/channels/{guild}/{channel_id}/{message_id})" if channel_id else "*(no link: posted before this update)*"
+        summary = _pending_summary(kind, state)
+        lines.append(f"• {_PENDING_KIND_LABELS[kind]}{': **' + summary + '**' if summary else ''} — {age_s} ago — {link}")
+    more = f"\n… and {len(rows) - 15} more." if len(rows) > 15 else ""
+    embed = discord.Embed(
+        title=f"⏳ Pending approvals ({len(rows)})",
+        description=("\n".join(lines) + more)[:4000],
+        color=discord.Color.orange(),
+    )
+    embed.set_footer(text="Resolved approvals leave this list. Entries older than 7 days are dropped at restart.")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 def _resolve_combatant_record(guild: str, cb: encounter.Combatant) -> storage.CharacterRecord | None:
     """Look up a stored character record from a Combatant (PC or NPC)."""
@@ -6798,7 +6894,8 @@ async def creature_attack_cmd(
     if hit:
         view = CreatureAttackView(cre_rec.id, target_rec.id, cr.name, t_name)
         await interaction.response.send_message(
-            content="A DM can apply the creature's damage below.", embed=embed, view=view
+            content=f"{_dm_ping(interaction.guild)}A DM can apply the creature's damage below.",
+            embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
         )
         await view.persist(await interaction.original_response())
         await _combat_log(guild, f"Creature Attack: {cr.name} → {t_name} HIT (roll {outcome['total']} vs TN {outcome['tn']})")
@@ -8809,14 +8906,14 @@ async def spell_damage(
             if approval_ch:
                 embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
                 embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-                await view.persist(await approval_ch.send(content="A DM can authorize the spell damage below.", embed=embed, view=view))
+                await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the spell damage below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
                 await interaction.response.send_message(
                     f"📜 Spell damage on **{rec.character.name}** — approval routed to the DM channel.{owner_ping}"
                 )
             else:
                 await interaction.response.send_message(
-                    content=f"A DM can authorize the spell damage below.{owner_ping}",
-                    embed=embed, view=view,
+                    content=f"{_dm_ping(interaction.guild)}A DM can authorize the spell damage below.{owner_ping}",
+                    embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
                 )
                 await view.persist(await interaction.original_response())
         else:
@@ -9159,16 +9256,16 @@ async def dm_treat(
             embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
             embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
             await view.persist(await approval_ch.send(
-                content="Treatment succeeded. A DM can authorize the healing below.",
-                embed=embed, view=view,
+                content=f"{_dm_ping(interaction.guild)}Treatment succeeded. A DM can authorize the healing below.",
+                embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
             ))
             await interaction.response.send_message(
                 f"💊 Treatment on **{pc.name}** succeeded — healing approval routed to the DM channel.{owner_ping}"
             )
         else:
             await interaction.response.send_message(
-                content=f"Treatment succeeded. A DM can authorize the healing below.{owner_ping}",
-                embed=embed, view=view,
+                content=f"{_dm_ping(interaction.guild)}Treatment succeeded. A DM can authorize the healing below.{owner_ping}",
+                embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
             )
             await view.persist(await interaction.original_response())
     elif success:
@@ -10749,6 +10846,7 @@ cog_combat.init(
     refuse_if_dead=_refuse_if_dead,
     refuse_if_cannot_act=_refuse_if_cannot_act,
     on_death=_on_death,
+    dm_ping=_dm_ping,
     require_guild=_require_guild,
     require_dm_role=_require_dm_role,
     require_encounter=_require_encounter,

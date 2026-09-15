@@ -104,6 +104,8 @@ CREATE TABLE IF NOT EXISTS undo_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_undo_entity ON undo_snapshots (guild_id, entity_name COLLATE NOCASE, created_at);
 """,
+    # 7: pending approval views remember their channel (for /dm pending jump links)
+    "ALTER TABLE pending_views ADD COLUMN channel_id TEXT NOT NULL DEFAULT '';",
 ]
 
 # How many before-states to keep per character/creature for /dm undo.
@@ -454,13 +456,24 @@ class Store:
             )
 
     # -- pending approval views (views_base.py) ---------------------------------
-    def save_pending_view(self, message_id: str, guild_id: str, kind: str, state: str) -> None:
+    def save_pending_view(self, message_id: str, guild_id: str, kind: str, state: str,
+                          channel_id: str = "") -> None:
         with self._lock, self._conn:
             self._conn.execute(
-                "INSERT OR REPLACE INTO pending_views (message_id, guild_id, kind, state, created_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (message_id, guild_id, kind, state, time.time()),
+                "INSERT OR REPLACE INTO pending_views (message_id, guild_id, kind, state, created_at, channel_id) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (message_id, guild_id, kind, state, time.time(), channel_id),
             )
+
+    def list_pending_views(self, guild_id: str) -> list[tuple[str, str, str, str, float]]:
+        """(message_id, channel_id, kind, state, created_at) for a guild, newest first."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT message_id, channel_id, kind, state, created_at FROM pending_views "
+                "WHERE guild_id = ? ORDER BY created_at DESC",
+                (guild_id,),
+            ).fetchall()
+        return [(r["message_id"], r["channel_id"], r["kind"], r["state"], r["created_at"]) for r in rows]
 
     def delete_pending_view(self, message_id: str) -> None:
         with self._lock, self._conn:
