@@ -233,7 +233,7 @@ async def _refuse_if_dead(interaction: discord.Interaction, c: Character) -> boo
     if not stats.is_dead(c):
         return False
     await interaction.response.send_message(
-        f"💀 **{c.name}** is dead. PC death is permanent; Staff may use `/dm revive` only to undo a bug.",
+        f"💀 **{c.name}** is dead. PC death is permanent; a DM may use `/dm revive` only to undo a bug.",
         ephemeral=True,
     )
     return True
@@ -4522,7 +4522,7 @@ async def dm_heal(
 # /grapple group: grappling subsystem (s40)
 # ===========================================================================
 
-@dm.command(name="revive", description="Staff override: undo a death caused by a bug. Kami role required; logged.")
+@dm.command(name="revive", description="Staff override: undo a death caused by a bug. Fortune/Kami role required; logged.")
 @app_commands.describe(
     target="Character name (PC or NPC).",
     reason="Why this death is being reversed (required; written to the combat log).",
@@ -4537,11 +4537,7 @@ async def dm_revive(
 ) -> None:
     if not await _require_guild(interaction):
         return
-    if not _is_kami(interaction):
-        await interaction.response.send_message(
-            f"Reviving a character is a **{ROLE_KAMI}**-only override for bugs. PC death is permanent.",
-            ephemeral=True,
-        )
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = _find_any_character(guild, target)
