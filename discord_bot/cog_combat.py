@@ -2521,7 +2521,10 @@ _CONDITION_CHOICES = [
 
 
 def _expiry_notes(enc: encounter.Encounter) -> list[str]:
-    return [f"⌛ {line} ended." for line in enc.last_expired]
+    """Condition-ended lines from the last round boundary, announced once."""
+    notes = [f"⌛ {line} ended." for line in enc.last_expired]
+    enc.last_expired = []
+    return notes
 
 
 @combat_condition.command(name="set", description="Apply a condition to a combatant, optionally for a number of Rounds [Fortune]")
