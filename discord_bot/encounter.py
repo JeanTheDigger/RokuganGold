@@ -21,6 +21,9 @@ VALID_CONDITIONS: frozenset[str] = frozenset({
     "grappled", "mounted", "pinned", "prone", "stunned",
 })
 
+# Per-combatant fight tally keys (end-of-fight summary).
+TALLY_KEYS: tuple[str, ...] = ("attacks", "hits", "dealt", "taken", "healed", "kills", "void")
+
 # Roster statuses that put a player into initiative (see Encounter.roster).
 ROSTER_IN: frozenset[str] = frozenset({"accepted", "forced"})
 
@@ -155,6 +158,43 @@ class Encounter:
     # bot has already nudged the actor this turn.
     turn_started_at: float = 0.0
     nudged: bool = False
+    # Fight summary: when the fight opened, per-name tallies (TALLY_KEYS plus
+    # "join_level"), and who died. Names are the combatant names.
+    started_at: float = 0.0
+    tally: dict[str, dict] = field(default_factory=dict)
+    deaths: list[str] = field(default_factory=list)
+
+    def tally_for(self, name: str) -> dict:
+        """The tally row for a name (canonical combatant spelling when known), created empty."""
+        cb = self.find(name)
+        key = cb.name if cb else next((k for k in self.tally if k.lower() == name.lower()), name)
+        row = self.tally.get(key)
+        if row is None:
+            row = {k: 0 for k in TALLY_KEYS}
+            row["join_level"] = ""
+            self.tally[key] = row
+        return row
+
+    def record(self, name: str, key: str, amount: int = 1) -> bool:
+        """Add to a tally for someone who is (or was) in this fight. False if unknown."""
+        if key not in TALLY_KEYS or amount == 0:
+            return False
+        if self.find(name) is None and not any(k.lower() == name.lower() for k in self.tally):
+            return False
+        self.tally_for(name)[key] += amount
+        return True
+
+    def note_join(self, name: str, level: str) -> None:
+        row = self.tally_for(name)
+        if not row["join_level"]:
+            row["join_level"] = level
+
+    def note_death(self, name: str) -> None:
+        cb = self.find(name)
+        canonical = cb.name if cb else name
+        if canonical.lower() not in (d.lower() for d in self.deaths):
+            self.deaths.append(canonical)
+            self.tally_for(canonical)
 
     def roster_allows(self, user_id: str) -> bool:
         """True if this user may join initiative: no roster, or accepted/forced."""
@@ -234,6 +274,8 @@ class Encounter:
             # Opening the fight: the top of the order acts first, so do not
             # step past them.
             self.started = True
+            if not self.started_at:
+                self.started_at = time.time()
             self.turn_index = 0
             self._begin_turn(self.current())
             return self.current()
@@ -279,6 +321,9 @@ class Encounter:
             "roster_message_id": self.roster_message_id,
             "turn_started_at": self.turn_started_at,
             "nudged": self.nudged,
+            "started_at": self.started_at,
+            "tally": {k: dict(v) for k, v in self.tally.items()},
+            "deaths": list(self.deaths),
         }
 
     @classmethod
@@ -296,6 +341,9 @@ class Encounter:
             roster_message_id=d.get("roster_message_id", 0),
             turn_started_at=d.get("turn_started_at", 0.0),
             nudged=d.get("nudged", False),
+            started_at=d.get("started_at", 0.0),
+            tally={k: dict(v) for k, v in d.get("tally", {}).items()},
+            deaths=list(d.get("deaths", [])),
         )
         enc.combatants = [Combatant.from_dict(c) for c in d.get("combatants", [])]
         return enc

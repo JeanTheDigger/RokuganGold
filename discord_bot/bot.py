@@ -315,6 +315,17 @@ def _set_fear_penalty(guild_id: str, channel_id: int, name: str, rank: int) -> b
     _save_encounter(guild_id, enc)
     return True
 
+def _tally(channel_id: int | None, name: str, key: str, amount: int = 1) -> None:
+    """Add to the fight tally of this channel's encounter (no-op if none / unknown name)."""
+    if channel_id is None or not amount:
+        return
+    enc = encounters.get(channel_id)
+    if enc is None or not enc.record(name, key, amount):
+        return
+    guild_id = store.encounter_guild(str(channel_id))
+    if guild_id:
+        _save_encounter(guild_id, enc)
+
 async def _on_death(guild_id: str, name: str, owner_id: str | None, record_id: int | None) -> list[str]:
     """Bookkeeping when a character or creature dies: drop it from every
     initiative tracker in this guild and, for a PC, stop it being the
@@ -328,6 +339,7 @@ async def _on_death(guild_id: str, name: str, owner_id: str | None, record_id: i
             continue
         if owner_id and owner_id != NPC_OWNER and cb.owner_id not in (None, owner_id):
             continue
+        enc.note_death(name)
         enc.remove(name)
         _save_encounter(guild_id, enc)
         if "removed from initiative" not in notes:
@@ -4900,6 +4912,7 @@ async def void_spend(
         )
         return
     c.current_void_points -= 1
+    _tally(interaction.channel_id, c.name, "void")
     store.save(rec)
     await interaction.response.send_message(
         f"🌀 **{c.name}** spends a Void Point: {reason}\n"
@@ -6129,6 +6142,11 @@ class CreatureAttackView(_DisableableView):
         applied = combat.apply_damage(target_rec.character, dmg["raw"], target_rec.character.armor_reduction)
         store.save(target_rec, note="creature attack damage")
         c = target_rec.character
+        _tally(interaction.channel_id, self.creature_name, "attacks"); _tally(interaction.channel_id, self.creature_name, "hits")
+        _tally(interaction.channel_id, self.creature_name, "dealt", applied["final_damage"])
+        _tally(interaction.channel_id, c.name, "taken", applied["final_damage"])
+        if applied["is_dead"]:
+            _tally(interaction.channel_id, self.creature_name, "kills")
         death_line = ""
         if applied["is_dead"]:
             notes = await _on_death(str(interaction.guild_id), c.name, target_rec.owner_id, target_rec.id)
@@ -6254,6 +6272,7 @@ class SpellDamageView(_DisableableView):
                     void_saved = min(10, applied["final_damage"])
                     rec.character.wounds_taken = max(0, rec.character.wounds_taken - void_saved)
                     rec.character.current_void_points -= 1
+                    _tally(self.source_channel_id or interaction.channel_id, rec.character.name, "void")
                     applied["final_damage"] -= void_saved
                     applied["new_wound_level"] = stats.wound_level_name(rec.character)
                     applied["is_dead"] = stats.is_dead(rec.character)
@@ -6262,6 +6281,7 @@ class SpellDamageView(_DisableableView):
                 else:
                     void_line = "\n🔮 No Void Points available: full damage applied"
         store.save(rec, note="spell damage")
+        _tally(self.source_channel_id or interaction.channel_id, rec.character.name, "taken", applied["final_damage"])
         c = rec.character
         death_line = ""
         if applied["is_dead"]:
@@ -6334,6 +6354,7 @@ class DmDamageView(_DisableableView):
             return
         applied = combat.apply_damage(rec.character, self.amount, rec.character.armor_reduction)
         store.save(rec, note="DM damage")
+        _tally(self.source_channel_id or interaction.channel_id, rec.character.name, "taken", applied["final_damage"])
         c = rec.character
         death_line = ""
         if applied["is_dead"]:
@@ -6403,6 +6424,7 @@ class DmDamageView(_DisableableView):
             )
             return
         c.current_void_points -= 1
+        _tally(self.source_channel_id or interaction.channel_id, c.name, "void")
         self.amount = max(0, self.amount - 10)
         self.void_reduced = True
         store.save(rec, note="Void Point spent (damage reduction)")
@@ -6475,6 +6497,7 @@ class DmHealView(_DisableableView):
         healed = old_wounds - c.wounds_taken
         new_level = stats.wound_level_name(c)
         store.save(rec, note="DM heal")
+        _tally(self.source_channel_id or interaction.channel_id, c.name, "healed", healed)
         embed = discord.Embed(
             title="💚 Healing applied",
             color=discord.Color.green(),
@@ -8280,6 +8303,7 @@ async def spell_cast(
             await interaction.response.send_message("No Void Points remaining.", ephemeral=True)
             return
         caster.current_void_points -= 1
+        _tally(interaction.channel_id, caster.name, "void")
         extra_rolled = extra_kept = 1
     fear_r = _fear_penalty(interaction.channel_id, caster.name)
     extra_rolled -= fear_r
@@ -8629,6 +8653,7 @@ async def spell_importune(
             await interaction.response.send_message(embed=embed)
             return
         caster.current_void_points -= 1
+        _tally(interaction.channel_id, caster.name, "void")
         extra_rolled = extra_kept = 1
     cast_rolled = ring_val + effective_rank + extra_rolled
     cast_kept = ring_val + extra_kept
@@ -8987,8 +9012,10 @@ class MedicineTreatView(_DisableableView):
             await interaction.followup.send(f"**{c.name}** is dead. PC death is permanent.", ephemeral=True)
             return
         old_level = stats.wound_level_name(c)
+        old_wounds = c.wounds_taken
         c.wounds_taken = max(0, c.wounds_taken - self.wounds_healed)
         store.save(rec, note="Medicine treatment")
+        _tally(self.source_channel_id or interaction.channel_id, c.name, "healed", old_wounds - c.wounds_taken)
         new_level = stats.wound_level_name(c)
         embed = discord.Embed(title="💚 Treatment Applied", color=discord.Color.green())
         crossed = f" ({old_level} → **{new_level}**)" if old_level != new_level else ""
@@ -10847,6 +10874,7 @@ cog_combat.init(
     refuse_if_cannot_act=_refuse_if_cannot_act,
     on_death=_on_death,
     dm_ping=_dm_ping,
+    tally=_tally,
     require_guild=_require_guild,
     require_dm_role=_require_dm_role,
     require_encounter=_require_encounter,

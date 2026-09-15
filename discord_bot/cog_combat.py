@@ -7,6 +7,8 @@ format_dice, combat_log, encounter save/load) are injected via init().
 
 from __future__ import annotations
 
+import time as _time
+
 import discord
 from discord import app_commands
 
@@ -38,6 +40,7 @@ class _Deps:
     refuse_if_cannot_act: object
     on_death: object
     dm_ping: object
+    tally: object
     require_guild: object
     require_dm_role: object
     require_encounter: object
@@ -71,6 +74,7 @@ def init(
     refuse_if_cannot_act,
     on_death,
     dm_ping,
+    tally,
     require_guild,
     require_dm_role,
     require_encounter,
@@ -97,6 +101,7 @@ def init(
     _d.refuse_if_cannot_act = refuse_if_cannot_act
     _d.on_death = on_death
     _d.dm_ping = dm_ping
+    _d.tally = tally
     _d.require_guild = require_guild
     _d.require_dm_role = require_dm_role
     _d.require_encounter = require_encounter
@@ -347,6 +352,7 @@ class DamageView(views_base.PersistentView):
             t_dmg_notes = t_dmg_notes + bish_notes
             if self.void_damage and attacker.current_void_points > 0:
                 attacker.current_void_points -= 1
+                _d.tally(self.channel_id, attacker.name, "void")
                 extra_rolled += 1
                 t_kept += 1
                 t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
@@ -418,7 +424,10 @@ class DamageView(views_base.PersistentView):
                     _d.store.save(attacker_rec, note="post-kill heal")
                     heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
             _d.store.save_creature(cre_rec, note="attack damage")
+            _d.tally(self.channel_id, self.attacker_name, "dealt", applied["final_damage"])
+            _d.tally(self.channel_id, self.target_name, "taken", applied["final_damage"])
             if applied["is_dead"]:
+                _d.tally(self.channel_id, self.attacker_name, "kills")
                 await _d.on_death(str(interaction.guild_id), cre_rec.creature.name, None, None)
             cr = cre_rec.creature
             cre_cs_line = ""
@@ -509,6 +518,7 @@ class DamageView(views_base.PersistentView):
                     void_saved = min(10, applied["final_damage"])
                     target.wounds_taken = max(0, target.wounds_taken - void_saved)
                     target.current_void_points -= 1
+                    _d.tally(self.channel_id, target.name, "void")
                     applied["final_damage"] -= void_saved
                     applied["new_wound_level"] = stats.wound_level_name(target)
                     applied["is_dead"] = stats.is_dead(target)
@@ -517,7 +527,10 @@ class DamageView(views_base.PersistentView):
                 else:
                     void_line = "\n🔮 No Void Points available: full damage applied"
             _d.store.save(target_rec, note="attack damage")
+            _d.tally(self.channel_id, self.attacker_name, "dealt", applied["final_damage"])
+            _d.tally(self.channel_id, self.target_name, "taken", applied["final_damage"])
             if applied["is_dead"]:
+                _d.tally(self.channel_id, self.attacker_name, "kills")
                 await _d.on_death(str(interaction.guild_id), target.name, target_rec.owner_id, target_rec.id)
             embed = discord.Embed(
                 title="🗡️ Disarm",
@@ -594,6 +607,7 @@ class DamageView(views_base.PersistentView):
         t_dmg_notes = t_dmg_notes + bish_notes
         if self.void_damage and attacker.current_void_points > 0:
             attacker.current_void_points -= 1
+            _d.tally(self.channel_id, attacker.name, "void")
             extra_rolled += 1
             t_kept += 1
             t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
@@ -673,6 +687,7 @@ class DamageView(views_base.PersistentView):
                 void_saved = min(10, applied["final_damage"])
                 target.wounds_taken = max(0, target.wounds_taken - void_saved)
                 target.current_void_points -= 1
+                _d.tally(self.channel_id, target.name, "void")
                 applied["final_damage"] -= void_saved
                 applied["new_wound_level"] = stats.wound_level_name(target)
                 applied["is_dead"] = stats.is_dead(target)
@@ -693,7 +708,10 @@ class DamageView(views_base.PersistentView):
             if phx:
                 phoenix_line = f"\n🔥 {phx}"
         _d.store.save(target_rec, note="attack damage")
+        _d.tally(self.channel_id, self.attacker_name, "dealt", applied["final_damage"])
+        _d.tally(self.channel_id, self.target_name, "taken", applied["final_damage"])
         if applied["is_dead"]:
+            _d.tally(self.channel_id, self.attacker_name, "kills")
             await _d.on_death(str(interaction.guild_id), target.name, target_rec.owner_id, target_rec.id)
 
         knockdown_line = ""
@@ -915,9 +933,11 @@ class DamageView(views_base.PersistentView):
                 embed=embed2, view=view2,
             ))
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
+            _d.tally(self.channel_id, self.attacker_name, "attacks"); _d.tally(self.channel_id, self.attacker_name, "hits")
         else:
             await interaction.followup.send(embed=embed2)
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) MISS")
+            _d.tally(self.channel_id, self.attacker_name, "attacks")
 
     async def _second_attack_creature(
         self,
@@ -1002,9 +1022,11 @@ class DamageView(views_base.PersistentView):
                 embed=embed2, view=view2,
             ))
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
+            _d.tally(self.channel_id, self.attacker_name, "attacks"); _d.tally(self.channel_id, self.attacker_name, "hits")
         else:
             await interaction.followup.send(embed=embed2)
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) MISS")
+            _d.tally(self.channel_id, self.attacker_name, "attacks")
 
     @discord.ui.button(label="No Effect", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -1299,6 +1321,7 @@ async def attack(
             void_line = f" · 🌀 {reason_block}"
         elif c.current_void_points > 0:
             c.current_void_points -= 1
+            _d.tally(interaction.channel_id, c.name, "void")
             bonus_rolled = bonus_kept = 1
             _d.store.save(attacker_rec)
             void_line = f" · 🌀 Void +1k1 ({c.current_void_points} VP left)"
@@ -1726,9 +1749,11 @@ async def attack(
             await interaction.response.send_message(content=f"{_d.dm_ping(interaction.guild)}{prompt}{owner_ping}", embed=embed, view=view, allowed_mentions=_PING_MENTIONS)
             await view.persist(await interaction.original_response())
         await _d.combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) HIT (roll {outcome['roll']} vs TN {outcome['target_tn']})")
+        _d.tally(interaction.channel_id, a_name, "attacks"); _d.tally(interaction.channel_id, a_name, "hits")
     else:
         await interaction.response.send_message(embed=embed)
         await _d.combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) MISS (roll {outcome['roll']} vs TN {outcome['target_tn']})")
+        _d.tally(interaction.channel_id, a_name, "attacks")
 
 def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
     if not enc.combatants:
@@ -1853,6 +1878,7 @@ def _join_record(guild: str, channel_id: int, owner_id: str, rec: _storage_mod.C
         is_npc=False,
         reflexes=rec.character.reflexes,
     ))
+    enc.note_join(rec.character.name, stats.wound_level_name(rec.character))
     _d.save_encounter(guild, enc)
     return enc, init_total
 
@@ -2284,18 +2310,104 @@ async def combat_remove(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(f"Removed **{name}**.\n\n{_render_encounter(enc, guild)}")
 
 
-@combat_group.command(name="end", description="End the encounter in this channel.")
+def _end_level(enc: encounter.Encounter, guild: str, name: str) -> str:
+    """Current wound level of a fight participant, from their sheet or creature record."""
+    if name.lower() in (d.lower() for d in enc.deaths):
+        return "Dead"
+    cb = enc.find(name)
+    rec = _d.resolve_combatant_record(guild, cb) if cb else None
+    if rec is None:
+        rec = _d.store.get_by_name_guild(guild, name)
+    if rec is not None:
+        return stats.wound_level_name(rec.character)
+    cre = _d.store.get_creature_by_name(guild, name)
+    if cre is not None:
+        return creature.creature_wound_level(cre.creature)
+    return "?"
+
+
+def _render_summary(enc: encounter.Encounter, guild: str, final: bool) -> tuple[discord.Embed, list[str]]:
+    """The fight summary embed and compact log lines (one per participant)."""
+    names = [c.name for c in enc.combatants] + [n for n in enc.tally if enc.find(n) is None]
+    elapsed = ""
+    if enc.started_at:
+        mins = int((_time.time() - enc.started_at) // 60)
+        elapsed = f" · {mins // 60}h {mins % 60}m" if mins >= 60 else f" · {mins} min"
+    head = f"Rounds: **{enc.round if enc.started else 0}**{elapsed} · {len(names)} participant(s)"
+    if enc.deaths:
+        head += f" · 💀 {len(enc.deaths)} dead"
+    lines: list[str] = []
+    logs: list[str] = []
+    most_dealt = most_taken = best_acc = None
+    for name in names:
+        row = enc.tally.get(name) or enc.tally_for(name)
+        dead = name.lower() in (d.lower() for d in enc.deaths)
+        end = _end_level(enc, guild, name)
+        arc = f"{row['join_level']} → {end}" if row["join_level"] else end
+        parts = [f"{row['hits']}/{row['attacks']} hits" if row["attacks"] else "no attacks",
+                 f"dealt {row['dealt']}", f"taken {row['taken']}"]
+        if row["healed"]:
+            parts.append(f"healed {row['healed']}")
+        if row["kills"]:
+            parts.append(f"kills {row['kills']}")
+        if row["void"]:
+            parts.append(f"Void {row['void']}")
+        lines.append(f"{'💀 ' if dead else '• '}**{name}**: {' · '.join(parts)} · {arc}")
+        logs.append(f"{name}: {row['hits']}/{row['attacks']} hits, dealt {row['dealt']}, taken {row['taken']}, {arc}")
+        if row["dealt"] and (most_dealt is None or row["dealt"] > most_dealt[1]):
+            most_dealt = (name, row["dealt"])
+        if row["taken"] and (most_taken is None or row["taken"] > most_taken[1]):
+            most_taken = (name, row["taken"])
+        if row["attacks"] >= 3:
+            acc = row["hits"] / row["attacks"]
+            if best_acc is None or acc > best_acc[1]:
+                best_acc = (name, acc, row["hits"], row["attacks"])
+    callouts = []
+    if most_dealt:
+        callouts.append(f"🗡️ Most damage dealt: **{most_dealt[0]}** ({most_dealt[1]})")
+    if most_taken:
+        callouts.append(f"🩸 Most damage taken: **{most_taken[0]}** ({most_taken[1]})")
+    if best_acc:
+        callouts.append(f"🎯 Most accurate: **{best_acc[0]}** ({best_acc[2]}/{best_acc[3]})")
+    embed = discord.Embed(
+        title="🏁 Fight summary" if final else "📊 Fight so far",
+        description=(head + "\n\n" + ("\n".join(lines) if lines else "*No participants recorded.*")
+                     + ("\n\n" + "\n".join(callouts) if callouts else ""))[:4000],
+        color=discord.Color.dark_gold() if final else discord.Color.blurple(),
+    )
+    if enc.deaths:
+        embed.add_field(name="Fallen", value=", ".join(enc.deaths)[:1024], inline=False)
+    embed.set_footer(text="Damage counts what a DM approved. /dm undo rolls back sheets, not this tally.")
+    return embed, logs
+
+
+@combat_group.command(name="recap", description="Fight so far: rounds, hits, damage dealt and taken, healing, kills, Void, wound levels.")
+async def combat_recap(interaction: discord.Interaction) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    enc = await _d.require_encounter(interaction)
+    if enc is None:
+        return
+    embed, _ = _render_summary(enc, str(interaction.guild_id), final=False)
+    await interaction.response.send_message(embed=embed)
+
+
+@combat_group.command(name="end", description="End the encounter in this channel and post the fight summary.")
 async def combat_end(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    if _d.encounters.pop(interaction.channel_id, None) is None:
+    guild = str(interaction.guild_id)
+    enc = _d.encounters.get(interaction.channel_id)
+    if enc is None:
         await interaction.response.send_message("No encounter here.", ephemeral=True)
         return
+    embed, logs = _render_summary(enc, guild, final=True)
+    _d.encounters.pop(interaction.channel_id, None)
     _d.delete_encounter(interaction.channel_id)
-    await interaction.response.send_message("⚔️ Encounter ended.")
-    await _d.combat_log(str(interaction.guild_id), "--- Encounter ended ---")
+    await interaction.response.send_message(content="⚔️ Encounter ended.", embed=embed)
+    await _d.combat_log(guild, "--- Encounter ended --- " + (" | ".join(logs) if logs else ""))
 
 
 @combat_group.command(name="summary", description="Compact overview of all combatants' key stats. Fortune role required.")
@@ -2384,6 +2496,7 @@ async def combat_npc(interaction: discord.Interaction, name: str) -> None:
         is_npc=True,
         reflexes=rec.character.reflexes,
     ))
+    enc.note_join(rec.character.name, stats.wound_level_name(rec.character))
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     await interaction.response.send_message(_render_encounter(enc, guild))
@@ -2715,6 +2828,7 @@ async def combat_void_armor(interaction: discord.Interaction, combatant: str) ->
         await interaction.response.send_message(f"🌀 **{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
         return
     c.current_void_points -= 1
+    _d.tally(interaction.channel_id, cb.name, "void")
     cb.void_armor_tn_bonus += 10
     _d.store.save(rec)
     _d.save_encounter(guild, enc)
@@ -2758,6 +2872,7 @@ async def combat_void_initiative(interaction: discord.Interaction, combatant: st
         await interaction.response.send_message(f"🌀 **{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
         return
     c.current_void_points -= 1
+    _d.tally(interaction.channel_id, cb.name, "void")
     cb.void_initiative_boost += 10
     cur_before = enc.current() if enc.started else None
     enc._sort()
@@ -2816,6 +2931,7 @@ async def combat_void_swap(interaction: discord.Interaction, spender: str, targe
         await interaction.response.send_message(f"🌀 **{cb_s.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
         return
     c.current_void_points -= 1
+    _d.tally(interaction.channel_id, cb_s.name, "void")
     old_s = cb_s.effective_initiative
     old_t = cb_t.effective_initiative
     cb_s.initiative, cb_t.initiative = cb_t.initiative, cb_s.initiative
@@ -3661,6 +3777,9 @@ async def duel_strike(
         bonus_rolled=tr + cr, bonus_kept=tk,
     )
     hit = result["hit"]
+    _d.tally(interaction.channel_id, atk.name, "attacks")
+    if hit:
+        _d.tally(interaction.channel_id, atk.name, "hits")
     embed = discord.Embed(
         title=f"⚔️ {atk.name} strikes at {tgt.name}",
         color=discord.Color.red() if hit else discord.Color.greyple(),
@@ -3732,6 +3851,7 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
         is_npc=True,
         reflexes=rec.creature.air,
     ))
+    enc.note_join(rec.creature.name, creature.creature_wound_level(rec.creature))
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     await interaction.response.send_message(_render_encounter(enc, guild))
@@ -4689,6 +4809,7 @@ async def combat_env_damage(
             reduction = 0 if ignore_reduction else rec.character.armor_reduction
             applied = combat.apply_damage(rec.character, amount, reduction)
             _d.store.save(rec, note="environmental damage")
+            _d.tally(interaction.channel_id, rec.character.name, "taken", applied["final_damage"])
             if applied["is_dead"]:
                 await _d.on_death(guild, rec.character.name, rec.owner_id, rec.id)
             dead_tag = " 💀 **DEAD**" if applied["is_dead"] else ""
@@ -4712,6 +4833,7 @@ async def combat_env_damage(
                 cr.wounds_taken += final
                 is_dead = cr.wounds_taken >= cr.wounds_dead
                 _d.store.save_creature(cre_rec, note="environmental damage")
+                _d.tally(interaction.channel_id, cr.name, "taken", final)
                 if is_dead:
                     await _d.on_death(guild, cr.name, None, None)
                 dead_tag = " 💀 **DEAD**" if is_dead else ""
