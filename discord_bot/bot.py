@@ -786,9 +786,9 @@ async def _resolve_active_for_edit(
 # ===========================================================================
 @client.tree.command(name="ping", description="Check that the bot is alive.")
 async def ping(interaction: discord.Interaction) -> None:
-    await interaction.response.send_message(
-        f"🎋 Alive. Gateway latency {round(client.latency * 1000)} ms.", ephemeral=True
-    )
+    latency = client.latency
+    ms = f"{round(latency * 1000)} ms" if latency == latency else "not measured yet"
+    await interaction.response.send_message(f"🎋 Alive. Gateway latency {ms}.", ephemeral=True)
 
 @client.tree.command(name="sync", description="Re-sync all slash commands with Discord [Kami]")
 async def sync_commands(interaction: discord.Interaction) -> None:
@@ -3674,7 +3674,7 @@ async def sheet_equip(
     else:
         if w not in combat.WEAPON_CATALOG:
             await interaction.response.send_message(
-                f"Unknown weapon **{weapon}**: see `/weapon list`.", ephemeral=True
+                f"Unknown weapon **{weapon}**: see `/ref weapon list`.", ephemeral=True
             )
             return
         if w not in [x.lower() for x in c.weapons]:
@@ -8257,7 +8257,7 @@ async def xp_advantage(
     adv = advantages.get(base_name, "advantage")
     if adv is None:
         await interaction.response.send_message(
-            f"No advantage named **{base_name}**: see `/advantage search`.", ephemeral=True
+            f"No advantage named **{base_name}**: see `/ref advantage search`.", ephemeral=True
         )
         return
     canonical = adv["name"]
@@ -8388,7 +8388,7 @@ async def school_learn(
     if s is None:
         await interaction.response.send_message(
             f"No school named **{lookup or '(unset)'}**. Set one with `school_name:` "
-            f"(or `/stat set` isn't for this: pick from `/school search`).",
+            f"(or `/stat set` isn't for this: pick from `/ref school search`).",
             ephemeral=True,
         )
         return

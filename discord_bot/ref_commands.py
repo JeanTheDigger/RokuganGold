@@ -340,7 +340,7 @@ async def school_list(interaction: discord.Interaction, clan: str | None = None)
     await interaction.response.send_message(
         f"\U0001f3ef **{len(schools.ALL)} schools & paths** "
         f"({cats['basic']} basic · {cats['advanced']} advanced · {cats['alternate']} alternate). "
-        f"Browse with `/school list clan:<clan>`, `/school search`, or `/school view`.\n{summary}",
+        f"Browse with `/ref school list clan:<clan>`, `/ref school search`, or `/ref school view`.\n{summary}",
         ephemeral=True,
     )
 
@@ -367,7 +367,7 @@ async def school_view(interaction: discord.Interaction, name: str) -> None:
     s = schools.get(name)
     if s is None:
         await interaction.response.send_message(
-            f"No school named **{name}**. Try `/school search`.", ephemeral=True
+            f"No school named **{name}**. Try `/ref school search`.", ephemeral=True
         )
         return
     await interaction.response.send_message(embed=build_school_embed(s))
@@ -393,7 +393,7 @@ async def weapon_list(interaction: discord.Interaction) -> None:
 async def weapon_view(interaction: discord.Interaction, name: str) -> None:
     w = combat.WEAPON_CATALOG.get(name.lower().strip())
     if w is None:
-        await interaction.response.send_message(f"No weapon named **{name}**. See `/weapon list`.", ephemeral=True)
+        await interaction.response.send_message(f"No weapon named **{name}**. See `/ref weapon list`.", ephemeral=True)
         return
     dr = f"{w['rolled']}k{w['kept']}" + (" + Strength" if w.get("strength_adds") and w.get("melee") else "")
     embed = discord.Embed(title=f"⚔️ {name.lower().strip()}", color=discord.Color.dark_grey())
@@ -423,7 +423,7 @@ async def armor_list(interaction: discord.Interaction) -> None:
             line += " · heavy"
         lines.append(line)
     await interaction.response.send_message(
-        f"\U0001f6e1️ **Armor** ({len(combat.ARMOR_CATALOG)} types · equip with `/sheet armor`):\n" + "\n".join(lines), ephemeral=True
+        f"\U0001f6e1️ **Armor** ({len(combat.ARMOR_CATALOG)} types · equip with `/stat armor`):\n" + "\n".join(lines), ephemeral=True
     )
 
 
@@ -479,7 +479,7 @@ async def advantage_list(interaction: discord.Interaction, kind: app_commands.Ch
         n_dis = len(advantages.by_kind("disadvantage"))
         await interaction.response.send_message(
             f"🌸 **{n_adv} Advantages**, 💢 **{n_dis} Disadvantages**. "
-            f"Use `/advantage list kind:` or `/advantage search`, `/advantage view`.",
+            f"Use `/ref advantage list kind:` or `/ref advantage search`, `/ref advantage view`.",
             ephemeral=True,
         )
         return
@@ -518,7 +518,7 @@ async def advantage_search(interaction: discord.Interaction, query: str) -> None
 async def advantage_view(interaction: discord.Interaction, name: str) -> None:
     r = advantages.get(name)
     if r is None:
-        await interaction.response.send_message(f"No entry named **{name}**. Try `/advantage search`.", ephemeral=True)
+        await interaction.response.send_message(f"No entry named **{name}**. Try `/ref advantage search`.", ephemeral=True)
         return
     await interaction.response.send_message(embed=build_advantage_embed(r))
 
@@ -534,8 +534,8 @@ async def kata_list(interaction: discord.Interaction, element: str | None = None
         counts = Counter(k["element"] for k in kata.ALL)
         summary = " · ".join(f"{el} {n}" for el, n in sorted(counts.items()))
         await interaction.response.send_message(
-            f"\U0001F94B **{len(kata.ALL)} Kata.** Browse with `/kata list element:<element>`, "
-            f"`/kata search`, `/kata view`.\n{summary}", ephemeral=True
+            f"\U0001F94B **{len(kata.ALL)} Kata.** Browse with `/ref kata list element:<element>`, "
+            f"`/ref kata search`, `/ref kata view`.\n{summary}", ephemeral=True
         )
         return
     matches = kata.by_element(element)
@@ -570,7 +570,7 @@ async def kata_view(interaction: discord.Interaction, name: str) -> None:
     k = kata.get(name)
     if k is None:
         await interaction.response.send_message(
-            f"No Kata named **{name}**. Try `/kata search`.", ephemeral=True
+            f"No Kata named **{name}**. Try `/ref kata search`.", ephemeral=True
         )
         return
     await interaction.response.send_message(embed=build_kata_embed(k))
@@ -587,8 +587,8 @@ async def kiho_list(interaction: discord.Interaction, element: str | None = None
         counts = Counter(k["element"] for k in kiho.ALL)
         summary = " · ".join(f"{el} {n}" for el, n in sorted(counts.items()))
         await interaction.response.send_message(
-            f"✋ **{len(kiho.ALL)} Kiho.** Browse with `/kiho list element:<element>`, "
-            f"`/kiho search`, `/kiho view`.\n{summary}", ephemeral=True
+            f"✋ **{len(kiho.ALL)} Kiho.** Browse with `/ref kiho list element:<element>`, "
+            f"`/ref kiho search`, `/ref kiho view`.\n{summary}", ephemeral=True
         )
         return
     matches = kiho.by_element(element)
@@ -623,7 +623,7 @@ async def kiho_view(interaction: discord.Interaction, name: str) -> None:
     k = kiho.get(name)
     if k is None:
         await interaction.response.send_message(
-            f"No Kiho named **{name}**. Try `/kiho search`.", ephemeral=True
+            f"No Kiho named **{name}**. Try `/ref kiho search`.", ephemeral=True
         )
         return
     await interaction.response.send_message(embed=build_kiho_embed(k))
@@ -865,7 +865,7 @@ async def ancestors_check(
             found.append(f"**{adv}**: {ANCESTOR_EFFECTS[key]}")
     if not found:
         await interaction.response.send_message(
-            f"**{c.name}** has no Ancestor advantages recorded. Use `/sheet advantage` to add one.",
+            f"**{c.name}** has no Ancestor advantages recorded. Use `/stat advantage` to add one.",
             ephemeral=True,
         )
         return
@@ -942,9 +942,9 @@ async def dual_wield_info(
             inline=False,
         )
     elif c.equipped_weapon:
-        embed.description = f"Only wielding **{c.equipped_weapon}** (no off-hand). Use `/sheet wield` to set both weapons."
+        embed.description = f"Only wielding **{c.equipped_weapon}** (no off-hand). Use `/stat wield` to set both weapons."
     else:
-        embed.description = "No weapons wielded. Use `/sheet wield` to equip weapons."
+        embed.description = "No weapons wielded. Use `/stat wield` to equip weapons."
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 

@@ -19,7 +19,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 |---|---|
 | `/help` | Categorized command reference: 13 categories, expandable. Shows a compact overview or drill into one category. Ephemeral (only you see it). |
 | `/whoami` | Quick glance at your active character: name, school, rings, wounds (with penalty warning), VP, movement speed, spell slots (if tracked), wielded weapon, active Kata, and combat conditions (if in an encounter). Ephemeral. |
-| `/lookup` | Unified search across **all** catalogs (spells, schools, kata, kiho, advantages, weapons, creatures). Find anything without knowing which command to use. Ephemeral. |
+| `/ref search` | Unified search across **all** catalogs (spells, schools, kata, kiho, advantages, weapons, creatures). Find anything without knowing which command to use. Ephemeral. |
 
 **Dice**
 
@@ -82,7 +82,7 @@ posts the result publicly in the channel with the relevant rule, and presents
 Approve / Deny buttons that only a DM can click. This applies to:
 
 - **Attack damage** (`/fight attack` → DM clicks "Roll & Apply Damage" or "Deny")
-- **Spell damage** (`/spell_damage` with `target:` → DM clicks "Apply Damage" or "Deny")
+- **Spell damage** (`/spell damage` with `target:` → DM clicks "Apply Damage" or "Deny")
 - **Creature attacks** (`/creature attack` → DM clicks "Apply Creature Damage" or "No Damage")
 - **Arbitrary damage** (`/dm damage` → DM clicks "Apply Damage" or "Deny")
 - **Healing** (`/dm heal` → DM clicks "Apply Healing" or "Deny")
@@ -128,10 +128,10 @@ their Type and Atemi flag).
 
 | Command | What it does |
 |---|---|
-| `/kata list` · `/kata search` · `/kata view` | Browse Kata by element/Mastery, with Schools and effect. |
-| `/kiho list` · `/kiho search` · `/kiho view` | Browse Kiho by element/Mastery, with Type and effect. |
+| `/ref kata list` · `/ref kata search` · `/ref kata view` | Browse Kata by element/Mastery, with Schools and effect. |
+| `/ref kiho list` · `/ref kiho search` · `/ref kiho view` | Browse Kiho by element/Mastery, with Type and effect. |
 | `/sheet kata` · `/sheet kiho` | Record/remove a Kata or Kiho on the sheet (free): e.g. one granted at creation. Buy with XP via `/xp kata`/`/xp kiho` instead. |
-| `/sheet kata_activate` | Set your **active Kata** (Simple Action; only one active: s30). Blank name drops it. |
+| `/sheet kata activate` | Set your **active Kata** (Simple Action; only one active: s30). Blank name drops it. |
 | `/sheet kiho activate` | Activate/deactivate a **Kiho**: one Internal / one Kharmic / one Mystical at a time, Martial stacks (s38). |
 
 `/xp kata` and `/xp kiho` autocomplete real names and **auto-fill the Mastery
@@ -140,7 +140,7 @@ Level**, so the RAW cost is computed for you.
 **Active-Kata combat effects**: the active Kata (⚑ on the sheet) feeds straight
 into `/fight attack`. The bot auto-applies the **deterministic subset** it can compute
 faithfully from the sheet, the chosen stance, the maneuver, and the weapon
-(main- and off-hand, via `/sheet wield`): **14 Kata**:
+(main- and off-hand, via `/stat wield`): **14 Kata**:
 
 | Kata | Auto-applied in `/fight attack` |
 |---|---|
@@ -196,9 +196,9 @@ and full effect text.
 
 | Command | What it does |
 |---|---|
-| `/advantage list` · `/advantage search` · `/advantage view` | Browse both, with costs and effects. |
+| `/ref advantage list` · `/ref advantage search` · `/ref advantage view` | Browse both, with costs and effects. |
 | `/xp advantage` | Buy an Advantage with XP (cost = its point value; pass `points:` for Variable-cost ones). |
-| `/sheet advantage` · `/sheet disadvantage` | Record/remove on the sheet (free): e.g. at creation. Taking a Disadvantage tells you the XP it grants; a DM applies that with `/xp grant`. |
+| `/stat advantage` · `/stat disadvantage` | Record/remove on the sheet (free): e.g. at creation. Taking a Disadvantage tells you the XP it grants; a DM applies that with `/xp grant`. |
 
 **Auto-applied Advantage & Disadvantage combat effects**: when a character has
 one of the entries below, `/fight attack` applies the modifier automatically, the same
@@ -292,9 +292,9 @@ Every school **and path** and its techniques are in the bot: **347 entries**
 
 | Command | What it does |
 |---|---|
-| `/school list` | Overall summary (basic/advanced/alternate + per-clan counts), or `clan:` for that clan's entries grouped by category. |
-| `/school search` | Find schools/paths by name or clan (each tagged basic / adv / path). |
-| `/school view` | An entry's Benefit, Skills, Honor, Outfit, Affinity, Prerequisites, and every Technique (Rank + name + full effect text). |
+| `/ref school list` | Overall summary (basic/advanced/alternate + per-clan counts), or `clan:` for that clan's entries grouped by category. |
+| `/ref school search` | Find schools/paths by name or clan (each tagged basic / adv / path). |
+| `/ref school view` | An entry's Benefit, Skills, Honor, Outfit, Affinity, Prerequisites, and every Technique (Rank + name + full effect text). |
 | `/sheet learn` | Record the techniques your school grants **up to your School Rank** onto your sheet (RAW: techniques come free with rank at a dojo). Uses your sheet's school, or pass `school_name:`. |
 
 Only **Basic Schools** appear in `/sheet create` and `/npc generate` autocomplete
@@ -310,7 +310,7 @@ turn on things the engine can't know (target type: "vs Shadowlands / unaware",
 mounted, duels, grapples, terrain, multiple opponents, allies), are
 reactive / Void-gated / "once per X", need player choice, or need systems the bot
 doesn't model (spells, tattoos, mass battle, conditions, kiho): those stay
-**DM-adjudicated**, full text on the sheet via `/school view`.
+**DM-adjudicated**, full text on the sheet via `/ref school view`.
 
 The 36 span: attack-roll dice/flat (Torch's Flame Flickers, The Force of Honor,
 The Way of the Crane, Always Be Ready, The Subtle Sting, Togashi Tattooed Order,
@@ -396,11 +396,11 @@ Mastery Level**: so the RAW cost (1 × Mastery Level) is computed for you.
 
 | Command | What it does |
 |---|---|
-| `/weapon list` · `/weapon view` | Browse all **44 weapons** (damage rating, skill, trait, size). |
-| `/armor list` | The **7 armor types** with Armor TN bonus and Reduction. |
-| `/sheet equip` | Add/remove a weapon on your character's gear list (autocomplete). |
-| `/sheet wield` | Set the weapon(s) in hand: `weapon:` (main) and optional `off_hand:`. This is `/fight attack`'s **default weapon** and gates defender weapon-conditional Kata (Crane, Dragon). `unwield:true` goes unarmed. |
-| `/sheet armor` | Equip an armor type: sets the sheet's **Armor TN bonus** and **Reduction** automatically (e.g. Light → +5 TN, Reduction 3; Heavy → +10, 5); `none` removes it. |
+| `/ref weapon list` · `/ref weapon view` | Browse all **44 weapons** (damage rating, skill, trait, size). |
+| `/ref armor list` | The **7 armor types** with Armor TN bonus and Reduction. |
+| `/stat equip` | Add/remove a weapon on your character's gear list (autocomplete). |
+| `/stat wield` | Set the weapon(s) in hand: `weapon:` (main) and optional `off_hand:`. This is `/fight attack`'s **default weapon** and gates defender weapon-conditional Kata (Crane, Dragon). `unwield:true` goes unarmed. |
+| `/stat armor` | Equip an armor type: sets the sheet's **Armor TN bonus** and **Reduction** automatically (e.g. Light → +5 TN, Reduction 3; Heavy → +10, 5); `none` removes it. |
 
 Weapon damage (used by `/fight attack`) and armor Reduction/Armor-TN (used by combat)
 now come from the full catalogs: Ashigaru +3/1, Tatami +4/1, Light +5/3, Heavy
@@ -469,10 +469,10 @@ it lands, the DM authorizes the outcome."*
 | `/combat status` | Show the current order and whose turn it is. |
 | `/combat remove` / `/combat end` | Drop a combatant / end the encounter. |
 | `/combat condition set` | Apply a condition to a combatant (DM only). 8 choices: Blinded, Dazed, Entangled, Fatigued, Grappled, Mounted, Prone, Stunned. |
-| `/combat condition_clear` | Remove a condition from a combatant (DM only). |
-| `/combat conditions` | Show a combatant's active conditions and their DM-adjudicated effects. |
-| `/combat guard` | Guard another combatant (DM only). Ward gets +10 Armor TN, guarder gets −5. Clears on guarder's next turn. |
-| `/combat full_defense` | Full Defense (DM only). Rolls Defense/Reflexes, adds half (rounded up) to Armor TN until next turn. Complex Action. |
+| `/combat condition clear` | Remove a condition from a combatant (DM only). |
+| `/combat condition list` | Show a combatant's active conditions and their DM-adjudicated effects. |
+| `/fight guard` | Guard another combatant (DM only). Ward gets +10 Armor TN, guarder gets −5. Clears on guarder's next turn. |
+| `/fight full_defense` | Full Defense (DM only). Rolls Defense/Reflexes, adds half (rounded up) to Armor TN until next turn. Complex Action. |
 | `/combat summary` | Compact DM-only overview of all combatants: wounds, wound level, Armor TN, VP, conditions, guards, and Full Defense: at a glance. Ephemeral. |
 
 Initiative order is in-memory scratch state (a bot restart clears an in-progress
@@ -485,49 +485,49 @@ section). Conditions display inline in the initiative listing (e.g. `[dazed,
 prone]`), active guards show as `🛡️→WardName`, and Full Defense as
 `🛡️FD+N`.
 
-**Grappling** (`/grapple`, all DM-only: s40 Grappling rules)
+**Grappling** (`/engage grapple`, all DM-only: s40 Grappling rules)
 
 | Command | What it does |
 |---|---|
-| `/grapple initiate` | Initiate a grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus), then contested Jiujutsu/Strength. On success, both gain **Grappled**; initiator has control. Complex Action. |
-| `/grapple control` | Contested Jiujutsu/Strength roll between two grapple participants. Winner has control until the next Turn. |
-| `/grapple hit` | Grapple Hit (controller only): unarmed damage on a grappled opponent. No attack roll: DM authorizes damage via the standard button flow. Complex Action. |
-| `/grapple throw` | Throw a grappled opponent: both become **Prone**, grapple ends for both. Complex Action. |
-| `/grapple pin` | Pin a grappled opponent: target gains **Pinned** condition (fully immobilized; prerequisite for Bind). Complex Action. |
-| `/grapple break_free` | Break free. No opponent = controller break (Simple Action, no roll). With opponent = defender break-free (Complex Action, contested Jiujutsu/Strength). |
+| `/engage grapple initiate` | Initiate a grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus), then contested Jiujutsu/Strength. On success, both gain **Grappled**; initiator has control. Complex Action. |
+| `/engage grapple control` | Contested Jiujutsu/Strength roll between two grapple participants. Winner has control until the next Turn. |
+| `/engage grapple hit` | Grapple Hit (controller only): unarmed damage on a grappled opponent. No attack roll: DM authorizes damage via the standard button flow. Complex Action. |
+| `/engage grapple throw` | Throw a grappled opponent: both become **Prone**, grapple ends for both. Complex Action. |
+| `/engage grapple pin` | Pin a grappled opponent: target gains **Pinned** condition (fully immobilized; prerequisite for Bind). Complex Action. |
+| `/engage grapple break_free` | Break free. No opponent = controller break (Simple Action, no roll). With opponent = defender break-free (Complex Action, contested Jiujutsu/Strength). |
 
-**Iaijutsu dueling** (`/duel`, all DM-only: s40 Iaijutsu rules)
-
-| Command | What it does |
-|---|---|
-| `/duel assess` | Assessment: both duelists roll Iaijutsu(Assessment)/Awareness vs TN 10 + opponent's Insight Rank × 5. On success, learn opponent's Void, Reflexes, Iaijutsu, emphases, VP, or wound level (+1 per Raise). If one exceeds the other by 10+, that duelist gains +1k1 on Focus. |
-| `/duel focus` | Focus: contested Iaijutsu(Focus)/Void roll. Winner by 5+ strikes first; +1 Free Raise per additional 5. Neither by 5 → Kharmic Strike (simultaneous, cause dropped). |
-| `/duel strike` | Strike: Iaijutsu/Reflexes attack vs normal Armor TN. Free Raises from Focus apply as Increased Damage. On hit, DM-authorized damage via the standard button flow (default weapon: katana). |
-
-**Contested checks, Fear, and Honor rolls** (all DM-only)
+**Iaijutsu dueling** (`/engage duel`, all DM-only: s40 Iaijutsu rules)
 
 | Command | What it does |
 |---|---|
-| `/contest` | Contested Skill/Trait roll between two characters. Each side rolls **(Trait + Skill) keep Trait** with per-side explode (skilled only), wound penalties, and optional flat bonuses. Supports encounter combatants, NPCs, and players. |
-| `/fear` | Fear check: **Willpower vs TN 5 + (Fear Rank × 5)**. Raw Willpower roll (no explosion). |
-| `/honor_roll` | Honor Roll: **Honor Rank dice, keep 1** vs a DM-set TN. Resists temptation or dishonor. |
+| `/engage duel assess` | Assessment: both duelists roll Iaijutsu(Assessment)/Awareness vs TN 10 + opponent's Insight Rank × 5. On success, learn opponent's Void, Reflexes, Iaijutsu, emphases, VP, or wound level (+1 per Raise). If one exceeds the other by 10+, that duelist gains +1k1 on Focus. |
+| `/engage duel focus` | Focus: contested Iaijutsu(Focus)/Void roll. Winner by 5+ strikes first; +1 Free Raise per additional 5. Neither by 5 → Kharmic Strike (simultaneous, cause dropped). |
+| `/engage duel strike` | Strike: Iaijutsu/Reflexes attack vs normal Armor TN. Free Raises from Focus apply as Increased Damage. On hit, DM-authorized damage via the standard button flow (default weapon: katana). |
 
-**Void Point management** (`/void`)
-
-| Command | What it does |
-|---|---|
-| `/void spend` | Spend a Void Point with a reason label (+1k1, negate conditional, etc.). Tracks VP. Players can spend their own; DMs can spend for NPCs/other players. |
-| `/void refresh` | Recover VP: **Rest** (full refresh) or **Meditation** (Meditation/Void check vs TN, recovers 1 VP on success). |
-| `/void status` | Show current VP with a visual bar. |
-
-**Poison & Medicine** (DM-only)
+**Contested checks, Fear, and Honor rolls** (roll for your own character; other characters and NPCs need the Fortune role)
 
 | Command | What it does |
 |---|---|
-| `/poison` | Poison resistance: **Stamina vs TN (Strength × 5)**. Raw Stamina roll (no explosion). Optional poison name for display. |
-| `/medicine` | Medicine/Intelligence check vs a DM-set TN. Treats wounds, poison, disease, etc. Explodes only if skilled. |
+| `/check contest` | Contested Skill/Trait roll between two characters. Each side rolls **(Trait + Skill) keep Trait** with per-side explode (skilled only), wound penalties, and optional flat bonuses. Supports encounter combatants, NPCs, and players. |
+| `/check fear` | Fear check: **Willpower vs TN 5 + (Fear Rank × 5)**. Raw Willpower roll (no explosion). |
+| `/check honor` | Honor Roll: **Honor Rank dice, keep 1** vs a DM-set TN. Resists temptation or dishonor. |
 
-**Skill checks: Stealth, Investigation, Social, Craft, Lore** (all DM-only)
+**Void Point management** (`/sheet void`)
+
+| Command | What it does |
+|---|---|
+| `/sheet void spend` | Spend a Void Point with a reason label (+1k1, negate conditional, etc.). Tracks VP. Players can spend their own; DMs can spend for NPCs/other players. |
+| `/sheet void refresh` | Recover VP: **Rest** (full refresh) or **Meditation** (Meditation/Void check vs TN, recovers 1 VP on success). |
+| `/sheet void status` | Show current VP with a visual bar. |
+
+**Poison & Medicine** (your own character, or Fortune for others)
+
+| Command | What it does |
+|---|---|
+| `/check poison` | Poison resistance: **Stamina vs TN (Strength × 5)**. Raw Stamina roll (no explosion). Optional poison name for display. |
+| `/check medicine` | Medicine/Intelligence check vs a DM-set TN. Treats wounds, poison, disease, etc. Explodes only if skilled. |
+
+**Skill checks: Stealth, Investigation, Social, Craft, Lore** (your own character, or Fortune for others)
 
 Six commands that all use the same engine: `(Trait + Skill) keep Trait` vs TN,
 exploding only when skilled (skill rank > 0). Wound penalty auto-applied. Each
@@ -536,17 +536,17 @@ helper for a consistent three-field embed (Roll / Dice / Result).
 
 | Command | What it does |
 |---|---|
-| `/skillcheck` | **Universal** skill check: DM picks the trait (dropdown) and skill name (autocomplete from sheet; rank read automatically). For anything not covered by a dedicated command. |
-| `/stealth` | **Stealth/Agility** vs TN. Auto-reads the Stealth skill from the sheet. Verdict: "Undetected!" / "Spotted!" |
-| `/investigate` | **Investigation/Perception** vs TN. Optional emphasis choice (Notice, Interrogation, Search): checks the sheet for a matching emphasis and adds a footer reminder about emphasis rerolls. |
-| `/social` | **Social skill** dropdown (Courtier, Etiquette, Intimidation, Temptation, Sincerity, Perform): auto-selects the correct trait per L5R 4e rules (Awareness for most, Willpower for Intimidation). |
-| `/craft` | **Artisan or Craft / Intelligence** vs TN. Skill name autocompletes from sheet (e.g. "Artisan: Painting", "Craft: Weaponsmithing"). |
-| `/lore` | **Lore / Intelligence** vs TN. Specialty autocompletes from sheet (e.g. "Lore: Heraldry", "Lore: Shadowlands"). |
+| `/check skill` | **Universal** skill check: DM picks the trait (dropdown) and skill name (autocomplete from sheet; rank read automatically). For anything not covered by a dedicated command. |
+| `/check stealth` | **Stealth/Agility** vs TN. Auto-reads the Stealth skill from the sheet. Verdict: "Undetected!" / "Spotted!" |
+| `/check investigate` | **Investigation/Perception** vs TN. Optional emphasis choice (Notice, Interrogation, Search): checks the sheet for a matching emphasis and adds a footer reminder about emphasis rerolls. |
+| `/check social` | **Social skill** dropdown (Courtier, Etiquette, Intimidation, Temptation, Sincerity, Perform): auto-selects the correct trait per L5R 4e rules (Awareness for most, Willpower for Intimidation). |
+| `/check craft` | **Artisan or Craft / Intelligence** vs TN. Skill name autocompletes from sheet (e.g. "Artisan: Painting", "Craft: Weaponsmithing"). |
+| `/check lore` | **Lore / Intelligence** vs TN. Specialty autocompletes from sheet (e.g. "Lore: Heraldry", "Lore: Shadowlands"). |
 
 All six support `member:` (DM targets a player's active character), `is_npc:`
 (look up by name), `bonus:` (flat modifier for advantages, tools, etc.), and
 `reason:` (label shown with the roll). The opposed-check use case (e.g.
-Stealth vs Investigation) is already handled by `/contest`.
+Stealth vs Investigation) is already handled by `/check contest`.
 
 **NPCs** (generated from **GDD s22.4**: Generation Templates, LOCKED)
 
@@ -554,7 +554,7 @@ Stealth vs Investigation) is already handled by `/contest`.
 |---|---|
 | `/npc generate` | DM generates a samurai NPC by `insight_rank` (1–5): Traits/Rings, Honor, Glory, age, koku within the s22.4 bands, random variance. A `school:` from the catalog (autocomplete) auto-fills the school's skills, Honor, clan, and type (the Benefit is already baked into the s22.4 ring bands, so it isn't re-applied); or set `skills` manually. |
 | `/npc view` · `/npc list` · `/npc delete` | View / roster / remove NPCs (delete is DM-only). |
-| `/npc trait` · `/npc skill` · `/npc set` · `/npc wound` · `/npc heal` · `/npc rename` | Edit a generated NPC field-by-field (DM only): same fields as the `/sheet` editors. |
+| `/npc-edit trait` · `/npc-edit skill` · `/npc-edit set` · `/npc-edit wound` · `/npc-edit heal` · `/npc rename` | Edit a generated NPC field-by-field (DM only): same fields as the `/sheet` editors. |
 
 NPCs plug into combat: `/combat npc name:` adds one to initiative, and `/fight attack`
 takes `target_npc:` (fight an NPC) and `attacker_npc:` (a DM runs a monster
@@ -571,18 +571,18 @@ NPCs can be tuned field-by-field with the `/npc` editors above.
 **Skill Masteries**, **Advantages/Disadvantages**, **Kiho**, and **Conditions**
 now auto-apply in `/fight attack` (see the tables above); the rest of Kata, most
 Techniques, and most Kiho stay DM-adjudicated (shown as reminders; technique
-text on the sheet via `/school view`). **Void Point damage reduction** adds a
+text on the sheet via `/ref school view`). **Void Point damage reduction** adds a
 second button on every hit: DM clicks "Void Reduce" to spend 1 VP and subtract
 10 wounds from the target (L5R 4e core rule). The button is hidden for creature
 targets (no VP) and knockdown maneuvers (no damage). **Called Shot** (1–4 raises)
 labels the targeted body part in the damage embed; **Extra Attack** (5 raises)
 auto-fires a second attack roll after the first hit resolves (once per Turn);
-**Guard** (`/combat guard`) assigns a ward (+10 TN) and penalizes the guarder
+**Guard** (`/fight guard`) assigns a ward (+10 TN) and penalizes the guarder
 (−5 TN), clearing on the guarder's next turn. **Armor attack penalties** (s39)
 auto-apply: Heavy −5, Tetsu-Do −10 (−5 if Str ≥ 5); Hida Bushi R1 is exempt.
-**Full Defense** (`/combat full_defense`) rolls Defense/Reflexes and adds half
+**Full Defense** (`/fight full_defense`) rolls Defense/Reflexes and adds half
 (rounded up) to Armor TN until the combatant's next turn: a Complex Action.
-**Grappling** (`/grapple`) covers the full subsystem: initiate (Jiujutsu/Agility
+**Grappling** (`/engage grapple`) covers the full subsystem: initiate (Jiujutsu/Agility
 vs TN ignoring armor), contested control rolls, Hit (unarmed damage via DM
 buttons), Throw (Prone + leave grapple), and Break Free.
 **Spell Casting** (`/spell cast`) rolls (Ring + School Rank) keep Ring vs TN
@@ -592,20 +592,20 @@ raise), and wound penalty. **Spell slots** are tracked per element: max = Ring +
 School Rank per day, consumed on each cast (success or failure). DM refreshes all
 slots and heals wounds via `/dm new_day`: no connection between real time and game
 time. Players cast their own spells; DMs can cast for NPCs or other players.
-**Iaijutsu Dueling** (`/duel`) covers the full three-stage formal duel:
+**Iaijutsu Dueling** (`/engage duel`) covers the full three-stage formal duel:
 Assessment (Iaijutsu/Awareness, reveals opponent stats, +1k1 Focus bonus if
 exceeded by 10+), Focus (contested Iaijutsu/Void, winner by 5+ strikes first
 with Free Raises per additional 5, otherwise Kharmic Strike), and Strike
 (Iaijutsu/Reflexes attack vs normal Armor TN, Free Raises as Increased Damage,
 DM-authorized damage via buttons): DM only.
-**Contested Checks** (`/contest`) handle any opposed Skill/Trait roll between
+**Contested Checks** (`/check contest`) handle any opposed Skill/Trait roll between
 two characters, with per-side explode, wound penalties, and flat bonuses.
-**Fear Checks** (`/fear`) roll Willpower vs TN 5 + Fear Rank × 5.
-**Honor Rolls** (`/honor_roll`) roll Honor Rank dice, keep 1, vs a DM-set TN.
-**Void Point Management** (`/void`) tracks VP spending (with reason labels),
+**Fear Checks** (`/check fear`) roll Willpower vs TN 5 + Fear Rank × 5.
+**Honor Rolls** (`/check honor`) roll Honor Rank dice, keep 1, vs a DM-set TN.
+**Void Point Management** (`/sheet void`) tracks VP spending (with reason labels),
 rest recovery (full refresh), and Meditation/Void checks (recover 1 on success).
-**Poison Resistance** (`/poison`) rolls Stamina vs TN Strength × 5.
-**Medicine Checks** (`/medicine`) roll Medicine/Intelligence vs a TN for treatment.
+**Poison Resistance** (`/check poison`) rolls Stamina vs TN Strength × 5.
+**Medicine Checks** (`/check medicine`) roll Medicine/Intelligence vs a TN for treatment.
 Dual-wielding and thrown/charge maneuvers are still **not** modelled: the DM
 can express those with `raises`/`bonus_tn`.
 
@@ -704,7 +704,7 @@ and override DR manually for a charge.
 **Grapple-Capable Polearms** (GDD s39)
 
 Sasumata and sodegarami can be used to initiate a grapple while armed (normally
-a grapple requires free hands). When `/combat grapple initiate` is used and the
+a grapple requires free hands). When `/engage grapple initiate` is used and the
 attacker has a weapon equipped:
 - If the weapon is **grapple-capable**: a green checkmark note confirms it
 - If the weapon is **not** grapple-capable: a warning reminds the DM that the
@@ -762,7 +762,7 @@ Perception adds to damage (comparable to Strength for melee) — use
 **Extraordinary Weapon Qualities** (GDD s39 — Crafting Specials)
 
 Master crafters in Rokugan can forge weapons with exceptional properties. These
-are managed per-character via `/sheet quality` (the qualities belong to the
+are managed per-character via `/stat quality` (the qualities belong to the
 character's currently-equipped weapon, not to a weapon type). When attacking,
 qualities apply only if the weapon used matches the character's `equipped_weapon`.
 
@@ -770,7 +770,7 @@ qualities apply only if the weapon used matches the character's `equipped_weapon
 |---|---|
 | `/sheet quality qualities:"balanced, swift"` | Set qualities on the equipped weapon (comma-separated). |
 | `/sheet quality clear:True` | Remove all weapon qualities. |
-| `/sheet quality` | View current weapon qualities. |
+| `/stat quality` | View current weapon qualities. |
 
 | Quality | Effect | Auto-applied? |
 |---|---|---|
@@ -818,7 +818,7 @@ Reduction, cost (koku), type (heavy/light), and special penalties.
 
 Armor is also included in the unified `/ref search` results alongside weapons,
 spells, schools, kata, kiho, advantages, and creatures. Equipping armor via
-`/sheet armor` now shows the cost and special penalty text.
+`/stat armor` now shows the cost and special penalty text.
 
 **Rooms** (private play rooms: each is a Discord **private thread**)
 
@@ -839,44 +839,44 @@ own room.
 
 | Command | What it does |
 |---|---|
-| `/combat stance` | Declare stance for the round: Attack, Full Attack (−10 ATN, +2k1), Defense (+Air+Defense ATN), Full Defense (Complex Action), Center (+Void ATN, +1k1 next turn). Resets on turn advance. |
-| `/combat action` | Track Simple/Complex action usage per turn. L5R 4e: 1 Complex OR 2 Simple per turn. |
-| `/combat init` | **DM** adjusts a combatant's initiative mid-combat (covers re-rolls and delayed-action repositioning). |
-| `/combat hold` | **DM** toggles a combatant's held-action flag. Shown in the encounter display. |
-| `/combat delay` | **DM** toggles delayed status, with an optional new initiative value. |
-| `/combat act` | **DM** resolves a held/delayed combatant's action: clears the flag and resets action economy. |
+| `/fight stance` | Declare stance for the round: Attack, Full Attack (−10 ATN, +2k1), Defense (+Air+Defense ATN), Full Defense (Complex Action), Center (+Void ATN, +1k1 next turn). Resets on turn advance. |
+| `/fight action` | Track Simple/Complex action usage per turn. L5R 4e: 1 Complex OR 2 Simple per turn. |
+| `/combat turn init` | **DM** adjusts a combatant's initiative mid-combat (covers re-rolls and delayed-action repositioning). |
+| `/combat turn hold` | **DM** toggles a combatant's held-action flag. Shown in the encounter display. |
+| `/combat turn delay` | **DM** toggles delayed status, with an optional new initiative value. |
+| `/combat turn act` | **DM** resolves a held/delayed combatant's action: clears the flag and resets action economy. |
 | `/combat room` | **DM** adds all room members' active characters to initiative at once (run inside a room thread). |
-| `/combat surprise` | **DM** toggles the surprise-round flag. Auto-clears when Round 2 begins. |
-| `/combat mount` | Mount or dismount: toggles the Mounted condition on a combatant (DM only). |
-| `/dual_wield` | Show dual-wielding rules and off-hand penalties based on weapon size (Small −5, Medium −10, Large −15). |
-| `/heritage roll` | Roll on the Heritage table for a clan (d10). |
-| `/heritage table` | View the full Heritage table for a clan (10 entries). |
-| `/taint` | View or modify Shadowlands Taint. Shows Taint Rank (floor(Taint/Earth)), effects, mutations, and madness when crossing rank boundaries. |
-| `/battle roll` | Mass Battle engagement roll: Battle/Perception vs a DM-set TN. Result determines engagement level (Reserves → Heroic Opportunity). |
-| `/battle damage` | Incidental damage by engagement level: Reserves 0, Disengaged 1k1, Engaged 2k1, Heavily Engaged 3k2, Heroic 4k3. |
-| `/family list` | Browse all 47 families grouped by clan with their +1 Trait bonuses. |
-| `/family search` | Search families by name or clan. |
-| `/spell_damage` | Roll spell damage dice (XkY), optionally auto-apply to a target. |
-| `/craft_extended` | Multi-step extended crafting roll (Craft or Artisan/Intelligence). Shows quality tier thresholds (Standard, Fine at 1.5×, Exceptional at 2×). |
-| `/encumbrance` | Check carrying capacity (Strength × 5 items). |
-| `/atn` | Armor TN breakdown: base (Reflexes × 5 + 5), armor, stance, guard, Full Defense, condition overrides. Shows in-combat context when applicable. |
+| `/combat turn surprise` | **DM** toggles the surprise-round flag. Auto-clears when Round 2 begins. |
+| `/fight mount` | Mount or dismount: toggles the Mounted condition on a combatant (DM only). |
+| `/ref dual_wield` | Show dual-wielding rules and off-hand penalties based on weapon size (Small −5, Medium −10, Large −15). |
+| `/ref heritage roll` | Roll on the Heritage table for a clan (d10). |
+| `/ref heritage table` | View the full Heritage table for a clan (10 entries). |
+| `/dm taint` | View or modify Shadowlands Taint. Shows Taint Rank (floor(Taint/Earth)), effects, mutations, and madness when crossing rank boundaries. |
+| `/engage battle roll` | Mass Battle engagement roll: Battle/Perception vs a DM-set TN. Result determines engagement level (Reserves → Heroic Opportunity). |
+| `/engage battle damage` | Incidental damage by engagement level: Reserves 0, Disengaged 1k1, Engaged 2k1, Heavily Engaged 3k2, Heroic 4k3. |
+| `/ref family list` | Browse all 47 families grouped by clan with their +1 Trait bonuses. |
+| `/ref family search` | Search families by name or clan. |
+| `/spell damage` | Roll spell damage dice (XkY), optionally auto-apply to a target. |
+| `/dm craft_extended` | Multi-step extended crafting roll (Craft or Artisan/Intelligence). Shows quality tier thresholds (Standard, Fine at 1.5×, Exceptional at 2×). |
+| `/ref encumbrance` | Check carrying capacity (Strength × 5 items). |
+| `/ref armor_tn` | Armor TN breakdown: base (Reflexes × 5 + 5), armor, stance, guard, Full Defense, condition overrides. Shows in-combat context when applicable. |
 | `/spell resist` | Spell resistance: target rolls raw Willpower vs a DM-set TN. DM only. |
-| `/horsemanship` | Horsemanship/Agility check vs a TN. |
-| `/influence` | Track court influence points for a character (DM-managed). |
-| `/travel` | Calculate travel time by mode (foot, horse, forced march, cart, ship, river) and terrain (normal, rough, mountains). |
-| `/ancestors` | Show Ancestor advantage mechanical effects (21 ancestors with their bonuses). |
+| `/check horsemanship` | Horsemanship/Agility check vs a TN. |
+| `/dm influence` | Track court influence points for a character (DM-managed). |
+| `/ref travel` | Calculate travel time by mode (foot, horse, forced march, cart, ship, river) and terrain (normal, rough, mountains). |
+| `/ref ancestors` | Show Ancestor advantage mechanical effects (21 ancestors with their bonuses). |
 
 `/combat status` and `/combat summary` now display each combatant's **stance**
 and **actions remaining** alongside initiative, conditions, guards, and Full
 Defense. `/combat next` now shows **condition reminders** when advancing to a
 combatant who has active conditions (Stunned: can't act, Dazed: Defense only,
-Entangled: break-free only, etc.). `/combat stance` now shows the mechanical
+Entangled: break-free only, etc.). `/fight stance` now shows the mechanical
 effects of each stance when declared. Initiative ties now break by **Reflexes**
 (L5R 4e rule). `/whoami` and `/sheet view` display a visual **wound track**
 (H → Ni → Gr → [**Hu**] → In → Cr → Dn → Ou → De with current level marked).
 `/dm damage` now includes a **Void Reduce (−10)** button.
 
-`/modifiers` is a quick-reference card for **terrain and range modifiers**: cover
+`/ref modifiers` is a quick-reference card for **terrain and range modifiers**: cover
 (+10/+20 TN), range increments (+10 TN each beyond the first), higher ground
 (+1k0), darkness, mounted vs foot, and prone targets: with a note on how to apply
 them via the `/fight attack bonus_tn:` parameter. `/ref calledshot` shows the Called Shot
@@ -903,13 +903,13 @@ Guard, Full Defense, grapple events, duel stages, creature attacks, spell damage
 and medicine treatments are all logged as one-line entries. `/dm clear_log` removes
 the setting. The log is per-server (guild-scoped) and stored in the database.
 
-`/combat hold` and `/combat delay` let the DM mark a combatant as holding or
+`/combat turn hold` and `/combat turn delay` let the DM mark a combatant as holding or
 delaying their action: the encounter display shows ⏸️HELD / ⏳DELAYED markers.
-`/combat act` resolves a held or delayed combatant's action: clears the flag,
+`/combat turn act` resolves a held or delayed combatant's action: clears the flag,
 resets action economy, and logs the event to the combat log channel.
 
 **Combatant autocomplete**: all combat commands that take a combatant name
-(`/combat stance`, `/combat condition set`, `/combat guard`, etc.) now offer
+(`/fight stance`, `/combat condition set`, `/fight guard`, etc.) now offer
 Discord autocomplete, so DMs pick from a dropdown rather than typing names.
 
 **Encounter persistence**: encounters are saved to the database on every state
@@ -989,9 +989,9 @@ python3 l5r_rules/dice.py     # runs a built-in validation of the dice rules
 
 | Command | What it does |
 |---|---|
-| `/dm creature search` | Search templates with detailed multi-line output: rings (with abbreviated trait overrides), attack/damage with flat bonuses, TN, Reduction, Fear, wound total, and tags. Paginated at 5 per page. Richer than `/dm creature catalog`. |
-| `/dm creature info` | Full stat block of a bestiary template: rings with overridden traits, initiative, attack/damage (including flat bonuses), Armor TN, Reduction, Fear, wound track with level ranges, special abilities (invulnerability, spirit, undead, fear), and all tags. Ephemeral, DM-only. Uses existing template autocomplete. |
-| `/dm creature compare` | Side-by-side comparison of two bestiary templates in one embed. Each creature shown as a compact stat summary (abbreviated traits, attack/damage, TN, wounds, specials, tags). Useful for DM encounter prep. Ephemeral, DM-only. |
+| `/creature search` | Search templates with detailed multi-line output: rings (with abbreviated trait overrides), attack/damage with flat bonuses, TN, Reduction, Fear, wound total, and tags. Paginated at 5 per page. Richer than `/creature catalog`. |
+| `/creature info` | Full stat block of a bestiary template: rings with overridden traits, initiative, attack/damage (including flat bonuses), Armor TN, Reduction, Fear, wound track with level ranges, special abilities (invulnerability, spirit, undead, fear), and all tags. Ephemeral, DM-only. Uses existing template autocomplete. |
+| `/creature compare` | Side-by-side comparison of two bestiary templates in one embed. Each creature shown as a compact stat summary (abbreviated traits, attack/damage, TN, wounds, specials, tags). Useful for DM encounter prep. Ephemeral, DM-only. |
 
 The embed shows:
 - **Rings** — e.g. "Air **1** (Reflexes 3) · Earth **2** · Fire **1** (Agility 3) · Water **3**" — trait overrides in parentheses, non-overridden rings shown clean
@@ -1000,39 +1000,39 @@ The embed shows:
 - **Special Abilities** — generated from tags (undead immunities, invulnerability type, spirit half-damage, fear penalty)
 - **Tags** — full tag list as inline code
 
-Distinct from existing `/dm creature view` (which shows a *spawned* instance with current wounds). This is a reference lookup — no instance needed.
+Distinct from existing `/creature view` (which shows a *spawned* instance with current wounds). This is a reference lookup — no instance needed.
 
 **Phase 61 (cont.): Category System**
 
 | Command | What it does |
 |---|---|
-| `/dm category create` | Create a named category (e.g. "Bandits", "Town Guards"). 64-char limit, case-insensitive unique per server. |
-| `/dm category delete` | Delete a category. Members (NPCs/creatures) are **not** deleted — only the grouping is removed. |
-| `/dm category rename` | Rename a category (same uniqueness rules). |
-| `/dm category add` | Add an NPC or creature to a category. Validates the entity exists before adding. |
-| `/dm category remove` | Remove an NPC or creature from a category. |
-| `/dm category bulk_add` | Add multiple NPCs or creatures at once (comma-separated names). Reports added, already-present, and not-found. |
-| `/dm category bulk_remove` | Remove multiple NPCs or creatures at once (comma-separated names). |
-| `/dm category list` | List all categories on this server with member counts. |
-| `/dm category view` | View all members of a category, grouped by type (NPCs / Creatures). |
-| `/dm category spawn` | Spawn all creature templates in a category as combat-ready instances. Skips already-spawned and unknown templates. |
+| `/category create` | Create a named category (e.g. "Bandits", "Town Guards"). 64-char limit, case-insensitive unique per server. |
+| `/category delete` | Delete a category. Members (NPCs/creatures) are **not** deleted — only the grouping is removed. |
+| `/category rename` | Rename a category (same uniqueness rules). |
+| `/category add` | Add an NPC or creature to a category. Validates the entity exists before adding. |
+| `/category remove` | Remove an NPC or creature from a category. |
+| `/category bulk_add` | Add multiple NPCs or creatures at once (comma-separated names). Reports added, already-present, and not-found. |
+| `/category bulk_remove` | Remove multiple NPCs or creatures at once (comma-separated names). |
+| `/category list` | List all categories on this server with member counts. |
+| `/category view` | View all members of a category, grouped by type (NPCs / Creatures). |
+| `/category spawn` | Spawn all creature templates in a category as combat-ready instances. Skips already-spawned and unknown templates. |
 | `/combat category` | Add all NPCs and creatures in a category to the active encounter's initiative tracker. Rolls initiative for each, applies Swift bonus for NPCs with swift weapons. |
 
 Categories use **name-based** references rather than IDs, so entries survive creature delete/respawn cycles. Storage uses two tables (`categories` + `category_members`) with cascading deletes. Autocomplete on category names across all subcommands.
 
-Viewing an NPC (`/dm npc view`) or creature (`/dm creature view`) now shows which categories they belong to in a "Categories" field on the embed.
+Viewing an NPC (`/npc view`) or creature (`/creature view`) now shows which categories they belong to in a "Categories" field on the embed.
 
 **Phase 62: NPC Enhancements**
 
 | Command | What it does |
 |---|---|
-| `/dm npc item` | Add or remove items from an NPC's inventory. Supports quantity, case-insensitive matching, partial removal. Mirrors `/sheet item` for PCs. |
-| `/dm npc spell` | Add or remove a spell from an NPC's known spell list. Case-insensitive duplicate detection. |
-| `/dm npc notes` | Set or clear free-text notes on an NPC (appearance, personality, plot hooks). Shown in the Details section of the NPC embed. Omit text to clear. |
-| `/dm npc clone` | Clone an existing NPC with a new name. Deep copies all fields (traits, skills, equipment, spells, inventory), resets wounds to 0. Useful for creating variants (e.g. "Guard Captain" from "Town Guard"). |
-| `/dm npc equip` | Set an NPC's equipped weapon, off-hand weapon, and/or armor name. All three parameters are optional — provide whichever you're changing. Empty string clears the field. |
-| `/dm npc feature` | Add or remove from any list field: Advantage, Disadvantage, Technique, Kata, Kiho, Weapon (owned), Weapon Quality, or Emphasis (requires `skill:` parameter). Case-insensitive duplicate detection. |
-| `/dm npc affinity` | Set an NPC's shugenja affinity and/or deficiency element. Choice of Air/Earth/Fire/Water/Void/(clear). |
+| `/npc-edit item` | Add or remove items from an NPC's inventory. Supports quantity, case-insensitive matching, partial removal. Mirrors `/stat item` for PCs. |
+| `/npc-edit spell` | Add or remove a spell from an NPC's known spell list. Case-insensitive duplicate detection. |
+| `/npc notes` | Set or clear free-text notes on an NPC (appearance, personality, plot hooks). Shown in the Details section of the NPC embed. Omit text to clear. |
+| `/npc clone` | Clone an existing NPC with a new name. Deep copies all fields (traits, skills, equipment, spells, inventory), resets wounds to 0. Useful for creating variants (e.g. "Guard Captain" from "Town Guard"). |
+| `/npc-edit equip` | Set an NPC's equipped weapon, off-hand weapon, and/or armor name. All three parameters are optional — provide whichever you're changing. Empty string clears the field. |
+| `/npc-edit feature` | Add or remove from any list field: Advantage, Disadvantage, Technique, Kata, Kiho, Weapon (owned), Weapon Quality, or Emphasis (requires `skill:` parameter). Case-insensitive duplicate detection. |
+| `/npc-edit affinity` | Set an NPC's shugenja affinity and/or deficiency element. Choice of Air/Earth/Fire/Water/Void/(clear). |
 
 **Phase 63: Combat Enhancements**
 
@@ -1040,9 +1040,9 @@ Three new commands for managing terrain, environmental effects, and area damage 
 
 | Command | What it does |
 |---|---|
-| `/combat cover` | Set a combatant's cover/terrain Armor TN bonus (range -30 to +30). Persists until the DM changes it or the encounter ends. Automatically applied during attack resolution. Set to 0 to clear. |
-| `/combat notes` | Set or clear an environment description for the encounter (e.g. "Burning temple, dense smoke, slippery floor"). Shown in the initiative tracker and combat summary. Omit text to clear. |
-| `/combat env_damage` | Apply environmental damage (fire, falling, poison, etc.) to multiple combatants at once. Comma-separated names or "all". Handles both characters and creatures. Optional `ignore_reduction` flag bypasses armor reduction. Logged to combat log. |
+| `/fight env cover` | Set a combatant's cover/terrain Armor TN bonus (range -30 to +30). Persists until the DM changes it or the encounter ends. Automatically applied during attack resolution. Set to 0 to clear. |
+| `/fight env notes` | Set or clear an environment description for the encounter (e.g. "Burning temple, dense smoke, slippery floor"). Shown in the initiative tracker and combat summary. Omit text to clear. |
+| `/fight env damage` | Apply environmental damage (fire, falling, poison, etc.) to multiple combatants at once. Comma-separated names or "all". Handles both characters and creatures. Optional `ignore_reduction` flag bypasses armor reduction. Logged to combat log. |
 
 Cover bonus is wired into all attack resolution paths: main attacks, Extra Attack second strikes, and creature attacks. It stacks with Guard, Full Defense, Void Armor TN, and other modifiers. Displayed in both the initiative tracker and the `/combat summary` embed.
 

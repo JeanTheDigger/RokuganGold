@@ -1135,7 +1135,7 @@ combat_battle = app_commands.Group(name="battle", description="Mass Battle syste
     target_npc="Attack a stored NPC by name (instead of a player).",
     target_creature="Attack a spawned creature by name (instead of a player).",
     attacker_npc="Attack WITH a stored NPC instead of your own character [Fortune]",
-    weapon="Weapon for this attack. Defaults to your wielded weapon (`/sheet wield`), else katana.",
+    weapon="Weapon for this attack. Defaults to your wielded weapon (`/stat wield`), else katana.",
     raises="Called Raises: each adds +5 to the target's Armor TN.",
     increased_damage="Increased Damage raises: each adds +5 TN AND +1 damage die on a hit.",
     maneuver="A combat maneuver (its raise cost is added to the TN automatically).",
@@ -1260,7 +1260,7 @@ async def attack(
     if atk_combatant is not None and atk_combatant.actions_used > 0:
         await interaction.response.send_message(
             f"**{atk_combatant.name}** has already used actions this turn ({atk_combatant.actions_used}/2). "
-            f"Use `/fight action reset` to override.",
+            f"Use `/fight action action_type:Reset` to override.",
             ephemeral=True,
         )
         return
@@ -2291,7 +2291,10 @@ async def combat_next(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return
     enc = await _d.require_encounter(interaction)
-    if enc is None or not enc.combatants:
+    if enc is None:
+        return
+    if not enc.combatants:
+        await interaction.response.send_message(_render_encounter(enc), ephemeral=True)
         return
     uid = str(interaction.user.id)
     cur = enc.current()
@@ -2465,7 +2468,10 @@ async def combat_summary(interaction: discord.Interaction) -> None:
     if not await _d.require_dm_role(interaction):
         return
     enc = await _d.require_encounter(interaction)
-    if enc is None or not enc.combatants:
+    if enc is None:
+        return
+    if not enc.combatants:
+        await interaction.response.send_message(_render_encounter(enc), ephemeral=True)
         return
     guild = str(interaction.guild_id)
     title = f"⚔️ Combat Summary: Round {enc.round}"
@@ -2872,7 +2878,7 @@ async def fight_status(interaction: discord.Interaction, member: discord.Member 
         owner = interaction.user
     rec = _d.store.get_active(guild, str(owner.id))
     if rec is None:
-        await interaction.response.send_message("No active character. Use `/sheet use` first.", ephemeral=True)
+        await interaction.response.send_message("No active character. Create one with `/sheet create` (staff: `/sheet activate`).", ephemeral=True)
         return
     c = rec.character
     enc = _d.encounters.get(interaction.channel_id)
@@ -2963,7 +2969,7 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
     if g.actions_used >= 2:
         await interaction.response.send_message(
             f"**{g.name}** has no actions remaining this turn ({g.actions_used}/2). "
-            f"Use `/fight action reset` to override.",
+            f"Use `/fight action action_type:Reset` to override.",
             ephemeral=True,
         )
         return
@@ -3015,7 +3021,7 @@ async def combat_full_defense(
     if cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-            f"Use `/fight action reset` to override.",
+            f"Use `/fight action action_type:Reset` to override.",
             ephemeral=True,
         )
         return
@@ -3275,7 +3281,7 @@ async def grapple_initiate(
     if atk_cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{atk_cb.name}** has already used actions this turn ({atk_cb.actions_used}/2). "
-            f"Use `/fight action reset` to override.", ephemeral=True)
+            f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
         return
     ar, af, _ = condition_effects.contested_roll_modifier(atk_cb.conditions)
     ar -= atk_cb.fear_penalty
@@ -3451,7 +3457,7 @@ async def grapple_hit(
     if atk_cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{atk_cb.name}** has already used actions this turn ({atk_cb.actions_used}/2). "
-            f"Use `/fight action reset` to override.", ephemeral=True)
+            f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     atk_rec = _d.resolve_combatant_record(guild, atk_cb)
@@ -3515,7 +3521,7 @@ async def grapple_throw(
     if thrower_cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{thrower_cb.name}** has already used actions this turn ({thrower_cb.actions_used}/2). "
-            f"Use `/fight action reset` to override.", ephemeral=True)
+            f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
         return
     thrower_cb.conditions.discard("grappled")
     thrower_cb.conditions.add("prone")
@@ -3566,7 +3572,7 @@ async def grapple_pin(
     if ctrl_cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{ctrl_cb.name}** has already used actions this turn ({ctrl_cb.actions_used}/2). "
-            f"Use `/fight action reset` to override.", ephemeral=True)
+            f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
         return
     tgt_cb.conditions.add("pinned")
     ctrl_cb.actions_used = 2
@@ -3612,7 +3618,7 @@ async def grapple_break(
         if cb.actions_used >= 2:
             await interaction.response.send_message(
                 f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-                f"Use `/fight action reset` to override.", ephemeral=True)
+                f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
             return
         cb.conditions.discard("grappled")
         cb.conditions.discard("pinned")
@@ -3632,7 +3638,7 @@ async def grapple_break(
     if cb.actions_used > 0:
         await interaction.response.send_message(
             f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-            f"Use `/fight action reset` to override.", ephemeral=True)
+            f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
         return
     rec_cb = _d.resolve_combatant_record(guild, cb)
     rec_opp = _d.resolve_combatant_record(guild, opp_cb)
@@ -4529,7 +4535,10 @@ async def combat_turn_done(
     if not await _d.require_guild(interaction):
         return
     enc = await _d.require_encounter(interaction)
-    if enc is None or not enc.combatants:
+    if enc is None:
+        return
+    if not enc.combatants:
+        await interaction.response.send_message(_render_encounter(enc), ephemeral=True)
         return
     if not enc.started:
         await interaction.response.send_message("Encounter has not started yet. Use `/combat next` to begin.", ephemeral=True)
