@@ -1,9 +1,8 @@
-"""L5R 4e Shadowlands Taint progression system.
+"""L5R 4e Shadowlands Taint progression system (GDD s42, sheet field s22.3).
 
-Taint accumulates as a float. Taint Rank = floor(Taint / Earth Ring).
-At Taint Rank thresholds, characters suffer mutations and madness.
-
-L5R 4e Core Rulebook p.274-276.
+Taint is a score of the form Rank.Points: 10 Points = 1 Rank, so 2.3 is
+Rank 2 with 3 Points. Taint Rank is the whole-number part. Rank effects,
+mutation thresholds and Social penalties follow s42.
 """
 
 from __future__ import annotations
@@ -14,12 +13,12 @@ from . import stats
 from .character import Character
 
 TAINT_RANK_EFFECTS: dict[int, str] = {
-    0: "No noticeable Taint.",
-    1: "Minor physical change (pallor, shadow under eyes). Others may notice with Lore: Shadowlands check.",
-    2: "Definite physical mutation (discolored veins, dark spots). Social penalty TN +5. Minor mental urges.",
-    3: "Severe mutation (claws, inhuman eyes, scaled patches). Social penalty TN +10. Compulsive violent urges.",
-    4: "Monstrous transformation. Social penalty TN +15. Risk of losing control (Honor Roll TN 20 to resist acting on Taint urges).",
-    5: "Lost to the Taint. Character becomes an NPC under DM control.",
+    0: "Seeds of Darkness: not treated as Tainted; spells targeting the Tainted do not register. At worst, occasional nightmares.",
+    1: "Passive Infection: recognised as Tainted by specific spells and abilities, otherwise functions normally. Occasional nightmares; may feel sick or tired.",
+    2: "Active Infection: nightmares, nausea and vomiting, muscle tremors, mild hallucinations. Develops one Shadowlands Power (usually Minor).",
+    3: "Consuming: paranoid and transformed. -1k0 to all Social Skill rolls. One additional Shadowlands Power and one physical mutation.",
+    4: "Deadly: barely functions in society; obsessed with blood, death and flesh. -2k0 to all Social Skill rolls; Willpower TN 15 under stress or resort to violence; max Void Points -1. Two Shadowlands Powers (one Major) and one more mutation.",
+    5: "The Lost: claimed by the Shadowlands unless exceptional (a Ring at 6+ holds on until Rank 7). Becomes a creature under GM control.",
 }
 
 MUTATIONS: list[str] = [
@@ -48,7 +47,7 @@ MADNESS: list[str] = [
 
 
 def taint_rank(character: Character) -> int:
-    """Taint Rank = floor(Taint / Earth Ring). Capped at 5 (lost)."""
+    """Whole-number part of the Taint score (s42: 10 Points = 1 Rank)."""
     return stats.taint_rank(character)
 
 
@@ -61,14 +60,12 @@ def is_lost(character: Character) -> bool:
 
 
 def social_penalty(character: Character) -> int:
-    """TN penalty to Social rolls from visible Taint (Taint Rank 2+)."""
+    """Rolled dice lost on Social Skill rolls (s42): -1k0 at Rank 3, -2k0 at Rank 4+."""
     rank = taint_rank(character)
     if rank >= 4:
-        return 15
+        return 2
     if rank >= 3:
-        return 10
-    if rank >= 2:
-        return 5
+        return 1
     return 0
 
 
@@ -85,11 +82,8 @@ def madness_roll(rng: random.Random | None = None) -> str:
 def check_threshold_crossing(old_taint: float, new_taint: float, character: Character) -> dict | None:
     """Check if adding taint crosses a Taint Rank boundary.
     Returns info about the new rank if crossed, None otherwise."""
-    earth = stats.earth_ring(character)
-    if earth <= 0:
-        return None
-    old_rank = min(int(old_taint // earth), 5)
-    new_rank = min(int(new_taint // earth), 5)
+    old_rank = min(int(max(0.0, old_taint)), 10)
+    new_rank = min(int(max(0.0, new_taint)), 10)
     if new_rank > old_rank:
         result = {
             "old_rank": old_rank,
@@ -97,9 +91,9 @@ def check_threshold_crossing(old_taint: float, new_taint: float, character: Char
             "description": taint_description(new_rank),
             "is_lost": new_rank >= 5,
         }
-        if new_rank >= 2:
-            result["mutation"] = mutation_roll()
         if new_rank >= 3:
+            result["mutation"] = mutation_roll()
+        if new_rank >= 4:
             result["madness"] = madness_roll()
         return result
     return None

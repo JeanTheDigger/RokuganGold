@@ -3881,6 +3881,9 @@ async def sheet_heal(
         await interaction.response.send_message(err, ephemeral=True)
         return
     c = rec.character
+    if stats.is_dead(c):
+        await interaction.response.send_message(f"**{c.name}** is dead. PC death is permanent.", ephemeral=True)
+        return
     old = stats.wound_level_name(c)
     c.wounds_taken = max(0, c.wounds_taken - amount)
     store.save(rec)
@@ -4179,6 +4182,9 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
     for owner_id, rec in active:
         c = rec.character
         parts = []
+        if stats.is_dead(c):
+            lines.append(f"**{c.name}**: 💀 dead — no recovery")
+            continue
         healed = 0
         rate = stats.natural_healing_rate(c)
         if c.wounds_taken > 0:
@@ -4207,7 +4213,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         description="\n".join(lines),
         color=discord.Color.green(),
     )
-    footer = "Rest: full VP · Stamina x 2 healing · Spell slots: Ring + School Rank per element"
+    footer = "Rest: full VP · Stamina x 2 healing · Spell slots: Ring per element + Void Ring bonus"
     if date_str:
         embed.add_field(name="Calendar", value=date_str, inline=False)
     else:
@@ -8266,7 +8272,7 @@ async def taint_command(
         embed.add_field(name="Earth Ring", value=str(stats.earth_ring(c)), inline=True)
         embed.add_field(name="Status", value=taint.taint_description(rank), inline=False)
         if taint.social_penalty(c):
-            embed.add_field(name="Social Penalty", value=f"TN +{taint.social_penalty(c)}", inline=True)
+            embed.add_field(name="Social Penalty", value=f"-{taint.social_penalty(c)}k0 to Social Skill rolls", inline=True)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ---------------------------------------------------------------------------
@@ -8496,6 +8502,11 @@ class MedicineTreatView(_DisableableView):
             await interaction.response.send_message("Target no longer exists.", ephemeral=True)
             return
         c = rec.character
+        if stats.is_dead(c):
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(f"**{c.name}** is dead. PC death is permanent.", ephemeral=True)
+            return
         old_level = stats.wound_level_name(c)
         c.wounds_taken = max(0, c.wounds_taken - self.wounds_healed)
         store.save(rec)
@@ -8712,6 +8723,9 @@ async def dm_treat(
         return
     hc = healer_rec.character
     pc = patient_rec.character
+    if stats.is_dead(pc):
+        await interaction.response.send_message(f"**{pc.name}** is dead. PC death is permanent.", ephemeral=True)
+        return
     tn = tn_override if tn_override is not None else MEDICINE_TN.get(treatment.value, 15)
     medicine_skill = hc.skills.get("Medicine", 0)
     wp = stats.wound_penalty(hc)

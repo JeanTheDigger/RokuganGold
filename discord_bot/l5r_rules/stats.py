@@ -111,13 +111,11 @@ def honor_rank(c: Character) -> int:
 
 
 def taint_rank(c: Character) -> int:
-    """Taint Rank = floor(Taint / Earth Ring). 0 if no taint. Capped at 5."""
+    """Taint Rank = whole-number part of the Taint score (GDD s22.3 / s42:
+    10 Points = 1 Rank, so 2.3 = Rank 2 with 3 Points). Ranks run 0-10."""
     if c.taint <= 0:
         return 0
-    earth = earth_ring(c)
-    if earth <= 0:
-        return 5
-    return min(int(c.taint // earth), 5)
+    return min(int(c.taint), 10)
 
 
 def water_ring(c: Character) -> int:
