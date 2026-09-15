@@ -80,6 +80,16 @@ CREATE TABLE IF NOT EXISTS locations (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_location_unique
     ON locations (area_id, name COLLATE NOCASE);
 """,
+    # 5: approval views that survive a restart (see views_base.py)
+    """\
+CREATE TABLE IF NOT EXISTS pending_views (
+    message_id TEXT NOT NULL PRIMARY KEY,
+    guild_id   TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    state      TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+""",
 ]
 
 _SCHEMA = """
@@ -404,6 +414,30 @@ class Store:
                 "DELETE FROM active_characters WHERE guild_id = ? AND user_id = ? AND character_id = ?",
                 (guild_id, user_id, character_id),
             )
+
+    # -- pending approval views (views_base.py) ---------------------------------
+    def save_pending_view(self, message_id: str, guild_id: str, kind: str, state: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO pending_views (message_id, guild_id, kind, state, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (message_id, guild_id, kind, state, time.time()),
+            )
+
+    def delete_pending_view(self, message_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM pending_views WHERE message_id = ?", (message_id,))
+
+    def load_pending_views(self) -> list[tuple[str, str, str]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT message_id, kind, state FROM pending_views ORDER BY created_at"
+            ).fetchall()
+        return [(r["message_id"], r["kind"], r["state"]) for r in rows]
+
+    def purge_pending_views(self, older_than: float) -> None:
+        with self._lock, self._conn:
+            self._conn.execute("DELETE FROM pending_views WHERE created_at < ?", (older_than,))
 
     def encounter_guild(self, channel_id: str) -> str | None:
         with self._lock:

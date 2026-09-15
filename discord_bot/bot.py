@@ -29,6 +29,7 @@ import cog_checks
 import cog_combat
 import ref_commands
 import storage
+import views_base
 from l5r_rules import (
     advancement, advantage_effects, advantages, combat, condition_effects, creature, enums,
     families, heritage, kata, kata_effects, kiho, kiho_effects, mass_battle, npc_gen,
@@ -131,17 +132,19 @@ class RokuganBot(discord.Client):
                 log.warning("Failed to restore encounter for channel %s", ch_id_str)
         if encounters:
             log.info("Restored %d encounter(s) from database.", len(encounters))
+        if not getattr(self, "_views_restored", False):
+            self._views_restored = True
+            restored = views_base.restore_all(self)
+            if restored:
+                log.info("Re-attached %d pending approval view(s).", restored)
 
 client = RokuganBot()
 
 
-class _DisableableView(discord.ui.View):
-    """Base View that provides a shared _disable() method."""
-
-    def _disable(self) -> None:
-        for child in self.children:
-            child.disabled = True
-        self.stop()
+# Approval views: shared _disable(), and (for subclasses that set KIND)
+# persistence across restarts. See views_base.py.
+_DisableableView = views_base.PersistentView
+views_base.init(store)
 
 
 # ===========================================================================
@@ -2697,7 +2700,7 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
         character_state=state,
         lobby_channel_id=int(state.get("channel_id", interaction.channel_id)),
     )
-    await approval_ch.send(embed=embed, view=view)
+    await view.persist(await approval_ch.send(embed=embed, view=view))
 
     await interaction.response.edit_message(
         content=f"📋 Your character **{state['name']}** has been submitted for DM review! "
@@ -2754,6 +2757,8 @@ async def _create_player_support_channel(
 
 class _FullCharacterApprovalView(_DisableableView):
     """DM approval view for fully-built character sheets from the wizard."""
+
+    KIND = "char_approval"
 
     def __init__(self, applicant_id: int, character_state: dict,
                  lobby_channel_id: int) -> None:
@@ -4436,7 +4441,7 @@ async def dm_damage(
     if approval_ch:
         embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
         embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-        await approval_ch.send(content="A DM can authorize the damage below.", embed=embed, view=view)
+        await view.persist(await approval_ch.send(content="A DM can authorize the damage below.", embed=embed, view=view))
         await interaction.response.send_message(
             f"💥 Pending damage on **{c.name}** — approval routed to the DM channel.{owner_ping}"
         )
@@ -4445,6 +4450,7 @@ async def dm_damage(
             content=f"A DM can authorize the damage below.{owner_ping}",
             embed=embed, view=view,
         )
+        await view.persist(await interaction.original_response())
 
 @dm.command(name="heal", description="Heal wounds on a character (shows DM-approval buttons).")
 @app_commands.describe(
@@ -4501,7 +4507,7 @@ async def dm_heal(
     if approval_ch:
         embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
         embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-        await approval_ch.send(content="A DM can authorize the healing below.", embed=embed, view=view)
+        await view.persist(await approval_ch.send(content="A DM can authorize the healing below.", embed=embed, view=view))
         await interaction.response.send_message(
             f"💚 Pending healing on **{c.name}** — approval routed to the DM channel.{owner_ping}"
         )
@@ -4510,6 +4516,7 @@ async def dm_heal(
             content=f"A DM can authorize the healing below.{owner_ping}",
             embed=embed, view=view,
         )
+        await view.persist(await interaction.original_response())
 
 # ===========================================================================
 # /grapple group: grappling subsystem (s40)
@@ -5832,6 +5839,8 @@ async def room_close(interaction: discord.Interaction) -> None:
 class CreatureAttackView(_DisableableView):
     """DM-only button: apply a creature's fixed damage to a character it hit."""
 
+    KIND = "creature_attack"
+
     def __init__(self, creature_id: int, target_char_id: int, creature_name: str, target_name: str) -> None:
         super().__init__(timeout=1800)
         self.creature_id = creature_id
@@ -5906,6 +5915,8 @@ class CreatureAttackView(_DisableableView):
 class SpellDamageView(_DisableableView):
     """DM-approval gate for spell damage: shows the rolled damage and lets
     the DM approve, void-reduce, or deny before touching the target's sheet."""
+
+    KIND = "spell_damage"
 
     def __init__(
         self,
@@ -6036,6 +6047,8 @@ class DmDamageView(_DisableableView):
     """DM-approval gate for /dm damage: shows pending damage and lets a DM
     confirm or deny before applying to the target's sheet."""
 
+    KIND = "dm_damage"
+
     def __init__(self, target_id: int, target_name: str, amount: int, reason: str,
                  source_channel_id: int = 0) -> None:
         super().__init__(timeout=1800)
@@ -6162,6 +6175,8 @@ class DmDamageView(_DisableableView):
 class DmHealView(_DisableableView):
     """DM-approval gate for /dm heal: shows pending healing and lets a DM
     confirm or deny before modifying the target's wound track."""
+
+    KIND = "dm_heal"
 
     def __init__(self, target_id: int, target_name: str, amount: int, reason: str,
                  source_channel_id: int = 0) -> None:
@@ -6613,6 +6628,7 @@ async def creature_attack_cmd(
         await interaction.response.send_message(
             content="A DM can apply the creature's damage below.", embed=embed, view=view
         )
+        await view.persist(await interaction.original_response())
         await _combat_log(guild, f"Creature Attack: {cr.name} → {t_name} HIT (roll {outcome['total']} vs TN {outcome['tn']})")
     else:
         await interaction.response.send_message(embed=embed)
@@ -8593,7 +8609,7 @@ async def spell_damage(
             if approval_ch:
                 embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
                 embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-                await approval_ch.send(content="A DM can authorize the spell damage below.", embed=embed, view=view)
+                await view.persist(await approval_ch.send(content="A DM can authorize the spell damage below.", embed=embed, view=view))
                 await interaction.response.send_message(
                     f"📜 Spell damage on **{rec.character.name}** — approval routed to the DM channel.{owner_ping}"
                 )
@@ -8602,6 +8618,7 @@ async def spell_damage(
                     content=f"A DM can authorize the spell damage below.{owner_ping}",
                     embed=embed, view=view,
                 )
+                await view.persist(await interaction.original_response())
         else:
             embed.set_footer(text=f"Target '{target}' not found: use exact character name.")
             await interaction.response.send_message(embed=embed)
@@ -8641,6 +8658,8 @@ async def influence_track(
 
 class MedicineTreatView(_DisableableView):
     """DM-approval gate for medicine treatment healing."""
+
+    KIND = "medicine_treat"
 
     def __init__(
         self, healer_name: str, target_id: int, target_name: str,
@@ -8939,10 +8958,10 @@ async def dm_treat(
         if approval_ch:
             embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
             embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-            await approval_ch.send(
+            await view.persist(await approval_ch.send(
                 content="Treatment succeeded. A DM can authorize the healing below.",
                 embed=embed, view=view,
-            )
+            ))
             await interaction.response.send_message(
                 f"💊 Treatment on **{pc.name}** succeeded — healing approval routed to the DM channel.{owner_ping}"
             )
@@ -8951,6 +8970,7 @@ async def dm_treat(
                 content=f"Treatment succeeded. A DM can authorize the healing below.{owner_ping}",
                 embed=embed, view=view,
             )
+            await view.persist(await interaction.original_response())
     elif success:
         if pc.wounds_taken <= 0:
             embed.add_field(name="Note", value=f"**{pc.name}** has no wounds to heal.", inline=False)

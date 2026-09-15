@@ -12,6 +12,7 @@ from discord import app_commands
 
 import encounter
 import storage as _storage_mod
+import views_base
 from l5r_rules import (
     advantage_effects, advantages, combat, condition_effects, creature, enums,
     kata, kata_effects, kiho, kiho_effects, mass_battle, skill_mastery,
@@ -152,10 +153,12 @@ _MANEUVER_APPLY_LABEL = {
 }
 
 
-class DamageView(discord.ui.View):
+class DamageView(views_base.PersistentView):
     """DM-only buttons attached to a landed attack: resolve the hit, or waive it.
 
     Handles the plain hit and the Feint / Disarm / Knockdown maneuvers."""
+
+    KIND = "attack_damage"
 
     def __init__(
         self,
@@ -179,7 +182,7 @@ class DamageView(discord.ui.View):
         def_init: int | None = None,
         duel_strike_reduction: int = 0,
     ) -> None:
-        super().__init__(timeout=1800)  # 30 min
+        super().__init__()
         self.attacker_id = attacker_id
         self.target_id = target_id
         self.target_creature_id = target_creature_id
@@ -211,11 +214,6 @@ class DamageView(discord.ui.View):
                 to_remove.append(child)
         for child in to_remove:
             self.remove_item(child)
-
-    def _disable(self) -> None:
-        for child in self.children:
-            child.disabled = True
-        self.stop()
 
     async def _post_result(self, interaction: discord.Interaction, embed: discord.Embed, text: str = "") -> None:
         """Post result to source channel when using approval routing, or inline."""
@@ -903,10 +901,10 @@ class DamageView(discord.ui.View):
                 attacker_stance=self.attacker_stance,
                 atk_init=self.atk_init, def_init=self.def_init,
             )
-            await interaction.followup.send(
+            await view2.persist(await interaction.followup.send(
                 content="A DM can authorize the 2nd attack's damage below.",
                 embed=embed2, view=view2,
-            )
+            ))
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
         else:
             await interaction.followup.send(embed=embed2)
@@ -988,10 +986,10 @@ class DamageView(discord.ui.View):
                 attacker_stance=self.attacker_stance,
                 atk_init=self.atk_init, def_init=self.def_init,
             )
-            await interaction.followup.send(
+            await view2.persist(await interaction.followup.send(
                 content="A DM can authorize the 2nd attack's damage below.",
                 embed=embed2, view=view2,
-            )
+            ))
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
         else:
             await interaction.followup.send(embed=embed2)
@@ -1670,12 +1668,13 @@ async def attack(
         if approval_ch:
             embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
             embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-            await approval_ch.send(content=prompt, embed=embed, view=view)
+            await view.persist(await approval_ch.send(content=prompt, embed=embed, view=view))
             await interaction.response.send_message(
                 f"⚔️ **{a_name}** hit **{t_name}** — damage approval pending in the DM channel.{owner_ping}"
             )
         else:
             await interaction.response.send_message(content=f"{prompt}{owner_ping}", embed=embed, view=view)
+            await view.persist(await interaction.original_response())
         await _d.combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) HIT (roll {outcome['roll']} vs TN {outcome['target_tn']})")
     else:
         await interaction.response.send_message(embed=embed)
@@ -2628,6 +2627,7 @@ async def grapple_hit(
         channel_id=interaction.channel_id,
     )
     await interaction.response.send_message(embed=embed, view=view)
+    await view.persist(await interaction.original_response())
 
 
 @combat_grapple.command(name="throw", description="Grapple Throw: target becomes Prone and leaves the grapple. Fortune role required.")
@@ -3210,6 +3210,8 @@ async def duel_strike(
         embed.set_footer(text="The strike misses.")
 
     await interaction.response.send_message(embed=embed, view=view)
+    if view is not None:
+        await view.persist(await interaction.original_response())
     tag = "HIT" if hit else "MISS"
     await _d.combat_log(guild, f"Duel Strike: {atk.name} → {tgt.name} ({weapon}) {tag} (roll {result['total']} vs TN {result['tn']})")
 
