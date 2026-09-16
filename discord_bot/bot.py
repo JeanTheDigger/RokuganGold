@@ -29,6 +29,7 @@ from discord.ext import tasks
 import encounter
 import cog_checks
 import cog_combat
+import cog_inventory
 import cog_npc_builder
 import ref_commands
 import storage
@@ -1361,7 +1362,7 @@ sheet_kata_grp = app_commands.Group(name="kata", description="Record and activat
 sheet_kiho_grp = app_commands.Group(name="kiho", description="Record and activate Kiho.", parent=sheet)
 sheet_tattoo_grp = app_commands.Group(name="tattoo", description="Manage Togashi tattoos.", parent=sheet)
 sheet_data = app_commands.Group(name="data", description="Export / import character sheets.", parent=sheet)
-stat_group = app_commands.Group(name="stat", description="Set traits, skills, equipment, and inventory on your character.")
+stat_group = app_commands.Group(name="stat", description="Staff edits to a character sheet: traits, skills, armor, qualities, advantages.")
 xp_group = app_commands.Group(name="xp", description="Grant and spend Experience to advance characters.")
 
 _SCHOOL_CHOICES = [app_commands.Choice(name=s, value=s) for s in enums.SCHOOL_TYPES]
@@ -3693,86 +3694,6 @@ async def sheet_set(
         f"Updated **{field.value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
     )
 
-@stat_group.command(name="equip", description="Add (or remove) a weapon on your character's gear.")
-@app_commands.describe(weapon="Weapon name.", remove="Remove it instead of adding.", member="Target player [Fortune]")
-@app_commands.autocomplete(weapon=_weapon_autocomplete)
-async def sheet_equip(
-    interaction: discord.Interaction,
-    weapon: str,
-    remove: bool = False,
-    member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    w = weapon.lower().strip()
-    c = rec.character
-    if remove:
-        c.weapons = [x for x in c.weapons if x.lower() != w]
-        msg = f"Removed **{w}** from **{c.name}**."
-    else:
-        if w not in combat.WEAPON_CATALOG:
-            await interaction.response.send_message(
-                f"Unknown weapon **{weapon}**: see `/ref weapon list`.", ephemeral=True
-            )
-            return
-        if w not in [x.lower() for x in c.weapons]:
-            c.weapons.append(w)
-        prof = combat.WEAPON_CATALOG[w]
-        msg = f"**{c.name}** equips **{w}** (DR {prof['rolled']}k{prof['kept']}, {prof['skill']})."
-    changed = store.save(rec, note="stat equip")
-    await _audit_stat(interaction, rec, "stat equip", changed)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
-@stat_group.command(name="wield", description="Set the weapon(s) in hand: the default for /fight attack and for defensive Kata.")
-@app_commands.describe(
-    weapon="Main-hand weapon (start typing for suggestions).",
-    off_hand="Off-hand weapon, e.g. wakizashi for a daisho. Blank clears the off hand.",
-    unwield="Lower both weapons (go unarmed).",
-    member="Target player [Fortune]",
-)
-@app_commands.autocomplete(weapon=_weapon_autocomplete, off_hand=_weapon_autocomplete)
-async def sheet_wield(
-    interaction: discord.Interaction,
-    weapon: str | None = None,
-    off_hand: str | None = None,
-    unwield: bool = False,
-    member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    if unwield:
-        c.equipped_weapon = ""
-        c.off_hand_weapon = ""
-        changed = store.save(rec, note="stat wield")
-        await _audit_stat(interaction, rec, "stat wield", changed)
-        await interaction.response.send_message(
-            f"**{c.name}** lowers their weapons (unarmed).", embed=build_sheet_embed(rec)
-        )
-        return
-    if weapon is not None and weapon.strip():
-        c.equipped_weapon = weapon.lower().strip()
-    if not c.equipped_weapon:
-        await interaction.response.send_message(
-            "Give a `weapon:` to wield, or `unwield:true` to go unarmed.", ephemeral=True
-        )
-        return
-    c.off_hand_weapon = off_hand.lower().strip() if off_hand and off_hand.strip() else ""
-    changed = store.save(rec, note="stat wield")
-    await _audit_stat(interaction, rec, "stat wield", changed)
-    off = f" + **{c.off_hand_weapon}** (off hand)" if c.off_hand_weapon else ""
-    await interaction.response.send_message(
-        f"🗡️ **{c.name}** wields **{c.equipped_weapon}**{off}.", embed=build_sheet_embed(rec)
-    )
-
 @stat_group.command(name="armor", description="Equip armor (sets Armor TN bonus & Reduction), or 'none' to remove. [Fortune]")
 @app_commands.describe(armor="Armor type (bogu/ashigaru/tatami/light/heavy/tetsu_do/riding, or 'none').", member="Target player [Fortune]")
 @app_commands.autocomplete(armor=_armor_autocomplete)
@@ -3879,67 +3800,6 @@ async def sheet_quality(
     await interaction.response.send_message(
         f"**{c.name}** weapon qualities set: **{q_list}** (on {wpn}).", embed=build_sheet_embed(rec)
     )
-
-@stat_group.command(name="item", description="Add or remove items from your inventory (quantity supported).")
-@app_commands.describe(
-    name="Item name.", quantity="How many (default 1).",
-    remove="Remove instead of adding.", member="Target player [Fortune]",
-)
-async def sheet_item(
-    interaction: discord.Interaction, name: str,
-    quantity: app_commands.Range[int, 1, 9999] = 1,
-    remove: bool = False, member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    ok, msg = _modify_inventory(c.inventory, c.name, name.strip(), quantity, remove)
-    if not ok:
-        await interaction.response.send_message(msg, ephemeral=True)
-        return
-    changed = store.save(rec, note="stat item")
-    await _audit_stat(interaction, rec, "stat item", changed)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
-@stat_group.command(name="koku", description="Add or spend koku (money). Negative amount spends.")
-@app_commands.describe(
-    amount="Koku to add (positive) or spend (negative).",
-    reason="Why (e.g. 'bought katana', 'reward from lord').",
-    member="Target player [Fortune]",
-)
-async def sheet_koku(
-    interaction: discord.Interaction,
-    amount: float,
-    reason: str | None = None,
-    member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    if amount < 0 and c.koku + amount < 0:
-        await interaction.response.send_message(
-            f"**{c.name}** only has **{c.koku:g}** koku (tried to spend {abs(amount):g}).", ephemeral=True
-        )
-        return
-    c.koku += amount
-    c.koku = round(c.koku, 2)
-    if amount >= 0:
-        label = f"Received **{amount:g}** koku"
-    else:
-        label = f"Spent **{abs(amount):g}** koku"
-    why = f" ({reason})" if reason else ""
-    msg = f"\U0001F4B0 **{c.name}**: {label}{why}. Balance: **{c.koku:g}** koku."
-    changed = store.save(rec, note="stat koku")
-    await _audit_stat(interaction, rec, "stat koku", changed)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 @stat_group.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free: no XP). [Fortune]")
 @app_commands.describe(
@@ -5429,7 +5289,8 @@ async def void_status(
 
 _HELP_BLURBS: dict[str, str] = {
     "sheet": "Your character sheet: create, view, Void, Kata, Kiho, export. One character per player; staff use activate to act as NPCs.",
-    "stat": "Your gear and purse: equip, wield, items, koku. Traits, skills, armor and advantages are set by Fortune; players advance with /xp.",
+    "stat": "Staff sheet edits: traits, skills, numeric fields, armor, qualities, advantages. Players use /inventory for gear and /xp to advance.",
+    "inventory": "Your gear and purse in one panel: wield, weapons, items, koku.",
     "xp": "Spend Experience on traits, skills, emphases, kata, kiho, spells and advantages.",
     "roll": "Roll & Keep dice, with optional TN, Raises and Emphasis.",
     "dice": "Quick dice shorthand: 5k3, 7k2+5.",
@@ -5459,7 +5320,7 @@ _HELP_BLURBS: dict[str, str] = {
 }
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Getting started", ["help", "whoami", "players", "compare", "date"]),
-    ("Your character", ["sheet", "stat", "xp"]),
+    ("Your character", ["sheet", "inventory", "xp", "stat"]),
     ("Dice and checks", ["roll", "dice", "check", "macro", "history"]),
     ("Fights and magic", ["combat", "fight", "engage", "spell"]),
     ("Places", ["room", "location"]),
@@ -11234,6 +11095,20 @@ cog_combat.init(
     weapon_autocomplete=_weapon_autocomplete,
     creature_instance_autocomplete=_creature_instance_autocomplete,
     category_autocomplete=_category_autocomplete,
+)
+
+cog_inventory.init(
+    tree=client.tree,
+    store=store,
+    npc_owner=NPC_OWNER,
+    require_guild=_require_guild,
+    is_dm=_is_dm,
+    resolve_active_for_edit=_resolve_active_for_edit,
+    audit_stat=_audit_stat,
+    modify_inventory=_modify_inventory,
+    npc_autocomplete=_npc_autocomplete,
+    role_fortune=ROLE_FORTUNE,
+    role_kami=ROLE_KAMI,
 )
 
 cog_npc_builder.init(

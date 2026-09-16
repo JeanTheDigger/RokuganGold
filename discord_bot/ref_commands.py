@@ -423,7 +423,7 @@ async def armor_list(interaction: discord.Interaction) -> None:
             line += " · heavy"
         lines.append(line)
     await interaction.response.send_message(
-        f"\U0001f6e1️ **Armor** ({len(combat.ARMOR_CATALOG)} types · equip with `/stat armor`):\n" + "\n".join(lines), ephemeral=True
+        f"\U0001f6e1️ **Armor** ({len(combat.ARMOR_CATALOG)} types · equip with `/stat armor` or `/inventory` (staff)):\n" + "\n".join(lines), ephemeral=True
     )
 
 
@@ -942,9 +942,9 @@ async def dual_wield_info(
             inline=False,
         )
     elif c.equipped_weapon:
-        embed.description = f"Only wielding **{c.equipped_weapon}** (no off-hand). Use `/stat wield` to set both weapons."
+        embed.description = f"Only wielding **{c.equipped_weapon}** (no off-hand). Use `/inventory` to set both weapons."
     else:
-        embed.description = "No weapons wielded. Use `/stat wield` to equip weapons."
+        embed.description = "No weapons wielded. Use `/inventory` to wield weapons."
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 

@@ -1135,7 +1135,7 @@ combat_battle = app_commands.Group(name="battle", description="Mass Battle syste
     target_npc="Attack a stored NPC by name (instead of a player).",
     target_creature="Attack a spawned creature by name (instead of a player).",
     attacker_npc="Attack WITH a stored NPC instead of your own character [Fortune]",
-    weapon="Weapon for this attack. Defaults to your wielded weapon (`/stat wield`), else katana.",
+    weapon="Weapon for this attack. Defaults to your wielded weapon (`/inventory`), else katana.",
     raises="Called Raises: each adds +5 to the target's Armor TN.",
     increased_damage="Increased Damage raises: each adds +5 TN AND +1 damage die on a hit.",
     maneuver="A combat maneuver (its raise cost is added to the TN automatically).",

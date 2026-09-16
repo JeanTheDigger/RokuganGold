@@ -40,7 +40,7 @@ Players roll their own `/check` commands (skill, stealth, social, lore, craft, m
 | Click-once approvals | Every approval button (damage, healing, spells, creatures, Medicine, conditions, character approval, wizard Resume) accepts exactly one final click; a second click says so instead of applying twice. |
 | Fight safety | `/combat start` cannot wipe a fight that already has combatants or a roster unless you are staff. `/combat next` works for staff, the player whose turn it is, or the roster organizer opening the fight. Players cannot re-roll initiative by re-joining. `/sheet delete` is staff-only. |
 | Sheet edit audit | Every `/stat` change writes one line to the combat log: who edited, whose sheet, and the exact fields that changed (staff edits are marked). |
-| Who may change a sheet | Players manage only gear and purse (`/stat equip`, `wield`, `item`, `koku`), activations, Void spends, and advancement through `/xp`. Traits, skills, numeric fields, armor, weapon qualities, advantages, disadvantages, free Kata/Kiho records, wounds, healing and JSON import are **Fortune** only. |
+| Who may change a sheet | Players manage only gear and purse (`/inventory`), activations, Void spends, and advancement through `/xp`. Traits, skills, numeric fields, armor, weapon qualities, advantages, disadvantages, free Kata/Kiho records, wounds, healing and JSON import are **Fortune** only. |
 | XP log (Kami only) | `/setup server` creates `#xp-log` visible only to Kami and registers it; `/dm xp_log_channel` sets or clears it. Every `/xp grant` (who granted, to whom, how much, why, balance) and every XP spend is written there. A grant made while no channel is set warns the granter. |
 | Button errors | If a button or menu ever fails, the bot answers with an explanation instead of Discord's bare "This interaction failed", and logs the details. |
 | `/sheet view` | Show a sheet: rings (derived as min of two traits), wounds & wound level, Insight & Rank, standing, gear, skills. `member:` shows another player's (DM only). |
@@ -140,7 +140,7 @@ Level**, so the RAW cost is computed for you.
 **Active-Kata combat effects**: the active Kata (⚑ on the sheet) feeds straight
 into `/fight attack`. The bot auto-applies the **deterministic subset** it can compute
 faithfully from the sheet, the chosen stance, the maneuver, and the weapon
-(main- and off-hand, via `/stat wield`): **14 Kata**:
+(main- and off-hand, via `/inventory`): **14 Kata**:
 
 | Kata | Auto-applied in `/fight attack` |
 |---|---|
@@ -398,8 +398,7 @@ Mastery Level**: so the RAW cost (1 × Mastery Level) is computed for you.
 |---|---|
 | `/ref weapon list` · `/ref weapon view` | Browse all **44 weapons** (damage rating, skill, trait, size). |
 | `/ref armor list` | The **7 armor types** with Armor TN bonus and Reduction. |
-| `/stat equip` | Add/remove a weapon on your character's gear list (autocomplete). |
-| `/stat wield` | Set the weapon(s) in hand: `weapon:` (main) and optional `off_hand:`. This is `/fight attack`'s **default weapon** and gates defender weapon-conditional Kata (Crane, Dragon). `unwield:true` goes unarmed. |
+| `/inventory` | One ephemeral panel for gear and purse: main hand and off hand menus (from owned weapons), add a catalog weapon, drop one, add or remove items, add or spend koku. Staff also set armor and weapon qualities here, and can open any player's character (`member:`) or an NPC (`npc:`). Every change saves at once with an undo snapshot and an audit line. |
 | `/stat armor` | Equip an armor type: sets the sheet's **Armor TN bonus** and **Reduction** automatically (e.g. Light → +5 TN, Reduction 3; Heavy → +10, 5); `none` removes it. |
 
 Weapon damage (used by `/fight attack`) and armor Reduction/Armor-TN (used by combat)
@@ -1026,7 +1025,7 @@ Viewing an NPC (`/npc view`) or creature (`/creature view`) now shows which cate
 
 | Command | What it does |
 |---|---|
-| `/npc-edit item` | Add or remove items from an NPC's inventory. Supports quantity, case-insensitive matching, partial removal. Mirrors `/stat item` for PCs. |
+| `/npc-edit item` | Add or remove items from an NPC's inventory. Supports quantity, case-insensitive matching, partial removal. Mirrors `/inventory` for PCs. |
 | `/npc-edit spell` | Add or remove a spell from an NPC's known spell list. Case-insensitive duplicate detection. |
 | `/npc notes` | Set or clear free-text notes on an NPC (appearance, personality, plot hooks). Shown in the Details section of the NPC embed. Omit text to clear. |
 | `/npc clone` | Clone an existing NPC with a new name. Deep copies all fields (traits, skills, equipment, spells, inventory), resets wounds to 0. Useful for creating variants (e.g. "Guard Captain" from "Town Guard"). |
