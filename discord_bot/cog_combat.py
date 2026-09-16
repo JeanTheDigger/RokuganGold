@@ -1135,7 +1135,7 @@ combat_battle = app_commands.Group(name="battle", description="Mass Battle syste
     target_npc="Attack a stored NPC by name (instead of a player).",
     target_creature="Attack a spawned creature by name (instead of a player).",
     attacker_npc="Attack WITH a stored NPC instead of your own character [Fortune]",
-    weapon="Weapon for this attack. Defaults to your wielded weapon (`/inventory`), else katana.",
+    weapon="Weapon for this attack. Defaults to your wielded weapon (`/inventory`), else unarmed.",
     raises="Called Raises: each adds +5 to the target's Armor TN.",
     increased_damage="Increased Damage raises: each adds +5 TN AND +1 damage die on a hit.",
     maneuver="A combat maneuver (its raise cost is added to the TN automatically).",
@@ -1194,16 +1194,16 @@ async def attack(
     if await _d.refuse_if_cannot_act(interaction, attacker_rec.character):
         return
 
-    # Weapon: off_hand flag overrides to off-hand weapon; else explicit, else wielded, else katana.
+    # Weapon: off_hand flag overrides to off-hand weapon; else explicit, else wielded, else unarmed (Jiujutsu).
     if off_hand:
         if not attacker_rec.character.off_hand_weapon:
             await interaction.response.send_message(
-                "No off-hand weapon equipped. Set one with `/stat wield off_hand:`.", ephemeral=True
+                "No off-hand weapon equipped. Set one with `/inventory`.", ephemeral=True
             )
             return
         weapon = attacker_rec.character.off_hand_weapon
     else:
-        weapon = (weapon or "").strip() or attacker_rec.character.equipped_weapon or "katana"
+        weapon = (weapon or "").strip() or attacker_rec.character.equipped_weapon or "unarmed"
 
     # Resolve the target: a spawned creature, a stored NPC, or a player's character.
     target_rec = None

@@ -18,7 +18,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 | Command | What it does |
 |---|---|
 | `/help` | Categorized command reference: 13 categories, expandable. Shows a compact overview or drill into one category. Ephemeral (only you see it). |
-| `/whoami` | Quick glance at your active character: name, school, rings, wounds (with penalty warning), VP, movement speed, spell slots (if tracked), wielded weapon, active Kata, and combat conditions (if in an encounter). Ephemeral. |
+| `/whoami` | Your character hub, ephemeral: the quick status card (rings, wounds, VP, honor, movement, wielded weapon, active Kata, combat conditions) with buttons for the full sheet, the inventory panel, spending or resting Void, fight status and JSON export, plus menus to set the active Kata, Kiho (s38 exclusivity enforced) and tattoo. |
 | `/ref search` | Unified search across **all** catalogs (spells, schools, kata, kiho, advantages, weapons, creatures). Find anything without knowing which command to use. Ephemeral. |
 
 **Dice**
@@ -160,7 +160,7 @@ faithfully from the sheet, the chosen stance, the maneuver, and the weapon
 | Strength of the Crab | Attack Stance + wearing armor → **+2 Reduction** |
 
 Weapon-conditional Kata read what the character is **wielding**: set that with
-`/sheet wield weapon: off_hand:` (it also becomes `/fight attack`'s default weapon).
+`/inventory` (the main hand also becomes `/fight attack`'s default weapon; nothing wielded means an unarmed Jiujutsu attack).
 
 **Rate-limited Kata: enforced while a `/combat` encounter is running.** The
 initiative tracker now carries real round/turn state (it resets each combatant's
@@ -1030,6 +1030,7 @@ Viewing an NPC (`/npc view`) or creature (`/creature view`) now shows which cate
 | `/npc notes` | Set or clear free-text notes on an NPC (appearance, personality, plot hooks). Shown in the Details section of the NPC embed. Omit text to clear. |
 | `/npc clone` | Clone an existing NPC with a new name. Deep copies all fields (traits, skills, equipment, spells, inventory), resets wounds to 0. Useful for creating variants (e.g. "Guard Captain" from "Town Guard"). |
 | `/npc create` | Staff NPC builder with exact stats, ephemeral: name and notes, clan, family (+1 Trait), school and Rank (Benefit, skills, Honor, outfit, techniques), every Ring/Trait from a menu, skills by category (specialty skills and emphases via a popup), advantages and disadvantages by category, weapon/off-hand/armor, Honor/Glory/Status/Koku. Review, then save as an NPC, as a template, or both. |
+| `/npc edit` | Reopen a stored NPC in the same builder, seeded with its current values, starting at Rings and Traits. Save changes overwrites the NPC (wounds are kept; techniques follow the school and Rank). |
 | `/npc form` | The same in one popup: a typed stat block (`Sta 3 Wil 2 ...`, `Kenjutsu 3 (Katana), Lore: Shadowlands 2`, `weapon: katana; armor: light; adv: Large`, `clan: Crab; school: Hida Bushi; rank: 2; honor: 4.5`). Traits typed here are final values. Validated, previewed, then saved. |
 | `/npc template save` · `spawn` · `list` · `view` · `delete` | Reusable NPC templates. `save` copies an existing NPC; `spawn` creates fresh NPCs from a template (`count:` numbers them: Bandit 1, Bandit 2). Spawned NPCs are independent: wounds and edits never touch the template. |
 | `/npc-edit equip` | Set an NPC's equipped weapon, off-hand weapon, and/or armor name. All three parameters are optional — provide whichever you're changing. Empty string clears the field. |

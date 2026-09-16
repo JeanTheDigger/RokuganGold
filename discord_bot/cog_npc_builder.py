@@ -85,8 +85,30 @@ def new_state(user_id: int, guild_id: int, name: str, notes: str = "") -> dict:
     }
 
 
+def state_from_record(rec: storage.CharacterRecord, user_id: int, guild_id: int) -> dict:
+    """Seed the wizard with an existing NPC so every step shows its current values."""
+    c = rec.character
+    state = new_state(user_id, guild_id, c.name, c.notes or "")
+    state.update({
+        "edit_id": rec.id, "original": c.to_dict(),
+        "clan": c.clan, "family": c.family, "school": c.school, "rank": c.school_rank,
+        "traits": {t: (c.void_ring if t == "void" else c.get_trait(t)) for t in TRAIT_ORDER},
+        "skills": dict(c.skills), "emphases": {k: list(v) for k, v in c.emphases.items()},
+        "advantages": list(c.advantages), "disadvantages": list(c.disadvantages),
+        "weapon": c.equipped_weapon, "off_hand": c.off_hand_weapon, "armor": c.armor_name or "none",
+        "honor": c.honor, "glory": c.glory, "status": c.status, "koku": c.koku,
+        "spells": list(c.spells_known), "school_type": c.school_type,
+    })
+    return state
+
+
 def base_character(state: dict) -> Character:
-    """Family + school applied, no explicit overrides. Defaults are the RAW 2s."""
+    """Family + school applied, no explicit overrides. Defaults are the RAW 2s.
+    When editing an existing NPC the base is the NPC as it is now."""
+    if state.get("original"):
+        c = Character.from_dict(copy.deepcopy(state["original"]))
+        c.name = state["name"]
+        return c
     c = Character(name=state["name"], is_npc=True)
     fam = families.get(state["family"]) if state.get("family") else None
     if fam:
@@ -102,8 +124,18 @@ def base_character(state: dict) -> Character:
 
 def materialize(state: dict) -> Character:
     c = base_character(state)
+    if state.get("original"):
+        # Editing: identity fields are set directly; techniques follow the school and rank.
+        c.clan = state.get("clan", "")
+        c.family = state.get("family", "")
+        c.school = state.get("school", "")
+        c.skills = {}
+        c.emphases = {}
+        c.weapons = list(state.get("original", {}).get("weapons", []))
+        c.spells_known = []
     c.school_rank = int(state.get("rank") or 1)
-    if c.school:
+    if c.school and (not state.get("original") or c.school != state["original"].get("school")
+                     or c.school_rank != state["original"].get("school_rank")):
         c.techniques = [t["name"] for t in schools.techniques_up_to(c.school, c.school_rank)]
     for trait, value in state.get("traits", {}).items():
         if trait == "void":
@@ -152,7 +184,7 @@ def materialize(state: dict) -> Character:
     if state.get("school_type"):
         c.school_type = state["school_type"]
     c.notes = state.get("notes", "") or ""
-    c.wounds_taken = 0
+    c.wounds_taken = int(state["original"].get("wounds_taken", 0)) if state.get("original") else 0
     return c
 
 
@@ -169,9 +201,11 @@ def effective_trait(state: dict, trait: str) -> int:
 
 def _fmt_traits(state: dict) -> str:
     parts = []
+    base = base_character(state)
     for t in TRAIT_ORDER:
         v = effective_trait(state, t)
-        mark = "**" if t in state.get("traits", {}) else ""
+        base_v = base.void_ring if t == "void" else base.get_trait(t)
+        mark = "**" if v != base_v else ""
         parts.append(f"{mark}{'Void' if t == 'void' else t[:3].capitalize()} {v}{mark}")
     return " · ".join(parts)
 
@@ -206,6 +240,9 @@ class _SaveView(discord.ui.View):
         self._done = False
         if back is None:
             self.remove_item(self.edit)
+        if state.get("edit_id"):
+            self.save_npc.label = "Save changes"
+            self.save_both.label = "Save changes + template"
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != int(self.state["user_id"]):
@@ -221,7 +258,16 @@ class _SaveView(discord.ui.View):
         char = materialize(self.state)
         lines: list[str] = []
         rec = None
-        if as_npc:
+        if as_npc and self.state.get("edit_id"):
+            rec = _d.store.get_by_id(int(self.state["edit_id"]))
+            if rec is None:
+                await interaction.response.send_message("That NPC no longer exists.", ephemeral=True)
+                return
+            char.wounds_taken = rec.character.wounds_taken  # editing stats never heals
+            rec.character = char
+            _d.store.save(rec, note="npc edit wizard")
+            lines.append(f"🎭 Updated NPC **{char.name}**.")
+        elif as_npc:
             rec, err = _save_npc(guild_id, char)
             if err:
                 await interaction.response.send_message(err, ephemeral=True)
@@ -243,6 +289,7 @@ class _SaveView(discord.ui.View):
 
     @discord.ui.button(label="Save NPC", style=discord.ButtonStyle.success, emoji="🎭")
     async def save_npc(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        """Creates the NPC, or overwrites it when the wizard was opened with /npc edit."""
         await self._finish(interaction, True, False)
 
     @discord.ui.button(label="Save as template", style=discord.ButtonStyle.primary, emoji="📋")
@@ -385,12 +432,13 @@ class NpcWizard(discord.ui.View):
         idx = self.state["step"]
         key, title = STEPS[idx]
         st = self.state
-        line = f"**NPC builder: {st['name']}** · Step {idx + 1}/{len(STEPS)}: {title}"
+        mode = "Editing NPC" if st.get("edit_id") else "NPC builder"
+        line = f"**{mode}: {st['name']}** · Step {idx + 1}/{len(STEPS)}: {title}"
         hints = {
             "clan": "Pick the clan (or none). It only filters families and schools.",
             "family": "The family adds its +1 Trait, like a player character.",
             "school": "The school adds its Benefit, starting skills, Honor and outfit; Rank sets the techniques known.",
-            "traits": f"Pick a trait, then its value. Bold = set by you.\n{_fmt_traits(st)}",
+            "traits": f"Pick a trait, then its value. Bold = changed from the base.\n{_fmt_traits(st)}",
             "skills": "Pick a category, a skill, then its rank (0 removes). Lore, Craft, Artisan, Perform and Games take a specialty.",
             "advantages": "Pick a category, then an advantage to add; pick it again to remove it.",
             "disadvantages": "Pick a category, then a disadvantage to add; pick it again to remove it.",
@@ -862,6 +910,23 @@ async def npc_form(interaction: discord.Interaction) -> None:
     await interaction.response.send_modal(_FormModal())
 
 
+@app_commands.command(name="edit", description="Reopen a stored NPC in the step-by-step builder and change any stat. [Fortune]")
+@app_commands.describe(name="The NPC to edit.")
+async def npc_edit(interaction: discord.Interaction, name: str) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    if not await _d.require_dm_role(interaction):
+        return
+    rec = _d.store.get_by_name(str(interaction.guild_id), _d.npc_owner, name)
+    if rec is None:
+        await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
+        return
+    state = state_from_record(rec, interaction.user.id, interaction.guild_id)
+    state["step"] = next(i for i, (k, _) in enumerate(STEPS) if k == "traits")
+    wizard = NpcWizard(state)
+    await interaction.response.send_message(content=wizard.header(), embed=wizard.embed(), view=wizard, ephemeral=True)
+
+
 template_group = app_commands.Group(name="template", description="Reusable NPC templates: save one, spawn copies.")
 
 
@@ -979,6 +1044,8 @@ def init(*, store, npc_owner: str, require_guild, require_dm_role, is_dm, build_
     _d = _Deps(store=store, npc_owner=npc_owner, require_guild=require_guild, require_dm_role=require_dm_role,
                is_dm=is_dm, build_sheet_embed=build_sheet_embed, npc_autocomplete=npc_autocomplete)
     template_save.autocomplete("name")(npc_autocomplete)
+    npc_edit.autocomplete("name")(npc_autocomplete)
     npc_group.add_command(npc_create)
+    npc_group.add_command(npc_edit)
     npc_group.add_command(npc_form)
     npc_group.add_command(template_group)

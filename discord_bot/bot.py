@@ -29,6 +29,7 @@ from discord.ext import tasks
 import encounter
 import cog_checks
 import cog_combat
+import cog_hub
 import cog_inventory
 import cog_npc_builder
 import ref_commands
@@ -845,17 +846,8 @@ async def sync_commands(interaction: discord.Interaction) -> None:
         return
     await interaction.followup.send(f"Synced **{count}** commands to this server (global duplicates cleared).")
 
-@client.tree.command(name="whoami", description="Quick glance at your active character's status.")
-async def whoami(interaction: discord.Interaction) -> None:
-    if not await _require_guild(interaction):
-        return
-    guild = str(interaction.guild_id)
-    rec = store.get_active(guild, str(interaction.user.id))
-    if rec is None:
-        await interaction.response.send_message(
-            "You have no active character. Use `/sheet create` first.", ephemeral=True
-        )
-        return
+def _whoami_lines(interaction: discord.Interaction, rec: storage.CharacterRecord) -> list[str]:
+    """The quick status card lines for a character (used by /whoami and the character hub)."""
     c = rec.character
     rings = stats.all_rings(c)
     lvl = stats.wound_level_name(c)
@@ -906,7 +898,7 @@ async def whoami(interaction: discord.Interaction) -> None:
                 conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "none"
                 lines.append(f"In combat: conditions: {conds}")
                 break
-    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+    return lines
 
 @client.tree.command(name="date", description="Show the current in-game Rokugani calendar date.")
 async def date_cmd(interaction: discord.Interaction) -> None:
@@ -3926,6 +3918,51 @@ async def sheet_kiho(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
+def _activate_kata(c: Character, name: str | None) -> tuple[bool, str]:
+    """Set (or drop) the active Kata. Returns (changed, message)."""
+    if not name or not name.strip():
+        prev = c.active_kata
+        c.active_kata = ""
+        tail = f" (**{prev}**)" if prev else ""
+        return True, f"**{c.name}** drops their active Kata{tail}."
+    k = kata.get(name)
+    canonical = k["name"] if k else name.strip()
+    if canonical.lower() not in [x.lower() for x in c.katas]:
+        return False, (f"**{c.name}** hasn't learned the Kata **{canonical}**: add it with `/sheet kata learn` "
+                       f"or buy it with `/xp kata`.")
+    c.active_kata = canonical
+    note = "" if kata_effects.is_auto(canonical) else " *(its effect is DM-adjudicated: shown as a reminder on attacks.)*"
+    return True, f"🥋 **{c.name}** assumes the Kata **{canonical}**.{note}"
+
+def _activate_kiho(c: Character, name: str, off: bool = False) -> tuple[bool, str]:
+    """Activate or end a known Kiho (s38: one Internal/Kharmic/Mystical; Martial stacks). Returns (changed, message)."""
+    h = kiho.get(name)
+    canonical = h["name"] if h else name.strip()
+    if off:
+        c.active_kiho = [x for x in c.active_kiho if x.lower() != canonical.lower()]
+        return True, f"**{c.name}** ends the Kiho **{canonical}**."
+    if canonical.lower() not in [x.lower() for x in c.kiho]:
+        return False, (f"**{c.name}** hasn't learned the Kiho **{canonical}**: add it with `/sheet kiho learn` "
+                       f"or buy it with `/xp kiho`.")
+    ktype = (h["type"] if h else "").strip().lower()
+    replaced = ""
+    if ktype in ("internal", "kharmic", "mystical"):
+        dropped = []
+        kept = []
+        for x in c.active_kiho:
+            xr = kiho.get(x)
+            xt = (xr["type"] if xr else "").strip().lower()
+            (dropped if xt == ktype else kept).append(x)
+        c.active_kiho = kept
+        if dropped:
+            replaced = f" (replaces {', '.join(dropped)})"
+    if canonical.lower() not in [x.lower() for x in c.active_kiho]:
+        c.active_kiho.append(canonical)
+    tlabel = h["type"] if h and h.get("type") else "Kiho"
+    return True, (f"✋ **{c.name}** activates the {tlabel} Kiho **{canonical}**{replaced}. "
+                  f"*(Activation cost: a Void Point or Meditation/Void roll: and duration are "
+                  f"DM-adjudicated; its combat effect is shown as a reminder on attacks.)*")
+
 @sheet_kata_grp.command(name="activate", description="Set your active Kata (Simple Action; only one active). Blank name drops it.")
 @app_commands.describe(
     name="A Kata your character knows. Leave blank to drop the active Kata.",
@@ -3941,33 +3978,12 @@ async def sheet_kata_activate(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
-    c = rec.character
-    if not name or not name.strip():
-        prev = c.active_kata
-        c.active_kata = ""
-        store.save(rec)
-        tail = f" (**{prev}**)" if prev else ""
-        await interaction.response.send_message(
-            f"**{c.name}** drops their active Kata{tail}.", embed=build_sheet_embed(rec)
-        )
+    ok, msg = _activate_kata(rec.character, name)
+    if not ok:
+        await interaction.response.send_message(msg, ephemeral=True)
         return
-    k = kata.get(name)
-    canonical = k["name"] if k else name.strip()
-    if canonical.lower() not in [x.lower() for x in c.katas]:
-        await interaction.response.send_message(
-            f"**{c.name}** hasn't learned the Kata **{canonical}**: add it with `/sheet kata` "
-            f"or buy it with `/xp kata`.", ephemeral=True,
-        )
-        return
-    c.active_kata = canonical
     store.save(rec)
-    note = (
-        "" if kata_effects.is_auto(canonical)
-        else " *(its effect is DM-adjudicated: shown as a reminder on attacks.)*"
-    )
-    await interaction.response.send_message(
-        f"🥋 **{c.name}** assumes the Kata **{canonical}**.{note}", embed=build_sheet_embed(rec)
-    )
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 @sheet_kiho_grp.command(name="activate", description="Activate/deactivate a Kiho (one Internal/Kharmic/Mystical; Martial stacks).")
 @app_commands.describe(
@@ -3985,45 +4001,12 @@ async def sheet_kiho_activate(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
-    c = rec.character
-    h = kiho.get(name)
-    canonical = h["name"] if h else name.strip()
-    if off:
-        c.active_kiho = [x for x in c.active_kiho if x.lower() != canonical.lower()]
-        store.save(rec)
-        await interaction.response.send_message(
-            f"**{c.name}** ends the Kiho **{canonical}**.", embed=build_sheet_embed(rec)
-        )
+    ok, msg = _activate_kiho(rec.character, name, off)
+    if not ok:
+        await interaction.response.send_message(msg, ephemeral=True)
         return
-    if canonical.lower() not in [x.lower() for x in c.kiho]:
-        await interaction.response.send_message(
-            f"**{c.name}** hasn't learned the Kiho **{canonical}**: add it with `/sheet kiho` "
-            f"or buy it with `/xp kiho`.", ephemeral=True,
-        )
-        return
-    # s38: only one Internal, one Kharmic, one Mystical may be active; Martial stacks.
-    ktype = (h["type"] if h else "").strip().lower()
-    replaced = ""
-    if ktype in ("internal", "kharmic", "mystical"):
-        dropped = []
-        kept = []
-        for x in c.active_kiho:
-            xr = kiho.get(x)
-            xt = (xr["type"] if xr else "").strip().lower()
-            (dropped if xt == ktype else kept).append(x)
-        c.active_kiho = kept
-        if dropped:
-            replaced = f" (replaces {', '.join(dropped)})"
-    if canonical.lower() not in [x.lower() for x in c.active_kiho]:
-        c.active_kiho.append(canonical)
     store.save(rec)
-    tlabel = h["type"] if h and h.get("type") else "Kiho"
-    await interaction.response.send_message(
-        f"✋ **{c.name}** activates the {tlabel} Kiho **{canonical}**{replaced}. "
-        f"*(Activation cost: a Void Point or Meditation/Void roll: and duration are "
-        f"DM-adjudicated; its combat effect is shown as a reminder on attacks.)*",
-        embed=build_sheet_embed(rec),
-    )
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 
 # ---------------------------------------------------------------------------
@@ -5303,7 +5286,7 @@ _HELP_BLURBS: dict[str, str] = {
     "spell": "Browse spells, cast, resist, importune, spell damage.",
     "players": "Directory of approved player characters.",
     "compare": "Compare two characters side by side.",
-    "whoami": "Quick glance at your active character.",
+    "whoami": "Your character hub: status card with buttons for Void, Kata, Kiho, tattoos, inventory, full sheet, export.",
     "room": "Private play rooms (threads) with invites.",
     "location": "In-character areas and location channels.",
     "date": "The current Rokugani calendar date.",
@@ -11109,6 +11092,20 @@ cog_inventory.init(
     npc_autocomplete=_npc_autocomplete,
     role_fortune=ROLE_FORTUNE,
     role_kami=ROLE_KAMI,
+)
+
+cog_hub.init(
+    tree=client.tree,
+    store=store,
+    require_guild=_require_guild,
+    build_sheet_embed=build_sheet_embed,
+    whoami_lines=_whoami_lines,
+    activate_kata=_activate_kata,
+    activate_kiho=_activate_kiho,
+    tally=_tally,
+    export_callback=sheet_export.callback,
+    fight_status_callback=cog_combat.fight_status.callback,
+    inventory_callback=cog_inventory.inventory.callback,
 )
 
 cog_npc_builder.init(
