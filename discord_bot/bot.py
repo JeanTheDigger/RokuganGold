@@ -2015,8 +2015,8 @@ def _calc_chargen_xp(state: dict) -> tuple[int, int]:
 
 
 def _chargen_embed(state: dict) -> discord.Embed:
-    _cg_save(state)
     """Full-wizard progress embed showing all chargen state."""
+    _cg_save(state)
     spent, remaining = _calc_chargen_xp(state)
     embed = discord.Embed(
         title=f"Character Creation: {state['name']}",
@@ -2398,11 +2398,13 @@ _CHARGEN_CHOICES: dict[str, tuple[str, str]] = {
 class _AdvChoiceModal(discord.ui.Modal):
     choice = discord.ui.TextInput(label="Specify", max_length=100, required=True)
 
-    def __init__(self, state: dict, entry: dict, kind: str, label: str, placeholder: str):
+    def __init__(self, state: dict, entry: dict, kind: str, label: str, placeholder: str,
+                 category: str = ""):
         super().__init__(title=entry["name"][:45])
         self.state = state
         self.entry = entry
         self.kind = kind
+        self._category = category
         self.choice.label = label[:45]
         self.choice.placeholder = placeholder[:100]
 
@@ -2423,7 +2425,10 @@ class _AdvChoiceModal(discord.ui.Modal):
                 self.state["advantages_chosen"].pop()
                 await interaction.response.send_message("Not enough XP for that advantage.", ephemeral=True)
                 return
-            await _chargen_advantages(interaction, self.state)
+            if self._category:
+                await _chargen_adv_category(interaction, self.state, self._category)
+            else:
+                await _chargen_advantages(interaction, self.state)
         else:
             current_disadv_xp = sum(d["points"] for d in self.state.get("disadvantages_chosen", []))
             if current_disadv_xp >= _MAX_DISADVANTAGE_XP:
@@ -2432,7 +2437,10 @@ class _AdvChoiceModal(discord.ui.Modal):
                 )
                 return
             self.state.setdefault("disadvantages_chosen", []).append(entry_data)
-            await _chargen_disadvantages(interaction, self.state)
+            if self._category:
+                await _chargen_disadv_category(interaction, self.state, self._category)
+            else:
+                await _chargen_disadvantages(interaction, self.state)
 
 
 # --- Step 6: Advantages ---
@@ -2440,7 +2448,12 @@ class _AdvantageSelect(discord.ui.Select):
     def __init__(self, state: dict, category: str):
         self.state = state
         self.category = category
-        chosen_names = {a["name"] for a in state.get("advantages_chosen", [])}
+        chosen_names = set()
+        for a in state.get("advantages_chosen", []):
+            chosen_names.add(a["name"])
+            base = a["name"].split(" (")[0]
+            if base in _CHARGEN_CHOICES:
+                chosen_names.add(base)
         advs = [a for a in advantages.by_kind("advantage")
                 if a.get("points") is not None and a["name"] not in chosen_names
                 and (a.get("category") or "") == category]
@@ -2469,7 +2482,8 @@ class _AdvantageSelect(discord.ui.Select):
             return
         choice_spec = _CHARGEN_CHOICES.get(adv["name"])
         if choice_spec:
-            modal = _AdvChoiceModal(self.state, adv, "advantage", choice_spec[0], choice_spec[1])
+            modal = _AdvChoiceModal(self.state, adv, "advantage", choice_spec[0], choice_spec[1],
+                                    category=self.category)
             await interaction.response.send_modal(modal)
             return
         self.state.setdefault("advantages_chosen", []).append({"name": adv["name"], "points": adv["points"]})
@@ -2478,7 +2492,26 @@ class _AdvantageSelect(discord.ui.Select):
             self.state["advantages_chosen"].pop()
             await interaction.response.send_message("Not enough XP for that advantage.", ephemeral=True)
             return
-        await _chargen_advantages(interaction, self.state)
+        await _chargen_adv_category(interaction, self.state, self.category)
+
+
+async def _chargen_adv_category(interaction: discord.Interaction, state: dict, cat: str) -> None:
+    view = _ChargenView(state)
+    view.add_item(_AdvantageSelect(state, cat))
+    back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_advantages(btn_inter, state)
+
+    back_btn.callback = on_back
+    view.add_item(back_btn)
+    await interaction.response.edit_message(
+        content=f"**Step 6/10 — Advantages ({cat})** · Select an advantage to buy.",
+        embed=_chargen_embed(state), view=view,
+    )
 
 
 class _AdvCategorySelect(discord.ui.Select):
@@ -2492,23 +2525,7 @@ class _AdvCategorySelect(discord.ui.Select):
         if interaction.user.id != int(self.state["user_id"]):
             await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
             return
-        cat = self.values[0]
-        view = _ChargenView(self.state)
-        view.add_item(_AdvantageSelect(self.state, cat))
-        back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
-
-        async def on_back(btn_inter: discord.Interaction) -> None:
-            if btn_inter.user.id != int(self.state["user_id"]):
-                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
-                return
-            await _chargen_advantages(btn_inter, self.state)
-
-        back_btn.callback = on_back
-        view.add_item(back_btn)
-        await interaction.response.edit_message(
-            content=f"**Step 6/10 — Advantages ({cat})** · Select an advantage to buy.",
-            embed=_chargen_embed(self.state), view=view,
-        )
+        await _chargen_adv_category(interaction, self.state, self.values[0])
 
 
 async def _chargen_advantages(interaction: discord.Interaction, state: dict) -> None:
@@ -2558,7 +2575,13 @@ async def _chargen_advantages(interaction: discord.Interaction, state: dict) -> 
 class _DisadvantageSelect(discord.ui.Select):
     def __init__(self, state: dict, category: str):
         self.state = state
-        chosen_names = {d["name"] for d in state.get("disadvantages_chosen", [])}
+        self.category = category
+        chosen_names = set()
+        for d in state.get("disadvantages_chosen", []):
+            chosen_names.add(d["name"])
+            base = d["name"].split(" (")[0]
+            if base in _CHARGEN_CHOICES:
+                chosen_names.add(base)
         disadvs = [d for d in advantages.by_kind("disadvantage")
                    if d.get("points") is not None and d["name"] not in chosen_names
                    and (d.get("category") or "") == category]
@@ -2594,11 +2617,33 @@ class _DisadvantageSelect(discord.ui.Select):
             return
         choice_spec = _CHARGEN_CHOICES.get(dis["name"])
         if choice_spec:
-            modal = _AdvChoiceModal(self.state, dis, "disadvantage", choice_spec[0], choice_spec[1])
+            modal = _AdvChoiceModal(self.state, dis, "disadvantage", choice_spec[0], choice_spec[1],
+                                    category=self.category)
             await interaction.response.send_modal(modal)
             return
         self.state.setdefault("disadvantages_chosen", []).append({"name": dis["name"], "points": dis["points"]})
-        await _chargen_disadvantages(interaction, self.state)
+        await _chargen_disadv_category(interaction, self.state, self.category)
+
+
+async def _chargen_disadv_category(interaction: discord.Interaction, state: dict, cat: str) -> None:
+    view = _ChargenView(state)
+    view.add_item(_DisadvantageSelect(state, cat))
+    back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_disadvantages(btn_inter, state)
+
+    back_btn.callback = on_back
+    view.add_item(back_btn)
+    disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+    await interaction.response.edit_message(
+        content=f"**Step 7/10 — Disadvantages ({cat})** · "
+                f"Select a disadvantage ({disadv_xp}/{_MAX_DISADVANTAGE_XP} XP gained).",
+        embed=_chargen_embed(state), view=view,
+    )
 
 
 class _DisadvCategorySelect(discord.ui.Select):
@@ -2612,25 +2657,7 @@ class _DisadvCategorySelect(discord.ui.Select):
         if interaction.user.id != int(self.state["user_id"]):
             await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
             return
-        cat = self.values[0]
-        view = _ChargenView(self.state)
-        view.add_item(_DisadvantageSelect(self.state, cat))
-        back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
-
-        async def on_back(btn_inter: discord.Interaction) -> None:
-            if btn_inter.user.id != int(self.state["user_id"]):
-                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
-                return
-            await _chargen_disadvantages(btn_inter, self.state)
-
-        back_btn.callback = on_back
-        view.add_item(back_btn)
-        disadv_xp = sum(d["points"] for d in self.state.get("disadvantages_chosen", []))
-        await interaction.response.edit_message(
-            content=f"**Step 7/10 — Disadvantages ({cat})** · "
-                    f"Select a disadvantage ({disadv_xp}/{_MAX_DISADVANTAGE_XP} XP gained).",
-            embed=_chargen_embed(self.state), view=view,
-        )
+        await _chargen_disadv_category(interaction, self.state, self.values[0])
 
 
 async def _chargen_disadvantages(interaction: discord.Interaction, state: dict) -> None:
