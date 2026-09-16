@@ -18,8 +18,8 @@ Known simplifications vs the GDScript (documented, not silent):
   - PERMANENT_WOUND advantage floor (min NICKED) IS now applied in
     wound_level_index(): characters with the disadvantage are always at
     least at the Nicked wound level.
-  - Insight omits the Skill Mastery / Courtier insight bonuses (no s24 mastery
-    engine here). The core formula is exact.
+  - Insight includes Courtier/Etiquette R3 (+3) and R7 (+10) mastery Insight
+    bonuses. The core formula is exact.
   - Spirit-creature stat-block wound tracks are not modelled (PC formula only).
 """
 
@@ -82,10 +82,26 @@ def is_dead(c: Character) -> bool:
     return wound_level_index(c) == 8
 
 
+def _skill_rank(c: Character, name: str) -> int:
+    lower = name.lower()
+    for k, v in c.skills.items():
+        if k.lower() == lower:
+            return v
+    return 0
+
+
 def insight(c: Character) -> int:
     rings_sum = sum(ring_value(c, r) for r in ("air", "earth", "fire", "water", "void"))
     total_skill_ranks = sum(c.skills.values())
-    return rings_sum * 10 + total_skill_ranks
+    base = rings_sum * 10 + total_skill_ranks
+    # Courtier/Etiquette mastery: +3 Insight at R3, +10 total at R7
+    for sk in ("Courtier", "Etiquette"):
+        rank = _skill_rank(c, sk)
+        if rank >= 7:
+            base += 10
+        elif rank >= 3:
+            base += 3
+    return base
 
 
 def insight_rank(c: Character) -> int:

@@ -30,6 +30,19 @@ Skill-check auto-applied:
   Seven Fortunes' Blessing: Fukurokujin: +1k1 chosen Lore (parameterised)
   Weakness: chosen Trait treated as 1 lower (parameterised)
 
+High Skill mastery auto-applied (contested-only):
+  Courtier R5: +1k0 on Contested Rolls
+  Etiquette R5: +1k0 on Contested Rolls
+  Investigation R5: +5 on Contested Rolls
+  Sincerity R5: +5 on Contested Rolls
+  Meditation R5: +5 flat on Fasting emphasis rolls (TN reduced by 5)
+
+High Skill mastery reminder-only:
+  Acting R3/R5/R7 (disguise TN reduction), Calligraphy R5 (cipher +10),
+  Divination R5 (second attempt), Investigation R3/R7 (Search retries),
+  Medicine R5 (healing +1k0), Meditation R3/R7 (VP recovery),
+  Spellcraft R5 (casting +1k0), Tea Ceremony R5 (2 VP recovery)
+
 Parameterised storage: advantages requiring a parameter (Chosen by the
 Oracles, Weakness, Doubt, Fukurokujin, Heart of Vengeance, etc.) are stored
 as "Name: Parameter" on the character sheet (e.g. "Weakness: Willpower").
@@ -355,6 +368,70 @@ def skill_check_modifiers(
     if weak_param and weak_param.lower() == tr:
         flat -= 1
         notes.append(f"Weakness -1 ({weak_param}: trait rolls as 1 lower)")
+
+    # --- High Skill Mastery Abilities (L5R 4e RAW) ---
+    _sr = character.skills.get(skill_name, 0)
+
+    if sk == "acting":
+        if _sr >= 7:
+            notes.append("Acting R7: Disguise TN reduced by 15 (total)")
+        elif _sr >= 5:
+            notes.append("Acting R5: Disguise TN reduced by 10 (total)")
+        elif _sr >= 3:
+            notes.append("Acting R3: Disguise TN reduced by 5")
+
+    elif sk == "calligraphy":
+        if _sr >= 5:
+            notes.append("Calligraphy R5: +10 when breaking a code or cipher")
+
+    elif sk == "courtier":
+        if is_contested and _sr >= 5:
+            rolled += 1
+            notes.append("Courtier R5: +1k0 (Contested Roll)")
+
+    elif sk == "divination":
+        if _sr >= 5:
+            notes.append("Divination R5: Second attempt without Void Point cost")
+
+    elif sk == "etiquette":
+        if is_contested and _sr >= 5:
+            rolled += 1
+            notes.append("Etiquette R5: +1k0 (Contested Roll)")
+
+    elif sk == "investigation":
+        if _sr >= 3:
+            notes.append("Investigation R3: Second Search attempt without TN increase")
+        if is_contested and _sr >= 5:
+            flat += 5
+            notes.append("Investigation R5: +5 (Contested Roll)")
+        if _sr >= 7:
+            notes.append("Investigation R7: Third Search attempt if second fails")
+
+    elif sk == "medicine":
+        if _sr >= 5:
+            notes.append("Medicine R5: Wound healing +1k0")
+
+    elif sk == "meditation":
+        if _sr >= 7:
+            notes.append("Meditation R7: Restores up to 3 Void Points")
+        elif _sr >= 3:
+            notes.append("Meditation R3: Restores up to 2 Void Points")
+        if _sr >= 5 and emphasis and emphasis.lower() == "fasting":
+            flat += 5
+            notes.append("Meditation R5: +5 (Fasting TN reduced by 5)")
+
+    elif sk == "sincerity":
+        if is_contested and _sr >= 5:
+            flat += 5
+            notes.append("Sincerity R5: +5 (Contested Roll)")
+
+    elif sk == "spellcraft":
+        if _sr >= 5:
+            notes.append("Spellcraft R5: +1k0 on Spell Casting Rolls")
+
+    elif sk == "tea ceremony":
+        if _sr >= 5:
+            notes.append("Tea Ceremony R5: Participants regain 2 Void Points instead of 1")
 
     # Rank 10 universal mastery: Free Raise on all rolls using that Skill
     if character.skills.get(skill_name, 0) >= 10:
