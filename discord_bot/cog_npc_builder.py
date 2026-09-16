@@ -119,6 +119,8 @@ def base_character(state: dict) -> Character:
     sch = schools.get(state["school"]) if state.get("school") else None
     if sch:
         schools.apply_to_character(c, sch)
+        if state.get("clan"):
+            c.clan = state["clan"]  # the chosen clan wins over the school's catalog clan
     return c
 
 
@@ -475,9 +477,10 @@ class NpcWizard(discord.ui.View):
         key = self._step_key()
         st = self.state
         if key == "clan":
-            clans = schools.creation_clans()[:24]
-            opts = [_opt("(no clan)", "", default=not st["clan"])] + [_opt(c, default=c == st["clan"]) for c in clans]
-            self.add_item(_Pick("Clan...", opts, self._on_clan, 0))
+            great = [_opt("(no clan)", "", default=not st["clan"])] + [_opt(c, default=c == st["clan"]) for c in schools.great_clans()]
+            self.add_item(_Pick("Great Clan...", great, self._on_clan, 0))
+            minor = [_opt(c, default=c == st["clan"]) for c in schools.minor_clans()]
+            self.add_item(_Pick("Minor clan, Brotherhood, Imperial or Ronin...", minor, self._on_clan, 1))
         elif key == "family":
             fams = families.by_clan(st["clan"]) if st["clan"] else []
             opts = [_opt("(no family)", "", default=not st["family"])] + [

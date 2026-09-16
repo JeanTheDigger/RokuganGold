@@ -60,6 +60,9 @@ def clans() -> list[str]:
 # every clan that has families, plus the school-only groups a character can
 # belong to (Brotherhood, Imperial, Ronin).
 _PSEUDO_CLANS = ("Minor Clan", "Miscellaneous")
+# Owner ruling 2026-09-16: the Mantis and its former member clans (Fox, Centipede,
+# Wasp) are minor clans in this setting.
+GREAT_CLANS: tuple[str, ...] = ("Crab", "Crane", "Dragon", "Lion", "Phoenix", "Scorpion", "Unicorn", "Spider")
 
 
 def creation_clans() -> list[str]:
@@ -69,14 +72,40 @@ def creation_clans() -> list[str]:
     return sorted(out)
 
 
+def great_clans() -> list[str]:
+    return [c for c in creation_clans() if c in GREAT_CLANS]
+
+
+def minor_clans() -> list[str]:
+    """Every other creation clan: the minor clans plus Brotherhood, Imperial and Ronin."""
+    return [c for c in creation_clans() if c not in GREAT_CLANS]
+
+
+def _other_clan_tag(name: str, clan: str) -> bool:
+    """True if a school name carries a ': Other Clan' tag for a different creation clan."""
+    low = name.lower()
+    for other in creation_clans():
+        if other.lower() != clan.lower() and f"{other.lower()} clan" in low:
+            return True
+    return False
+
+
 def basic_for_clan(clan: str) -> list[dict]:
-    """Basic schools a character of this clan starts with. A minor clan's schools
-    are the "Minor Clan" entries whose name carries the clan ("Usagi Bushi: Hare Clan")."""
-    own = [s for s in basic() if s["clan"].lower() == clan.lower()]
+    """Basic schools a character of this clan starts with.
+    Own catalog entries first (minus ones tagged for another clan, e.g. the Fox
+    schools filed under Mantis); else the entries whose name carries the clan
+    ("Usagi Bushi: Hare Clan"); else the entries named after one of its families
+    ("Kitsune Shugenja" for the Fox)."""
+    from . import families
+    own = [s for s in basic() if s["clan"].lower() == clan.lower() and not _other_clan_tag(s["name"], clan)]
     if own:
         return own
     tag = f"{clan.lower()} clan"
-    return [s for s in basic() if s["clan"] == "Minor Clan" and tag in s["name"].lower()]
+    tagged = [s for s in basic() if tag in s["name"].lower()]
+    if tagged:
+        return tagged
+    fams = [f["name"].lower() for f in families.by_clan(clan)]
+    return [s for s in basic() if any(s["name"].lower().startswith(f + " ") for f in fams)]
 
 
 def techniques_up_to(name: str, rank: int) -> list[dict]:

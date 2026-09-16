@@ -30,10 +30,10 @@ FAMILIES_DATA: list[dict] = [
     {"name": "Kitsu", "clan": "Lion", "bonus_trait": "intelligence"},
     {"name": "Matsu", "clan": "Lion", "bonus_trait": "strength"},
     # Mantis Clan
-    {"name": "Kitsune", "clan": "Mantis", "bonus_trait": "awareness"},
-    {"name": "Moshi", "clan": "Mantis", "bonus_trait": "intelligence"},
-    {"name": "Tsuruchi", "clan": "Mantis", "bonus_trait": "reflexes"},
-    {"name": "Yoritomo", "clan": "Mantis", "bonus_trait": "strength"},
+    {"name": "Kitsune", "clan": "Fox", "bonus_trait": "awareness"},
+    {"name": "Moshi", "clan": "Centipede", "bonus_trait": "intelligence"},
+    {"name": "Tsuruchi", "clan": "Wasp", "bonus_trait": "perception"},
+    {"name": "Yoritomo", "clan": "Mantis", "bonus_trait": "stamina"},
     # Phoenix Clan
     {"name": "Agasha", "clan": "Phoenix", "bonus_trait": "perception"},
     {"name": "Isawa", "clan": "Phoenix", "bonus_trait": "willpower"},
@@ -55,7 +55,8 @@ FAMILIES_DATA: list[dict] = [
     {"name": "Goju", "clan": "Spider", "bonus_trait": "agility"},
     {"name": "Ninube", "clan": "Spider", "bonus_trait": "reflexes"},
     # Minor Clans
-    # Minor Clans (owner-supplied source text, 2026-09-16). Falcon families are under Crab
+    # Minor Clans (owner-supplied source text, 2026-09-16). In this setting the Mantis, Fox,
+    # Centipede and Wasp are minor clans too, each with its own family (owner ruling 2026-09-16). Falcon families are under Crab
     # (Toritaka), Fox under Mantis (Kitsune), Snake under Spider (Chuda).
     {"name": "Ichiro", "clan": "Badger", "bonus_trait": "strength"},
     {"name": "Komori", "clan": "Bat", "bonus_trait": "intelligence"},

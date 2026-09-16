@@ -1377,9 +1377,10 @@ async def sheet_create(interaction: discord.Interaction) -> None:
 # ---------------------------------------------------------------------------
 # /sheet wizard: guided step-by-step character creation
 # ---------------------------------------------------------------------------
-_GREAT_CLANS = ["Crab", "Crane", "Dragon", "Lion", "Mantis", "Phoenix", "Scorpion", "Unicorn",
-                "Ronin", "Imperial", "Spider"]
-_MINOR_CLANS = ["Badger", "Bat", "Dragonfly", "Hare", "Monkey", "Oriole", "Ox", "Sparrow", "Tortoise"]
+_GREAT_CLANS = ["Crab", "Crane", "Dragon", "Lion", "Phoenix", "Scorpion", "Unicorn", "Ronin", "Imperial", "Spider"]
+# Owner ruling 2026-09-16: Mantis, Fox, Centipede and Wasp are minor clans in this setting.
+_MINOR_CLANS = ["Badger", "Bat", "Boar", "Centipede", "Dragonfly", "Fox", "Hare", "Mantis", "Monkey", "Oriole", "Ox",
+                "Sparrow", "Tiger", "Tortoise", "Wasp"]
 _ALL_SCHOOL_CLANS = sorted({s["clan"] for s in schools.ALL if s.get("category", "basic") == "basic"})
 
 def _wizard_embed(state: dict) -> discord.Embed:
@@ -1406,10 +1407,14 @@ def _wizard_embed(state: dict) -> discord.Embed:
     return embed
 
 class _ClanSelect(discord.ui.Select):
-    def __init__(self, state: dict):
+    """One of two menus on the clan step: the Great Clans, or the minor clans and others."""
+
+    def __init__(self, state: dict, great: bool = True):
         self.state = state
-        options = [discord.SelectOption(label=c) for c in schools.creation_clans()[:25]]
-        super().__init__(placeholder="Choose your Clan...", options=options)
+        clans = schools.great_clans() if great else schools.minor_clans()
+        options = [discord.SelectOption(label=c) for c in clans[:25]]
+        super().__init__(placeholder="Great Clan..." if great else "Minor clan, Brotherhood, Imperial or Ronin...",
+                         options=options, row=0 if great else 1)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != int(self.state["user_id"]):
@@ -1973,6 +1978,8 @@ def _build_base_char(state: dict) -> Character:
     applied = schools.get(state["school_name"]) if state.get("school_name") else None
     if applied:
         schools.apply_to_character(char, applied)
+        if state.get("clan"):
+            char.clan = state["clan"]  # a Fox studying at a school filed under Mantis is still a Fox
     for pick in state.get("wildcard_picks", []):
         sk = pick["skill"]
         rk = pick["rank"]
@@ -3263,7 +3270,8 @@ async def sheet_wizard(  # legacy in-channel wizard, no longer registered as a c
         "school_name": "",
     }
     view = _WizardView(state)
-    view.add_item(_ClanSelect(state))
+    view.add_item(_ClanSelect(state, great=True))
+    view.add_item(_ClanSelect(state, great=False))
     await interaction.response.send_message(
         content="**Step 1/5**: Choose your Clan.",
         embed=_wizard_embed(state), view=view,
@@ -9985,7 +9993,8 @@ async def _cg_resume(interaction: discord.Interaction, state: dict) -> None:
     step = state.get("step", "clan")
     if step in ("clan", "family"):
         view = _WizardView(state)
-        view.add_item(_ClanSelect(state))
+        view.add_item(_ClanSelect(state, great=True))
+        view.add_item(_ClanSelect(state, great=False))
         await interaction.response.edit_message(
             content=f"Resuming **{state.get('name', 'your character')}**.\n**Step 1/10**: Choose your Clan.",
             embed=_chargen_embed(state), view=view,
@@ -10136,7 +10145,8 @@ class _ChargenNameModal(discord.ui.Modal, title="Character Creation"):
         }
         state["step"] = "clan"
         view = _WizardView(state)
-        view.add_item(_ClanSelect(state))
+        view.add_item(_ClanSelect(state, great=True))
+        view.add_item(_ClanSelect(state, great=False))
         first_msg = await priv_channel.send(
             content=f"Welcome, {interaction.user.mention}! Let's build **{character_name}**.\n"
                     f"**Step 1/10**: Choose your Clan.",
