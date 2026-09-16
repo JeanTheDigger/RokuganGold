@@ -9,10 +9,11 @@ technique_effects.py.
 Every value here is read verbatim from the s24 LOCKED text; nothing is
 auto-applied on a condition the engine cannot actually check.
 
-Auto-applied (18):
+Auto-applied (19):
   Kenjutsu R3: +1k0 damage (sword)
   Kenjutsu R7: damage explodes on 9 and 10 (sword)
   Jiujutsu R3: +1k0 damage (unarmed)
+  Jiujutsu R5: free raise toward Grapple
   Jiujutsu R7: +0k1 damage (unarmed)
   Heavy Weapons R3: ignore 2 Reduction
   Heavy Weapons R5: free raise toward Knockdown
@@ -35,10 +36,14 @@ Auto-applied (off-hand):
 
 Reminder-only (not auto-applied):
   Polearms R3 (+5 Init first round: needs per-round tracker changes),
-  Spears R5/R7 (range / ready: not combat math), Staves R3 (armor doubling
-  not modeled), Knives R7 (extra attack: not modeled),
-  Chain Weapons R3/R5 (grapple not modeled), Kenjutsu R5
-  and Kyujutsu R3/R5 (ready / string / range: not combat math).
+  Polearms R5 (+1k0 vs mounted/larger: target state not tracked, note only),
+  Polearms R7 (ready: not combat math),
+  Spears R5/R7 (range / ready: not combat math),
+  Staves R3 (armor doubling not modeled),
+  Staves R7 large (ready: not combat math),
+  Knives R7 (extra attack: not modeled),
+  Chain Weapons R3/R5 (grapple not modeled),
+  Kenjutsu R5 and Kyujutsu R3/R5 (ready / string / range: not combat math).
 """
 
 from __future__ import annotations
@@ -91,6 +96,8 @@ def attacker_damage(
         rolled += 1; notes.append("Kyujutsu R7 +1k0 damage (bow Strength +1)")
     if skill == "staves" and rank >= 7 and _is_small(weapon_profile):
         rolled += 1; notes.append("Staves R7 +1k0 damage (small staff)")
+    if skill == "polearms" and rank >= 5:
+        notes.append("Polearms R5: +1k0 damage vs mounted/larger (DM: apply if applicable)")
     return rolled, kept, flat, notes
 
 
@@ -171,6 +178,9 @@ def maneuver_free_raises(
             free += 1; notes.append("Knives R5: free raise for Disarm (sai/jitte)")
         if skill == "chain weapons" and rank >= 7:
             free += 1; notes.append("Chain Weapons R7: free raise for Disarm")
+    if maneuver == "grapple":
+        if skill == "jiujutsu" and rank >= 5:
+            free += 1; notes.append("Jiujutsu R5: free raise for Grapple")
     return free, notes
 
 

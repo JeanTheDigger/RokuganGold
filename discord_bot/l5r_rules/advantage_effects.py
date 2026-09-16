@@ -43,6 +43,13 @@ High Skill mastery reminder-only:
   Medicine R5 (healing +1k0), Meditation R3/R7 (VP recovery),
   Spellcraft R5 (casting +1k0), Tea Ceremony R5 (2 VP recovery)
 
+Bugei Skill mastery reminder-only:
+  Athletics R3/R5/R7 (terrain/movement), Battle R5 (Initiative),
+  Defense R3/R5/R7 (stances), Horsemanship R3/R5/R7 (horseback),
+  Hunting R5 (+1k0 Stealth in wilderness, cross-skill note on Stealth),
+  Iaijutsu R3/R5/R7 (ready/duel).
+  Weapon Bugei masteries are in skill_mastery.py (not here).
+
 Parameterised storage: advantages requiring a parameter (Chosen by the
 Oracles, Weakness, Doubt, Fukurokujin, Heart of Vengeance, etc.) are stored
 as "Name: Parameter" on the character sheet (e.g. "Weakness: Willpower").
@@ -369,8 +376,12 @@ def skill_check_modifiers(
         flat -= 1
         notes.append(f"Weakness -1 ({weak_param}: trait rolls as 1 lower)")
 
-    # --- High Skill Mastery Abilities (L5R 4e RAW) ---
+    # --- Skill Mastery Abilities (L5R 4e RAW) ---
     _sr = character.skills.get(skill_name, 0)
+
+    # Cross-skill: Hunting R5 grants +1k0 Stealth in wilderness
+    if sk == "stealth" and character.skills.get("Hunting", 0) >= 5:
+        notes.append("Hunting R5: +1k0 Stealth in wilderness (DM: apply if in wilderness)")
 
     if sk == "acting":
         if _sr >= 7:
@@ -432,6 +443,48 @@ def skill_check_modifiers(
     elif sk == "tea ceremony":
         if _sr >= 5:
             notes.append("Tea Ceremony R5: Participants regain 2 Void Points instead of 1")
+
+    # --- Bugei (non-weapon) Mastery Abilities ---
+
+    elif sk == "athletics":
+        if _sr >= 5:
+            notes.append("Athletics R5: No movement penalties regardless of terrain")
+        elif _sr >= 3:
+            notes.append("Athletics R3: Moderate Terrain unimpeded; Difficult Terrain Water -1 instead of -2")
+        if _sr >= 7:
+            notes.append("Athletics R7: +5 feet to one Move Action per Round")
+
+    elif sk == "battle":
+        if _sr >= 5:
+            notes.append(f"Battle R5: +{_sr} Initiative in Skirmishes (add Battle Skill Rank)")
+
+    elif sk == "defense":
+        if _sr >= 3:
+            notes.append("Defense R3: Retain previous roll in maintained Full Defense")
+        if _sr >= 5:
+            notes.append("Defense R5: Armor TN +3 in Defense and Full Defense Stances")
+        if _sr >= 7:
+            notes.append("Defense R7: One Simple Action in Full Defense (no attacks)")
+
+    elif sk == "horsemanship":
+        if _sr >= 3:
+            notes.append("Horsemanship R3: Full Attack Stance allowed on horseback")
+        if _sr >= 7:
+            notes.append("Horsemanship R7: Mounting is a Free Action, dismounting is Free")
+        elif _sr >= 5:
+            notes.append("Horsemanship R5: Mounting is Simple Action, dismounting is Free")
+
+    elif sk == "hunting":
+        if _sr >= 5:
+            notes.append("Hunting R5: +1k0 to Stealth in wilderness")
+
+    elif sk == "iaijutsu":
+        if _sr >= 3:
+            notes.append("Iaijutsu R3: Readying katana is a Free Action")
+        if _sr >= 5:
+            notes.append("Iaijutsu R5: Free Raise on Focus roll during Iaijutsu Duel")
+        if _sr >= 7:
+            notes.append("Iaijutsu R7: +2k2 Focus if Assessment exceeds opponent by 10+ (instead of +1k1)")
 
     # Rank 10 universal mastery: Free Raise on all rolls using that Skill
     if character.skills.get(skill_name, 0) >= 10:
