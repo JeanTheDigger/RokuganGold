@@ -5414,22 +5414,40 @@ _HELP_BLURBS: dict[str, str] = {
     "creature": "Bestiary creatures: spawn, wound, attack [Fortune].",
     "category": "Group NPCs and creatures for bulk actions [Fortune].",
     "dm": "Fortune and Kami tools: approvals, new day, damage, undo, revive, channels.",
-    "ref": "Rules reference: weapons, armor, schools, families, kata, kiho, advantages, tattoos.",
+    "ref": "Weapons, armor, schools, families, kata, kiho, advantages, tattoos, heritage, travel, modifiers.",
     "setup": "Server setup [Kami].",
     "sync": "Re-sync slash commands [Kami].",
     "ping": "Is the bot alive?",
     "help": "This overview.",
 }
-_HELP_ORDER: list[str] = [
-    "help", "sheet", "stat", "xp", "roll", "dice", "macro", "history", "check", "combat", "fight", "engage",
-    "spell", "players", "compare", "whoami", "room", "location", "date", "npc", "npc-edit", "creature",
-    "category", "dm", "ref", "setup", "sync", "ping",
+_HELP_SECTIONS: list[tuple[str, list[str]]] = [
+    ("Getting started", ["help", "whoami", "players", "compare", "date"]),
+    ("Your character", ["sheet", "stat", "xp"]),
+    ("Dice and checks", ["roll", "dice", "check", "macro", "history"]),
+    ("Fights and magic", ["combat", "fight", "engage", "spell"]),
+    ("Places", ["room", "location"]),
+    ("Rules reference", ["ref"]),
+    ("Staff [Fortune]", ["npc", "npc-edit", "creature", "category", "dm"]),
+    ("Admin [Kami]", ["setup", "sync", "ping"]),
 ]
+_HELP_ORDER: list[str] = [name for _, names in _HELP_SECTIONS for name in names]
 _HELP_START = (
     "**New here?** `/sheet create` makes a character, `/players` shows who is around, `/roll` rolls dice, "
     "`/check skill` rolls a skill for your character. In a fight: `/combat` runs initiative, `/fight` is what "
     "you do on your turn, `/engage` covers grapples, duels and battles. **[Fortune]** = DM role, **[Kami]** = admin."
 )
+_HELP_TAG_RE = re.compile(r"\s*\[(Fortune|Kami)\]\.?\s*$")
+
+def _help_desc(desc: str) -> str:
+    """One sentence, ending in a period, with the role tag (if any) last."""
+    text = str(desc or "").strip()
+    m = _HELP_TAG_RE.search(text)
+    tag = f" [{m.group(1)}]" if m else ""
+    core = text[: m.start()] if m else text
+    core = core.rstrip().rstrip(":;,")
+    if core and core[-1] not in ".?!":
+        core += "."
+    return core + tag
 
 def _help_leaves(cmd: app_commands.Command | app_commands.Group, path: str = "") -> list[tuple[str, str]]:
     p = f"{path} {cmd.name}".strip()
@@ -5440,13 +5458,26 @@ def _help_leaves(cmd: app_commands.Command | app_commands.Group, path: str = "")
         return out
     return [(f"/{p}", cmd.description)]
 
+def _help_page_lines(cmd: app_commands.Command | app_commands.Group) -> list[str]:
+    """A group's commands: plain commands first, then each sub-group under its own header."""
+    if not isinstance(cmd, app_commands.Group):
+        return [f"`/{cmd.name}`: {_help_desc(cmd.description)}"]
+    plain = [c for c in cmd.commands if not isinstance(c, app_commands.Group)]
+    subgroups = [c for c in cmd.commands if isinstance(c, app_commands.Group)]
+    lines = [f"`/{cmd.name} {c.name}`: {_help_desc(c.description)}" for c in plain]
+    for sg in subgroups:
+        lines.append("")
+        lines.append(f"**/{cmd.name} {sg.name}**: {_help_desc(sg.description)}")
+        lines.extend(f"`/{cmd.name} {sg.name} {c.name}`: {_help_desc(c.description)}" for c in sg.commands)
+    return lines
+
 def _help_top() -> list[app_commands.Command | app_commands.Group]:
     cmds = {c.name: c for c in client.tree.get_commands()}
     ordered = [cmds.pop(n) for n in _HELP_ORDER if n in cmds]
     return ordered + [cmds[n] for n in sorted(cmds)]
 
 async def _help_category_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
-    cur = (current or "").lower()
+    cur = (current or "").lower().lstrip("/")
     return [app_commands.Choice(name=f"/{c.name}", value=c.name) for c in _help_top() if cur in c.name][:25]
 
 @client.tree.command(
@@ -5464,10 +5495,13 @@ async def help_command(
         key = category.strip().lstrip("/").lower()
         cmd = next((c for c in top if c.name == key), None)
         if cmd is None:
-            await interaction.response.send_message(f"No command group called **{category}**. Try `/help` for the list.", ephemeral=True)
+            names = ", ".join(f"`/{c.name}`" for c in top)
+            await interaction.response.send_message(
+                f"No command group called **{category}**. Groups: {names}.", ephemeral=True
+            )
             return
         leaves = _help_leaves(cmd)
-        lines = [f"`{path}`: {desc}" for path, desc in leaves]
+        lines = _help_page_lines(cmd)
         blurb = _HELP_BLURBS.get(cmd.name, "")
         embeds: list[discord.Embed] = []
         chunk: list[str] = []
@@ -5477,8 +5511,8 @@ async def help_command(
                 embeds.append(discord.Embed(description="\n".join(chunk), color=discord.Color.gold()))
                 chunk, size = [], 0
             chunk.append(line); size += len(line) + 1
-        embeds.append(discord.Embed(description="\n".join(chunk), color=discord.Color.gold()))
-        embeds[0].title = f"Rokugan Bot: /{cmd.name} ({len(leaves)})"
+        embeds.append(discord.Embed(description="\n".join(chunk).strip(), color=discord.Color.gold()))
+        embeds[0].title = f"Rokugan Bot: /{cmd.name} ({len(leaves)} command{'s' if len(leaves) != 1 else ''})"
         if blurb:
             embeds[0].description = blurb + "\n\n" + (embeds[0].description or "")
         # One embed per message: Discord caps a single message at 6000 characters across embeds.
@@ -5486,14 +5520,28 @@ async def help_command(
         for extra in embeds[1:]:
             await interaction.followup.send(embed=extra, ephemeral=True)
         return
-    # Overview: one line per group in the body (an embed holds at most 25 fields,
-    # and there are more groups than that).
-    lines = []
-    for cmd in top:
-        n = len(_help_leaves(cmd))
-        label = f"**/{cmd.name}**" + (f" ({n})" if n > 1 else "")
-        lines.append(f"{label} — {str(_HELP_BLURBS.get(cmd.name, cmd.description))}")
-    body = _HELP_START + "\n\nUse `/help category:` to list every command in a group. All game math is L5R 4th Edition.\n\n" + "\n".join(lines)
+    # Overview: sections of one line per group in the body (an embed holds at
+    # most 25 fields, and there are more groups than that).
+    by_name = {c.name: c for c in top}
+    listed: set[str] = set()
+    parts: list[str] = []
+    for section, names in _HELP_SECTIONS + [("Other", [n for n in by_name if n not in _HELP_ORDER])]:
+        entries = []
+        for name in names:
+            cmd = by_name.get(name)
+            if cmd is None:
+                continue
+            listed.add(name)
+            n = len(_help_leaves(cmd))
+            label = f"**/{cmd.name}**" + (f" ({n})" if n > 1 else "")
+            entries.append(f"{label}: {_help_desc(_HELP_BLURBS.get(cmd.name, cmd.description))}")
+        if entries:
+            parts.append(f"__**{section}**__\n" + "\n".join(entries))
+    body = (
+        _HELP_START
+        + "\n\nUse `/help category:` to list every command in a group. All game math is L5R 4th Edition.\n\n"
+        + "\n\n".join(parts)
+    )
     embed = discord.Embed(title="Rokugan Bot: Command Reference", description=body[:4096], color=discord.Color.gold())
     embed.set_footer(text="Tip: /help category:combat")
     await interaction.response.send_message(embed=embed, ephemeral=True)
