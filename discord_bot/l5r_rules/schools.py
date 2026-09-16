@@ -199,8 +199,15 @@ def parse_skills(skills: str) -> tuple[list[tuple[str, int, str | None]], list[s
         emph = None
         mp = re.search(r"\(([^)]+)\)", p)
         if mp:
-            emph = mp.group(1).strip()
-            p = re.sub(r"\s*\([^)]+\)", "", p).strip()
+            inner = mp.group(1).strip()
+            if "/" in inner:
+                wildcards.append(p)
+                continue
+            if re.search(r"\b(?:may|replace|after|instead|see |era)\b", inner, re.I):
+                p = re.sub(r"\s*\([^)]+\)", "", p).strip()
+            else:
+                emph = inner
+                p = re.sub(r"\s*\([^)]+\)", "", p).strip()
         if p:
             assigned.append((p, rank, emph))
     return assigned, wildcards
