@@ -3134,6 +3134,11 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
         skill_str = ", ".join(f"{s} {r}" for s, r in sorted(char.skills.items()))
         embed.add_field(name="Skills", value=skill_str[:1024], inline=False)
 
+    if char.emphases:
+        emph_str = ", ".join(f"{sk} ({', '.join(em)})" for sk, em in sorted(char.emphases.items()) if em)
+        if emph_str:
+            embed.add_field(name="Emphases", value=emph_str[:1024], inline=False)
+
     if char.advantages:
         embed.add_field(name="Advantages", value=", ".join(char.advantages)[:1024], inline=False)
     if char.disadvantages:
@@ -3292,6 +3297,11 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
     if char.skills:
         skill_str = ", ".join(f"{s} {r}" for s, r in sorted(char.skills.items()))
         embed.add_field(name="Skills", value=skill_str[:1024], inline=False)
+
+    if char.emphases:
+        emph_str = ", ".join(f"{sk} ({', '.join(em)})" for sk, em in sorted(char.emphases.items()) if em)
+        if emph_str:
+            embed.add_field(name="Emphases", value=emph_str[:1024], inline=False)
 
     if char.advantages:
         embed.add_field(name="Advantages", value=", ".join(char.advantages)[:1024], inline=False)
