@@ -143,6 +143,48 @@ async def _stale_turn_check() -> None:
             log.warning("Stale-turn nudge failed for channel %s", channel_id, exc_info=True)
 
 
+# Discord rejects a whole sync if any one top-level command's combined name,
+# description and choice-value text exceeds this many characters.
+COMMAND_TEXT_LIMIT: int = 8000
+
+def _command_text_chars(payload: object) -> int:
+    """Characters Discord counts toward COMMAND_TEXT_LIMIT in a command's registration payload."""
+    if isinstance(payload, dict):
+        return sum(
+            len(v) if k in ("name", "description", "value") and isinstance(v, str) else _command_text_chars(v)
+            for k, v in payload.items()
+        )
+    if isinstance(payload, list):
+        return sum(_command_text_chars(item) for item in payload)
+    return 0
+
+def _oversized_commands(tree: app_commands.CommandTree) -> list[tuple[str, int]]:
+    """(name, chars) for every top-level command whose payload Discord would refuse."""
+    out: list[tuple[str, int]] = []
+    for cmd in tree.get_commands():
+        chars = _command_text_chars(cmd.to_dict(tree))
+        if chars > COMMAND_TEXT_LIMIT:
+            out.append((cmd.name, chars))
+    return out
+
+async def _sync_tree(tree: app_commands.CommandTree, guild: discord.abc.Snowflake) -> tuple[int, str]:
+    """Register the tree with one guild and clear global copies. Returns (count, error).
+    A failed sync leaves Discord serving the previous definitions, so the error is
+    always logged and returned instead of raised."""
+    for name, chars in _oversized_commands(tree):
+        log.error("/%s registration is %d chars (limit %d): Discord will reject the sync", name, chars, COMMAND_TEXT_LIMIT)
+    try:
+        tree.copy_global_to(guild=guild)
+        synced = await tree.sync(guild=guild)
+        tree.clear_commands(guild=None)
+        await tree.sync()
+    except discord.HTTPException as e:
+        detail = getattr(e, "text", "") or str(e)
+        log.error("Command sync to guild %s FAILED: %s", getattr(guild, "id", "?"), detail)
+        return 0, detail
+    log.info("Synced %d commands to guild %s", len(synced), getattr(guild, "id", "?"))
+    return len(synced), ""
+
 class RokuganBot(discord.Client):
     def __init__(self) -> None:
         super().__init__(intents=intents)
@@ -150,24 +192,14 @@ class RokuganBot(discord.Client):
 
     async def setup_hook(self) -> None:
         if GUILD_ID:
-            guild = discord.Object(id=int(GUILD_ID))
-            self.tree.copy_global_to(guild=guild)
-            await self.tree.sync(guild=guild)
-            self.tree.clear_commands(guild=None)
-            await self.tree.sync()
-            log.info("Synced commands to dev guild %s and cleared global", GUILD_ID)
+            await _sync_tree(self.tree, discord.Object(id=int(GUILD_ID)))
 
     async def on_ready(self) -> None:
         self.tree.on_error = _on_app_command_error
         self.add_view(_ChargenButtonView())
         if not GUILD_ID:
             for g in self.guilds:
-                self.tree.copy_global_to(guild=g)
-                synced = await self.tree.sync(guild=g)
-                log.info("Synced %d commands to guild %s", len(synced), g.id)
-            self.tree.clear_commands(guild=None)
-            await self.tree.sync()
-            log.info("Cleared stale global commands")
+                await _sync_tree(self.tree, g)
         log.info("Logged in as %s (id=%s). Ready.", self.user, getattr(self.user, "id", "?"))
         for ch_id_str, data_json in store.load_all_encounters():
             try:
@@ -800,12 +832,16 @@ async def sync_commands(interaction: discord.Interaction) -> None:
         )
         return
     await interaction.response.defer(ephemeral=True)
-    guild = discord.Object(id=interaction.guild_id)
-    client.tree.copy_global_to(guild=guild)
-    synced = await client.tree.sync(guild=guild)
-    client.tree.clear_commands(guild=None)
-    await client.tree.sync()
-    await interaction.followup.send(f"Synced **{len(synced)}** commands to this server (global duplicates cleared).")
+    oversized = _oversized_commands(client.tree)
+    count, error = await _sync_tree(client.tree, discord.Object(id=interaction.guild_id))
+    if error:
+        too_big = "; ".join(f"/{n} is {c} chars (limit {COMMAND_TEXT_LIMIT})" for n, c in oversized)
+        await interaction.followup.send(
+            "Sync **failed**: Discord kept the previous command definitions.\n"
+            f"```\n{error[:1500]}\n```" + (f"\nOversized: {too_big}" if too_big else "")
+        )
+        return
+    await interaction.followup.send(f"Synced **{count}** commands to this server (global duplicates cleared).")
 
 @client.tree.command(name="whoami", description="Quick glance at your active character's status.")
 async def whoami(interaction: discord.Interaction) -> None:
