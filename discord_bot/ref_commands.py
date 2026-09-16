@@ -112,17 +112,19 @@ def build_school_embed(s: dict) -> discord.Embed:
     embed = discord.Embed(title=f"\U0001f3ef {s['name']}{kw}", color=discord.Color.dark_teal())
     cat = _SCHOOL_CATEGORY_LABEL.get(s.get("category", "basic"), "school")
     embed.description = f"{s['clan']} {cat}"
+    eff_skills, eff_honor, eff_outfit = schools.effective_fields(s)
+    benefit_display = s["benefit"].split("|")[0].strip() if s["benefit"] else ""
     meta = []
-    if s["benefit"]:
-        meta.append(f"**Benefit: ** {s['benefit']}")
-    if s["honor"]:
-        meta.append(f"**Honor: ** {s['honor']}")
+    if benefit_display:
+        meta.append(f"**Benefit: ** {benefit_display}")
+    if eff_honor:
+        meta.append(f"**Honor: ** {eff_honor}")
     if meta:
         embed.add_field(name="​", value="  ·  ".join(meta), inline=False)
-    if s["skills"]:
-        embed.add_field(name="Skills", value=s["skills"][:1024], inline=False)
-    if s["outfit"]:
-        embed.add_field(name="Outfit", value=s["outfit"][:1024], inline=False)
+    if eff_skills:
+        embed.add_field(name="Skills", value=eff_skills[:1024], inline=False)
+    if eff_outfit:
+        embed.add_field(name="Outfit", value=eff_outfit[:1024], inline=False)
     if s["affinity"]:
         embed.add_field(name="Affinity/Deficiency", value=s["affinity"][:1024], inline=False)
     if s["prereq"]:
