@@ -56,6 +56,12 @@ FAMILIES_DATA: list[dict] = [
     {"name": "Daigotsu", "clan": "Spider", "bonus_trait": "willpower"},
     {"name": "Goju", "clan": "Spider", "bonus_trait": "agility"},
     {"name": "Ninube", "clan": "Spider", "bonus_trait": "reflexes"},
+    # Imperial Families
+    {"name": "Hantei", "clan": "Imperial", "bonus_trait": "void"},
+    {"name": "Miya", "clan": "Imperial", "bonus_trait": "reflexes"},
+    {"name": "Otomo", "clan": "Imperial", "bonus_trait": "intelligence"},
+    {"name": "Seppun", "clan": "Imperial", "bonus_trait": "agility"},
+    {"name": "Toturi", "clan": "Imperial", "bonus_trait": "willpower"},
     # Minor Clans
     # Minor Clans (owner-supplied source text, 2026-09-16). In this setting the Mantis, Fox,
     # Centipede and Wasp are minor clans too, each with its own family (owner ruling 2026-09-16). Falcon families are under Crab
