@@ -51,11 +51,6 @@ FAMILIES_DATA: list[dict] = [
     {"name": "Moto", "clan": "Unicorn", "bonus_trait": "agility"},
     {"name": "Shinjo", "clan": "Unicorn", "bonus_trait": "reflexes"},
     {"name": "Utaku", "clan": "Unicorn", "bonus_trait": "stamina"},
-    # Spider Clan
-    {"name": "Chuda", "clan": "Spider", "bonus_trait": "intelligence"},
-    {"name": "Daigotsu", "clan": "Spider", "bonus_trait": "willpower"},
-    {"name": "Goju", "clan": "Spider", "bonus_trait": "agility"},
-    {"name": "Ninube", "clan": "Spider", "bonus_trait": "reflexes"},
     # Imperial Families
     {"name": "Hantei", "clan": "Imperial", "bonus_trait": "void"},
     {"name": "Miya", "clan": "Imperial", "bonus_trait": "reflexes"},
