@@ -1,8 +1,9 @@
 """/inventory: one ephemeral panel for a character's gear and purse.
 
-Shows what is in hand, armor, owned weapons, items and koku, and lets the
-owner (or staff, for any character or NPC) wield, equip off-hand, drop weapons,
-and remove items. Adding items/weapons, koku, armor, and weapon qualities are staff-only.
+Shows wielded weapons, armor, owned weapons, items and koku. Players can
+wield/unwield, equip off-hand, drop weapons, remove items, and put on or
+take off armor they own. Adding items/weapons, koku, assigning new armor,
+and weapon qualities are staff-only.
 Every change is saved with an undo snapshot and an audit line.
 """
 
@@ -36,6 +37,9 @@ class _Deps:
 
 _d: _Deps = None  # type: ignore[assignment]
 
+_BOW_SKILLS: set[str] = {"kyujutsu"}
+_ARROW_KEYWORDS: set[str] = {"arrow", "arrows"}
+
 
 def _weapon_label(key: str) -> str:
     spec = combat.WEAPON_CATALOG.get(key.lower())
@@ -44,14 +48,35 @@ def _weapon_label(key: str) -> str:
     return f"{key.replace('_', ' ')} · DR {spec['rolled']}k{spec['kept']} · {spec['skill']}"
 
 
+def _is_arrow(key: str) -> bool:
+    return any(kw in key.lower() for kw in _ARROW_KEYWORDS)
+
+
+def _is_bow(key: str) -> bool:
+    spec = combat.WEAPON_CATALOG.get(key.lower())
+    return spec is not None and spec.get("skill", "").lower() in _BOW_SKILLS
+
+
+def _armor_label(key: str) -> str:
+    spec = combat.ARMOR_CATALOG.get(key)
+    if spec is None:
+        return key.replace("_", " ")
+    return f"{key.replace('_', ' ')} (TN +{spec['tn_bonus']}, Red {spec['reduction']})"
+
+
 def build_inventory_embed(rec: storage.CharacterRecord) -> discord.Embed:
     c = rec.character
     embed = discord.Embed(title=f"🎒 {c.name}: inventory", color=discord.Color.dark_gold())
-    main = c.equipped_weapon or "unarmed"
-    off = f" + {c.off_hand_weapon} (off hand)" if c.off_hand_weapon else ""
+    main = c.equipped_weapon.replace("_", " ") if c.equipped_weapon else "unarmed"
+    off = f" + {c.off_hand_weapon.replace('_', ' ')} (off hand)" if c.off_hand_weapon else ""
     quals = f"\nQualities: {', '.join(c.weapon_qualities)}" if c.weapon_qualities else ""
     embed.add_field(name="🗡️ In hand", value=f"{main}{off}{quals}", inline=False)
-    armor = f"{c.armor_name} (Armor TN +{c.armor_tn_bonus}, Reduction {c.armor_reduction})" if c.armor_name else "none"
+    if c.armor_name:
+        armor = f"{c.armor_name.replace('_', ' ')} (Armor TN +{c.armor_tn_bonus}, Reduction {c.armor_reduction})"
+    elif c.owned_armor:
+        armor = f"{c.owned_armor.replace('_', ' ')} (not worn)"
+    else:
+        armor = "none"
     embed.add_field(name="🛡️ Armor", value=armor, inline=True)
     embed.add_field(name="💰 Koku", value=f"{c.koku:g}", inline=True)
     weapons = "\n".join(f"• {_weapon_label(w)}" for w in c.weapons) if c.weapons else "none"
@@ -127,11 +152,12 @@ class InventoryPanel(discord.ui.View):
 
     ACTIONS: list[tuple[str, str, bool]] = [  # (value, label, staff_only)
         ("drop", "Drop a weapon (remove from owned)", False),
-        ("add_item", "Add an item (staff)", True),
         ("remove_item", "Remove items", False),
+        ("wear_armor", "Put on / take off armor", False),
+        ("add_item", "Add an item (staff)", True),
         ("koku", "Koku: add or spend (staff)", True),
-        ("armor", "Armor (staff)", True),
-        ("qualities", "Weapon qualities on the wielded weapon (staff)", True),
+        ("armor", "Assign armor (staff)", True),
+        ("qualities", "Weapon qualities (staff)", True),
     ]
 
     def __init__(self, rec: storage.CharacterRecord, user_id: int, staff: bool) -> None:
@@ -192,11 +218,22 @@ class InventoryPanel(discord.ui.View):
         elif self.action == "remove_item" and c.inventory:
             opts = [discord.SelectOption(label=f"{n} × {q}"[:100], value=n[:100]) for n, q in sorted(c.inventory.items())]
             self.add_item(_Pick("Items to remove (all of each)...", opts, self._on_remove_items, 3, max_values=len(opts)))
+        elif self.action == "wear_armor":
+            opts: list[discord.SelectOption] = []
+            if c.armor_name:
+                opts.append(discord.SelectOption(label=f"Take off: {_armor_label(c.armor_name)}"[:100], value="off"))
+            if c.owned_armor and not c.armor_name:
+                opts.append(discord.SelectOption(label=f"Put on: {_armor_label(c.owned_armor)}"[:100], value="on"))
+            if not opts:
+                self.status = "You don't own any armor. Staff can assign armor with `/stat armor`."
+                self.action = ""
+            else:
+                self.add_item(_Pick("Armor...", opts, self._on_wear_armor, 3))
         elif self.action == "armor":
             opts = [discord.SelectOption(label="none", value="none", default=not c.armor_name)] + [
                 discord.SelectOption(label=k.replace("_", " "), value=k, description=f"Armor TN +{a['tn_bonus']}, Reduction {a['reduction']}",
                                      default=k == c.armor_name) for k, a in combat.ARMOR_CATALOG.items()]
-            self.add_item(_Pick("Armor...", opts, self._on_armor, 3))
+            self.add_item(_Pick("Assign armor...", opts, self._on_armor, 3))
         elif self.action == "qualities":
             quals = sorted(combat.WEAPON_QUALITIES)
             opts = [discord.SelectOption(label=q.title(), value=q, default=q in c.weapon_qualities) for q in quals]
@@ -208,14 +245,22 @@ class InventoryPanel(discord.ui.View):
     # -- handlers ------------------------------------------------------------
     async def _on_main(self, interaction: discord.Interaction, values: list[str]) -> None:
         c = self.rec.character
-        c.equipped_weapon = values[0].lower() if values else ""
-        if not c.equipped_weapon:
+        new_weapon = values[0].lower() if values else ""
+        if not new_weapon:
+            c.equipped_weapon = ""
             c.off_hand_weapon = ""
             await self.commit(interaction, f"🗡️ **{c.name}** lowers their weapons (unarmed).", "wield")
             return
+        if _is_arrow(new_weapon):
+            has_bow = _is_bow(c.off_hand_weapon) if c.off_hand_weapon else False
+            if not has_bow:
+                self.status = "Arrows must be used with a bow. Equip a bow first (main or off hand)."
+                await self.render(interaction)
+                return
+        c.equipped_weapon = new_weapon
         if c.off_hand_weapon == c.equipped_weapon:
             c.off_hand_weapon = ""
-        await self.commit(interaction, f"🗡️ **{c.name}** wields **{c.equipped_weapon}**.", "wield")
+        await self.commit(interaction, f"🗡️ **{c.name}** wields **{c.equipped_weapon.replace('_', ' ')}**.", "wield")
 
     async def _on_off(self, interaction: discord.Interaction, values: list[str]) -> None:
         c = self.rec.character
@@ -224,15 +269,19 @@ class InventoryPanel(discord.ui.View):
             self.status = "Wield a main-hand weapon first."
             await self.render(interaction)
             return
+        if _is_arrow(off):
+            self.status = "Arrows go in the main hand with a bow in the off hand, not the other way around."
+            await self.render(interaction)
+            return
         c.off_hand_weapon = "" if off == c.equipped_weapon else off
-        msg = f"🗡️ Off hand: **{c.off_hand_weapon or 'nothing'}**." if off != c.equipped_weapon else "That weapon is already in the main hand."
+        msg = f"🗡️ Off hand: **{c.off_hand_weapon.replace('_', ' ') or 'nothing'}**." if off != c.equipped_weapon else "That weapon is already in the main hand."
         await self.commit(interaction, msg, "wield")
 
     async def _on_action(self, interaction: discord.Interaction, values: list[str]) -> None:
         action = values[0] if values else ""
         staff_only = {v for v, _, s in self.ACTIONS if s}
         if (action in staff_only or action.startswith("add:")) and not self.staff:
-            self.status = f"Adding items, koku, weapons, armor, and qualities are managed by **{_d.role_fortune}**."
+            self.status = f"Adding items, koku, assigning armor, and qualities are managed by **{_d.role_fortune}**."
             await self.render(interaction)
             return
         if action == "add_item":
@@ -288,11 +337,33 @@ class InventoryPanel(discord.ui.View):
                 removed.append(key)
         await self.commit(interaction, "Removed: " + ", ".join(f"**{r}**" for r in removed) + ".", "item")
 
+    async def _on_wear_armor(self, interaction: discord.Interaction, values: list[str]) -> None:
+        c = self.rec.character
+        choice = values[0] if values else ""
+        if choice == "off" and c.armor_name:
+            c.owned_armor = c.armor_name
+            c.armor_name, c.armor_tn_bonus, c.armor_reduction = "", 0, 0
+            await self.commit(interaction, f"🛡️ **{c.name}** takes off **{c.owned_armor.replace('_', ' ')}**.", "armor")
+        elif choice == "on" and c.owned_armor:
+            spec = combat.get_armor(c.owned_armor)
+            if spec is None:
+                self.status = f"Armor '{c.owned_armor}' is no longer in the catalog."
+                await self.render(interaction)
+                return
+            c.armor_name = c.owned_armor
+            c.armor_tn_bonus, c.armor_reduction = spec["tn_bonus"], spec["reduction"]
+            note = f"\n⚠️ {spec['special']}" if spec.get("special") else ""
+            await self.commit(interaction, f"🛡️ **{c.name}** puts on **{c.armor_name.replace('_', ' ')}**: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}.{note}", "armor")
+        else:
+            self.action = ""
+            await self.render(interaction)
+
     async def _on_armor(self, interaction: discord.Interaction, values: list[str]) -> None:
         c = self.rec.character
         a = values[0]
         if a == "none":
             c.armor_name, c.armor_tn_bonus, c.armor_reduction = "", 0, 0
+            c.owned_armor = ""
             await self.commit(interaction, f"Removed armor from **{c.name}**.", "armor")
             return
         spec = combat.get_armor(a)
@@ -300,9 +371,10 @@ class InventoryPanel(discord.ui.View):
             self.status = f"Unknown armor {a}."
             await self.render(interaction)
             return
+        c.owned_armor = a
         c.armor_name, c.armor_tn_bonus, c.armor_reduction = a, spec["tn_bonus"], spec["reduction"]
         note = f"\n⚠️ {spec['special']}" if spec.get("special") else ""
-        await self.commit(interaction, f"🛡️ **{c.name}** wears **{a}**: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}.{note}", "armor")
+        await self.commit(interaction, f"🛡️ **{c.name}** wears **{a.replace('_', ' ')}**: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}.{note}", "armor")
 
     async def _on_qualities(self, interaction: discord.Interaction, values: list[str]) -> None:
         c = self.rec.character

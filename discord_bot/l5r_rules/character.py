@@ -77,6 +77,7 @@ class Character:
     wounds_taken: int = 0
 
     # -- Armor & equipment --
+    owned_armor: str = ""
     armor_name: str = ""
     armor_tn_bonus: int = 0
     armor_reduction: int = 0

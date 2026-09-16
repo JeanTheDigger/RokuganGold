@@ -561,7 +561,12 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         inline=False,
     )
 
-    gear = f"Armor: {c.armor_name or ' '}  (TN +{c.armor_tn_bonus}, Reduction {c.armor_reduction})"
+    if c.armor_name:
+        gear = f"Armor: {c.armor_name}  (TN +{c.armor_tn_bonus}, Reduction {c.armor_reduction})"
+    elif c.owned_armor:
+        gear = f"Armor: {c.owned_armor}  (not worn)"
+    else:
+        gear = "Armor: —"
     if c.equipped_weapon:
         wield = c.equipped_weapon
         if c.off_hand_weapon:
@@ -3769,6 +3774,7 @@ async def sheet_armor(
     a = armor.lower().strip()
     if a in ("none", "", "remove"):
         c.armor_name = ""
+        c.owned_armor = ""
         c.armor_tn_bonus = 0
         c.armor_reduction = 0
         msg = f"Removed armor from **{c.name}**."
@@ -3780,6 +3786,7 @@ async def sheet_armor(
             )
             return
         c.armor_name = a
+        c.owned_armor = a
         c.armor_tn_bonus = spec["tn_bonus"]
         c.armor_reduction = spec["reduction"]
         heavy = " (heavy)" if spec["is_heavy"] else ""
@@ -6025,6 +6032,7 @@ async def npc_equip(
         a = armor.lower().strip()
         if a in ("none", "", "remove"):
             c.armor_name = ""
+            c.owned_armor = ""
             c.armor_tn_bonus = 0
             c.armor_reduction = 0
             changes.append("Armor: **(none)**")
@@ -6032,11 +6040,13 @@ async def npc_equip(
             spec = combat.get_armor(a)
             if spec is not None:
                 c.armor_name = a
+                c.owned_armor = a
                 c.armor_tn_bonus = spec["tn_bonus"]
                 c.armor_reduction = spec["reduction"]
                 changes.append(f"Armor: **{a}** (ATN+{spec['tn_bonus']}, Red {spec['reduction']})")
             else:
                 c.armor_name = a
+                c.owned_armor = a
                 changes.append(f"Armor: **{a}** (custom — set ATN/Reduction manually)")
     if not changes:
         await interaction.response.send_message(
