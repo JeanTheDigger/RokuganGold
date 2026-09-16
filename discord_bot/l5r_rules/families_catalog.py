@@ -14,9 +14,9 @@ FAMILIES_DATA: list[dict] = [
     {"name": "Yasuki", "clan": "Crab", "bonus_trait": "awareness"},
     # Crane Clan
     {"name": "Asahina", "clan": "Crane", "bonus_trait": "intelligence"},
-    {"name": "Daidoji", "clan": "Crane", "bonus_trait": "agility"},
+    {"name": "Daidoji", "clan": "Crane", "bonus_trait": "stamina"},
     {"name": "Doji", "clan": "Crane", "bonus_trait": "awareness"},
-    {"name": "Kakita", "clan": "Crane", "bonus_trait": "reflexes"},
+    {"name": "Kakita", "clan": "Crane", "bonus_trait": "agility"},
     # Dragon Clan
     {"name": "Kitsuki", "clan": "Dragon", "bonus_trait": "awareness"},
     {"name": "Mirumoto", "clan": "Dragon", "bonus_trait": "agility"},
