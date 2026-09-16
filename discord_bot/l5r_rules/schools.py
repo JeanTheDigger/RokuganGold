@@ -10,6 +10,55 @@ import re
 
 from .schools_catalog import SCHOOLS_DATA
 
+
+def _normalize_technique_ranks() -> None:
+    """Fix rank-0 techniques left by the extraction script.
+
+    L5R 4e has no rank 0 — every technique has a positive rank.
+    Basic schools: sequential ranks 1, 2, 3, ...
+    Advanced schools: sequential ranks 1, 2, 3, ... (relative to the school)
+    Alternate paths: rank from 'Replaces: X N' prereq, else 1.
+    """
+    for school in SCHOOLS_DATA:
+        techs = school.get("techniques", [])
+        if not any(t["rank"] == 0 for t in techs):
+            continue
+
+        cat = school.get("category", "basic")
+        prereq = school.get("prereq", "")
+
+        if cat in ("basic", "advanced"):
+            for i, t in enumerate(techs):
+                if t["rank"] == 0:
+                    t["rank"] = i + 1
+        else:
+            rank = _parse_replacement_rank(prereq)
+            for t in techs:
+                if t["rank"] == 0:
+                    t["rank"] = rank
+
+
+def _parse_replacement_rank(prereq: str) -> int:
+    """Extract the technique rank an alternate path replaces.
+
+    Patterns handled:
+      'Replaces: Hida Bushi 2'          -> 2
+      'Replaces: Hida Bushi Rank 2'     -> 2
+      'Rank 6. Must attain ...'         -> 6
+      'Replaces: Any ...'               -> 1
+      '' or 'Requires: ...'             -> 1
+    """
+    m = re.search(r"Replaces:\s*.+?(?:Rank\s+)?(\d+)", prereq)
+    if m:
+        return int(m.group(1))
+    m = re.match(r"Rank\s+(\d+)", prereq)
+    if m:
+        return int(m.group(1))
+    return 1
+
+
+_normalize_technique_ranks()
+
 _TRAITS = {
     "stamina", "willpower", "strength", "perception",
     "agility", "intelligence", "reflexes", "awareness", "void",
