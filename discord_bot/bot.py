@@ -1773,6 +1773,8 @@ class _ChargenResumeView(views_base.PersistentView):
 _CHARGEN_XP = 40
 _MAX_DISADVANTAGE_XP = 10
 _EMPHASIS_XP_COST = 2
+_CHARGEN_TRAIT_CAP = 4   # L5R 4e: no starting character may begin with any ability above 4
+_CHARGEN_SKILL_CAP = 4
 
 _SKILL_CATEGORIES: dict[str, list[str]] = {
     "Bugei": [
@@ -2303,8 +2305,7 @@ class _TraitRaiseSelect(discord.ui.Select):
             cur = base.void_ring if t == "void" else base.get_trait(t)
             bought = state.get("trait_purchases", {}).get(t, 0)
             effective = cur + bought
-            cap = advancement.MAX_VOID_RANK if t == "void" else advancement.MAX_TRAIT_RANK
-            if effective >= cap:
+            if effective >= _CHARGEN_TRAIT_CAP:
                 continue
             mult = advancement.VOID_XP_MULT if t == "void" else advancement.TRAIT_XP_MULT
             cost = (effective + 1) * mult
@@ -2756,7 +2757,7 @@ class _SkillSelect(discord.ui.Select):
             base_rank = base.skills.get(sk, 0)
             bought = state.get("skill_purchases", {}).get(sk, 0)
             effective = base_rank + bought
-            if effective >= advancement.MAX_SKILL_RANK:
+            if effective >= _CHARGEN_SKILL_CAP:
                 continue
             cost = (effective + 1) * advancement.SKILL_XP_MULT
             label = f"{sk} ({effective} → {effective + 1})" if effective > 0 else f"{sk} (0 → 1)"
