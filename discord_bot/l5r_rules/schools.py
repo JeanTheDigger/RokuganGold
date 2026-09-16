@@ -22,7 +22,14 @@ _BY_NAME = {s["name"].lower(): s for s in SCHOOLS_DATA}
 
 
 def get(name: str) -> dict | None:
-    return _BY_NAME.get(name.lower().strip())
+    """Exact (case-insensitive) match, else the one school whose name starts with
+    the text before its ': Clan' tag ("Usagi Bushi" finds "Usagi Bushi: Hare Clan")."""
+    key = name.lower().strip()
+    hit = _BY_NAME.get(key)
+    if hit is not None or not key:
+        return hit
+    starts = [s for k, s in _BY_NAME.items() if k.startswith(key + ":") or k.startswith(key + " (")]
+    return starts[0] if len(starts) == 1 else None
 
 
 def search(query: str) -> list[dict]:
