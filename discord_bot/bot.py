@@ -29,6 +29,7 @@ from discord.ext import tasks
 import encounter
 import cog_checks
 import cog_combat
+import cog_npc_builder
 import ref_commands
 import storage
 import views_base
@@ -5445,7 +5446,7 @@ _HELP_BLURBS: dict[str, str] = {
     "room": "Private play rooms (threads) with invites.",
     "location": "In-character areas and location channels.",
     "date": "The current Rokugani calendar date.",
-    "npc": "Stored NPCs: generate, view, place in rooms, speak as them [Fortune].",
+    "npc": "Stored NPCs: build with exact stats, templates, generate, view, place in rooms, speak as them [Fortune].",
     "npc-edit": "Edit NPC stats and gear [Fortune].",
     "creature": "Bestiary creatures: spawn, wound, attack [Fortune].",
     "category": "Group NPCs and creatures for bulk actions [Fortune].",
@@ -5676,7 +5677,7 @@ async def npc_list(interaction: discord.Interaction) -> None:
     recs = store.list_by_owner(str(interaction.guild_id), NPC_OWNER)
     if not recs:
         await interaction.response.send_message(
-            "No NPCs yet. Create one with `/npc generate` (Fortune).", ephemeral=True
+            "No NPCs yet. Build one with `/npc create` or `/npc form`, or spawn from a template (Fortune).", ephemeral=True
         )
         return
     lines = [
@@ -11233,6 +11234,17 @@ cog_combat.init(
     weapon_autocomplete=_weapon_autocomplete,
     creature_instance_autocomplete=_creature_instance_autocomplete,
     category_autocomplete=_category_autocomplete,
+)
+
+cog_npc_builder.init(
+    store=store,
+    npc_owner=NPC_OWNER,
+    require_guild=_require_guild,
+    require_dm_role=_require_dm_role,
+    is_dm=_is_dm,
+    build_sheet_embed=build_sheet_embed,
+    npc_autocomplete=_npc_autocomplete,
+    npc_group=npc_group,
 )
 
 ref_commands.init(

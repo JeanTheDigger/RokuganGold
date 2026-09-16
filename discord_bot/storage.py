@@ -115,6 +115,19 @@ CREATE TABLE IF NOT EXISTS xp_log_channels (
     channel_id TEXT NOT NULL
 );
 """,
+    # 10: reusable NPC templates (/npc template ...), one row per guild + name
+    """\
+CREATE TABLE IF NOT EXISTS npc_templates (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_npc_template_unique ON npc_templates (guild_id, name COLLATE NOCASE);
+""",
 ]
 
 # How many before-states to keep per character/creature for /dm undo.
@@ -819,6 +832,48 @@ class Store:
             )
 
     # -- XP log channel (Kami only) --------------------------------------------
+    # -- NPC templates --------------------------------------------------------
+    def save_npc_template(self, guild_id: str, name: str, data: dict, created_by: str = "") -> None:
+        """Insert or replace the template with this (case-insensitive) name."""
+        now = time.time()
+        payload = json.dumps(data)
+        with self._lock, self._conn:
+            row = self._conn.execute(
+                "SELECT id FROM npc_templates WHERE guild_id = ? AND name = ? COLLATE NOCASE", (guild_id, name),
+            ).fetchone()
+            if row:
+                self._conn.execute(
+                    "UPDATE npc_templates SET name = ?, data = ?, created_by = ?, updated_at = ? WHERE id = ?",
+                    (name, payload, created_by, now, row["id"]),
+                )
+            else:
+                self._conn.execute(
+                    "INSERT INTO npc_templates (guild_id, name, data, created_by, created_at, updated_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    (guild_id, name, payload, created_by, now, now),
+                )
+
+    def get_npc_template(self, guild_id: str, name: str) -> tuple[str, dict] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT name, data FROM npc_templates WHERE guild_id = ? AND name = ? COLLATE NOCASE", (guild_id, name),
+            ).fetchone()
+        return (row["name"], json.loads(row["data"])) if row else None
+
+    def list_npc_templates(self, guild_id: str) -> list[tuple[str, dict]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT name, data FROM npc_templates WHERE guild_id = ? ORDER BY name COLLATE NOCASE", (guild_id,),
+            ).fetchall()
+        return [(r["name"], json.loads(r["data"])) for r in rows]
+
+    def delete_npc_template(self, guild_id: str, name: str) -> bool:
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM npc_templates WHERE guild_id = ? AND name = ? COLLATE NOCASE", (guild_id, name),
+            )
+        return cur.rowcount > 0
+
     def set_xp_log_channel(self, guild_id: str, channel_id: str) -> None:
         with self._lock, self._conn:
             self._conn.execute(
