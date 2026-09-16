@@ -45,9 +45,10 @@ FAMILIES_DATA: list[dict] = [
     {"name": "Soshi", "clan": "Scorpion", "bonus_trait": "intelligence"},
     {"name": "Yogo", "clan": "Scorpion", "bonus_trait": "willpower"},
     # Unicorn Clan
-    {"name": "Ide", "clan": "Unicorn", "bonus_trait": "awareness"},
-    {"name": "Iuchi", "clan": "Unicorn", "bonus_trait": "willpower"},
-    {"name": "Moto", "clan": "Unicorn", "bonus_trait": "strength"},
+    {"name": "Horiuchi", "clan": "Unicorn", "bonus_trait": "willpower"},
+    {"name": "Ide", "clan": "Unicorn", "bonus_trait": "perception"},
+    {"name": "Iuchi", "clan": "Unicorn", "bonus_trait": "intelligence"},
+    {"name": "Moto", "clan": "Unicorn", "bonus_trait": "agility"},
     {"name": "Shinjo", "clan": "Unicorn", "bonus_trait": "reflexes"},
     {"name": "Utaku", "clan": "Unicorn", "bonus_trait": "stamina"},
     # Spider Clan
