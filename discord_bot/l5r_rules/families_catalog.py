@@ -53,14 +53,19 @@ FAMILIES_DATA: list[dict] = [
     {"name": "Goju", "clan": "Spider", "bonus_trait": "agility"},
     {"name": "Ninube", "clan": "Spider", "bonus_trait": "reflexes"},
     # Minor Clans
-    {"name": "Kasuga", "clan": "Tortoise", "bonus_trait": "intelligence"},
-    {"name": "Suzume", "clan": "Sparrow", "bonus_trait": "stamina"},
-    {"name": "Tsi", "clan": "Oriole", "bonus_trait": "intelligence"},
-    {"name": "Usagi", "clan": "Hare", "bonus_trait": "agility"},
+    # Minor Clans (owner-supplied source text, 2026-09-16). Falcon families are under Crab
+    # (Toritaka), Fox under Mantis (Kitsune), Snake under Spider (Chuda).
+    {"name": "Ichiro", "clan": "Badger", "bonus_trait": "strength"},
+    {"name": "Komori", "clan": "Bat", "bonus_trait": "intelligence"},
+    {"name": "Heichi", "clan": "Boar", "bonus_trait": "willpower"},
     {"name": "Tonbo", "clan": "Dragonfly", "bonus_trait": "awareness"},
-    {"name": "Ujina", "clan": "Hare", "bonus_trait": "perception"},
-    {"name": "Ichiro", "clan": "Badger", "bonus_trait": "stamina"},
-    {"name": "Ox", "clan": "Ox", "bonus_trait": "strength"},
-    {"name": "Komori", "clan": "Bat", "bonus_trait": "awareness"},
-    {"name": "Toku", "clan": "Monkey", "bonus_trait": "willpower"},
+    {"name": "Usagi", "clan": "Hare", "bonus_trait": "awareness"},
+    {"name": "Ujina", "clan": "Hare", "bonus_trait": "agility"},
+    {"name": "Toku", "clan": "Monkey", "bonus_trait": "stamina"},
+    {"name": "Fuzake", "clan": "Monkey", "bonus_trait": "perception"},
+    {"name": "Tsi", "clan": "Oriole", "bonus_trait": "strength"},
+    {"name": "Morito", "clan": "Ox", "bonus_trait": "stamina"},
+    {"name": "Suzume", "clan": "Sparrow", "bonus_trait": "awareness"},
+    {"name": "Yotsu", "clan": "Tiger", "bonus_trait": "intelligence"},
+    {"name": "Kasuga", "clan": "Tortoise", "bonus_trait": "perception"},
 ]
