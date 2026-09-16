@@ -2349,6 +2349,92 @@ async def _chargen_traits(interaction: discord.Interaction, state: dict) -> None
     )
 
 
+# --- Advantage / disadvantage choice prompts ---
+# Entries with a fixed XP cost that need the player to specify a detail.
+# (label: max 45 chars for Discord TextInput, placeholder: max 100 chars)
+_CHARGEN_CHOICES: dict[str, tuple[str, str]] = {
+    # Advantages
+    "Chosen by the Oracles": ("Which Oracle?", "Air, Earth, Fire, Water, or Void"),
+    "Dark Paragon": ("Which Shourido tenet?", "Control, Determination, Insight, Knowledge, Perfection, Strength, or Will"),
+    "Different School": ("Which school?", "Full school name (e.g. Kakita Bushi)"),
+    "Elemental Blessing": ("Which element?", "Air, Earth, Fire, or Water"),
+    "Forbidden Knowledge": ("What forbidden topic?", "e.g. Maho, Kolat, Lying Darkness, Gozoku"),
+    "Friend of the Elements": ("Which element?", "Air, Earth, Fire, or Water"),
+    "Great Potential": ("Which Skill?", "One Skill you possess (e.g. Kenjutsu)"),
+    "Heart of Vengeance": ("Against whom?", "A clan, family, or group (e.g. Scorpion Clan)"),
+    "Higher Purpose": ("What is the purpose?", "A specific goal or cause"),
+    "Inheritance": ("What item?", "Describe the inherited item (weapon, armor, etc.)"),
+    "Inner Gift": ("Which Inner Gift?", "Empathy, Foresight, Lesser Prophecy, Tongues, or other"),
+    "Languages": ("Which language(s)?", "e.g. Gaijin (Merenae), Nezumi, Senpet, Yobanjin"),
+    "Multiple Schools": ("Which second school?", "Full school name (e.g. Doji Courtier)"),
+    "Paragon": ("Which Bushido tenet?", "Compassion, Courage, Courtesy, Duty, Honesty, Honor, or Sincerity"),
+    "Seven Fortunes' Blessing": ("Which Fortune?", "Benten, Bishamon, Daikoku, Ebisu, Fukurokujin, Hotei, or Jurojin"),
+    "Social Position": ("What position?", "e.g. Magistrate, Imperial Herald, Governor's Advisor"),
+    "Soul of Artistry": ("Which Artisan Skill?", "e.g. Painting, Poetry, Ikebana, Origami, Sculpture"),
+    "Spy Network": ("Where?", "Province, city, or region your network covers"),
+    "Touch of the Spirit Realms": ("Which spirit realm?", "Chikushudo, Gaki-do, Meido, Sakkaku, Tengoku, Toshigoku, Yomi, Yume-do"),
+    "Way of the Land": ("Which province?", "Province name (e.g. Beiden, Ryoko Owari)"),
+    # Disadvantages
+    "Bad Fortune": ("Which type?", "Secret Love, Disfigurement, Evil Eye, Allergy, Lingering Misfortune, Unknown Enemy"),
+    "Compulsion": ("What compulsion?", "e.g. Gambling, Drinking, Lying, Cleaning, Bragging"),
+    "Cursed by the Realm": ("Which spirit realm?", "Chikushudo, Gaki-do, Jigoku, Maigo no Musha, Meido, Sakkaku, Tengoku, etc."),
+    "Dark Secret": ("What is the secret?", "Describe briefly (only DM and you see this)"),
+    "Doubt": ("Which School Skill?", "One of your School Skills (e.g. Kenjutsu)"),
+    "Driven": ("What goal?", "The goal you would sacrifice anything for"),
+    "Elemental Imbalance": ("Which element?", "Air, Earth, Fire, or Water (not your Deficiency)"),
+    "Fascination": ("What subject?", "e.g. Gaijin culture, the Shadowlands, ancient history"),
+    "Haunted": ("By what or whom?", "e.g. An ancestor, a spirit, a vengeful ghost"),
+    "Jealousy": ("Jealous of whom?", "A specific PC or major NPC name"),
+    "Lost Love": ("Who was lost?", "Name, clan/family, circumstances"),
+    "Obligation": ("Obligated to whom?", "Person, group, or organization (e.g. your daimyo, a monk order)"),
+    "Phobia": ("What do you fear?", "e.g. Fire, Heights, Water, Spiders, Crowds, the Shadowlands"),
+    "Seven Fortunes' Curse": ("Which Fortune's curse?", "Benten, Bishamon, Daikoku, Ebisu, Fukurokujin, Hotei (6 pts), Jurojin"),
+    "True Love": ("Who is your true love?", "Name and brief description"),
+    "Weakness": ("Which Trait?", "Agility, Awareness, Intelligence, Perception, Reflexes, Stamina, Strength, Willpower"),
+    "Wrath of the Kami": ("Which element?", "Air, Earth, Fire, or Water"),
+}
+
+
+class _AdvChoiceModal(discord.ui.Modal):
+    choice = discord.ui.TextInput(label="Specify", max_length=100, required=True)
+
+    def __init__(self, state: dict, entry: dict, kind: str, label: str, placeholder: str):
+        super().__init__(title=entry["name"][:45])
+        self.state = state
+        self.entry = entry
+        self.kind = kind
+        self.choice.label = label[:45]
+        self.choice.placeholder = placeholder[:100]
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        detail = self.choice.value.strip()
+        if not detail:
+            await interaction.response.send_message("Please specify a choice.", ephemeral=True)
+            return
+        name = f"{self.entry['name']} ({detail})"
+        entry_data = {"name": name, "points": self.entry["points"]}
+        if self.kind == "advantage":
+            self.state.setdefault("advantages_chosen", []).append(entry_data)
+            _, remaining = _calc_chargen_xp(self.state)
+            if remaining < 0:
+                self.state["advantages_chosen"].pop()
+                await interaction.response.send_message("Not enough XP for that advantage.", ephemeral=True)
+                return
+            await _chargen_advantages(interaction, self.state)
+        else:
+            current_disadv_xp = sum(d["points"] for d in self.state.get("disadvantages_chosen", []))
+            if current_disadv_xp >= _MAX_DISADVANTAGE_XP:
+                await interaction.response.send_message(
+                    f"Maximum {_MAX_DISADVANTAGE_XP} XP from disadvantages already reached.", ephemeral=True,
+                )
+                return
+            self.state.setdefault("disadvantages_chosen", []).append(entry_data)
+            await _chargen_disadvantages(interaction, self.state)
+
+
 # --- Step 6: Advantages ---
 class _AdvantageSelect(discord.ui.Select):
     def __init__(self, state: dict, category: str):
@@ -2380,6 +2466,11 @@ class _AdvantageSelect(discord.ui.Select):
         adv = advantages.get(chosen, "advantage")
         if not adv or adv.get("points") is None:
             await interaction.response.send_message("That advantage has a variable cost; ask a DM.", ephemeral=True)
+            return
+        choice_spec = _CHARGEN_CHOICES.get(adv["name"])
+        if choice_spec:
+            modal = _AdvChoiceModal(self.state, adv, "advantage", choice_spec[0], choice_spec[1])
+            await interaction.response.send_modal(modal)
             return
         self.state.setdefault("advantages_chosen", []).append({"name": adv["name"], "points": adv["points"]})
         _, remaining = _calc_chargen_xp(self.state)
@@ -2500,6 +2591,11 @@ class _DisadvantageSelect(discord.ui.Select):
                 f"You've already reached the maximum {_MAX_DISADVANTAGE_XP} XP from disadvantages.",
                 ephemeral=True,
             )
+            return
+        choice_spec = _CHARGEN_CHOICES.get(dis["name"])
+        if choice_spec:
+            modal = _AdvChoiceModal(self.state, dis, "disadvantage", choice_spec[0], choice_spec[1])
+            await interaction.response.send_modal(modal)
             return
         self.state.setdefault("disadvantages_chosen", []).append({"name": dis["name"], "points": dis["points"]})
         await _chargen_disadvantages(interaction, self.state)

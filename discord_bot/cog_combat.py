@@ -1752,12 +1752,13 @@ async def attack(
         target_owner_id = target_rec.owner_id if target_rec is not None else None
         owner_ping = f" <@{target_owner_id}>" if target_owner_id and target_owner_id != _d.NPC_OWNER else ""
         if approval_ch:
+            await interaction.response.send_message(
+                content=f"⚔️ **{a_name}** hit **{t_name}** — damage approval pending in the DM channel.{owner_ping}",
+                embed=embed,
+            )
             embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
             embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
             await view.persist(await approval_ch.send(content=f"{_d.dm_ping(interaction.guild)}{prompt}", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
-            await interaction.response.send_message(
-                f"⚔️ **{a_name}** hit **{t_name}** — damage approval pending in the DM channel.{owner_ping}"
-            )
         else:
             await interaction.response.send_message(content=f"{_d.dm_ping(interaction.guild)}{prompt}{owner_ping}", embed=embed, view=view, allowed_mentions=_PING_MENTIONS)
             await view.persist(await interaction.original_response())

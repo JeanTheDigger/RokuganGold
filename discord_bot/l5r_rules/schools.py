@@ -259,6 +259,10 @@ _WEAPON_KEYWORDS: dict[str, str] = {
     "spear": "yari",
     "yari": "yari",
     "naginata": "naginata",
+    "nagamaki": "nagamaki",
+    "bisento": "bisento",
+    "nage-yari": "nage_yari",
+    "lance": "lance",
 }
 
 _WORD_NUMBERS = {
