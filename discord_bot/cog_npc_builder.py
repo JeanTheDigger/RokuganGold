@@ -166,6 +166,13 @@ def materialize(state: dict) -> Character:
                 c.equipped_weapon = w
             else:
                 c.off_hand_weapon = w
+    if not c.equipped_weapon and not state.get("original"):
+        # Nothing picked for the hand: wield the first catalog weapon from the school outfit,
+        # because a character with nothing in hand attacks unarmed.
+        for w in c.weapons:
+            if w.lower() in combat.WEAPON_CATALOG:
+                c.equipped_weapon = w.lower()
+                break
     armor = (state.get("armor") or "").strip().lower()
     if armor and armor != "none":
         spec = combat.get_armor(armor)

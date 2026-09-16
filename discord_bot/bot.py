@@ -4687,6 +4687,17 @@ def _parse_advdis_name(raw: str, kind: str) -> tuple[dict | None, str]:
     return entry, canonical
 
 
+def _auto_wield(c: Character) -> str:
+    """If nothing is in hand but the character owns a catalog weapon, wield the first one.
+    Returns the weapon wielded, or ''. Nothing wielded means every attack is unarmed."""
+    if c.equipped_weapon:
+        return c.equipped_weapon
+    for w in c.weapons:
+        if w.lower() in combat.WEAPON_CATALOG:
+            c.equipped_weapon = w.lower()
+            return c.equipped_weapon
+    return ""
+
 def _modify_inventory(
     inventory: dict[str, int], char_name: str,
     item_name: str, quantity: int, remove: bool,
@@ -5489,6 +5500,11 @@ async def npc_generate(
         school_skills=school_skills,
         base_honor=(base_honor if base_honor is not None else 3.5),
     )
+    if catalog:
+        # The school's starting outfit, with the first weapon in hand: an NPC with
+        # nothing wielded attacks unarmed, so a generated bushi must carry its blade.
+        schools.apply_outfit(char, catalog.get("outfit", ""))
+        _auto_wield(char)
     try:
         rec = store.create_character(str(interaction.guild_id), NPC_OWNER, char)
     except storage.DuplicateNameError:

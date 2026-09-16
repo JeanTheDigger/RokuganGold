@@ -170,11 +170,11 @@ class InventoryPanel(discord.ui.View):
         c = self.rec.character
         owned = [w for w in c.weapons]
         hand_opts = [discord.SelectOption(label="unarmed", value="", default=not c.equipped_weapon)] + [
-            discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w == c.equipped_weapon) for w in owned
+            discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w.lower() == c.equipped_weapon.lower()) for w in owned
         ]
         self.add_item(_Pick("Main hand...", hand_opts, self._on_main, 0))
         off_opts = [discord.SelectOption(label="(no off-hand)", value="", default=not c.off_hand_weapon)] + [
-            discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w == c.off_hand_weapon) for w in owned
+            discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w.lower() == c.off_hand_weapon.lower()) for w in owned
         ]
         self.add_item(_Pick("Off hand...", off_opts, self._on_off, 1))
         groups = sorted({w["skill"] for w in combat.WEAPON_CATALOG.values()})
@@ -207,7 +207,7 @@ class InventoryPanel(discord.ui.View):
     # -- handlers ------------------------------------------------------------
     async def _on_main(self, interaction: discord.Interaction, values: list[str]) -> None:
         c = self.rec.character
-        c.equipped_weapon = values[0] if values else ""
+        c.equipped_weapon = values[0].lower() if values else ""
         if not c.equipped_weapon:
             c.off_hand_weapon = ""
             await self.commit(interaction, f"🗡️ **{c.name}** lowers their weapons (unarmed).", "wield")
@@ -218,7 +218,7 @@ class InventoryPanel(discord.ui.View):
 
     async def _on_off(self, interaction: discord.Interaction, values: list[str]) -> None:
         c = self.rec.character
-        off = values[0] if values else ""
+        off = values[0].lower() if values else ""
         if off and not c.equipped_weapon:
             self.status = "Wield a main-hand weapon first."
             await self.render(interaction)
@@ -254,7 +254,7 @@ class InventoryPanel(discord.ui.View):
 
     async def _on_add_weapon(self, interaction: discord.Interaction, values: list[str]) -> None:
         c = self.rec.character
-        w = values[0]
+        w = values[0].lower()
         if w in [x.lower() for x in c.weapons]:
             self.status = f"**{c.name}** already owns a {w}."
             await self.render(interaction)
@@ -266,10 +266,10 @@ class InventoryPanel(discord.ui.View):
     async def _on_drop(self, interaction: discord.Interaction, values: list[str]) -> None:
         c = self.rec.character
         w = values[0]
-        c.weapons = [x for x in c.weapons if x != w]
-        if c.equipped_weapon == w:
+        c.weapons = [x for x in c.weapons if x.lower() != w.lower()]
+        if c.equipped_weapon.lower() == w.lower():
             c.equipped_weapon = ""
-        if c.off_hand_weapon == w:
+        if c.off_hand_weapon.lower() == w.lower():
             c.off_hand_weapon = ""
         await self.commit(interaction, f"Dropped **{w}**.", "equip")
 
