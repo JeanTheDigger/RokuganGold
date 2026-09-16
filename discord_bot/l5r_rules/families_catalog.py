@@ -35,7 +35,8 @@ FAMILIES_DATA: list[dict] = [
     {"name": "Tsuruchi", "clan": "Wasp", "bonus_trait": "perception"},
     {"name": "Yoritomo", "clan": "Mantis", "bonus_trait": "stamina"},
     # Phoenix Clan
-    {"name": "Agasha", "clan": "Phoenix", "bonus_trait": "perception"},
+    {"name": "Agasha", "clan": "Phoenix", "bonus_trait": "intelligence"},
+    {"name": "Asako", "clan": "Phoenix", "bonus_trait": "awareness"},
     {"name": "Isawa", "clan": "Phoenix", "bonus_trait": "willpower"},
     {"name": "Shiba", "clan": "Phoenix", "bonus_trait": "perception"},
     # Scorpion Clan
