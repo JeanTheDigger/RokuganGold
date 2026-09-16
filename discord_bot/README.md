@@ -945,7 +945,7 @@ discord_bot/
 │   ├── spells.py          # Access helpers over the spell catalog (GDD s32-s37).
 │   ├── spells_catalog.py  # AUTO-GENERATED: 287 spells (verbatim).
 │   ├── advantages.py      # Access helpers over the advantage catalog (GDD s45).
-│   ├── advantages_catalog.py # AUTO-GENERATED: 162 advantages/disadvantages (verbatim).
+│   ├── advantages_catalog.py # AUTO-GENERATED: 177 advantages/disadvantages (verbatim).
 │   ├── kata.py            # Access helpers over the kata catalog (GDD s30).
 │   ├── kata_catalog.py    # AUTO-GENERATED: 43 Kata (verbatim).
 │   ├── kata_effects.py    # Deterministic active-Kata combat modifiers for /attack (GDD s30).
