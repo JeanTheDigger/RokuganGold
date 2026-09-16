@@ -1871,6 +1871,9 @@ def _wildcard_count(text: str) -> int:
     m = re.search(r"\bany\s+(\d+)\b", low)
     if m:
         return int(m.group(1))
+    m = re.search(r"\b(?:pick|choose)\s+(\d+)\b", low)
+    if m:
+        return int(m.group(1))
     for word, n in _wn.items():
         if re.search(r"\b" + word + r"\b", low):
             return n
@@ -1925,7 +1928,8 @@ def _wildcard_eligible(text: str) -> list[str]:
 
 
 def _expand_wildcard_slots(school: dict) -> list[dict]:
-    _, wildcards = schools.parse_skills(school.get("skills", ""))
+    eff_skills, _, _ = schools.effective_fields(school)
+    _, wildcards = schools.parse_skills(eff_skills)
     slots: list[dict] = []
     for wc in wildcards:
         eligible = _wildcard_eligible(wc)
@@ -5830,11 +5834,12 @@ async def npc_generate(
     # Benefit is NOT re-applied here: the s22.4 ring bands already reflect it.
     catalog = schools.get(school) if school else None
     if catalog:
+        eff_skills, eff_honor, eff_outfit = schools.effective_fields(catalog)
         if not school_skills:
-            assigned, _ = schools.parse_skills(catalog.get("skills", ""))
+            assigned, _ = schools.parse_skills(eff_skills)
             school_skills = [nm for nm, _r, _e in assigned]
         if base_honor is None:
-            base_honor = schools.parse_honor(catalog.get("honor", ""))
+            base_honor = schools.parse_honor(eff_honor)
         clan = clan or catalog.get("clan")
         if school_type is None and schools._infer_type(catalog):
             resolved_type = schools._infer_type(catalog)
@@ -5848,9 +5853,7 @@ async def npc_generate(
         base_honor=(base_honor if base_honor is not None else 3.5),
     )
     if catalog:
-        # The school's starting outfit, with the first weapon in hand: an NPC with
-        # nothing wielded attacks unarmed, so a generated bushi must carry its blade.
-        schools.apply_outfit(char, catalog.get("outfit", ""))
+        schools.apply_outfit(char, eff_outfit)
         _auto_wield(char)
     try:
         rec = store.create_character(str(interaction.guild_id), NPC_OWNER, char)

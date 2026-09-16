@@ -117,6 +117,31 @@ def techniques_up_to(name: str, rank: int) -> list[dict]:
 
 
 # --- Applying a school to a character at creation ---------------------------
+def effective_fields(school: dict) -> tuple[str, str, str]:
+    """Return (skills, honor, outfit) with fallback to benefit-embedded values.
+
+    Some schools (Dragon monks, ronin orders) pack Skills/Honor/Outfit into the
+    benefit field as pipe-delimited segments instead of using their own fields."""
+    skills = school.get("skills", "").strip()
+    honor = school.get("honor", "").strip()
+    outfit = school.get("outfit", "").strip()
+    if skills and honor:
+        return skills, honor, outfit
+    benefit = school.get("benefit", "")
+    if "|" not in benefit:
+        return skills, honor, outfit
+    for seg in benefit.split("|")[1:]:
+        seg = seg.strip()
+        sl = seg.lower()
+        if sl.startswith("skills:") and not skills:
+            skills = seg[len("Skills:"):].strip()
+        elif sl.startswith("honor:") and not honor:
+            honor = seg[len("Honor:"):].strip()
+        elif sl.startswith("outfit:") and not outfit:
+            outfit = seg[len("Outfit:"):].strip()
+    return skills, honor, outfit
+
+
 def parse_benefit(benefit: str) -> tuple[str, int] | None:
     """'+1 Stamina' -> ('stamina', 1); None if not a recognised Trait bonus."""
     m = re.search(r"\+(\d+)\s+([A-Za-z]+)", benefit or "")
@@ -163,7 +188,7 @@ def parse_skills(skills: str) -> tuple[list[tuple[str, int, str | None]], list[s
         if not p:
             continue
         low = p.lower()
-        if low.startswith("any") or "any one" in low or low.startswith("choose") or low.startswith("one "):
+        if low.startswith("any") or "any one" in low or low.startswith("choose") or low.startswith("one ") or re.search(r"\((?:pick|choose)\b", low):
             wildcards.append(p)
             continue
         rank = 1
@@ -202,6 +227,8 @@ def apply_to_character(character, school: dict) -> dict:
     if stype:
         character.school_type = stype
 
+    eff_skills, eff_honor, eff_outfit = effective_fields(school)
+
     ben = parse_benefit(school.get("benefit", ""))
     if ben:
         trait, amt = ben
@@ -214,12 +241,12 @@ def apply_to_character(character, school: dict) -> dict:
                 character.set_trait(trait, character.get_trait(trait) + 1)
         report["benefit"] = f"+{amt} {'Void' if trait == 'void' else trait.capitalize()}"
 
-    honor = parse_honor(school.get("honor", ""))
+    honor = parse_honor(eff_honor)
     if honor is not None:
         character.honor = honor
         report["honor"] = honor
 
-    assigned, wildcards = parse_skills(school.get("skills", ""))
+    assigned, wildcards = parse_skills(eff_skills)
     for name, rank, emph in assigned:
         character.skills[name] = max(character.skills.get(name, 0), rank)
         report["skills"].append(f"{name} {rank}")
@@ -230,7 +257,7 @@ def apply_to_character(character, school: dict) -> dict:
                 report["emphases"].append(f"{name} ({emph})")
     report["wildcards"] = wildcards
 
-    outfit_items = apply_outfit(character, school.get("outfit", ""))
+    outfit_items = apply_outfit(character, eff_outfit)
     report["outfit"] = outfit_items
     return report
 
