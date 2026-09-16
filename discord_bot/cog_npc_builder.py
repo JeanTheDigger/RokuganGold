@@ -475,7 +475,7 @@ class NpcWizard(discord.ui.View):
         key = self._step_key()
         st = self.state
         if key == "clan":
-            clans = schools.clans()
+            clans = schools.creation_clans()[:24]
             opts = [_opt("(no clan)", "", default=not st["clan"])] + [_opt(c, default=c == st["clan"]) for c in clans]
             self.add_item(_Pick("Clan...", opts, self._on_clan, 0))
         elif key == "family":
@@ -485,8 +485,7 @@ class NpcWizard(discord.ui.View):
             ]
             self.add_item(_Pick("Family..." if fams else "No families for this clan", opts, self._on_family, 0))
         elif key == "school":
-            pool = [s for s in (schools.by_clan(st["clan"]) if st["clan"] else schools.basic())
-                    if s.get("category", "basic") == "basic"]
+            pool = schools.basic_for_clan(st["clan"]) if st["clan"] else schools.basic()
             opts = [_opt("(no school)", "", default=not st["school"])] + [
                 _opt(s["name"], description=(s.get("keywords") or "")[:100] or None, default=s["name"] == st["school"]) for s in pool
             ]

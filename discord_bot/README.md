@@ -399,6 +399,7 @@ Mastery Level**: so the RAW cost (1 × Mastery Level) is computed for you.
 | `/ref weapon list` · `/ref weapon view` | Browse all **44 weapons** (damage rating, skill, trait, size). |
 | `/ref armor list` | The **7 armor types** with Armor TN bonus and Reduction. |
 | `/inventory` | One ephemeral panel for gear and purse: main hand and off hand menus (from owned weapons), add a catalog weapon, drop one, add or remove items, add or spend koku. Staff also set armor and weapon qualities here, and can open any player's character (`member:`) or an NPC (`npc:`). Every change saves at once with an undo snapshot and an audit line. |
+| `/stat identity` | Staff: set clan, family and/or school text on a sheet. A catalog family also applies its +1 Trait (once; `apply_bonus:false` to skip), which repairs a sheet created before minor clans were selectable in the wizard. |
 | `/stat armor` | Equip an armor type: sets the sheet's **Armor TN bonus** and **Reduction** automatically (e.g. Light → +5 TN, Reduction 3; Heavy → +10, 5); `none` removes it. |
 
 Weapon damage (used by `/fight attack`) and armor Reduction/Armor-TN (used by combat)

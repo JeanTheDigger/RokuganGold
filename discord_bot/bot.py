@@ -1408,7 +1408,7 @@ def _wizard_embed(state: dict) -> discord.Embed:
 class _ClanSelect(discord.ui.Select):
     def __init__(self, state: dict):
         self.state = state
-        options = [discord.SelectOption(label=c) for c in _ALL_SCHOOL_CLANS]
+        options = [discord.SelectOption(label=c) for c in schools.creation_clans()[:25]]
         super().__init__(placeholder="Choose your Clan...", options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -1531,10 +1531,10 @@ class _SchoolClanSelect(discord.ui.Select):
         await _show_school_select(interaction, self.state, self.values[0])
 
 async def _show_school_select(interaction: discord.Interaction, state: dict, school_clan: str) -> None:
-    basic_schools = [s for s in schools.by_clan(school_clan) if s.get("category", "basic") == "basic"]
+    basic_schools = schools.basic_for_clan(school_clan)
     if not basic_schools:
         await interaction.response.edit_message(
-            content=f"No basic schools found for **{school_clan}**. Pick another.",
+            content=f"No basic schools found for **{school_clan}**. Pick **Different School** and choose another clan's school.",
             embed=_active_embed(state), view=interaction.message.view,
         )
         return
@@ -3684,6 +3684,61 @@ async def sheet_set(
     await _audit_stat(interaction, rec, "stat set", changed)
     await interaction.response.send_message(
         f"Updated **{field.value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
+    )
+
+@stat_group.command(name="identity", description="Set clan, family and/or school on a sheet; a catalog family adds its +1 Trait. [Fortune]")
+@app_commands.describe(
+    clan="Clan name (free text).",
+    family="Family name; a catalog match also applies its +1 Trait unless apply_bonus is false.",
+    school="School name (catalog match preferred; free text allowed).",
+    apply_bonus="Apply the catalog family's +1 Trait (default true). Ignored when the family is unchanged.",
+    member="Target player [Fortune]. Omit for your own active character.",
+)
+async def sheet_identity(
+    interaction: discord.Interaction,
+    clan: str | None = None,
+    family: str | None = None,
+    school: str | None = None,
+    apply_bonus: bool = True,
+    member: discord.Member | None = None,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    c = rec.character
+    changes: list[str] = []
+    if clan is not None:
+        c.clan = clan.strip()
+        changes.append(f"Clan **{c.clan or '(none)'}**")
+    if family is not None:
+        fam = families.get(family.strip())
+        new_name = fam["name"] if fam else family.strip()
+        if new_name.lower() != (c.family or "").lower():
+            if fam and apply_bonus:
+                changes.append(f"Family **{fam['name']}** ({families.apply_to_character(c, fam)})")
+                if not c.clan:
+                    c.clan = fam["clan"]
+            else:
+                c.family = new_name
+                changes.append(f"Family **{new_name or '(none)'}**" + (" (no bonus applied)" if fam else " (not in the catalog: no bonus)"))
+        else:
+            changes.append(f"Family already **{c.family}** (unchanged, no bonus re-applied)")
+    if school is not None:
+        sch = schools.get(school.strip())
+        c.school = sch["name"] if sch else school.strip()
+        changes.append(f"School **{c.school or '(none)'}**" + ("" if sch or not c.school else " (not in the catalog)"))
+    if not changes:
+        await interaction.response.send_message("Give at least one of `clan:`, `family:` or `school:`.", ephemeral=True)
+        return
+    changed = store.save(rec, note="stat identity")
+    await _audit_stat(interaction, rec, "stat identity", changed)
+    await interaction.response.send_message(
+        f"Updated **{c.name}**: " + "; ".join(changes) + ".", embed=build_sheet_embed(rec)
     )
 
 @stat_group.command(name="armor", description="Equip armor (sets Armor TN bonus & Reduction), or 'none' to remove. [Fortune]")

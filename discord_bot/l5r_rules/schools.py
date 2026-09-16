@@ -48,6 +48,30 @@ def clans() -> list[str]:
     return sorted({s["clan"] for s in SCHOOLS_DATA})
 
 
+# The school catalog files minor clans under one "Minor Clan" entry (and odd
+# schools under "Miscellaneous"). Character creation offers real clans instead:
+# every clan that has families, plus the school-only groups a character can
+# belong to (Brotherhood, Imperial, Ronin).
+_PSEUDO_CLANS = ("Minor Clan", "Miscellaneous")
+
+
+def creation_clans() -> list[str]:
+    from . import families
+    out = {f["clan"] for f in families.ALL}
+    out |= {s["clan"] for s in basic() if s["clan"] not in _PSEUDO_CLANS}
+    return sorted(out)
+
+
+def basic_for_clan(clan: str) -> list[dict]:
+    """Basic schools a character of this clan starts with. A minor clan's schools
+    are the "Minor Clan" entries whose name carries the clan ("Usagi Bushi: Hare Clan")."""
+    own = [s for s in basic() if s["clan"].lower() == clan.lower()]
+    if own:
+        return own
+    tag = f"{clan.lower()} clan"
+    return [s for s in basic() if s["clan"] == "Minor Clan" and tag in s["name"].lower()]
+
+
 def techniques_up_to(name: str, rank: int) -> list[dict]:
     """Ranked techniques (1..rank) a character of this school is entitled to."""
     s = get(name)
