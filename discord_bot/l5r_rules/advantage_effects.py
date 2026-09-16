@@ -50,6 +50,11 @@ Bugei Skill mastery reminder-only:
   Iaijutsu R3/R5/R7 (ready/duel).
   Weapon Bugei masteries are in skill_mastery.py (not here).
 
+Merchant Skill mastery reminder-only:
+  Animal Handling R3/R5/R7 (training/command), Commerce R5 (price ±20%),
+  Engineering R5 (+5 Cooperative), Sailing R5 (+5 Cooperative).
+  Craft: no mastery abilities.
+
 Parameterised storage: advantages requiring a parameter (Chosen by the
 Oracles, Weakness, Doubt, Fukurokujin, Heart of Vengeance, etc.) are stored
 as "Name: Parameter" on the character sheet (e.g. "Weakness: Willpower").
@@ -485,6 +490,28 @@ def skill_check_modifiers(
             notes.append("Iaijutsu R5: Free Raise on Focus roll during Iaijutsu Duel")
         if _sr >= 7:
             notes.append("Iaijutsu R7: +2k2 Focus if Assessment exceeds opponent by 10+ (instead of +1k1)")
+
+    # --- Merchant Mastery Abilities ---
+
+    elif sk == "animal handling":
+        if _sr >= 3:
+            notes.append("Animal Handling R3: Trained animals may be used by others")
+        if _sr >= 5:
+            notes.append("Animal Handling R5: Command trained animals to attack a target")
+        if _sr >= 7:
+            notes.append("Animal Handling R7: Animals may be commanded non-verbally")
+
+    elif sk == "commerce":
+        if _sr >= 5:
+            notes.append("Commerce R5: May adjust buy/sell price by up to 20%")
+
+    elif sk == "engineering":
+        if _sr >= 5:
+            notes.append("Engineering R5: +5 on Cooperative or Cumulative Skill Rolls")
+
+    elif sk == "sailing":
+        if _sr >= 5:
+            notes.append("Sailing R5: +5 on Cooperative or Cumulative Skill Rolls")
 
     # Rank 10 universal mastery: Free Raise on all rolls using that Skill
     if character.skills.get(skill_name, 0) >= 10:
