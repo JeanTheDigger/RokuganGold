@@ -5507,8 +5507,13 @@ def _help_page_lines(cmd: app_commands.Command | app_commands.Group) -> list[str
         lines.extend(f"`/{cmd.name} {sg.name} {c.name}`: {_help_desc(c.description)}" for c in sg.commands)
     return lines
 
+# Top-level commands as registered at import. After the startup sync the tree's
+# global list is empty (commands are copied per guild and the global copies
+# cleared), so /help must not read the live tree.
+_HELP_COMMANDS: list[app_commands.Command | app_commands.Group] = []
+
 def _help_top() -> list[app_commands.Command | app_commands.Group]:
-    cmds = {c.name: c for c in client.tree.get_commands()}
+    cmds = {c.name: c for c in (_HELP_COMMANDS or client.tree.get_commands())}
     ordered = [cmds.pop(n) for n in _HELP_ORDER if n in cmds]
     return ordered + [cmds[n] for n in sorted(cmds)]
 
@@ -11265,6 +11270,7 @@ client.tree.add_command(spell_group)
 client.tree.add_command(cog_checks.check)
 client.tree.add_command(ref_commands.ref)
 client.tree.add_command(setup_group)
+_HELP_COMMANDS.extend(client.tree.get_commands())
 
 def main() -> None:
     if not TOKEN:
