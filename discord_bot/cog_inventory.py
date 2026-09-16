@@ -1,9 +1,9 @@
 """/inventory: one ephemeral panel for a character's gear and purse.
 
 Shows what is in hand, armor, owned weapons, items and koku, and lets the
-owner (or staff, for any character or NPC) wield, add or drop weapons, add or
-remove items, and add or spend koku. Armor and weapon qualities are staff-only,
-as before. Every change is saved with an undo snapshot and an audit line.
+owner (or staff, for any character or NPC) wield, add or drop weapons.
+Items, koku, armor, and weapon qualities are staff-only.
+Every change is saved with an undo snapshot and an audit line.
 """
 
 from __future__ import annotations
@@ -127,9 +127,9 @@ class InventoryPanel(discord.ui.View):
 
     ACTIONS: list[tuple[str, str, bool]] = [  # (value, label, staff_only)
         ("drop", "Drop a weapon (remove from owned)", False),
-        ("add_item", "Add an item", False),
-        ("remove_item", "Remove items", False),
-        ("koku", "Koku: add or spend", False),
+        ("add_item", "Add an item (staff)", True),
+        ("remove_item", "Remove items (staff)", True),
+        ("koku", "Koku: add or spend (staff)", True),
         ("armor", "Armor (staff)", True),
         ("qualities", "Weapon qualities on the wielded weapon (staff)", True),
     ]
@@ -180,7 +180,8 @@ class InventoryPanel(discord.ui.View):
         groups = sorted({w["skill"] for w in combat.WEAPON_CATALOG.values()})
         action_opts = [discord.SelectOption(label=label, value=value, default=value == self.action)
                        for value, label, staff_only in self.ACTIONS if self.staff or not staff_only]
-        action_opts += [discord.SelectOption(label=f"Add weapon: {g}", value=f"add:{g}", default=self.action == f"add:{g}") for g in groups]
+        if self.staff:
+            action_opts += [discord.SelectOption(label=f"Add weapon: {g}", value=f"add:{g}", default=self.action == f"add:{g}") for g in groups]
         self.add_item(_Pick("Action...", action_opts, self._on_action, 2))
         if self.action.startswith("add:"):
             group = self.action[4:]
@@ -230,8 +231,8 @@ class InventoryPanel(discord.ui.View):
     async def _on_action(self, interaction: discord.Interaction, values: list[str]) -> None:
         action = values[0] if values else ""
         staff_only = {v for v, _, s in self.ACTIONS if s}
-        if action in staff_only and not self.staff:
-            self.status = f"Armor and weapon qualities are set by **{_d.role_fortune}**."
+        if (action in staff_only or action.startswith("add:")) and not self.staff:
+            self.status = f"Items, koku, weapons, armor, and qualities are managed by **{_d.role_fortune}**."
             await self.render(interaction)
             return
         if action == "add_item":
