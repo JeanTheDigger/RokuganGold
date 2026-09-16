@@ -118,7 +118,7 @@ WEAPON_CATALOG: dict[str, dict] = {
     "nage_yari_thrown": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "reflexes", "melee": False, "size": "Large"},
     "mai_chong_thrown": {"rolled": 0, "kept": 3, "strength_adds": True, "skill": "Spears", "trait": "reflexes", "melee": False, "size": "Large"},
     # Unarmed
-    "unarmed": {"rolled": 1, "kept": 1, "strength_adds": True, "skill": "Jiujutsu", "trait": "agility", "melee": True, "size": "Small"},
+    "unarmed": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "Jiujutsu", "trait": "agility", "melee": True, "size": "Small"},
     # Firearms (Teppoudo / Intelligence). General rule: ignore armor TN + armor Reduction.
     # Kakiyari can be used as a yari in melee (DR 1k1) — select "yari" for that mode.
     "kakiyari": {"rolled": 3, "kept": 2, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Large", "armor_tn_mult": 0, "ignore_armor_reduction": True},
