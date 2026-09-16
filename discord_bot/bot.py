@@ -2091,7 +2091,8 @@ class _WildcardSkillSelect(discord.ui.Select):
             await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
             return
         picks = self.state.setdefault("wildcard_picks", [])
-        picks.append({"skill": self.values[0], "rank": self.rank})
+        if len(picks) == self.slot_idx:  # a stale (double-clicked) menu must not fill the slot twice
+            picks.append({"skill": self.values[0], "rank": self.rank})
         await _chargen_wildcards(interaction, self.state)
 
 
@@ -2174,8 +2175,12 @@ async def _chargen_wildcards(interaction: discord.Interaction, state: dict) -> N
 async def _chargen_wildcard_category(interaction: discord.Interaction, state: dict,
                                      slot_idx: int, category: str) -> None:
     slots = state.get("wildcard_slots", [])
-    slot = slots[slot_idx]
     picks = state.get("wildcard_picks", [])
+    if slot_idx != len(picks) or slot_idx >= len(slots):
+        # A stale menu (double click, or Skip already took this slot): show the current pick instead.
+        await _chargen_wildcards(interaction, state)
+        return
+    slot = slots[slot_idx]
     already = {p["skill"] for p in picks}
 
     groups = _wildcard_cat_groups([s for s in slot["eligible"] if s not in already])
@@ -9966,154 +9971,6 @@ async def roll_history(
 # ---------------------------------------------------------------------------
 #  Server setup (Kami-only) & character submission
 # ---------------------------------------------------------------------------
-
-class CharacterApprovalView(_DisableableView):
-    """Lets a DM approve or deny a character submission from the lobby."""
-
-    def __init__(self, applicant_id: int, character_name: str, concept: str,
-                 lobby_channel_id: int, clan: str = "", family_name: str = "",
-                 school_name: str = "") -> None:
-        super().__init__(timeout=None)
-        self.applicant_id = applicant_id
-        self.character_name = character_name
-        self.concept = concept
-        self.lobby_channel_id = lobby_channel_id
-        self.clan = clan
-        self.family_name = family_name
-        self.school_name = school_name
-
-    @discord.ui.button(label="Approve", style=discord.ButtonStyle.success, emoji="✅")
-    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not await _require_dm_role(interaction):
-            return
-        guild = interaction.guild
-        if guild is None:
-            return
-        member = guild.get_member(self.applicant_id)
-        if member is None:
-            try:
-                member = await guild.fetch_member(self.applicant_id)
-            except discord.NotFound:
-                await interaction.response.send_message("That member is no longer in the server.", ephemeral=True)
-                return
-        approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
-        if approved_role is None:
-            await interaction.response.send_message(
-                f"The **{ROLE_APPROVED}** role doesn't exist. Run `/setup server` first.",
-                ephemeral=True,
-            )
-            return
-
-        guild_id = str(guild.id)
-        owner_id = str(self.applicant_id)
-        char = Character(
-            name=self.character_name,
-            clan=self.clan,
-            family=self.family_name,
-            school=self.school_name,
-            school_type="Bushi",
-        )
-        family_entry = families.get(self.family_name) if self.family_name else None
-        family_report = None
-        if family_entry:
-            family_report = families.apply_to_character(char, family_entry)
-            if not self.clan:
-                char.clan = family_entry["clan"]
-        applied = schools.get(self.school_name) if self.school_name else None
-        report = schools.apply_to_character(char, applied) if applied else None
-        if applied:
-            char.school_type = applied.get("type", "Bushi")
-        try:
-            record = store.create_character(guild_id, owner_id, char)
-        except storage.DuplicateNameError:
-            await interaction.response.send_message(
-                f"A character named **{self.character_name}** already exists for that player. "
-                f"Ask them to pick another name.",
-                ephemeral=True,
-            )
-            return
-        store.set_active(guild_id, owner_id, record.id)
-
-        roles_to_add = [approved_role]
-        if char.clan:
-            clan_role = discord.utils.get(guild.roles, name=char.clan)
-            if clan_role:
-                roles_to_add.append(clan_role)
-        if char.family:
-            family_role = discord.utils.get(guild.roles, name=char.family)
-            if family_role:
-                roles_to_add.append(family_role)
-        await member.add_roles(*roles_to_add, reason=f"Character '{self.character_name}' approved by {interaction.user.display_name}")
-        nick_note = ""
-        try:
-            await member.edit(nick=self.character_name, reason=f"Character approved: {self.character_name}")
-        except discord.Forbidden:
-            nick_note = "\n(Could not change nickname — the bot's role may be too low or the member is the server owner.)"
-        support_note = await _create_player_support_channel(guild, member, self.character_name)
-        self._disable()
-        await interaction.response.edit_message(view=self)
-
-        sheet_parts: list[str] = []
-        if applied:
-            sheet_parts.append(f"School: **{applied['name']}**")
-            if report and report["benefit"]:
-                sheet_parts.append(f"Benefit: {report['benefit']}")
-            if report and report["skills"]:
-                sheet_parts.append(f"{len(report['skills'])} school skills applied")
-            if report and report["wildcards"]:
-                sheet_parts.append("Wildcards to choose: " + "; ".join(report["wildcards"]))
-        if family_report:
-            sheet_parts.append(f"Family: **{family_entry['name']}** ({family_report})")
-        sheet_info = "\n".join(sheet_parts) if sheet_parts else "No school/family catalog match — sheet starts with base stats."
-
-        support_info = f"\n{support_note}" if support_note else ""
-        embed = discord.Embed(
-            title="✅ Character Approved",
-            color=discord.Color.green(),
-            description=(
-                f"**{member.mention}**'s character **{self.character_name}** has been approved.\n"
-                f"They now have the **{ROLE_APPROVED}** role, their nickname has been set, "
-                f"and their character sheet has been created.{nick_note}{support_info}"
-            ),
-        )
-        embed.add_field(name="Sheet Created", value=sheet_info, inline=False)
-        embed.set_footer(text=f"Approved by {interaction.user.display_name}")
-        await interaction.followup.send(embed=embed)
-        lobby = client.get_channel(self.lobby_channel_id)
-        if lobby:
-            await lobby.send(
-                f"✅ {member.mention}, your character **{self.character_name}** has been approved! "
-                f"Your character sheet has been created and set as active. "
-                f"You now have access to the rest of the server. Welcome to Rokugan!"
-            )
-
-    @discord.ui.button(label="Deny", style=discord.ButtonStyle.danger, emoji="❌")
-    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not await _require_dm_role(interaction):
-            return
-        self._disable()
-        await interaction.response.edit_message(view=self)
-        guild = interaction.guild
-        member = guild.get_member(self.applicant_id) if guild else None
-        if member is None and guild is not None:
-            try:
-                member = await guild.fetch_member(self.applicant_id)
-            except discord.NotFound:
-                member = None
-        member_str = member.mention if member else f"User {self.applicant_id}"
-        embed = discord.Embed(
-            title="❌ Character Denied",
-            color=discord.Color.red(),
-            description=f"**{member_str}**'s character **{self.character_name}** was denied.",
-        )
-        embed.set_footer(text=f"Denied by {interaction.user.display_name}")
-        await interaction.followup.send(embed=embed)
-        lobby = client.get_channel(self.lobby_channel_id)
-        if lobby and member:
-            await lobby.send(
-                f"❌ {member.mention}, your character **{self.character_name}** was not approved. "
-                f"Please speak with a DM for details and feel free to submit again."
-            )
 
 async def _cg_resume(interaction: discord.Interaction, state: dict) -> None:
     """Show the wizard's last step again on the message this interaction came from."""
