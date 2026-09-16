@@ -1,8 +1,8 @@
 """/inventory: one ephemeral panel for a character's gear and purse.
 
 Shows what is in hand, armor, owned weapons, items and koku, and lets the
-owner (or staff, for any character or NPC) wield, add or drop weapons.
-Items, koku, armor, and weapon qualities are staff-only.
+owner (or staff, for any character or NPC) wield, equip off-hand, drop weapons,
+and remove items. Adding items/weapons, koku, armor, and weapon qualities are staff-only.
 Every change is saved with an undo snapshot and an audit line.
 """
 
@@ -128,7 +128,7 @@ class InventoryPanel(discord.ui.View):
     ACTIONS: list[tuple[str, str, bool]] = [  # (value, label, staff_only)
         ("drop", "Drop a weapon (remove from owned)", False),
         ("add_item", "Add an item (staff)", True),
-        ("remove_item", "Remove items (staff)", True),
+        ("remove_item", "Remove items", False),
         ("koku", "Koku: add or spend (staff)", True),
         ("armor", "Armor (staff)", True),
         ("qualities", "Weapon qualities on the wielded weapon (staff)", True),
@@ -232,7 +232,7 @@ class InventoryPanel(discord.ui.View):
         action = values[0] if values else ""
         staff_only = {v for v, _, s in self.ACTIONS if s}
         if (action in staff_only or action.startswith("add:")) and not self.staff:
-            self.status = f"Items, koku, weapons, armor, and qualities are managed by **{_d.role_fortune}**."
+            self.status = f"Adding items, koku, weapons, armor, and qualities are managed by **{_d.role_fortune}**."
             await self.render(interaction)
             return
         if action == "add_item":
