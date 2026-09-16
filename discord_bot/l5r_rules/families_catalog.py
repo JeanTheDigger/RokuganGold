@@ -20,8 +20,10 @@ FAMILIES_DATA: list[dict] = [
     # Dragon Clan
     {"name": "Kitsuki", "clan": "Dragon", "bonus_trait": "awareness"},
     {"name": "Mirumoto", "clan": "Dragon", "bonus_trait": "agility"},
-    {"name": "Tamori", "clan": "Dragon", "bonus_trait": "stamina"},
+    {"name": "Tamori", "clan": "Dragon", "bonus_trait": "willpower"},
     {"name": "Togashi", "clan": "Dragon", "bonus_trait": "reflexes"},
+    {"name": "Hitomi", "clan": "Dragon", "bonus_trait": "strength"},
+    {"name": "Hoshi", "clan": "Dragon", "bonus_trait": "void"},
     # Lion Clan
     {"name": "Akodo", "clan": "Lion", "bonus_trait": "intelligence"},
     {"name": "Ikoma", "clan": "Lion", "bonus_trait": "awareness"},
@@ -33,7 +35,7 @@ FAMILIES_DATA: list[dict] = [
     {"name": "Tsuruchi", "clan": "Mantis", "bonus_trait": "reflexes"},
     {"name": "Yoritomo", "clan": "Mantis", "bonus_trait": "strength"},
     # Phoenix Clan
-    {"name": "Agasha", "clan": "Phoenix", "bonus_trait": "intelligence"},
+    {"name": "Agasha", "clan": "Phoenix", "bonus_trait": "perception"},
     {"name": "Isawa", "clan": "Phoenix", "bonus_trait": "willpower"},
     {"name": "Shiba", "clan": "Phoenix", "bonus_trait": "perception"},
     # Scorpion Clan
