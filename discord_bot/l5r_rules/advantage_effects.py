@@ -55,6 +55,14 @@ Merchant Skill mastery reminder-only:
   Engineering R5 (+5 Cooperative), Sailing R5 (+5 Cooperative).
   Craft: no mastery abilities.
 
+Low Skill mastery auto-applied (contested-only):
+  Intimidation R5: +5 on Contested Rolls
+  Temptation R5: +5 on Contested Rolls
+
+Low Skill mastery reminder-only:
+  Forgery R3/R7 (detection TN bonus), Forgery R5 (detect others' forgery),
+  Sleight of Hand R5 (conceal weapons), Stealth R3/R5/R7 (movement)
+
 Parameterised storage: advantages requiring a parameter (Chosen by the
 Oracles, Weakness, Doubt, Fukurokujin, Heart of Vengeance, etc.) are stored
 as "Name: Parameter" on the character sheet (e.g. "Weakness: Willpower").
@@ -512,6 +520,38 @@ def skill_check_modifiers(
     elif sk == "sailing":
         if _sr >= 5:
             notes.append("Sailing R5: +5 on Cooperative or Cumulative Skill Rolls")
+
+    # --- Low Skill Mastery Abilities ---
+
+    elif sk == "forgery":
+        if _sr >= 7:
+            notes.append("Forgery R7: +1k1 to forgery detection TN (total)")
+        elif _sr >= 3:
+            notes.append("Forgery R3: +1k0 to forgery detection TN")
+        if _sr >= 5:
+            notes.append("Forgery R5: +1k0 to detect others' forgeries")
+
+    elif sk == "intimidation":
+        if is_contested and _sr >= 5:
+            flat += 5
+            notes.append("Intimidation R5: +5 (Contested Roll)")
+
+    elif sk == "sleight of hand":
+        if _sr >= 5:
+            notes.append("Sleight of Hand R5: Conceal Emphasis may hide small weapons")
+
+    elif sk == "stealth":
+        if _sr >= 7:
+            notes.append("Stealth R7: Free Move Actions allowed while using Stealth")
+        elif _sr >= 5:
+            notes.append("Stealth R5: Stealth movement = Water x 10")
+        elif _sr >= 3:
+            notes.append("Stealth R3: Stealth movement = Water x 5")
+
+    elif sk == "temptation":
+        if is_contested and _sr >= 5:
+            flat += 5
+            notes.append("Temptation R5: +5 (Contested Roll)")
 
     # Rank 10 universal mastery: Free Raise on all rolls using that Skill
     if character.skills.get(skill_name, 0) >= 10:
