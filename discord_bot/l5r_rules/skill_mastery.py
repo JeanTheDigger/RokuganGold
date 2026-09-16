@@ -9,7 +9,7 @@ technique_effects.py.
 Every value here is read verbatim from the s24 LOCKED text; nothing is
 auto-applied on a condition the engine cannot actually check.
 
-Auto-applied (19):
+Auto-applied (21):
   Kenjutsu R3: +1k0 damage (sword)
   Kenjutsu R7: damage explodes on 9 and 10 (sword)
   Jiujutsu R3: +1k0 damage (unarmed)
@@ -29,6 +29,8 @@ Auto-applied (19):
   Chain Weapons R7: free raise toward Disarm or Knockdown
   War Fan R5: defender Armor TN +1
   War Fan R7: defender Armor TN +3
+  Teppoudo R3: +1k0 damage (firearm)
+  Teppoudo R7: +0k1 damage (firearm)
 
 Auto-applied (off-hand):
   Knives R3: no off-hand penalty with knives
@@ -43,7 +45,8 @@ Reminder-only (not auto-applied):
   Staves R7 large (ready: not combat math),
   Knives R7 (extra attack: not modeled),
   Chain Weapons R3/R5 (grapple not modeled),
-  Kenjutsu R5 and Kyujutsu R3/R5 (ready / string / range: not combat math).
+  Kenjutsu R5 and Kyujutsu R3/R5 (ready / string / range: not combat math),
+  Teppoudo R5 (loading: action economy, not combat math).
 """
 
 from __future__ import annotations
@@ -98,6 +101,11 @@ def attacker_damage(
         rolled += 1; notes.append("Staves R7 +1k0 damage (small staff)")
     if skill == "polearms" and rank >= 5:
         notes.append("Polearms R5: +1k0 damage vs mounted/larger (DM: apply if applicable)")
+    if skill == "teppoudo":
+        if rank >= 3:
+            rolled += 1; notes.append("Teppoudo R3 +1k0 damage (firearm)")
+        if rank >= 7:
+            kept += 1; notes.append("Teppoudo R7 +0k1 damage (firearm)")
     return rolled, kept, flat, notes
 
 

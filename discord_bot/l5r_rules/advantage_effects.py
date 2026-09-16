@@ -553,6 +553,10 @@ def skill_check_modifiers(
             flat += 5
             notes.append("Temptation R5: +5 (Contested Roll)")
 
+    elif sk == "teppoudo":
+        if _sr >= 5:
+            notes.append("Teppoudo R5: Loading requires one less Complex Action")
+
     # Rank 10 universal mastery: Free Raise on all rolls using that Skill
     if character.skills.get(skill_name, 0) >= 10:
         notes.append(f"**{skill_name} R10**: Free Raise (DM: reduce declared raises by 1)")
