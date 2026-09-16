@@ -8492,11 +8492,12 @@ async def xp_kata(
     canonical = rec["name"] if rec else name.strip()
     await _buy_named(interaction, member, canonical, ml, "katas", "kata", "\U0001F94B")
 
-@xp_group.command(name="kiho", description="Learn a Kiho (cost = 1 x Mastery Level; non-Brotherhood pay 1.5x, ceil).")
+@xp_group.command(name="kiho", description="Learn a Kiho (Brotherhood 1x ML; non-Brotherhood monks 1.5x; shugenja 2x).")
 @app_commands.describe(
     name="Kiho name (catalog match auto-fills the Mastery Level).",
     mastery_level="Its Mastery Level (optional if the kiho is in the catalog).",
-    non_brotherhood="Set True if the buyer is not a Brotherhood monk (1.5x cost,).",
+    non_brotherhood="Non-Brotherhood monk (1.5x cost).",
+    shugenja="Shugenja buyer (2x cost).",
     member="Advance another player's character [Fortune]",
 )
 @app_commands.autocomplete(name=_kiho_autocomplete)
@@ -8505,8 +8506,12 @@ async def xp_kiho(
     name: app_commands.Range[str, 1, 60],
     mastery_level: app_commands.Range[int, 1, 10] | None = None,
     non_brotherhood: bool = False,
+    shugenja: bool = False,
     member: discord.Member | None = None,
 ) -> None:
+    if non_brotherhood and shugenja:
+        await interaction.response.send_message("Pick one: `non_brotherhood` or `shugenja`, not both.", ephemeral=True)
+        return
     rec = kiho.get(name)
     ml = mastery_level if mastery_level is not None else (rec["mastery"] if rec else None)
     if ml is None:
@@ -8515,8 +8520,8 @@ async def xp_kiho(
         )
         return
     canonical = rec["name"] if rec else name.strip()
-    cost = advancement.kiho_cost(ml, non_brotherhood)
-    note = " *(non-Brotherhood monk: 1.5x cost,)*" if non_brotherhood else ""
+    cost = advancement.kiho_cost(ml, non_brotherhood=non_brotherhood, shugenja=shugenja)
+    note = " *(shugenja: 2x cost)*" if shugenja else (" *(non-Brotherhood monk: 1.5x cost)*" if non_brotherhood else "")
     await _buy_named(interaction, member, canonical, ml, "kiho", "kiho", "✋", note=note, cost=cost)
 
 @xp_group.command(name="spell", description="Memorise a spell so no scroll is needed (cost = 1 x Mastery Level).")

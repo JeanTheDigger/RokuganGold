@@ -356,6 +356,10 @@ def skill_check_modifiers(
         flat -= 1
         notes.append(f"Weakness -1 ({weak_param}: trait rolls as 1 lower)")
 
+    # Rank 10 universal mastery: Free Raise on all rolls using that Skill
+    if character.skills.get(skill_name, 0) >= 10:
+        notes.append(f"**{skill_name} R10**: Free Raise (DM: reduce declared raises by 1)")
+
     return rolled, kept, flat, notes
 
 
