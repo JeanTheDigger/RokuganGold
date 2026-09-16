@@ -1772,6 +1772,7 @@ class _ChargenResumeView(views_base.PersistentView):
 # ---------------------------------------------------------------------------
 _CHARGEN_XP = 40
 _MAX_DISADVANTAGE_XP = 10
+_EMPHASIS_XP_COST = 2
 
 _SKILL_CATEGORIES: dict[str, list[str]] = {
     "Bugei": [
@@ -1831,6 +1832,31 @@ _SUBCAT_MAP: dict[str, list[str]] = {
     "craft": _CRAFT_SKILLS,
     "artisan": _ARTISAN_SKILLS,
     "perform": _PERFORM_SKILLS,
+}
+
+_CHARGEN_SKILL_CATS: dict[str, list[str]] = {
+    "Bugei": [
+        "Athletics", "Battle", "Defense", "Horsemanship", "Hunting",
+        "Iaijutsu", "Jiujutsu", "Kenjutsu", "Knives", "Kyujutsu",
+        "Naginatajutsu", "Polearms", "Spears", "Staves", "War Fan",
+        "Chain Weapons",
+    ],
+    "High": [
+        "Calligraphy", "Courtier", "Divination", "Etiquette", "Games",
+        "Investigation", "Medicine", "Meditation", "Sincerity",
+        "Spellcraft", "Tea Ceremony", "Theology",
+    ],
+    "Low": [
+        "Acting", "Commerce", "Engineering", "Forgery", "Intimidation",
+        "Locksmith", "Sleight of Hand", "Stealth", "Temptation",
+    ],
+    "Merchant": [
+        "Animal Handling", "Sailing",
+    ],
+    "Lore": _LORE_SKILLS,
+    "Craft": _CRAFT_SKILLS,
+    "Artisan": _ARTISAN_SKILLS,
+    "Perform": _PERFORM_SKILLS,
 }
 
 
@@ -2009,6 +2035,7 @@ def _calc_chargen_xp(state: dict) -> tuple[int, int]:
         base_val = base_char.skills.get(skill, 0)
         for i in range(ranks):
             spent += (base_val + i + 1) * advancement.SKILL_XP_MULT
+    spent += len(state.get("emphasis_purchases", [])) * _EMPHASIS_XP_COST
     disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
     disadv_xp = min(disadv_xp, _MAX_DISADVANTAGE_XP)
     return spent, _CHARGEN_XP + disadv_xp - spent
@@ -2056,6 +2083,9 @@ def _chargen_embed(state: dict) -> discord.Embed:
     if state.get("skill_purchases"):
         sl = ", ".join(f"{s} +{r}" for s, r in state["skill_purchases"].items())
         lines.append(f"**Skill Purchases:** {sl}")
+    if state.get("emphasis_purchases"):
+        el = ", ".join(f"{e['skill']}: {e['emphasis']}" for e in state["emphasis_purchases"])
+        lines.append(f"**Emphases:** {el}")
     if state.get("chosen_spells"):
         lines.append(f"**Spells:** {', '.join(state['chosen_spells'])}")
 
@@ -2092,6 +2122,11 @@ def _materialize_character(state: dict) -> Character:
     for dis in state.get("disadvantages_chosen", []):
         if dis["name"] not in char.disadvantages:
             char.disadvantages.append(dis["name"])
+
+    for emp in state.get("emphasis_purchases", []):
+        lst = char.emphases.setdefault(emp["skill"], [])
+        if emp["emphasis"] not in lst:
+            lst.append(emp["emphasis"])
 
     for spell_name in state.get("chosen_spells", []):
         if spell_name not in char.spells_known:
@@ -2710,7 +2745,7 @@ class _SkillSelect(discord.ui.Select):
     def __init__(self, state: dict, category: str):
         self.state = state
         self._category = category
-        skill_list = _SKILL_CATEGORIES.get(category, [])
+        skill_list = _CHARGEN_SKILL_CATS.get(category, [])
         base = _build_base_char(state)
         options = []
         for sk in skill_list:
@@ -2752,7 +2787,7 @@ class _SkillSelect(discord.ui.Select):
 class _SkillCategorySelect(discord.ui.Select):
     def __init__(self, state: dict):
         self.state = state
-        options = [discord.SelectOption(label=c) for c in _SKILL_CATEGORIES]
+        options = [discord.SelectOption(label=c) for c in _CHARGEN_SKILL_CATS]
         super().__init__(placeholder="Pick a skill category...", options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -2819,15 +2854,124 @@ async def _chargen_skills(interaction: discord.Interaction, state: dict) -> None
             return
         await _chargen_disadvantages(btn_inter, state)
 
+    emph_btn = discord.ui.Button(label="Buy Emphasis (2 XP)", style=discord.ButtonStyle.secondary, row=3)
+
+    async def on_emph(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_emphasis_pick(btn_inter, state)
+
+    emph_btn.callback = on_emph
+
+    undo_emph_btn = discord.ui.Button(label="Undo Emphasis", style=discord.ButtonStyle.secondary, row=3)
+
+    async def on_undo_emph(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        emphs = state.get("emphasis_purchases", [])
+        if emphs:
+            emphs.pop()
+        await _chargen_skills(btn_inter, state)
+
+    undo_emph_btn.callback = on_undo_emph
+
     undo_btn.callback = on_undo
     next_btn.callback = on_next
     back_btn.callback = on_back
     view.add_item(back_btn)
     view.add_item(undo_btn)
     view.add_item(next_btn)
+    view.add_item(emph_btn)
+    view.add_item(undo_emph_btn)
 
     await interaction.response.edit_message(
-        content="**Step 8/10 — Skills** · Pick a category then select skills to buy. Press **Next** when done.",
+        content="**Step 8/10 — Skills** · Pick a category then select skills to buy. "
+                "Use **Buy Emphasis** to add skill emphases. Press **Next** when done.",
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+class _EmphasisSkillSelect(discord.ui.Select):
+    def __init__(self, state: dict):
+        self.state = state
+        base = _build_base_char(state)
+        all_skills: dict[str, int] = dict(base.skills)
+        for sk, ranks in state.get("skill_purchases", {}).items():
+            all_skills[sk] = all_skills.get(sk, 0) + ranks
+        options = [discord.SelectOption(label=f"{sk} (Rank {rk})", value=sk)
+                   for sk, rk in sorted(all_skills.items()) if rk >= 1]
+        if not options:
+            options = [discord.SelectOption(label="(no skills yet)", value="__none__")]
+        super().__init__(placeholder="Which skill gets the emphasis?", options=options[:25])
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        chosen = self.values[0]
+        if chosen == "__none__":
+            await interaction.response.defer()
+            return
+        await interaction.response.send_modal(_EmphasisModal(self.state, chosen))
+
+
+class _EmphasisModal(discord.ui.Modal):
+    def __init__(self, state: dict, skill: str):
+        super().__init__(title=f"Emphasis for {skill}"[:45])
+        self.state = state
+        self.skill = skill
+        self.emphasis_input = discord.ui.TextInput(
+            label="Emphasis name",
+            placeholder="e.g. Swords, Deception, Rokugani...",
+            max_length=60,
+        )
+        self.add_item(self.emphasis_input)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        emph_name = self.emphasis_input.value.strip()
+        if not emph_name:
+            await interaction.response.send_message("Emphasis cannot be empty.", ephemeral=True)
+            return
+        emphs = self.state.setdefault("emphasis_purchases", [])
+        for e in emphs:
+            if e["skill"] == self.skill and e["emphasis"].lower() == emph_name.lower():
+                await interaction.response.send_message(
+                    f"You already bought {self.skill}: {emph_name}.", ephemeral=True)
+                return
+        base = _build_base_char(self.state)
+        for existing in base.emphases.get(self.skill, []):
+            if existing.lower() == emph_name.lower():
+                await interaction.response.send_message(
+                    f"Your school already grants {self.skill}: {existing}.", ephemeral=True)
+                return
+        emphs.append({"skill": self.skill, "emphasis": emph_name})
+        _, remaining = _calc_chargen_xp(self.state)
+        if remaining < 0:
+            emphs.pop()
+            await interaction.response.send_message("Not enough XP for this emphasis.", ephemeral=True)
+            return
+        await _chargen_skills(interaction, self.state)
+
+
+async def _chargen_emphasis_pick(interaction: discord.Interaction, state: dict) -> None:
+    view = _ChargenView(state)
+    view.add_item(_EmphasisSkillSelect(state))
+    back_btn = discord.ui.Button(label="Back to Skills", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills(btn_inter, state)
+
+    back_btn.callback = on_back
+    view.add_item(back_btn)
+    _, remaining = _calc_chargen_xp(state)
+    await interaction.response.edit_message(
+        content=f"**Step 8/10 — Emphasis** · Pick a skill to add an emphasis to ({_EMPHASIS_XP_COST} XP each). "
+                f"{remaining} XP remaining.",
         embed=_chargen_embed(state), view=view,
     )
 
@@ -10273,6 +10417,7 @@ class _ChargenNameModal(discord.ui.Modal, title="Character Creation"):
             "advantages_chosen": [],
             "disadvantages_chosen": [],
             "skill_purchases": {},
+            "emphasis_purchases": [],
             "chosen_spells": [],
             "concept": concept_text,
         }
