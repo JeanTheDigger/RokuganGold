@@ -1,6 +1,6 @@
 """Skill, trait, and special check slash commands (/check group).
 
-Extracted from bot.py — all 13 check commands plus their check-only
+Extracted from bot.py - all 13 check commands plus their check-only
 constants and helpers.  Shared helpers (guards, autocompletes, format_dice,
 log_roll, resolve_duelist) are injected via init().
 """
@@ -148,7 +148,7 @@ def _try_spend_void(
             void_line = f"\U0001f300 Void +1k1 ({c.current_void_points} VP left)"
     if void_unskilled and not spend_void:
         if sk > 0:
-            void_line = f"\U0001f300 Already has {skill_name} {sk} — use {void_param_label} for +1k1 instead"
+            void_line = f"\U0001f300 Already has {skill_name} {sk} - use {void_param_label} for +1k1 instead"
         else:
             ok, reason = advantage_effects.can_spend_void_on_roll(c, skill_name=skill_name)
             if not ok:
@@ -536,7 +536,7 @@ async def fear_check(
         verdict = f"❌ **Fails!** -{fear_rank}k0 to all rolls until the encounter ends"
         verdict += " (tracked on the initiative list)." if tracked else " (not in an encounter here: DM tracks it)."
         if result["margin"] <= -15:
-            verdict += "\n💥 **Catastrophic failure (15+):** overwhelmed — flees or cowers helplessly (GM's determination)."
+            verdict += "\n💥 **Catastrophic failure (15+):** overwhelmed - flees or cowers helplessly (GM's determination)."
     embed.add_field(
         name="Result",
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",

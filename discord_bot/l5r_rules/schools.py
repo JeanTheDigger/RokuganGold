@@ -14,7 +14,7 @@ from .schools_catalog import SCHOOLS_DATA
 def _normalize_technique_ranks() -> None:
     """Fix rank-0 techniques left by the extraction script.
 
-    L5R 4e has no rank 0 — every technique has a positive rank.
+    L5R 4e has no rank 0 - every technique has a positive rank.
     Basic schools: sequential ranks 1, 2, 3, ...
     Advanced schools: sequential ranks 1, 2, 3, ... (relative to the school)
     Alternate paths: rank from 'Replaces: X N' prereq, else 1.

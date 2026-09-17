@@ -1,4 +1,4 @@
-"""L5R 4e Togashi Tattoo Catalog — GDD s57.25.11 (LOCKED).
+"""L5R 4e Togashi Tattoo Catalog - GDD s57.25.11 (LOCKED).
 
 25 mystical tattoos granted to monks of the Togashi Tattooed Order,
 Kikage Zumi, and Hoshi Tsurui Zumi schools. Each has a unique effect.

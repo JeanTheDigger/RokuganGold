@@ -27,13 +27,13 @@ ENGAGEMENT_LEVELS = {
 }
 
 # ---------------------------------------------------------------------------
-# GDD s47 Battle Table — Individual Character Experience in Mass Battle
+# GDD s47 Battle Table - Individual Character Experience in Mass Battle
 # ---------------------------------------------------------------------------
 # Each entry: (wounds_dice, glory, event)
 # wounds_dice = number of 1k1 dice of damage the character suffers
 # glory = Glory points earned this Battle Turn
 # event = None | "duel" | "heroic"
-# Row index = clamped((total - 1) // 3, 0, 9) — bands of 3 from 1-30
+# Row index = clamped((total - 1) // 3, 0, 9) - bands of 3 from 1-30
 # Column index = 0-5 (columns 1-6)
 # VALUES PROVISIONAL per GDD.
 BATTLE_TABLE: list[list[tuple[int, int, str | None]]] = [

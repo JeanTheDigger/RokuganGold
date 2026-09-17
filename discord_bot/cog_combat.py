@@ -1,6 +1,6 @@
 """Combat slash commands (/combat group and /attack).
 
-Extracted from bot.py — all combat group commands, attack command, DamageView,
+Extracted from bot.py - all combat group commands, attack command, DamageView,
 and combat-only constants/helpers.  Shared helpers (guards, autocompletes,
 format_dice, combat_log, encounter save/load) are injected via init().
 """
@@ -302,7 +302,7 @@ class DamageView(views_base.PersistentView):
             src = _d.bot_client.get_channel(self.source_channel_id)
             if src:
                 await src.send(msg)
-            await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
+            await interaction.followup.send(f"Denied - posted in <#{self.source_channel_id}>.")
         else:
             await interaction.followup.send(msg)
 
@@ -458,7 +458,7 @@ class DamageView(views_base.PersistentView):
                 if combat.has_weapon_quality(attacker, self.weapon, "unbreakable"):
                     break_line = f"\n🛡️ Unbreakable: weapon survives {raw} damage (threshold {brk})"
                 else:
-                    break_line = f"\n💥 **WEAPON BROKEN** — {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
+                    break_line = f"\n💥 **WEAPON BROKEN** - {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
             embed = discord.Embed(
                 title="⚔️ Damage applied",
                 color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
@@ -765,7 +765,7 @@ class DamageView(views_base.PersistentView):
             if combat.has_weapon_quality(attacker, self.weapon, "unbreakable"):
                 break_line = f"\n🛡️ Unbreakable: weapon survives {raw} damage (threshold {brk})"
             else:
-                break_line = f"\n💥 **WEAPON BROKEN** — {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
+                break_line = f"\n💥 **WEAPON BROKEN** - {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
 
         embed = discord.Embed(
             title="⚔️ Damage applied",
@@ -1057,7 +1057,7 @@ class DamageView(views_base.PersistentView):
             src = _d.bot_client.get_channel(self.source_channel_id)
             if src:
                 await src.send(msg)
-            await interaction.followup.send(f"No effect — posted in <#{self.source_channel_id}>.")
+            await interaction.followup.send(f"No effect - posted in <#{self.source_channel_id}>.")
         else:
             await interaction.followup.send(msg)
 
@@ -1258,7 +1258,7 @@ async def attack(
             await interaction.response.send_message(f"**{atk_combatant.name}** cannot attack: {block_reason}", ephemeral=True)
             return
 
-    # Action economy (s40): attack is a Complex Action — requires full action budget.
+    # Action economy (s40): attack is a Complex Action - requires full action budget.
     if atk_combatant is not None and atk_combatant.actions_used > 0:
         await interaction.response.send_message(
             f"**{atk_combatant.name}** has already used actions this turn ({atk_combatant.actions_used}/2). "
@@ -1347,7 +1347,7 @@ async def attack(
     atk_weapon_profile = combat.get_weapon_profile(weapon)
     if void_damage and not atk_weapon_profile.get("void_damage"):
         await interaction.response.send_message(
-            f"**{weapon}** does not support void_damage — only katana can spend VP for +1k1 damage.",
+            f"**{weapon}** does not support void_damage - only katana can spend VP for +1k1 damage.",
             ephemeral=True,
         )
         return
@@ -1617,7 +1617,7 @@ async def attack(
         if arrow_tn_note:
             kata_notes.append(arrow_tn_note)
     if atk_weapon_profile.get("half_range"):
-        kata_notes.append("⚠️ Half range — verify target is within halved bow range")
+        kata_notes.append("⚠️ Half range - verify target is within halved bow range")
 
     # Staff vs armor (L5R 4e Equipment): armor TN bonus doubled against staves.
     staff_tn_adj = 0
@@ -1764,7 +1764,7 @@ async def attack(
         owner_ping = f" <@{target_owner_id}>" if target_owner_id and target_owner_id != _d.NPC_OWNER else ""
         if approval_ch:
             await interaction.response.send_message(
-                content=f"⚔️ **{a_name}** hit **{t_name}** — damage approval pending in the DM channel.{owner_ping}",
+                content=f"⚔️ **{a_name}** hit **{t_name}** - damage approval pending in the DM channel.{owner_ping}",
                 embed=embed,
             )
             embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
@@ -1825,7 +1825,7 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
     notes_line = f"\n📍 *{enc.notes}*" if enc.notes else ""
     result = header + notes_line + "\n" + "\n".join(lines)
     if len(result) > 1700:
-        result = result[:1700] + "\n*(truncated — use `/combat summary` for full view)*"
+        result = result[:1700] + "\n*(truncated - use `/combat summary` for full view)*"
     return result
 @combat_group.command(name="start", description="Start a fresh initiative tracker in this channel.")
 async def combat_start(interaction: discord.Interaction) -> None:
@@ -1936,7 +1936,7 @@ def _render_roster(enc: encounter.Encounter) -> str:
     for uid, status in enc.roster.items():
         counts[status] = counts.get(status, 0) + 1
         in_init = any(c.owner_id == uid for c in enc.combatants)
-        lines.append(f"{_ROSTER_ICON.get(status, '❔')} <@{uid}> — {status}{' · in initiative' if in_init else ''}")
+        lines.append(f"{_ROSTER_ICON.get(status, '❔')} <@{uid}> - {status}{' · in initiative' if in_init else ''}")
     head = f"🛡️ **Encounter roster** (organizer: <@{enc.organizer_id}>)"
     tally = f"✅ {counts['accepted']}  ⏳ {counts['pending']}  ❌ {counts['declined']}  🔒 {counts['forced']}"
     if enc.roster_begun:
@@ -2897,7 +2897,7 @@ async def fight_status(interaction: discord.Interaction, member: discord.Member 
     cb = enc.find(c.name) if enc else None
     level = stats.wound_level_name(c)
     lines = [
-        f"❤️ Wounds **{c.wounds_taken}/{stats.total_wound_capacity(c)}** — **{level}** (penalty {stats.wound_penalty(c):+d} to rolls)",
+        f"❤️ Wounds **{c.wounds_taken}/{stats.total_wound_capacity(c)}** - **{level}** (penalty {stats.wound_penalty(c):+d} to rolls)",
         f"🔮 Void **{c.current_void_points}/{c.max_void_points}**",
         f"🗡️ Weapon **{c.equipped_weapon or 'katana'}**" + (f" · off-hand {c.off_hand_weapon}" if c.off_hand_weapon else ""),
     ]
@@ -3307,7 +3307,7 @@ async def grapple_initiate(
         if wp.get("grapple_capable"):
             grapple_weapon_note = f"\n✓ {equipped.replace('_', ' ').title()}: can initiate grapple while armed"
         else:
-            grapple_weapon_note = f"\n⚠️ {equipped.replace('_', ' ').title()} is not grapple-capable — must drop/sheathe to grapple (DM adjudicates)"
+            grapple_weapon_note = f"\n⚠️ {equipped.replace('_', ' ').title()} is not grapple-capable - must drop/sheathe to grapple (DM adjudicates)"
     embed = discord.Embed(
         title=f"🤼 {atk_cb.name} attempts to grapple {def_cb.name}",
         color=discord.Color.greyple(),
@@ -3337,7 +3337,7 @@ async def grapple_initiate(
             name="2. Contested Strength (Jiujutsu/Strength)",
             value=f"{atk_cb.name}: ({str_a + jiu_a + cr_a}k{str_a}) → **{contest['total_a']}**\n"
                   f"{def_cb.name}: ({str_b + jiu_b + cr_b}k{str_b}) → **{contest['total_b']}**\n"
-                  f"{'**Attacker wins** — grapple established!' if atk_wins else '**Defender resists** — grab fails!'}",
+                  f"{'**Attacker wins** - grapple established!' if atk_wins else '**Defender resists** - grab fails!'}",
             inline=False,
         )
         if atk_wins:
@@ -3970,7 +3970,7 @@ async def duel_focus(
     fs = result["first_striker"]
     if fs == "kharmic":
         outcome = (
-            f"Margin **{diff}** — neither exceeds their threshold: **Kharmic Strike** (simultaneous).\n"
+            f"Margin **{diff}** - neither exceeds their threshold: **Kharmic Strike** (simultaneous).\n"
             f"Both attack at the same time; the cause is considered dropped."
         )
     else:
@@ -4306,7 +4306,7 @@ async def combat_stance(
         return
     if stance.value == "full_defense":
         await interaction.response.send_message(
-            f"Use `/fight full_defense combatant:{cb.name}` instead — Full Defense requires a Defense/Reflexes roll (Complex Action).",
+            f"Use `/fight full_defense combatant:{cb.name}` instead - Full Defense requires a Defense/Reflexes roll (Complex Action).",
             ephemeral=True,
         )
         return
@@ -4706,7 +4706,7 @@ async def battle_damage(
     await interaction.response.send_message(embed=embed)
 
 
-@combat_battle.command(name="table", description="Battle Table roll — individual experience in mass battle. [Fortune]")
+@combat_battle.command(name="table", description="Battle Table roll - individual experience in mass battle. [Fortune]")
 @app_commands.describe(
     name="Character name.",
     army_status="Army Status for the character's side this round.",
@@ -4790,15 +4790,15 @@ async def battle_table(
             f"= **{result['wound_damage']} damage**"
         )
     else:
-        lines.append("**0W** — no wounds this round")
+        lines.append("**0W** - no wounds this round")
     if result["glory"] > 0:
         lines.append(f"**+{result['glory']} Glory**")
     else:
         lines.append("No Glory")
     if result["event"] == "duel":
-        lines.append("⚔️ **DUEL** — encounter an enemy of roughly equal skill!")
+        lines.append("⚔️ **DUEL** - encounter an enemy of roughly equal skill!")
     elif result["event"] == "heroic":
-        lines.append("✨ **HEROIC OPPORTUNITY** — a chance to change the battle!")
+        lines.append("✨ **HEROIC OPPORTUNITY** - a chance to change the battle!")
     embed.add_field(name="Result", value="\n".join(lines), inline=False)
 
     if result["wound_roll"]:
@@ -5015,7 +5015,7 @@ async def combat_action(
 
 
 # ---------------------------------------------------------------------------
-# Phase 63: Combat Enhancements — cover, notes, env_damage
+# Phase 63: Combat Enhancements - cover, notes, env_damage
 # ---------------------------------------------------------------------------
 
 @combat_env.command(name="cover", description="Set a combatant's cover/terrain Armor TN bonus. [Fortune]")
@@ -5084,7 +5084,7 @@ async def combat_notes(
     amount="Raw damage to apply.",
     targets='Comma-separated combatant names, or "all".',
     reason="Source of damage (fire, falling, etc.).",
-    ignore_reduction="Skip armor reduction (default: no — reduction applies).",
+    ignore_reduction="Skip armor reduction (default: no - reduction applies).",
 )
 async def combat_env_damage(
     interaction: discord.Interaction,
@@ -5162,7 +5162,7 @@ async def combat_env_damage(
                     f"{' DEAD' if is_dead else ''}",
                 )
             else:
-                results.append(f"**{cb.name}**: *(no sheet — damage not tracked)*")
+                results.append(f"**{cb.name}**: *(no sheet - damage not tracked)*")
 
     parts = [f"💥 **Environmental Damage**: {amount}{reason_tag}"]
     if ignore_reduction:

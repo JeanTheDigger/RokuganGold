@@ -366,12 +366,12 @@ def skill_check_modifiers(
         rolled += 1
         notes.append("Clear Thinker +1k0 (vs manipulation)")
 
-    # Seven Fortunes' Blessing: Daikoku — +1k1 Commerce
+    # Seven Fortunes' Blessing: Daikoku - +1k1 Commerce
     if sk == "commerce" and _has_adv_containing(character, "daikoku") and _has_adv_containing(character, "seven fortunes"):
         rolled += 1; kept += 1
         notes.append("Daikoku's Blessing +1k1 (Commerce)")
 
-    # Seven Fortunes' Blessing: Fukurokujin — +1k1 to chosen Lore
+    # Seven Fortunes' Blessing: Fukurokujin - +1k1 to chosen Lore
     if sk.startswith("lore") and _has_adv_containing(character, "fukurokujin") and _has_adv_containing(character, "seven fortunes"):
         param = _get_adv_param(character, "Seven Fortunes' Blessing")
         if param and "fukurokujin" in param.lower():
@@ -403,27 +403,27 @@ def skill_check_modifiers(
         rolled -= 1; kept -= 1
         notes.append("Bad Eyesight -1k1 (Perception-based)")
 
-    # Seven Fortunes' Curse: Benten — +10 TN to Etiquette (= -10 flat)
+    # Seven Fortunes' Curse: Benten - +10 TN to Etiquette (= -10 flat)
     if sk == "etiquette" and _has_disadv_containing(character, "benten") and _has_disadv_containing(character, "seven fortunes"):
         flat -= 10
         notes.append("Benten's Curse -10 (Etiquette TN +10)")
 
-    # Seven Fortunes' Curse: Daikoku — -1k1 Commerce
+    # Seven Fortunes' Curse: Daikoku - -1k1 Commerce
     if sk == "commerce" and _has_disadv_containing(character, "daikoku") and _has_disadv_containing(character, "seven fortunes"):
         rolled -= 1; kept -= 1
         notes.append("Daikoku's Curse -1k1 (Commerce)")
 
-    # Seven Fortunes' Curse: Fukurokujin — +5 TN to all Lore (= -5 flat)
+    # Seven Fortunes' Curse: Fukurokujin - +5 TN to all Lore (= -5 flat)
     if sk.startswith("lore") and _has_disadv_containing(character, "fukurokujin") and _has_disadv_containing(character, "seven fortunes"):
         flat -= 5
         notes.append("Fukurokujin's Curse -5 (Lore TN +5)")
 
-    # Seven Fortunes' Blessing: Jurojin — +2k0 resist poison/disease
+    # Seven Fortunes' Blessing: Jurojin - +2k0 resist poison/disease
     if sk in ("poison_resist", "medicine") and _has_adv_containing(character, "jurojin") and _has_adv_containing(character, "seven fortunes"):
         rolled += 2
         notes.append("Jurojin's Blessing +2k0 (resist poison/disease)")
 
-    # Seven Fortunes' Curse: Jurojin — -2k0 resist poison/disease
+    # Seven Fortunes' Curse: Jurojin - -2k0 resist poison/disease
     if sk in ("poison_resist", "medicine") and _has_disadv_containing(character, "jurojin") and _has_disadv_containing(character, "seven fortunes"):
         rolled -= 2
         notes.append("Jurojin's Curse -2k0 (resist poison/disease)")

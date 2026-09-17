@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS pending_views (
     created_at REAL NOT NULL
 );
 """,
-    # 6: undo snapshots — the state of a character/creature row before each save
+    # 6: undo snapshots - the state of a character/creature row before each save
     """\
 CREATE TABLE IF NOT EXISTS undo_snapshots (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

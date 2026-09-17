@@ -118,7 +118,7 @@ def entangled_cannot_act(conditions: set[str]) -> bool:
 
 
 def cannot_act(conditions: set[str]) -> tuple[bool, str]:
-    """(blocked, reason) — conditions that completely prevent taking actions."""
+    """(blocked, reason) - conditions that completely prevent taking actions."""
     if "stunned" in conditions:
         return True, "**Stunned:** cannot take actions (recovers Earth TN 20 at Reactions Stage)"
     if "pinned" in conditions:
@@ -129,7 +129,7 @@ def cannot_act(conditions: set[str]) -> tuple[bool, str]:
 
 
 def cannot_attack(conditions: set[str], weapon_size: str) -> tuple[bool, str]:
-    """(blocked, reason) — conditions that prevent attacking specifically."""
+    """(blocked, reason) - conditions that prevent attacking specifically."""
     blocked, reason = cannot_act(conditions)
     if blocked:
         return True, reason
@@ -141,7 +141,7 @@ def cannot_attack(conditions: set[str], weapon_size: str) -> tuple[bool, str]:
 
 
 def invalid_stance(conditions: set[str], stance: str) -> tuple[bool, str]:
-    """(blocked, reason) — conditions that forbid a specific stance."""
+    """(blocked, reason) - conditions that forbid a specific stance."""
     if "grappled" in conditions:
         return True, "**Grappled:** stances do not apply while grappled"
     if "dazed" in conditions and stance not in ("defense", "full_defense"):

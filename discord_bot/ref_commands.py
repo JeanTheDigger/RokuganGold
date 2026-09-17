@@ -1,7 +1,7 @@
 """Reference catalog commands: /ref and all subcommands.
 
 Extracted from bot.py to reduce file size.  All commands are pure
-read-only lookups into the L5R rules data modules — no character
+read-only lookups into the L5R rules data modules - no character
 mutations.  The module is initialised by bot.py calling ``init()``,
 which injects the shared state and wires up autocompletes.
 """
@@ -247,7 +247,7 @@ RANGE_INCREMENTS: list[tuple[str, str]] = [
 
 
 # ---------------------------------------------------------------------------
-# /ref search — cross-catalog search
+# /ref search - cross-catalog search
 # ---------------------------------------------------------------------------
 
 @ref.command(
@@ -315,7 +315,7 @@ async def lookup(
 
 
 # ---------------------------------------------------------------------------
-# /ref school — school catalog
+# /ref school - school catalog
 # ---------------------------------------------------------------------------
 
 @ref_school.command(name="list", description="List schools (optionally by clan).")
@@ -376,7 +376,7 @@ async def school_view(interaction: discord.Interaction, name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /ref weapon — weapon catalog
+# /ref weapon - weapon catalog
 # ---------------------------------------------------------------------------
 
 @ref_weapon.command(name="list", description="List all weapons, grouped by skill.")
@@ -410,7 +410,7 @@ async def weapon_view(interaction: discord.Interaction, name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /ref armor — armor catalog
+# /ref armor - armor catalog
 # ---------------------------------------------------------------------------
 
 @ref_armor.command(name="list", description="List all armor types with TN bonus, Reduction, and cost.")
@@ -466,7 +466,7 @@ async def armor_search(interaction: discord.Interaction, query: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /ref advantage — advantages & disadvantages
+# /ref advantage - advantages & disadvantages
 # ---------------------------------------------------------------------------
 
 @ref_advantage.command(name="list", description="List Advantages or Disadvantages.")
@@ -526,7 +526,7 @@ async def advantage_view(interaction: discord.Interaction, name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /ref kata — kata catalog
+# /ref kata - kata catalog
 # ---------------------------------------------------------------------------
 
 @ref_kata.command(name="list", description="List Kata by element (or a summary).")
@@ -579,7 +579,7 @@ async def kata_view(interaction: discord.Interaction, name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /ref kiho — kiho catalog
+# /ref kiho - kiho catalog
 # ---------------------------------------------------------------------------
 
 @ref_kiho.command(name="list", description="List Kiho by element (or a summary).")
@@ -632,7 +632,7 @@ async def kiho_view(interaction: discord.Interaction, name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /ref heritage — heritage table rolls
+# /ref heritage - heritage table rolls
 # ---------------------------------------------------------------------------
 
 @ref_heritage.command(name="roll", description="Roll on a clan's Heritage Table (1d10). [Fortune]")
@@ -663,7 +663,7 @@ async def heritage_table(interaction: discord.Interaction, clan: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /ref encumbrance — carrying capacity check
+# /ref encumbrance - carrying capacity check
 # ---------------------------------------------------------------------------
 
 @ref.command(name="encumbrance", description="Check carrying capacity (Strength-based).")
@@ -707,7 +707,7 @@ async def encumbrance_check(
 
 
 # ---------------------------------------------------------------------------
-# /ref atn — Armor TN breakdown
+# /ref atn - Armor TN breakdown
 # ---------------------------------------------------------------------------
 
 @ref.command(name="armor_tn", description="Show Armor TN breakdown for your active character.")
@@ -793,7 +793,7 @@ async def atn_breakdown(interaction: discord.Interaction, target: str | None = N
 
 
 # ---------------------------------------------------------------------------
-# /ref family — family catalog
+# /ref family - family catalog
 # ---------------------------------------------------------------------------
 
 @ref_family.command(name="list", description="List families by clan.")
@@ -833,7 +833,7 @@ async def family_search(interaction: discord.Interaction, query: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /ref ancestors — ancestor advantage effects
+# /ref ancestors - ancestor advantage effects
 # ---------------------------------------------------------------------------
 
 @ref.command(name="ancestors", description="Show mechanical effects of Ancestor advantages on a character.")
@@ -883,7 +883,7 @@ async def ancestors_check(
 
 
 # ---------------------------------------------------------------------------
-# /ref dual_wield — dual-wielding rules
+# /ref dual_wield - dual-wielding rules
 # ---------------------------------------------------------------------------
 
 @ref.command(name="dual_wield", description="Show dual-wielding rules and penalties for a character.")
@@ -936,12 +936,12 @@ async def dual_wield_info(
         embed.add_field(name="Off-hand Attack Penalty", value=penalty + mastery_note, inline=False)
         embed.add_field(name="Dominant-hand Penalty", value="−5 to main-hand attacks while holding an off-hand weapon", inline=False)
         ir = stats.insight_rank(c)
-        embed.add_field(name="Armor TN Bonus", value=f"+{ir} (Insight Rank {ir}) — dual-wielding covers more area", inline=False)
+        embed.add_field(name="Armor TN Bonus", value=f"+{ir} (Insight Rank {ir}) - dual-wielding covers more area", inline=False)
         embed.add_field(
             name="Usage",
             value=(
-                "• `/fight attack` — main-hand attack (dominant-hand penalty auto-applied)\n"
-                "• `/fight attack off_hand:True` — off-hand attack with penalty above\n"
+                "• `/fight attack` - main-hand attack (dominant-hand penalty auto-applied)\n"
+                "• `/fight attack off_hand:True` - off-hand attack with penalty above\n"
                 "• Mirumoto Two-Heavens / Niten Mastery may reduce penalties"
             ),
             inline=False,
@@ -954,7 +954,7 @@ async def dual_wield_info(
 
 
 # ---------------------------------------------------------------------------
-# /ref travel — travel time calculator
+# /ref travel - travel time calculator
 # ---------------------------------------------------------------------------
 
 @ref.command(name="travel", description="Calculate travel time between locations.")
@@ -1000,7 +1000,7 @@ async def travel_calc(
 
 
 # ---------------------------------------------------------------------------
-# /ref modifiers — combat modifiers reference
+# /ref modifiers - combat modifiers reference
 # ---------------------------------------------------------------------------
 
 @ref.command(name="modifiers", description="Terrain, range, and situational combat modifiers (L5R 4e).")
@@ -1022,7 +1022,7 @@ async def modifiers_ref(interaction: discord.Interaction) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /ref calledshot — called shot reference
+# /ref calledshot - called shot reference
 # ---------------------------------------------------------------------------
 
 @ref.command(name="calledshot", description="Called Shot: raise costs and body part effects (L5R 4e).")
@@ -1053,7 +1053,7 @@ async def calledshot_ref(interaction: discord.Interaction) -> None:
 
 
 # ---------------------------------------------------------------------------
-# /ref tattoo — Togashi tattoo abilities
+# /ref tattoo - Togashi tattoo abilities
 # ---------------------------------------------------------------------------
 
 @ref_tattoo.command(name="list", description="List all Togashi tattoo abilities.")

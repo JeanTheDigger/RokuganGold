@@ -83,7 +83,7 @@ WEAPON_CATALOG: dict[str, dict] = {
     "yumi": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Large", "penalty_mounted": 10},
     "dai_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "penalty_on_foot": 10},
     "han_kyu": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small", "penalty_mounted": 10},
-    # Arrows (s39 ammunition — select as weapon to use a specific arrow type;
+    # Arrows (s39 ammunition - select as weapon to use a specific arrow type;
     # Kyujutsu / Reflexes same as bows; DR from the arrow, not the bow).
     # armor_tn_mult: multiplier on the target's armor TN bonus from armor.
     "willow_leaf_arrow": {"rolled": 2, "kept": 2, "strength_adds": False, "skill": "Kyujutsu", "trait": "reflexes", "melee": False, "size": "Small"},
@@ -111,7 +111,7 @@ WEAPON_CATALOG: dict[str, dict] = {
     "shuriken": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
     "tsubute": {"rolled": 1, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Small", "no_explode": True},
     "blowgun": {"rolled": 0, "kept": 1, "strength_adds": False, "skill": "Ninjutsu", "trait": "agility", "melee": False, "size": "Medium", "no_explode": True, "armor_tn_mult": 3},
-    # Thrown variants — same weapon used as a ranged attack (Reflexes, not Agility).
+    # Thrown variants - same weapon used as a ranged attack (Reflexes, not Agility).
     # Select the _thrown entry when the weapon is hurled instead of wielded in melee.
     "wakizashi_thrown": {"rolled": 2, "kept": 2, "strength_adds": True, "skill": "Kenjutsu", "trait": "reflexes", "melee": False, "size": "Small"},
     "yari_thrown": {"rolled": 1, "kept": 2, "strength_adds": True, "skill": "Spears", "trait": "reflexes", "melee": False, "size": "Large"},
@@ -120,7 +120,7 @@ WEAPON_CATALOG: dict[str, dict] = {
     # Unarmed
     "unarmed": {"rolled": 0, "kept": 1, "strength_adds": True, "skill": "Jiujutsu", "trait": "agility", "melee": True, "size": "Small"},
     # Firearms (Teppoudo / Intelligence). General rule: ignore armor TN + armor Reduction.
-    # Kakiyari can be used as a yari in melee (DR 1k1) — select "yari" for that mode.
+    # Kakiyari can be used as a yari in melee (DR 1k1) - select "yari" for that mode.
     "kakiyari": {"rolled": 3, "kept": 2, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Large", "armor_tn_mult": 0, "ignore_armor_reduction": True},
     # Hand-Cannon: also ignores natural toughness Reduction. Can be used as tetsubo in melee.
     "hand_cannon": {"rolled": 4, "kept": 3, "strength_adds": False, "skill": "Teppoudo", "trait": "intelligence", "melee": False, "size": "Large", "armor_tn_mult": 0, "ignore_armor_reduction": True, "ignore_creature_reduction": True},
@@ -734,7 +734,7 @@ def resolve_iaijutsu_focus(
     win_threshold controls the margin needed to strike first (default 5;
     Kakita R3 First and Last Strike uses 3). raise_divisor controls the
     Free-Raise-per-margin step (default 5; First and Last Strike uses 3).
-    Thresholds are per-duelist — asymmetric when only one has the technique."""
+    Thresholds are per-duelist - asymmetric when only one has the technique."""
     r_a = void_a + iaijutsu_a + bonus_rolled_a
     k_a = void_a + bonus_kept_a
     r_b = void_b + iaijutsu_b + bonus_rolled_b

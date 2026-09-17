@@ -2,7 +2,7 @@
 
 Only tattoos whose effect the bot can compute faithfully from the sheet are
 auto-applied here: passive modifiers gated on the active tattoo, character
-stats, and weapon profile — the same pattern as kata_effects.py / kiho_effects.py.
+stats, and weapon profile - the same pattern as kata_effects.py / kiho_effects.py.
 
 Auto-applied (9):
   Bamboo: Armor TN += (2 x School Rank) + 5 (defender, no armor)
@@ -10,7 +10,7 @@ Auto-applied (9):
   Blaze: unarmed damage +Fire Ring +School Rank flat (attacker)
   Crab: Reduction += Earth Ring (defender)
   Lion: +SR rolled dice on attack rolls with chosen Bugei skill (attacker)
-  Mantis: Fear immunity (passive, always on — wired into /assess fear)
+  Mantis: Fear immunity (passive, always on - wired into /assess fear)
   Mountain: wound penalties reduced by (School Rank + 2) (attacker)
   Phoenix: reactive heal at Down/Out (reminder on damage resolution)
   Storm: Knockdown costs 1 Raise instead of standard (attacker free raise)
@@ -153,7 +153,7 @@ def maneuver_free_raises(
 
 
 # ---------------------------------------------------------------------------
-# Fear immunity (Mantis — passive, always on, does not need activation)
+# Fear immunity (Mantis - passive, always on, does not need activation)
 # ---------------------------------------------------------------------------
 
 def is_fear_immune(character: Character) -> bool:
@@ -208,7 +208,7 @@ def active_tattoo_reminder(character: Character) -> str | None:
         chosen = (getattr(character, "lion_tattoo_skill", "") or "")
         if chosen:
             return None
-        return "⚑ Lion Tattoo: no Bugei skill chosen — use `/sheet tattoo activate Lion skill:` to set one"
+        return "⚑ Lion Tattoo: no Bugei skill chosen - use `/sheet tattoo activate Lion skill:` to set one"
     text = _COMBAT_REMINDERS.get(active)
     if text:
         sr = character.school_rank

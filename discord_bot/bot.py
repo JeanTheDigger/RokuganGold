@@ -356,7 +356,7 @@ async def _refuse_if_cannot_act(interaction: discord.Interaction, c: Character) 
         return True
     if stats.wound_level_name(c) == "Out":
         await interaction.response.send_message(
-            f"😵 **{c.name}** is **Out** — unconscious — and cannot act until healed above that level.",
+            f"😵 **{c.name}** is **Out** - unconscious - and cannot act until healed above that level.",
             ephemeral=True,
         )
         return True
@@ -390,7 +390,7 @@ def _sheet_diff(old: dict, new: dict) -> list[str]:
             a, b = a or {}, b or {}
             for k in sorted(set(a) | set(b)):
                 if a.get(k) != b.get(k):
-                    out.append(f"{key}.{k} {a.get(k, '—')} → {b.get(k, '—')}")
+                    out.append(f"{key}.{k} {a.get(k, '-')} → {b.get(k, '-')}")
         elif isinstance(a, list) or isinstance(b, list):
             a, b = a or [], b or []
             added = [x for x in b if x not in a]; removed = [x for x in a if x not in b]
@@ -566,7 +566,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     elif c.owned_armor:
         gear = f"Armor: {c.owned_armor}  (not worn)"
     else:
-        gear = "Armor: —"
+        gear = "Armor: -"
     if c.equipped_weapon:
         wield = c.equipped_weapon
         if c.off_hand_weapon:
@@ -1373,7 +1373,7 @@ _SET_FIELDS = [
 ]
 _SET_CHOICES = [app_commands.Choice(name=f, value=f) for f in _SET_FIELDS]
 
-@sheet.command(name="create", description="Create a new character — opens a private wizard channel.")
+@sheet.command(name="create", description="Create a new character - opens a private wizard channel.")
 async def sheet_create(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -2250,7 +2250,7 @@ async def _chargen_wildcards(interaction: discord.Interaction, state: dict) -> N
 
     total = len(slots)
     await interaction.response.edit_message(
-        content=f"**Starting Skills — Pick {slot_idx + 1} of {total}**{rank_note}\n{slot['label']}",
+        content=f"**Starting Skills - Pick {slot_idx + 1} of {total}**{rank_note}\n{slot['label']}",
         embed=_active_embed(state), view=view,
     )
 
@@ -2290,7 +2290,7 @@ async def _chargen_wildcard_category(interaction: discord.Interaction, state: di
     rank_note = f" at Rank {slot['rank']}" if slot["rank"] > 1 else ""
     total = len(slots)
     await interaction.response.edit_message(
-        content=f"**Starting Skills — Pick {slot_idx + 1} of {total}** ({category}){rank_note}\n{slot['label']}",
+        content=f"**Starting Skills - Pick {slot_idx + 1} of {total}** ({category}){rank_note}\n{slot['label']}",
         embed=_active_embed(state), view=view,
     )
 
@@ -2384,7 +2384,7 @@ async def _chargen_traits(interaction: discord.Interaction, state: dict) -> None
     view.add_item(next_btn)
 
     await interaction.response.edit_message(
-        content="**Step 5/10 — Trait Raises** · Select a trait to raise (costs XP). Press **Next** when done.",
+        content="**Step 5/10 - Trait Raises** · Select a trait to raise (costs XP). Press **Next** when done.",
         embed=_chargen_embed(state), view=view,
     )
 
@@ -2502,7 +2502,7 @@ class _AdvantageSelect(discord.ui.Select):
         for a in advs[:25]:
             options.append(discord.SelectOption(
                 label=a["name"][:100],
-                description=f"{a['cost_text']} — {a.get('category', '')}",
+                description=f"{a['cost_text']} - {a.get('category', '')}",
             ))
         if not options:
             options = [discord.SelectOption(label="(none available)", value="__none__")]
@@ -2549,7 +2549,7 @@ async def _chargen_adv_category(interaction: discord.Interaction, state: dict, c
     back_btn.callback = on_back
     view.add_item(back_btn)
     await interaction.response.edit_message(
-        content=f"**Step 6/10 — Advantages ({cat})** · Select an advantage to buy.",
+        content=f"**Step 6/10 - Advantages ({cat})** · Select an advantage to buy.",
         embed=_chargen_embed(state), view=view,
     )
 
@@ -2606,7 +2606,7 @@ async def _chargen_advantages(interaction: discord.Interaction, state: dict) -> 
     view.add_item(next_btn)
 
     await interaction.response.edit_message(
-        content="**Step 6/10 — Advantages** · Pick a category then select advantages. Press **Next** when done.",
+        content="**Step 6/10 - Advantages** · Pick a category then select advantages. Press **Next** when done.",
         embed=_chargen_embed(state), view=view,
     )
 
@@ -2630,7 +2630,7 @@ class _DisadvantageSelect(discord.ui.Select):
         for d in disadvs[:25]:
             options.append(discord.SelectOption(
                 label=d["name"][:100],
-                description=f"{d['cost_text']} — gives XP back",
+                description=f"{d['cost_text']} - gives XP back",
             ))
         if not options:
             options = [discord.SelectOption(label="(none available)", value="__none__")]
@@ -2680,7 +2680,7 @@ async def _chargen_disadv_category(interaction: discord.Interaction, state: dict
     view.add_item(back_btn)
     disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
     await interaction.response.edit_message(
-        content=f"**Step 7/10 — Disadvantages ({cat})** · "
+        content=f"**Step 7/10 - Disadvantages ({cat})** · "
                 f"Select a disadvantage ({disadv_xp}/{_MAX_DISADVANTAGE_XP} XP gained).",
         embed=_chargen_embed(state), view=view,
     )
@@ -2739,7 +2739,7 @@ async def _chargen_disadvantages(interaction: discord.Interaction, state: dict) 
 
     disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
     await interaction.response.edit_message(
-        content=f"**Step 7/10 — Disadvantages** · Pick a category to browse. "
+        content=f"**Step 7/10 - Disadvantages** · Pick a category to browse. "
                 f"({disadv_xp}/{_MAX_DISADVANTAGE_XP} XP gained). Press **Next** when done.",
         embed=_chargen_embed(state), view=view,
     )
@@ -2816,7 +2816,7 @@ async def _chargen_skills_category(interaction: discord.Interaction, state: dict
     back_btn.callback = on_back
     view.add_item(back_btn)
     await interaction.response.edit_message(
-        content=f"**Step 8/10 — Skills ({category})** · Select a skill to buy/raise.",
+        content=f"**Step 8/10 - Skills ({category})** · Select a skill to buy/raise.",
         embed=_chargen_embed(state), view=view,
     )
 
@@ -2892,7 +2892,7 @@ async def _chargen_skills(interaction: discord.Interaction, state: dict) -> None
     view.add_item(undo_emph_btn)
 
     await interaction.response.edit_message(
-        content="**Step 8/10 — Skills** · Pick a category then select skills to buy. "
+        content="**Step 8/10 - Skills** · Pick a category then select skills to buy. "
                 "Use **Buy Emphasis** to add skill emphases. Press **Next** when done.",
         embed=_chargen_embed(state), view=view,
     )
@@ -2975,7 +2975,7 @@ async def _chargen_emphasis_pick(interaction: discord.Interaction, state: dict) 
     view.add_item(back_btn)
     _, remaining = _calc_chargen_xp(state)
     await interaction.response.edit_message(
-        content=f"**Step 8/10 — Emphasis** · Pick a skill to add an emphasis to ({_EMPHASIS_XP_COST} XP each). "
+        content=f"**Step 8/10 - Emphasis** · Pick a skill to add an emphasis to ({_EMPHASIS_XP_COST} XP each). "
                 f"{remaining} XP remaining.",
         embed=_chargen_embed(state), view=view,
     )
@@ -3068,7 +3068,7 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
             back_btn.callback = on_back
             v2.add_item(back_btn)
             await sel_inter.response.edit_message(
-                content=f"**Step 9/10 — Spells ({el})** · Pick a Mastery 1 spell.",
+                content=f"**Step 9/10 - Spells ({el})** · Pick a Mastery 1 spell.",
                 embed=_chargen_embed(state), view=v2,
             )
 
@@ -3097,7 +3097,7 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
 
     slots_desc = ", ".join(f"{el}: {cnt}" for el, cnt in remaining.items() if cnt > 0)
     await interaction.response.edit_message(
-        content=f"**Step 9/10 — Starting Spells** · Remaining slots: {slots_desc}. "
+        content=f"**Step 9/10 - Starting Spells** · Remaining slots: {slots_desc}. "
                 f"(Sense, Commune, Summon are auto-granted.)",
         embed=_chargen_embed(state), view=view,
     )
@@ -3229,7 +3229,7 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
         view.add_item(back_spells_btn)
 
     await interaction.response.edit_message(
-        content="**Step 10/10 — Review** · Check your character below, then submit for DM approval.",
+        content="**Step 10/10 - Review** · Check your character below, then submit for DM approval.",
         embed=embed, view=view,
     )
 
@@ -3373,7 +3373,7 @@ async def _create_player_support_channel(
     try:
         ch = await support_cat.create_text_channel(
             channel_name, overwrites=overwrites,
-            topic=f"Private channel for {character_name} — speak with Staff here.",
+            topic=f"Private channel for {character_name} - speak with Staff here.",
             reason=f"Player support channel for approved character '{character_name}'",
         )
         await ch.send(
@@ -3382,7 +3382,7 @@ async def _create_player_support_channel(
         )
         return f"Support channel #{ch.name} created."
     except discord.Forbidden:
-        return "Could not create support channel — bot lacks permission."
+        return "Could not create support channel - bot lacks permission."
 
 
 class _FullCharacterApprovalView(_DisableableView):
@@ -3452,7 +3452,7 @@ class _FullCharacterApprovalView(_DisableableView):
         try:
             await member.edit(nick=state["name"], reason=f"Character approved: {state['name']}")
         except discord.Forbidden:
-            nick_note = ("\n(Could not change nickname — the bot's role may be too low "
+            nick_note = ("\n(Could not change nickname - the bot's role may be too low "
                          "or the member is the server owner.)")
 
         creation_ch_id = store.get_creation_channel(guild_id, owner_id)
@@ -3460,7 +3460,7 @@ class _FullCharacterApprovalView(_DisableableView):
             ch = client.get_channel(int(creation_ch_id))
             if ch:
                 try:
-                    await ch.delete(reason=f"Character '{state['name']}' approved — wizard channel cleanup")
+                    await ch.delete(reason=f"Character '{state['name']}' approved - wizard channel cleanup")
                 except discord.Forbidden:
                     pass
             store.delete_creation_channel(guild_id, owner_id)
@@ -3748,12 +3748,12 @@ class _DeleteConfirmView(discord.ui.View):
                         await member.remove_roles(*roles_to_remove, reason=f"Character '{char.name}' deleted")
                         role_notes.append("Roles removed: " + ", ".join(r.name for r in roles_to_remove))
                     except discord.Forbidden:
-                        role_notes.append("Could not remove roles — bot lacks permission.")
+                        role_notes.append("Could not remove roles - bot lacks permission.")
                 try:
                     await member.edit(nick=None, reason=f"Character '{char.name}' deleted")
                     role_notes.append("Nickname reset.")
                 except discord.Forbidden:
-                    role_notes.append("Could not reset nickname — bot lacks permission.")
+                    role_notes.append("Could not reset nickname - bot lacks permission.")
 
             support_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT)
             if support_cat:
@@ -3764,7 +3764,7 @@ class _DeleteConfirmView(discord.ui.View):
                         await support_ch.delete(reason=f"Character '{char.name}' deleted")
                         role_notes.append(f"Support channel #{channel_slug} deleted.")
                     except discord.Forbidden:
-                        role_notes.append("Could not delete support channel — bot lacks permission.")
+                        role_notes.append("Could not delete support channel - bot lacks permission.")
 
         extra = ("\n" + "\n".join(role_notes)) if role_notes else ""
         await interaction.response.edit_message(
@@ -4362,7 +4362,7 @@ async def sheet_kiho_activate(
 
 
 # ---------------------------------------------------------------------------
-# /sheet tattoo — Togashi tattoo management (s57.25)
+# /sheet tattoo - Togashi tattoo management (s57.25)
 # ---------------------------------------------------------------------------
 
 @sheet_tattoo_grp.command(name="add", description="Grant a Togashi tattoo ability to a character. [Fortune]")
@@ -4479,7 +4479,7 @@ async def sheet_tattoo_activate(
         return
     if key == "bear" and not choice:
         await interaction.response.send_message(
-            "Bear Tattoo requires `choice:` — pick **Stamina** (+SR) or **Strength** (+ceil(SR/2)).",
+            "Bear Tattoo requires `choice:` - pick **Stamina** (+SR) or **Strength** (+ceil(SR/2)).",
             ephemeral=True,
         )
         return
@@ -4491,7 +4491,7 @@ async def sheet_tattoo_activate(
     if key == "lion":
         if not skill:
             await interaction.response.send_message(
-                "Lion Tattoo requires `skill:` — name one Bugei skill to boost by +SR ranks "
+                "Lion Tattoo requires `skill:` - name one Bugei skill to boost by +SR ranks "
                 "(e.g. Kenjutsu, Heavy Weapons, Jiujutsu).", ephemeral=True,
             )
             return
@@ -4634,7 +4634,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/npc clone", "Clone an NPC with a new name"),
         ("/npc rename / delete", "Rename or remove an NPC"),
         ("/npc place / dismiss", "Place or remove an NPC in a room"),
-        ("/npc say", "Speak as an NPC (webhook — appears as their name)"),
+        ("/npc say", "Speak as an NPC (webhook - appears as their name)"),
     ]),
     ("\U0001f409", "Creatures", "Bestiary creature management.", [
         ("/creature catalog", "Search bestiary templates (compact)"),
@@ -4881,7 +4881,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         c = rec.character
         parts = []
         if stats.is_dead(c):
-            lines.append(f"**{c.name}**: 💀 dead — no recovery")
+            lines.append(f"**{c.name}**: 💀 dead - no recovery")
             continue
         healed = 0
         rate = stats.natural_healing_rate(c)
@@ -4916,7 +4916,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
                         line = (f"☠️ Taint roll failed ({tr['rolled']}k{tr['kept']}{tea} = {tr['total']} vs TN {tr['tn']}): "
                                 f"Taint {tr['old_taint']:g} → **{tr['new_taint']:g}**")
                         if tr["crossing"]:
-                            line += f" — **Rank {tr['crossing']['new_rank']}**: {tr['crossing']['description']}"
+                            line += f" - **Rank {tr['crossing']['new_rank']}**: {tr['crossing']['description']}"
                             if "mutation" in tr["crossing"]:
                                 line += f" Mutation: {tr['crossing']['mutation']}."
                             if "madness" in tr["crossing"]:
@@ -5000,7 +5000,7 @@ async def dm_mount(
 def _format_rokugani_date(year: int, month: int, day: int) -> str:
     """Format a Rokugani date as a human-readable string."""
     month_name, season = ROKUGANI_MONTHS[month - 1]
-    return f"Day {day} of the Month of the {month_name}, {season} — Year {year} (Isawa Calendar)"
+    return f"Day {day} of the Month of the {month_name}, {season} - Year {year} (Isawa Calendar)"
 
 def _date_embed(date_str: str) -> discord.Embed:
     return discord.Embed(
@@ -5177,7 +5177,7 @@ async def dm_damage(
         embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
         await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the damage below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
         await interaction.response.send_message(
-            f"💥 Pending damage on **{c.name}** — approval routed to the DM channel.{owner_ping}"
+            f"💥 Pending damage on **{c.name}** - approval routed to the DM channel.{owner_ping}"
         )
     else:
         await interaction.response.send_message(
@@ -5243,7 +5243,7 @@ async def dm_heal(
         embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
         await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the healing below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
         await interaction.response.send_message(
-            f"💚 Pending healing on **{c.name}** — approval routed to the DM channel.{owner_ping}"
+            f"💚 Pending healing on **{c.name}** - approval routed to the DM channel.{owner_ping}"
         )
     else:
         await interaction.response.send_message(
@@ -5291,13 +5291,13 @@ async def dm_revive(
     if rec.owner_id != NPC_OWNER and store.get_active(guild, rec.owner_id) is None:
         store.set_active(guild, rec.owner_id, rec.id)
         notes.append("set as the player's active character again")
-    await _combat_log(guild, f"REVIVE: {c.name} by {interaction.user.display_name} — {reason} ({'; '.join(notes)})")
+    await _combat_log(guild, f"REVIVE: {c.name} by {interaction.user.display_name} - {reason} ({'; '.join(notes)})")
     embed = discord.Embed(
         title=f"🕊️ Revived: {c.name}",
         description=f"**Reason:** {reason}\n" + "\n".join(f"• {n}" for n in notes),
         color=discord.Color.teal(),
     )
-    embed.set_footer(text=f"Staff override by {interaction.user.display_name} — logged")
+    embed.set_footer(text=f"Staff override by {interaction.user.display_name} - logged")
     await interaction.response.send_message(embed=embed)
 
 def _undo_diff(entity_type: str, old: dict, new: dict) -> list[str]:
@@ -5358,7 +5358,7 @@ async def dm_undo(
                 cur_d = cur.character.to_dict() if sn.entity_type == "character" else cur.creature.to_dict()
                 effect = "; ".join(_undo_diff(sn.entity_type, cur_d, sn.data))
             age = int((now - sn.created_at) // 60)
-            lines.append(f"• **{sn.entity_name}** — {sn.note} ({age} min ago)\n  ↩ would restore: {effect}")
+            lines.append(f"• **{sn.entity_name}** - {sn.note} ({age} min ago)\n  ↩ would restore: {effect}")
         embed = discord.Embed(
             title="↩ Undo preview (newest first)",
             description="\n".join(lines)[:4000],
@@ -5399,14 +5399,14 @@ async def dm_undo(
         after_cr = store.get_creature_by_id(sn.entity_id).creature
         if after_cr.wounds_taken >= after_cr.wounds_dead and before_d.get("wounds_taken", 0) < after_cr.wounds_dead:
             notes += await _on_death(guild, after_cr.name, None, None)
-    await _combat_log(guild, f"UNDO: {sn.entity_name} ({sn.note}) by {interaction.user.display_name} — {'; '.join(notes)}")
+    await _combat_log(guild, f"UNDO: {sn.entity_name} ({sn.note}) by {interaction.user.display_name} - {'; '.join(notes)}")
     embed = discord.Embed(
         title=f"↩ Undone: {sn.note} on {sn.entity_name}",
         description="\n".join(f"• {n}" for n in notes),
         color=discord.Color.dark_teal(),
     )
     remaining = len(store.list_undo(guild, sn.entity_name, limit=storage.UNDO_KEEP_PER_ENTITY))
-    embed.set_footer(text=f"Staff action by {interaction.user.display_name} — logged. {remaining} earlier change(s) still undoable for {sn.entity_name}.")
+    embed.set_footer(text=f"Staff action by {interaction.user.display_name} - logged. {remaining} earlier change(s) still undoable for {sn.entity_name}.")
     await interaction.response.send_message(embed=embed)
 
 _PENDING_KIND_LABELS: dict[str, str] = {
@@ -5450,7 +5450,7 @@ async def dm_pending(interaction: discord.Interaction) -> None:
         age_s = f"{age} min" if age < 120 else f"{age // 60} h"
         link = f"[open](https://discord.com/channels/{guild}/{channel_id}/{message_id})" if channel_id else "*(no link: posted before this update)*"
         summary = _pending_summary(kind, state)
-        lines.append(f"• {_PENDING_KIND_LABELS[kind]}{': **' + summary + '**' if summary else ''} — {age_s} ago — {link}")
+        lines.append(f"• {_PENDING_KIND_LABELS[kind]}{': **' + summary + '**' if summary else ''} - {age_s} ago - {link}")
     more = f"\n… and {len(rows) - 15} more." if len(rows) > 15 else ""
     embed = discord.Embed(
         title=f"⏳ Pending approvals ({len(rows)})",
@@ -6383,7 +6383,7 @@ async def npc_equip(
             else:
                 c.armor_name = a
                 c.owned_armor = a
-                changes.append(f"Armor: **{a}** (custom — set ATN/Reduction manually)")
+                changes.append(f"Armor: **{a}** (custom - set ATN/Reduction manually)")
     if not changes:
         await interaction.response.send_message(
             "Provide at least one of `weapon:`, `off_hand:`, or `armor:`.", ephemeral=True,
@@ -6865,7 +6865,7 @@ class SpellDamageView(_DisableableView):
             src = client.get_channel(self.source_channel_id)
             if src:
                 await src.send(msg)
-            await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
+            await interaction.followup.send(f"Denied - posted in <#{self.source_channel_id}>.")
         else:
             await interaction.followup.send(msg)
 
@@ -7084,7 +7084,7 @@ class DmDamageView(_DisableableView):
             src = client.get_channel(self.source_channel_id)
             if src:
                 await src.send(msg)
-            await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
+            await interaction.followup.send(f"Denied - posted in <#{self.source_channel_id}>.")
         else:
             await interaction.followup.send(msg)
 
@@ -7178,7 +7178,7 @@ class DmHealView(_DisableableView):
             src = client.get_channel(self.source_channel_id)
             if src:
                 await src.send(msg)
-            await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
+            await interaction.followup.send(f"Denied - posted in <#{self.source_channel_id}>.")
         else:
             await interaction.followup.send(msg)
 
@@ -7559,7 +7559,7 @@ async def creature_attack_cmd(
         await _combat_log(guild, f"Creature Attack: {cr.name} → {t_name} MISS (roll {outcome['total']} vs TN {outcome['tn']})")
 
 # ===========================================================================
-# /category — organise NPCs & creatures into named groups
+# /category - organise NPCs & creatures into named groups
 # ===========================================================================
 _ENTITY_TYPE_CHOICES = [
     app_commands.Choice(name="NPC", value="npc"),
@@ -7793,7 +7793,7 @@ async def category_bulk_add(
     if not_found:
         parts.append(f"Not found: {', '.join(not_found)}")
     await interaction.response.send_message(
-        f"\U0001f4c1 **{cat.name}** — {kind.name} bulk add\n" + "\n".join(parts),
+        f"\U0001f4c1 **{cat.name}** - {kind.name} bulk add\n" + "\n".join(parts),
         ephemeral=True,
     )
 
@@ -7836,7 +7836,7 @@ async def category_bulk_remove(
     if not_in:
         parts.append(f"Not in category: {', '.join(not_in)}")
     await interaction.response.send_message(
-        f"\U0001f4c1 **{cat.name}** — {kind.name} bulk remove\n" + "\n".join(parts),
+        f"\U0001f4c1 **{cat.name}** - {kind.name} bulk remove\n" + "\n".join(parts),
         ephemeral=True,
     )
 
@@ -7886,7 +7886,7 @@ async def category_spawn(interaction: discord.Interaction, category: str) -> Non
     if not_found:
         parts.append(f"Template not found: {', '.join(not_found)}")
     await interaction.response.send_message(
-        f"👹 Category **{cat.name}** — spawn\n" + "\n".join(parts),
+        f"👹 Category **{cat.name}** - spawn\n" + "\n".join(parts),
     )
 
 # ===========================================================================
@@ -8317,7 +8317,7 @@ async def location_list(
         lines.append(f"**{a.name}**")
         if locs:
             for loc in locs:
-                lines.append(f"  • <#{loc.channel_id}> — {loc.name}" + (f" (by <@{loc.creator_id}>)" if loc.creator_id else ""))
+                lines.append(f"  • <#{loc.channel_id}> - {loc.name}" + (f" (by <@{loc.creator_id}>)" if loc.creator_id else ""))
         else:
             lines.append("  *(no locations yet)*")
     pages = _paginate(lines, "**Locations:**\n")
@@ -9520,7 +9520,7 @@ async def taint_command(
             embed.add_field(
                 name="Resistance Roll",
                 value=f"Earth {stats.earth_ring(c)}k{stats.earth_ring(c)} vs TN {taint.periodic_roll_tn(rank)} "
-                      f"every {interval} day(s) — next in {due} day(s) (via /dm new_day){tea}",
+                      f"every {interval} day(s) - next in {due} day(s) (via /dm new_day){tea}",
                 inline=False,
             )
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -9588,7 +9588,7 @@ async def craft_extended(
             void_line = f"🌀 Void +1k1 ({c.current_void_points} VP left)"
     if void_unskilled and not spend_void:
         if skill_rank > 0:
-            void_line = f"🌀 Already has {skill} {skill_rank} — use spend_void for +1k1 instead"
+            void_line = f"🌀 Already has {skill} {skill_rank} - use spend_void for +1k1 instead"
         else:
             ok, reason_block = advantage_effects.can_spend_void_on_roll(c, skill_name=skill)
             if not ok:
@@ -9687,7 +9687,7 @@ async def spell_damage(
                 embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
                 await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the spell damage below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
                 await interaction.response.send_message(
-                    f"📜 Spell damage on **{rec.character.name}** — approval routed to the DM channel.{owner_ping}"
+                    f"📜 Spell damage on **{rec.character.name}** - approval routed to the DM channel.{owner_ping}"
                 )
             else:
                 await interaction.response.send_message(
@@ -9818,7 +9818,7 @@ class MedicineTreatView(_DisableableView):
             src = client.get_channel(self.source_channel_id)
             if src:
                 await src.send(msg)
-            await interaction.followup.send(f"Denied — posted in <#{self.source_channel_id}>.")
+            await interaction.followup.send(f"Denied - posted in <#{self.source_channel_id}>.")
         else:
             await interaction.followup.send(msg)
 
@@ -10067,7 +10067,7 @@ async def dm_treat(
                 embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
             ))
             await interaction.response.send_message(
-                f"💊 Treatment on **{pc.name}** succeeded — healing approval routed to the DM channel.{owner_ping}"
+                f"💊 Treatment on **{pc.name}** succeeded - healing approval routed to the DM channel.{owner_ping}"
             )
         else:
             await interaction.response.send_message(
@@ -10653,7 +10653,7 @@ async def setup_server(interaction: discord.Interaction) -> None:
             "The bot is missing required permissions to set up the server:\n"
             + "\n".join(f"• **{p}**" for p in missing)
             + "\n\nGo to **Server Settings → Roles**, find the bot's role, "
-            "and enable those permissions — or re-invite the bot with "
+            "and enable those permissions - or re-invite the bot with "
             "**Administrator** ticked.",
             ephemeral=True,
         )
@@ -11314,7 +11314,7 @@ async def _setup_server_inner(
     await interaction.followup.send("\n".join(summary_parts), ephemeral=True)
 
 # ---------------------------------------------------------------------------
-#  Rules reference — pinned embeds posted by /setup server
+#  Rules reference - pinned embeds posted by /setup server
 # ---------------------------------------------------------------------------
 
 async def _post_rules_reference(channel: discord.TextChannel) -> None:
@@ -11374,14 +11374,14 @@ async def _post_rules_reference(channel: discord.TextChannel) -> None:
         title="Target Numbers (TN)",
         color=0xC4A747,
         description=(
-            "**5** — Mundane\n"
-            "**10** — Simple\n"
-            "**15** — Normal\n"
-            "**20** — Hard\n"
-            "**25** — Very Hard\n"
-            "**30** — Heroic\n"
-            "**40** — Legendary\n"
-            "**50+** — Impossible\n\n"
+            "**5** - Mundane\n"
+            "**10** - Simple\n"
+            "**15** - Normal\n"
+            "**20** - Hard\n"
+            "**25** - Very Hard\n"
+            "**30** - Heroic\n"
+            "**40** - Legendary\n"
+            "**50+** - Impossible\n\n"
             "**Raises:** voluntarily increase TN by +5 each for extra effects.\n"
             "**Free Raises:** from mastery abilities or advantages; don't increase TN."
         ),
@@ -11445,12 +11445,12 @@ async def _post_rules_reference(channel: discord.TextChannel) -> None:
     await msg.pin()
 
 # ---------------------------------------------------------------------------
-#  /dm announce — post an event to announcements with RSVP
+#  /dm announce - post an event to announcements with RSVP
 # ---------------------------------------------------------------------------
 
 @dm.command(name="announce", description="Post a session/event announcement with RSVP reactions. [Fortune]")
 @app_commands.describe(
-    title="Event title (e.g. 'Court of the Crane — Session 5').",
+    title="Event title (e.g. 'Court of the Crane - Session 5').",
     description="Event details (what, where, when, etc.).",
     date="When the event takes place (e.g. 'Saturday, Sept 14 at 7pm EST').",
     channel="Channel to post in (defaults to #announcements if it exists).",
@@ -11500,7 +11500,7 @@ async def dm_announce(
     )
 
 # ---------------------------------------------------------------------------
-#  /players — player character directory
+#  /players - player character directory
 # ---------------------------------------------------------------------------
 
 @client.tree.command(name="players", description="Show all approved player characters on this server.")
@@ -11521,8 +11521,8 @@ async def players_cmd(interaction: discord.Interaction) -> None:
     )
     for owner_id, rec in pcs[:25]:
         c = rec.character
-        clan_str = c.clan if c.clan else "—"
-        school_str = c.school if c.school else "—"
+        clan_str = c.clan if c.clan else "-"
+        school_str = c.school if c.school else "-"
         wl = stats.wound_level_name(c)
         wound_icon = ""
         if wl == "Dead":

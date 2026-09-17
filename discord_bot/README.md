@@ -274,15 +274,15 @@ forbids the action, with a clear error message explaining why:
 
 | Restriction | Blocked commands |
 |---|---|
-| **Stunned** — cannot take actions | attack, guard, full_defense, hold, delay, grapple initiate/hit/throw/pin/break_free |
-| **Pinned** — fully immobilized | attack, guard, full_defense, hold, delay, grapple initiate/hit/throw/pin (break_free is allowed) |
-| **Entangled** — can only break free | attack, guard, full_defense, hold, delay, grapple initiate/hit/throw/pin (break_free is allowed) |
-| **Grappled + Large weapon** — large weapons unusable | attack (with a Large weapon only) |
-| **Prone + Large weapon** — cannot attack with Large | attack (with a Large weapon only) |
-| **Dazed** — Defense/Full Defense only | stance set to Attack, Full Attack, or Center |
-| **Fatigued** — no Full Attack | stance set to Full Attack |
-| **Mounted** — no Full Attack | stance set to Full Attack |
-| **Grappled** — stances don't apply | any stance change |
+| **Stunned** - cannot take actions | attack, guard, full_defense, hold, delay, grapple initiate/hit/throw/pin/break_free |
+| **Pinned** - fully immobilized | attack, guard, full_defense, hold, delay, grapple initiate/hit/throw/pin (break_free is allowed) |
+| **Entangled** - can only break free | attack, guard, full_defense, hold, delay, grapple initiate/hit/throw/pin (break_free is allowed) |
+| **Grappled + Large weapon** - large weapons unusable | attack (with a Large weapon only) |
+| **Prone + Large weapon** - cannot attack with Large | attack (with a Large weapon only) |
+| **Dazed** - Defense/Full Defense only | stance set to Attack, Full Attack, or Center |
+| **Fatigued** - no Full Attack | stance set to Full Attack |
+| **Mounted** - no Full Attack | stance set to Full Attack |
+| **Grappled** - stances don't apply | any stance change |
 
 **Schools & Techniques** (all of **GDD s29**, transcribed verbatim)
 
@@ -425,7 +425,7 @@ it lands, the DM authorizes the outcome."*
 `/fight attack` options: `weapon` (autocomplete), `raises` (+5 TN each),
 `increased_damage` (+5 TN and +1 damage die each), `maneuver`, `spend_void`,
 `attacker_stance`, `defender_stance`, `bonus_tn` (DM situational modifier), and
-`weapon_material` (jade/crystal/obsidian/nemuranai — bypasses creature Invulnerability).
+`weapon_material` (jade/crystal/obsidian/nemuranai - bypasses creature Invulnerability).
 
 **Maneuvers & Void** (the maneuver's raise cost is added to the TN automatically):
 
@@ -636,7 +636,7 @@ wound track (Healthy `Earth×5`, then `Earth×2` per level, as for PCs) are hand
 hazard is excluded. `l5r_rules/creature_catalog.py` is generated: don't hand-edit
 it; re-run the extractor to refresh.
 
-**Creature Special Abilities (GDD s54.0)** — auto-applied when dealing damage to
+**Creature Special Abilities (GDD s54.0)** - auto-applied when dealing damage to
 creatures via `/fight attack target_creature:`:
 
 | Tag | Effect | Bypassed by |
@@ -660,8 +660,8 @@ Kyujutsu/Reflexes like bows.
 
 | Weapon | DR | Armor TN Effect | Other |
 |---|---|---|---|
-| `willow_leaf_arrow` | 2k2 | Normal (standard arrow) | — |
-| `armor_piercing_arrow` | 1k1 | **Ignores** armor TN bonus from armor | — |
+| `willow_leaf_arrow` | 2k2 | Normal (standard arrow) | - |
+| `armor_piercing_arrow` | 1k1 | **Ignores** armor TN bonus from armor | - |
 | `flesh_cutter_arrow` | 2k3 | **Doubles** armor TN bonus from armor | Half range |
 | `humming_bulb_arrow` | 0k1 | Normal | Whistles (flavor) |
 | `rope_cutter_arrow` | 1k1 | Normal | +2 raises vs inanimate (DM); half range |
@@ -675,7 +675,7 @@ damage time based on the attacker's Ninjutsu rank. Bo-Hiya ignores all forms of
 Reduction at damage time (armor, kata bonuses, technique bonuses, natural
 toughness). "Half range" arrows display a DM reminder in the combat effects.
 
-**Weapon Breakage** (GDD s39 — auto-checked at damage time)
+**Weapon Breakage** (GDD s39 - auto-checked at damage time)
 
 | Weapon | Break Threshold |
 |---|---|
@@ -688,17 +688,17 @@ When a weapon's raw damage (pre-Reduction) meets or exceeds its break threshold,
 a **WEAPON BROKEN** warning appears in the damage embed. The DM should enforce
 removal of the weapon from play.
 
-**Weapon Stance Penalties** (GDD s39 — auto-applied on attack)
+**Weapon Stance Penalties** (GDD s39 - auto-applied on attack)
 
 | Weapon | On Foot | Mounted |
 |---|---|---|
-| `dai_kyu` | +10 TN | — |
-| `yumi` | — | +10 TN |
-| `han_kyu` | — | +10 TN |
+| `dai_kyu` | +10 TN | - |
+| `yumi` | - | +10 TN |
+| `han_kyu` | - | +10 TN |
 | `lance` | +10 TN | +5 TN |
 
 Lance uses DR 1k2 (non-charging). Full DR 3k4 requires a mounted charge,
-which is not yet modeled — the DM can use `bonus_tn:` to remove the penalty
+which is not yet modeled - the DM can use `bonus_tn:` to remove the penalty
 and override DR manually for a charge.
 
 **Grapple-Capable Polearms** (GDD s39)
@@ -734,12 +734,12 @@ Shuriken (25') and tsubute (30') are already in the catalog as ranged weapons
 katana. The VP is spent at damage resolution time (not attack time), adding
 **+1k1** to the damage roll. If the attacker has no VP when damage resolves, a
 "no Void Points" note appears and no bonus is applied. Only the katana catalog
-entry has the `void_damage` flag — other weapons are rejected with an error.
+entry has the `void_damage` flag - other weapons are rejected with an error.
 
 **Kyoketsu-shogi** (GDD s39): doubles the target's armor TN bonus (same
 `armor_tn_mult: 2` mechanic as flesh cutter arrows). Auto-applied.
 
-**Firearms** (GDD s39 — Teppoudo / Intelligence)
+**Firearms** (GDD s39 - Teppoudo / Intelligence)
 
 All firearms ignore armor effects on both Armor TN and Reduction. Attack rolls
 use Intelligence (the Teppoudo skill trait), not Agility or Reflexes.
@@ -756,10 +756,10 @@ use Intelligence (the Teppoudo skill trait), not Agility or Reflexes.
 - Rank 7: additionally +0k1 (cumulative +1k1)
 
 Firearms do not add Strength to damage. The DM may optionally rule that
-Perception adds to damage (comparable to Strength for melee) — use
+Perception adds to damage (comparable to Strength for melee) - use
 `increased_damage` raises to represent this if desired.
 
-**Extraordinary Weapon Qualities** (GDD s39 — Crafting Specials)
+**Extraordinary Weapon Qualities** (GDD s39 - Crafting Specials)
 
 Master crafters in Rokugan can forge weapons with exceptional properties. These
 are managed per-character via `/stat quality` (the qualities belong to the
@@ -774,12 +774,12 @@ qualities apply only if the weapon used matches the character's `equipped_weapon
 
 | Quality | Effect | Auto-applied? |
 |---|---|---|
-| **Balanced** | +1k0 to attack rolls | Yes — added to rolled dice in `/fight attack` |
-| **Radiant** | Counts as jade (bypasses creature Invulnerability) | Yes — treated as jade material in creature damage path |
-| **Signature** | Bears the creator's personal stamp (flavor only) | N/A — no mechanical effect |
-| **Swift** | +5 Initiative | Yes — added at `/combat join`/`npc`/`room` time |
-| **True** | Subtract wielder's Strength from target's Reduction | Yes — applied in both creature and PC/NPC damage paths |
-| **Unbreakable** | Cannot be broken by damage exceeding break threshold | Yes — suppresses weapon breakage |
+| **Balanced** | +1k0 to attack rolls | Yes - added to rolled dice in `/fight attack` |
+| **Radiant** | Counts as jade (bypasses creature Invulnerability) | Yes - treated as jade material in creature damage path |
+| **Signature** | Bears the creator's personal stamp (flavor only) | N/A - no mechanical effect |
+| **Swift** | +5 Initiative | Yes - added at `/combat join`/`npc`/`room` time |
+| **True** | Subtract wielder's Strength from target's Reduction | Yes - applied in both creature and PC/NPC damage paths |
+| **Unbreakable** | Cannot be broken by damage exceeding break threshold | Yes - suppresses weapon breakage |
 
 Quality names are validated against `WEAPON_QUALITIES` in `combat.py`. Invalid
 names are rejected. Qualities are displayed as `[balanced, swift]` after the
@@ -795,7 +795,7 @@ Reduction below 0.
 Combatant's base initiative), so it flows through `effective_initiative`
 alongside Void and Center Stance bonuses.
 
-**Armor Catalog** (GDD s39 — full reference with `/ref armor`)
+**Armor Catalog** (GDD s39 - full reference with `/ref armor`)
 
 All 7 armor types from GDD s39 are browsable with full details: TN bonus,
 Reduction, cost (koku), type (heavy/light), and special penalties.
@@ -808,9 +808,9 @@ Reduction, cost (koku), type (heavy/light), and special penalties.
 
 | Armor | TN Bonus | Reduction | Cost | Special |
 |---|---|---|---|---|
-| Bogu | +0 | 1 | 1 koku | — |
-| Ashigaru | +3 | 1 | 5 koku | — |
-| Tatami | +4 | 1 | 10 koku | — |
+| Bogu | +0 | 1 | 1 koku | - |
+| Ashigaru | +3 | 1 | 5 koku | - |
+| Tatami | +4 | 1 | 10 koku | - |
 | Light | +5 | 3 | 25 koku | Athletics/Stealth TN +5 |
 | Heavy | +10 | 5 | 40 koku | Agility/Reflexes skill TN +5 |
 | Tetsu-Do | +13 | 8 | 100 koku | Heavy. Agi/Ref TN +10 (+5 if Str 5+) |
@@ -994,20 +994,20 @@ python3 l5r_rules/dice.py     # runs a built-in validation of the dice rules
 | `/creature compare` | Side-by-side comparison of two bestiary templates in one embed. Each creature shown as a compact stat summary (abbreviated traits, attack/damage, TN, wounds, specials, tags). Useful for DM encounter prep. Ephemeral, DM-only. |
 
 The embed shows:
-- **Rings** — e.g. "Air **1** (Reflexes 3) · Earth **2** · Fire **1** (Agility 3) · Water **3**" — trait overrides in parentheses, non-overridden rings shown clean
-- **Combat** — initiative, named attack with roll/keep + flat bonus, damage roll/keep + flat bonus, Armor TN, Reduction, Fear (if > 0)
-- **Wound Track** — level ranges derived from thresholds, e.g. "Healthy 0–16 · Nicked 17–31 · Dead 32"; proportional fallback for creatures with no explicit thresholds
-- **Special Abilities** — generated from tags (undead immunities, invulnerability type, spirit half-damage, fear penalty)
-- **Tags** — full tag list as inline code
+- **Rings** - e.g. "Air **1** (Reflexes 3) · Earth **2** · Fire **1** (Agility 3) · Water **3**" - trait overrides in parentheses, non-overridden rings shown clean
+- **Combat** - initiative, named attack with roll/keep + flat bonus, damage roll/keep + flat bonus, Armor TN, Reduction, Fear (if > 0)
+- **Wound Track** - level ranges derived from thresholds, e.g. "Healthy 0–16 · Nicked 17–31 · Dead 32"; proportional fallback for creatures with no explicit thresholds
+- **Special Abilities** - generated from tags (undead immunities, invulnerability type, spirit half-damage, fear penalty)
+- **Tags** - full tag list as inline code
 
-Distinct from existing `/creature view` (which shows a *spawned* instance with current wounds). This is a reference lookup — no instance needed.
+Distinct from existing `/creature view` (which shows a *spawned* instance with current wounds). This is a reference lookup - no instance needed.
 
 **Phase 61 (cont.): Category System**
 
 | Command | What it does |
 |---|---|
 | `/category create` | Create a named category (e.g. "Bandits", "Town Guards"). 64-char limit, case-insensitive unique per server. |
-| `/category delete` | Delete a category. Members (NPCs/creatures) are **not** deleted — only the grouping is removed. |
+| `/category delete` | Delete a category. Members (NPCs/creatures) are **not** deleted - only the grouping is removed. |
 | `/category rename` | Rename a category (same uniqueness rules). |
 | `/category add` | Add an NPC or creature to a category. Validates the entity exists before adding. |
 | `/category remove` | Remove an NPC or creature from a category. |
@@ -1034,7 +1034,7 @@ Viewing an NPC (`/npc view`) or creature (`/creature view`) now shows which cate
 | `/npc edit` | Reopen a stored NPC in the same builder, seeded with its current values, starting at Rings and Traits. Save changes overwrites the NPC (wounds are kept; techniques follow the school and Rank). |
 | `/npc form` | The same in one popup: a typed stat block (`Sta 3 Wil 2 ...`, `Kenjutsu 3 (Katana), Lore: Shadowlands 2`, `weapon: katana; armor: light; adv: Large`, `clan: Crab; school: Hida Bushi; rank: 2; honor: 4.5`). Traits typed here are final values. Validated, previewed, then saved. |
 | `/npc template save` · `spawn` · `list` · `view` · `delete` | Reusable NPC templates. `save` copies an existing NPC; `spawn` creates fresh NPCs from a template (`count:` numbers them: Bandit 1, Bandit 2). Spawned NPCs are independent: wounds and edits never touch the template. |
-| `/npc-edit equip` | Set an NPC's equipped weapon, off-hand weapon, and/or armor name. All three parameters are optional — provide whichever you're changing. Empty string clears the field. |
+| `/npc-edit equip` | Set an NPC's equipped weapon, off-hand weapon, and/or armor name. All three parameters are optional - provide whichever you're changing. Empty string clears the field. |
 | `/npc-edit feature` | Add or remove from any list field: Advantage, Disadvantage, Technique, Kata, Kiho, Weapon (owned), Weapon Quality, or Emphasis (requires `skill:` parameter). Case-insensitive duplicate detection. |
 | `/npc-edit affinity` | Set an NPC's shugenja affinity and/or deficiency element. Choice of Air/Earth/Fire/Water/Void/(clear). |
 
