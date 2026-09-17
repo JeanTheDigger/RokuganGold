@@ -4890,6 +4890,29 @@ async def battle_status(
     await interaction.response.send_message(embed=embed)
 
 
+def _sync_mount_to_sheet(guild: str, cb, mounting: bool) -> str:
+    """Persist mounted state to the combatant's character sheet (if they have one).
+    Updates is_mounted and adjusts riding armor TN bonus. Returns a note string."""
+    if cb.is_npc:
+        return ""
+    rec = _d.store.get_by_name_guild(guild, cb.name)
+    if rec is None:
+        return ""
+    c = rec.character
+    c.is_mounted = mounting
+    prof = combat.get_armor(c.armor_name) if c.armor_name else None
+    if prof and prof.get("tn_bonus_mounted"):
+        if mounting:
+            c.armor_tn_bonus = prof["tn_bonus_mounted"]
+        else:
+            c.armor_tn_bonus = prof["tn_bonus"]
+    _d.store.save(rec, note="mount" if mounting else "dismount")
+    extra_parts = []
+    if prof and prof.get("tn_bonus_mounted"):
+        extra_parts.append(f" Armor TN bonus → +{c.armor_tn_bonus}.")
+    return "".join(extra_parts)
+
+
 # ---------------------------------------------------------------------------
 # Phase 42: Mounted Combat (#10)
 # ---------------------------------------------------------------------------
@@ -4916,17 +4939,20 @@ async def combat_mount(
     if cb is None:
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
         return
+    guild = str(interaction.guild_id)
     if dismount:
         cb.conditions.discard("mounted")
-        _d.save_encounter(str(interaction.guild_id), enc)
-        await interaction.response.send_message(f"**{cb.name}** dismounts.")
+        _d.save_encounter(guild, enc)
+        extra = _sync_mount_to_sheet(guild, cb, False)
+        await interaction.response.send_message(f"**{cb.name}** dismounts.{extra}")
     else:
         cb.conditions.add("mounted")
-        _d.save_encounter(str(interaction.guild_id), enc)
+        _d.save_encounter(guild, enc)
+        extra = _sync_mount_to_sheet(guild, cb, True)
         await interaction.response.send_message(
             f"**{cb.name}** mounts up. Mounted combat: +1k0 damage on melee "
             f"vs unmounted, +1 rolled die on Horsemanship checks. Mounted archery "
-            f"at −1k0 unless Mounted Archery emphasis."
+            f"at −1k0 unless Mounted Archery emphasis.{extra}"
         )
 
 # ---------------------------------------------------------------------------

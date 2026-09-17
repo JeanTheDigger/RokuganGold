@@ -81,6 +81,7 @@ class Character:
     armor_name: str = ""
     armor_tn_bonus: int = 0
     armor_reduction: int = 0
+    is_mounted: bool = False
     weapons: list[str] = field(default_factory=list)
     # Currently-wielded weapons (main / off hand). Used as the default weapon for
     # /attack and to gate defender weapon-conditional kata (Strength of the

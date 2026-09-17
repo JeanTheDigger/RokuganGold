@@ -309,7 +309,9 @@ def _armor_skill_penalty(
             return -5, [f"Tetsu-Do: +5 TN on {trait_name.capitalize()} skills (Strength {c.strength})"]
         return -10, [f"Tetsu-Do: +10 TN on {trait_name.capitalize()} skills (Strength {c.strength})"]
     if kind == "agi_ref_not_mounted":
-        return -5, [f"Riding Armor: +5 TN on {trait_name.capitalize()} skills (except mounted)"]
+        if c.is_mounted:
+            return 0, []
+        return -5, [f"Riding Armor: +5 TN on {trait_name.capitalize()} skills (not mounted)"]
     return 0, []
 
 

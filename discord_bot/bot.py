@@ -4613,6 +4613,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/dm setdate", "Set the Rokugani calendar date (year/month/day)"),
         ("/dm roles", "Show Fortune and Kami role holders"),
         ("/dm influence", "Track Influence Points (court scene)"),
+        ("/dm mount", "Toggle mounted state on a character (outside combat)"),
         ("/room create", "Create a private play room (thread, optional description)"),
         ("/room describe", "Set or update the pinned room description"),
         ("/room invite / kick", "Add or remove room members"),
@@ -4945,6 +4946,56 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed)
     if date_str:
         await _update_date_display(guild, date_str, reason="A new day dawns in Rokugan.")
+
+
+@dm.command(name="mount", description="Toggle mounted state on a character (outside combat). [Fortune]")
+@app_commands.describe(
+    member="Target player.",
+    dismount="Dismount instead of mounting.",
+)
+async def dm_mount(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    dismount: bool = False,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    guild = str(interaction.guild_id)
+    rec = store.get_active(guild, str(member.id))
+    if rec is None:
+        await interaction.response.send_message(
+            f"{member.display_name} has no active character.", ephemeral=True,
+        )
+        return
+    c = rec.character
+    mounting = not dismount
+    if c.is_mounted == mounting:
+        state = "already mounted" if mounting else "already dismounted"
+        await interaction.response.send_message(
+            f"**{c.name}** is {state}.", ephemeral=True,
+        )
+        return
+    c.is_mounted = mounting
+    prof = combat.get_armor(c.armor_name) if c.armor_name else None
+    armor_note = ""
+    if prof and prof.get("tn_bonus_mounted"):
+        if mounting:
+            c.armor_tn_bonus = prof["tn_bonus_mounted"]
+        else:
+            c.armor_tn_bonus = prof["tn_bonus"]
+        armor_note = f" Armor TN bonus → +{c.armor_tn_bonus}."
+    store.save(rec, note="mount" if mounting else "dismount")
+    if mounting:
+        await interaction.response.send_message(
+            f"**{c.name}** mounts up.{armor_note} Riding armor skill penalty removed while mounted.",
+        )
+    else:
+        await interaction.response.send_message(
+            f"**{c.name}** dismounts.{armor_note}",
+        )
+
 
 def _format_rokugani_date(year: int, month: int, day: int) -> str:
     """Format a Rokugani date as a human-readable string."""
