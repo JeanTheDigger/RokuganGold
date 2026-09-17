@@ -1044,7 +1044,7 @@ async def template_delete(interaction: discord.Interaction, template: str) -> No
     if not _d.store.delete_npc_template(str(interaction.guild_id), template):
         await interaction.response.send_message(f"No template named **{template}**.", ephemeral=True)
         return
-    await interaction.response.send_message(f"Deleted template **{template}**.", ephemeral=True)
+    await interaction.response.send_message(f"🗑️ Deleted template **{template}**.", ephemeral=True)
 
 
 def init(*, store, npc_owner: str, require_guild, require_dm_role, is_dm, build_sheet_embed,

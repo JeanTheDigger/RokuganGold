@@ -146,7 +146,7 @@ def _build_armor_embed(name: str, s: dict) -> discord.Embed:
     embed.add_field(name="Cost", value=f"{s['cost']} koku", inline=True)
     embed.add_field(name="Type", value="Heavy" if s["is_heavy"] else "Light", inline=True)
     if s.get("special"):
-        embed.add_field(name="Special", value=s["special"], inline=False)
+        embed.add_field(name="Special", value=s["special"][:1024], inline=False)
     return embed
 
 
@@ -688,7 +688,8 @@ async def encumbrance_check(
     else:
         rec = _d.store.get_active(guild, str(interaction.user.id))
     if rec is None:
-        await interaction.response.send_message("Character not found.", ephemeral=True)
+        label = f"No character named **{name}**." if name else "You have no active character."
+        await interaction.response.send_message(label, ephemeral=True)
         return
     c = rec.character
     cap = stats.encumbrance_capacity(c)
@@ -857,7 +858,8 @@ async def ancestors_check(
     else:
         rec = _d.store.get_active(guild, str(interaction.user.id))
     if rec is None:
-        await interaction.response.send_message("Character not found.", ephemeral=True)
+        label = f"No character named **{name}**." if name else "You have no active character."
+        await interaction.response.send_message(label, ephemeral=True)
         return
     c = rec.character
     found = []
@@ -906,7 +908,8 @@ async def dual_wield_info(
     else:
         rec = _d.store.get_active(guild, str(interaction.user.id))
     if rec is None:
-        await interaction.response.send_message("Character not found.", ephemeral=True)
+        label = f"No character named **{name}**." if name else "You have no active character."
+        await interaction.response.send_message(label, ephemeral=True)
         return
     c = rec.character
     embed = discord.Embed(title=f"Dual Wielding: {c.name}", color=discord.Color.dark_blue())
@@ -1075,7 +1078,7 @@ async def tattoo_view(interaction: discord.Interaction, name: str) -> None:
         )
         return
     embed = discord.Embed(title=f"Tattoo: {t['name']}", color=discord.Color.dark_green())
-    embed.add_field(name="Effect", value=t["effect"], inline=False)
+    embed.add_field(name="Effect", value=t["effect"][:1024], inline=False)
     act = t["activation"].replace("_", " ").title()
     dur = t["duration"].replace("_", " ").title()
     layer = t["layer"].replace("_", " ").title()

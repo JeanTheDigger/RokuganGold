@@ -1881,7 +1881,7 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
     if enc is not None and enc.find(rec.character.name) is not None and not _d.is_dm(interaction):
         await interaction.response.send_message(
             f"**{rec.character.name}** is already in initiative. Re-rolling initiative is a staff call "
-            f"(`/combat join member:` by Fortune).", ephemeral=True,
+            f"(`/combat join member:` by {_d.ROLE_FORTUNE}).", ephemeral=True,
         )
         return
     if enc is not None and enc.roster and not _d.is_dm(interaction) and not enc.roster_allows(str(owner.id)):
@@ -2267,7 +2267,7 @@ async def combat_setup(interaction: discord.Interaction) -> None:
     )
 
 
-@combat_group.command(name="add", description="Add an NPC/monster to initiative by its Reflexes and Insight Rank.")
+@combat_group.command(name="add", description="Add an NPC/monster to initiative by its Reflexes and Insight Rank. [Fortune]")
 @app_commands.describe(
     name="NPC name.", reflexes="NPC Reflexes.", insight_rank="NPC Insight Rank (1 if unknown).",
 )
@@ -2355,7 +2355,7 @@ async def combat_status(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(_render_encounter(enc, str(interaction.guild_id)))
 
 
-@combat_group.command(name="remove", description="Remove a combatant from initiative.")
+@combat_group.command(name="remove", description="Remove a combatant from initiative. [Fortune]")
 @app_commands.describe(name="The combatant name to remove.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_remove(interaction: discord.Interaction, name: str) -> None:
@@ -2454,7 +2454,7 @@ async def combat_recap(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed)
 
 
-@combat_group.command(name="end", description="End the encounter in this channel and post the fight summary.")
+@combat_group.command(name="end", description="End the encounter in this channel and post the fight summary. [Fortune]")
 async def combat_end(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -2463,7 +2463,7 @@ async def combat_end(interaction: discord.Interaction) -> None:
     guild = str(interaction.guild_id)
     enc = _d.encounters.get(interaction.channel_id)
     if enc is None:
-        await interaction.response.send_message("No encounter here.", ephemeral=True)
+        await interaction.response.send_message("No encounter here. Start one with `/combat start`.", ephemeral=True)
         return
     embed, logs = _render_summary(enc, guild, final=True)
     await _close_roster_message(enc, guild, "Encounter ended.")
@@ -2581,7 +2581,7 @@ def _expiry_notes(enc: encounter.Encounter) -> list[str]:
     return notes
 
 
-@combat_condition.command(name="set", description="Apply a condition to a combatant, optionally for a number of Rounds [Fortune]")
+@combat_condition.command(name="set", description="Apply a condition to a combatant, optionally for a number of Rounds. [Fortune]")
 @app_commands.describe(
     name="The combatant to affect.",
     condition="The condition to apply.",
@@ -2616,7 +2616,7 @@ async def combat_condition_set(
     await _d.combat_log(str(interaction.guild_id), f"Condition: {c.name} +{condition.name}{dur}")
 
 
-@combat_condition.command(name="clear", description="Remove a condition from a combatant [Fortune]")
+@combat_condition.command(name="clear", description="Remove a condition from a combatant. [Fortune]")
 @app_commands.describe(
     name="The combatant to affect.",
     condition="The condition to remove.",
@@ -4328,7 +4328,7 @@ async def combat_stance(
     await _d.combat_log(str(interaction.guild_id), f"Stance: {cb.name} → {label}")
 
 
-@combat_turn.command(name="init", description="Adjust a combatant's initiative value [Fortune]")
+@combat_turn.command(name="init", description="Adjust a combatant's initiative value. [Fortune]")
 @app_commands.describe(
     name="Combatant name.",
     value="New initiative total.",
@@ -4364,7 +4364,7 @@ async def combat_init(
     )
 
 
-@combat_turn.command(name="hold", description="Mark a combatant as holding their action [Fortune]")
+@combat_turn.command(name="hold", description="Mark a combatant as holding their action. [Fortune]")
 @app_commands.describe(name="Combatant name.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_hold(interaction: discord.Interaction, name: str) -> None:
@@ -4427,7 +4427,7 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         await _d.combat_log(guild, f"Hold: {cb.name} held")
 
 
-@combat_turn.command(name="delay", description="Mark a combatant as delaying [Fortune]")
+@combat_turn.command(name="delay", description="Mark a combatant as delaying. [Fortune]")
 @app_commands.describe(name="Combatant name.", new_initiative="Optional new initiative value.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_delay(
@@ -4507,7 +4507,7 @@ async def combat_delay(
         await _d.combat_log(guild, f"Delay: {cb.name} delayed{init_note}")
 
 
-@combat_turn.command(name="act", description="A held/delayed combatant takes their action now [Fortune]")
+@combat_turn.command(name="act", description="A held/delayed combatant takes their action now. [Fortune]")
 @app_commands.describe(name="Combatant name.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_act(interaction: discord.Interaction, name: str) -> None:
@@ -4603,7 +4603,7 @@ async def combat_turn_done(
     await _d.combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
 
 
-@combat_turn.command(name="surprise", description="Toggle the surprise round flag on the current encounter [Fortune]")
+@combat_turn.command(name="surprise", description="Toggle the surprise round flag on the current encounter. [Fortune]")
 async def combat_surprise(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return

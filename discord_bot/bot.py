@@ -642,7 +642,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
     if record.owner_id == NPC_OWNER:
         cats = store.list_entity_categories(record.guild_id, "npc", c.name)
         if cats:
-            embed.add_field(name="Categories", value=", ".join(cat.name for cat in cats), inline=False)
+            embed.add_field(name="Categories", value=", ".join(cat.name for cat in cats)[:1024], inline=False)
 
     embed.set_footer(text=f"Owner: player {record.owner_id} · sheet #{record.id}")
     return embed
@@ -682,10 +682,10 @@ def build_creature_embed(record: storage.CreatureRecord) -> discord.Embed:
     )
     specials = creature.creature_special_notes(cr)
     if specials:
-        embed.add_field(name="Special Abilities", value="\n".join(specials), inline=False)
+        embed.add_field(name="Special Abilities", value="\n".join(specials)[:1024], inline=False)
     cats = store.list_entity_categories(record.guild_id, "creature", cr.name)
     if cats:
-        embed.add_field(name="Categories", value=", ".join(c.name for c in cats), inline=False)
+        embed.add_field(name="Categories", value=", ".join(c.name for c in cats)[:1024], inline=False)
     embed.set_footer(text=f"creature #{record.id}")
     return embed
 
@@ -751,7 +751,7 @@ def _build_creature_template_embed(cr: creature.Creature) -> discord.Embed:
 
     specials = creature.creature_special_notes(cr)
     if specials:
-        embed.add_field(name="Special Abilities", value="\n".join(specials), inline=False)
+        embed.add_field(name="Special Abilities", value="\n".join(specials)[:1024], inline=False)
 
     if cr.tags:
         embed.add_field(name="Tags", value=", ".join(f"`{t}`" for t in cr.tags), inline=False)
@@ -830,7 +830,7 @@ async def ping(interaction: discord.Interaction) -> None:
     ms = f"{round(latency * 1000)} ms" if latency == latency else "not measured yet"
     await interaction.response.send_message(f"🎋 Alive. Gateway latency {ms}.", ephemeral=True)
 
-@client.tree.command(name="sync", description="Re-sync all slash commands with Discord [Kami]")
+@client.tree.command(name="sync", description="Re-sync all slash commands with Discord. [Kami]")
 async def sync_commands(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -3688,7 +3688,7 @@ async def sheet_delete(
     if rec is None and member is None and _is_dm(interaction):
         rec = store.get_by_name_guild(guild, name)
     if rec is None:
-        await interaction.response.send_message(f"No character named **{name}** found.", ephemeral=True)
+        await interaction.response.send_message(f"No character named **{name}**.", ephemeral=True)
         return
     if stats.is_dead(rec.character) and not _is_dm(interaction):
         await interaction.response.send_message(
@@ -3792,7 +3792,7 @@ async def sheet_owner(interaction: discord.Interaction, name: str) -> None:
     guild = str(interaction.guild_id)
     rec = store.get_by_name_guild(guild, name)
     if rec is None:
-        await interaction.response.send_message(f"No character named **{name}** found.", ephemeral=True)
+        await interaction.response.send_message(f"No character named **{name}**.", ephemeral=True)
         return
     if rec.owner_id == NPC_OWNER:
         await interaction.response.send_message(f"**{rec.character.name}** is an NPC.", ephemeral=True)
@@ -4799,7 +4799,7 @@ async def dm_wizard_cmd(interaction: discord.Interaction) -> None:
         ephemeral=True,
     )
 
-@dm.command(name="party", description="DM overview: all active PCs on this server.")
+@dm.command(name="party", description="DM overview: all active PCs on this server. [Fortune]")
 async def party_overview(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -4865,7 +4865,7 @@ async def dm_roles(interaction: discord.Interaction) -> None:
         lines.append(f"**{ROLE_FORTUNE}** role not found: create it in Server Settings > Roles.")
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
-@dm.command(name="new_day", description="Advance one day: heal, refresh VP and spell slots for all PCs.")
+@dm.command(name="new_day", description="Advance one day: heal, refresh VP and spell slots for all PCs. [Fortune]")
 async def dm_new_day(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -5044,7 +5044,7 @@ def _advance_calendar(guild_id: str) -> str | None:
     store.set_calendar(guild_id, year, month, day)
     return _format_rokugani_date(year, month, day)
 
-@dm.command(name="setdate", description="Set the Rokugani calendar date [Fortune]")
+@dm.command(name="setdate", description="Set the Rokugani calendar date. [Fortune]")
 @app_commands.describe(
     year="Year number (Isawa Calendar).",
     month="Month (1-12): Hare, Dragon, Serpent, Horse, Goat, Monkey, Rooster, Dog, Boar, Rat, Ox, Tiger.",
@@ -5126,7 +5126,7 @@ def _modify_inventory(
     return True, f"Added {quantity}× **{key}** to **{char_name}** (now {total})."
 
 
-@dm.command(name="damage", description="Apply damage to a character (shows DM-approval buttons).")
+@dm.command(name="damage", description="Apply damage to a character (shows DM-approval buttons). [Fortune]")
 @app_commands.describe(
     target="Character name (PC or NPC).",
     amount="Raw damage to apply (before Reduction).",
@@ -5186,7 +5186,7 @@ async def dm_damage(
         )
         await view.persist(await interaction.original_response())
 
-@dm.command(name="heal", description="Heal wounds on a character (shows DM-approval buttons).")
+@dm.command(name="heal", description="Heal wounds on a character (shows DM-approval buttons). [Fortune]")
 @app_commands.describe(
     target="Character name (PC or NPC).",
     amount="Wounds to heal.",
@@ -5432,7 +5432,7 @@ def _pending_summary(kind: str, state: str) -> str:
         return f"{src} → {tgt}"
     return str(tgt or src or "")
 
-@dm.command(name="pending", description="List approvals still waiting for a DM, with jump links [Fortune]")
+@dm.command(name="pending", description="List approvals still waiting for a DM, with jump links. [Fortune]")
 async def dm_pending(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -5971,7 +5971,7 @@ async def npc_delete(interaction: discord.Interaction, name: str) -> None:
         await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
         return
     store.delete(rec.id)
-    await interaction.response.send_message(f"Deleted NPC **{rec.character.name}**.", ephemeral=True)
+    await interaction.response.send_message(f"🗑️ Deleted NPC **{rec.character.name}**.", ephemeral=True)
 
 def _resolve_npc(
     interaction: discord.Interaction, name: str
@@ -6118,7 +6118,7 @@ async def npc_rename(
     rec.character.name = new_name
     store.save(rec)
     await interaction.response.send_message(
-        f"Renamed **{old_name}** → **{new_name}**.", embed=build_sheet_embed(rec)
+        f"✏️ Renamed **{old_name}** → **{new_name}**.", embed=build_sheet_embed(rec)
     )
 
 # -- NPC room placement & speech -------------------------------------------
@@ -6406,7 +6406,7 @@ _FEATURE_FIELDS = [
     app_commands.Choice(name="Emphasis", value="_emphasis"),
 ]
 
-@npc_edit_group.command(name="feature", description="Add or remove an advantage, technique, kata, kiho, weapon, quality, or emphasis.")
+@npc_edit_group.command(name="feature", description="Add or remove an advantage, technique, kata, kiho, weapon, quality, or emphasis. [Fortune]")
 @app_commands.describe(
     name="NPC name.", field="Which feature list to modify.",
     entry="Name to add or remove.", remove="Remove instead of adding.",
@@ -7397,7 +7397,7 @@ async def creature_delete(interaction: discord.Interaction, name: str) -> None:
         await interaction.response.send_message(err, ephemeral=True)
         return
     store.delete_creature(rec.id)
-    await interaction.response.send_message(f"Removed creature **{rec.creature.name}**.", ephemeral=True)
+    await interaction.response.send_message(f"🗑️ Removed creature **{rec.creature.name}**.", ephemeral=True)
 
 @creature_group.command(name="wound", description="Apply wounds to a creature directly (no reduction). [Fortune]")
 @app_commands.describe(name="The creature.", amount="Wounds to apply.")
@@ -9448,13 +9448,14 @@ async def spell_importune(
 # Phase 42: Taint Progression (#14)
 # ---------------------------------------------------------------------------
 
-@dm.command(name="taint", description="View or modify a character's Shadowlands Taint [Fortune]")
+@dm.command(name="taint", description="View or modify a character's Shadowlands Taint. [Fortune]")
 @app_commands.describe(
     name="Character name.",
     add="Taint points to add (can be negative to remove).",
     member="Player whose character to check (omit for caller's).",
     is_npc="Target is an NPC.",
 )
+@app_commands.autocomplete(name=_npc_autocomplete)
 async def taint_command(
     interaction: discord.Interaction,
     name: str | None = None,
@@ -9479,7 +9480,8 @@ async def taint_command(
     else:
         rec = store.get_active(guild, str(interaction.user.id))
     if rec is None:
-        await interaction.response.send_message("Character not found.", ephemeral=True)
+        label = f"No character named **{name}**." if name else "You have no active character."
+        await interaction.response.send_message(label, ephemeral=True)
         return
     c = rec.character
     if add is not None:
@@ -9527,7 +9529,7 @@ async def taint_command(
 # Phase 42: Crafting Extended (#6)
 # ---------------------------------------------------------------------------
 
-@dm.command(name="craft_extended", description="Extended crafting roll: cumulative multi-step project [Fortune]")
+@dm.command(name="craft_extended", description="Extended crafting roll: cumulative multi-step project. [Fortune]")
 @app_commands.describe(
     name="Character name.",
     skill="Craft/Artisan skill name.",
@@ -9710,6 +9712,7 @@ async def spell_damage(
     change="Influence points to add (negative to subtract).",
     reason="Why the influence changed.",
 )
+@app_commands.autocomplete(name=_npc_autocomplete)
 async def influence_track(
     interaction: discord.Interaction,
     name: str,
@@ -9826,7 +9829,7 @@ MEDICINE_TN = {
     "antidote_preparation": 20,
 }
 
-@dm.command(name="xp_log_channel", description="Set (or clear) the Kami-only channel logging XP grants and spends [Kami]")
+@dm.command(name="xp_log_channel", description="Set (or clear) the Kami-only channel logging XP grants and spends. [Kami]")
 @app_commands.describe(channel="The Kami-only text channel. Omit to stop logging XP.")
 async def dm_xp_log_channel(interaction: discord.Interaction, channel: discord.TextChannel | None = None) -> None:
     if not await _require_guild(interaction):
@@ -9845,7 +9848,7 @@ async def dm_xp_log_channel(interaction: discord.Interaction, channel: discord.T
         f"Make sure only **{ROLE_KAMI}** can see that channel.", ephemeral=True,
     )
 
-@dm.command(name="log_channel", description="Set the channel where combat events are logged [Kami]")
+@dm.command(name="log_channel", description="Set the channel where combat events are logged. [Kami]")
 @app_commands.describe(channel="The text channel to post combat log entries to.")
 async def dm_log_channel(
     interaction: discord.Interaction,
@@ -9863,7 +9866,7 @@ async def dm_log_channel(
         f"will be logged there automatically."
     )
 
-@dm.command(name="clear_log", description="Stop logging combat events [Kami]")
+@dm.command(name="clear_log", description="Stop logging combat events. [Kami]")
 async def dm_clear_log(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -9873,7 +9876,7 @@ async def dm_clear_log(interaction: discord.Interaction) -> None:
     store.clear_log_channel(str(interaction.guild_id))
     await interaction.response.send_message("Combat log channel cleared. Events will no longer be logged.", ephemeral=True)
 
-@dm.command(name="date_channel", description="Set the channel for the pinned date display [Kami]")
+@dm.command(name="date_channel", description="Set the channel for the pinned date display. [Kami]")
 @app_commands.describe(channel="The text channel where the date will be pinned and updated.")
 async def dm_date_channel(
     interaction: discord.Interaction,
@@ -9901,7 +9904,7 @@ async def dm_date_channel(
         f"will update automatically when time advances."
     )
 
-@dm.command(name="clear_date_channel", description="Stop updating the date display channel [Kami]")
+@dm.command(name="clear_date_channel", description="Stop updating the date display channel. [Kami]")
 async def dm_clear_date_channel(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -9911,7 +9914,7 @@ async def dm_clear_date_channel(interaction: discord.Interaction) -> None:
     store.clear_date_channel(str(interaction.guild_id))
     await interaction.response.send_message("Date channel cleared. The pinned message will no longer update.", ephemeral=True)
 
-@dm.command(name="approval_channel", description="Set the channel for character submission approvals [Kami]")
+@dm.command(name="approval_channel", description="Set the channel for character submission approvals. [Kami]")
 @app_commands.describe(channel="The DM-only text channel for character submissions.")
 async def dm_approval_channel(
     interaction: discord.Interaction,
@@ -9928,7 +9931,7 @@ async def dm_approval_channel(
         f"Character submissions will be routed there for DM review."
     )
 
-@dm.command(name="clear_approval", description="Stop routing character approvals to a DM channel [Kami]")
+@dm.command(name="clear_approval", description="Stop routing character approvals to a DM channel. [Kami]")
 async def dm_clear_approval(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -9938,7 +9941,7 @@ async def dm_clear_approval(interaction: discord.Interaction) -> None:
     store.clear_approval_channel(str(interaction.guild_id))
     await interaction.response.send_message("Character approval channel cleared.", ephemeral=True)
 
-@dm.command(name="damage_channel", description="Set the channel for damage/healing approvals [Kami]")
+@dm.command(name="damage_channel", description="Set the channel for damage/healing approvals. [Kami]")
 @app_commands.describe(channel="The DM-only text channel for damage approval requests.")
 async def dm_damage_channel(
     interaction: discord.Interaction,
@@ -9956,7 +9959,7 @@ async def dm_damage_channel(
         f"Results will be posted back in the combat room."
     )
 
-@dm.command(name="clear_damage_channel", description="Stop routing damage approvals to a separate channel [Kami]")
+@dm.command(name="clear_damage_channel", description="Stop routing damage approvals to a separate channel. [Kami]")
 async def dm_clear_damage_channel(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -10613,7 +10616,7 @@ class _ChargenButtonView(discord.ui.View):
         await _start_chargen_wizard(interaction)
 
 
-setup_group = app_commands.Group(name="setup", description="Server setup commands [Kami]")
+setup_group = app_commands.Group(name="setup", description="Server setup commands. [Kami]")
 
 @setup_group.command(name="server", description="Create the server channel structure (Lobby, OOC, IC, DM categories). [Kami]")
 async def setup_server(interaction: discord.Interaction) -> None:
@@ -11445,7 +11448,7 @@ async def _post_rules_reference(channel: discord.TextChannel) -> None:
 #  /dm announce — post an event to announcements with RSVP
 # ---------------------------------------------------------------------------
 
-@dm.command(name="announce", description="Post a session/event announcement with RSVP reactions [Fortune]")
+@dm.command(name="announce", description="Post a session/event announcement with RSVP reactions. [Fortune]")
 @app_commands.describe(
     title="Event title (e.g. 'Court of the Crane — Session 5').",
     description="Event details (what, where, when, etc.).",
