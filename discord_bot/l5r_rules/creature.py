@@ -14,6 +14,7 @@ two lesser oni); more can be transcribed the same way.
 
 from __future__ import annotations
 
+import random
 from copy import deepcopy
 from dataclasses import dataclass, field, asdict, fields
 
@@ -96,6 +97,148 @@ def spawn(template_id: str, instance_name: str) -> Creature | None:
     cr.name = instance_name
     cr.wounds_taken = 0
     return cr
+
+
+def randomize_stats(cr: Creature) -> list[str]:
+    """Apply slight random variation to a spawned creature's stats.
+
+    Rings/traits +/-1, dice pools +/-1 per component, Armor TN +/-5,
+    Reduction +/-1, wound thresholds scaled 0.85-1.15. Fear, tags, and
+    flat bonuses are unchanged. Returns human-readable change lines.
+    """
+    changes: list[str] = []
+
+    for ring in ("air", "earth", "fire", "water"):
+        base = getattr(cr, ring)
+        if base <= 0:
+            continue
+        delta = random.choice([-1, 0, 1])
+        if delta == 0:
+            continue
+        new_val = max(1, base + delta)
+        if new_val != base:
+            setattr(cr, ring, new_val)
+            changes.append(f"{ring.capitalize()}: {base} -> {new_val}")
+
+    for tname, tval in list(cr.traits.items()):
+        if tval <= 0:
+            continue
+        delta = random.choice([-1, 0, 1])
+        if delta == 0:
+            continue
+        new_val = max(1, tval + delta)
+        if new_val != tval:
+            cr.traits[tname] = new_val
+            changes.append(f"{tname}: {tval} -> {new_val}")
+
+    for label, r_attr, k_attr in [
+        ("Initiative", "initiative_rolled", "initiative_kept"),
+        ("Attack", "attack_rolled", "attack_kept"),
+        ("Damage", "damage_rolled", "damage_kept"),
+    ]:
+        rolled = getattr(cr, r_attr)
+        kept = getattr(cr, k_attr)
+        dr = random.choice([-1, 0, 1])
+        dk = random.choice([-1, 0, 1])
+        new_r = max(1, rolled + dr)
+        new_k = max(1, kept + dk)
+        if new_k > new_r:
+            new_k = new_r
+        if new_r != rolled or new_k != kept:
+            setattr(cr, r_attr, new_r)
+            setattr(cr, k_attr, new_k)
+            changes.append(f"{label}: {rolled}k{kept} -> {new_r}k{new_k}")
+
+    base_atn = cr.armor_tn
+    atn_delta = random.choice([-5, 0, 5])
+    if atn_delta != 0:
+        cr.armor_tn = max(5, base_atn + atn_delta)
+        if cr.armor_tn != base_atn:
+            changes.append(f"Armor TN: {base_atn} -> {cr.armor_tn}")
+
+    base_red = cr.reduction
+    red_delta = random.choice([-1, 0, 1])
+    if red_delta != 0:
+        new_red = max(0, base_red + red_delta)
+        if new_red != base_red:
+            cr.reduction = new_red
+            changes.append(f"Reduction: {base_red} -> {cr.reduction}")
+
+    if cr.wound_thresholds:
+        factor = random.uniform(0.85, 1.15)
+        if abs(factor - 1.0) > 0.01:
+            old_dead = cr.wounds_dead
+            cr.wound_thresholds = [max(1, round(t * factor)) for t in cr.wound_thresholds]
+            cr.wounds_dead = max(cr.wound_thresholds[-1] + 1, round(old_dead * factor))
+            changes.append(f"Wounds Dead: {old_dead} -> {cr.wounds_dead}")
+
+    return changes
+
+
+def make_custom(
+    name: str,
+    earth: int,
+    attack_rolled: int,
+    attack_kept: int,
+    damage_rolled: int,
+    damage_kept: int,
+    armor_tn: int,
+    air: int | None = None,
+    fire: int | None = None,
+    water: int | None = None,
+    attack_name: str = "Attack",
+    reduction: int = 0,
+    wounds_dead: int = 0,
+    fear: int = 0,
+    tags_str: str = "",
+    initiative_rolled: int | None = None,
+    initiative_kept: int | None = None,
+) -> Creature:
+    """Build a custom creature from explicit parameters."""
+    _air = air if air is not None else earth
+    _fire = fire if fire is not None else earth
+    _water = water if water is not None else earth
+
+    if initiative_rolled is None:
+        initiative_rolled = _water + 1
+    if initiative_kept is None:
+        initiative_kept = _water
+
+    tags = [t.strip() for t in tags_str.split(",") if t.strip()] if tags_str else []
+
+    if wounds_dead <= 0:
+        healthy, step = earth * 5, earth * 2
+        wound_thresholds = [healthy + step * i for i in range(7)]
+        wounds_dead = healthy + step * 7 + 1
+    else:
+        step = max(1, wounds_dead // 8)
+        wound_thresholds = [step * (i + 1) for i in range(7)]
+
+    slug = name.lower().replace(" ", "_").replace("'", "")
+    template_id = f"custom_{slug}"
+
+    return Creature(
+        template_id=template_id,
+        name=name,
+        air=_air,
+        earth=earth,
+        fire=_fire,
+        water=_water,
+        initiative_rolled=initiative_rolled,
+        initiative_kept=initiative_kept,
+        attack_name=attack_name,
+        attack_rolled=attack_rolled,
+        attack_kept=attack_kept,
+        damage_rolled=damage_rolled,
+        damage_kept=damage_kept,
+        armor_tn=armor_tn,
+        reduction=reduction,
+        wounds_dead=wounds_dead,
+        fear=fear,
+        wound_thresholds=wound_thresholds,
+        tags=tags,
+        wounds_taken=0,
+    )
 
 
 # --- Creature special abilities (GDD s54.0) --------------------------------

@@ -4641,7 +4641,8 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/creature search", "Search with detailed output"),
         ("/creature info", "Full stat block of a template"),
         ("/creature compare", "Compare two templates side-by-side"),
-        ("/creature spawn", "Spawn a creature from a template"),
+        ("/creature spawn", "Spawn from template (optional randomize)"),
+        ("/creature create", "Create a custom creature from scratch"),
         ("/creature view / list", "View or list spawned creatures"),
         ("/creature attack", "Creature attacks a PC/NPC"),
         ("/creature wound / heal", "Apply or heal creature wounds"),
@@ -7329,9 +7330,13 @@ async def creature_compare(interaction: discord.Interaction, template_a: str, te
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @creature_group.command(name="spawn", description="Spawn a creature instance from a template. [Fortune]")
-@app_commands.describe(template="Which creature template.", name="Instance name (default: The template's name).")
+@app_commands.describe(
+    template="Which creature template.",
+    name="Instance name (default: The template's name).",
+    randomize="Slightly randomize stats from the base template.",
+)
 @app_commands.autocomplete(template=_creature_template_autocomplete)
-async def creature_spawn(interaction: discord.Interaction, template: str, name: str | None = None) -> None:
+async def creature_spawn(interaction: discord.Interaction, template: str, name: str | None = None, randomize: bool = False) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -7344,6 +7349,9 @@ async def creature_spawn(interaction: discord.Interaction, template: str, name: 
         return
     inst_name = name or tmpl.name
     cr = creature.spawn(template, inst_name)
+    rand_changes: list[str] = []
+    if randomize:
+        rand_changes = creature.randomize_stats(cr)
     try:
         rec = store.create_creature(str(interaction.guild_id), cr)
     except storage.DuplicateNameError:
@@ -7352,8 +7360,106 @@ async def creature_spawn(interaction: discord.Interaction, template: str, name: 
             ephemeral=True,
         )
         return
+    msg = f"👹 Spawned **{inst_name}**."
+    if rand_changes:
+        msg += "\n**Randomized:** " + ", ".join(rand_changes)
     await interaction.response.send_message(
-        content=f"👹 Spawned **{inst_name}**.", embed=build_creature_embed(rec)
+        content=msg, embed=build_creature_embed(rec)
+    )
+
+@creature_group.command(name="create", description="Create and spawn a custom creature from scratch. [Fortune]")
+@app_commands.describe(
+    name="Creature name.",
+    earth="Earth ring (sets base health).",
+    attack_rolled="Attack rolled dice (the X in XkY).",
+    attack_kept="Attack kept dice (the Y in XkY).",
+    damage_rolled="Damage rolled dice.",
+    damage_kept="Damage kept dice.",
+    armor_tn="Armor TN.",
+    air="Air ring (default: same as Earth).",
+    fire="Fire ring (default: same as Earth).",
+    water="Water ring (default: same as Earth).",
+    attack_name="Name of the attack (default: Attack).",
+    reduction="Damage Reduction (default: 0).",
+    wounds_dead="Total wounds to kill (default: auto from Earth).",
+    fear="Fear rank, 0 for none (default: 0).",
+    tags="Comma-separated tags (e.g. shadowlands,spirit).",
+    initiative_rolled="Initiative rolled dice (default: Water+1).",
+    initiative_kept="Initiative kept dice (default: Water).",
+)
+async def creature_create(
+    interaction: discord.Interaction,
+    name: str,
+    earth: int,
+    attack_rolled: int,
+    attack_kept: int,
+    damage_rolled: int,
+    damage_kept: int,
+    armor_tn: int,
+    air: int | None = None,
+    fire: int | None = None,
+    water: int | None = None,
+    attack_name: str = "Attack",
+    reduction: int = 0,
+    wounds_dead: int = 0,
+    fear: int = 0,
+    tags: str = "",
+    initiative_rolled: int | None = None,
+    initiative_kept: int | None = None,
+) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
+    if earth < 1 or attack_rolled < 1 or attack_kept < 1 or damage_rolled < 1 or damage_kept < 1 or armor_tn < 1:
+        await interaction.response.send_message(
+            "Earth, attack dice, damage dice, and Armor TN must all be at least 1.", ephemeral=True
+        )
+        return
+    if attack_kept > attack_rolled:
+        await interaction.response.send_message(
+            "Attack kept dice cannot exceed rolled dice.", ephemeral=True
+        )
+        return
+    if damage_kept > damage_rolled:
+        await interaction.response.send_message(
+            "Damage kept dice cannot exceed rolled dice.", ephemeral=True
+        )
+        return
+    if initiative_rolled is not None and initiative_kept is not None and initiative_kept > initiative_rolled:
+        await interaction.response.send_message(
+            "Initiative kept dice cannot exceed rolled dice.", ephemeral=True
+        )
+        return
+    cr = creature.make_custom(
+        name=name,
+        earth=earth,
+        attack_rolled=attack_rolled,
+        attack_kept=attack_kept,
+        damage_rolled=damage_rolled,
+        damage_kept=damage_kept,
+        armor_tn=armor_tn,
+        air=air,
+        fire=fire,
+        water=water,
+        attack_name=attack_name,
+        reduction=reduction,
+        wounds_dead=wounds_dead,
+        fear=fear,
+        tags_str=tags,
+        initiative_rolled=initiative_rolled,
+        initiative_kept=initiative_kept,
+    )
+    try:
+        rec = store.create_creature(str(interaction.guild_id), cr)
+    except storage.DuplicateNameError:
+        await interaction.response.send_message(
+            f"A creature named **{name}** already exists. Pick a different name.",
+            ephemeral=True,
+        )
+        return
+    await interaction.response.send_message(
+        content=f"👹 Created custom creature **{name}**.", embed=build_creature_embed(rec)
     )
 
 @creature_group.command(name="list", description="List spawned creatures on this server.")
@@ -7841,9 +7947,12 @@ async def category_bulk_remove(
     )
 
 @category_group.command(name="spawn", description="Spawn all creature templates in a category as instances. [Fortune]")
-@app_commands.describe(category="Which category to spawn creatures from.")
+@app_commands.describe(
+    category="Which category to spawn creatures from.",
+    randomize="Slightly randomize stats for each spawned creature.",
+)
 @app_commands.autocomplete(category=_category_autocomplete)
-async def category_spawn(interaction: discord.Interaction, category: str) -> None:
+async def category_spawn(interaction: discord.Interaction, category: str, randomize: bool = False) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -7873,6 +7982,8 @@ async def category_spawn(interaction: discord.Interaction, category: str) -> Non
             not_found.append(ename)
             continue
         cr = creature.spawn(tmpl.template_id, ename)
+        if randomize:
+            creature.randomize_stats(cr)
         try:
             store.create_creature(guild, cr)
             spawned.append(ename)
@@ -7885,8 +7996,9 @@ async def category_spawn(interaction: discord.Interaction, category: str) -> Non
         parts.append(f"Already spawned: {', '.join(already_exist)}")
     if not_found:
         parts.append(f"Template not found: {', '.join(not_found)}")
+    suffix = " (randomized)" if randomize and spawned else ""
     await interaction.response.send_message(
-        f"👹 Category **{cat.name}** - spawn\n" + "\n".join(parts),
+        f"👹 Category **{cat.name}** - spawn{suffix}\n" + "\n".join(parts),
     )
 
 # ===========================================================================
