@@ -111,7 +111,7 @@ def clans() -> list[str]:
 _PSEUDO_CLANS = ("Minor Clan", "Miscellaneous")
 # Owner ruling 2026-09-16: the Mantis and its former member clans (Fox, Centipede,
 # Wasp) are minor clans in this setting.
-GREAT_CLANS: tuple[str, ...] = ("Crab", "Crane", "Dragon", "Lion", "Phoenix", "Scorpion", "Unicorn", "Spider")
+GREAT_CLANS: tuple[str, ...] = ("Crab", "Crane", "Dragon", "Lion", "Phoenix", "Scorpion", "Unicorn")
 
 
 def creation_clans() -> list[str]:

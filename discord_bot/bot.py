@@ -1382,7 +1382,7 @@ async def sheet_create(interaction: discord.Interaction) -> None:
 # ---------------------------------------------------------------------------
 # /sheet wizard: guided step-by-step character creation
 # ---------------------------------------------------------------------------
-_GREAT_CLANS = ["Crab", "Crane", "Dragon", "Lion", "Phoenix", "Scorpion", "Unicorn", "Ronin", "Imperial", "Spider"]
+_GREAT_CLANS = ["Crab", "Crane", "Dragon", "Lion", "Phoenix", "Scorpion", "Unicorn", "Ronin", "Imperial"]
 # Owner ruling 2026-09-16: Mantis, Fox, Centipede and Wasp are minor clans in this setting.
 _MINOR_CLANS = ["Badger", "Bat", "Boar", "Centipede", "Dragonfly", "Fox", "Hare", "Mantis", "Monkey", "Oriole", "Ox",
                 "Sparrow", "Tiger", "Tortoise", "Wasp"]
@@ -5727,7 +5727,8 @@ _HELP_SECTIONS: list[tuple[str, list[str]]] = [
 ]
 _HELP_ORDER: list[str] = [name for _, names in _HELP_SECTIONS for name in names]
 _HELP_START = (
-    "**New here?** `/sheet create` makes a character, `/players` shows who is around, `/roll` rolls dice, "
+    "**New here?** `/sheet create` makes a character, `/whoami` is your character dashboard (spend Void, set Kata, "
+    "open inventory), `/players` shows who is around, `/roll` rolls dice, "
     "`/check skill` rolls a skill for your character. In a fight: `/combat` runs initiative, `/fight` is what "
     "you do on your turn, `/engage` covers grapples, duels and battles. **[Fortune]** = DM role, **[Kami]** = admin."
 )
@@ -8732,7 +8733,7 @@ async def xp_costs(interaction: discord.Interaction) -> None:
 
 @sheet.command(name="learn", description="Record the techniques your school grants up to your School Rank.")
 @app_commands.describe(
-    school_name="School to learn from (defaults to your sheet's school).",
+    school_name="School to learn from (defaults to your sheet's school). Different school requires Fortune.",
     member="Do this for another player [Fortune]",
 )
 @app_commands.autocomplete(school_name=_school_autocomplete)
@@ -8748,6 +8749,9 @@ async def school_learn(
         await interaction.response.send_message(err, ephemeral=True)
         return
     c = rec.character
+    if school_name and c.school and school_name.strip().lower() != c.school.strip().lower():
+        if not await _require_dm_role(interaction):
+            return
     lookup = school_name or c.school
     s = schools.get(lookup) if lookup else None
     if s is None:
@@ -10666,7 +10670,6 @@ async def _setup_server_inner(
         "Phoenix": "#E67E22",
         "Scorpion": "#E74C3C",
         "Unicorn": "#9B59B6",
-        "Spider": "#7F8C8D",
         "Ronin": "#95A5A6",
         "Imperial": "#DAA520",
         "Badger": "#8B4513",
