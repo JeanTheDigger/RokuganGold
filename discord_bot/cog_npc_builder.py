@@ -285,7 +285,7 @@ class _SaveView(discord.ui.View):
         if as_template:
             replaced = _save_template(guild_id, char.name, char, str(interaction.user.id))
             lines.append(
-                f"📋 {'Replaced' if replaced else 'Saved'} template **{char.name}**: spawn copies with "
+                f"📋 {'Replaced' if replaced else 'Saved'} template **{char.name}**: Spawn copies with "
                 f"`/npc template spawn template:{char.name}`."
             )
         self._done = True
@@ -376,7 +376,7 @@ class _NumbersModal(discord.ui.Modal, title="Honor, Glory, Status, Koku"):
                 errors.append(f"{field}: '{raw}' is not a number")
                 continue
             if not lo <= val <= hi:
-                errors.append(f"{field}: must be between {lo} and {hi}")
+                errors.append(f"{field}: Must be between {lo} and {hi}")
                 continue
             self.wizard.state[field] = val
         self.wizard.state["notes"] = (self.notes.value or "").strip()
@@ -746,7 +746,7 @@ def parse_keyed(text: str) -> dict[str, str]:
         if not part.strip():
             continue
         if ":" not in part and "=" not in part:
-            raise ParseError(f"Expected 'key: value' but got '{part.strip()[:40]}'.")
+            raise ParseError(f"Expected 'key: Value' but got '{part.strip()[:40]}'.")
         key, val = re.split(r"[:=]", part, maxsplit=1)
         out[key.strip().lower()] = val.strip()
     return out
@@ -862,7 +862,7 @@ class _FormModal(discord.ui.Modal, title="NPC stat block"):
     )
     gear = discord.ui.TextInput(
         label="Gear, advantages, spells", required=False, max_length=1000, style=discord.TextStyle.paragraph,
-        placeholder="weapon: katana; off: wakizashi; armor: light; adv: Large; disadv: Bad Reputation",
+        placeholder="weapon: Katana; off: Wakizashi; armor: Light; adv: Large; disadv: Bad Reputation",
     )
     details = discord.ui.TextInput(
         label="Details", required=False, max_length=1000, style=discord.TextStyle.paragraph,
@@ -882,7 +882,7 @@ class _FormModal(discord.ui.Modal, title="NPC stat block"):
         except ParseError as e:
             await interaction.response.send_message(f"Could not read the stat block: {e}\nRun `/npc form` again.", ephemeral=True)
             return
-        content = f"**{name}**: check the sheet, then save."
+        content = f"**{name}**: Check the sheet, then save."
         if warnings:
             content += "\n⚠️ " + "\n⚠️ ".join(warnings)
         view = _SaveView(state)
@@ -901,7 +901,7 @@ async def _template_autocomplete(interaction: discord.Interaction, current: str)
     return [app_commands.Choice(name=n, value=n) for n in names[:25]]
 
 
-@app_commands.command(name="create", description="Build an NPC step by step with exact stats: school, traits, skills, gear. [Fortune]")
+@app_commands.command(name="create", description="Build an NPC step by step with exact stats: School, traits, skills, gear. [Fortune]")
 async def npc_create(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -936,7 +936,7 @@ async def npc_edit(interaction: discord.Interaction, name: str) -> None:
     await interaction.response.send_message(content=wizard.header(), embed=wizard.embed(), view=wizard, ephemeral=True)
 
 
-template_group = app_commands.Group(name="template", description="Reusable NPC templates: save one, spawn copies.")
+template_group = app_commands.Group(name="template", description="Reusable NPC templates: Save one, spawn copies.")
 
 
 @template_group.command(name="save", description="Save an existing NPC as a reusable template. [Fortune]")

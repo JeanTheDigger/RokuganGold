@@ -108,7 +108,7 @@ class CharacterHub(discord.ui.View):
             ("Full sheet", discord.ButtonStyle.primary, self._on_sheet, "📜"),
             ("Inventory", discord.ButtonStyle.primary, self._on_inventory, "🎒"),
             ("Spend Void", discord.ButtonStyle.secondary, self._on_void, "🌀"),
-            ("Rest: refresh Void", discord.ButtonStyle.secondary, self._on_rest, None),
+            ("Rest: Refresh Void", discord.ButtonStyle.secondary, self._on_rest, None),
             ("Fight status", discord.ButtonStyle.secondary, self._on_fight, "⚔️"),
         ):
             b = discord.ui.Button(label=label, style=style, row=0, emoji=emoji)
@@ -121,8 +121,8 @@ class CharacterHub(discord.ui.View):
             self.add_item(_Pick("Active Kata...", opts, self._on_kata, row)); row += 1
         if c.kiho:
             opts = [discord.SelectOption(label=(("✓ " if k in c.active_kiho else "") + k)[:100], value=k[:100],
-                                         description="active: pick to end" if k in c.active_kiho else None) for k in c.kiho]
-            self.add_item(_Pick("Kiho: pick to activate, pick again to end...", opts, self._on_kiho, row)); row += 1
+                                         description="active: Pick to end" if k in c.active_kiho else None) for k in c.kiho]
+            self.add_item(_Pick("Kiho: Pick to activate, pick again to end...", opts, self._on_kiho, row)); row += 1
         if c.tattoos:
             opts = [discord.SelectOption(label="(deactivate tattoo)", value="", default=not c.active_tattoo)] + [
                 discord.SelectOption(label=t[:100], value=t[:100], default=t.lower() == c.active_tattoo.lower()) for t in c.tattoos]
@@ -165,7 +165,7 @@ class CharacterHub(discord.ui.View):
         old = c.current_void_points
         c.current_void_points = cap
         _d.store.save(rec)
-        cap_note = f" (Taint Rank {taint.taint_rank(c)}: max VP -1)" if cap < c.max_void_points else ""
+        cap_note = f" (Taint Rank {taint.taint_rank(c)}: Max VP -1)" if cap < c.max_void_points else ""
         await self.refresh(interaction)
         await interaction.followup.send(
             f"🌀 **{c.name}** rests and recovers all Void Points.\n  VP: {old} → **{c.current_void_points}/{cap}**{cap_note}")
@@ -207,7 +207,7 @@ class CharacterHub(discord.ui.View):
         key = value.lower().strip()
         if key in ("bear", "lion"):
             await interaction.response.send_message(
-                f"The {value} tattoo needs a choice: use `/sheet tattoo activate name:{value}` with "
+                f"The {value} tattoo needs a choice: Use `/sheet tattoo activate name:{value}` with "
                 f"`{'choice' if key == 'bear' else 'skill'}:`.", ephemeral=True)
             return
         t = tattoo_catalog.get_tattoo(key)
@@ -224,7 +224,7 @@ class CharacterHub(discord.ui.View):
         await interaction.response.edit_message(content=None, embed=hub_embed(interaction, self.rec), view=None)
 
 
-@app_commands.command(name="whoami", description="Your character hub: status card with buttons for Void, Kata, Kiho, tattoos, inventory, sheet.")
+@app_commands.command(name="whoami", description="Your character hub: Status card with buttons for Void, Kata, Kiho, tattoos, inventory, sheet.")
 async def whoami(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return

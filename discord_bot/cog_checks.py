@@ -341,10 +341,10 @@ async def contest(
     if not await _d.require_dm_role(interaction):
         return
     if void_a and void_unskilled_a:
-        await interaction.response.send_message("A: cannot use both void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
+        await interaction.response.send_message("A: Cannot use both void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     if void_b and void_unskilled_b:
-        await interaction.response.send_message("B: cannot use both void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
+        await interaction.response.send_message("B: Cannot use both void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
@@ -454,7 +454,7 @@ async def contest(
     description="Fear check: Willpower vs TN 5 + (Fear Rank x 5).",
 )
 @app_commands.describe(
-    name="Character (default: yours; others or NPCs need Fortune).",
+    name="Character (default: Yours; others or NPCs need Fortune).",
     fear_rank="Fear Rank 1-10 (TN = 5 + rank x 5).",
     member="Another player's character [Fortune]",
     is_npc="The name is an NPC.",
@@ -551,10 +551,10 @@ async def fear_check(
 
 @check.command(
     name="honor",
-    description="Honor Roll: roll Honor Rank dice, keep 1, vs a TN.",
+    description="Honor Roll: Roll Honor Rank dice, keep 1, vs a TN.",
 )
 @app_commands.describe(
-    name="Character (default: yours; others or NPCs need Fortune).",
+    name="Character (default: Yours; others or NPCs need Fortune).",
     tn="Target Number to resist.",
     member="Another player's character [Fortune]",
     is_npc="The name is an NPC.",
@@ -612,7 +612,7 @@ async def honor_roll(
     description="Poison resistance: Stamina vs TN (Strength x 5).",
 )
 @app_commands.describe(
-    name="Character (default: yours; others or NPCs need Fortune).",
+    name="Character (default: Yours; others or NPCs need Fortune).",
     strength="Poison Strength 1-10 (TN = Strength x 5).",
     member="Another player's character [Fortune]",
     is_npc="The name is an NPC.",
@@ -685,14 +685,14 @@ async def poison_resist(
     description="Medicine/Intelligence check vs a TN (treat wounds, poison, disease).",
 )
 @app_commands.describe(
-    name="Character (default: yours; others or NPCs need Fortune).",
+    name="Character (default: Yours; others or NPCs need Fortune).",
     tn="Target Number for the treatment.",
     member="Another player's character [Fortune]",
     is_npc="The name is an NPC.",
     bonus="Flat bonus.",
     spend_void="Spend a Void Point for +1k1.",
-    void_unskilled="Void Point: treat Medicine 0 as Rank 1.",
-    emphasis="Emphasis on the sheet: rerolls 1s once.",
+    void_unskilled="Void Point: Treat Medicine 0 as Rank 1.",
+    emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="What is being treated (for display).",
 )
 async def medicine_check(
@@ -774,7 +774,7 @@ async def medicine_check(
     description="Generic Skill/Trait check vs a TN. DM picks the trait and skill.",
 )
 @app_commands.describe(
-    name="Character (default: yours; others or NPCs need Fortune).",
+    name="Character (default: Yours; others or NPCs need Fortune).",
     trait="Trait for the roll (the kept dice).",
     skill="Skill name as on the sheet (e.g. Athletics).",
     tn="Target Number.",
@@ -782,8 +782,8 @@ async def medicine_check(
     is_npc="The name is an NPC.",
     bonus="Flat bonus.",
     spend_void="Spend a Void Point for +1k1.",
-    void_unskilled="Void Point: treat Skill 0 as Rank 1.",
-    emphasis="Emphasis on the sheet: rerolls 1s once.",
+    void_unskilled="Void Point: Treat Skill 0 as Rank 1.",
+    emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label shown with the roll.",
     secret="Only you see the result.",
 )
@@ -850,7 +850,7 @@ async def skill_check_cmd(
 
 @check.command(
     name="cooperative",
-    description="Cooperative check: helpers roll at TN+5, each success gives primary +1k0 (cap Void).",
+    description="Cooperative check: Helpers roll at TN+5, each success gives primary +1k0 (cap Void).",
 )
 @app_commands.describe(
     name="Primary character making the check.",
@@ -862,8 +862,8 @@ async def skill_check_cmd(
     is_npc="Primary character is an NPC.",
     bonus="Flat bonus to the primary roll.",
     spend_void="Spend a Void Point for +1k1 on the primary roll.",
-    void_unskilled="Void Point: treat Skill 0 as Rank 1.",
-    emphasis="Emphasis on the sheet: rerolls 1s once.",
+    void_unskilled="Void Point: Treat Skill 0 as Rank 1.",
+    emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label shown with the roll.",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
@@ -913,7 +913,7 @@ async def check_cooperative(
         if hrec is None:
             hrec = _d.store.get_by_name(guild, _d.NPC_OWNER, hname)
         if hrec is None:
-            helper_lines.append(f"❌ **{hname}**: not found")
+            helper_lines.append(f"❌ **{hname}**: Not found")
             continue
         hc = hrec.character
         htv = stats.trait_value(hc, trait.value)
@@ -990,14 +990,14 @@ async def check_cooperative(
     description="Stealth/Agility check vs a TN.",
 )
 @app_commands.describe(
-    name="Character (default: yours; others or NPCs need Fortune).",
+    name="Character (default: Yours; others or NPCs need Fortune).",
     tn="Target Number.",
     member="Another player's character [Fortune]",
     is_npc="The name is an NPC.",
     bonus="Flat bonus.",
     spend_void="Spend a Void Point for +1k1.",
-    void_unskilled="Void Point: treat Stealth 0 as Rank 1.",
-    emphasis="Emphasis on the sheet: rerolls 1s once.",
+    void_unskilled="Void Point: Treat Stealth 0 as Rank 1.",
+    emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label (e.g. 'sneaking past the guards').",
     secret="Only you see the result.",
 )
@@ -1065,14 +1065,14 @@ async def stealth_check(
     description="Investigation/Perception check vs a TN.",
 )
 @app_commands.describe(
-    name="Character (default: yours; others or NPCs need Fortune).",
+    name="Character (default: Yours; others or NPCs need Fortune).",
     tn="Target Number.",
-    emphasis="Emphasis on the sheet: rerolls 1s once.",
+    emphasis="Emphasis on the sheet: Rerolls 1s once.",
     member="Another player's character [Fortune]",
     is_npc="The name is an NPC.",
     bonus="Flat bonus.",
     spend_void="Spend a Void Point for +1k1.",
-    void_unskilled="Void Point: treat Investigation 0 as Rank 1.",
+    void_unskilled="Void Point: Treat Investigation 0 as Rank 1.",
     reason="Label (e.g. 'searching the crime scene').",
     secret="Only you see the result.",
 )
@@ -1129,7 +1129,7 @@ async def investigate_check(
         title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, "Perception", result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
     if has_emphasis:
-        embed.set_footer(text=f"Has {emp_name} emphasis: reroll 1s once (DM adjudicates).")
+        embed.set_footer(text=f"Has {emp_name} emphasis: Reroll 1s once (DM adjudicates).")
     elif emp_name:
         embed.set_footer(text=f"No {emp_name} emphasis on sheet.")
     await interaction.response.send_message(embed=embed, ephemeral=secret)
@@ -1144,15 +1144,15 @@ async def investigate_check(
     description="Social skill check vs a TN. Auto-selects the correct trait.",
 )
 @app_commands.describe(
-    name="Character (default: yours; others or NPCs need Fortune).",
+    name="Character (default: Yours; others or NPCs need Fortune).",
     skill="Social skill (auto-selects the correct trait).",
     tn="Target Number.",
     member="Another player's character [Fortune]",
     is_npc="The name is an NPC.",
     bonus="Flat bonus.",
     spend_void="Spend a Void Point for +1k1.",
-    void_unskilled="Void Point: treat Skill 0 as Rank 1.",
-    emphasis="Emphasis on the sheet: rerolls 1s once.",
+    void_unskilled="Void Point: Treat Skill 0 as Rank 1.",
+    emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label (e.g. 'convincing the magistrate').",
 )
 @app_commands.choices(skill=_SOCIAL_SKILLS)
@@ -1219,15 +1219,15 @@ async def social_check(
     description="Artisan or Craft skill / Intelligence check vs a TN.",
 )
 @app_commands.describe(
-    name="Character (default: yours; others or NPCs need Fortune).",
+    name="Character (default: Yours; others or NPCs need Fortune).",
     skill="Skill as on the sheet (e.g. Craft: Weaponsmithing).",
     tn="Target Number.",
     member="Another player's character [Fortune]",
     is_npc="The name is an NPC.",
     bonus="Flat bonus.",
     spend_void="Spend a Void Point for +1k1.",
-    void_unskilled="Void Point: treat Skill 0 as Rank 1.",
-    emphasis="Emphasis on the sheet: rerolls 1s once.",
+    void_unskilled="Void Point: Treat Skill 0 as Rank 1.",
+    emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label (e.g. 'forging a katana').",
 )
 async def craft_check(
@@ -1288,15 +1288,15 @@ async def craft_check(
     description="Lore/Intelligence check vs a TN.",
 )
 @app_commands.describe(
-    name="Character (default: yours; others or NPCs need Fortune).",
+    name="Character (default: Yours; others or NPCs need Fortune).",
     specialty="Lore skill as on the sheet (e.g. Lore: Shadowlands).",
     tn="Target Number.",
     member="Another player's character [Fortune]",
     is_npc="The name is an NPC.",
     bonus="Flat bonus.",
     spend_void="Spend a Void Point for +1k1.",
-    void_unskilled="Void Point: treat Skill 0 as Rank 1.",
-    emphasis="Emphasis on the sheet: rerolls 1s once.",
+    void_unskilled="Void Point: Treat Skill 0 as Rank 1.",
+    emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label (e.g. 'identifying the creature').",
 )
 async def lore_check(
@@ -1354,14 +1354,14 @@ async def lore_check(
 
 @check.command(name="horsemanship", description="Horsemanship/Agility check (mounted combat maneuver).")
 @app_commands.describe(
-    name="Character (default: yours; others or NPCs need Fortune).",
+    name="Character (default: Yours; others or NPCs need Fortune).",
     tn="Target Number.",
     member="Player whose character to use.",
     is_npc="Target is an NPC.",
     bonus="Flat bonus.",
     spend_void="Spend a Void Point for +1k1.",
-    void_unskilled="Void Point: treat Horsemanship 0 as Rank 1.",
-    emphasis="Emphasis on the sheet: rerolls 1s once.",
+    void_unskilled="Void Point: Treat Horsemanship 0 as Rank 1.",
+    emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label (e.g. 'charge').",
 )
 async def horsemanship_check(

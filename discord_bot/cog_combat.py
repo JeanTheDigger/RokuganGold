@@ -368,7 +368,7 @@ class DamageView(views_base.PersistentView):
                 t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
                 _d.store.save(attacker_rec, note="Void Point spent (katana damage)")
             elif self.void_damage:
-                t_dmg_notes.append("Katana: no Void Points for +1k1 damage")
+                t_dmg_notes.append("Katana: No Void Points for +1k1 damage")
             ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
             t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
             ignore += t_ignore
@@ -407,10 +407,10 @@ class DamageView(views_base.PersistentView):
             bohiya_note = ""
             firearm_red_note = ""
             if wp.get("ignore_all_reduction"):
-                bohiya_note = f"Bo-Hiya: ignores all Reduction ({cre_base_red} → 0)"
+                bohiya_note = f"Bo-Hiya: Ignores all Reduction ({cre_base_red} → 0)"
                 cre_base_red = 0
             elif wp.get("ignore_creature_reduction"):
-                firearm_red_note = f"Firearm: ignores natural toughness ({cre_base_red} → 0)"
+                firearm_red_note = f"Firearm: Ignores natural toughness ({cre_base_red} → 0)"
                 cre_base_red = 0
             elif wp.get("double_reduction"):
                 bokken_note = f"Bokken: Reduction doubled ({cre_base_red} → {cre_base_red * 2})"
@@ -450,13 +450,13 @@ class DamageView(views_base.PersistentView):
             if self.weapon_material != "normal":
                 mat_line = f"\n🔶 Weapon material: **{self.weapon_material.title()}**"
             if radiant:
-                mat_line += "\n🔶 Radiant: counts as Jade (bypasses Invulnerability)"
+                mat_line += "\n🔶 Radiant: Counts as Jade (bypasses Invulnerability)"
             special_line = "".join(f"\n🛡️ {n}" for n in applied.get("special_notes", []))
             break_line = ""
             brk = wp.get("break_threshold")
             if brk and raw >= brk:
                 if combat.has_weapon_quality(attacker, self.weapon, "unbreakable"):
-                    break_line = f"\n🛡️ Unbreakable: weapon survives {raw} damage (threshold {brk})"
+                    break_line = f"\n🛡️ Unbreakable: Weapon survives {raw} damage (threshold {brk})"
                 else:
                     break_line = f"\n💥 **WEAPON BROKEN** - {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
             embed = discord.Embed(
@@ -535,7 +535,7 @@ class DamageView(views_base.PersistentView):
                     applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
                     void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
                 else:
-                    void_line = "\n🔮 No Void Points available: full damage applied"
+                    void_line = "\n🔮 No Void Points available: Full damage applied"
             _d.store.save(target_rec, note="attack damage")
             _d.tally(self.channel_id, self.attacker_name, "dealt", applied["final_damage"])
             _d.tally(self.channel_id, self.target_name, "taken", applied["final_damage"])
@@ -624,7 +624,7 @@ class DamageView(views_base.PersistentView):
             t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
             _d.store.save(attacker_rec, note="Void Point spent (katana damage)")
         elif self.void_damage:
-            t_dmg_notes.append("Katana: no Void Points for +1k1 damage")
+            t_dmg_notes.append("Katana: No Void Points for +1k1 damage")
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
         t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon, defender=target)
         ignore += t_ignore
@@ -667,10 +667,10 @@ class DamageView(views_base.PersistentView):
         bohiya_note = ""
         firearm_red_note = ""
         if wp.get("ignore_all_reduction"):
-            bohiya_note = f"Bo-Hiya: ignores all Reduction ({base_red} → 0)"
+            bohiya_note = f"Bo-Hiya: Ignores all Reduction ({base_red} → 0)"
             base_red = 0
         elif wp.get("ignore_armor_reduction"):
-            firearm_red_note = f"Firearm: ignores armor Reduction ({base_red} → 0)"
+            firearm_red_note = f"Firearm: Ignores armor Reduction ({base_red} → 0)"
             base_red = 0
         elif wp.get("double_reduction"):
             bokken_note = f"Bokken: Reduction doubled ({base_red} → {base_red * 2})"
@@ -705,7 +705,7 @@ class DamageView(views_base.PersistentView):
                 applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
                 void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
             else:
-                void_line = "\n🔮 No Void Points available: full damage applied"
+                void_line = "\n🔮 No Void Points available: Full damage applied"
         heal_line = ""
         if applied["is_dead"]:
             heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
@@ -763,7 +763,7 @@ class DamageView(views_base.PersistentView):
         brk = wp.get("break_threshold")
         if brk and raw >= brk:
             if combat.has_weapon_quality(attacker, self.weapon, "unbreakable"):
-                break_line = f"\n🛡️ Unbreakable: weapon survives {raw} damage (threshold {brk})"
+                break_line = f"\n🛡️ Unbreakable: Weapon survives {raw} damage (threshold {brk})"
             else:
                 break_line = f"\n💥 **WEAPON BROKEN** - {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
 
@@ -1064,7 +1064,7 @@ class DamageView(views_base.PersistentView):
 def _rate_status(combatant, key: str, scope: str) -> str:
     """Gate a once-per-Turn/Round kata against the live encounter tracker.
 
-    Returns 'apply' (available: and marks it spent), 'used' (already spent this
+    Returns 'apply' (available: And marks it spent), 'used' (already spent this
     Turn/Round), or 'untracked' (no encounter is tracking this attacker, so the
     limit can't be enforced and the effect stays a DM-adjudicated reminder)."""
     if combatant is None:
@@ -1116,11 +1116,11 @@ _WEAPON_MATERIAL_CHOICES = [
 # ===========================================================================
 combat_group = app_commands.Group(name="combat", description="Track combat initiative and turn order.")
 combat_condition = app_commands.Group(name="condition", description="Apply, clear, or view conditions.", parent=combat_group)
-combat_turn = app_commands.Group(name="turn", description="Initiative adjustments: hold, delay, act, surprise.", parent=combat_group)
+combat_turn = app_commands.Group(name="turn", description="Initiative adjustments: Hold, delay, act, surprise.", parent=combat_group)
 combat_void = app_commands.Group(name="void", description="Round-level Void Point combat effects.", parent=combat_group)
 
 fight_group = app_commands.Group(name="fight", description="Attack, stance, and defense actions.")
-combat_env = app_commands.Group(name="env", description="Environment effects: cover, notes, damage.", parent=fight_group)
+combat_env = app_commands.Group(name="env", description="Environment effects: Cover, notes, damage.", parent=fight_group)
 
 engage_group = app_commands.Group(name="engage", description="Grapple, duel, and mass battle subsystems.")
 combat_grapple = app_commands.Group(name="grapple", description="Grappling subsystem.", parent=engage_group)
@@ -1138,10 +1138,10 @@ combat_battle = app_commands.Group(name="battle", description="Mass Battle syste
     target_creature="Attack a spawned creature by name (instead of a player).",
     attacker_npc="Attack WITH a stored NPC instead of your own character [Fortune]",
     weapon="Weapon for this attack. Defaults to your wielded weapon (`/inventory`), else unarmed.",
-    raises="Called Raises: each adds +5 to the target's Armor TN.",
-    increased_damage="Increased Damage raises: each adds +5 TN AND +1 damage die on a hit.",
+    raises="Called Raises: Each adds +5 to the target's Armor TN.",
+    increased_damage="Increased Damage raises: Each adds +5 TN AND +1 damage die on a hit.",
     maneuver="A combat maneuver (its raise cost is added to the TN automatically).",
-    spend_void="Spend a Void Point for +1k1 on the attack roll (RAW: not valid on damage).",
+    spend_void="Spend a Void Point for +1k1 on the attack roll (RAW: Not valid on damage).",
     void_damage="(Katana only) Spend a Void Point for +1k1 on the damage roll.",
     attacker_stance="Your stance (Full Attack = +2k1 to hit).",
     defender_stance="Target's stance (affects their Armor TN).",
@@ -1269,7 +1269,7 @@ async def attack(
 
     if target_creature_rec is not None and man in ("disarm", "knockdown"):
         await interaction.response.send_message(
-            "Disarm/Knockdown aren't supported against creatures yet: use a plain attack or Feint.",
+            "Disarm/Knockdown aren't supported against creatures yet: Use a plain attack or Feint.",
             ephemeral=True,
         )
         return
@@ -1305,7 +1305,7 @@ async def attack(
     _atk_skill = _atk_profile.get("skill", "Kenjutsu")
     if _atk_char.skills.get(_atk_skill, 0) == 0 and (raises or increased_damage or maneuver_raises):
         await interaction.response.send_message(
-            f"**{_atk_char.name}** is Unskilled in {_atk_skill}: an Unskilled Roll may not benefit from "
+            f"**{_atk_char.name}** is Unskilled in {_atk_skill}: An Unskilled Roll may not benefit from "
             "Raises of any kind, called, maneuver or Free. Attack without them.",
             ephemeral=True,
         )
@@ -1660,7 +1660,7 @@ async def attack(
 
     # Defense Stance warning (s40): may not attack while in Defense.
     if a_stance == "defense":
-        kata_notes.append("⚠️ Defense Stance: may not attack (DM override in effect)")
+        kata_notes.append("⚠️ Defense Stance: May not attack (DM override in effect)")
 
     outcome = combat.resolve_attack(
         attacker, weapon, tn, raises + maneuver_raises, _d.engine,
@@ -1705,7 +1705,7 @@ async def attack(
         inline=False,
     )
     if outcome["unskilled"]:
-        embed.set_footer(text=f"Unskilled in {outcome['skill_name']}: dice did not explode.")
+        embed.set_footer(text=f"Unskilled in {outcome['skill_name']}: Dice did not explode.")
 
     if kata_notes:
         embed.add_field(name="⚑ Combat effects (auto-applied)", value=" · ".join(kata_notes)[:1024], inline=False)
@@ -1814,12 +1814,12 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         cover = f"  🪨Cover{'+' if c.cover_bonus > 0 else ''}{c.cover_bonus}" if c.cover_bonus else ""
         fear = f"  😨-{c.fear_penalty}k0" if c.fear_penalty else ""
         init_val = c.effective_initiative
-        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{fear}{held}{delayed}")
+        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: Init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{fear}{held}{delayed}")
     header = f"⚔️ **Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
     if not enc.started:
-        header = "⚔️ **Not started**: use `/combat next` to begin."
+        header = "⚔️ **Not started**: Use `/combat next` to begin."
         if enc.surprise_round:
             header += " *(Surprise Round)*"
     notes_line = f"\n📍 *{enc.notes}*" if enc.notes else ""
@@ -1888,7 +1888,7 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
         status = enc.roster.get(str(owner.id))
         why = "declined the roster (press **Join** on it to change your mind)" if status == "declined" else \
               "have not accepted the roster yet (press **Join** on it)" if status == "pending" else \
-              "are not on this encounter's roster: ask the organizer or staff to add you"
+              "are not on this encounter's roster: Ask the organizer or staff to add you"
         await interaction.response.send_message(f"You {why}.", ephemeral=True)
         return
 
@@ -1940,9 +1940,9 @@ def _render_roster(enc: encounter.Encounter) -> str:
     head = f"🛡️ **Encounter roster** (organizer: <@{enc.organizer_id}>)"
     tally = f"✅ {counts['accepted']}  ⏳ {counts['pending']}  ❌ {counts['declined']}  🔒 {counts['forced']}"
     if enc.roster_begun:
-        tail = "Begun: accepted players are in initiative. Late **Join** rolls you in at once."
+        tail = "Begun: Accepted players are in initiative. Late **Join** rolls you in at once."
     else:
-        tail = ("Invited players: press **Join** or **Decline**. Staff: **Force** requires everyone in. "
+        tail = ("Invited players: Press **Join** or **Decline**. Staff: **Force** requires everyone in. "
                 "Organizer/staff: **Begin** rolls initiative for all who are in.")
     return "\n".join([head, *lines, "", tally, tail])
 
@@ -1992,7 +1992,7 @@ class RosterView(views_base.PersistentView):
                 continue
             rec = _d.store.get_active(self.guild_id, uid)
             if rec is None:
-                notes.append(f"<@{uid}>: no active character (`/sheet create`), not added")
+                notes.append(f"<@{uid}>: No active character (`/sheet create`), not added")
                 continue
             if stats.is_dead(rec.character) or stats.wound_level_name(rec.character) == "Out":
                 notes.append(f"<@{uid}>: **{rec.character.name}** cannot act ({stats.wound_level_name(rec.character)}), not added")
@@ -2083,7 +2083,7 @@ class RosterView(views_base.PersistentView):
         pending = sum(1 for st in enc.roster.values() if st == "pending")
         tail = f"\n⏳ {pending} invited player(s) have not answered; they can still press **Join**." if pending else ""
         extra = ("\n".join(notes) + "\n" + _render_encounter(enc, self.guild_id)
-                 + "\nStaff: add NPCs with `/combat add`, `/combat npc` or `/combat creature`, then `/combat next`." + tail)
+                 + "\nStaff: Add NPCs with `/combat add`, `/combat npc` or `/combat creature`, then `/combat next`." + tail)
         await self._refresh(interaction, enc, extra)
         await _d.combat_log(self.guild_id, f"Roster begun by {interaction.user.display_name}: {len(notes)} rolled")
 
@@ -2202,7 +2202,7 @@ async def combat_roster_add(interaction: discord.Interaction, member: discord.Me
     _d.save_encounter(str(interaction.guild_id), enc)
     await _refresh_roster_message(enc)
     await interaction.response.send_message(
-        f"{member.mention}: you have been invited to the encounter here. Press **Join** on the roster to enter"
+        f"{member.mention}: You have been invited to the encounter here. Press **Join** on the roster to enter"
         + (" (it rolls your initiative at once)." if enc.roster_begun else "."),
         allowed_mentions=discord.AllowedMentions(users=[member]),
     )
@@ -2253,7 +2253,7 @@ async def combat_roster_close(interaction: discord.Interaction) -> None:
     await _d.combat_log(str(interaction.guild_id), f"--- Encounter roster closed by {interaction.user.display_name} ---")
 
 
-@combat_group.command(name="setup", description="Set up an encounter roster: pick who is in, players accept or decline, then begin.")
+@combat_group.command(name="setup", description="Set up an encounter roster: Pick who is in, players accept or decline, then begin.")
 async def combat_setup(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -2443,7 +2443,7 @@ def _render_summary(enc: encounter.Encounter, guild: str, final: bool) -> tuple[
     return embed, logs
 
 
-@combat_group.command(name="recap", description="Fight so far: rounds, hits, damage dealt and taken, healing, kills, Void, wound levels.")
+@combat_group.command(name="recap", description="Fight so far: Rounds, hits, damage dealt and taken, healing, kills, Void, wound levels.")
 async def combat_recap(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -2765,7 +2765,7 @@ class ConditionView(views_base.PersistentView):
         src = f" ({self.source})" if self.source else ""
         dur = f" {self.rounds}r" if self.rounds else ""
         await _d.combat_log(self.guild_id, f"Condition: {cb.name} +{self.condition.title()}{dur}{src} approved by {interaction.user.display_name}")
-        await self._finish(interaction, f"✅ {self._label()}{src}: applied by {interaction.user.display_name}.")
+        await self._finish(interaction, f"✅ {self._label()}{src}: Applied by {interaction.user.display_name}.")
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="❌")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -2776,7 +2776,7 @@ class ConditionView(views_base.PersistentView):
             await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         await _d.combat_log(self.guild_id, f"Condition: {self.target_name} {self.condition.title()} denied by {interaction.user.display_name}")
-        await self._finish(interaction, f"❌ {self._label()}: denied by {interaction.user.display_name}.")
+        await self._finish(interaction, f"❌ {self._label()}: Denied by {interaction.user.display_name}.")
 
 
 async def post_condition_request(
@@ -2876,7 +2876,7 @@ class SpellConditionPromptView(discord.ui.View):
         return cb
 
 
-@fight_group.command(name="status", description="Your compact combat card: wounds, penalty, Void, stance, conditions, Armor TN.")
+@fight_group.command(name="status", description="Your compact combat card: Wounds, penalty, Void, stance, conditions, Armor TN.")
 @app_commands.describe(member="Another player's active character [Fortune]")
 async def fight_status(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
     if not await _d.require_guild(interaction):
@@ -2936,7 +2936,7 @@ async def fight_status(interaction: discord.Interaction, member: discord.Member 
     if stats.is_dead(c):
         lines.append("💀 **Dead.**")
     elif level == "Out":
-        lines.append("😵 **Out**: unconscious, cannot act.")
+        lines.append("😵 **Out**: Unconscious, cannot act.")
     embed = discord.Embed(title=f"🧾 {c.name}", description="\n".join(lines), color=discord.Color.dark_gold())
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -3066,7 +3066,7 @@ async def combat_full_defense(
         f"  Roll: {result['rolled']}k{result['kept']} → **{result['total']}** · "
         f"half (rounded up) = **+{result['bonus']} Armor TN**\n"
         f"{wp_note}"
-        f"  Complex Action: only Free Actions until next turn.\n"
+        f"  Complex Action: Only Free Actions until next turn.\n"
         f"  Expires at the start of {cb.name}'s next turn."
     )
     await _d.combat_log(str(interaction.guild_id), f"Full Defense: {cb.name} (+{result['bonus']} Armor TN)")
@@ -3305,7 +3305,7 @@ async def grapple_initiate(
     if equipped:
         wp = combat.get_weapon_profile(equipped)
         if wp.get("grapple_capable"):
-            grapple_weapon_note = f"\n✓ {equipped.replace('_', ' ').title()}: can initiate grapple while armed"
+            grapple_weapon_note = f"\n✓ {equipped.replace('_', ' ').title()}: Can initiate grapple while armed"
         else:
             grapple_weapon_note = f"\n⚠️ {equipped.replace('_', ' ').title()} is not grapple-capable - must drop/sheathe to grapple (DM adjudicates)"
     embed = discord.Embed(
@@ -3437,7 +3437,7 @@ async def grapple_control(
     await _d.combat_log(guild, f"Grapple Control: {winner} wins")
 
 
-@combat_grapple.command(name="hit", description="Grapple Hit: unarmed damage on a grappled opponent (no attack roll). [Fortune]")
+@combat_grapple.command(name="hit", description="Grapple Hit: Unarmed damage on a grappled opponent (no attack roll). [Fortune]")
 @app_commands.describe(
     attacker="The combatant in control (dealing damage).",
     target="The grapple participant receiving damage.",
@@ -3501,7 +3501,7 @@ async def grapple_hit(
     await view.persist(await interaction.original_response())
 
 
-@combat_grapple.command(name="throw", description="Grapple Throw: target becomes Prone and leaves the grapple. [Fortune]")
+@combat_grapple.command(name="throw", description="Grapple Throw: Target becomes Prone and leaves the grapple. [Fortune]")
 @app_commands.describe(
     thrower="The combatant in control (throwing).",
     target="The combatant being thrown.",
@@ -3551,7 +3551,7 @@ async def grapple_throw(
     await _d.combat_log(guild, f"Grapple Throw: {thrower_cb.name} throws {target_cb.name} (both prone, grapple ends)")
 
 
-@combat_grapple.command(name="pin", description="Grapple Pin: immobilize the target (Complex Action, controller only). [Fortune]")
+@combat_grapple.command(name="pin", description="Grapple Pin: Immobilize the target (Complex Action, controller only). [Fortune]")
 @app_commands.describe(
     controller="The combatant in control.",
     target="The grapple participant being pinned.",
@@ -3592,7 +3592,7 @@ async def grapple_pin(
     _d.save_encounter(guild, enc)
     await interaction.response.send_message(
         f"🤼 **{ctrl_cb.name}** pins **{tgt_cb.name}**!\n"
-        f"  {tgt_cb.name} is **Pinned**: fully immobilized. Can only speak or cast verbal-only Mastery 1 spells.\n"
+        f"  {tgt_cb.name} is **Pinned**: Fully immobilized. Can only speak or cast verbal-only Mastery 1 spells.\n"
         f"  (Pin is a prerequisite for Bind.)"
     )
     await _d.combat_log(guild, f"Grapple Pin: {ctrl_cb.name} pins {tgt_cb.name}")
@@ -3709,7 +3709,7 @@ async def grapple_break(
 
 
 
-@combat_duel.command(name="assess", description="Assessment stage: both duelists roll Iaijutsu(Assessment)/Awareness. [Fortune]")
+@combat_duel.command(name="assess", description="Assessment stage: Both duelists roll Iaijutsu(Assessment)/Awareness. [Fortune]")
 @app_commands.describe(
     duelist_a="First duelist (combatant name or character).",
     duelist_b="Second duelist (combatant name or character).",
@@ -3801,7 +3801,7 @@ async def duel_assess(
 
     def _reveal_text(res, opponent):
         if not res["success"]:
-            return "Failed: no information learned."
+            return "Failed: No information learned."
         reveals = res["reveals"]
         opponent_ir = stats.insight_rank(opponent)
         opponent_iaijutsu = opponent.skills.get("Iaijutsu", 0)
@@ -3850,7 +3850,7 @@ async def duel_assess(
     await _d.combat_log(str(interaction.guild_id), f"Duel Assess: {ca.name} vs {cb_char.name}")
 
 
-@combat_duel.command(name="focus", description="Focus stage: contested Iaijutsu(Focus)/Void roll. [Fortune]")
+@combat_duel.command(name="focus", description="Focus stage: Contested Iaijutsu(Focus)/Void roll. [Fortune]")
 @app_commands.describe(
     duelist_a="First duelist.",
     duelist_b="Second duelist.",
@@ -3996,7 +3996,7 @@ async def duel_focus(
 @app_commands.describe(
     attacker="The duelist striking.",
     target="The opponent being struck.",
-    weapon="Weapon used (default: katana).",
+    weapon="Weapon used (default: Katana).",
     free_raises="Free Raises from Focus (auto-applied to damage total).",
     bonus_tn="DM situational modifier to the target's Armor TN.",
     attacker_npc="Attacker is a stored NPC.",
@@ -4696,7 +4696,7 @@ async def battle_damage(
         return
     result = mass_battle.resolve_battle_turn_damage(engagement.value, _d.engine)
     if result["damage"] == 0:
-        await interaction.response.send_message(f"**{engagement.name}**: no incidental damage this round.")
+        await interaction.response.send_message(f"**{engagement.name}**: No incidental damage this round.")
         return
     embed = discord.Embed(title=f"Mass Battle Damage: {engagement.name}", color=discord.Color.dark_red())
     embed.add_field(name="Damage", value=f"**{result['damage']}** ({result['rolled']}k{result['kept']})", inline=True)
@@ -4990,7 +4990,7 @@ async def combat_action(
     if action_type.value == "reset":
         cb.actions_used = 0
         _d.save_encounter(str(interaction.guild_id), enc)
-        await interaction.response.send_message(f"**{cb.name}**: actions reset.")
+        await interaction.response.send_message(f"**{cb.name}**: Actions reset.")
         return
     if action_type.value == "free":
         await interaction.response.send_message(f"**{cb.name}** takes a Free Action.")
@@ -5044,12 +5044,12 @@ async def combat_cover(
     _d.save_encounter(str(interaction.guild_id), enc)
     if bonus == 0:
         await interaction.response.send_message(
-            f"**{cb.name}**: cover cleared.\n\n{_render_encounter(enc, str(interaction.guild_id))}"
+            f"**{cb.name}**: Cover cleared.\n\n{_render_encounter(enc, str(interaction.guild_id))}"
         )
     else:
         sign = "+" if bonus > 0 else ""
         await interaction.response.send_message(
-            f"**{cb.name}**: cover set to **{sign}{bonus}** Armor TN.\n\n"
+            f"**{cb.name}**: Cover set to **{sign}{bonus}** Armor TN.\n\n"
             f"{_render_encounter(enc, str(interaction.guild_id))}"
         )
 
@@ -5084,7 +5084,7 @@ async def combat_notes(
     amount="Raw damage to apply.",
     targets='Comma-separated combatant names, or "all".',
     reason="Source of damage (fire, falling, etc.).",
-    ignore_reduction="Skip armor reduction (default: no - reduction applies).",
+    ignore_reduction="Skip armor reduction (default: No - reduction applies).",
 )
 async def combat_env_damage(
     interaction: discord.Interaction,

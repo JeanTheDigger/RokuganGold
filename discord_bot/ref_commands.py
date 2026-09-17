@@ -85,14 +85,14 @@ def init(
 
 ref = app_commands.Group(
     name="ref",
-    description="Browse L5R rules reference: weapons, armor, schools, and more.",
+    description="Browse L5R rules reference: Weapons, armor, schools, and more.",
 )
 ref_weapon = app_commands.Group(name="weapon", description="Weapon catalog (damage, skill, size).", parent=ref)
 ref_armor = app_commands.Group(name="armor", description="Armor catalog (TN bonus, Reduction).", parent=ref)
 ref_advantage = app_commands.Group(name="advantage", description="Advantages & Disadvantages.", parent=ref)
 ref_kata = app_commands.Group(name="kata", description="Kata by element and mastery.", parent=ref)
 ref_kiho = app_commands.Group(name="kiho", description="Kiho by element and mastery.", parent=ref)
-ref_school = app_commands.Group(name="school", description="School catalog: benefit, skills, techniques.", parent=ref)
+ref_school = app_commands.Group(name="school", description="School catalog: Benefit, skills, techniques.", parent=ref)
 ref_family = app_commands.Group(name="family", description="Family catalog (character creation bonuses).", parent=ref)
 ref_heritage = app_commands.Group(name="heritage", description="Heritage table rolls (L5R 4e).", parent=ref)
 ref_tattoo = app_commands.Group(name="tattoo", description="Togashi tattoo abilities.", parent=ref)
@@ -230,7 +230,7 @@ TERRAIN_MODIFIERS: list[tuple[str, str]] = [
     ("Heavy Cover (wall, fortification)", "+20 Armor TN"),
     ("Concealment (fog, darkness, smoke)", "+10 Armor TN (partial) / +20 (total)"),
     ("Higher Ground (attacker above)", "+1k0 on attack rolls"),
-    ("Darkness (total)", "Blinded: all rolls −3k0, TN +10"),
+    ("Darkness (total)", "Blinded: All rolls −3k0, TN +10"),
     ("Narrow Footing (bridge, ledge)", "Agility TN 20 or fall; no Full Attack"),
     ("Mounted vs. Foot", "+1k0 to mounted attacker; unmounted −1k0 to attack"),
     ("Prone Target (melee)", "−10 Armor TN"),
@@ -252,7 +252,7 @@ RANGE_INCREMENTS: list[tuple[str, str]] = [
 
 @ref.command(
     name="search",
-    description="Search all catalogs: spells, schools, kata, advantages, weapons, and more.",
+    description="Search all catalogs: Spells, schools, kata, advantages, weapons, and more.",
 )
 @app_commands.describe(
     query="Search term (matches names, elements, categories).",
@@ -307,7 +307,7 @@ async def lookup(
         return
 
     lines = [f"`{cat:10s}` **{name}**: {detail}" for cat, name, detail in results[:25]]
-    extra = f"\n*…{len(results) - 25} more: narrow your search.*" if len(results) > 25 else ""
+    extra = f"\n*…{len(results) - 25} more: Narrow your search.*" if len(results) > 25 else ""
     await interaction.response.send_message(
         f"\U0001f50e **{len(results)} result(s) for `{query}`: **\n" + "\n".join(lines) + extra,
         ephemeral=True,
@@ -712,7 +712,7 @@ async def encumbrance_check(
 
 @ref.command(name="armor_tn", description="Show Armor TN breakdown for your active character.")
 @app_commands.describe(
-    target="Character name (Fortune: omit to see your own).",
+    target="Character name (Fortune: Omit to see your own).",
 )
 async def atn_breakdown(interaction: discord.Interaction, target: str | None = None) -> None:
     if not await _d.require_guild(interaction):
@@ -878,7 +878,7 @@ async def ancestors_check(
         description="\n".join(found),
         color=discord.Color.gold(),
     )
-    embed.set_footer(text="DM: apply these bonuses manually to relevant rolls.")
+    embed.set_footer(text="DM: Apply these bonuses manually to relevant rolls.")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -924,15 +924,15 @@ async def dual_wield_info(
         elif off_size == "Medium":
             penalty = "−10 TN (Medium off-hand weapon)"
         else:
-            penalty = "−15 TN (Large off-hand weapon: not normally allowed)"
+            penalty = "−15 TN (Large off-hand weapon: Not normally allowed)"
         # Check skill mastery off-hand penalty removal (Knives R3, War Fan R3).
         off_skill = off_w.get("skill", "")
         off_rank = c.skills.get(off_skill, 0)
         mastery_note = ""
         if off_skill.lower() == "knives" and off_rank >= 3:
-            mastery_note = "\n✓ **Knives R3**: off-hand penalty removed"
+            mastery_note = "\n✓ **Knives R3**: Off-hand penalty removed"
         elif off_skill.lower() == "war fan" and off_rank >= 3:
-            mastery_note = "\n✓ **War Fan R3**: off-hand penalty removed"
+            mastery_note = "\n✓ **War Fan R3**: Off-hand penalty removed"
         embed.add_field(name="Off-hand Attack Penalty", value=penalty + mastery_note, inline=False)
         embed.add_field(name="Dominant-hand Penalty", value="−5 to main-hand attacks while holding an off-hand weapon", inline=False)
         ir = stats.insight_rank(c)
@@ -1025,7 +1025,7 @@ async def modifiers_ref(interaction: discord.Interaction) -> None:
 # /ref calledshot - called shot reference
 # ---------------------------------------------------------------------------
 
-@ref.command(name="calledshot", description="Called Shot: raise costs and body part effects (L5R 4e).")
+@ref.command(name="calledshot", description="Called Shot: Raise costs and body part effects (L5R 4e).")
 async def calledshot_ref(interaction: discord.Interaction) -> None:
     embed = discord.Embed(title="\U0001f3af Called Shot Reference", color=discord.Color.dark_gold())
     parts_lines = []
@@ -1037,16 +1037,16 @@ async def calledshot_ref(interaction: discord.Interaction) -> None:
         value=(
             "Called Shots use the standard Raise mechanic (+5 TN per raise). "
             "On a successful hit, the DM adjudicates the effect based on the body part:\n"
-            "• **Limb**: may disarm, hamper movement, or force a Stamina check\n"
-            "• **Hand/Foot**: may drop weapon, reduce movement\n"
+            "• **Limb**: May disarm, hamper movement, or force a Stamina check\n"
+            "• **Hand/Foot**: May drop weapon, reduce movement\n"
             "• **Head**: +1k1 bonus damage on this strike\n"
-            "• **Eye/Ear/Finger**: devastating: +1k1 damage, potential permanent injury"
+            "• **Eye/Ear/Finger**: Devastating: +1k1 damage, potential permanent injury"
         ),
         inline=False,
     )
     embed.add_field(
         name="Usage",
-        value="Use `/fight attack maneuver: Called Shot raises: N`: the raise cost is added to TN automatically.",
+        value="Use `/fight attack maneuver: Called Shot raises: N`: The raise cost is added to TN automatically.",
         inline=False,
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)

@@ -405,7 +405,7 @@ def _sheet_diff(old: dict, new: dict) -> list[str]:
 async def _audit_stat(interaction: discord.Interaction, rec: storage.CharacterRecord, what: str,
                       changed: bool = True) -> None:
     """One combat-log line per sheet edit: who edited whose sheet and what changed.
-    `changed` is Store.save()'s return value: the undo snapshot it just took is the before-state."""
+    `changed` is Store.save()'s return value: The undo snapshot it just took is the before-state."""
     guild = str(interaction.guild_id)
     changes: list[str] = []
     if changed:
@@ -540,7 +540,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
             f"Honor {c.honor:g} · Glory {c.glory:g} · Status {c.status:g} · Infamy {c.infamy:g}\n"
             f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) · "
             f"Void Points {c.current_void_points}/{taint.void_point_cap(c)}"
-            + (" (Taint: max -1)" if taint.void_point_cap(c) < c.max_void_points else "") + "\n"
+            + (" (Taint: Max -1)" if taint.void_point_cap(c) < c.max_void_points else "") + "\n"
             f"XP available: **{c.xp:g}** (spent {c.xp_spent:g})"
         ),
         inline=False,
@@ -644,7 +644,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         if cats:
             embed.add_field(name="Categories", value=", ".join(cat.name for cat in cats)[:1024], inline=False)
 
-    embed.set_footer(text=f"Owner: player {record.owner_id} · sheet #{record.id}")
+    embed.set_footer(text=f"Owner: Player {record.owner_id} · sheet #{record.id}")
     return embed
 
 def build_creature_embed(record: storage.CreatureRecord) -> discord.Embed:
@@ -666,7 +666,7 @@ def build_creature_embed(record: storage.CreatureRecord) -> discord.Embed:
         name="Combat",
         value=(
             f"Initiative {cr.initiative_rolled}k{cr.initiative_kept}\n"
-            f"{cr.attack_name}: attack **{cr.attack_rolled}k{cr.attack_kept}**, "
+            f"{cr.attack_name}: Attack **{cr.attack_rolled}k{cr.attack_kept}**, "
             f"damage **{cr.damage_rolled}k{cr.damage_kept}**\n"
             f"Armor TN **{cr.armor_tn}** · Reduction **{cr.reduction}**"
             + (f" · Fear **{cr.fear}**" if cr.fear else "")
@@ -725,7 +725,7 @@ def _build_creature_template_embed(cr: creature.Creature) -> discord.Embed:
         dmg += f"+{cr.damage_flat}"
     combat_lines = [
         f"Initiative: {cr.initiative_rolled}k{cr.initiative_kept}",
-        f"{cr.attack_name or 'Attack'}: attack {atk}, damage {dmg}",
+        f"{cr.attack_name or 'Attack'}: Attack {atk}, damage {dmg}",
         f"Armor TN **{cr.armor_tn}** · Reduction **{cr.reduction}**",
     ]
     if cr.fear > 0:
@@ -901,7 +901,7 @@ def _whoami_lines(interaction: discord.Interaction, rec: storage.CharacterRecord
         for cb in enc.combatants:
             if cb.owner_id == uid and cb.name.lower() == c.name.lower():
                 conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "none"
-                lines.append(f"In combat: conditions: {conds}")
+                lines.append(f"In combat: Conditions: {conds}")
                 break
     return lines
 
@@ -981,16 +981,16 @@ def _delete_encounter(channel_id: int) -> None:
 
 @client.tree.command(
     name="roll",
-    description="Roll & Keep (L5R 4e). Example: rolled=7 kept=3, optionally against a TN.",
+    description="Roll & Keep (L5R 4e). Example: Rolled=7 kept=3, optionally against a TN.",
 )
 @app_commands.describe(
     rolled="Number of dice to ROLL (the X in XkY).",
     kept="Number of dice to KEEP (the Y in XkY).",
     tn="Optional Target Number to test against.",
-    raises="Called Raises: each adds +5 to the TN (default 0).",
+    raises="Called Raises: Each adds +5 to the TN (default 0).",
     bonus="Flat modifier added to the total (default 0).",
-    emphasis="Emphasis: reroll any initial 1 once (default off).",
-    unskilled="Unskilled roll: dice do NOT explode (default off).",
+    emphasis="Emphasis: Reroll any initial 1 once (default off).",
+    unskilled="Unskilled roll: Dice do NOT explode (default off).",
     reason="Optional label shown with the roll (e.g. 'Kenjutsu attack').",
 )
 async def roll(
@@ -1059,7 +1059,7 @@ _DICE_RE = re.compile(
 
 @client.tree.command(
     name="dice",
-    description="Quick dice: type '5k3', '7k2+5', '4k2-3'. Shorthand for /roll.",
+    description="Quick dice: Type '5k3', '7k2+5', '4k2-3'. Shorthand for /roll.",
 )
 @app_commands.describe(
     expression="Dice expression like 5k3, 7k2+5, 4k2-3.",
@@ -1354,12 +1354,12 @@ def _check_insight_rank_advance(c: Character) -> str:
 # /sheet group
 # ===========================================================================
 sheet = app_commands.Group(name="sheet", description="Create and manage L5R 4e character sheets.")
-sheet_void = app_commands.Group(name="void", description="Void Point management: spend, refresh, status.", parent=sheet)
+sheet_void = app_commands.Group(name="void", description="Void Point management: Spend, refresh, status.", parent=sheet)
 sheet_kata_grp = app_commands.Group(name="kata", description="Record and activate Kata.", parent=sheet)
 sheet_kiho_grp = app_commands.Group(name="kiho", description="Record and activate Kiho.", parent=sheet)
 sheet_tattoo_grp = app_commands.Group(name="tattoo", description="Manage Togashi tattoos.", parent=sheet)
 sheet_data = app_commands.Group(name="data", description="Export / import character sheets.", parent=sheet)
-stat_group = app_commands.Group(name="stat", description="Staff edits to a character sheet: traits, skills, armor, qualities, advantages.")
+stat_group = app_commands.Group(name="stat", description="Staff edits to a character sheet: Traits, skills, armor, qualities, advantages.")
 xp_group = app_commands.Group(name="xp", description="Grant and spend Experience to advance characters.")
 
 _SCHOOL_CHOICES = [app_commands.Choice(name=s, value=s) for s in enums.SCHOOL_TYPES]
@@ -3157,7 +3157,7 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
     embed.add_field(name="XP", value=f"{spent} spent, {remaining} unspent", inline=True)
 
     if remaining > 0:
-        embed.set_footer(text=f"{remaining} XP unspent: it carries over to your sheet as spendable XP.")
+        embed.set_footer(text=f"{remaining} XP unspent: It carries over to your sheet as spendable XP.")
 
     wc_picks = state.get("wildcard_picks", [])
     resolved_picks = [p for p in wc_picks if p.get("skill") != "(auto-skipped)"]
@@ -3598,7 +3598,7 @@ async def _activate_autocomplete(interaction: discord.Interaction, current: str)
     out += [app_commands.Choice(name=f"NPC: {n}", value=n) for n in sorted(npcs) if cur in n.lower()]
     return out[:25]
 
-@sheet.command(name="activate", description="Staff: act as one of your characters or as a stored NPC (commands without a name use it).")
+@sheet.command(name="activate", description="Staff: Act as one of your characters or as a stored NPC (commands without a name use it).")
 @app_commands.describe(name="Your character, or an NPC's name.")
 @app_commands.autocomplete(name=_activate_autocomplete)
 async def sheet_activate(interaction: discord.Interaction, name: app_commands.Range[str, 1, 64]) -> None:
@@ -3620,7 +3620,7 @@ async def sheet_activate(interaction: discord.Interaction, name: app_commands.Ra
     if rec is None:
         mine = ", ".join(r.character.name for r in store.list_by_owner(guild, uid)) or "none"
         await interaction.response.send_message(
-            f"No character or NPC called **{name}**. Yours: {mine}. NPCs: see `/npc list`.", ephemeral=True,
+            f"No character or NPC called **{name}**. Yours: {mine}. NPCs: See `/npc list`.", ephemeral=True,
         )
         return
     if stats.is_dead(rec.character):
@@ -3629,7 +3629,7 @@ async def sheet_activate(interaction: discord.Interaction, name: app_commands.Ra
     store.set_active(guild, uid, rec.id)
     if as_npc:
         await interaction.response.send_message(
-            f"🎭 You are now acting as **{rec.character.name}** (NPC): attacks, checks, spells and `/fight status` "
+            f"🎭 You are now acting as **{rec.character.name}** (NPC): Attacks, checks, spells and `/fight status` "
             f"without a name use it. `/sheet activate` your own character to switch back.", ephemeral=True,
         )
     else:
@@ -3668,7 +3668,7 @@ async def sheet_list(interaction: discord.Interaction, member: discord.Member | 
     )
 
 
-@sheet.command(name="delete", description="Delete a character sheet (players: ask staff). [Fortune]")
+@sheet.command(name="delete", description="Delete a character sheet (players: Ask staff). [Fortune]")
 @app_commands.describe(name="Character name.", member="Owner of the character [Fortune]")
 @app_commands.autocomplete(name=_own_character_autocomplete)
 async def sheet_delete(
@@ -3899,7 +3899,7 @@ async def sheet_trait(
         f"Set **{label}** to **{value}** on **{rec.character.name}**.{rank_msg}", embed=build_sheet_embed(rec)
     )
 
-@stat_group.command(name="skill", description="Set skill ranks. Single: skill='Kenjutsu' rank=3. Bulk: skill='Kenjutsu 3, Courtier 2'. [Fortune]")
+@stat_group.command(name="skill", description="Set skill ranks. Single: Skill='Kenjutsu' rank=3. Bulk: Skill='Kenjutsu 3, Courtier 2'. [Fortune]")
 @app_commands.describe(
     skill="Skill name, or bulk list: 'Kenjutsu 3, Courtier 2, Etiquette 1'.",
     rank="Rank 0-10 (0 removes). Omit when using bulk format.",
@@ -4020,7 +4020,7 @@ async def sheet_identity(
                     c.clan = fam["clan"]
             else:
                 c.family = new_name
-                changes.append(f"Family **{new_name or '(none)'}**" + (" (no bonus applied)" if fam else " (not in the catalog: no bonus)"))
+                changes.append(f"Family **{new_name or '(none)'}**" + (" (no bonus applied)" if fam else " (not in the catalog: No bonus)"))
         else:
             changes.append(f"Family already **{c.family}** (unchanged, no bonus re-applied)")
     if school is not None:
@@ -4092,7 +4092,7 @@ async def _quality_autocomplete(
 
 @stat_group.command(name="quality", description="Set extraordinary weapon qualities on the equipped weapon. [Fortune]")
 @app_commands.describe(
-    qualities="Comma-separated qualities: balanced, radiant, signature, swift, true, unbreakable.",
+    qualities="Comma-separated qualities: Balanced, radiant, signature, swift, true, unbreakable.",
     clear="Remove all weapon qualities.",
     member="Target player [Fortune]",
 )
@@ -4145,7 +4145,7 @@ async def sheet_quality(
         f"**{c.name}** weapon qualities set: **{q_list}** (on {wpn}).", embed=build_sheet_embed(rec)
     )
 
-@stat_group.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free: no XP). [Fortune]")
+@stat_group.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free: No XP). [Fortune]")
 @app_commands.describe(
     name="Advantage name. For parameterised advantages, include the parameter: 'Weakness: Willpower', 'Seven Fortunes' Blessing: Daikoku'.",
     remove="Remove it instead.",
@@ -4175,7 +4175,7 @@ async def sheet_advantage(
         base = adv["name"] if adv else name.strip().split(":")[0].strip()
         param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(base)
         if param_hint and ":" not in name:
-            msg += f"\n*Hint: this advantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
+            msg += f"\n*Hint: This advantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
     changed = store.save(rec, note="stat advantage")
     await _audit_stat(interaction, rec, "stat advantage", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
@@ -4206,17 +4206,17 @@ async def sheet_disadvantage(
     else:
         if canonical.lower() not in [x.lower() for x in c.disadvantages]:
             c.disadvantages.append(canonical)
-        grant = f" (grants {dis['points']} XP: a DM applies it with `/xp grant`)" if dis and dis["points"] else ""
+        grant = f" (grants {dis['points']} XP: A DM applies it with `/xp grant`)" if dis and dis["points"] else ""
         msg = f"**{c.name}** takes the disadvantage **{canonical}**{grant}."
         base = dis["name"] if dis else name.strip().split(":")[0].strip()
         param_hint = advantage_effects.PARAMETERISED_DISADVANTAGES.get(base)
         if param_hint and ":" not in name:
-            msg += f"\n*Hint: this disadvantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
+            msg += f"\n*Hint: This disadvantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
     changed = store.save(rec, note="stat disadvantage")
     await _audit_stat(interaction, rec, "stat disadvantage", changed)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@sheet_kata_grp.command(name="learn", description="Record (or remove) a Kata on your sheet (free: no XP; use /xp kata to buy). [Fortune]")
+@sheet_kata_grp.command(name="learn", description="Record (or remove) a Kata on your sheet (free: No XP; use /xp kata to buy). [Fortune]")
 @app_commands.describe(name="Kata name.", remove="Remove it instead.", member="Target player [Fortune]")
 @app_commands.autocomplete(name=_kata_autocomplete)
 async def sheet_kata(
@@ -4243,7 +4243,7 @@ async def sheet_kata(
     store.save(rec)
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
-@sheet_kiho_grp.command(name="learn", description="Record (or remove) a Kiho on your sheet (free: no XP; use /xp kiho to buy). [Fortune]")
+@sheet_kiho_grp.command(name="learn", description="Record (or remove) a Kiho on your sheet (free: No XP; use /xp kiho to buy). [Fortune]")
 @app_commands.describe(name="Kiho name.", remove="Remove it instead.", member="Target player [Fortune]")
 @app_commands.autocomplete(name=_kiho_autocomplete)
 async def sheet_kiho(
@@ -4280,10 +4280,10 @@ def _activate_kata(c: Character, name: str | None) -> tuple[bool, str]:
     k = kata.get(name)
     canonical = k["name"] if k else name.strip()
     if canonical.lower() not in [x.lower() for x in c.katas]:
-        return False, (f"**{c.name}** hasn't learned the Kata **{canonical}**: add it with `/sheet kata learn` "
+        return False, (f"**{c.name}** hasn't learned the Kata **{canonical}**: Add it with `/sheet kata learn` "
                        f"or buy it with `/xp kata`.")
     c.active_kata = canonical
-    note = "" if kata_effects.is_auto(canonical) else " *(its effect is DM-adjudicated: shown as a reminder on attacks.)*"
+    note = "" if kata_effects.is_auto(canonical) else " *(its effect is DM-adjudicated: Shown as a reminder on attacks.)*"
     return True, f"🥋 **{c.name}** assumes the Kata **{canonical}**.{note}"
 
 def _activate_kiho(c: Character, name: str, off: bool = False) -> tuple[bool, str]:
@@ -4294,7 +4294,7 @@ def _activate_kiho(c: Character, name: str, off: bool = False) -> tuple[bool, st
         c.active_kiho = [x for x in c.active_kiho if x.lower() != canonical.lower()]
         return True, f"**{c.name}** ends the Kiho **{canonical}**."
     if canonical.lower() not in [x.lower() for x in c.kiho]:
-        return False, (f"**{c.name}** hasn't learned the Kiho **{canonical}**: add it with `/sheet kiho learn` "
+        return False, (f"**{c.name}** hasn't learned the Kiho **{canonical}**: Add it with `/sheet kiho learn` "
                        f"or buy it with `/xp kiho`.")
     ktype = (h["type"] if h else "").strip().lower()
     replaced = ""
@@ -4312,7 +4312,7 @@ def _activate_kiho(c: Character, name: str, off: bool = False) -> tuple[bool, st
         c.active_kiho.append(canonical)
     tlabel = h["type"] if h and h.get("type") else "Kiho"
     return True, (f"✋ **{c.name}** activates the {tlabel} Kiho **{canonical}**{replaced}. "
-                  f"*(Activation cost: a Void Point or Meditation/Void roll: and duration are "
+                  f"*(Activation cost: A Void Point or Meditation/Void roll: And duration are "
                   f"DM-adjudicated; its combat effect is shown as a reminder on attacks.)*")
 
 @sheet_kata_grp.command(name="activate", description="Set your active Kata (Simple Action; only one active). Blank name drops it.")
@@ -4594,9 +4594,9 @@ async def sheet_heal(
 # ===========================================================================
 # /dm group
 # ===========================================================================
-dm = app_commands.Group(name="dm", description="DM tools: requires the Fortune role (or Kami for admin commands).")
+dm = app_commands.Group(name="dm", description="DM tools: Requires the Fortune role (or Kami for admin commands).")
 npc_group = app_commands.Group(name="npc", description="Generate, view, and manage NPC characters.")
-npc_edit_group = app_commands.Group(name="npc-edit", description="Edit NPC stats: traits, skills, items, spells, and gear.")
+npc_edit_group = app_commands.Group(name="npc-edit", description="Edit NPC stats: Traits, skills, items, spells, and gear.")
 creature_group = app_commands.Group(name="creature", description="Spawn and run bestiary creatures.")
 room_group = app_commands.Group(name="room", description="Create private play rooms and invite people.")
 category_group = app_commands.Group(name="category", description="Organise NPCs and creatures into named groups.")
@@ -4609,7 +4609,7 @@ location_area_group = app_commands.Group(name="area", description="Manage locati
 _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("\U0001f3ad", "Session & World", "Manage your game session and world state.", [
         ("/dm party", "Overview of all active PCs"),
-        ("/dm new_day", "New day: refresh spells, natural healing"),
+        ("/dm new_day", "New day: Refresh spells, natural healing"),
         ("/dm setdate", "Set the Rokugani calendar date (year/month/day)"),
         ("/dm roles", "Show Fortune and Kami role holders"),
         ("/dm influence", "Track Influence Points (court scene)"),
@@ -4691,7 +4691,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("\U0001f3af", "Skill Checks", "Roll skill and trait checks for characters.", [
         ("/check skill", "Generic Skill/Trait vs TN"),
         ("/check contest", "Contested roll between two characters"),
-        ("/check cooperative", "Cooperative check: helpers assist primary"),
+        ("/check cooperative", "Cooperative check: Helpers assist primary"),
         ("/check fear / honor", "Fear or Honor Roll"),
         ("/check stealth / investigate", "Stealth or Investigation"),
         ("/check social", "Social skill check (auto-selects trait)"),
@@ -4781,7 +4781,7 @@ class _DmWizardCatSelect(discord.ui.Select):
         view.add_item(back_btn)
         await interaction.response.edit_message(content=None, embed=embed, view=view)
 
-@dm.command(name="wizard", description="Interactive command menu: browse all Fortune and Kami actions by category.")
+@dm.command(name="wizard", description="Interactive command menu: Browse all Fortune and Kami actions by category.")
 async def dm_wizard_cmd(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -4799,7 +4799,7 @@ async def dm_wizard_cmd(interaction: discord.Interaction) -> None:
         ephemeral=True,
     )
 
-@dm.command(name="party", description="DM overview: all active PCs on this server. [Fortune]")
+@dm.command(name="party", description="DM overview: All active PCs on this server. [Fortune]")
 async def party_overview(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -4857,15 +4857,15 @@ async def dm_roles(interaction: discord.Interaction) -> None:
         members = [m.mention for m in kami_role.members]
         lines.append(f"**{ROLE_KAMI}** (admin): {', '.join(members) if members else 'nobody'}")
     else:
-        lines.append(f"**{ROLE_KAMI}** role not found: create it in Server Settings > Roles.")
+        lines.append(f"**{ROLE_KAMI}** role not found: Create it in Server Settings > Roles.")
     if fortune_role:
         members = [m.mention for m in fortune_role.members]
         lines.append(f"**{ROLE_FORTUNE}** (DM): {', '.join(members) if members else 'nobody'}")
     else:
-        lines.append(f"**{ROLE_FORTUNE}** role not found: create it in Server Settings > Roles.")
+        lines.append(f"**{ROLE_FORTUNE}** role not found: Create it in Server Settings > Roles.")
     await interaction.response.send_message("\n".join(lines), ephemeral=True)
 
-@dm.command(name="new_day", description="Advance one day: heal, refresh VP and spell slots for all PCs. [Fortune]")
+@dm.command(name="new_day", description="Advance one day: Heal, refresh VP and spell slots for all PCs. [Fortune]")
 async def dm_new_day(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -4897,7 +4897,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         if vp_old < vp_cap:
             parts.append(f"VP {vp_old} → {vp_cap}/{vp_cap}")
         if vp_cap < c.max_void_points:
-            parts.append(f"Taint Rank {taint.taint_rank(c)}: max VP -1")
+            parts.append(f"Taint Rank {taint.taint_rank(c)}: Max VP -1")
         for element in SPELL_ELEMENTS:
             c.spell_slots[element] = stats.spell_slot_max(c, element)
         c.void_spell_bonus = stats.void_bonus_max(c)
@@ -4937,7 +4937,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         description="\n".join(lines),
         color=discord.Color.green(),
     )
-    footer = "Rest: full VP · Stamina x 2 healing · Spell slots: Ring per element + Void Ring bonus"
+    footer = "Rest: Full VP · Stamina x 2 healing · Spell slots: Ring per element + Void Ring bonus"
     if date_str:
         embed.add_field(name="Calendar", value=date_str, inline=False)
     else:
@@ -5260,7 +5260,7 @@ async def dm_heal(
 @app_commands.describe(
     target="Character name (PC or NPC).",
     reason="Why this death is being reversed (required; written to the combat log).",
-    wounds="Wounds to set the character to (default: the top of the Out level, alive but Out).",
+    wounds="Wounds to set the character to (default: The top of the Out level, alive but Out).",
 )
 @app_commands.autocomplete(target=_any_character_autocomplete)
 async def dm_revive(
@@ -5394,7 +5394,7 @@ async def dm_undo(
             if after.owner_id != NPC_OWNER and store.get_active(guild, after.owner_id) is None:
                 store.set_active(guild, after.owner_id, after.id)
                 notes.append("set as the player's active character again")
-            notes.append("not re-added to any initiative list: use `/combat add` if needed")
+            notes.append("not re-added to any initiative list: Use `/combat add` if needed")
     else:
         after_cr = store.get_creature_by_id(sn.entity_id).creature
         if after_cr.wounds_taken >= after_cr.wounds_dead and before_d.get("wounds_taken", 0) < after_cr.wounds_dead:
@@ -5448,7 +5448,7 @@ async def dm_pending(interaction: discord.Interaction) -> None:
     for message_id, channel_id, kind, state, created_at in rows[:15]:
         age = int((now - created_at) // 60)
         age_s = f"{age} min" if age < 120 else f"{age // 60} h"
-        link = f"[open](https://discord.com/channels/{guild}/{channel_id}/{message_id})" if channel_id else "*(no link: posted before this update)*"
+        link = f"[open](https://discord.com/channels/{guild}/{channel_id}/{message_id})" if channel_id else "*(no link: Posted before this update)*"
         summary = _pending_summary(kind, state)
         lines.append(f"• {_PENDING_KIND_LABELS[kind]}{': **' + summary + '**' if summary else ''} - {age_s} ago - {link}")
     more = f"\n… and {len(rows) - 15} more." if len(rows) > 15 else ""
@@ -5579,7 +5579,7 @@ async def void_refresh(
             return
     c = rec.character
     vp_cap = taint.void_point_cap(c)
-    cap_note = f" (Taint Rank {taint.taint_rank(c)}: max VP -1)" if vp_cap < c.max_void_points else ""
+    cap_note = f" (Taint Rank {taint.taint_rank(c)}: Max VP -1)" if vp_cap < c.max_void_points else ""
     if mode.value == "rest":
         if not npc_name and (member is None or member.id == interaction.user.id):
             if not await _require_dm_role(interaction):
@@ -5675,7 +5675,7 @@ async def void_status(
     vp_cap = taint.void_point_cap(c)
     bar_full = "🟣" * c.current_void_points
     bar_empty = "⚫" * max(0, vp_cap - c.current_void_points)
-    cap_note = f"\n  Taint Rank {taint.taint_rank(c)}: maximum reduced by 1" if vp_cap < c.max_void_points else ""
+    cap_note = f"\n  Taint Rank {taint.taint_rank(c)}: Maximum reduced by 1" if vp_cap < c.max_void_points else ""
     await interaction.response.send_message(
         f"🌀 **{c.name}**: Void Points: **{c.current_void_points}/{vp_cap}**\n"
         f"  {bar_full}{bar_empty}\n"
@@ -5688,9 +5688,9 @@ async def void_status(
 # ===========================================================================
 
 _HELP_BLURBS: dict[str, str] = {
-    "sheet": "Your character sheet: create, view, Void, Kata, Kiho, export. One character per player; staff use activate to act as NPCs.",
-    "stat": "Staff sheet edits: traits, skills, numeric fields, armor, qualities, advantages. Players use /inventory for gear and /xp to advance.",
-    "inventory": "Your gear and purse in one panel: wield, weapons, items, koku.",
+    "sheet": "Your character sheet: Create, view, Void, Kata, Kiho, export. One character per player; staff use activate to act as NPCs.",
+    "stat": "Staff sheet edits: Traits, skills, numeric fields, armor, qualities, advantages. Players use /inventory for gear and /xp to advance.",
+    "inventory": "Your gear and purse in one panel: Wield, weapons, items, koku.",
     "xp": "Spend Experience on traits, skills, emphases, kata, kiho, spells and advantages.",
     "roll": "Roll & Keep dice, with optional TN, Raises and Emphasis.",
     "dice": "Quick dice shorthand: 5k3, 7k2+5.",
@@ -5698,20 +5698,20 @@ _HELP_BLURBS: dict[str, str] = {
     "history": "Recent rolls in this channel.",
     "check": "Skill, trait and situational checks for your character. Rolling for others or NPCs needs Fortune.",
     "combat": "Initiative and turn order. Your own actions are under /fight; grapples, duels and battles under /engage.",
-    "fight": "Your actions in a fight: attack, stance, guard, full defense, your status card.",
+    "fight": "Your actions in a fight: Attack, stance, guard, full defense, your status card.",
     "engage": "Grapple, Iaijutsu duel and mass battle subsystems (run by Fortune).",
     "spell": "Browse spells, cast, resist, importune, spell damage.",
     "players": "Directory of approved player characters.",
     "compare": "Compare two characters side by side.",
-    "whoami": "Your character hub: status card with buttons for Void, Kata, Kiho, tattoos, inventory, full sheet, export.",
+    "whoami": "Your character hub: Status card with buttons for Void, Kata, Kiho, tattoos, inventory, full sheet, export.",
     "room": "Private play rooms (threads) with invites.",
     "location": "In-character areas and location channels.",
     "date": "The current Rokugani calendar date.",
-    "npc": "Stored NPCs: build with exact stats, templates, generate, view, place in rooms, speak as them [Fortune].",
+    "npc": "Stored NPCs: Build with exact stats, templates, generate, view, place in rooms, speak as them [Fortune].",
     "npc-edit": "Edit NPC stats and gear [Fortune].",
-    "creature": "Bestiary creatures: spawn, wound, attack [Fortune].",
+    "creature": "Bestiary creatures: Spawn, wound, attack [Fortune].",
     "category": "Group NPCs and creatures for bulk actions [Fortune].",
-    "dm": "Fortune and Kami tools: approvals, new day, damage, undo, revive, channels.",
+    "dm": "Fortune and Kami tools: Approvals, new day, damage, undo, revive, channels.",
     "ref": "Weapons, armor, schools, families, kata, kiho, advantages, tattoos, heritage, travel, modifiers.",
     "setup": "Server setup [Kami].",
     "sync": "Re-sync slash commands [Kami].",
@@ -5919,9 +5919,9 @@ async def npc_generate(
             ephemeral=True,
         )
         return
-    note = f"🎭 Generated **{name}**: a Rank {insight_rank} {char.school_type} NPC (stats have random variance)."
+    note = f"🎭 Generated **{name}**: A Rank {insight_rank} {char.school_type} NPC (stats have random variance)."
     if not school_skills:
-        note += " No skills set: regenerate with `skills:` to give it school skills."
+        note += " No skills set: Regenerate with `skills:` to give it school skills."
     await interaction.response.send_message(content=note, embed=build_sheet_embed(rec))
 
 @npc_group.command(name="view", description="View a stored NPC.")
@@ -6662,7 +6662,7 @@ async def room_members(interaction: discord.Interaction) -> None:
     npcs = store.list_room_npcs(rec.id)
     npc_line = "\n🎭 NPCs: " + ", ".join(f"**{n}**" for n in sorted(npcs)) if npcs else ""
     await interaction.response.send_message(
-        f"🏮 **{rec.name}**: host <@{rec.host_id}>\nMembers: {mentions}{npc_line}",
+        f"🏮 **{rec.name}**: Host <@{rec.host_id}>\nMembers: {mentions}{npc_line}",
         ephemeral=True,
     )
 
@@ -6894,7 +6894,7 @@ class SpellDamageView(_DisableableView):
                     applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
                     void_line = f"\n🔮 Void Point: **−{void_saved}** wounds ({rec.character.current_void_points} VP left)"
                 else:
-                    void_line = "\n🔮 No Void Points available: full damage applied"
+                    void_line = "\n🔮 No Void Points available: Full damage applied"
         store.save(rec, note="spell damage")
         ch_for_tally = self.source_channel_id or interaction.channel_id
         _tally(ch_for_tally, rec.character.name, "taken", applied["final_damage"])
@@ -6908,7 +6908,7 @@ class SpellDamageView(_DisableableView):
             notes = await _on_death(str(interaction.guild_id), c.name, rec.owner_id, rec.id)
             death_line = "".join(f"\n💀 {n}" for n in notes)
         embed = discord.Embed(
-            title=f"📜 {self.reason or 'Spell Damage'}: applied",
+            title=f"📜 {self.reason or 'Spell Damage'}: Applied",
             color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.dark_magenta(),
         )
         embed.add_field(
@@ -7057,7 +7057,7 @@ class DmDamageView(_DisableableView):
         await interaction.response.send_message(
             f"🔮 **{self.target_name}** spends 1 VP → damage reduced to **{self.amount}**. "
             f"({c.current_void_points}/{c.max_void_points} VP left). "
-            f"DM: now click Apply Damage or Deny."
+            f"DM: Now click Apply Damage or Deny."
         )
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
@@ -7276,7 +7276,7 @@ async def creature_search(interaction: discord.Interaction, query: str) -> None:
         lines.append(
             f"• **{t.name}** (`{tid}`)\n"
             f"  {' · '.join(ring_parts)}\n"
-            f"  {t.attack_name or 'Atk'}: atk {atk}, dmg {dmg} | TN {t.armor_tn}, Red {t.reduction} | "
+            f"  {t.attack_name or 'Atk'}: Atk {atk}, dmg {dmg} | TN {t.armor_tn}, Red {t.reduction} | "
             f"Dead {t.wounds_dead}{fear_s}\n"
             f"  {tags_s}"
         )
@@ -7329,7 +7329,7 @@ async def creature_compare(interaction: discord.Interaction, template_a: str, te
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @creature_group.command(name="spawn", description="Spawn a creature instance from a template. [Fortune]")
-@app_commands.describe(template="Which creature template.", name="Instance name (default: the template's name).")
+@app_commands.describe(template="Which creature template.", name="Instance name (default: The template's name).")
 @app_commands.autocomplete(template=_creature_template_autocomplete)
 async def creature_spawn(interaction: discord.Interaction, template: str, name: str | None = None) -> None:
     if not await _require_guild(interaction):
@@ -7443,7 +7443,7 @@ async def creature_heal(
     creature_name="The attacking creature.",
     target="The player to attack (their active character).",
     target_npc="Attack a stored NPC instead of a player.",
-    raises="Called Raises: each adds +5 to the target's Armor TN.",
+    raises="Called Raises: Each adds +5 to the target's Armor TN.",
     bonus_tn="Situational +/- to the target's Armor TN.",
 )
 @app_commands.autocomplete(creature_name=_creature_instance_autocomplete, target_npc=_npc_autocomplete)
@@ -8154,7 +8154,7 @@ async def location_area_fix_permissions(interaction: discord.Interaction) -> Non
     area="Which area to create the location in.",
     name="Location name (becomes the channel name).",
     description="Optional location description (pinned at the top).",
-    private="If True, only listed members can see the channel. Default: public (inherits area visibility).",
+    private="If True, only listed members can see the channel. Default: Public (inherits area visibility).",
     member1="Grant access to this member (required for private locations).",
     member2="Grant access to a second member.",
     member3="Grant access to a third member.",
@@ -8407,7 +8407,7 @@ async def xp_grant(interaction: discord.Interaction, member: discord.Member, amo
     )
     if not logged:
         await interaction.followup.send(
-            "⚠️ This grant was not logged: no XP log channel is set. A Kami can set one with `/dm xp_log_channel`.",
+            "⚠️ This grant was not logged: No XP log channel is set. A Kami can set one with `/dm xp_log_channel`.",
             ephemeral=True,
         )
 
@@ -8451,7 +8451,7 @@ async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[
     new_rank, cost = quote
     if c.xp < cost:
         await interaction.response.send_message(
-            f"Not enough XP: raising {label} to **{new_rank}** costs **{cost}**, but **{c.name}** has {c.xp:g}.",
+            f"Not enough XP: Raising {label} to **{new_rank}** costs **{cost}**, but **{c.name}** has {c.xp:g}.",
             ephemeral=True)
         return
     advancement.apply_trait_raise(c, trait.value)
@@ -8464,7 +8464,7 @@ async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[
         f"\U0001F300 **{c.name}** raises **{label}** to rank **{new_rank}** for **{cost}** XP.\n"
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}", embed=build_sheet_embed(rec))
 
-@xp_group.command(name="skill", description="Spend XP to raise or learn a Skill (RAW: new rank x1).")
+@xp_group.command(name="skill", description="Spend XP to raise or learn a Skill (RAW: New rank x1).")
 @app_commands.describe(skill="Skill name.", member="Advance another player's character [Fortune]")
 async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[str, 1, 40], member: discord.Member | None = None) -> None:
     if not await _require_guild(interaction):
@@ -8482,7 +8482,7 @@ async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[s
     new_rank, cost = quote
     if c.xp < cost:
         await interaction.response.send_message(
-            f"Not enough XP: raising **{skill_name}** to **{new_rank}** costs **{cost}**, but **{c.name}** has {c.xp:g}.",
+            f"Not enough XP: Raising **{skill_name}** to **{new_rank}** costs **{cost}**, but **{c.name}** has {c.xp:g}.",
             ephemeral=True)
         return
     advancement.apply_skill_raise(c, skill_name)
@@ -8513,7 +8513,7 @@ async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Rang
         return
     if c.xp < cost:
         await interaction.response.send_message(
-            f"Not enough XP: an Emphasis costs **{cost}**, but **{c.name}** has {c.xp:g}.", ephemeral=True)
+            f"Not enough XP: An Emphasis costs **{cost}**, but **{c.name}** has {c.xp:g}.", ephemeral=True)
         return
     advancement.apply_emphasis(c, skill_name, emph)
     c.xp -= cost
@@ -8570,7 +8570,7 @@ async def xp_kata(
     ml = mastery_level if mastery_level is not None else (kata_entry["mastery"] if kata_entry else None)
     if ml is None:
         await interaction.response.send_message(
-            f"**{name}** isn't in the catalog: give its `mastery_level:` too.", ephemeral=True
+            f"**{name}** isn't in the catalog: Give its `mastery_level:` too.", ephemeral=True
         )
         return
     if not _is_dm(interaction) and kata_entry:
@@ -8611,7 +8611,7 @@ async def xp_kiho(
     ml = mastery_level if mastery_level is not None else (kiho_entry["mastery"] if kiho_entry else None)
     if ml is None:
         await interaction.response.send_message(
-            f"**{name}** isn't in the catalog: give its `mastery_level:` too.", ephemeral=True
+            f"**{name}** isn't in the catalog: Give its `mastery_level:` too.", ephemeral=True
         )
         return
     if not _is_dm(interaction):
@@ -8659,7 +8659,7 @@ async def xp_spell(
     ml = mastery_level if mastery_level is not None else (spell["mastery"] if spell else None)
     if ml is None:
         await interaction.response.send_message(
-            f"**{name}** isn't in the catalog: give its `mastery_level:` too.", ephemeral=True
+            f"**{name}** isn't in the catalog: Give its `mastery_level:` too.", ephemeral=True
         )
         return
     if not _is_dm(interaction):
@@ -8678,7 +8678,7 @@ async def xp_spell(
 @xp_group.command(name="advantage", description="Buy an Advantage with XP (cost = its point value).")
 @app_commands.describe(
     name="Advantage name.",
-    points="Point cost: required only for 'Variable'-cost advantages.",
+    points="Point cost: Required only for 'Variable'-cost advantages.",
     member="Advance another player's character [Fortune]",
 )
 @app_commands.autocomplete(name=_advantage_autocomplete)
@@ -8699,7 +8699,7 @@ async def xp_advantage(
     adv = advantages.get(base_name, "advantage")
     if adv is None:
         await interaction.response.send_message(
-            f"No advantage named **{base_name}**: see `/ref advantage search`.", ephemeral=True
+            f"No advantage named **{base_name}**: See `/ref advantage search`.", ephemeral=True
         )
         return
     canonical = adv["name"]
@@ -8709,7 +8709,7 @@ async def xp_advantage(
     cost = points if points is not None else adv["points"]
     if cost is None:
         await interaction.response.send_message(
-            f"**{adv['name']}** has a Variable cost ({adv['cost_text']}): pass `points:` to set it.",
+            f"**{adv['name']}** has a Variable cost ({adv['cost_text']}): Pass `points:` to set it.",
             ephemeral=True,
         )
         return
@@ -8730,7 +8730,7 @@ async def xp_advantage(
     msg = f"🌸 **{c.name}** gains the advantage **{canonical}** for **{cost}** XP. XP left {c.xp:g}"
     param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(adv["name"])
     if param_hint and ":" not in input_name:
-        msg += f"\n*Hint: use `{adv['name']}: <{param_hint}>` to record the chosen option.*"
+        msg += f"\n*Hint: Use `{adv['name']}: <{param_hint}>` to record the chosen option.*"
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 @xp_group.command(name="remove_disadvantage", description="Buy off a Disadvantage with XP (cost = 2x its point value).")
@@ -8774,13 +8774,13 @@ async def xp_remove_disadvantage(
     base_cost = points if points is not None else (adv["points"] if adv else None)
     if base_cost is None:
         await interaction.response.send_message(
-            f"**{canonical}** has a Variable cost: pass `points:` to set its base value.", ephemeral=True
+            f"**{canonical}** has a Variable cost: Pass `points:` to set its base value.", ephemeral=True
         )
         return
     cost = base_cost * 2
     if c.xp < cost:
         await interaction.response.send_message(
-            f"Not enough XP: removing **{canonical}** costs **{cost}** (2x{base_cost}), "
+            f"Not enough XP: Removing **{canonical}** costs **{cost}** (2x{base_cost}), "
             f"but **{c.name}** has {c.xp:g}.", ephemeral=True
         )
         return
@@ -8833,7 +8833,7 @@ async def school_learn(
     if s is None:
         await interaction.response.send_message(
             f"No school named **{lookup or '(unset)'}**. Set one with `school_name:` "
-            f"(or `/stat set` isn't for this: pick from `/ref school search`).",
+            f"(or `/stat set` isn't for this: Pick from `/ref school search`).",
             ephemeral=True,
         )
         return
@@ -8952,7 +8952,7 @@ async def spell_view(interaction: discord.Interaction, name: str) -> None:
     conceal="Conceal the casting with Stealth/Agility (result = observers' detection TN).",
     attacker_npc="Cast as a stored NPC [Fortune]",
     member="Cast as another player's character [Fortune]",
-    target="Combatant the spell is aimed at: enables Request-condition buttons for Dazed, Prone, etc.",
+    target="Combatant the spell is aimed at: Enables Request-condition buttons for Dazed, Prone, etc.",
 )
 @app_commands.autocomplete(name=_spell_autocomplete, target=cog_combat._combatant_autocomplete)
 async def spell_cast(
@@ -9063,9 +9063,9 @@ async def spell_cast(
     )
     notes = []
     if affinity:
-        notes.append(f"Affinity ({element.title()}): effective rank {result['effective_rank']}")
+        notes.append(f"Affinity ({element.title()}): Effective rank {result['effective_rank']}")
     if deficiency:
-        notes.append(f"Deficiency ({element.title()}): effective rank {result['effective_rank']}")
+        notes.append(f"Deficiency ({element.title()}): Effective rank {result['effective_rank']}")
     if spend_void:
         notes.append(f"Void Point: +1k1 ({caster.current_void_points} VP left)")
     if wound_pen:
@@ -9194,7 +9194,7 @@ async def spell_resist(
         embed.add_field(name="Modifiers", value=" · ".join(notes), inline=False)
     embed.add_field(
         name="Rule",
-        value="L5R 4e: target rolls raw Willpower (a Trait Roll: no skill, dice explode) vs the spell's TN.",
+        value="L5R 4e: Target rolls raw Willpower (a Trait Roll: No skill, dice explode) vs the spell's TN.",
         inline=False,
     )
     await interaction.response.send_message(embed=embed)
@@ -9239,9 +9239,9 @@ async def spell_interrupt(
         f"Willpower {willpower}k{willpower} = **{total}** vs {tn_reason}\n"
     )
     if success:
-        roll_desc += "**MAINTAINED**: spell continues normally."
+        roll_desc += "**MAINTAINED**: Spell continues normally."
     else:
-        roll_desc += "**DISRUPTED**: spell fails, but spell slot is refunded."
+        roll_desc += "**DISRUPTED**: Spell fails, but spell slot is refunded."
         elem = element.lower().strip()
         if void_bonus:
             c.void_spell_bonus = min(c.void_spell_bonus + 1, stats.void_bonus_max(c))
@@ -9384,7 +9384,7 @@ async def spell_importune(
             bonus_max = stats.void_bonus_max(caster)
             embed.add_field(
                 name="Step 2: Casting",
-                value=f"No {element.title()} slots (0/{slot_max}) or bonus slots (0/{bonus_max}): cannot attempt the cast.",
+                value=f"No {element.title()} slots (0/{slot_max}) or bonus slots (0/{bonus_max}): Cannot attempt the cast.",
                 inline=False,
             )
             await interaction.response.send_message(embed=embed)
@@ -9398,7 +9398,7 @@ async def spell_importune(
             await interaction.response.send_message(embed=embed)
             return
         if caster.current_void_points <= 0:
-            embed.add_field(name="Step 2: Casting", value="No Void Points remaining: cannot spend VP.", inline=False)
+            embed.add_field(name="Step 2: Casting", value="No Void Points remaining: Cannot spend VP.", inline=False)
             await interaction.response.send_message(embed=embed)
             return
         caster.current_void_points -= 1
@@ -9529,7 +9529,7 @@ async def taint_command(
 # Phase 42: Crafting Extended (#6)
 # ---------------------------------------------------------------------------
 
-@dm.command(name="craft_extended", description="Extended crafting roll: cumulative multi-step project. [Fortune]")
+@dm.command(name="craft_extended", description="Extended crafting roll: Cumulative multi-step project. [Fortune]")
 @app_commands.describe(
     name="Character name.",
     skill="Craft/Artisan skill name.",
@@ -9623,7 +9623,7 @@ async def craft_extended(
     embed.add_field(name="Quality Tiers (cumulative total)", value="\n".join(quality_lines), inline=False)
     if adv_notes:
         embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
-    embed.set_footer(text="DM: track cumulative total across rolls. Each roll = one crafting period.")
+    embed.set_footer(text="DM: Track cumulative total across rolls. Each roll = one crafting period.")
     await interaction.response.send_message(embed=embed)
 
 # ---------------------------------------------------------------------------
@@ -9637,7 +9637,7 @@ async def craft_extended(
     bonus="Flat damage bonus.",
     target="Target character name (shows DM-approval buttons to apply).",
     reason="Spell name or label.",
-    caster="The caster (a combatant here): credits the damage and any kill in the fight summary.",
+    caster="The caster (a combatant here): Credits the damage and any kill in the fight summary.",
 )
 @app_commands.autocomplete(caster=cog_combat._combatant_autocomplete)
 async def spell_damage(
@@ -9696,10 +9696,10 @@ async def spell_damage(
                 )
                 await view.persist(await interaction.original_response())
         else:
-            embed.set_footer(text=f"Target '{target}' not found: use exact character name.")
+            embed.set_footer(text=f"Target '{target}' not found: Use exact character name.")
             await interaction.response.send_message(embed=embed)
     else:
-        embed.set_footer(text="Add target: to route damage through the DM-approval gate.")
+        embed.set_footer(text="Add target: To route damage through the DM-approval gate.")
         await interaction.response.send_message(embed=embed)
 
 # ---------------------------------------------------------------------------
@@ -9726,7 +9726,7 @@ async def influence_track(
     embed = discord.Embed(title="Court Influence", color=discord.Color.purple())
     sign = "+" if change >= 0 else ""
     embed.add_field(name=name, value=f"{sign}{change} Influence" + (f": {reason}" if reason else ""), inline=False)
-    embed.set_footer(text="DM: track cumulative influence totals for the court scene. Use /social for Courtier/Etiquette checks.")
+    embed.set_footer(text="DM: Track cumulative influence totals for the court scene. Use /social for Courtier/Etiquette checks.")
     await interaction.response.send_message(embed=embed)
 
 # ---------------------------------------------------------------------------
@@ -9844,7 +9844,7 @@ async def dm_xp_log_channel(interaction: discord.Interaction, channel: discord.T
         return
     store.set_xp_log_channel(guild, str(channel.id))
     await interaction.response.send_message(
-        f"XP log channel set to {channel.mention}: every `/xp grant` and every XP spend is recorded there. "
+        f"XP log channel set to {channel.mention}: Every `/xp grant` and every XP spend is recorded there. "
         f"Make sure only **{ROLE_KAMI}** can see that channel.", ephemeral=True,
     )
 
@@ -9969,12 +9969,12 @@ async def dm_clear_damage_channel(interaction: discord.Interaction) -> None:
     store.clear_damage_approval_channel(str(interaction.guild_id))
     await interaction.response.send_message("Damage approval channel cleared. Damage approvals will fall back to the character approval channel.", ephemeral=True)
 
-@dm.command(name="treat", description="Medicine treatment: healer rolls, DM approves (L5R 4e).")
+@dm.command(name="treat", description="Medicine treatment: Healer rolls, DM approves (L5R 4e).")
 @app_commands.describe(
     healer="Character performing the treatment.",
     patient="Character being treated.",
     treatment="Type of medical treatment.",
-    wounds_healed="Wounds healed on success (default: healer's Intelligence x 2).",
+    wounds_healed="Wounds healed on success (default: Healer's Intelligence x 2).",
     tn_override="Custom TN (overrides default for the treatment type).",
     bonus="Flat bonus (tools, emphasis, etc.).",
 )
@@ -10080,7 +10080,7 @@ async def dm_treat(
             embed.add_field(name="Note", value=f"**{pc.name}** has no wounds to heal.", inline=False)
         await interaction.response.send_message(embed=embed)
     else:
-        embed.set_footer(text="L5R 4e: a failed Medicine check cannot be re-attempted on the same patient until the next day.")
+        embed.set_footer(text="L5R 4e: A failed Medicine check cannot be re-attempted on the same patient until the next day.")
         await interaction.response.send_message(embed=embed)
 
 # ---------------------------------------------------------------------------
@@ -10107,7 +10107,7 @@ async def sheet_export(
     payload = _json.dumps(data, indent=2, ensure_ascii=False)
     if len(payload) <= 1900:
         await interaction.response.send_message(
-            f"**{c.name}**: character sheet JSON:\n```json\n{payload}\n```",
+            f"**{c.name}**: Character sheet JSON:\n```json\n{payload}\n```",
             ephemeral=True,
         )
     else:
@@ -10116,7 +10116,7 @@ async def sheet_export(
         fname = c.name.lower().replace(" ", "_").replace("'", "") + ".json"
         file = discord.File(buf, filename=fname)
         await interaction.response.send_message(
-            content=f"**{c.name}**: character sheet exported.",
+            content=f"**{c.name}**: Character sheet exported.",
             file=file,
             ephemeral=True,
         )
@@ -10693,12 +10693,12 @@ async def _setup_server_inner(
         kami_role = await guild.create_role(
             name=ROLE_KAMI, color=discord.Color.from_str("#E8B923"),
             permissions=kami_perms, hoist=True,
-            reason="Server setup: admin role",
+            reason="Server setup: Admin role",
         )
     else:
         await kami_role.edit(color=discord.Color.from_str("#E8B923"),
                             permissions=kami_perms, hoist=True,
-                            reason="Server setup: update admin role")
+                            reason="Server setup: Update admin role")
 
     fortune_perms = discord.Permissions(
         manage_messages=True, manage_nicknames=True, manage_threads=True,
@@ -10717,7 +10717,7 @@ async def _setup_server_inner(
     else:
         await fortune_role.edit(color=discord.Color.from_str("#9B59B6"),
                                 permissions=fortune_perms, hoist=True,
-                                reason="Server setup: update DM role")
+                                reason="Server setup: Update DM role")
 
     approved_perms = discord.Permissions(
         view_channel=True, send_messages=True, read_message_history=True,
@@ -10730,12 +10730,12 @@ async def _setup_server_inner(
         approved_role = await guild.create_role(
             name=ROLE_APPROVED, color=discord.Color.from_str("#2ECC71"),
             permissions=approved_perms, hoist=False,
-            reason="Server setup: player access role",
+            reason="Server setup: Player access role",
         )
     else:
         await approved_role.edit(color=discord.Color.from_str("#2ECC71"),
                                  permissions=approved_perms, hoist=False,
-                                 reason="Server setup: update player role")
+                                 reason="Server setup: Update player role")
 
     dm_roles: list[discord.Role] = [fortune_role, kami_role]
 
@@ -10770,13 +10770,13 @@ async def _setup_server_inner(
                 name=clan_name,
                 color=discord.Color.from_str(color_hex),
                 hoist=True,
-                reason="Server setup: clan role",
+                reason="Server setup: Clan role",
             )
         else:
             await role.edit(
                 color=discord.Color.from_str(color_hex),
                 hoist=True,
-                reason="Server setup: update clan role",
+                reason="Server setup: Update clan role",
             )
         clan_roles_created.append(role)
 
@@ -10799,7 +10799,7 @@ async def _setup_server_inner(
             await role.edit(
                 color=discord.Color.from_str(color_hex),
                 hoist=False,
-                reason=f"Server setup: update {fam_clan} family role",
+                reason=f"Server setup: Update {fam_clan} family role",
             )
         family_roles_created.append(role)
 
@@ -10807,13 +10807,13 @@ async def _setup_server_inner(
     legacy_minor = discord.utils.get(guild.roles, name="Minor Clan")
     if legacy_minor:
         try:
-            await legacy_minor.delete(reason="Server setup: replaced by individual minor clan roles")
+            await legacy_minor.delete(reason="Server setup: Replaced by individual minor clan roles")
         except discord.Forbidden:
             pass
 
     # --- Reorder: Approved below clan/family roles for color priority ---
     try:
-        await approved_role.edit(position=1, reason="Server setup: move Approved below clan roles")
+        await approved_role.edit(position=1, reason="Server setup: Move Approved below clan roles")
     except (discord.Forbidden, discord.HTTPException):
         pass
 
@@ -10836,12 +10836,12 @@ async def _setup_server_inner(
         for dupe in matches[1:]:
             for ch in dupe.channels:
                 try:
-                    await ch.delete(reason=f"Cleanup: duplicate {cat_name} category")
+                    await ch.delete(reason=f"Cleanup: Duplicate {cat_name} category")
                     deleted_channels.append(f"#{ch.name}")
                 except discord.Forbidden:
                     pass
             try:
-                await dupe.delete(reason=f"Cleanup: duplicate {cat_name} category")
+                await dupe.delete(reason=f"Cleanup: Duplicate {cat_name} category")
                 deleted_dupes.append(cat_name)
             except discord.Forbidden:
                 pass
@@ -10853,7 +10853,7 @@ async def _setup_server_inner(
         for ch in list(cat.text_channels):
             if ch.name not in expected_channels:
                 try:
-                    await ch.delete(reason=f"Cleanup: unexpected channel in {cat_name}")
+                    await ch.delete(reason=f"Cleanup: Unexpected channel in {cat_name}")
                     deleted_channels.append(f"#{ch.name}")
                 except discord.Forbidden:
                     pass
@@ -10877,7 +10877,7 @@ async def _setup_server_inner(
         lobby_cat = await guild.create_category("Lobby", overwrites=lobby_overwrites, reason="Server setup")
         created_items.append("Lobby category")
     else:
-        await lobby_cat.edit(overwrites=lobby_overwrites, reason="Server setup: update permissions")
+        await lobby_cat.edit(overwrites=lobby_overwrites, reason="Server setup: Update permissions")
         existing_items.append("Lobby")
     existing_names = {ch.name for ch in lobby_cat.text_channels}
     if "lore" not in existing_names:
@@ -10910,7 +10910,7 @@ async def _setup_server_inner(
                 lore_overwrites[r] = discord.PermissionOverwrite(
                     view_channel=True, send_messages=True, read_message_history=True,
                 )
-            await lore_ch.edit(overwrites=lore_overwrites, reason="Server setup: staff-only lore")
+            await lore_ch.edit(overwrites=lore_overwrites, reason="Server setup: Staff-only lore")
     if "welcome" not in existing_names:
         welcome_ch = await lobby_cat.create_text_channel("welcome")
         welcome_embed = discord.Embed(
@@ -10966,8 +10966,8 @@ async def _setup_server_inner(
                     manage_messages=True,
                 ),
             }
-            await sub_ch.edit(overwrites=sub_overwrites_upd, reason="Server setup: lock character-submission")
-            await sub_ch.purge(limit=200, reason="Server setup: reset character-submission")
+            await sub_ch.edit(overwrites=sub_overwrites_upd, reason="Server setup: Lock character-submission")
+            await sub_ch.purge(limit=200, reason="Server setup: Reset character-submission")
             sub_embed = discord.Embed(
                 title="Character Submission",
                 color=0xC4A747,
@@ -10997,7 +10997,7 @@ async def _setup_server_inner(
     welcome_ch_obj = discord.utils.get(lobby_cat.text_channels, name="welcome")
     if welcome_ch_obj and guild.system_channel != welcome_ch_obj:
         try:
-            await guild.edit(system_channel=welcome_ch_obj, reason="Server setup: new members see #welcome first")
+            await guild.edit(system_channel=welcome_ch_obj, reason="Server setup: New members see #welcome first")
         except discord.Forbidden:
             pass
 
@@ -11021,7 +11021,7 @@ async def _setup_server_inner(
         ooc_cat = await guild.create_category("Out of Character", overwrites=ooc_overwrites, reason="Server setup")
         created_items.append("Out of Character category")
     else:
-        await ooc_cat.edit(overwrites=ooc_overwrites, reason="Server setup: update permissions")
+        await ooc_cat.edit(overwrites=ooc_overwrites, reason="Server setup: Update permissions")
         existing_items.append("Out of Character")
     existing_names = {ch.name for ch in ooc_cat.text_channels}
     if "general" not in existing_names:
@@ -11068,7 +11068,7 @@ async def _setup_server_inner(
                     view_channel=True, send_messages=True, read_message_history=True,
                     manage_messages=True,
                 )
-            await ann_ch.edit(overwrites=announce_overwrites, reason="Server setup: staff-only announcements")
+            await ann_ch.edit(overwrites=announce_overwrites, reason="Server setup: Staff-only announcements")
     if "rules-reference" not in existing_names:
         rules_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
             everyone: discord.PermissionOverwrite(view_channel=False),
@@ -11102,7 +11102,7 @@ async def _setup_server_inner(
                 rules_overwrites[r] = discord.PermissionOverwrite(
                     view_channel=True, send_messages=True, read_message_history=True,
                 )
-            await rules_ch.edit(overwrites=rules_overwrites, reason="Server setup: staff-only rules-reference")
+            await rules_ch.edit(overwrites=rules_overwrites, reason="Server setup: Staff-only rules-reference")
 
     # Order OOC channels: announcements, general, off-topic, rules-reference
     _OOC_ORDER = ["announcements", "general", "off-topic", "rules-reference"]
@@ -11136,7 +11136,7 @@ async def _setup_server_inner(
         icinfo_cat = await guild.create_category("IC Information", overwrites=icinfo_overwrites, reason="Server setup")
         created_items.append("IC Information category")
     else:
-        await icinfo_cat.edit(overwrites=icinfo_overwrites, reason="Server setup: update permissions")
+        await icinfo_cat.edit(overwrites=icinfo_overwrites, reason="Server setup: Update permissions")
         existing_items.append("IC Information")
     existing_names = {ch.name for ch in icinfo_cat.text_channels}
     cal_ch: discord.TextChannel | None = None
@@ -11146,7 +11146,7 @@ async def _setup_server_inner(
     else:
         cal_ch = discord.utils.get(icinfo_cat.text_channels, name="calendar")
         if cal_ch:
-            await cal_ch.purge(limit=200, reason="Server setup: reset calendar")
+            await cal_ch.purge(limit=200, reason="Server setup: Reset calendar")
     guild_id = str(guild.id)
     cal = store.get_calendar(guild_id)
     if cal is not None and cal_ch is not None:
@@ -11160,11 +11160,11 @@ async def _setup_server_inner(
     if ic_cat is not None:
         for ch in list(ic_cat.channels):
             try:
-                await ch.delete(reason="Server setup: removing unused In Character category")
+                await ch.delete(reason="Server setup: Removing unused In Character category")
             except discord.Forbidden:
                 pass
         try:
-            await ic_cat.delete(reason="Server setup: removing unused In Character category")
+            await ic_cat.delete(reason="Server setup: Removing unused In Character category")
             deleted_channels.append("In Character (category)")
         except discord.Forbidden:
             pass
@@ -11187,7 +11187,7 @@ async def _setup_server_inner(
         ps_cat = await guild.create_category(CAT_PLAYER_SUPPORT, overwrites=ps_overwrites, reason="Server setup")
         created_items.append("Player Support category")
     else:
-        await ps_cat.edit(overwrites=ps_overwrites, reason="Server setup: update permissions")
+        await ps_cat.edit(overwrites=ps_overwrites, reason="Server setup: Update permissions")
         existing_items.append("Player Support")
 
     # --- 6. Staff Members (Fortune + Kami only) ---
@@ -11210,7 +11210,7 @@ async def _setup_server_inner(
         dm_cat = await guild.create_category("Staff Members", overwrites=dm_overwrites, reason="Server setup")
         created_items.append("Staff Members category")
     else:
-        await dm_cat.edit(name="Staff Members", overwrites=dm_overwrites, reason="Server setup: rename to Staff Members")
+        await dm_cat.edit(name="Staff Members", overwrites=dm_overwrites, reason="Server setup: Rename to Staff Members")
         existing_items.append("Staff Members")
     existing_names = {ch.name for ch in dm_cat.text_channels}
     if "dm-discussion" not in existing_names:
@@ -11264,26 +11264,26 @@ async def _setup_server_inner(
             areas_skipped += 1
             continue
         try:
-            await cat.set_permissions(everyone, view_channel=False, reason="Server setup: fix area permissions")
+            await cat.set_permissions(everyone, view_channel=False, reason="Server setup: Fix area permissions")
             await cat.set_permissions(bot_member, view_channel=True, send_messages=True,
                                      manage_channels=True, manage_messages=True,
-                                     manage_threads=True, reason="Server setup: fix area permissions")
+                                     manage_threads=True, reason="Server setup: Fix area permissions")
             await cat.set_permissions(approved_role, view_channel=True, send_messages=True,
-                                     read_message_history=True, reason="Server setup: fix area permissions")
+                                     read_message_history=True, reason="Server setup: Fix area permissions")
             for r in (fortune_role, kami_role):
                 await cat.set_permissions(r, view_channel=True, send_messages=True,
                                          read_message_history=True, manage_messages=True,
-                                         reason="Server setup: fix area permissions")
+                                         reason="Server setup: Fix area permissions")
             for ch in cat.text_channels:
                 if ch.name == "description":
                     await ch.set_permissions(everyone, view_channel=False, send_messages=False,
-                                            reason="Server setup: fix area permissions")
+                                            reason="Server setup: Fix area permissions")
                     await ch.set_permissions(approved_role, view_channel=True, send_messages=False,
-                                            read_message_history=True, reason="Server setup: fix area permissions")
+                                            read_message_history=True, reason="Server setup: Fix area permissions")
                     for r in (fortune_role, kami_role):
                         await ch.set_permissions(r, view_channel=True, send_messages=True,
                                                  read_message_history=True, manage_messages=True,
-                                                 reason="Server setup: fix area permissions")
+                                                 reason="Server setup: Fix area permissions")
             areas_fixed += 1
         except discord.Forbidden:
             areas_skipped += 1
