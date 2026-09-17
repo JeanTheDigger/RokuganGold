@@ -5925,11 +5925,13 @@ async def npc_generate(
         note += " No skills set: Regenerate with `skills:` to give it school skills."
     await interaction.response.send_message(content=note, embed=build_sheet_embed(rec))
 
-@npc_group.command(name="view", description="View a stored NPC.")
+@npc_group.command(name="view", description="View a stored NPC's full stat block. [Fortune]")
 @app_commands.describe(name="The NPC to view.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_view(interaction: discord.Interaction, name: str) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     rec = store.get_by_name(str(interaction.guild_id), NPC_OWNER, name)
     if rec is None:
@@ -7484,11 +7486,11 @@ async def creature_list(interaction: discord.Interaction) -> None:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view)
 
-@creature_group.command(name="view", description="View a spawned creature.")
+@creature_group.command(name="view", description="View a spawned creature's full stat block. [Fortune]")
 @app_commands.describe(name="The creature to view.")
 @app_commands.autocomplete(name=_creature_instance_autocomplete)
 async def creature_view(interaction: discord.Interaction, name: str) -> None:
-    rec, err = _resolve_creature(interaction, name, require_dm=False)
+    rec, err = _resolve_creature(interaction, name)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
