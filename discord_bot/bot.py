@@ -5581,6 +5581,9 @@ async def void_refresh(
     vp_cap = taint.void_point_cap(c)
     cap_note = f" (Taint Rank {taint.taint_rank(c)}: max VP -1)" if vp_cap < c.max_void_points else ""
     if mode.value == "rest":
+        if not npc_name and (member is None or member.id == interaction.user.id):
+            if not await _require_dm_role(interaction):
+                return
         old = c.current_void_points
         c.current_void_points = vp_cap
         store.save(rec)
@@ -8521,6 +8524,35 @@ async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Rang
         f"\U0001F3AF **{c.name}** gains **{skill_name} (Emphasis: {emph})** for **{cost}** XP. XP left {c.xp:g}",
         embed=build_sheet_embed(rec))
 
+def _kata_school_ok(c: Character, schools_str: str) -> tuple[bool, str]:
+    """Check if character qualifies for a kata's school requirement."""
+    if not schools_str:
+        return True, ""
+    base = schools_str.split("|")[0].strip()
+    if base.lower() == "any":
+        return True, ""
+    if base.lower().startswith("any "):
+        parts = base.split()
+        if len(parts) == 3 and parts[2].lower() in ("bushi", "school"):
+            if parts[1].lower() == "bushi":
+                if "bushi" not in c.school_type.lower():
+                    return False, f"requires a Bushi school (you are {c.school_type})"
+                return True, ""
+            clan_req = parts[1]
+            if c.clan.lower() != clan_req.lower():
+                return False, f"requires {clan_req} clan (you are {c.clan})"
+            if "bushi" not in c.school_type.lower():
+                return False, f"requires a {clan_req} Bushi school (you are {c.school_type})"
+            return True, ""
+        if len(parts) == 2 and parts[1].lower() == "bushi":
+            if "bushi" not in c.school_type.lower():
+                return False, f"requires a Bushi school (you are {c.school_type})"
+            return True, ""
+    allowed = [s.strip().lower() for s in base.split(",")]
+    if c.school.strip().lower() in allowed:
+        return True, ""
+    return False, f"requires school: {base}"
+
 @xp_group.command(name="kata", description="Learn a Kata (cost = 1 x Mastery Level).")
 @app_commands.describe(
     name="Kata name (catalog match auto-fills the Mastery Level).",
@@ -8534,14 +8566,25 @@ async def xp_kata(
     mastery_level: app_commands.Range[int, 1, 10] | None = None,
     member: discord.Member | None = None,
 ) -> None:
-    rec = kata.get(name)
-    ml = mastery_level if mastery_level is not None else (rec["mastery"] if rec else None)
+    kata_entry = kata.get(name)
+    ml = mastery_level if mastery_level is not None else (kata_entry["mastery"] if kata_entry else None)
     if ml is None:
         await interaction.response.send_message(
             f"**{name}** isn't in the catalog: give its `mastery_level:` too.", ephemeral=True
         )
         return
-    canonical = rec["name"] if rec else name.strip()
+    if not _is_dm(interaction) and kata_entry:
+        rec, err = await _resolve_active_for_edit(interaction, member)
+        if err:
+            await interaction.response.send_message(err, ephemeral=True)
+            return
+        ok, reason = _kata_school_ok(rec.character, kata_entry.get("schools", ""))
+        if not ok:
+            await interaction.response.send_message(
+                f"**{rec.character.name}** cannot learn **{kata_entry['name']}**: {reason}.",
+                ephemeral=True)
+            return
+    canonical = kata_entry["name"] if kata_entry else name.strip()
     await _buy_named(interaction, member, canonical, ml, "katas", "kata", "\U0001F94B")
 
 @xp_group.command(name="kiho", description="Learn a Kiho (Brotherhood 1x ML; non-Brotherhood monks 1.5x; shugenja 2x).")
@@ -8564,14 +8607,37 @@ async def xp_kiho(
     if non_brotherhood and shugenja:
         await interaction.response.send_message("Pick one: `non_brotherhood` or `shugenja`, not both.", ephemeral=True)
         return
-    rec = kiho.get(name)
-    ml = mastery_level if mastery_level is not None else (rec["mastery"] if rec else None)
+    kiho_entry = kiho.get(name)
+    ml = mastery_level if mastery_level is not None else (kiho_entry["mastery"] if kiho_entry else None)
     if ml is None:
         await interaction.response.send_message(
             f"**{name}** isn't in the catalog: give its `mastery_level:` too.", ephemeral=True
         )
         return
-    canonical = rec["name"] if rec else name.strip()
+    if not _is_dm(interaction):
+        rec, err = await _resolve_active_for_edit(interaction, member)
+        if err:
+            await interaction.response.send_message(err, ephemeral=True)
+            return
+        c = rec.character
+        stype = c.school_type.lower()
+        if "monk" not in stype and "shugenja" not in stype:
+            await interaction.response.send_message(
+                f"**{c.name}** is a {c.school_type}. Only Monks and Shugenja can learn Kiho.",
+                ephemeral=True)
+            return
+        if "shugenja" in stype and not shugenja:
+            shugenja = True
+        if kiho_entry and kiho_entry.get("element"):
+            elem = kiho_entry["element"].lower()
+            if elem != "void":
+                ring_val = stats.ring_value(c, elem)
+                if ring_val < ml:
+                    await interaction.response.send_message(
+                        f"**{c.name}**'s {elem.title()} Ring is {ring_val}, but **{kiho_entry['name']}** "
+                        f"requires {elem.title()} {ml}.", ephemeral=True)
+                    return
+    canonical = kiho_entry["name"] if kiho_entry else name.strip()
     cost = advancement.kiho_cost(ml, non_brotherhood=non_brotherhood, shugenja=shugenja)
     note = " *(shugenja: 2x cost)*" if shugenja else (" *(non-Brotherhood monk: 1.5x cost)*" if non_brotherhood else "")
     await _buy_named(interaction, member, canonical, ml, "kiho", "kiho", "✋", note=note, cost=cost)
@@ -8596,6 +8662,16 @@ async def xp_spell(
             f"**{name}** isn't in the catalog: give its `mastery_level:` too.", ephemeral=True
         )
         return
+    if not _is_dm(interaction):
+        rec, err = await _resolve_active_for_edit(interaction, member)
+        if err:
+            await interaction.response.send_message(err, ephemeral=True)
+            return
+        if "shugenja" not in rec.character.school_type.lower():
+            await interaction.response.send_message(
+                f"**{rec.character.name}** is a {rec.character.school_type}, not a Shugenja. "
+                f"Only Shugenja can memorise spells.", ephemeral=True)
+            return
     canonical = spell["name"] if spell else name.strip()
     await _buy_named(interaction, member, canonical, ml, "spells_known", "spell", "\U0001F4DC")
 
@@ -11538,6 +11614,7 @@ cog_hub.init(
     export_callback=sheet_export.callback,
     fight_status_callback=cog_combat.fight_status.callback,
     inventory_callback=cog_inventory.inventory.callback,
+    is_dm=_is_dm,
 )
 
 cog_npc_builder.init(

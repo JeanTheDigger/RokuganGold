@@ -31,6 +31,7 @@ class _Deps:
     export_callback: Callable[..., Awaitable[None]]
     fight_status_callback: Callable[..., Awaitable[None]]
     inventory_callback: Callable[..., Awaitable[None]]
+    is_dm: Callable[[discord.Interaction], bool]
 
 
 _d: _Deps = None  # type: ignore[assignment]
@@ -149,6 +150,12 @@ class CharacterHub(discord.ui.View):
         await interaction.response.send_modal(_VoidReasonModal(self))
 
     async def _on_rest(self, interaction: discord.Interaction) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                "Resting requires a **Fortune** (or **Kami**) to authorise. "
+                "Use Meditation (via `/void refresh mode:meditation`) to recover 1 VP on your own.",
+                ephemeral=True)
+            return
         rec = self.reload()
         if rec is None:
             await interaction.response.send_message("That character no longer exists.", ephemeral=True)
@@ -230,9 +237,9 @@ async def whoami(interaction: discord.Interaction) -> None:
 
 
 def init(*, tree: app_commands.CommandTree, store, require_guild, build_sheet_embed, whoami_lines, activate_kata,
-         activate_kiho, tally, export_callback, fight_status_callback, inventory_callback) -> None:
+         activate_kiho, tally, export_callback, fight_status_callback, inventory_callback, is_dm) -> None:
     global _d
     _d = _Deps(store=store, require_guild=require_guild, build_sheet_embed=build_sheet_embed, whoami_lines=whoami_lines,
                activate_kata=activate_kata, activate_kiho=activate_kiho, tally=tally, export_callback=export_callback,
-               fight_status_callback=fight_status_callback, inventory_callback=inventory_callback)
+               fight_status_callback=fight_status_callback, inventory_callback=inventory_callback, is_dm=is_dm)
     tree.add_command(whoami)
