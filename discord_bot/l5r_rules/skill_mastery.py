@@ -23,6 +23,7 @@ Auto-applied (21):
   Ninjutsu R3: +1k0 damage
   Ninjutsu R5: damage dice explode normally (overrides default no-explode)
   Ninjutsu R7: +0k1 damage
+  Staves R3: negates staff armor TN doubling penalty (via combat.staff_armor_tn_mod)
   Staves R5: free raise toward Knockdown
   Staves R7: small staves +1k0 damage
   Knives R5: free raise toward Disarm (sai/jitte)
@@ -41,7 +42,6 @@ Reminder-only (not auto-applied):
   Polearms R5 (+1k0 vs mounted/larger: target state not tracked, note only),
   Polearms R7 (ready: not combat math),
   Spears R5/R7 (range / ready: not combat math),
-  Staves R3 (armor doubling not modeled),
   Staves R7 large (ready: not combat math),
   Knives R7 (extra attack: not modeled),
   Chain Weapons R3/R5 (grapple not modeled),

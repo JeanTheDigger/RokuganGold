@@ -546,10 +546,11 @@ class DamageView(views_base.PersistentView):
                 title="🗡️ Disarm",
                 color=discord.Color.green() if dis["disarmed"] else discord.Color.orange(),
             )
+            dis_armor_label = f" ({target.armor_name.replace('_', ' ').title()})" if target.armor_name else ""
             embed.add_field(
                 name="Damage (2k1)",
                 value=f"{_d.format_dice(dis['damage_dice'])}\nRaw **{dis['damage']}** − reduction "
-                f"{applied['reduction']} = **{applied['final_damage']}** wounds{void_line}",
+                f"{applied['reduction']}{dis_armor_label} = **{applied['final_damage']}** wounds{void_line}",
                 inline=False,
             )
             embed.add_field(
@@ -770,12 +771,13 @@ class DamageView(views_base.PersistentView):
             title="⚔️ Damage applied",
             color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
         )
+        armor_label = f" ({target.armor_name.replace('_', ' ').title()})" if target.armor_name else ""
         embed.add_field(
             name="Damage",
             value=(
                 f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
                 f"{_d.format_dice(dmg['dice'])}{feint_line}{kata_line}{called_shot_line}\n"
-                f"Raw **{raw}** − reduction {applied['reduction']} = "
+                f"Raw **{raw}** − reduction {applied['reduction']}{armor_label} = "
                 f"**{applied['final_damage']}** wounds{void_line}{break_line}"
             ),
             inline=False,
@@ -1617,6 +1619,15 @@ async def attack(
     if atk_weapon_profile.get("half_range"):
         kata_notes.append("⚠️ Half range — verify target is within halved bow range")
 
+    # Staff vs armor (L5R 4e Equipment): armor TN bonus doubled against staves.
+    staff_tn_adj = 0
+    if target_creature_rec is None:
+        staff_tn_adj, staff_tn_note = combat.staff_armor_tn_mod(
+            attacker, weapon, target_rec.character.armor_tn_bonus
+        )
+        if staff_tn_note:
+            kata_notes.append(staff_tn_note)
+
     # Target name + Armor TN depend on the target kind.
     if target_creature_rec is not None:
         t_name = target_creature_rec.creature.name
@@ -1631,10 +1642,10 @@ async def attack(
             is_melee_attack,
         )
         if cond_tn_ovr is not None:
-            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + bonus_tn + arrow_tn_adj + dw_def_bonus
+            tn = cond_tn_ovr + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + bonus_tn + arrow_tn_adj + staff_tn_adj + dw_def_bonus
             kata_notes.extend(cond_tn_notes)
         else:
-            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + arrow_tn_adj + dw_def_bonus)
+            tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + arrow_tn_adj + staff_tn_adj + dw_def_bonus)
 
     # Center Stance bonus (s40): +1k1 + Void Ring on one roll, from centering last Round.
     center_line = ""

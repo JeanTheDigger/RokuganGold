@@ -392,6 +392,20 @@ def arrow_armor_tn_mod(weapon_name: str, target_armor_tn_bonus: int) -> tuple[in
     return adj, f"{label}: armor TN ×{mult} ({adj:+d})"
 
 
+def staff_armor_tn_mod(attacker: Character, weapon_name: str, target_armor_tn_bonus: int) -> tuple[int, str]:
+    """Staff special (L5R 4e Equipment): armor bonuses to Armor TN are doubled
+    against attacks made with a staff. Staves R3 mastery negates this penalty.
+    Returns (tn_modifier, note). Modifier is added to the target's Armor TN."""
+    wp = get_weapon_profile(weapon_name)
+    if wp.get("skill") != "Staves":
+        return 0, ""
+    if target_armor_tn_bonus <= 0:
+        return 0, ""
+    if attacker.skills.get("Staves", 0) >= 3:
+        return 0, "Staves R3: armor TN doubling negated"
+    return target_armor_tn_bonus, f"Staff vs armor: Armor TN bonus doubled (+{target_armor_tn_bonus})"
+
+
 def blowgun_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, int, str]:
     """Extra damage dice from blowgun Ninjutsu rank scaling (GDD s39).
     Base 0k1; at Ninjutsu 3: 1k1 (+1k0); at Ninjutsu 7: 2k1 (+2k0).
