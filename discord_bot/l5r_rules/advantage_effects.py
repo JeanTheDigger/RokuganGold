@@ -270,6 +270,49 @@ def strength_of_honor(character: Character, resisting: str) -> tuple[int, int, l
     return rolled, flat, notes
 
 
+def _armor_skill_penalty(
+    c: Character, skill_name: str, trait_name: str,
+) -> tuple[int, list[str]]:
+    """Flat penalty from the character's armor on skill checks (L5R 4e Equipment).
+
+    Light: +5 TN on Athletics and Stealth.
+    Heavy: +5 TN on all Agility/Reflexes skill rolls.
+    Tetsu-do: +10 TN on Agility/Reflexes (+5 if Strength >= 5).
+    Riding: +5 TN on Agility/Reflexes except when mounted.
+    Hida Bushi R1 (Way of the Crab) negates heavy armor penalties.
+    Returns (flat_penalty, notes) where penalty is <= 0."""
+    if not c.armor_name:
+        return 0, []
+    from . import combat
+    prof = combat.get_armor(c.armor_name)
+    if prof is None:
+        return 0, []
+    kind = prof.get("penalty_kind", "none")
+    if kind == "none":
+        return 0, []
+    sk = skill_name.lower()
+    tr = trait_name.lower()
+    if kind == "athletics_stealth":
+        if sk in ("athletics", "stealth"):
+            label = c.armor_name.replace("_", " ").title()
+            return -5, [f"Light Armor ({label}): +5 TN on {skill_name}"]
+        return 0, []
+    if tr not in ("agility", "reflexes"):
+        return 0, []
+    if any(t.lower() == "the way of the crab" for t in c.techniques):
+        return 0, []
+    label = c.armor_name.replace("_", " ").title()
+    if kind == "agi_ref":
+        return -5, [f"Heavy Armor ({label}): +5 TN on {trait_name.capitalize()} skills"]
+    if kind == "agi_ref_iron":
+        if c.strength >= 5:
+            return -5, [f"Tetsu-Do: +5 TN on {trait_name.capitalize()} skills (Strength {c.strength})"]
+        return -10, [f"Tetsu-Do: +10 TN on {trait_name.capitalize()} skills (Strength {c.strength})"]
+    if kind == "agi_ref_not_mounted":
+        return -5, [f"Riding Armor: +5 TN on {trait_name.capitalize()} skills (except mounted)"]
+    return 0, []
+
+
 def skill_check_modifiers(
     character: Character,
     skill_name: str,
@@ -560,6 +603,11 @@ def skill_check_modifiers(
     # Rank 10 universal mastery: Free Raise on all rolls using that Skill
     if character.skills.get(skill_name, 0) >= 10:
         notes.append(f"**{skill_name} R10**: Free Raise (DM: reduce declared raises by 1)")
+
+    # Armor skill check penalties (L5R 4e Equipment)
+    armor_pen, armor_notes = _armor_skill_penalty(character, skill_name, trait_name)
+    flat += armor_pen
+    notes.extend(armor_notes)
 
     return rolled, kept, flat, notes
 
