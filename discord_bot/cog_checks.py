@@ -277,7 +277,7 @@ def _build_check_embed(
         inline=False,
     )
     if adv_notes:
-        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
+        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
     return embed
 
 
@@ -672,7 +672,7 @@ async def poison_resist(
         inline=False,
     )
     if adv_notes:
-        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
+        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -761,7 +761,7 @@ async def medicine_check(
         inline=False,
     )
     if adv_notes:
-        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
+        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
     await interaction.response.send_message(embed=embed)
 
 
@@ -975,7 +975,7 @@ async def check_cooperative(
         inline=False,
     )
     if adv_notes:
-        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
+        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
     if void_spent:
         _d.store.save(rec)
     await interaction.response.send_message(embed=embed)

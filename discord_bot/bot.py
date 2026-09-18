@@ -576,7 +576,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         gear += f"\nWielding: {wield}"
     if c.weapons:
         gear += "\nWeapons: " + ", ".join(c.weapons)
-    embed.add_field(name="Equipment", value=gear, inline=False)
+    embed.add_field(name="Equipment", value=gear[:1024], inline=False)
 
     if c.spell_slots:
         slot_parts = []
@@ -4764,7 +4764,7 @@ class _DmWizardCatSelect(discord.ui.Select):
         lines: list[str] = []
         for cmd, hint in commands:
             lines.append(f"`{cmd}`\n {hint}")
-        embed.add_field(name="Commands", value="\n".join(lines), inline=False)
+        embed.add_field(name="Commands", value="\n".join(lines)[:1024], inline=False)
         embed.set_footer(text="Type any command in the chat bar: Discord will autocomplete the parameters.")
         view = discord.ui.View(timeout=300)
         back_btn = discord.ui.Button(label="Back to categories", style=discord.ButtonStyle.secondary)
@@ -5953,11 +5953,17 @@ async def npc_list(interaction: discord.Interaction) -> None:
             "No NPCs yet. Build one with `/npc create` or `/npc form`, or spawn from a template (Fortune).", ephemeral=True
         )
         return
-    lines = [
-        f"• {'💀 ' if stats.is_dead(r.character) else ''}**{r.character.name}**: {r.character.clan or ' '} {r.character.school_type} "
-        f"(Rank {r.character.school_rank})"
-        for r in recs
-    ]
+    dm = _is_dm(interaction)
+    lines = []
+    for r in recs:
+        dead = "💀 " if stats.is_dead(r.character) else ""
+        if dm:
+            lines.append(
+                f"• {dead}**{r.character.name}**: {r.character.clan or ' '} {r.character.school_type} "
+                f"(Rank {r.character.school_rank})"
+            )
+        else:
+            lines.append(f"• {dead}**{r.character.name}**")
     pages = _paginate(lines, "🎭 **NPCs on this server: **\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0])
@@ -7201,9 +7207,13 @@ def _resolve_creature(
         return None, f"No creature named **{name}**."
     return rec, None
 
-@creature_group.command(name="catalog", description="Search the bestiary templates you can spawn.")
+@creature_group.command(name="catalog", description="Search the bestiary templates. [Fortune]")
 @app_commands.describe(search="Filter by name, id, or tag (e.g. 'oni', 'goblin', 'wolf'). Omit for a summary.")
 async def creature_catalog(interaction: discord.Interaction, search: str | None = None) -> None:
+    if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
+        return
     items = sorted(creature.CREATURE_CATALOG.items(), key=lambda kv: kv[1].name)
     total = len(items)
     if not search:
@@ -7478,11 +7488,17 @@ async def creature_list(interaction: discord.Interaction) -> None:
             "No creatures spawned. Use `/creature spawn` (Fortune).", ephemeral=True
         )
         return
-    lines = [
-        f"• **{r.creature.name}**: {creature.creature_wound_level(r.creature)} "
-        f"({r.creature.wounds_taken}/{r.creature.wounds_dead})"
-        for r in recs
-    ]
+    dm = _is_dm(interaction)
+    lines = []
+    for r in recs:
+        lvl = creature.creature_wound_level(r.creature)
+        if dm:
+            lines.append(
+                f"• **{r.creature.name}**: {lvl} "
+                f"({r.creature.wounds_taken}/{r.creature.wounds_dead})"
+            )
+        else:
+            lines.append(f"• **{r.creature.name}**: {lvl}")
     pages = _paginate(lines, "👹 **Creatures: **\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0])
@@ -9738,9 +9754,9 @@ async def craft_extended(
         (tn, "Standard Quality"),
     ]
     quality_lines = [f"TN {t}: {desc}" for t, desc in quality_thresholds]
-    embed.add_field(name="Quality Tiers (cumulative total)", value="\n".join(quality_lines), inline=False)
+    embed.add_field(name="Quality Tiers (cumulative total)", value="\n".join(quality_lines)[:1024], inline=False)
     if adv_notes:
-        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes), inline=False)
+        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
     embed.set_footer(text="DM: Track cumulative total across rolls. Each roll = one crafting period.")
     await interaction.response.send_message(embed=embed)
 
@@ -10428,10 +10444,10 @@ async def compare_characters(
     owner_b = str(member_b.id) if member_b else str(interaction.user.id)
 
     rec_a = store.get_by_name(guild, owner_a, name_a)
-    if rec_a is None:
+    if rec_a is None and _is_dm(interaction):
         rec_a = store.get_by_name(guild, NPC_OWNER, name_a)
     rec_b = store.get_by_name(guild, owner_b, name_b)
-    if rec_b is None:
+    if rec_b is None and _is_dm(interaction):
         rec_b = store.get_by_name(guild, NPC_OWNER, name_b)
 
     if rec_a is None:

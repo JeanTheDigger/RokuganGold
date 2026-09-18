@@ -682,6 +682,11 @@ async def encumbrance_check(
         return
     guild = str(interaction.guild_id)
     if is_npc and name:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"You need the **{_d.ROLE_FORTUNE}** (or **{_d.ROLE_KAMI}**) role to check NPC stats.", ephemeral=True
+            )
+            return
         rec = _d.store.get_by_name(guild, _d.NPC_OWNER, name)
     elif member is not None:
         rec = _d.store.get_active(guild, str(member.id))
@@ -852,6 +857,11 @@ async def ancestors_check(
         return
     guild = str(interaction.guild_id)
     if is_npc and name:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"You need the **{_d.ROLE_FORTUNE}** (or **{_d.ROLE_KAMI}**) role to check NPC stats.", ephemeral=True
+            )
+            return
         rec = _d.store.get_by_name(guild, _d.NPC_OWNER, name)
     elif member is not None:
         rec = _d.store.get_active(guild, str(member.id))

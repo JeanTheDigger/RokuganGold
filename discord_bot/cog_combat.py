@@ -142,6 +142,13 @@ async def _combatant_autocomplete(
     return [app_commands.Choice(name=n, value=n) for n in names[:25]]
 
 
+def _is_own_combatant(interaction: discord.Interaction, cb) -> bool:
+    """True if the combatant belongs to the invoking user (their active character)."""
+    if cb.owner_id and cb.owner_id == str(interaction.user.id) and not cb.is_npc:
+        return True
+    return False
+
+
 # ===========================================================================
 # /attack: combat with DM-authorized damage
 # ===========================================================================
@@ -2950,14 +2957,17 @@ async def fight_status(interaction: discord.Interaction, member: discord.Member 
 async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     enc = await _d.require_encounter(interaction)
     if enc is None:
         return
     g = enc.find(guarder)
     if g is None:
         await interaction.response.send_message(f"No combatant named **{guarder}**.", ephemeral=True)
+        return
+    if not _is_own_combatant(interaction, g) and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            f"You can only guard with your own combatant, or ask a Fortune to do it.", ephemeral=True
+        )
         return
     w = enc.find(ward)
     if w is None:
@@ -3013,14 +3023,17 @@ async def combat_full_defense(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     enc = await _d.require_encounter(interaction)
     if enc is None:
         return
     cb = enc.find(combatant)
     if cb is None:
         await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
+        return
+    if not _is_own_combatant(interaction, cb) and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            f"You can only declare Full Defense for your own combatant, or ask a Fortune to do it.", ephemeral=True
+        )
         return
     blocked, block_reason = condition_effects.cannot_act(cb.conditions)
     if blocked:
@@ -3082,14 +3095,17 @@ async def combat_full_defense(
 async def combat_void_armor(interaction: discord.Interaction, combatant: str) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     enc = await _d.require_encounter(interaction)
     if enc is None:
         return
     cb = enc.find(combatant)
     if cb is None:
         await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
+        return
+    if not _is_own_combatant(interaction, cb) and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            f"You can only spend Void Points for your own combatant, or ask a Fortune to do it.", ephemeral=True
+        )
         return
     guild = str(interaction.guild_id)
     rec = _d.resolve_combatant_record(guild, cb)
@@ -3126,14 +3142,17 @@ async def combat_void_armor(interaction: discord.Interaction, combatant: str) ->
 async def combat_void_initiative(interaction: discord.Interaction, combatant: str) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     enc = await _d.require_encounter(interaction)
     if enc is None:
         return
     cb = enc.find(combatant)
     if cb is None:
         await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
+        return
+    if not _is_own_combatant(interaction, cb) and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            f"You can only spend Void Points for your own combatant, or ask a Fortune to do it.", ephemeral=True
+        )
         return
     guild = str(interaction.guild_id)
     rec = _d.resolve_combatant_record(guild, cb)
@@ -3178,14 +3197,17 @@ async def combat_void_initiative(interaction: discord.Interaction, combatant: st
 async def combat_void_swap(interaction: discord.Interaction, spender: str, target: str) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     enc = await _d.require_encounter(interaction)
     if enc is None:
         return
     cb_s = enc.find(spender)
     if cb_s is None:
         await interaction.response.send_message(f"No combatant named **{spender}**.", ephemeral=True)
+        return
+    if not _is_own_combatant(interaction, cb_s) and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            f"You can only spend Void Points for your own combatant, or ask a Fortune to do it.", ephemeral=True
+        )
         return
     cb_t = enc.find(target)
     if cb_t is None:
@@ -4291,14 +4313,17 @@ async def combat_stance(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     enc = await _d.require_encounter(interaction)
     if enc is None:
         return
     cb = enc.find(name)
     if cb is None:
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    if not _is_own_combatant(interaction, cb) and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            f"You can only set stance on your own combatant, or ask a Fortune to do it.", ephemeral=True
+        )
         return
     if stance.value not in encounter.VALID_STANCES:
         valid = ", ".join(s.replace("_", " ").title() for s in sorted(encounter.VALID_STANCES))
@@ -4917,7 +4942,7 @@ def _sync_mount_to_sheet(guild: str, cb, mounting: bool) -> str:
 # Phase 42: Mounted Combat (#10)
 # ---------------------------------------------------------------------------
 
-@fight_group.command(name="mount", description="Mount or dismount (sets/clears Mounted condition). [Fortune]")
+@fight_group.command(name="mount", description="Mount or dismount (sets/clears Mounted condition).")
 @app_commands.describe(
     name="Combatant name.",
     dismount="Dismount instead of mounting.",
@@ -4930,14 +4955,17 @@ async def combat_mount(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     enc = await _d.require_encounter(interaction)
     if enc is None:
         return
     cb = enc.find(name)
     if cb is None:
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    if not _is_own_combatant(interaction, cb) and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            f"You can only mount/dismount your own combatant, or ask a Fortune to do it.", ephemeral=True
+        )
         return
     guild = str(interaction.guild_id)
     if dismount:
@@ -4959,7 +4987,7 @@ async def combat_mount(
 # Phase 42: Multiple Attacks / Action Economy (#9)
 # ---------------------------------------------------------------------------
 
-@fight_group.command(name="action", description="Track action usage this turn (Simple or Complex). [Fortune]")
+@fight_group.command(name="action", description="Track action usage this turn (Simple or Complex).")
 @app_commands.describe(
     name="Combatant name.",
     action_type="Type of action being taken.",
@@ -4978,14 +5006,17 @@ async def combat_action(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    if not await _d.require_dm_role(interaction):
-        return
     enc = await _d.require_encounter(interaction)
     if enc is None:
         return
     cb = enc.find(name)
     if cb is None:
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
+        return
+    if not _is_own_combatant(interaction, cb) and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            f"You can only track actions for your own combatant, or ask a Fortune to do it.", ephemeral=True
+        )
         return
     if action_type.value == "reset":
         cb.actions_used = 0
