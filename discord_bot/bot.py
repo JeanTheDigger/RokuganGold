@@ -5633,7 +5633,7 @@ async def void_refresh(
         store.save(rec)
         embed = discord.Embed(
             title=f"🧘 Meditation: {c.name}",
-            color=discord.Color.teal() if success else discord.Color.greyple(),
+            color=discord.Color.teal() if success else discord.Color.red(),
         )
         wp_str = f" {wp}" if wp else ""
         embed.add_field(
@@ -9216,7 +9216,7 @@ async def spell_cast(
     success = result["success"]
     embed = discord.Embed(
         title=f"📜 {caster.name} casts {s['name']}",
-        color=discord.Color.gold() if success else discord.Color.greyple(),
+        color=discord.Color.gold() if success else discord.Color.red(),
     )
     notes = []
     if affinity:
@@ -9389,7 +9389,7 @@ async def spell_interrupt(
     success = total >= tn
     embed = discord.Embed(
         title=f"⚡ {c.name}: Casting Interrupted",
-        color=discord.Color.green() if success else discord.Color.orange(),
+        color=discord.Color.green() if success else discord.Color.red(),
     )
     tn_reason = f"TN {tn} (5 + {damage} damage)" if damage > 0 else "TN 10 (distraction)"
     roll_desc = (
@@ -10180,7 +10180,7 @@ async def dm_treat(
     treat_label = treatment.name.split(" (")[0]
     embed = discord.Embed(
         title=f"💊 {treat_label}: {hc.name} treats {pc.name}",
-        color=discord.Color.green() if success else discord.Color.greyple(),
+        color=discord.Color.green() if success else discord.Color.red(),
     )
     wp_str = f" {wp}" if wp else ""
     bonus_str = f" {bonus:+d}" if bonus else ""

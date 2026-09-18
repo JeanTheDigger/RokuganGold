@@ -258,7 +258,7 @@ def _build_check_embed(
     success = result["success"]
     embed = discord.Embed(
         title=f"{title}: {c_name}",
-        color=discord.Color.green() if success else discord.Color.greyple(),
+        color=discord.Color.green() if success else discord.Color.red(),
     )
     wp_str = f" {wp}" if wp else ""
     bonus_str = f" {bonus:+d}" if bonus else ""
@@ -582,7 +582,7 @@ async def honor_roll(
     success = result["success"]
     embed = discord.Embed(
         title=f"⚖️ Honor Roll: {c.name}",
-        color=discord.Color.gold() if success else discord.Color.dark_grey(),
+        color=discord.Color.gold() if success else discord.Color.red(),
     )
     bonus_str = f" {bonus:+d}" if bonus else ""
     embed.add_field(
@@ -653,7 +653,7 @@ async def poison_resist(
         title += f" vs {poison_name}"
     embed = discord.Embed(
         title=title,
-        color=discord.Color.green() if success else discord.Color.dark_purple(),
+        color=discord.Color.green() if success else discord.Color.red(),
     )
     wp_str = f" {wp}" if wp else ""
     bonus_str = f" {bonus:+d}" if bonus else ""
@@ -741,7 +741,7 @@ async def medicine_check(
         title += f": {reason}"
     embed = discord.Embed(
         title=f"{title}: {c.name}",
-        color=discord.Color.green() if success else discord.Color.greyple(),
+        color=discord.Color.green() if success else discord.Color.red(),
     )
     wp_str = f" {wp}" if wp else ""
     bonus_str = f" {bonus:+d}" if bonus else ""
@@ -949,7 +949,7 @@ async def check_cooperative(
         title += f": {reason}"
     embed = discord.Embed(
         title=f"{title}: {c.name}",
-        color=discord.Color.green() if result["success"] else discord.Color.greyple(),
+        color=discord.Color.green() if result["success"] else discord.Color.red(),
     )
     embed.add_field(
         name="Helpers",
