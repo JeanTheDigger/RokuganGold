@@ -4790,7 +4790,7 @@ class _DmWizardCatSelect(discord.ui.Select):
         view.add_item(back_btn)
         await interaction.response.edit_message(content=None, embed=embed, view=view)
 
-@dm.command(name="wizard", description="Interactive command menu: Browse all Fortune and Kami actions by category.")
+@dm.command(name="wizard", description="Interactive command menu: Browse all Fortune and Kami actions by category. [Fortune]")
 async def dm_wizard_cmd(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -4997,13 +4997,19 @@ async def dm_mount(
         armor_note = f" Armor TN bonus → +{c.armor_tn_bonus}."
     store.save(rec, note="mount" if mounting else "dismount")
     if mounting:
-        await interaction.response.send_message(
-            f"**{c.name}** mounts up.{armor_note} Riding armor skill penalty removed while mounted.",
+        embed = discord.Embed(
+            title=f"🐴 {c.name} mounts up",
+            color=discord.Color.dark_gold(),
+            description=f"Riding armor skill penalty removed while mounted.{armor_note}",
         )
     else:
-        await interaction.response.send_message(
-            f"**{c.name}** dismounts.{armor_note}",
+        embed = discord.Embed(
+            title=f"🐴 {c.name} dismounts",
+            color=discord.Color.greyple(),
+            description=armor_note.strip() if armor_note else "Mounted condition cleared.",
         )
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
 
 
 def _format_rokugani_date(year: int, month: int, day: int) -> str:
@@ -5540,10 +5546,13 @@ async def void_spend(
     c.current_void_points -= 1
     _tally(interaction.channel_id, c.name, "void")
     store.save(rec)
-    await interaction.response.send_message(
-        f"🌀 **{c.name}** spends a Void Point: {reason}\n"
-        f"  VP remaining: **{c.current_void_points}/{c.max_void_points}**"
+    embed = discord.Embed(
+        title=f"🌀 {c.name}: Void Point Spent",
+        color=discord.Color.purple(),
+        description=f"{reason}\nVP remaining: **{c.current_void_points}/{c.max_void_points}**",
     )
+    embed.set_footer(text=f"Spent by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
 
 @sheet_void.command(name="refresh", description="Refresh Void Points (rest = full, or Meditation/Void check for 1).")
 @app_commands.describe(
@@ -5596,10 +5605,13 @@ async def void_refresh(
         old = c.current_void_points
         c.current_void_points = vp_cap
         store.save(rec)
-        await interaction.response.send_message(
-            f"🌀 **{c.name}** rests and recovers all Void Points.\n"
-            f"  VP: {old} → **{c.current_void_points}/{vp_cap}**{cap_note}"
+        embed = discord.Embed(
+            title=f"🌀 {c.name}: Void Points Restored",
+            color=discord.Color.purple(),
+            description=f"Rest: Full refresh.\nVP: {old} → **{c.current_void_points}/{vp_cap}**{cap_note}",
         )
+        embed.set_footer(text=f"Refreshed by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
     else:
         if c.current_void_points >= vp_cap:
             await interaction.response.send_message(
@@ -7827,7 +7839,7 @@ async def category_remove(
         f"\U0001f4c1 Removed {kind.name} **{name}** from **{cat.name}**.", ephemeral=True,
     )
 
-@category_group.command(name="list", description="List all categories on this server.")
+@category_group.command(name="list", description="List all categories on this server. [Fortune]")
 async def category_list(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
@@ -7847,7 +7859,7 @@ async def category_list(interaction: discord.Interaction) -> None:
         view = _PaginatorView(pages, interaction.user.id)
         await interaction.response.send_message(pages[0], view=view, ephemeral=True)
 
-@category_group.command(name="view", description="View all members of a category.")
+@category_group.command(name="view", description="View all members of a category. [Fortune]")
 @app_commands.describe(category="Which category to view.")
 @app_commands.autocomplete(category=_category_autocomplete)
 async def category_view(interaction: discord.Interaction, category: str) -> None:
@@ -8534,10 +8546,17 @@ async def xp_grant(interaction: discord.Interaction, member: discord.Member, amo
     before = rec.character.xp
     rec.character.xp = max(0.0, rec.character.xp + float(amount))
     store.save(rec, note="xp grant")
-    note = f" - *{reason}*" if reason else ""
-    await interaction.response.send_message(
-        f"✨ {member.mention}'s **{rec.character.name}** {'gains' if amount >= 0 else 'loses'} "
-        f"**{abs(amount):g}** XP -> **{rec.character.xp:g}** available{note}")
+    note = f"\n*{reason}*" if reason else ""
+    embed = discord.Embed(
+        title=f"✨ XP {'Grant' if amount >= 0 else 'Correction'}: {rec.character.name}",
+        color=discord.Color.gold() if amount >= 0 else discord.Color.orange(),
+        description=(
+            f"{member.mention} {'gains' if amount >= 0 else 'loses'} **{abs(amount):g}** XP\n"
+            f"Available: **{rec.character.xp:g}**{note}"
+        ),
+    )
+    embed.set_footer(text=f"Granted by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
     logged = await _xp_log(
         str(interaction.guild_id),
         f"XP GRANT: {interaction.user.display_name} → {rec.character.name} ({member.display_name}) "
@@ -10107,7 +10126,7 @@ async def dm_clear_damage_channel(interaction: discord.Interaction) -> None:
     store.clear_damage_approval_channel(str(interaction.guild_id))
     await interaction.response.send_message("Damage approval channel cleared. Damage approvals will fall back to the character approval channel.", ephemeral=True)
 
-@dm.command(name="treat", description="Medicine treatment: Healer rolls, DM approves (L5R 4e).")
+@dm.command(name="treat", description="Medicine treatment: Healer rolls, DM approves (L5R 4e). [Fortune]")
 @app_commands.describe(
     healer="Character performing the treatment.",
     patient="Character being treated.",

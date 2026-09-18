@@ -1848,12 +1848,18 @@ async def combat_start(interaction: discord.Interaction) -> None:
     _d.encounters[interaction.channel_id] = enc
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
-    await interaction.response.send_message(
-        "⚔️ New encounter started. Add combatants with `/combat join` (your character) "
-        "or `/combat add` (an NPC), then `/combat next` to begin.\n"
-        "Players end their turn with `/combat turn done`. "
-        "(For an invite-and-accept roster use `/combat setup` instead.)"
+    embed = discord.Embed(
+        title="⚔️ New Encounter Started",
+        color=discord.Color.red(),
+        description=(
+            "Add combatants with `/combat join` (your character) "
+            "or `/combat add` (an NPC), then `/combat next` to begin.\n"
+            "Players end their turn with `/combat turn done`.\n"
+            "*(For an invite-and-accept roster use `/combat setup` instead.)*"
+        ),
     )
+    embed.set_footer(text=f"Started by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
     await _d.combat_log(guild, "--- Encounter started ---")
 
 
@@ -2332,20 +2338,25 @@ async def combat_next(interaction: discord.Interaction) -> None:
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     mention = f"<@{current.owner_id}> " if current.owner_id and not current.is_npc else ""
-    parts = [f"➡️ {mention}It is now **{current.name}**'s turn."]
-    parts.extend(_expiry_notes(enc))
+    desc_parts: list[str] = []
+    expiry = _expiry_notes(enc)
+    if expiry:
+        desc_parts.extend(expiry)
     if current.center_bonus_available:
         rec = _d.resolve_combatant_record(guild, current)
         vr = rec.character.void_ring if rec else "?"
-        parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
+        desc_parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
     reminders = condition_effects.condition_reminders(current.conditions)
     if reminders:
-        parts.append("\n".join(reminders))
-    parts.append(_render_encounter(enc, guild))
-    msg = "\n\n".join(parts)
-    if len(msg) > 2000:
-        msg = msg[:1997] + "..."
-    await interaction.response.send_message(msg)
+        desc_parts.append("\n".join(reminders))
+    embed = discord.Embed(
+        title=f"➡️ {current.name}'s Turn",
+        color=discord.Color.green(),
+        description="\n".join(desc_parts) if desc_parts else None,
+    )
+    embed.set_footer(text=f"Round {enc.round}")
+    tracker = _render_encounter(enc, guild)
+    await interaction.response.send_message(content=f"{mention}{tracker}", embed=embed)
     if enc.round != prev_round:
         await _d.combat_log(guild, f"--- Round {enc.round} ---")
     cond_str = f" [{', '.join(sorted(current.conditions))}]" if current.conditions else ""
@@ -2376,7 +2387,9 @@ async def combat_remove(interaction: discord.Interaction, name: str) -> None:
         return
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
-    await interaction.response.send_message(f"Removed **{name}**.\n\n{_render_encounter(enc, guild)}")
+    embed = discord.Embed(title=f"✖️ Removed: {name}", color=discord.Color.greyple())
+    embed.set_footer(text=f"Removed by {interaction.user.display_name}")
+    await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
 
 
 def _end_level(enc: encounter.Encounter, guild: str, name: str) -> str:
@@ -2617,9 +2630,13 @@ async def combat_condition_set(
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     dur = f" for {rounds} Round(s)" if rounds else ""
-    await interaction.response.send_message(
-        f"**{c.name}** is now **{condition.name}**{dur}.\n\n{_render_encounter(enc, guild)}"
+    embed = discord.Embed(
+        title=f"⚡ {c.name}: {condition.name}",
+        color=discord.Color.orange(),
+        description=f"Condition applied{dur}.",
     )
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
     await _d.combat_log(str(interaction.guild_id), f"Condition: {c.name} +{condition.name}{dur}")
 
 
@@ -2649,9 +2666,12 @@ async def combat_condition_clear(
     c.clear_condition(condition.value)
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"**{c.name}** is no longer **{condition.name}**.\n\n{_render_encounter(enc, guild)}"
+    embed = discord.Embed(
+        title=f"✖️ {c.name}: {condition.name} cleared",
+        color=discord.Color.greyple(),
     )
+    embed.set_footer(text=f"Cleared by {interaction.user.display_name}")
+    await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
     await _d.combat_log(str(interaction.guild_id), f"Condition: {c.name} -{condition.name}")
 
 
@@ -4428,9 +4448,12 @@ async def combat_init(
             enc.turn_index = enc.combatants.index(cur)
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"**{cb.name}** initiative {old} → **{value}**\n{_render_encounter(enc, guild)}"
+    embed = discord.Embed(
+        title=f"🎲 {cb.name}: Initiative {old} → {value}",
+        color=discord.Color.gold(),
     )
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
 
 
 @combat_turn.command(name="hold", description="Mark a combatant as holding their action. [Fortune]")
@@ -4459,9 +4482,12 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
     if cb.held:
         cb.held = False
         _d.save_encounter(guild, enc)
-        await interaction.response.send_message(
-            f"**{cb.name}** is no longer holding their action.\n{_render_encounter(enc, guild)}"
+        embed = discord.Embed(
+            title=f"▶️ {cb.name}: Hold released",
+            color=discord.Color.green(),
         )
+        embed.set_footer(text=f"Released by {interaction.user.display_name}")
+        await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
         await _d.combat_log(guild, f"Hold: {cb.name} released")
         return
 
@@ -4471,18 +4497,22 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         next_cb = enc.advance()
         _d.save_encounter(guild, enc)
         mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
-        parts = [f"⏸️ **{cb.name}** holds their action."]
-        parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
-        parts.extend(_expiry_notes(enc))
+        desc_parts: list[str] = [f"➡️ It is now **{next_cb.name}**'s turn."]
+        desc_parts.extend(_expiry_notes(enc))
         if next_cb.center_bonus_available:
             rec = _d.resolve_combatant_record(guild, next_cb)
             vr = rec.character.void_ring if rec else "?"
-            parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
+            desc_parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
         reminders = condition_effects.condition_reminders(next_cb.conditions)
         if reminders:
-            parts.append("\n".join(reminders))
-        parts.append(_render_encounter(enc, guild))
-        await interaction.response.send_message("\n\n".join(parts))
+            desc_parts.append("\n".join(reminders))
+        embed = discord.Embed(
+            title=f"⏸️ {cb.name} holds their action",
+            color=discord.Color.dark_gold(),
+            description="\n".join(desc_parts),
+        )
+        embed.set_footer(text=f"Round {enc.round}")
+        await interaction.response.send_message(content=f"{mention}{_render_encounter(enc, guild)}", embed=embed)
         if enc.round != prev_round:
             await _d.combat_log(guild, f"--- Round {enc.round} ---")
         await _d.combat_log(guild, f"Hold: {cb.name} held (auto-advance)")
@@ -4490,9 +4520,12 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         await _d.combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
     else:
         _d.save_encounter(guild, enc)
-        await interaction.response.send_message(
-            f"⏸️ **{cb.name}** is holding their action.\n{_render_encounter(enc, guild)}"
+        embed = discord.Embed(
+            title=f"⏸️ {cb.name} holds their action",
+            color=discord.Color.dark_gold(),
         )
+        embed.set_footer(text=f"Set by {interaction.user.display_name}")
+        await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
         await _d.combat_log(guild, f"Hold: {cb.name} held")
 
 
@@ -4526,9 +4559,12 @@ async def combat_delay(
     if cb.delayed:
         cb.delayed = False
         _d.save_encounter(guild, enc)
-        await interaction.response.send_message(
-            f"**{cb.name}** is no longer delaying.\n{_render_encounter(enc, guild)}"
+        embed = discord.Embed(
+            title=f"▶️ {cb.name}: Delay released",
+            color=discord.Color.green(),
         )
+        embed.set_footer(text=f"Released by {interaction.user.display_name}")
+        await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
         await _d.combat_log(guild, f"Delay: {cb.name} released")
         return
 
@@ -4545,18 +4581,22 @@ async def combat_delay(
             init_note = f" (init → {cb.initiative})"
         _d.save_encounter(guild, enc)
         mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
-        parts = [f"⏳ **{cb.name}** delays their action{init_note}."]
-        parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
-        parts.extend(_expiry_notes(enc))
+        delay_desc: list[str] = [f"➡️ It is now **{next_cb.name}**'s turn."]
+        delay_desc.extend(_expiry_notes(enc))
         if next_cb.center_bonus_available:
             rec = _d.resolve_combatant_record(guild, next_cb)
             vr = rec.character.void_ring if rec else "?"
-            parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
+            delay_desc.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
         reminders = condition_effects.condition_reminders(next_cb.conditions)
         if reminders:
-            parts.append("\n".join(reminders))
-        parts.append(_render_encounter(enc, guild))
-        await interaction.response.send_message("\n\n".join(parts))
+            delay_desc.append("\n".join(reminders))
+        embed = discord.Embed(
+            title=f"⏳ {cb.name} delays{init_note}",
+            color=discord.Color.dark_gold(),
+            description="\n".join(delay_desc),
+        )
+        embed.set_footer(text=f"Round {enc.round}")
+        await interaction.response.send_message(content=f"{mention}{_render_encounter(enc, guild)}", embed=embed)
         if enc.round != prev_round:
             await _d.combat_log(guild, f"--- Round {enc.round} ---")
         await _d.combat_log(guild, f"Delay: {cb.name} delayed (auto-advance){init_note}")
@@ -4570,9 +4610,12 @@ async def combat_delay(
                 enc.turn_index = enc.combatants.index(current)
             init_note = f" (init → {cb.initiative})"
         _d.save_encounter(guild, enc)
-        await interaction.response.send_message(
-            f"⏳ **{cb.name}** is delaying{init_note}.\n{_render_encounter(enc, guild)}"
+        embed = discord.Embed(
+            title=f"⏳ {cb.name} delays{init_note}",
+            color=discord.Color.dark_gold(),
         )
+        embed.set_footer(text=f"Set by {interaction.user.display_name}")
+        await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
         await _d.combat_log(guild, f"Delay: {cb.name} delayed{init_note}")
 
 
@@ -4600,9 +4643,13 @@ async def combat_act(interaction: discord.Interaction, name: str) -> None:
     cb.actions_used = 0
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"**{cb.name}** acts now (was {was}).\n{_render_encounter(enc, guild)}"
+    embed = discord.Embed(
+        title=f"▶️ {cb.name} acts now",
+        color=discord.Color.green(),
+        description=f"Was {was}.",
     )
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
     await _d.combat_log(guild, f"Act: {cb.name} (was {was})")
 
 
@@ -4685,7 +4732,12 @@ async def combat_surprise(interaction: discord.Interaction) -> None:
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     state = "ON" if enc.surprise_round else "OFF"
-    await interaction.response.send_message(f"Surprise round: **{state}**\n{_render_encounter(enc, guild)}")
+    embed = discord.Embed(
+        title=f"❗ Surprise Round: {state}",
+        color=discord.Color.orange() if enc.surprise_round else discord.Color.greyple(),
+    )
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
 
 # ---------------------------------------------------------------------------
 # Phase 42: Mass Battle (#3)
@@ -4765,7 +4817,12 @@ async def battle_damage(
         return
     result = mass_battle.resolve_battle_turn_damage(engagement.value, _d.engine)
     if result["damage"] == 0:
-        await interaction.response.send_message(f"**{engagement.name}**: No incidental damage this round.")
+        embed = discord.Embed(
+            title=f"Mass Battle Damage: {engagement.name}",
+            color=discord.Color.greyple(),
+            description="No incidental damage this round.",
+        )
+        await interaction.response.send_message(embed=embed)
         return
     embed = discord.Embed(title=f"Mass Battle Damage: {engagement.name}", color=discord.Color.dark_red())
     embed.add_field(name="Damage", value=f"**{result['damage']}** ({result['rolled']}k{result['kept']})", inline=True)
@@ -5078,10 +5135,19 @@ async def combat_action(
     if action_type.value == "reset":
         cb.actions_used = 0
         _d.save_encounter(str(interaction.guild_id), enc)
-        await interaction.response.send_message(f"**{cb.name}**: Actions reset to 0/2.")
+        embed = discord.Embed(
+            title=f"**{cb.name}**: Actions Reset",
+            description="Actions reset to 0/2.",
+            color=discord.Color.blue(),
+        )
+        await interaction.response.send_message(embed=embed)
         return
     if action_type.value == "free":
-        await interaction.response.send_message(f"**{cb.name}** takes a Free Action.")
+        embed = discord.Embed(
+            title=f"**{cb.name}**: Free Action",
+            color=discord.Color.blurple(),
+        )
+        await interaction.response.send_message(embed=embed)
         return
     if action_type.value == "complex":
         if cb.actions_used > 0:
@@ -5139,15 +5205,18 @@ async def combat_cover(
     cb.cover_bonus = bonus
     _d.save_encounter(str(interaction.guild_id), enc)
     if bonus == 0:
-        await interaction.response.send_message(
-            f"**{cb.name}**: Cover cleared.\n\n{_render_encounter(enc, str(interaction.guild_id))}"
+        embed = discord.Embed(
+            title=f"🏔️ {cb.name}: Cover cleared",
+            color=discord.Color.greyple(),
         )
     else:
         sign = "+" if bonus > 0 else ""
-        await interaction.response.send_message(
-            f"**{cb.name}**: Cover set to **{sign}{bonus}** Armor TN.\n\n"
-            f"{_render_encounter(enc, str(interaction.guild_id))}"
+        embed = discord.Embed(
+            title=f"🏔️ {cb.name}: Cover {sign}{bonus} Armor TN",
+            color=discord.Color.dark_teal(),
         )
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(content=_render_encounter(enc, str(interaction.guild_id)), embed=embed)
 
 
 @combat_env.command(name="notes", description="Set or clear environment notes for this encounter. [Fortune]")
@@ -5166,13 +5235,18 @@ async def combat_notes(
     enc.notes = text.strip()
     _d.save_encounter(str(interaction.guild_id), enc)
     if enc.notes:
-        await interaction.response.send_message(
-            f"📍 Environment: *{enc.notes}*\n\n{_render_encounter(enc, str(interaction.guild_id))}"
+        embed = discord.Embed(
+            title="📍 Environment",
+            color=discord.Color.dark_teal(),
+            description=f"*{enc.notes}*",
         )
     else:
-        await interaction.response.send_message(
-            f"📍 Environment notes cleared.\n\n{_render_encounter(enc, str(interaction.guild_id))}"
+        embed = discord.Embed(
+            title="📍 Environment notes cleared",
+            color=discord.Color.greyple(),
         )
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(content=_render_encounter(enc, str(interaction.guild_id)), embed=embed)
 
 
 @combat_env.command(name="damage", description="Apply environmental damage to combatants. [Fortune]")
@@ -5260,11 +5334,16 @@ async def combat_env_damage(
             else:
                 results.append(f"**{cb.name}**: *(no sheet - damage not tracked)*")
 
-    parts = [f"💥 **Environmental Damage**: {amount}{reason_tag}"]
+    title = f"💥 Environmental Damage: {amount}{reason_tag}"
     if ignore_reduction:
-        parts[0] += " *(ignores reduction)*"
-    parts.extend(results)
+        title += " (ignores reduction)"
+    embed = discord.Embed(
+        title=title,
+        color=discord.Color.dark_red(),
+        description="\n".join(results),
+    )
     if not_found:
-        parts.append(f"Not found: {', '.join(not_found)}")
-    await interaction.response.send_message("\n".join(parts))
+        embed.add_field(name="Not found", value=", ".join(not_found), inline=False)
+    embed.set_footer(text=f"Applied by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
 
