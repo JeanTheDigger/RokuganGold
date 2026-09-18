@@ -1043,8 +1043,10 @@ async def roll(
         flags.append("Emphasis")
     if unskilled:
         flags.append("Unskilled (no explode)")
+    footer = f"Rolled by {interaction.user.display_name}"
     if flags:
-        embed.set_footer(text=" · ".join(flags))
+        footer += " · " + " · ".join(flags)
+    embed.set_footer(text=footer)
 
     log_total = outcome["total"] if tn is not None else total
     _log_roll(interaction.channel_id, interaction.user.display_name, title, log_total)
@@ -1112,6 +1114,7 @@ async def dice_quick(
         if bonus:
             total_str += f"  (dice {result.total} {'+' if bonus >= 0 else '−'} {abs(bonus)})"
         embed.add_field(name="Total", value=total_str, inline=False)
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     _log_roll(interaction.channel_id, interaction.user.display_name, title, outcome["total"] if tn else total)
     await interaction.response.send_message(embed=embed)
 

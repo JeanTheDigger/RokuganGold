@@ -2999,12 +2999,18 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
     g.actions_used += 1
     remaining = 2 - g.actions_used
     _d.save_encounter(str(interaction.guild_id), enc)
-    await interaction.response.send_message(
-        f"🛡️ **{g.name}** is guarding **{w.name}**.\n"
-        f"  Ward: +10 Armor TN · Guarder: −5 Armor TN\n"
-        f"  Simple Action ({remaining} action{'s' if remaining != 1 else ''} remaining).\n"
-        f"  Expires at the start of {g.name}'s next turn."
+    embed = discord.Embed(
+        title=f"🛡️ {g.name} guards {w.name}",
+        color=discord.Color.blue(),
+        description=(
+            f"Ward ({w.name}): **+10 Armor TN**\n"
+            f"Guarder ({g.name}): **-5 Armor TN**\n"
+            f"Simple Action ({remaining} action{'s' if remaining != 1 else ''} remaining)\n"
+            f"Expires at the start of {g.name}'s next turn."
+        ),
     )
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
     await _d.combat_log(str(interaction.guild_id), f"Guard: {g.name} guards {w.name}")
 
 
@@ -3073,15 +3079,20 @@ async def combat_full_defense(
     cb.stance = "full_defense"
     cb.actions_used = 2
     _d.save_encounter(guild, enc)
-    wp_note = f"  Wound penalty: **{wp}**\n" if wp != 0 else ""
-    await interaction.response.send_message(
-        f"🛡️ **{cb.name}** enters **Full Defense**.\n"
-        f"  Roll: {result['rolled']}k{result['kept']} → **{result['total']}** · "
-        f"half (rounded up) = **+{result['bonus']} Armor TN**\n"
-        f"{wp_note}"
-        f"  Complex Action: Only Free Actions until next turn.\n"
-        f"  Expires at the start of {cb.name}'s next turn."
+    wp_note = f"Wound penalty: **{wp}**\n" if wp != 0 else ""
+    embed = discord.Embed(
+        title=f"🛡️ {cb.name}: Full Defense",
+        color=discord.Color.dark_blue(),
+        description=(
+            f"Roll: {result['rolled']}k{result['kept']} = **{result['total']}** | "
+            f"Half (rounded up) = **+{result['bonus']} Armor TN**\n"
+            f"{wp_note}"
+            f"Complex Action: Only Free Actions until next turn.\n"
+            f"Expires at the start of {cb.name}'s next turn."
+        ),
     )
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
     await _d.combat_log(str(interaction.guild_id), f"Full Defense: {cb.name} (+{result['bonus']} Armor TN)")
 
 # ===========================================================================
@@ -3128,11 +3139,17 @@ async def combat_void_armor(interaction: discord.Interaction, combatant: str) ->
     cb.void_armor_tn_bonus += 10
     _d.store.save(rec)
     _d.save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"🌀 **{cb.name}** spends a Void Point: **+10 Armor TN** for this Round.\n"
-        f"  Armor TN bonus: +{cb.void_armor_tn_bonus} · VP remaining: {c.current_void_points}/{c.max_void_points}\n"
-        f"  Clears at the start of the next Round."
+    embed = discord.Embed(
+        title=f"🌀 {cb.name}: Void Armor",
+        color=discord.Color.purple(),
+        description=(
+            f"**+10 Armor TN** for this Round\n"
+            f"Armor TN bonus: +{cb.void_armor_tn_bonus} · VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+            f"Clears at the start of the next Round."
+        ),
     )
+    embed.set_footer(text=f"Spent by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
     await _d.combat_log(guild, f"Void Armor: {cb.name} (+10 Armor TN, {c.current_void_points} VP left)")
 
 
@@ -3179,11 +3196,19 @@ async def combat_void_initiative(interaction: discord.Interaction, combatant: st
         enc.turn_index = enc.combatants.index(cur_before)
     _d.store.save(rec)
     _d.save_encounter(guild, enc)
+    embed = discord.Embed(
+        title=f"🌀 {cb.name}: Void Initiative",
+        color=discord.Color.purple(),
+        description=(
+            f"**+10 Initiative** for the skirmish\n"
+            f"Effective initiative: **{cb.effective_initiative}** · VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+            f"Persists until the encounter ends."
+        ),
+    )
+    embed.set_footer(text=f"Spent by {interaction.user.display_name}")
     await interaction.response.send_message(
-        f"🌀 **{cb.name}** spends a Void Point: **+10 Initiative** for the skirmish.\n"
-        f"  Effective initiative: **{cb.effective_initiative}** · VP remaining: {c.current_void_points}/{c.max_void_points}\n"
-        f"  Persists until the encounter ends.\n\n"
-        f"{_render_encounter(enc, guild)}"
+        content=_render_encounter(enc, guild),
+        embed=embed,
     )
     await _d.combat_log(guild, f"Void Initiative: {cb.name} (+10, now {cb.effective_initiative}, {c.current_void_points} VP left)")
 
@@ -3244,13 +3269,21 @@ async def combat_void_swap(interaction: discord.Interaction, spender: str, targe
         enc.turn_index = enc.combatants.index(cur_before)
     _d.store.save(rec)
     _d.save_encounter(guild, enc)
+    embed = discord.Embed(
+        title=f"🌀 Initiative Swap",
+        color=discord.Color.purple(),
+        description=(
+            f"**{cb_s.name}** exchanges Initiative with **{cb_t.name}**\n"
+            f"{cb_s.name}: {old_s} → **{cb_s.effective_initiative}** · "
+            f"{cb_t.name}: {old_t} → **{cb_t.effective_initiative}**\n"
+            f"VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+            f"Persists for the remainder of the skirmish."
+        ),
+    )
+    embed.set_footer(text=f"Spent by {interaction.user.display_name}")
     await interaction.response.send_message(
-        f"🌀 **{cb_s.name}** spends a Void Point to **exchange Initiative** with **{cb_t.name}**.\n"
-        f"  {cb_s.name}: {old_s} → **{cb_s.effective_initiative}** · "
-        f"{cb_t.name}: {old_t} → **{cb_t.effective_initiative}**\n"
-        f"  VP remaining: {c.current_void_points}/{c.max_void_points}\n"
-        f"  Persists for the remainder of the skirmish.\n\n"
-        f"{_render_encounter(enc, guild)}"
+        content=_render_encounter(enc, guild),
+        embed=embed,
     )
     await _d.combat_log(guild, f"Void Swap: {cb_s.name} ↔ {cb_t.name} initiative ({c.current_void_points} VP left)")
 
@@ -3620,7 +3653,7 @@ async def grapple_pin(
     await _d.combat_log(guild, f"Grapple Pin: {ctrl_cb.name} pins {tgt_cb.name}")
 
 
-@combat_grapple.command(name="break_free", description="Break free from a grapple (controller: Simple, defender: Complex contested).")
+@combat_grapple.command(name="break_free", description="Break free from a grapple (controller: Simple, defender: Complex contested). [Fortune]")
 @app_commands.describe(
     combatant="The combatant trying to break free.",
     opponent="The grapple opponent (required for defender break-free contested roll; omit for controller break).",
@@ -4346,10 +4379,21 @@ async def combat_stance(
     _d.save_encounter(str(interaction.guild_id), enc)
     label = stance.name
     effects = combat.stance_effects(stance.value)
-    msg = f"**{cb.name}** adopts **{label}** stance."
+    _STANCE_COLORS = {
+        "attack": discord.Color.red(),
+        "full_attack": discord.Color.dark_red(),
+        "defense": discord.Color.blue(),
+        "full_defense": discord.Color.dark_blue(),
+        "center": discord.Color.gold(),
+    }
+    embed = discord.Embed(
+        title=f"⚔️ {cb.name}: {label} Stance",
+        color=_STANCE_COLORS.get(stance.value, discord.Color.blurple()),
+    )
     if effects:
-        msg += f"\n{effects}"
-    await interaction.response.send_message(msg)
+        embed.description = effects
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
     await _d.combat_log(str(interaction.guild_id), f"Stance: {cb.name} → {label}")
 
 
@@ -4972,16 +5016,29 @@ async def combat_mount(
         cb.conditions.discard("mounted")
         _d.save_encounter(guild, enc)
         extra = _sync_mount_to_sheet(guild, cb, False)
-        await interaction.response.send_message(f"**{cb.name}** dismounts.{extra}")
+        embed = discord.Embed(
+            title=f"🐴 {cb.name} dismounts",
+            color=discord.Color.greyple(),
+            description=extra or "Mounted condition cleared.",
+        )
+        embed.set_footer(text=f"Set by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
     else:
         cb.conditions.add("mounted")
         _d.save_encounter(guild, enc)
         extra = _sync_mount_to_sheet(guild, cb, True)
-        await interaction.response.send_message(
-            f"**{cb.name}** mounts up. Mounted combat: +1k0 damage on melee "
-            f"vs unmounted, +1 rolled die on Horsemanship checks. Mounted archery "
-            f"at −1k0 unless Mounted Archery emphasis.{extra}"
+        embed = discord.Embed(
+            title=f"🐴 {cb.name} mounts up",
+            color=discord.Color.dark_gold(),
+            description=(
+                "+1k0 melee damage vs unmounted\n"
+                "+1 rolled die on Horsemanship checks\n"
+                "Mounted archery at -1k0 unless Mounted Archery emphasis"
+                + (f"\n{extra}" if extra else "")
+            ),
         )
+        embed.set_footer(text=f"Set by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
 
 # ---------------------------------------------------------------------------
 # Phase 42: Multiple Attacks / Action Economy (#9)
@@ -5021,7 +5078,7 @@ async def combat_action(
     if action_type.value == "reset":
         cb.actions_used = 0
         _d.save_encounter(str(interaction.guild_id), enc)
-        await interaction.response.send_message(f"**{cb.name}**: Actions reset.")
+        await interaction.response.send_message(f"**{cb.name}**: Actions reset to 0/2.")
         return
     if action_type.value == "free":
         await interaction.response.send_message(f"**{cb.name}** takes a Free Action.")
@@ -5032,7 +5089,12 @@ async def combat_action(
             return
         cb.actions_used = 2
         _d.save_encounter(str(interaction.guild_id), enc)
-        await interaction.response.send_message(f"**{cb.name}** takes a **Complex Action** (turn used).")
+        embed = discord.Embed(
+            title=f"**{cb.name}**: Complex Action",
+            description="Turn used (2/2 actions).",
+            color=discord.Color.orange(),
+        )
+        await interaction.response.send_message(embed=embed)
     else:
         if cb.actions_used >= 2:
             await interaction.response.send_message(f"**{cb.name}** has no actions remaining this turn.", ephemeral=True)
@@ -5040,9 +5102,12 @@ async def combat_action(
         cb.actions_used += 1
         _d.save_encounter(str(interaction.guild_id), enc)
         remaining = 2 - cb.actions_used
-        await interaction.response.send_message(
-            f"**{cb.name}** takes a **Simple Action** ({remaining} action{'s' if remaining != 1 else ''} remaining)."
+        embed = discord.Embed(
+            title=f"**{cb.name}**: Simple Action",
+            description=f"{remaining} action{'s' if remaining != 1 else ''} remaining ({cb.actions_used}/2).",
+            color=discord.Color.teal() if remaining > 0 else discord.Color.orange(),
         )
+        await interaction.response.send_message(embed=embed)
 
 
 # ---------------------------------------------------------------------------
