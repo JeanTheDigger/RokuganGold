@@ -3415,11 +3415,15 @@ class _FullCharacterApprovalView(_DisableableView):
             try:
                 member = await guild.fetch_member(self.applicant_id)
             except discord.NotFound:
-                await interaction.response.send_message("That member is no longer in the server.", ephemeral=True)
+                self._disable()
+                await interaction.response.edit_message(view=self)
+                await interaction.followup.send("That member is no longer in the server.", ephemeral=True)
                 return
         approved_role = discord.utils.get(guild.roles, name=ROLE_APPROVED)
         if approved_role is None:
-            await interaction.response.send_message(
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(
                 f"The **{ROLE_APPROVED}** role doesn't exist. Run `/setup server` first.",
                 ephemeral=True,
             )
@@ -3433,7 +3437,9 @@ class _FullCharacterApprovalView(_DisableableView):
         try:
             record = store.create_character(guild_id, owner_id, char)
         except storage.DuplicateNameError:
-            await interaction.response.send_message(
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(
                 f"A character named **{state['name']}** already exists for that player.",
                 ephemeral=True,
             )
@@ -5660,6 +5666,7 @@ async def void_refresh(
                 ),
                 inline=False,
             )
+        embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
         await interaction.response.send_message(embed=embed)
 
 @sheet_void.command(name="status", description="Show current Void Points for a character.")
@@ -6654,7 +6661,12 @@ async def room_invite(interaction: discord.Interaction, member: discord.Member) 
         await interaction.response.send_message("I can't add members to this thread.", ephemeral=True)
         return
     store.add_room_member(rec.id, str(member.id))
-    await interaction.response.send_message(f"➕ {member.mention} joined **{rec.name}**.")
+    embed = discord.Embed(
+        description=f"➕ {member.mention} joined **{rec.name}**.",
+        color=discord.Color.green(),
+    )
+    embed.set_footer(text=f"Added by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
 
 @room_group.command(name="kick", description="Remove a member from this room (run inside the room's thread).")
 @app_commands.describe(member="Who to remove.")
@@ -6676,7 +6688,12 @@ async def room_kick(interaction: discord.Interaction, member: discord.Member) ->
         await interaction.response.send_message("I can't remove members from this thread.", ephemeral=True)
         return
     store.remove_room_member(rec.id, str(member.id))
-    await interaction.response.send_message(f"➖ Removed {member.mention} from **{rec.name}**.")
+    embed = discord.Embed(
+        description=f"➖ Removed {member.mention} from **{rec.name}**.",
+        color=discord.Color.greyple(),
+    )
+    embed.set_footer(text=f"Removed by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
 
 @room_group.command(name="members", description="List who's in this room (run inside the room's thread).")
 async def room_members(interaction: discord.Interaction) -> None:
@@ -6731,7 +6748,12 @@ async def room_close(interaction: discord.Interaction) -> None:
         return
     store.clear_room_npcs(rec.id)
     store.close_room(rec.id)
-    await interaction.response.send_message(f"🏮 Room **{rec.name}** closed. Archiving the thread.")
+    embed = discord.Embed(
+        description=f"🏮 Room **{rec.name}** closed. Archiving the thread.",
+        color=discord.Color.greyple(),
+    )
+    embed.set_footer(text=f"Closed by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
     try:
         await interaction.channel.edit(archived=True, locked=True)
     except discord.Forbidden:
@@ -6762,11 +6784,11 @@ class CreatureAttackView(_DisableableView):
             return
         cre_rec = store.get_creature_by_id(self.creature_id)
         target_rec = store.get_by_id(self.target_char_id)
-        if cre_rec is None:
-            await interaction.response.send_message("The creature no longer exists.", ephemeral=True)
-            return
-        if target_rec is None:
-            await interaction.response.send_message("The target no longer exists.", ephemeral=True)
+        if cre_rec is None or target_rec is None:
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            who = "creature" if cre_rec is None else "target"
+            await interaction.followup.send(f"The {who} no longer exists.", ephemeral=True)
             return
         dmg = creature.creature_damage(cre_rec.creature, engine)
         applied = combat.apply_damage(target_rec.character, dmg["raw"], target_rec.character.armor_reduction)
@@ -6901,7 +6923,9 @@ class SpellDamageView(_DisableableView):
     async def _resolve(self, interaction: discord.Interaction, void_reduce: bool) -> None:
         rec = store.get_by_id(self.target_id)
         if rec is None:
-            await interaction.response.send_message("Target no longer exists.", ephemeral=True)
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send("Target no longer exists.", ephemeral=True)
             return
         applied = combat.apply_damage(rec.character, self.raw_damage, rec.character.armor_reduction)
         void_line = ""
@@ -7002,7 +7026,9 @@ class DmDamageView(_DisableableView):
             return
         rec = store.get_by_id(self.target_id)
         if rec is None:
-            await interaction.response.send_message("Target no longer exists.", ephemeral=True)
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send("Target no longer exists.", ephemeral=True)
             return
         applied = combat.apply_damage(rec.character, self.amount, rec.character.armor_reduction)
         store.save(rec, note="DM damage")
@@ -7141,7 +7167,9 @@ class DmHealView(_DisableableView):
             return
         rec = store.get_by_id(self.target_id)
         if rec is None:
-            await interaction.response.send_message("Target no longer exists.", ephemeral=True)
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send("Target no longer exists.", ephemeral=True)
             return
         c = rec.character
         if stats.is_dead(c):
@@ -7734,7 +7762,12 @@ async def category_create(interaction: discord.Interaction, name: app_commands.R
     except storage.DuplicateNameError:
         await interaction.response.send_message(f"Category **{name}** already exists.", ephemeral=True)
         return
-    await interaction.response.send_message(f"\U0001f4c1 Created category **{cat.name}**.")
+    embed = discord.Embed(
+        description=f"\U0001f4c1 Created category **{cat.name}**.",
+        color=discord.Color.dark_gold(),
+    )
+    embed.set_footer(text=f"Created by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
 
 @category_group.command(name="delete", description="Delete a category (members are NOT deleted). [Fortune]")
 @app_commands.describe(name="Category to delete.")
@@ -7770,7 +7803,12 @@ async def category_rename(
     except storage.DuplicateNameError:
         await interaction.response.send_message(f"Category **{new_name}** already exists.", ephemeral=True)
         return
-    await interaction.response.send_message(f"\U0001f4c1 Renamed **{cat.name}** → **{new_name.strip()}**.")
+    embed = discord.Embed(
+        description=f"\U0001f4c1 Renamed **{cat.name}** → **{new_name.strip()}**.",
+        color=discord.Color.dark_gold(),
+    )
+    embed.set_footer(text=f"Renamed by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
 
 @category_group.command(name="add", description="Add an NPC or creature to a category. [Fortune]")
 @app_commands.describe(
@@ -7807,9 +7845,12 @@ async def category_add(
             f"**{name}** is already in **{cat.name}**.", ephemeral=True,
         )
         return
-    await interaction.response.send_message(
-        f"\U0001f4c1 Added {kind.name} **{name}** to **{cat.name}**.",
+    embed = discord.Embed(
+        description=f"\U0001f4c1 Added {kind.name} **{name}** to **{cat.name}**.",
+        color=discord.Color.dark_gold(),
     )
+    embed.set_footer(text=f"Added by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
 
 @category_group.command(name="remove", description="Remove an NPC or creature from a category. [Fortune]")
 @app_commands.describe(
@@ -8494,7 +8535,12 @@ async def location_close(interaction: discord.Interaction) -> None:
         )
         return
     store.delete_location(loc.id)
-    await interaction.response.send_message(f"Closing location **{loc.name}**...")
+    embed = discord.Embed(
+        description=f"Closing location **{loc.name}**...",
+        color=discord.Color.greyple(),
+    )
+    embed.set_footer(text=f"Closed by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
     try:
         await interaction.channel.delete(reason=f"Location closed by {interaction.user}")
     except discord.Forbidden:
@@ -9278,9 +9324,11 @@ async def spell_cast(
             prompt_view = cog_combat.SpellConditionPromptView(
                 guild, interaction.channel_id, tgt_cb.name, interaction.user.id, s["name"], conds,
             )
-            embed.set_footer(text=f"This spell can impose: {cond_names}. Press a button to ask a DM to apply it to {tgt_cb.name}.")
+            embed.set_footer(text=f"This spell can impose: {cond_names}. Press a button to ask a DM to apply it to {tgt_cb.name}. Cast by {interaction.user.display_name}")
         else:
-            embed.set_footer(text=f"This spell can impose: {cond_names}. Cast with target: (a combatant here) for one-click requests, or use /fight condition.")
+            embed.set_footer(text=f"This spell can impose: {cond_names}. Cast with target: (a combatant here) for one-click requests, or use /fight condition. Cast by {interaction.user.display_name}")
+    else:
+        embed.set_footer(text=f"Cast by {interaction.user.display_name}")
     # discord.py's interaction response rejects view=None (only a real view or omitted).
     if prompt_view is not None:
         await interaction.response.send_message(embed=embed, view=prompt_view)
@@ -9918,7 +9966,9 @@ class MedicineTreatView(_DisableableView):
             return
         rec = store.get_by_id(self.target_id)
         if rec is None:
-            await interaction.response.send_message("Target no longer exists.", ephemeral=True)
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send("Target no longer exists.", ephemeral=True)
             return
         c = rec.character
         if stats.is_dead(c):

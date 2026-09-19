@@ -254,6 +254,7 @@ def _build_check_embed(
     fail_text: str = "❌ **Failure.**",
     adv_notes: list[str] | None = None,
     void_line: str = "",
+    footer: str = "",
 ) -> discord.Embed:
     success = result["success"]
     embed = discord.Embed(
@@ -278,6 +279,8 @@ def _build_check_embed(
     )
     if adv_notes:
         embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
+    if footer:
+        embed.set_footer(text=footer)
     return embed
 
 
@@ -442,6 +445,7 @@ async def contest(
     if adv_notes_b:
         embed.add_field(name=f"{cb.name} Adv/Disadv", value="\n".join(adv_notes_b), inline=False)
     embed.add_field(name="Result", value=verdict, inline=False)
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -542,6 +546,7 @@ async def fear_check(
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -600,6 +605,7 @@ async def honor_roll(
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -673,6 +679,7 @@ async def poison_resist(
     )
     if adv_notes:
         embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -762,6 +769,7 @@ async def medicine_check(
     )
     if adv_notes:
         embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -838,7 +846,7 @@ async def skill_check_cmd(
     title = "\U0001f3af Skill Check" + (" \U0001f92b" if secret else "")
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
+    embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
     if not secret:
         _d.log_roll(interaction.channel_id, c.name, f"{skill}/{trait.name} vs TN {tn}", result["total"])
     await interaction.response.send_message(embed=embed, ephemeral=secret)
@@ -978,6 +986,7 @@ async def check_cooperative(
         embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
     if void_spent:
         _d.store.save(rec)
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -1052,6 +1061,7 @@ async def stealth_check(
         fail_text="❌ **Spotted!**",
         adv_notes=adv_notes,
         void_line=void_line,
+        footer=f"Rolled by {interaction.user.display_name}",
     )
     await interaction.response.send_message(embed=embed, ephemeral=secret)
 
@@ -1127,11 +1137,14 @@ async def investigate_check(
         title += f" ({emp_name})"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, "Perception", result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
+    roller = f"Rolled by {interaction.user.display_name}"
     if has_emphasis:
-        embed.set_footer(text=f"Has {emp_name} emphasis: Reroll 1s once (DM adjudicates).")
+        footer = f"Has {emp_name} emphasis: Reroll 1s once (DM adjudicates). {roller}"
     elif emp_name:
-        embed.set_footer(text=f"No {emp_name} emphasis on sheet.")
+        footer = f"No {emp_name} emphasis on sheet. {roller}"
+    else:
+        footer = roller
+    embed = _build_check_embed(title, c.name, skill_label, "Perception", result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=footer)
     await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 
@@ -1206,7 +1219,7 @@ async def social_check(
     title = "🗣️ Social Check"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, trait_display, result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
+    embed = _build_check_embed(title, c.name, skill_label, trait_display, result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -1275,7 +1288,7 @@ async def craft_check(
     title = "🔨 Craft Check"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
+    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -1344,7 +1357,7 @@ async def lore_check(
     title = "📚 Lore Check"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes, void_line=void_line)
+    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -1408,5 +1421,6 @@ async def horsemanship_check(
         reason or "Horsemanship Check", c.name, "Horsemanship", "Agility", result, wp, bonus,
         success_text="Maneuver succeeds!", fail_text="The rider falters!",
         adv_notes=adv_notes, void_line=void_line,
+        footer=f"Rolled by {interaction.user.display_name}",
     )
     await interaction.response.send_message(embed=embed)

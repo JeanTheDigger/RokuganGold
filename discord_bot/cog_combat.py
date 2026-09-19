@@ -322,11 +322,11 @@ class DamageView(views_base.PersistentView):
         if self.target_creature_id is not None:
             attacker_rec = _d.store.get_by_id(self.attacker_id)
             cre_rec = _d.store.get_creature_by_id(self.target_creature_id)
-            if cre_rec is None:
-                await interaction.response.send_message("The creature no longer exists.", ephemeral=True)
-                return
-            if attacker_rec is None:
-                await interaction.response.send_message("The attacker no longer exists.", ephemeral=True)
+            if cre_rec is None or attacker_rec is None:
+                self._disable()
+                await interaction.response.edit_message(view=self)
+                who = "creature" if cre_rec is None else "attacker"
+                await interaction.followup.send(f"The {who} no longer exists.", ephemeral=True)
                 return
             attacker = attacker_rec.character
             wp = combat.get_weapon_profile(self.weapon)
@@ -506,11 +506,11 @@ class DamageView(views_base.PersistentView):
 
         attacker_rec = _d.store.get_by_id(self.attacker_id)
         target_rec = _d.store.get_by_id(self.target_id)
-        if target_rec is None:
-            await interaction.response.send_message("The target no longer exists.", ephemeral=True)
-            return
-        if attacker_rec is None:
-            await interaction.response.send_message("The attacker no longer exists.", ephemeral=True)
+        if target_rec is None or attacker_rec is None:
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            who = "target" if target_rec is None else "attacker"
+            await interaction.followup.send(f"The {who} no longer exists.", ephemeral=True)
             return
         attacker = attacker_rec.character
         target = target_rec.character
@@ -2242,7 +2242,13 @@ async def combat_roster_remove(interaction: discord.Interaction, member: discord
     del enc.roster[uid]
     _d.save_encounter(str(interaction.guild_id), enc)
     await _refresh_roster_message(enc)
-    await interaction.response.send_message(f"{member.display_name} taken off the roster.")
+    embed = discord.Embed(
+        title="🛡️ Roster updated",
+        description=f"**{member.display_name}** taken off the roster.",
+        color=discord.Color.greyple(),
+    )
+    embed.set_footer(text=f"Removed by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
 
 
 @combat_roster.command(name="close", description="Close a roster that has not begun (organizer or staff).")
@@ -2260,7 +2266,12 @@ async def combat_roster_close(interaction: discord.Interaction) -> None:
     await _close_roster_message(enc, str(interaction.guild_id))
     _d.encounters.pop(interaction.channel_id, None)
     _d.delete_encounter(interaction.channel_id)
-    await interaction.response.send_message("🛡️ Encounter roster closed.")
+    embed = discord.Embed(
+        title="🛡️ Encounter roster closed",
+        color=discord.Color.greyple(),
+    )
+    embed.set_footer(text=f"Closed by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
     await _d.combat_log(str(interaction.guild_id), f"--- Encounter roster closed by {interaction.user.display_name} ---")
 
 
@@ -5356,7 +5367,7 @@ async def combat_env_damage(
     embed = discord.Embed(
         title=title,
         color=discord.Color.dark_red(),
-        description="\n".join(results),
+        description="\n".join(results)[:4000],
     )
     if not_found:
         embed.add_field(name="Not found", value=", ".join(not_found), inline=False)
