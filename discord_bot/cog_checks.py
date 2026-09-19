@@ -167,7 +167,7 @@ def _fear(interaction: discord.Interaction, c, adv_r: int, adv_notes: list[str])
     """Apply a tracked failed-Fear penalty (GDD s46: -Xk0 to all rolls) to a check's rolled dice."""
     fr = _d.fear_penalty(interaction.channel_id, c.name)
     if fr:
-        return adv_r - fr, adv_notes + [f"Fear: -{fr}k0 (failed Fear check)"]
+        return max(0, adv_r - fr), adv_notes + [f"Fear: -{fr}k0 (failed Fear check)"]
     return adv_r, adv_notes
 
 

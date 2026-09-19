@@ -33,11 +33,14 @@ class _Deps:
     encounters: dict[int, Encounter]
     require_guild: ...
     require_dm_role: ...
+    is_dm: ...
     find_any_character: ...
     paginate: ...
     PaginatorView: type
     ELEMENT_COLORS: dict[str, discord.Color]
     NPC_OWNER: str
+    ROLE_FORTUNE: str
+    ROLE_KAMI: str
 
 
 _d = _Deps()
@@ -49,11 +52,14 @@ def init(
     encounters: dict,
     require_guild,
     require_dm_role,
+    is_dm,
     find_any_character,
     paginate,
     PaginatorView,
     element_colors: dict,
     npc_owner: str,
+    role_fortune: str,
+    role_kami: str,
     weapon_autocomplete,
     armor_autocomplete,
     school_autocomplete,
@@ -65,7 +71,10 @@ def init(
     _d.encounters = encounters
     _d.require_guild = require_guild
     _d.require_dm_role = require_dm_role
+    _d.is_dm = is_dm
     _d.find_any_character = find_any_character
+    _d.ROLE_FORTUNE = role_fortune
+    _d.ROLE_KAMI = role_kami
     _d.paginate = paginate
     _d.PaginatorView = PaginatorView
     _d.ELEMENT_COLORS = element_colors
@@ -132,7 +141,10 @@ def build_school_embed(s: dict) -> discord.Embed:
     for t in s["techniques"][:12]:
         rank_label = f"Rank {t['rank']}" if t["rank"] else "Technique"
         title = f"{rank_label}: {t['name']}" if t["name"] else rank_label
-        embed.add_field(name=title[:256], value=t["effect"][:1024], inline=False)
+        effect = t["effect"]
+        if len(effect) > 1024:
+            effect = effect[:1021] + "..."
+        embed.add_field(name=title[:256], value=effect, inline=False)
     return embed
 
 

@@ -470,16 +470,15 @@ class DamageView(views_base.PersistentView):
                 title="⚔️ Damage applied",
                 color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
             )
-            embed.add_field(
-                name="Damage",
-                value=(
-                    f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                    f"{_d.format_dice(dmg['dice'])}{feint_line}{kata_line}{cre_cs_line}{mat_line}\n"
-                    f"Raw **{raw}** − reduction {applied['reduction']} = "
-                    f"**{applied['final_damage']}** wounds{special_line}{break_line}"
-                ),
-                inline=False,
+            dmg_text = (
+                f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+                f"{_d.format_dice(dmg['dice'])}{feint_line}{kata_line}{cre_cs_line}{mat_line}\n"
+                f"Raw **{raw}** − reduction {applied['reduction']} = "
+                f"**{applied['final_damage']}** wounds{special_line}{break_line}"
             )
+            if len(dmg_text) > 1024:
+                dmg_text = dmg_text[:1021] + "..."
+            embed.add_field(name="Damage", value=dmg_text, inline=False)
             if applied["level_changed"]:
                 status = (
                     f"{self.target_name}: {applied['old_wound_level']} → "
@@ -779,16 +778,15 @@ class DamageView(views_base.PersistentView):
             color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
         )
         armor_label = f" ({target.armor_name.replace('_', ' ').title()})" if target.armor_name else ""
-        embed.add_field(
-            name="Damage",
-            value=(
-                f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
-                f"{_d.format_dice(dmg['dice'])}{feint_line}{kata_line}{called_shot_line}\n"
-                f"Raw **{raw}** − reduction {applied['reduction']}{armor_label} = "
-                f"**{applied['final_damage']}** wounds{void_line}{break_line}"
-            ),
-            inline=False,
+        dmg_text = (
+            f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+            f"{_d.format_dice(dmg['dice'])}{feint_line}{kata_line}{called_shot_line}\n"
+            f"Raw **{raw}** − reduction {applied['reduction']}{armor_label} = "
+            f"**{applied['final_damage']}** wounds{void_line}{break_line}"
         )
+        if len(dmg_text) > 1024:
+            dmg_text = dmg_text[:1021] + "..."
+        embed.add_field(name="Damage", value=dmg_text, inline=False)
         embed.add_field(name="Result", value=self._wound_status(target_rec, applied) + heal_line + phoenix_line + knockdown_line, inline=False)
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
@@ -4277,10 +4275,16 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
             ))
             added.append(rec_c.creature.name)
     _d.save_encounter(guild, enc)
-    parts = [_render_encounter(enc, guild)]
+    desc = f"Added {len(added)} creature(s) to initiative." if added else "No creatures added."
     if not_found:
-        parts.append(f"Not found (skipped): {', '.join(not_found)}")
-    await interaction.response.send_message("\n".join(parts))
+        desc += f"\nNot found (skipped): {', '.join(not_found)}"
+    embed = discord.Embed(
+        title="⚔️ Category Join",
+        color=discord.Color.green() if added else discord.Color.greyple(),
+        description=desc[:4096],
+    )
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
 
 
 @combat_group.command(
@@ -4327,15 +4331,20 @@ async def combat_room(interaction: discord.Interaction) -> None:
         ))
         added.append(f"**{char_rec.character.name}** (init {init_total})")
     _d.save_encounter(guild, enc)
-    parts = []
+    desc_parts: list[str] = []
     if added:
-        parts.append("Added: " + ", ".join(added))
+        desc_parts.append("Added: " + ", ".join(added))
     if skipped:
-        parts.append("Skipped (no active character): " + ", ".join(skipped))
+        desc_parts.append("Skipped (no active character): " + ", ".join(skipped))
     if not added and not skipped:
-        parts.append("No members in this room.")
-    parts.append(_render_encounter(enc, guild))
-    await interaction.response.send_message("\n".join(parts))
+        desc_parts.append("No members in this room.")
+    embed = discord.Embed(
+        title="⚔️ Room Join",
+        color=discord.Color.green() if added else discord.Color.greyple(),
+        description="\n".join(desc_parts)[:4096],
+    )
+    embed.set_footer(text=f"Set by {interaction.user.display_name}")
+    await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
     for entry in added:
         await _d.combat_log(guild, f"Room join: {entry}")
 
@@ -4700,18 +4709,25 @@ async def combat_turn_done(
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
-    parts = [f"**{ended_name}**'s turn is done."]
-    parts.append(f"➡️ {mention}It is now **{next_cb.name}**'s turn.")
-    parts.extend(_expiry_notes(enc))
+    desc_parts: list[str] = [f"**{ended_name}**'s turn is done."]
+    expiry = _expiry_notes(enc)
+    if expiry:
+        desc_parts.extend(expiry)
     if next_cb.center_bonus_available:
         rec = _d.resolve_combatant_record(guild, next_cb)
         vr = rec.character.void_ring if rec else "?"
-        parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
+        desc_parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
     reminders = condition_effects.condition_reminders(next_cb.conditions)
     if reminders:
-        parts.append("\n".join(reminders))
-    parts.append(_render_encounter(enc, guild))
-    await interaction.response.send_message("\n\n".join(parts))
+        desc_parts.append("\n".join(reminders))
+    embed = discord.Embed(
+        title=f"➡️ {next_cb.name}'s Turn",
+        color=discord.Color.green(),
+        description="\n".join(desc_parts),
+    )
+    embed.set_footer(text=f"Round {enc.round}")
+    tracker = _render_encounter(enc, guild)
+    await interaction.response.send_message(content=f"{mention}{tracker}", embed=embed)
     if enc.round != prev_round:
         await _d.combat_log(guild, f"--- Round {enc.round} ---")
     await _d.combat_log(guild, f"Turn done: {ended_name}")
