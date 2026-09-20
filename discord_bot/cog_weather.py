@@ -404,14 +404,6 @@ def _weather_embed(
     return embed
 
 
-def _brief_weather_embed(
-    cloud: str, precip: str, wind: str, temp: str,
-) -> discord.Embed:
-    flavor = _build_flavor(cloud, precip, wind, temp)
-    color = TEMP_COLORS.get(temp, discord.Color.dark_gold())
-    return discord.Embed(description=flavor, color=color)
-
-
 # ---------------------------------------------------------------------------
 # Command group
 # ---------------------------------------------------------------------------
@@ -547,9 +539,6 @@ async def weather_set(
     await _update_weather_display(
         interaction.guild, new_cloud, new_precip, new_wind, new_temp, date_str,
     )
-    await _post_weather_to_locations(
-        interaction.guild, new_cloud, new_precip, new_wind, new_temp,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -667,25 +656,6 @@ async def _update_weather_display(
     _d.store.set_weather_channel(guild_id, channel_id, str(new_msg.id))
 
 
-async def _post_weather_to_locations(
-    guild: discord.Guild,
-    cloud: str, precip: str, wind: str, temp: str,
-) -> None:
-    guild_id = str(guild.id)
-    embed = _brief_weather_embed(cloud, precip, wind, temp)
-
-    areas = _d.store.list_location_areas(guild_id)
-    for area in areas:
-        cat = guild.get_channel(int(area.category_id))
-        if cat is None or not isinstance(cat, discord.CategoryChannel):
-            continue
-        for ch in cat.text_channels:
-            if ch.name == "description":
-                continue
-            try:
-                await ch.send(embed=embed)
-            except discord.Forbidden:
-                pass
 
 
 # ---------------------------------------------------------------------------
@@ -715,4 +685,3 @@ async def on_day_advanced(
 
     date_str = f"Day {day}, Month of the {month_name} ({season}) - Year {_year}"
     await _update_weather_display(guild, cloud, precip, wind, temp, date_str)
-    await _post_weather_to_locations(guild, cloud, precip, wind, temp)

@@ -11452,7 +11452,9 @@ async def _setup_server_inner(
     else:
         weather_ch = discord.utils.get(icinfo_cat.text_channels, name="weather")
     if weather_ch:
-        store.set_weather_channel(str(guild.id), str(weather_ch.id))
+        existing_wc = store.get_weather_channel(str(guild.id))
+        if existing_wc is None or existing_wc[0] != str(weather_ch.id):
+            store.set_weather_channel(str(guild.id), str(weather_ch.id))
 
     # --- 3c. Public Notices channel (rumor board) in IC Information ---
     if "public-notices" not in existing_names:
