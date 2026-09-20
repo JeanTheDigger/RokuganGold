@@ -2845,6 +2845,7 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         marker = "▶️ " if (enc.started and c is cur) else f"{i + 1}. "
         tag = " *(NPC)*" if c.is_npc else ""
         wound_tag = ""
+        spell_tag = ""
         if guild_id:
             rec = _d.resolve_combatant_record(guild_id, c)
             if rec is not None:
@@ -2852,6 +2853,17 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
                 if pen:
                     lvl = stats.wound_level_name(rec.character)
                     wound_tag = f"  ⚠️{lvl}({pen})"
+                ch_rec = rec.character
+                if ch_rec.spell_slots:
+                    parts: list[str] = []
+                    for el in _CAST_ELEMENTS:
+                        sl = ch_rec.spell_slots.get(el)
+                        if sl is not None:
+                            mx = stats.spell_slot_max(ch_rec, el)
+                            parts.append(f"{el[0].upper()}{sl}/{mx}")
+                    if parts:
+                        bonus = f"+{ch_rec.void_spell_bonus}V" if ch_rec.void_spell_bonus else ""
+                        spell_tag = f"  **S**: {' '.join(parts)}{bonus}"
         detail = f"  ·  {c.initiative_detail}" if c.initiative_detail else ""
         stance_str = f"  ⚔️{c.stance.replace('_', ' ').title()}" if c.stance != "attack" else ""
         acts = f"  [{c.actions_used}/2 acts]" if enc.started and c.actions_used > 0 else ""
@@ -2874,7 +2886,7 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
             tech_names = [e.get("display", k) for k, e in c.declared_techniques.items()]
             techs = "  **T**: " + ", ".join(tech_names)
         init_val = c.effective_initiative
-        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: Init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{fear}{held}{delayed}{techs}")
+        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: Init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{fear}{held}{delayed}{techs}{spell_tag}")
     header = f"⚔️ **Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
