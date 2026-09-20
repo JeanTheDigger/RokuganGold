@@ -275,17 +275,17 @@ class _SaveView(discord.ui.View):
             char.wounds_taken = rec.character.wounds_taken  # editing stats never heals
             rec.character = char
             _d.store.save(rec, note="npc edit wizard")
-            lines.append(f"🎭 Updated NPC **{char.name}**.")
+            lines.append(f"Updated NPC **{char.name}**.")
         elif as_npc:
             rec, err = _save_npc(guild_id, char)
             if err:
                 await interaction.response.send_message(err, ephemeral=True)
                 return
-            lines.append(f"🎭 Saved NPC **{char.name}**.")
+            lines.append(f"Saved NPC **{char.name}**.")
         if as_template:
             replaced = _save_template(guild_id, char.name, char, str(interaction.user.id))
             lines.append(
-                f"📋 {'Replaced' if replaced else 'Saved'} template **{char.name}**: Spawn copies with "
+                f"{'Replaced' if replaced else 'Saved'} template **{char.name}**: Spawn copies with "
                 f"`/npc template spawn template:{char.name}`."
             )
         self._done = True
@@ -296,12 +296,12 @@ class _SaveView(discord.ui.View):
             lines.append(f"View it with `/npc view name:{char.name}`; tweak with `/npc-edit`.")
         await interaction.response.edit_message(content="\n".join(lines), embed=None, view=self)
 
-    @discord.ui.button(label="Save NPC", style=discord.ButtonStyle.success, emoji="🎭")
+    @discord.ui.button(label="Save NPC", style=discord.ButtonStyle.success)
     async def save_npc(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         """Creates the NPC, or overwrites it when the wizard was opened with /npc edit."""
         await self._finish(interaction, True, False)
 
-    @discord.ui.button(label="Save as template", style=discord.ButtonStyle.primary, emoji="📋")
+    @discord.ui.button(label="Save as template", style=discord.ButtonStyle.primary)
     async def save_template(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._finish(interaction, False, True)
 
@@ -524,14 +524,14 @@ class NpcWizard(discord.ui.View):
             self.add_item(_Pick("Category...", [_opt(c, default=c == st[cat_key]) for c in cats], self._on_adv_cat, 0))
             if st[cat_key]:
                 chosen = st[key]
-                opts = [_opt(("✓ " if a["name"] in chosen else "") + a["name"], a["name"], description=a.get("cost_text") or None)
+                opts = [_opt(("[+] " if a["name"] in chosen else "") + a["name"], a["name"], description=a.get("cost_text") or None)
                         for a in advantages.by_kind(kind) if a.get("category") == st[cat_key]]
                 self.add_item(_Pick(f"{kind.capitalize()}...", opts, self._on_adv, 1))
         elif key == "gear":
             groups = sorted({w["skill"] for w in combat.WEAPON_CATALOG.values()})
             self.add_item(_Pick("Weapon group...", [_opt(g, default=g == st["weapon_group"]) for g in groups], self._on_weapon_group, 0))
             if st["weapon_group"]:
-                opts = [_opt(("✓ " if k == st["weapon"] else "") + k.replace("_", " "), k, description=f"DR {w['rolled']}k{w['kept']}")
+                opts = [_opt(("[+] " if k == st["weapon"] else "") + k.replace("_", " "), k, description=f"DR {w['rolled']}k{w['kept']}")
                         for k, w in combat.WEAPON_CATALOG.items() if w["skill"] == st["weapon_group"]]
                 self.add_item(_Pick("Weapon in hand...", opts, self._on_weapon, 1))
                 self.add_item(_Pick("Off-hand (optional)...", [_opt("(none)", "")] + opts, self._on_off_hand, 2))
@@ -884,7 +884,7 @@ class _FormModal(discord.ui.Modal, title="NPC stat block"):
             return
         content = f"**{name}**: Check the sheet, then save."
         if warnings:
-            content += "\n⚠️ " + "\n⚠️ ".join(warnings)
+            content += "\n" + "\n".join(warnings)
         view = _SaveView(state)
         await interaction.response.send_message(content=content[:2000], embed=_d.build_sheet_embed(preview_record(state)),
                                                 view=view, ephemeral=True)
@@ -954,7 +954,7 @@ async def template_save(interaction: discord.Interaction, name: str, template: a
     tname = (template or rec.character.name).strip()
     replaced = _save_template(guild_id, tname, rec.character, str(interaction.user.id))
     await interaction.response.send_message(
-        f"📋 {'Replaced' if replaced else 'Saved'} template **{tname}** from **{rec.character.name}**. "
+        f"{'Replaced' if replaced else 'Saved'} template **{tname}** from **{rec.character.name}**. "
         f"Spawn copies with `/npc template spawn template:{tname}`.",
         ephemeral=True,
     )
@@ -995,7 +995,7 @@ async def template_spawn(interaction: discord.Interaction, template: str,
         await interaction.response.send_message(
             f"Nothing spawned: {', '.join(f'**{n}**' for n in skipped)} already exist.", ephemeral=True)
         return
-    text = f"🎭 Spawned from **{tname}**: " + ", ".join(f"**{r.character.name}**" for r in made) + "."
+    text = f"Spawned from **{tname}**: " + ", ".join(f"**{r.character.name}**" for r in made) + "."
     if skipped:
         text += f" Skipped (name taken): {', '.join(skipped)}."
     await interaction.response.send_message(text, embed=_d.build_sheet_embed(made[0]))
@@ -1015,7 +1015,7 @@ async def template_list(interaction: discord.Interaction) -> None:
     for n, data in rows:
         c = Character.from_dict(data)
         lines.append(f"• **{n}**: {c.clan or ' '} {c.school or c.school_type} (Rank {c.school_rank})")
-    await interaction.response.send_message("📋 **NPC templates:**\n" + "\n".join(lines[:50]), ephemeral=True)
+    await interaction.response.send_message("**NPC templates:**\n" + "\n".join(lines[:50]), ephemeral=True)
 
 
 @template_group.command(name="view", description="Show a template's sheet.")
@@ -1030,7 +1030,7 @@ async def template_view(interaction: discord.Interaction, template: str) -> None
         return
     tname, data = row
     rec = storage.CharacterRecord(0, str(interaction.guild_id), _d.npc_owner, Character.from_dict(data))
-    await interaction.response.send_message(f"📋 Template **{tname}**", embed=_d.build_sheet_embed(rec), ephemeral=True)
+    await interaction.response.send_message(f"Template **{tname}**", embed=_d.build_sheet_embed(rec), ephemeral=True)
 
 
 @template_group.command(name="delete", description="Delete an NPC template (spawned NPCs are unaffected). [Fortune]")
@@ -1044,7 +1044,7 @@ async def template_delete(interaction: discord.Interaction, template: str) -> No
     if not _d.store.delete_npc_template(str(interaction.guild_id), template):
         await interaction.response.send_message(f"No template named **{template}**.", ephemeral=True)
         return
-    await interaction.response.send_message(f"🗑️ Deleted template **{template}**.", ephemeral=True)
+    await interaction.response.send_message(f"Deleted template **{template}**.", ephemeral=True)
 
 
 def init(*, store, npc_owner: str, require_guild, require_dm_role, is_dm, build_sheet_embed,

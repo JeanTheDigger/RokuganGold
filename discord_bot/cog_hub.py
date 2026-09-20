@@ -64,7 +64,7 @@ class _VoidReasonModal(discord.ui.Modal, title="Spend a Void Point"):
         _d.store.save(rec)
         await self.hub.refresh(interaction)
         await interaction.followup.send(
-            f"🌀 **{c.name}** spends a Void Point: {self.reason.value.strip()}\n"
+            f"**{c.name}** spends a Void Point: {self.reason.value.strip()}\n"
             f"  VP remaining: **{c.current_void_points}/{c.max_void_points}**")
 
 
@@ -105,11 +105,11 @@ class CharacterHub(discord.ui.View):
         self.clear_items()
         c = self.rec.character
         for label, style, cb, emoji in (
-            ("Full sheet", discord.ButtonStyle.primary, self._on_sheet, "📜"),
-            ("Inventory", discord.ButtonStyle.primary, self._on_inventory, "🎒"),
-            ("Spend Void", discord.ButtonStyle.secondary, self._on_void, "🌀"),
+            ("Full sheet", discord.ButtonStyle.primary, self._on_sheet, None),
+            ("Inventory", discord.ButtonStyle.primary, self._on_inventory, None),
+            ("Spend Void", discord.ButtonStyle.secondary, self._on_void, None),
             ("Rest: Refresh Void", discord.ButtonStyle.secondary, self._on_rest, None),
-            ("Fight status", discord.ButtonStyle.secondary, self._on_fight, "⚔️"),
+            ("Fight status", discord.ButtonStyle.secondary, self._on_fight, None),
         ):
             b = discord.ui.Button(label=label, style=style, row=0, emoji=emoji)
             b.callback = cb
@@ -120,7 +120,7 @@ class CharacterHub(discord.ui.View):
                 discord.SelectOption(label=k[:100], value=k[:100], default=k == c.active_kata) for k in c.katas]
             self.add_item(_Pick("Active Kata...", opts, self._on_kata, row)); row += 1
         if c.kiho:
-            opts = [discord.SelectOption(label=(("✓ " if k in c.active_kiho else "") + k)[:100], value=k[:100],
+            opts = [discord.SelectOption(label=(("[+] " if k in c.active_kiho else "") + k)[:100], value=k[:100],
                                          description="active: Pick to end" if k in c.active_kiho else None) for k in c.kiho]
             self.add_item(_Pick("Kiho: Pick to activate, pick again to end...", opts, self._on_kiho, row)); row += 1
         if c.tattoos:
@@ -168,7 +168,7 @@ class CharacterHub(discord.ui.View):
         cap_note = f" (Taint Rank {taint.taint_rank(c)}: Max VP -1)" if cap < c.max_void_points else ""
         await self.refresh(interaction)
         await interaction.followup.send(
-            f"🌀 **{c.name}** rests and recovers all Void Points.\n  VP: {old} → **{c.current_void_points}/{cap}**{cap_note}")
+            f"**{c.name}** rests and recovers all Void Points.\n  VP: {old} → **{c.current_void_points}/{cap}**{cap_note}")
 
     async def _apply(self, interaction: discord.Interaction, ok: bool, msg: str) -> None:
         if not ok:
@@ -214,7 +214,7 @@ class CharacterHub(discord.ui.View):
         label = t["name"] if t else key.title()
         c.active_tattoo, c.bear_tattoo_choice, c.lion_tattoo_skill = label, "", ""
         effect = f"\n> {t['effect']}" if t else ""
-        await self._apply(interaction, True, f"🐉 **{c.name}** activates the **{label}** tattoo.{effect}")
+        await self._apply(interaction, True, f"**{c.name}** activates the **{label}** tattoo.{effect}")
 
     async def _on_refresh(self, interaction: discord.Interaction) -> None:
         await self.refresh(interaction)

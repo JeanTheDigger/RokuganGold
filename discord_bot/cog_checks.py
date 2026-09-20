@@ -138,28 +138,28 @@ def _try_spend_void(
     if spend_void:
         ok, reason = advantage_effects.can_spend_void_on_roll(c, skill_name=skill_name) if skill_name else advantage_effects.can_spend_void_on_roll(c)
         if not ok:
-            void_line = f"\U0001f300 {reason}"
+            void_line = f"Void: {reason}"
         elif c.current_void_points <= 0:
-            void_line = f"\U0001f300 no Void Points to spend (0/{c.max_void_points})"
+            void_line = f"Void: No Void Points to spend (0/{c.max_void_points})"
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
             void_spent = True
-            void_line = f"\U0001f300 Void +1k1 ({c.current_void_points} VP left)"
+            void_line = f"Void +1k1 ({c.current_void_points} VP left)"
     if void_unskilled and not spend_void:
         if sk > 0:
-            void_line = f"\U0001f300 Already has {skill_name} {sk} - use {void_param_label} for +1k1 instead"
+            void_line = f"Void: Already has {skill_name} {sk} - use {void_param_label} for +1k1 instead"
         else:
             ok, reason = advantage_effects.can_spend_void_on_roll(c, skill_name=skill_name)
             if not ok:
-                void_line = f"\U0001f300 {reason}"
+                void_line = f"Void: {reason}"
             elif c.current_void_points <= 0:
-                void_line = f"\U0001f300 no Void Points to spend (0/{c.max_void_points})"
+                void_line = f"Void: No Void Points to spend (0/{c.max_void_points})"
             else:
                 c.current_void_points -= 1
                 sk = 1
                 void_spent = True
-                void_line = f"\U0001f300 Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
+                void_line = f"Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
     return void_r, void_k, void_spent, void_line, sk
 
 
@@ -250,8 +250,8 @@ def _build_check_embed(
     result: dict,
     wp: int,
     bonus: int,
-    success_text: str = "✅ **Success!**",
-    fail_text: str = "❌ **Failure.**",
+    success_text: str = "**Success!**",
+    fail_text: str = "**Failure.**",
     adv_notes: list[str] | None = None,
     void_line: str = "",
     footer: str = "",
@@ -405,7 +405,7 @@ async def contest(
         _d.store.save(rec_a)
     if void_spent_b:
         _d.store.save(rec_b)
-    title = "🎯 Contested Check"
+    title = "Contested Check"
     if reason:
         title += f": {reason}"
     if result["winner"] == "a":
@@ -494,7 +494,7 @@ async def fear_check(
     if clear:
         cleared = _d.set_fear_penalty(guild, interaction.channel_id, c.name, 0)
         await interaction.response.send_message(
-            f"😌 Fear penalty cleared for **{c.name}**." if cleared
+            f"Fear penalty cleared for **{c.name}**." if cleared
             else f"**{c.name}** is not in this channel's encounter; nothing to clear.",
         )
         return
@@ -518,7 +518,7 @@ async def fear_check(
     if not success:
         tracked = _d.set_fear_penalty(guild, interaction.channel_id, c.name, fear_rank)
     embed = discord.Embed(
-        title=f"😨 Fear Check: {c.name}",
+        title=f"Fear Check: {c.name}",
         color=discord.Color.green() if success else discord.Color.dark_red(),
     )
     wp_str = f" {wp}" if wp else ""
@@ -535,12 +535,12 @@ async def fear_check(
     embed.add_field(name="Roll", value=roll_text, inline=False)
     embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
     if success:
-        verdict = "✅ **Resists the Fear!**"
+        verdict = "**Resists the Fear!**"
     else:
-        verdict = f"❌ **Fails!** -{fear_rank}k0 to all rolls until the encounter ends"
+        verdict = f"**Fails!** -{fear_rank}k0 to all rolls until the encounter ends"
         verdict += " (tracked on the initiative list)." if tracked else " (not in an encounter here: DM tracks it)."
         if result["margin"] <= -15:
-            verdict += "\n💥 **Catastrophic failure (15+):** overwhelmed - flees or cowers helplessly (GM's determination)."
+            verdict += "\n**Catastrophic failure (15+):** overwhelmed - flees or cowers helplessly (GM's determination)."
     embed.add_field(
         name="Result",
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
@@ -586,7 +586,7 @@ async def honor_roll(
     result = combat.resolve_honor_roll(hr, tn, _d.engine, bonus=bonus)
     success = result["success"]
     embed = discord.Embed(
-        title=f"⚖️ Honor Roll: {c.name}",
+        title=f"Honor Roll: {c.name}",
         color=discord.Color.gold() if success else discord.Color.red(),
     )
     bonus_str = f" {bonus:+d}" if bonus else ""
@@ -599,7 +599,7 @@ async def honor_roll(
         inline=False,
     )
     embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
-    verdict = "✅ **Honor holds!**" if success else "❌ **Honor wavers.**"
+    verdict = "**Honor holds!**" if success else "**Honor wavers.**"
     embed.add_field(
         name="Result",
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
@@ -654,7 +654,7 @@ async def poison_resist(
         _d.store.save(rec)
     success = result["success"]
     tn = result["tn"]
-    title = f"☠️ Poison Resistance: {c.name}"
+    title = f"Poison Resistance: {c.name}"
     if poison_name:
         title += f" vs {poison_name}"
     embed = discord.Embed(
@@ -671,7 +671,7 @@ async def poison_resist(
         roll_text += f"\n{void_line}"
     embed.add_field(name="Roll", value=roll_text, inline=False)
     embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
-    verdict = "✅ **Resists the poison!**" if success else "❌ **Succumbs!** Apply poison effects."
+    verdict = "**Resists the poison!**" if success else "**Succumbs!** Apply poison effects."
     embed.add_field(
         name="Result",
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
@@ -743,7 +743,7 @@ async def medicine_check(
     if void_spent:
         _d.store.save(rec)
     success = result["success"]
-    title = "💊 Medicine Check"
+    title = "Medicine Check"
     if reason:
         title += f": {reason}"
     embed = discord.Embed(
@@ -761,7 +761,7 @@ async def medicine_check(
         roll_text += f"\n{void_line}"
     embed.add_field(name="Roll", value=roll_text, inline=False)
     embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
-    verdict = "✅ **Treatment successful!**" if success else "❌ **Treatment fails.**"
+    verdict = "**Treatment successful!**" if success else "**Treatment fails.**"
     embed.add_field(
         name="Result",
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
@@ -843,7 +843,7 @@ async def skill_check_cmd(
     if void_spent:
         _d.store.save(rec)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
-    title = "\U0001f3af Skill Check" + (" \U0001f92b" if secret else "")
+    title = "Skill Check" + (" (secret)" if secret else "")
     if reason:
         title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
@@ -921,14 +921,14 @@ async def check_cooperative(
         if hrec is None:
             hrec = _d.store.get_by_name(guild, _d.NPC_OWNER, hname)
         if hrec is None:
-            helper_lines.append(f"❌ **{hname}**: Not found")
+            helper_lines.append(f"**{hname}**: Not found Not found")
             continue
         hc = hrec.character
         htv = stats.trait_value(hc, trait.value)
         hsk = hc.skills.get(skill, 0)
         hwp = stats.wound_penalty(hc)
         hresult = combat.resolve_skill_check(htv, hsk, helper_tn, _d.engine, bonus=hwp)
-        mark = "✅" if hresult["success"] else "❌"
+        mark = "[+]" if hresult["success"] else "[-]"
         helper_lines.append(
             f"{mark} **{hc.name}** rolled **{hresult['total']}** vs TN {helper_tn} "
             f"({hresult['rolled']}k{hresult['kept']})"
@@ -952,7 +952,7 @@ async def check_cooperative(
     result["rolled"] = tv + sk + helper_rolled + adv_r + void_r
     result["kept"] = tv + adv_k + void_k
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
-    title = "\U0001F91D Cooperative Check"
+    title = "Cooperative Check"
     if reason:
         title += f": {reason}"
     embed = discord.Embed(
@@ -976,7 +976,7 @@ async def check_cooperative(
         roll_text += f"\n{void_line}"
     embed.add_field(name="Primary Roll", value=roll_text, inline=False)
     embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
-    verdict = "✅ **Success!**" if result["success"] else "❌ **Failure.**"
+    verdict = "**Success!**" if result["success"] else "**Failure.**"
     embed.add_field(
         name="Result",
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
@@ -1052,13 +1052,13 @@ async def stealth_check(
     if void_spent:
         _d.store.save(rec)
     skill_label = f"Stealth {sk}" if sk > 0 else "Stealth (unskilled)"
-    title = "🥷 Stealth Check" + (" 🤫" if secret else "")
+    title = "Stealth Check" + ("" if secret else "")
     if reason:
         title += f": {reason}"
     embed = _build_check_embed(
         title, c.name, skill_label, "Agility", result, wp, bonus,
-        success_text="✅ **Undetected!**",
-        fail_text="❌ **Spotted!**",
+        success_text="**Undetected!**",
+        fail_text="**Spotted!**",
         adv_notes=adv_notes,
         void_line=void_line,
         footer=f"Rolled by {interaction.user.display_name}",
@@ -1132,7 +1132,7 @@ async def investigate_check(
     skill_label = f"Investigation {sk}" if sk > 0 else "Investigation (unskilled)"
     if emp_name:
         skill_label += f" [{emp_name}]"
-    title = "🔍 Investigation" + (" 🤫" if secret else "")
+    title = "Investigation" + ("" if secret else "")
     if emp_name:
         title += f" ({emp_name})"
     if reason:
@@ -1216,7 +1216,7 @@ async def social_check(
         _d.store.save(rec)
     skill_label = f"{skill.value} {sk}" if sk > 0 else f"{skill.value} (unskilled)"
     trait_display = trait_attr.capitalize()
-    title = "🗣️ Social Check"
+    title = "Social Check"
     if reason:
         title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, trait_display, result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
@@ -1285,7 +1285,7 @@ async def craft_check(
     if void_spent:
         _d.store.save(rec)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
-    title = "🔨 Craft Check"
+    title = "Craft Check"
     if reason:
         title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
@@ -1354,7 +1354,7 @@ async def lore_check(
     if void_spent:
         _d.store.save(rec)
     skill_label = f"{specialty} {sk}" if sk > 0 else f"{specialty} (unskilled)"
-    title = "📚 Lore Check"
+    title = "Lore Check"
     if reason:
         title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")

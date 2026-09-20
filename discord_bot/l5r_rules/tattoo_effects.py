@@ -202,16 +202,16 @@ def active_tattoo_reminder(character: Character) -> str | None:
             delta = boosted - base
             thresh = delta * 2
             if thresh > 0:
-                return f"⚑ Bear Tattoo (Stamina +{sr}): wound threshold +{thresh} per level (Earth {base}→{boosted})"
+                return f"Bear Tattoo (Stamina +{sr}): wound threshold +{thresh} per level (Earth {base}→{boosted})"
         return None
     if active == "lion":
         chosen = (getattr(character, "lion_tattoo_skill", "") or "")
         if chosen:
             return None
-        return "⚑ Lion Tattoo: no Bugei skill chosen - use `/sheet tattoo activate Lion skill:` to set one"
+        return "Lion Tattoo: no Bugei skill chosen - use `/sheet tattoo activate Lion skill:` to set one"
     text = _COMBAT_REMINDERS.get(active)
     if text:
         sr = character.school_rank
         text = text.replace("SR", str(sr)).replace("IR", str(stats.insight_rank(character)))
-        return f"⚑ {active.title()} Tattoo: {text}"
+        return f"{active.title()} Tattoo: {text}"
     return None

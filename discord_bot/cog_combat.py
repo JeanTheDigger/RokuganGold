@@ -362,7 +362,7 @@ class DamageView(views_base.PersistentView):
         else:
             status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
         if applied["is_dead"]:
-            status += "  💀 **DEAD**"
+            status += "  **DEAD**"
         return status
 
     def _rate_limited_damage(self, interaction: discord.Interaction, attacker: Character):
@@ -381,7 +381,7 @@ class DamageView(views_base.PersistentView):
             tsu_ignore, tsu_note = val, note
         return scorp_bonus, scorp_note, tsu_ignore, tsu_note
 
-    @discord.ui.button(label="Roll & Apply Damage", style=discord.ButtonStyle.danger, emoji="⚔️")
+    @discord.ui.button(label="Roll & Apply Damage", style=discord.ButtonStyle.danger)
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _d.require_dm_role(interaction):
             return
@@ -390,7 +390,7 @@ class DamageView(views_base.PersistentView):
             return
         await self._resolve_damage(interaction)
 
-    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary)
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _d.require_dm_role(interaction):
             return
@@ -398,7 +398,7 @@ class DamageView(views_base.PersistentView):
             await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         msg = (
-            f"🛡️ {interaction.user.display_name} denied the effect: "
+            f"{interaction.user.display_name} denied the effect: "
             f"no damage applied to **{self.target_name}**."
         )
         self._disable()
@@ -537,7 +537,7 @@ class DamageView(views_base.PersistentView):
                     feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
                 raw += fb
                 if uncap_note:
-                    feint_line += f"\n⚑ {uncap_note}"
+                    feint_line += f"\n- {uncap_note}"
             scorp_bonus, scorp_note, tsu_ignore, tsu_note = self._rate_limited_damage(interaction, attacker)
             raw += scorp_bonus
             cre_base_red = cre_rec.creature.reduction
@@ -559,7 +559,7 @@ class DamageView(views_base.PersistentView):
                 if true_sub > 0:
                     true_note = f"True: Reduction −{true_sub} (wielder Strength {attacker.strength})"
                     cre_base_red = max(0, cre_base_red - attacker.strength)
-            kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, *t_dmg_notes) if n)
+            kata_line = "".join(f"\n- {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, *t_dmg_notes) if n)
             reduction = max(0, cre_base_red - ignore - tsu_ignore - cre_decl_reduction_ignore)
             radiant = combat.has_weapon_quality(attacker, self.weapon, "radiant")
             bypasses = radiant or self.weapon_material in ("jade", "crystal", "obsidian", "nemuranai")
@@ -570,7 +570,7 @@ class DamageView(views_base.PersistentView):
                 if heal_amt:
                     attacker.wounds_taken = max(0, attacker.wounds_taken - heal_amt)
                     _d.store.save(attacker_rec, note="post-kill heal")
-                    heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
+                    heal_line = f"\n- {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
             _d.store.save_creature(cre_rec, note="attack damage")
             _d.tally(self.channel_id, self.attacker_name, "dealt", applied["final_damage"])
             _d.tally(self.channel_id, self.target_name, "taken", applied["final_damage"])
@@ -583,22 +583,22 @@ class DamageView(views_base.PersistentView):
                 part = combat.CALLED_SHOT_PARTS.get(
                     min(self.called_shot_raises, 4), "specific part"
                 )
-                cre_cs_line = f"\n🎯 Called Shot: **{part}** ({self.called_shot_raises} raise{'s' if self.called_shot_raises != 1 else ''})"
+                cre_cs_line = f"\nCalled Shot: **{part}** ({self.called_shot_raises} raise{'s' if self.called_shot_raises != 1 else ''})"
             mat_line = ""
             if self.weapon_material != "normal":
-                mat_line = f"\n🔶 Weapon material: **{self.weapon_material.title()}**"
+                mat_line = f"\nWeapon material: **{self.weapon_material.title()}**"
             if radiant:
-                mat_line += "\n🔶 Radiant: Counts as Jade (bypasses Invulnerability)"
-            special_line = "".join(f"\n🛡️ {n}" for n in applied.get("special_notes", []))
+                mat_line += "\nRadiant: Counts as Jade (bypasses Invulnerability)"
+            special_line = "".join(f"\n- {n}" for n in applied.get("special_notes", []))
             break_line = ""
             brk = wp.get("break_threshold")
             if brk and raw >= brk:
                 if combat.has_weapon_quality(attacker, self.weapon, "unbreakable"):
-                    break_line = f"\n🛡️ Unbreakable: Weapon survives {raw} damage (threshold {brk})"
+                    break_line = f"\n- Unbreakable: Weapon survives {raw} damage (threshold {brk})"
                 else:
-                    break_line = f"\n💥 **WEAPON BROKEN** - {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
+                    break_line = f"\n**WEAPON BROKEN** - {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
             embed = discord.Embed(
-                title="⚔️ Damage applied",
+                title="Damage Applied",
                 color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
             )
             dmg_text = (
@@ -618,7 +618,7 @@ class DamageView(views_base.PersistentView):
             else:
                 status = f"{self.target_name}: **{applied['new_wound_level']}** ({cr.wounds_taken}/{cr.wounds_dead})"
             if applied["is_dead"]:
-                status += "  💀 **SLAIN**"
+                status += "  **SLAIN**"
             status += heal_line
             embed.add_field(name="Result", value=status, inline=False)
             embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
@@ -663,7 +663,7 @@ class DamageView(views_base.PersistentView):
                 _d.tally(self.channel_id, self.attacker_name, "kills")
                 await _d.on_death(str(interaction.guild_id), target.name, target_rec.owner_id, target_rec.id)
             embed = discord.Embed(
-                title="🗡️ Disarm",
+                title="Disarm",
                 color=discord.Color.green() if dis["disarmed"] else discord.Color.orange(),
             )
             dis_armor_label = f" ({target.armor_name.replace('_', ' ').title()})" if target.armor_name else ""
@@ -815,7 +815,7 @@ class DamageView(views_base.PersistentView):
                 feint_line = f"\nFeint bonus **+{fb}** (½ margin {self.attack_margin}, cap 5×Insight Rank)"
             raw += fb
             if uncap_note:
-                feint_line += f"\n⚑ {uncap_note}"
+                feint_line += f"\n- {uncap_note}"
         crab_bonus, crab_note = kata_effects.defender_reduction_bonus(target, self.defender_stance)
         tech_red, tech_red_notes = technique_effects.defender_reduction_bonus(target, self.defender_stance)
         kiho_red, kiho_red_notes = kiho_effects.defender_reduction_bonus(target)
@@ -843,7 +843,7 @@ class DamageView(views_base.PersistentView):
                 base_red = max(0, base_red - attacker.strength)
         duel_red_note = f"Warrior of Earth +{self.duel_strike_reduction} Reduction (duel Strike)" if self.duel_strike_reduction else ""
         kata_line = "".join(
-            f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, duel_red_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes, *tat_red_notes) if n
+            f"\n- {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, duel_red_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes, *tat_red_notes) if n
         )
         reduction = max(0, base_red - ignore - tsu_ignore - decl_reduction_ignore - decl_target_red_penalty + crab_bonus + tech_red + kiho_red + tat_red + self.duel_strike_reduction)
         if wp.get("ignore_all_reduction"):
@@ -855,12 +855,12 @@ class DamageView(views_base.PersistentView):
             if heal_amt:
                 attacker.wounds_taken = max(0, attacker.wounds_taken - heal_amt)
                 _d.store.save(attacker_rec, note="post-kill heal")
-                heal_line = f"\n⚑ {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
+                heal_line = f"\n- {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
         phoenix_line = ""
         if applied["new_wound_level"] in ("Down", "Out", "Dead"):
             phx = tattoo_effects.phoenix_heal_reminder(target)
             if phx:
-                phoenix_line = f"\n🔥 {phx}"
+                phoenix_line = f"\n{phx}"
         _d.store.save(target_rec, note="attack damage")
         _d.tally(self.channel_id, self.attacker_name, "dealt", applied["final_damage"])
         _d.tally(self.channel_id, self.target_name, "taken", applied["final_damage"])
@@ -892,7 +892,7 @@ class DamageView(views_base.PersistentView):
                 else f"{self.target_name} keeps their feet."
             )
             knockdown_line = (
-                f"\n🥋 Contested Strength: {self.attacker_name} **{kd_result['attacker_roll']}** vs "
+                f"\nContested Strength: {self.attacker_name} **{kd_result['attacker_roll']}** vs "
                 f"{self.target_name} **{kd_result['defender_roll']}**: {kd_verdict}"
             )
 
@@ -903,24 +903,24 @@ class DamageView(views_base.PersistentView):
             if def_cb and decl_on_hit_condition in encounter.VALID_CONDITIONS:
                 def_cb.set_condition(decl_on_hit_condition, 0, enc_dc.round if enc_dc else 0)
                 _d.save_encounter(str(interaction.guild_id), enc_dc)
-                decl_cond_line = f"\n⚑ **{decl_on_hit_condition.title()}** inflicted by technique"
+                decl_cond_line = f"\n- **{decl_on_hit_condition.title()}** inflicted by technique"
 
         called_shot_line = ""
         if self.maneuver == "called_shot" and self.called_shot_raises > 0:
             part = combat.CALLED_SHOT_PARTS.get(
                 min(self.called_shot_raises, 4), "specific part"
             )
-            called_shot_line = f"\n🎯 Called Shot: **{part}** ({self.called_shot_raises} raise{'s' if self.called_shot_raises != 1 else ''})"
+            called_shot_line = f"\nCalled Shot: **{part}** ({self.called_shot_raises} raise{'s' if self.called_shot_raises != 1 else ''})"
         break_line = ""
         brk = wp.get("break_threshold")
         if brk and raw >= brk:
             if combat.has_weapon_quality(attacker, self.weapon, "unbreakable"):
-                break_line = f"\n🛡️ Unbreakable: Weapon survives {raw} damage (threshold {brk})"
+                break_line = f"\n- Unbreakable: Weapon survives {raw} damage (threshold {brk})"
             else:
-                break_line = f"\n💥 **WEAPON BROKEN** - {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
+                break_line = f"\n**WEAPON BROKEN** - {self.weapon.replace('_', ' ').title()} inflicted {raw} damage (threshold {brk}+)"
 
         embed = discord.Embed(
-            title="⚔️ Damage applied",
+            title="Damage Applied",
             color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
         )
         armor_label = f" ({target.armor_name.replace('_', ' ').title()})" if target.armor_name else ""
@@ -1071,7 +1071,7 @@ class DamageView(views_base.PersistentView):
         )
         hit = outcome["hit"]
         embed2 = discord.Embed(
-            title="⚔️ Extra Attack: 2nd strike",
+            title="Extra Attack: 2nd Strike",
             color=discord.Color.green() if hit else discord.Color.light_grey(),
         )
         detail = (f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}\n"
@@ -1160,7 +1160,7 @@ class DamageView(views_base.PersistentView):
         )
         hit = outcome["hit"]
         embed2 = discord.Embed(
-            title="⚔️ Extra Attack: 2nd strike",
+            title="Extra Attack: 2nd Strike",
             color=discord.Color.green() if hit else discord.Color.light_grey(),
         )
         detail = (f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}\n"
@@ -1193,7 +1193,7 @@ class DamageView(views_base.PersistentView):
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) MISS")
             _d.tally(self.channel_id, self.attacker_name, "attacks")
 
-    @discord.ui.button(label="No Effect", style=discord.ButtonStyle.secondary, emoji="🛡️")
+    @discord.ui.button(label="No Effect", style=discord.ButtonStyle.secondary)
     async def waive(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _d.require_dm_role(interaction):
             return
@@ -1201,7 +1201,7 @@ class DamageView(views_base.PersistentView):
             await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         msg = (
-            f"🛡️ {interaction.user.display_name} ruled **no effect** on "
+            f"{interaction.user.display_name} ruled **no effect** on "
             f"{self.attacker_name}'s hit against {self.target_name}."
         )
         self._disable()
@@ -2568,7 +2568,7 @@ async def attack(
         return
     if target_creature_rec is not None and creature.creature_is_dead(target_creature_rec.creature):
         await interaction.response.send_message(
-            f"💀 **{target_creature_rec.creature.name}** has already been slain.", ephemeral=True
+            f"**{target_creature_rec.creature.name}** has already been slain.", ephemeral=True
         )
         return
     if target_rec is not None and await _d.refuse_if_dead(interaction, target_rec.character):
@@ -2700,15 +2700,15 @@ async def _execute_attack(
         c = attacker_rec.character
         ok, reason_block = advantage_effects.can_spend_void_on_roll(c)
         if not ok:
-            void_line = f" · 🌀 {reason_block}"
+            void_line = f" · {reason_block}"
         elif c.current_void_points > 0:
             c.current_void_points -= 1
             _d.tally(interaction.channel_id, c.name, "void")
             bonus_rolled = bonus_kept = 1
             _d.store.save(attacker_rec)
-            void_line = f" · 🌀 Void +1k1 ({c.current_void_points} VP left)"
+            void_line = f" · Void +1k1 ({c.current_void_points} VP left)"
         else:
-            void_line = " · 🌀 no Void Points to spend"
+            void_line = " · No Void Points to spend"
 
     # Katana void damage: validate weapon eligibility (VP spent at damage time).
     atk_weapon_profile = combat.get_weapon_profile(weapon)
@@ -2984,7 +2984,7 @@ async def _execute_attack(
         if arrow_tn_note:
             kata_notes.append(arrow_tn_note)
     if atk_weapon_profile.get("half_range"):
-        kata_notes.append("⚠️ Half range - verify target is within halved bow range")
+        kata_notes.append("Half range - verify target is within halved bow range")
 
     # Staff vs armor (L5R 4e Equipment): armor TN bonus doubled against staves.
     staff_tn_adj = 0
@@ -3097,12 +3097,12 @@ async def _execute_attack(
         bonus_kept += 1
         atk_flat += void_ring_val
         atk_combatant.center_bonus_available = False
-        center_line = f" · 🎯 Center: +1k1 +{void_ring_val} flat (Void Ring)"
+        center_line = f" · Center: +1k1 +{void_ring_val} flat (Void Ring)"
         kata_notes.append(f"Center Stance: +1k1 + {void_ring_val} (Void Ring)")
 
     # Defense Stance warning (s40): may not attack while in Defense.
     if a_stance == "defense":
-        kata_notes.append("⚠️ Defense Stance: May not attack (DM override in effect)")
+        kata_notes.append("Defense Stance: May not attack (DM override in effect)")
 
     outcome = combat.resolve_attack(
         attacker, weapon, tn, raises + maneuver_raises, _d.engine,
@@ -3115,7 +3115,7 @@ async def _execute_attack(
     a_name = attacker_rec.character.name
     hit = outcome["hit"]
     embed = discord.Embed(
-        title=f"⚔️ {a_name} attacks {t_name}",
+        title=f"{a_name} attacks {t_name}",
         color=discord.Color.green() if hit else discord.Color.greyple(),
     )
     atk_desc = (
@@ -3123,7 +3123,7 @@ async def _execute_attack(
         f"{outcome['trait_name'].capitalize()} with **{weapon.replace('_', ' ').title()}**"
     )
     if mat != "normal":
-        atk_desc += f"  ·  🔶 {mat.title()}"
+        atk_desc += f"  ·  {mat.title()}"
     if a_stance != "attack":
         auto_tag = " *(enc)*" if (not a_stance_explicit and atk_combatant) else ""
         atk_desc += f"  ·  {a_stance.replace('_', ' ').title()}{auto_tag}"
@@ -3139,7 +3139,7 @@ async def _execute_attack(
     if target_creature_rec is None and d_stance != "attack":
         auto_tag = " *(enc)*" if (not d_stance_explicit and def_combatant) else ""
         tn_note += f"  ·  {d_stance.replace('_', ' ').title()}{auto_tag}"
-    verdict = "✅ **HIT**" if hit else "❌ **MISS**"
+    verdict = "**HIT**" if hit else "**MISS**"
     embed.add_field(
         name="Result",
         value=f"Total **{outcome['roll']}** vs {tn_note}: {verdict} (margin {outcome['margin']:+d})",
@@ -3149,7 +3149,7 @@ async def _execute_attack(
         embed.set_footer(text=f"Unskilled in {outcome['skill_name']}: Dice did not explode.")
 
     if kata_notes:
-        embed.add_field(name="⚑ Combat effects (auto-applied)", value=" · ".join(kata_notes)[:1024], inline=False)
+        embed.add_field(name="Combat effects (auto-applied)", value=" · ".join(kata_notes)[:1024], inline=False)
     if rl_used_notes:
         embed.add_field(name="Rate-limited (already spent)", value="\n".join(rl_used_notes)[:1024], inline=False)
     reminders = _active_ability_reminders(attacker, "attacker", drop_rate_limited=rate_limited_handled)
@@ -3205,7 +3205,7 @@ async def _execute_attack(
         owner_ping = f" <@{target_owner_id}>" if target_owner_id and target_owner_id != _d.NPC_OWNER else ""
         if approval_ch:
             await _reply(
-                content=f"⚔️ **{a_name}** hit **{t_name}** - damage approval pending in the DM channel.{owner_ping}",
+                content=f"**{a_name}** hit **{t_name}** - damage approval pending in the DM channel.{owner_ping}",
                 embed=embed,
             )
             embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
@@ -3227,7 +3227,7 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
     cur = enc.current()
     lines = []
     for i, c in enumerate(enc.combatants):
-        marker = "▶️ " if (enc.started and c is cur) else f"{i + 1}. "
+        marker = ">> " if (enc.started and c is cur) else f"{i + 1}. "
         tag = " *(NPC)*" if c.is_npc else ""
         wound_tag = ""
         spell_tag = ""
@@ -3295,14 +3295,14 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
             lines.append(f"{main_line}\n> {' | '.join(extras)}")
         else:
             lines.append(main_line)
-    header = f"⚔️ **Round {enc.round}**"
+    header = f"**Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
     if not enc.started:
-        header = "⚔️ **Not started**: Use `/combat next` to begin."
+        header = "**Not started**: Use `/combat next` to begin."
         if enc.surprise_round:
             header += " *(Surprise Round)*"
-    notes_line = f"\n📍 *{enc.notes}*" if enc.notes else ""
+    notes_line = f"\n*{enc.notes}*" if enc.notes else ""
     result = header + notes_line + "\n" + "\n".join(lines)
     if len(result) > 1700:
         result = result[:1700] + "\n*(truncated - use `/combat summary` for full view)*"
@@ -3322,7 +3322,7 @@ async def combat_start(interaction: discord.Interaction) -> None:
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
-        title="⚔️ New Encounter Started",
+        title="New Encounter Started",
         color=discord.Color.red(),
         description=(
             "Add combatants with `/combat join` (your character) "
@@ -3414,7 +3414,7 @@ def _join_record(guild: str, channel_id: int, owner_id: str, rec: _storage_mod.C
 # Encounter roster (/combat setup): who is in the fight, by consent or by staff
 # ---------------------------------------------------------------------------
 
-_ROSTER_ICON = {"pending": "⏳", "accepted": "✅", "declined": "❌", "forced": "🔒"}
+_ROSTER_ICON = {"pending": "[?]", "accepted": "[+]", "declined": "[-]", "forced": "[!]"}
 
 
 def _render_roster(enc: encounter.Encounter) -> str:
@@ -3423,9 +3423,9 @@ def _render_roster(enc: encounter.Encounter) -> str:
     for uid, status in enc.roster.items():
         counts[status] = counts.get(status, 0) + 1
         in_init = any(c.owner_id == uid for c in enc.combatants)
-        lines.append(f"{_ROSTER_ICON.get(status, '❔')} <@{uid}> - {status}{' · in initiative' if in_init else ''}")
-    head = f"🛡️ **Encounter roster** (organizer: <@{enc.organizer_id}>)"
-    tally = f"✅ {counts['accepted']}  ⏳ {counts['pending']}  ❌ {counts['declined']}  🔒 {counts['forced']}"
+        lines.append(f"{_ROSTER_ICON.get(status, '[?]')} <@{uid}> - {status}{' · in initiative' if in_init else ''}")
+    head = f"**Encounter roster** (organizer: <@{enc.organizer_id}>)"
+    tally = f"Accepted: {counts['accepted']}  Pending: {counts['pending']}  Declined: {counts['declined']}  Forced: {counts['forced']}"
     if enc.roster_begun:
         tail = "Begun: Accepted players are in initiative. Late **Join** rolls you in at once."
     else:
@@ -3489,7 +3489,7 @@ class RosterView(views_base.PersistentView):
             await _d.combat_log(self.guild_id, f"Joined: {rec.character.name} (Init {total})")
         return notes
 
-    @discord.ui.button(label="Join", style=discord.ButtonStyle.success, emoji="✅")
+    @discord.ui.button(label="Join", style=discord.ButtonStyle.success)
     async def join(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enc = await self._enc(interaction)
         if enc is None:
@@ -3511,7 +3511,7 @@ class RosterView(views_base.PersistentView):
         if enc.roster_begun:
             await _refresh_board(enc, self.guild_id)
 
-    @discord.ui.button(label="Decline", style=discord.ButtonStyle.secondary, emoji="❌")
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.secondary)
     async def decline(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enc = await self._enc(interaction)
         if enc is None:
@@ -3531,7 +3531,7 @@ class RosterView(views_base.PersistentView):
         enc.roster[uid] = "declined"
         await self._refresh(interaction, enc)
 
-    @discord.ui.button(label="Force (staff)", style=discord.ButtonStyle.danger, emoji="🔒")
+    @discord.ui.button(label="Force (staff)", style=discord.ButtonStyle.danger)
     async def force(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not _d.is_dm(interaction):
             await interaction.response.send_message(
@@ -3554,7 +3554,7 @@ class RosterView(views_base.PersistentView):
             if enc.roster_begun:
                 await _refresh_board(enc, self.guild_id)
 
-    @discord.ui.button(label="Begin", style=discord.ButtonStyle.primary, emoji="⚔️")
+    @discord.ui.button(label="Begin", style=discord.ButtonStyle.primary)
     async def begin(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enc = await self._enc(interaction)
         if enc is None:
@@ -3572,7 +3572,7 @@ class RosterView(views_base.PersistentView):
         enc.roster_begun = True
         notes = await self._roll_in(interaction, enc, ready)
         pending = sum(1 for st in enc.roster.values() if st == "pending")
-        tail = f"\n⏳ {pending} invited player(s) have not answered; they can still press **Join**." if pending else ""
+        tail = f"\n{pending} invited player(s) have not answered; they can still press **Join**." if pending else ""
         extra = ("\n".join(notes) + "\n" + _render_encounter(enc, self.guild_id)
                  + "\nStaff: Add NPCs with `/combat add`, `/combat npc` or `/combat creature`, then `/combat next`." + tail)
         await self._refresh(interaction, enc, extra)
@@ -3745,7 +3745,7 @@ async def combat_roster_remove(interaction: discord.Interaction, member: discord
     _d.save_encounter(str(interaction.guild_id), enc)
     await _refresh_roster_message(enc)
     embed = discord.Embed(
-        title="🛡️ Roster updated",
+        title="Roster Updated",
         description=f"**{member.display_name}** taken off the roster.",
         color=discord.Color.greyple(),
     )
@@ -3769,7 +3769,7 @@ async def combat_roster_close(interaction: discord.Interaction) -> None:
     _d.encounters.pop(interaction.channel_id, None)
     _d.delete_encounter(interaction.channel_id)
     embed = discord.Embed(
-        title="🛡️ Encounter roster closed",
+        title="Encounter Roster Closed",
         color=discord.Color.greyple(),
     )
     embed.set_footer(text=f"Closed by {interaction.user.display_name}")
@@ -3948,7 +3948,7 @@ async def combat_remove(interaction: discord.Interaction, name: str) -> None:
         return
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
-    embed = discord.Embed(title=f"✖️ Removed: {name}", color=discord.Color.greyple())
+    embed = discord.Embed(title=f"Removed: {name}", color=discord.Color.greyple())
     embed.set_footer(text=f"Removed by {interaction.user.display_name}")
     await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
     await _refresh_board(enc, guild)
@@ -3979,7 +3979,7 @@ def _render_summary(enc: encounter.Encounter, guild: str, final: bool) -> tuple[
         elapsed = f" · {mins // 60}h {mins % 60}m" if mins >= 60 else f" · {mins} min"
     head = f"Rounds: **{enc.round if enc.started else 0}**{elapsed} · {len(names)} participant(s)"
     if enc.deaths:
-        head += f" · 💀 {len(enc.deaths)} dead"
+        head += f" · {len(enc.deaths)} dead"
     lines: list[str] = []
     logs: list[str] = []
     most_dealt = most_taken = best_acc = None
@@ -3996,7 +3996,7 @@ def _render_summary(enc: encounter.Encounter, guild: str, final: bool) -> tuple[
             parts.append(f"kills {row['kills']}")
         if row["void"]:
             parts.append(f"Void {row['void']}")
-        lines.append(f"{'💀 ' if dead else '• '}**{name}**: {' · '.join(parts)} · {arc}")
+        lines.append(f"{'[x] ' if dead else '- '}**{name}**: {' · '.join(parts)} · {arc}")
         logs.append(f"{name}: {row['hits']}/{row['attacks']} hits, dealt {row['dealt']}, taken {row['taken']}, {arc}")
         if row["dealt"] and (most_dealt is None or row["dealt"] > most_dealt[1]):
             most_dealt = (name, row["dealt"])
@@ -4008,13 +4008,13 @@ def _render_summary(enc: encounter.Encounter, guild: str, final: bool) -> tuple[
                 best_acc = (name, acc, row["hits"], row["attacks"])
     callouts = []
     if most_dealt:
-        callouts.append(f"🗡️ Most damage dealt: **{most_dealt[0]}** ({most_dealt[1]})")
+        callouts.append(f"Most damage dealt: **{most_dealt[0]}** ({most_dealt[1]})")
     if most_taken:
-        callouts.append(f"🩸 Most damage taken: **{most_taken[0]}** ({most_taken[1]})")
+        callouts.append(f"Most damage taken: **{most_taken[0]}** ({most_taken[1]})")
     if best_acc:
-        callouts.append(f"🎯 Most accurate: **{best_acc[0]}** ({best_acc[2]}/{best_acc[3]})")
+        callouts.append(f"Most accurate: **{best_acc[0]}** ({best_acc[2]}/{best_acc[3]})")
     embed = discord.Embed(
-        title="🏁 Fight summary" if final else "📊 Fight so far",
+        title="Fight Summary" if final else "Fight So Far",
         description=(head + "\n\n" + ("\n".join(lines) if lines else "*No participants recorded.*")
                      + ("\n\n" + "\n".join(callouts) if callouts else ""))[:4000],
         color=discord.Color.dark_gold() if final else discord.Color.blurple(),
@@ -4062,7 +4062,7 @@ async def combat_end(interaction: discord.Interaction) -> None:
                 pass
     _d.encounters.pop(interaction.channel_id, None)
     _d.delete_encounter(interaction.channel_id)
-    await interaction.response.send_message(content="⚔️ Encounter ended.", embed=embed)
+    await interaction.response.send_message(content="Encounter ended.", embed=embed)
     await _d.combat_log(guild, "--- Encounter ended --- " + (" | ".join(logs) if logs else ""))
 
 
@@ -4079,12 +4079,12 @@ async def combat_summary(interaction: discord.Interaction) -> None:
         await interaction.response.send_message(_render_encounter(enc), ephemeral=True)
         return
     guild = str(interaction.guild_id)
-    title = f"⚔️ Combat Summary: Round {enc.round}"
+    title = f"Combat Summary: Round {enc.round}"
     if enc.surprise_round:
         title += " (Surprise)"
     embed = discord.Embed(title=title, color=discord.Color.dark_red())
     if enc.notes:
-        embed.description = f"📍 *{enc.notes}*"
+        embed.description = f"*{enc.notes}*"
     for cb in enc.combatants[:25]:
         rec = _d.resolve_combatant_record(guild, cb)
         if rec is not None:
@@ -4093,14 +4093,14 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             pen = stats.wound_penalty(c)
             cap = stats.total_wound_capacity(c)
             tn = combat.armor_tn(c, cb.stance)
-            pen_str = f" ⚠️ **{pen} penalty**" if pen else ""
+            pen_str = f" **{pen} penalty**" if pen else ""
             vp = f"{c.current_void_points}/{c.max_void_points} VP"
             conds = ", ".join(sorted(cb.conditions)) if cb.conditions else " "
             fd = f", FD+{cb.full_defense_bonus}" if cb.full_defense_bonus else ""
-            v_atn = f", 🌀ATN+{cb.void_armor_tn_bonus}" if cb.void_armor_tn_bonus else ""
-            v_init = f", 🌀Init+{cb.void_initiative_boost}" if cb.void_initiative_boost else ""
-            c_bonus = ", 🎯Center+1k1" if cb.center_bonus_available else ""
-            c_init = f", 🎯Init+{cb.center_init_boost}" if cb.center_init_boost else ""
+            v_atn = f", ATN+{cb.void_armor_tn_bonus}" if cb.void_armor_tn_bonus else ""
+            v_init = f", Init+{cb.void_initiative_boost}" if cb.void_initiative_boost else ""
+            c_bonus = ", Center+1k1" if cb.center_bonus_available else ""
+            c_init = f", CInit+{cb.center_init_boost}" if cb.center_init_boost else ""
             guard = f", guarding {cb.guarding}" if cb.guarding else ""
             cover = f", Cover{'+' if cb.cover_bonus > 0 else ''}{cb.cover_bonus}" if cb.cover_bonus else ""
             held = ", HELD" if cb.held else ""
@@ -4115,7 +4115,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
         else:
             conds = ", ".join(sorted(cb.conditions)) if cb.conditions else " "
             value = f"*(no sheet)* · Conditions: {conds}"
-        marker = "▶️ " if (enc.started and cb is enc.current()) else ""
+        marker = ">> " if (enc.started and cb is enc.current()) else ""
         embed.add_field(
             name=f"{marker}{cb.name} (init {cb.effective_initiative})",
             value=value,
@@ -4205,7 +4205,7 @@ async def combat_condition_set(
     _d.save_encounter(guild, enc)
     dur = f" for {rounds} Round(s)" if rounds else ""
     embed = discord.Embed(
-        title=f"⚡ {c.name}: {condition.name}",
+        title=f"{c.name}: {condition.name}",
         color=discord.Color.orange(),
         description=f"Condition applied{dur}.",
     )
@@ -4242,7 +4242,7 @@ async def combat_condition_clear(
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
-        title=f"✖️ {c.name}: {condition.name} cleared",
+        title=f"{c.name}: {condition.name} cleared",
         color=discord.Color.greyple(),
     )
     embed.set_footer(text=f"Cleared by {interaction.user.display_name}")
@@ -4346,7 +4346,7 @@ class ConditionView(views_base.PersistentView):
                 except discord.HTTPException:
                     pass
 
-    @discord.ui.button(label="Apply", style=discord.ButtonStyle.success, emoji="✅")
+    @discord.ui.button(label="Apply", style=discord.ButtonStyle.success)
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not _d.is_dm(interaction):
             await interaction.response.send_message(f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can approve conditions.", ephemeral=True)
@@ -4359,7 +4359,7 @@ class ConditionView(views_base.PersistentView):
         if cb is None:
             self._disable()
             await interaction.response.edit_message(
-                content=f"⚠️ {self._label()}: **{self.target_name}** is no longer in that channel's initiative; nothing applied.",
+                content=f"{self._label()}: **{self.target_name}** is no longer in that channel's initiative; nothing applied.",
                 view=self, allowed_mentions=discord.AllowedMentions.none(),
             )
             return
@@ -4368,9 +4368,9 @@ class ConditionView(views_base.PersistentView):
         src = f" ({self.source})" if self.source else ""
         dur = f" {self.rounds}r" if self.rounds else ""
         await _d.combat_log(self.guild_id, f"Condition: {cb.name} +{self.condition.title()}{dur}{src} approved by {interaction.user.display_name}")
-        await self._finish(interaction, f"✅ {self._label()}{src}: Applied by {interaction.user.display_name}.")
+        await self._finish(interaction, f"{self._label()}{src}: Applied by {interaction.user.display_name}.")
 
-    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="❌")
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary)
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not _d.is_dm(interaction):
             await interaction.response.send_message(f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can deny conditions.", ephemeral=True)
@@ -4379,7 +4379,7 @@ class ConditionView(views_base.PersistentView):
             await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
         await _d.combat_log(self.guild_id, f"Condition: {self.target_name} {self.condition.title()} denied by {interaction.user.display_name}")
-        await self._finish(interaction, f"❌ {self._label()}: Denied by {interaction.user.display_name}.")
+        await self._finish(interaction, f"{self._label()}: Denied by {interaction.user.display_name}.")
 
 
 async def post_condition_request(
@@ -4392,7 +4392,7 @@ async def post_condition_request(
     view = ConditionView(guild, channel_id, target_name, condition, rounds, source, requester.id)
     dur = f" for {rounds} Round(s)" if rounds else " (until cleared)"
     embed = discord.Embed(
-        title=f"🩹 Condition request: {condition.title()} on {target_name}",
+        title=f"Condition request: {condition.title()} on {target_name}",
         description=f"**Duration:**{dur}\n**Source:** {source or 'not given'}\n**Requested by:** {requester.mention}\n**Fight:** <#{channel_id}>",
         color=discord.Color.orange(),
     )
@@ -4402,7 +4402,7 @@ async def post_condition_request(
     if approval_ch is not None:
         msg = await approval_ch.send(content=prompt, embed=embed, view=view, allowed_mentions=_PING_MENTIONS)
         await view.persist(msg)
-        return f"🩹 Condition request ({condition.title()} on **{target_name}**) sent to the DM channel.", None, None
+        return f"Condition request ({condition.title()} on **{target_name}**) sent to the DM channel.", None, None
     return prompt, embed, view
 
 
@@ -4457,7 +4457,7 @@ class SpellConditionPromptView(discord.ui.View):
         self.spell_name = spell_name
         for cond, rounds in conds[:4]:
             label = f"Request {cond.title()}" + (f" ({rounds} Round{'s' if rounds != 1 else ''})" if rounds else "")
-            btn = discord.ui.Button(label=label, style=discord.ButtonStyle.primary, emoji="🩹")
+            btn = discord.ui.Button(label=label, style=discord.ButtonStyle.primary)
             btn.callback = self._make_callback(btn, cond, rounds)
             self.add_item(btn)
 
@@ -4500,9 +4500,9 @@ async def fight_status(interaction: discord.Interaction, member: discord.Member 
     cb = enc.find(c.name) if enc else None
     level = stats.wound_level_name(c)
     lines = [
-        f"❤️ Wounds **{c.wounds_taken}/{stats.total_wound_capacity(c)}** - **{level}** (penalty {stats.wound_penalty(c):+d} to rolls)",
-        f"🔮 Void **{c.current_void_points}/{c.max_void_points}**",
-        f"🗡️ Weapon **{c.equipped_weapon or 'katana'}**" + (f" · off-hand {c.off_hand_weapon}" if c.off_hand_weapon else ""),
+        f"Wounds **{c.wounds_taken}/{stats.total_wound_capacity(c)}** - **{level}** (penalty {stats.wound_penalty(c):+d} to rolls)",
+        f"Void **{c.current_void_points}/{c.max_void_points}**",
+        f"Weapon **{c.equipped_weapon or 'katana'}**" + (f" · off-hand {c.off_hand_weapon}" if c.off_hand_weapon else ""),
     ]
     stance = cb.stance if cb else "attack"
     tn = combat.armor_tn(c, stance)
@@ -4516,16 +4516,16 @@ async def fight_status(interaction: discord.Interaction, member: discord.Member 
             tn += cb.cover_bonus; tn_notes.append(f"cover {cb.cover_bonus:+d}")
         if cb.guarding:
             tn -= 5; tn_notes.append(f"guarding {cb.guarding} −5")
-    lines.append(f"🛡️ Armor TN **{tn}** ({', '.join(tn_notes)}; guard/condition modifiers applied per attack)")
+    lines.append(f"Armor TN **{tn}** ({', '.join(tn_notes)}; guard/condition modifiers applied per attack)")
     if cb and enc:
         acts = {0: "none used", 1: "1 Simple used", 2: "done"}.get(cb.actions_used, str(cb.actions_used))
-        turn = "▶️ **your turn**" if enc.started and enc.current() is cb else f"Round {enc.round}"
-        lines.append(f"⚔️ {turn} · init **{cb.effective_initiative}** · stance **{cb.stance}** · actions: {acts}")
+        turn = ">> **your turn**" if enc.started and enc.current() is cb else f"Round {enc.round}"
+        lines.append(f"{turn} · init **{cb.effective_initiative}** · stance **{cb.stance}** · actions: {acts}")
         extras = []
         if cb.conditions:
             extras.append("conditions: " + ", ".join(sorted(cb.conditions)))
         if cb.fear_penalty:
-            extras.append(f"😨 Fear −{cb.fear_penalty}k0")
+            extras.append(f"Fear −{cb.fear_penalty}k0")
         if cb.held:
             extras.append("holding")
         if cb.delayed:
@@ -4537,10 +4537,10 @@ async def fight_status(interaction: discord.Interaction, member: discord.Member 
     else:
         lines.append("Not on this channel's initiative list.")
     if stats.is_dead(c):
-        lines.append("💀 **Dead.**")
+        lines.append("**Dead.**")
     elif level == "Out":
-        lines.append("😵 **Out**: Unconscious, cannot act.")
-    embed = discord.Embed(title=f"🧾 {c.name}", description="\n".join(lines), color=discord.Color.dark_gold())
+        lines.append("**Out**: Unconscious, cannot act.")
+    embed = discord.Embed(title=f"{c.name}", description="\n".join(lines), color=discord.Color.dark_gold())
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -4596,7 +4596,7 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
     remaining = 2 - g.actions_used
     _d.save_encounter(str(interaction.guild_id), enc)
     embed = discord.Embed(
-        title=f"🛡️ {g.name} guards {w.name}",
+        title=f"{g.name} guards {w.name}",
         color=discord.Color.blue(),
         description=(
             f"Ward ({w.name}): **+10 Armor TN**\n"
@@ -4677,7 +4677,7 @@ async def combat_full_defense(
     _d.save_encounter(guild, enc)
     wp_note = f"Wound penalty: **{wp}**\n" if wp != 0 else ""
     embed = discord.Embed(
-        title=f"🛡️ {cb.name}: Full Defense",
+        title=f"{cb.name}: Full Defense",
         color=discord.Color.dark_blue(),
         description=(
             f"Roll: {result['rolled']}k{result['kept']} = **{result['total']}** | "
@@ -4723,13 +4723,13 @@ async def combat_void_armor(interaction: discord.Interaction, combatant: str) ->
     c = rec.character
     ok, reason = advantage_effects.can_spend_void_on_roll(c)
     if not ok:
-        await interaction.response.send_message(f"🌀 {reason}", ephemeral=True)
+        await interaction.response.send_message(f"{reason}", ephemeral=True)
         return
     if c.current_void_points <= 0:
-        await interaction.response.send_message(f"🌀 **{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
+        await interaction.response.send_message(f"**{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
         return
     if not cb.consume_once("void_combat", "round"):
-        await interaction.response.send_message(f"🌀 **{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
+        await interaction.response.send_message(f"**{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
         return
     c.current_void_points -= 1
     _d.tally(interaction.channel_id, cb.name, "void")
@@ -4737,7 +4737,7 @@ async def combat_void_armor(interaction: discord.Interaction, combatant: str) ->
     _d.store.save(rec)
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
-        title=f"🌀 {cb.name}: Void Armor",
+        title=f"{cb.name}: Void Armor",
         color=discord.Color.purple(),
         description=(
             f"**+10 Armor TN** for this Round\n"
@@ -4776,13 +4776,13 @@ async def combat_void_initiative(interaction: discord.Interaction, combatant: st
     c = rec.character
     ok, reason = advantage_effects.can_spend_void_on_roll(c)
     if not ok:
-        await interaction.response.send_message(f"🌀 {reason}", ephemeral=True)
+        await interaction.response.send_message(f"{reason}", ephemeral=True)
         return
     if c.current_void_points <= 0:
-        await interaction.response.send_message(f"🌀 **{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
+        await interaction.response.send_message(f"**{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
         return
     if not cb.consume_once("void_combat", "round"):
-        await interaction.response.send_message(f"🌀 **{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
+        await interaction.response.send_message(f"**{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
         return
     c.current_void_points -= 1
     _d.tally(interaction.channel_id, cb.name, "void")
@@ -4794,7 +4794,7 @@ async def combat_void_initiative(interaction: discord.Interaction, combatant: st
     _d.store.save(rec)
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
-        title=f"🌀 {cb.name}: Void Initiative",
+        title=f"{cb.name}: Void Initiative",
         color=discord.Color.purple(),
         description=(
             f"**+10 Initiative** for the skirmish\n"
@@ -4846,13 +4846,13 @@ async def combat_void_swap(interaction: discord.Interaction, spender: str, targe
     c = rec.character
     ok, reason = advantage_effects.can_spend_void_on_roll(c)
     if not ok:
-        await interaction.response.send_message(f"🌀 {reason}", ephemeral=True)
+        await interaction.response.send_message(f"{reason}", ephemeral=True)
         return
     if c.current_void_points <= 0:
-        await interaction.response.send_message(f"🌀 **{cb_s.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
+        await interaction.response.send_message(f"**{cb_s.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
         return
     if not cb_s.consume_once("void_combat", "round"):
-        await interaction.response.send_message(f"🌀 **{cb_s.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
+        await interaction.response.send_message(f"**{cb_s.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
         return
     c.current_void_points -= 1
     _d.tally(interaction.channel_id, cb_s.name, "void")
@@ -4867,7 +4867,7 @@ async def combat_void_swap(interaction: discord.Interaction, spender: str, targe
     _d.store.save(rec)
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
-        title=f"🌀 Initiative Swap",
+        title=f"Initiative Swap",
         color=discord.Color.purple(),
         description=(
             f"**{cb_s.name}** exchanges Initiative with **{cb_t.name}**\n"
@@ -4957,11 +4957,11 @@ async def grapple_initiate(
     if equipped:
         wp = combat.get_weapon_profile(equipped)
         if wp.get("grapple_capable"):
-            grapple_weapon_note = f"\n✓ {equipped.replace('_', ' ').title()}: Can initiate grapple while armed"
+            grapple_weapon_note = f"\n{equipped.replace('_', ' ').title()}: Can initiate grapple while armed"
         else:
-            grapple_weapon_note = f"\n⚠️ {equipped.replace('_', ' ').title()} is not grapple-capable - must drop/sheathe to grapple (DM adjudicates)"
+            grapple_weapon_note = f"\n{equipped.replace('_', ' ').title()} is not grapple-capable - must drop/sheathe to grapple (DM adjudicates)"
     embed = discord.Embed(
-        title=f"🤼 {atk_cb.name} attempts to grapple {def_cb.name}",
+        title=f"{atk_cb.name} attempts to grapple {def_cb.name}",
         color=discord.Color.greyple(),
     )
     embed.add_field(
@@ -5069,7 +5069,7 @@ async def grapple_control(
         winner = "Tie (previous controller retains)"
         loser = ""
     embed = discord.Embed(
-        title="🤼 Grapple Control: Contested Jiujutsu/Strength",
+        title="Grapple Control: Contested Jiujutsu/Strength",
         color=discord.Color.blue(),
     )
     embed.add_field(
@@ -5137,7 +5137,7 @@ async def grapple_hit(
     atk_cb.actions_used = 2
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
-        title=f"🤼 Grapple Hit: {atk_cb.name} strikes {def_cb.name}",
+        title=f"Grapple Hit: {atk_cb.name} strikes {def_cb.name}",
         description="Unarmed damage, no attack roll (controller's Complex Action).",
         color=discord.Color.orange(),
     )
@@ -5198,7 +5198,7 @@ async def grapple_throw(
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
-        title=f"🤼 {thrower_cb.name} throws {target_cb.name}",
+        title=f"{thrower_cb.name} throws {target_cb.name}",
         description=(
             f"Both are now **Prone**. The grapple ends.\n"
             f"Standing up is a Simple Action."
@@ -5250,7 +5250,7 @@ async def grapple_pin(
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
-        title=f"🤼 {ctrl_cb.name} pins {tgt_cb.name}",
+        title=f"{ctrl_cb.name} pins {tgt_cb.name}",
         description=(
             f"{tgt_cb.name} is **Pinned**: Fully immobilized. "
             f"Can only speak or cast verbal-only Mastery 1 spells.\n"
@@ -5302,7 +5302,7 @@ async def grapple_break(
         cb.actions_used += 1
         _d.save_encounter(guild, enc)
         embed = discord.Embed(
-            title=f"🤼 {cb.name} breaks free",
+            title=f"{cb.name} breaks free",
             description=(
                 f"Controller break (Simple Action). Grappled condition removed.\n"
                 f"[{cb.actions_used}/2 actions used]"
@@ -5342,7 +5342,7 @@ async def grapple_break(
     defender_wins = result["winner"] == "a"
     cb.actions_used = 2
     embed = discord.Embed(
-        title=f"🤼 {cb.name} tries to break free from {opp_cb.name}",
+        title=f"{cb.name} tries to break free from {opp_cb.name}",
         color=discord.Color.green() if defender_wins else discord.Color.red(),
     )
     embed.add_field(
@@ -5465,11 +5465,11 @@ async def duel_assess(
     diff_ab = res_a["total"] - res_b["total"]
     focus_bonus = ""
     if diff_ab >= 10:
-        focus_bonus = f"⚡ **{ca.name}** exceeded by {diff_ab} → **+1k1** on Focus roll."
+        focus_bonus = f"**{ca.name}** exceeded by {diff_ab} → **+1k1** on Focus roll."
     elif diff_ab <= -10:
-        focus_bonus = f"⚡ **{cb_char.name}** exceeded by {-diff_ab} → **+1k1** on Focus roll."
+        focus_bonus = f"**{cb_char.name}** exceeded by {-diff_ab} → **+1k1** on Focus roll."
 
-    embed = discord.Embed(title=f"⚔️ Iaijutsu Duel: Assessment", color=discord.Color.gold())
+    embed = discord.Embed(title=f"Iaijutsu Duel: Assessment", color=discord.Color.gold())
 
     def _reveal_text(res, opponent):
         if not res["success"]:
@@ -5612,7 +5612,7 @@ async def duel_focus(
         raise_divisor_a=rd_a, raise_divisor_b=rd_b,
     )
 
-    embed = discord.Embed(title="⚔️ Iaijutsu Duel: Focus", color=discord.Color.dark_gold())
+    embed = discord.Embed(title="Iaijutsu Duel: Focus", color=discord.Color.dark_gold())
     a_mods = []
     b_mods = []
     if a_focus_bonus:
@@ -5733,7 +5733,7 @@ async def duel_strike(
     if hit:
         _d.tally(interaction.channel_id, atk.name, "hits")
     embed = discord.Embed(
-        title=f"⚔️ {atk.name} strikes at {tgt.name}",
+        title=f"{atk.name} strikes at {tgt.name}",
         color=discord.Color.red() if hit else discord.Color.greyple(),
     )
     roll_text = (
@@ -5792,7 +5792,7 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
         await interaction.response.send_message(f"No creature named **{name}**.", ephemeral=True)
         return
     if creature.creature_is_dead(rec.creature):
-        await interaction.response.send_message(f"💀 **{rec.creature.name}** has been slain.", ephemeral=True)
+        await interaction.response.send_message(f"**{rec.creature.name}** has been slain.", ephemeral=True)
         return
     result = creature.roll_creature_initiative(rec.creature, _d.engine)
     enc = _get_or_create(interaction.channel_id)
@@ -5879,7 +5879,7 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
     if not_found:
         desc += f"\nNot found (skipped): {', '.join(not_found)}"
     embed = discord.Embed(
-        title="⚔️ Category Join",
+        title="Category Join",
         color=discord.Color.green() if added else discord.Color.greyple(),
         description=desc[:4096],
     )
@@ -5940,7 +5940,7 @@ async def combat_room(interaction: discord.Interaction) -> None:
     if not added and not skipped:
         desc_parts.append("No members in this room.")
     embed = discord.Embed(
-        title="⚔️ Room Join",
+        title="Room Join",
         color=discord.Color.green() if added else discord.Color.greyple(),
         description="\n".join(desc_parts)[:4096],
     )
@@ -6018,7 +6018,7 @@ async def combat_stance(
         "center": discord.Color.gold(),
     }
     embed = discord.Embed(
-        title=f"⚔️ {cb.name}: {label} Stance",
+        title=f"{cb.name}: {label} Stance",
         color=_STANCE_COLORS.get(stance.value, discord.Color.blurple()),
     )
     if effects:
@@ -6061,7 +6061,7 @@ async def combat_init(
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
-        title=f"🎲 {cb.name}: Initiative {old} → {value}",
+        title=f"{cb.name}: Initiative {old} → {value}",
         color=discord.Color.gold(),
     )
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
@@ -6096,7 +6096,7 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         cb.held = False
         _d.save_encounter(guild, enc)
         embed = discord.Embed(
-            title=f"▶️ {cb.name}: Hold released",
+            title=f"{cb.name}: Hold released",
             color=discord.Color.green(),
         )
         embed.set_footer(text=f"Released by {interaction.user.display_name}")
@@ -6186,7 +6186,7 @@ async def combat_delay(
         cb.delayed = False
         _d.save_encounter(guild, enc)
         embed = discord.Embed(
-            title=f"▶️ {cb.name}: Delay released",
+            title=f"{cb.name}: Delay released",
             color=discord.Color.green(),
         )
         embed.set_footer(text=f"Released by {interaction.user.display_name}")
@@ -6283,7 +6283,7 @@ async def combat_act(interaction: discord.Interaction, name: str) -> None:
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
-        title=f"▶️ {cb.name} acts now",
+        title=f"{cb.name} acts now",
         color=discord.Color.green(),
         description=f"Was {was}.",
     )
@@ -6390,7 +6390,7 @@ async def combat_surprise(interaction: discord.Interaction) -> None:
     _d.save_encounter(guild, enc)
     state = "ON" if enc.surprise_round else "OFF"
     embed = discord.Embed(
-        title=f"❗ Surprise Round: {state}",
+        title=f"Surprise Round: {state}",
         color=discord.Color.orange() if enc.surprise_round else discord.Color.greyple(),
     )
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
@@ -6580,9 +6580,9 @@ async def battle_table(
     else:
         lines.append("No Glory")
     if result["event"] == "duel":
-        lines.append("⚔️ **DUEL** - encounter an enemy of roughly equal skill!")
+        lines.append("**DUEL** - encounter an enemy of roughly equal skill!")
     elif result["event"] == "heroic":
-        lines.append("✨ **HEROIC OPPORTUNITY** - a chance to change the battle!")
+        lines.append("**HEROIC OPPORTUNITY** - a chance to change the battle!")
     embed.add_field(name="Result", value="\n".join(lines), inline=False)
 
     if result["wound_roll"]:
@@ -6732,7 +6732,7 @@ async def combat_mount(
         _d.save_encounter(guild, enc)
         extra = _sync_mount_to_sheet(guild, cb, False)
         embed = discord.Embed(
-            title=f"🐴 {cb.name} dismounts",
+            title=f"{cb.name} dismounts",
             color=discord.Color.greyple(),
             description=extra or "Mounted condition cleared.",
         )
@@ -6743,7 +6743,7 @@ async def combat_mount(
         _d.save_encounter(guild, enc)
         extra = _sync_mount_to_sheet(guild, cb, True)
         embed = discord.Embed(
-            title=f"🐴 {cb.name} mounts up",
+            title=f"{cb.name} mounts up",
             color=discord.Color.dark_gold(),
             description=(
                 "+1k0 melee damage vs unmounted\n"
@@ -6864,13 +6864,13 @@ async def combat_cover(
     _d.save_encounter(str(interaction.guild_id), enc)
     if bonus == 0:
         embed = discord.Embed(
-            title=f"🏔️ {cb.name}: Cover cleared",
+            title=f"{cb.name}: Cover cleared",
             color=discord.Color.greyple(),
         )
     else:
         sign = "+" if bonus > 0 else ""
         embed = discord.Embed(
-            title=f"🏔️ {cb.name}: Cover {sign}{bonus} Armor TN",
+            title=f"{cb.name}: Cover {sign}{bonus} Armor TN",
             color=discord.Color.dark_teal(),
         )
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
@@ -6894,13 +6894,13 @@ async def combat_notes(
     _d.save_encounter(str(interaction.guild_id), enc)
     if enc.notes:
         embed = discord.Embed(
-            title="📍 Environment",
+            title="Environment",
             color=discord.Color.dark_teal(),
             description=f"*{enc.notes}*",
         )
     else:
         embed = discord.Embed(
-            title="📍 Environment notes cleared",
+            title="Environment notes cleared",
             color=discord.Color.greyple(),
         )
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
@@ -6954,7 +6954,7 @@ async def combat_env_damage(
             _d.tally(interaction.channel_id, rec.character.name, "taken", applied["final_damage"])
             if applied["is_dead"]:
                 await _d.on_death(guild, rec.character.name, rec.owner_id, rec.id)
-            dead_tag = " 💀 **DEAD**" if applied["is_dead"] else ""
+            dead_tag = " **DEAD**" if applied["is_dead"] else ""
             results.append(
                 f"**{cb.name}**: {amount} raw − {reduction} red = "
                 f"**{applied['final_damage']}** wounds → "
@@ -6978,7 +6978,7 @@ async def combat_env_damage(
                 _d.tally(interaction.channel_id, cr.name, "taken", final)
                 if is_dead:
                     await _d.on_death(guild, cr.name, None, None)
-                dead_tag = " 💀 **DEAD**" if is_dead else ""
+                dead_tag = " **DEAD**" if is_dead else ""
                 results.append(
                     f"**{cb.name}**: {amount} raw − {reduction} red = "
                     f"**{final}** wounds → {cr.wounds_taken}/{cr.wounds_dead}{dead_tag}"
@@ -6992,7 +6992,7 @@ async def combat_env_damage(
             else:
                 results.append(f"**{cb.name}**: *(no sheet - damage not tracked)*")
 
-    title = f"💥 Environmental Damage: {amount}{reason_tag}"
+    title = f"Environmental Damage: {amount}{reason_tag}"
     if ignore_reduction:
         title += " (ignores reduction)"
     embed = discord.Embed(

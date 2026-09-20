@@ -118,7 +118,7 @@ _SCHOOL_CATEGORY_LABEL = {
 
 def build_school_embed(s: dict) -> discord.Embed:
     kw = f" [{', '.join(s['keywords'])}]" if s["keywords"] else ""
-    embed = discord.Embed(title=f"\U0001f3ef {s['name']}{kw}", color=discord.Color.dark_teal())
+    embed = discord.Embed(title=f"{s['name']}{kw}", color=discord.Color.dark_teal())
     cat = _SCHOOL_CATEGORY_LABEL.get(s.get("category", "basic"), "school")
     embed.description = f"{s['clan']} {cat}"
     eff_skills, eff_honor, eff_outfit = schools.effective_fields(s)
@@ -149,7 +149,7 @@ def build_school_embed(s: dict) -> discord.Embed:
 
 
 def _build_armor_embed(name: str, s: dict) -> discord.Embed:
-    embed = discord.Embed(title=f"\U0001f6e1️ {name}", color=discord.Color.blue())
+    embed = discord.Embed(title=f"{name}", color=discord.Color.blue())
     tn_val = f"+{s['tn_bonus']}"
     if s.get("tn_bonus_mounted"):
         tn_val = f"+{s['tn_bonus']} (on foot) / +{s['tn_bonus_mounted']} (mounted)"
@@ -165,7 +165,7 @@ def _build_armor_embed(name: str, s: dict) -> discord.Embed:
 def build_advantage_embed(r: dict) -> discord.Embed:
     is_adv = r["kind"] == "advantage"
     embed = discord.Embed(
-        title=f"{'🌸' if is_adv else '💢'} {r['name']}",
+        title=f"{'' if is_adv else ''} {r['name']}",
         color=discord.Color.green() if is_adv else discord.Color.dark_red(),
     )
     meta = [r["kind"].capitalize()]
@@ -182,7 +182,7 @@ def build_advantage_embed(r: dict) -> discord.Embed:
 
 def build_kata_embed(k: dict) -> discord.Embed:
     color = _d.ELEMENT_COLORS.get(k["element"].lower(), discord.Color.teal())
-    embed = discord.Embed(title=f"\U0001F94B {k['name']}", color=color)
+    embed = discord.Embed(title=f"{k['name']}", color=color)
     embed.description = f"**{k['element']} {k['mastery']}**"
     if k.get("schools"):
         embed.add_field(name="Schools", value=k["schools"][:1024], inline=False)
@@ -194,7 +194,7 @@ def build_kata_embed(k: dict) -> discord.Embed:
 def build_kiho_embed(k: dict) -> discord.Embed:
     color = _d.ELEMENT_COLORS.get(k["element"].lower(), discord.Color.teal())
     atemi = " · Atemi" if k.get("atemi") else ""
-    embed = discord.Embed(title=f"✋ {k['name']}{atemi}", color=color)
+    embed = discord.Embed(title=f"{k['name']}{atemi}", color=color)
     meta = f"**{k['element']} {k['mastery']}**"
     if k.get("type"):
         meta += f" · {k['type']}"
@@ -321,7 +321,7 @@ async def lookup(
     lines = [f"`{cat:10s}` **{name}**: {detail}" for cat, name, detail in results[:25]]
     extra = f"\n*…{len(results) - 25} more: Narrow your search.*" if len(results) > 25 else ""
     await interaction.response.send_message(
-        f"\U0001f50e **{len(results)} result(s) for `{query}`: **\n" + "\n".join(lines) + extra,
+        f"**{len(results)} result(s) for `{query}`: **\n" + "\n".join(lines) + extra,
         ephemeral=True,
     )
 
@@ -345,14 +345,14 @@ async def school_list(interaction: discord.Interaction, clan: str | None = None)
             names = [s["name"] for s in matches if s.get("category", "basic") == cat]
             if names:
                 lines.append(f"**{label} ({len(names)}): ** " + ", ".join(names))
-        text = f"\U0001f3ef **{clan}: {len(matches)} schools/paths**\n" + "\n".join(lines)
+        text = f"**{clan}: {len(matches)} schools/paths**\n" + "\n".join(lines)
         await interaction.response.send_message(text[:1990], ephemeral=True)
         return
     counts = Counter(s["clan"] for s in schools.ALL)
     cats = Counter(s.get("category", "basic") for s in schools.ALL)
     summary = " · ".join(f"{k} {v}" for k, v in sorted(counts.items()))
     await interaction.response.send_message(
-        f"\U0001f3ef **{len(schools.ALL)} schools & paths** "
+        f"**{len(schools.ALL)} schools & paths** "
         f"({cats['basic']} basic · {cats['advanced']} advanced · {cats['alternate']} alternate). "
         f"Browse with `/ref school list clan:<clan>`, `/ref school search`, or `/ref school view`.\n{summary}",
         ephemeral=True,
@@ -372,7 +372,7 @@ async def school_search(interaction: discord.Interaction, query: str) -> None:
         for s in matches[:40]
     ]
     extra = f"\n…and {len(matches) - 40} more." if len(matches) > 40 else ""
-    await interaction.response.send_message("\U0001f3ef " + "\n".join(lines) + extra, ephemeral=True)
+    await interaction.response.send_message("\n".join(lines) + extra, ephemeral=True)
 
 
 @ref_school.command(name="view", description="Show a school's benefit, skills, outfit, and techniques.")
@@ -398,7 +398,7 @@ async def weapon_list(interaction: discord.Interaction) -> None:
         by_skill.setdefault(w["skill"], []).append(f"{wid} {w['rolled']}k{w['kept']}")
     lines = [f"**{sk}: ** " + ", ".join(sorted(v)) for sk, v in sorted(by_skill.items())]
     await interaction.response.send_message(
-        f"⚔️ **{len(combat.WEAPON_CATALOG)} weapons** (name DR):\n" + "\n".join(lines), ephemeral=True
+        f"**{len(combat.WEAPON_CATALOG)} weapons** (name DR):\n" + "\n".join(lines), ephemeral=True
     )
 
 
@@ -410,7 +410,7 @@ async def weapon_view(interaction: discord.Interaction, name: str) -> None:
         await interaction.response.send_message(f"No weapon named **{name}**. See `/ref weapon list`.", ephemeral=True)
         return
     dr = f"{w['rolled']}k{w['kept']}" + (" + Strength" if w.get("strength_adds") and w.get("melee") else "")
-    embed = discord.Embed(title=f"⚔️ {name.lower().strip()}", color=discord.Color.dark_grey())
+    embed = discord.Embed(title=f"{name.lower().strip()}", color=discord.Color.dark_grey())
     embed.add_field(name="Damage (DR)", value=dr, inline=True)
     embed.add_field(name="Skill", value=w["skill"], inline=True)
     embed.add_field(name="Trait", value=w["trait"].capitalize(), inline=True)
@@ -437,7 +437,7 @@ async def armor_list(interaction: discord.Interaction) -> None:
             line += " · heavy"
         lines.append(line)
     await interaction.response.send_message(
-        f"\U0001f6e1️ **Armor** ({len(combat.ARMOR_CATALOG)} types · equip with `/stat armor` or `/inventory` (staff)):\n" + "\n".join(lines), ephemeral=True
+        f"**Armor** ({len(combat.ARMOR_CATALOG)} types · equip with `/stat armor` or `/inventory` (staff)):\n" + "\n".join(lines), ephemeral=True
     )
 
 
@@ -473,7 +473,7 @@ async def armor_search(interaction: discord.Interaction, query: str) -> None:
             tn = f"+{s['tn_bonus']}/+{s['tn_bonus_mounted']} mounted"
         lines.append(f"• **{a}**: TN {tn}, Red {s['reduction']}, {s['cost']} koku")
     await interaction.response.send_message(
-        f"\U0001f6e1️ **Armor matching \"{query}\"** ({len(matches)} results):\n" + "\n".join(lines), ephemeral=True
+        f"**Armor matching \"{query}\"** ({len(matches)} results):\n" + "\n".join(lines), ephemeral=True
     )
 
 
@@ -492,13 +492,13 @@ async def advantage_list(interaction: discord.Interaction, kind: app_commands.Ch
         n_adv = len(advantages.by_kind("advantage"))
         n_dis = len(advantages.by_kind("disadvantage"))
         await interaction.response.send_message(
-            f"🌸 **{n_adv} Advantages**, 💢 **{n_dis} Disadvantages**. "
+            f" **{n_adv} Advantages**,  **{n_dis} Disadvantages**. "
             f"Use `/ref advantage list kind:` or `/ref advantage search`, `/ref advantage view`.",
             ephemeral=True,
         )
         return
     pool = sorted(advantages.by_kind(kind.value), key=lambda r: r["name"])
-    icon = '🌸' if kind.value == 'advantage' else '💢'
+    icon = '' if kind.value == 'advantage' else ''
     lines = [f"• {icon} **{r['name']}** ({r['cost_text']})" for r in pool]
     pages = _d.paginate(lines, f"{icon} **{kind.name} ({len(pool)}): **\n")
     if len(pages) == 1:
@@ -516,7 +516,7 @@ async def advantage_search(interaction: discord.Interaction, query: str) -> None
         await interaction.response.send_message(f"No entries match `{query}`.", ephemeral=True)
         return
     lines = [
-        f"{'🌸' if r['kind'] == 'advantage' else '💢'} **{r['name']}** ({r['cost_text']})"
+        f"{'' if r['kind'] == 'advantage' else ''} **{r['name']}** ({r['cost_text']})"
         for r in matches
     ]
     pages = _d.paginate(lines, f"**{len(matches)} match(es) for `{query}`: **\n")
@@ -548,7 +548,7 @@ async def kata_list(interaction: discord.Interaction, element: str | None = None
         counts = Counter(k["element"] for k in kata.ALL)
         summary = " · ".join(f"{el} {n}" for el, n in sorted(counts.items()))
         await interaction.response.send_message(
-            f"\U0001F94B **{len(kata.ALL)} Kata.** Browse with `/ref kata list element:<element>`, "
+            f"**{len(kata.ALL)} Kata.** Browse with `/ref kata list element:<element>`, "
             f"`/ref kata search`, `/ref kata view`.\n{summary}", ephemeral=True
         )
         return
@@ -562,7 +562,7 @@ async def kata_list(interaction: discord.Interaction, element: str | None = None
     for k in matches:
         by_ml.setdefault(k["mastery"], []).append(k["name"])
     lines = [f"**ML {ml}: ** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
-    text = f"\U0001F94B **{element} Kata ({len(matches)}): **\n" + "\n".join(lines)
+    text = f"**{element} Kata ({len(matches)}):** \n" + "\n".join(lines)
     await interaction.response.send_message(text[:1990], ephemeral=True)
 
 
@@ -575,7 +575,7 @@ async def kata_search(interaction: discord.Interaction, query: str) -> None:
         return
     lines = [f"• **{k['name']}** ({k['element']} {k['mastery']})" for k in matches[:40]]
     extra = f"\n…and {len(matches) - 40} more." if len(matches) > 40 else ""
-    await interaction.response.send_message("\U0001F94B " + "\n".join(lines) + extra, ephemeral=True)
+    await interaction.response.send_message("\n".join(lines) + extra, ephemeral=True)
 
 
 @ref_kata.command(name="view", description="Show a Kata's element, mastery, schools, and effect.")
@@ -601,7 +601,7 @@ async def kiho_list(interaction: discord.Interaction, element: str | None = None
         counts = Counter(k["element"] for k in kiho.ALL)
         summary = " · ".join(f"{el} {n}" for el, n in sorted(counts.items()))
         await interaction.response.send_message(
-            f"✋ **{len(kiho.ALL)} Kiho.** Browse with `/ref kiho list element:<element>`, "
+            f"**{len(kiho.ALL)} Kiho.** Browse with `/ref kiho list element:<element>`, "
             f"`/ref kiho search`, `/ref kiho view`.\n{summary}", ephemeral=True
         )
         return
@@ -615,7 +615,7 @@ async def kiho_list(interaction: discord.Interaction, element: str | None = None
     for k in matches:
         by_ml.setdefault(k["mastery"], []).append(k["name"])
     lines = [f"**ML {ml}: ** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
-    text = f"✋ **{element} Kiho ({len(matches)}): **\n" + "\n".join(lines)
+    text = f"**{element} Kiho ({len(matches)}): **\n" + "\n".join(lines)
     await interaction.response.send_message(text[:1990], ephemeral=True)
 
 
@@ -628,7 +628,7 @@ async def kiho_search(interaction: discord.Interaction, query: str) -> None:
         return
     lines = [f"• **{k['name']}** ({k['element']} {k['mastery']})" for k in matches[:40]]
     extra = f"\n…and {len(matches) - 40} more." if len(matches) > 40 else ""
-    await interaction.response.send_message("✋ " + "\n".join(lines) + extra, ephemeral=True)
+    await interaction.response.send_message("" + "\n".join(lines) + extra, ephemeral=True)
 
 
 @ref_kiho.command(name="view", description="Show a Kiho's element, mastery, type, and effect.")
@@ -806,7 +806,7 @@ async def atn_breakdown(interaction: discord.Interaction, target: str | None = N
             lines.append(f"**Total ATN = {total}**")
     else:
         lines.append(f"**Total ATN = {total}** (out of combat)")
-    embed = discord.Embed(title=f"\U0001f6e1️ ATN Breakdown: {c.name}", color=discord.Color.blue())
+    embed = discord.Embed(title=f"ATN Breakdown: {c.name}", color=discord.Color.blue())
     embed.description = "\n".join(lines)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -954,9 +954,9 @@ async def dual_wield_info(
         off_rank = c.skills.get(off_skill, 0)
         mastery_note = ""
         if off_skill.lower() == "knives" and off_rank >= 3:
-            mastery_note = "\n✓ **Knives R3**: Off-hand penalty removed"
+            mastery_note = "\n**Knives R3**: Off-hand penalty removed"
         elif off_skill.lower() == "war fan" and off_rank >= 3:
-            mastery_note = "\n✓ **War Fan R3**: Off-hand penalty removed"
+            mastery_note = "\n**War Fan R3**: Off-hand penalty removed"
         embed.add_field(name="Off-hand Attack Penalty", value=penalty + mastery_note, inline=False)
         embed.add_field(name="Dominant-hand Penalty", value="−5 to main-hand attacks while holding an off-hand weapon", inline=False)
         ir = stats.insight_rank(c)
@@ -1029,7 +1029,7 @@ async def travel_calc(
 
 @ref.command(name="modifiers", description="Terrain, range, and situational combat modifiers (L5R 4e).")
 async def modifiers_ref(interaction: discord.Interaction) -> None:
-    embed = discord.Embed(title="⚔️ Combat Modifiers Reference", color=discord.Color.dark_gold())
+    embed = discord.Embed(title="Combat Modifiers Reference", color=discord.Color.dark_gold())
     terrain_lines = [f"**{name}**: {effect}" for name, effect in TERRAIN_MODIFIERS]
     embed.add_field(name="Terrain & Situational", value="\n".join(terrain_lines), inline=False)
     range_lines = [f"**{name}**: {effect}" for name, effect in RANGE_INCREMENTS]
@@ -1051,7 +1051,7 @@ async def modifiers_ref(interaction: discord.Interaction) -> None:
 
 @ref.command(name="calledshot", description="Called Shot: Raise costs and body part effects (L5R 4e).")
 async def calledshot_ref(interaction: discord.Interaction) -> None:
-    embed = discord.Embed(title="\U0001f3af Called Shot Reference", color=discord.Color.dark_gold())
+    embed = discord.Embed(title="Called Shot Reference", color=discord.Color.dark_gold())
     parts_lines = []
     for raises, part in sorted(combat.CALLED_SHOT_PARTS.items()):
         parts_lines.append(f"**{raises} raise{'s' if raises != 1 else ''}**: {part.title()}")
@@ -1088,7 +1088,7 @@ async def tattoo_list(interaction: discord.Interaction) -> None:
         t = tattoo_catalog.TATTOO_CATALOG[n]
         tag = " (passive)" if t["passive"] else ""
         lines.append(f"• **{t['name']}**{tag}")
-    text = f"🐉 **{len(names)} Togashi Tattoos**:\n" + "\n".join(lines)
+    text = f"**{len(names)} Togashi Tattoos**:\n" + "\n".join(lines)
     await interaction.response.send_message(text[:1990], ephemeral=True)
 
 
@@ -1128,4 +1128,4 @@ async def tattoo_search(interaction: discord.Interaction, query: str) -> None:
         await interaction.response.send_message(f"No tattoos match `{query}`.", ephemeral=True)
         return
     lines = [f"• **{t['name']}**: {t['effect'][:80]}..." for t in matches]
-    await interaction.response.send_message("🐉 " + "\n".join(lines), ephemeral=True)
+    await interaction.response.send_message("" + "\n".join(lines), ephemeral=True)
