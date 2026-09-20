@@ -1444,12 +1444,16 @@ class CombatBoardView(views_base.PersistentView):
         reminders = condition_effects.condition_reminders(next_cb.conditions)
         if reminders:
             desc_parts.append("\n".join(reminders))
+        if next_cb.is_npc:
+            desc_parts.append("*Staff controls this combatant.*")
+        turn_idx = enc.combatants.index(next_cb) + 1 if next_cb in enc.combatants else "?"
+        total = len(enc.combatants)
         embed = discord.Embed(
-            title=f">> {next_cb.name}'s Turn",
+            title=f"{next_cb.name}'s Turn",
             color=discord.Color.green(),
             description="\n".join(desc_parts),
         )
-        embed.set_footer(text=f"Round {enc.round}")
+        embed.set_footer(text=f"Round {enc.round}  |  Turn {turn_idx} of {total}")
         await interaction.response.send_message(
             content=mention, embed=embed,
             allowed_mentions=_PING_MENTIONS,
@@ -3861,18 +3865,27 @@ async def combat_next(interaction: discord.Interaction) -> None:
     if current.center_bonus_available:
         rec = _d.resolve_combatant_record(guild, current)
         vr = rec.character.void_ring if rec else "?"
-        desc_parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
+        desc_parts.append(
+            f"**Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. "
+            "+10 Initiative this Round."
+        )
     reminders = condition_effects.condition_reminders(current.conditions)
     if reminders:
         desc_parts.append("\n".join(reminders))
+    if current.is_npc:
+        desc_parts.append("*Staff controls this combatant.*")
+    turn_idx = enc.combatants.index(current) + 1 if current in enc.combatants else "?"
+    total = len(enc.combatants)
     embed = discord.Embed(
-        title=f"➡️ {current.name}'s Turn",
+        title=f"{current.name}'s Turn",
         color=discord.Color.green(),
         description="\n".join(desc_parts) if desc_parts else None,
     )
-    embed.set_footer(text=f"Round {enc.round}")
-    tracker = _render_encounter(enc, guild)
-    await interaction.response.send_message(content=f"{mention}{tracker}", embed=embed)
+    embed.set_footer(text=f"Round {enc.round}  |  Turn {turn_idx} of {total}")
+    await interaction.response.send_message(
+        content=mention, embed=embed,
+        allowed_mentions=_PING_MENTIONS,
+    )
     if enc.round != prev_round:
         await _d.combat_log(guild, f"--- Round {enc.round} ---")
     cond_str = f" [{', '.join(sorted(current.conditions))}]" if current.conditions else ""
@@ -4157,7 +4170,7 @@ _CONDITION_CHOICES = [
 
 def _expiry_notes(enc: encounter.Encounter) -> list[str]:
     """Condition-ended lines from the last round boundary, announced once."""
-    notes = [f"⌛ {line} ended." for line in enc.last_expired]
+    notes = [f"{line} has ended." for line in enc.last_expired]
     enc.last_expired = []
     return notes
 
@@ -6098,36 +6111,46 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         next_cb = enc.advance()
         _d.save_encounter(guild, enc)
         mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
-        desc_parts: list[str] = [f"➡️ It is now **{next_cb.name}**'s turn."]
+        desc_parts: list[str] = [f"It is now **{next_cb.name}**'s turn."]
         desc_parts.extend(_expiry_notes(enc))
         if next_cb.center_bonus_available:
             rec = _d.resolve_combatant_record(guild, next_cb)
             vr = rec.character.void_ring if rec else "?"
-            desc_parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
+            desc_parts.append(
+                f"**Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. "
+                "+10 Initiative this Round."
+            )
         reminders = condition_effects.condition_reminders(next_cb.conditions)
         if reminders:
             desc_parts.append("\n".join(reminders))
+        if next_cb.is_npc:
+            desc_parts.append("*Staff controls this combatant.*")
+        turn_idx = enc.combatants.index(next_cb) + 1 if next_cb in enc.combatants else "?"
+        total = len(enc.combatants)
         embed = discord.Embed(
-            title=f"⏸️ {cb.name} holds their action",
+            title=f"{cb.name} holds their action",
             color=discord.Color.dark_gold(),
             description="\n".join(desc_parts),
         )
-        embed.set_footer(text=f"Round {enc.round}")
-        await interaction.response.send_message(content=f"{mention}{_render_encounter(enc, guild)}", embed=embed)
+        embed.set_footer(text=f"Round {enc.round}  |  Turn {turn_idx} of {total}")
+        await interaction.response.send_message(
+            content=mention, embed=embed,
+            allowed_mentions=_PING_MENTIONS,
+        )
         if enc.round != prev_round:
             await _d.combat_log(guild, f"--- Round {enc.round} ---")
         await _d.combat_log(guild, f"Hold: {cb.name} held (auto-advance)")
         cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
         await _d.combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
-        await _refresh_board(enc, guild)
+        await _repost_board(enc, guild)
     else:
         _d.save_encounter(guild, enc)
         embed = discord.Embed(
-            title=f"⏸️ {cb.name} holds their action",
+            title=f"{cb.name} holds their action",
             color=discord.Color.dark_gold(),
         )
         embed.set_footer(text=f"Set by {interaction.user.display_name}")
-        await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
+        await interaction.response.send_message(embed=embed)
         await _d.combat_log(guild, f"Hold: {cb.name} held")
         await _refresh_board(enc, guild)
 
@@ -6185,28 +6208,38 @@ async def combat_delay(
             init_note = f" (init → {cb.initiative})"
         _d.save_encounter(guild, enc)
         mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
-        delay_desc: list[str] = [f"➡️ It is now **{next_cb.name}**'s turn."]
+        delay_desc: list[str] = [f"It is now **{next_cb.name}**'s turn."]
         delay_desc.extend(_expiry_notes(enc))
         if next_cb.center_bonus_available:
             rec = _d.resolve_combatant_record(guild, next_cb)
             vr = rec.character.void_ring if rec else "?"
-            delay_desc.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
+            delay_desc.append(
+                f"**Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. "
+                "+10 Initiative this Round."
+            )
         reminders = condition_effects.condition_reminders(next_cb.conditions)
         if reminders:
             delay_desc.append("\n".join(reminders))
+        if next_cb.is_npc:
+            delay_desc.append("*Staff controls this combatant.*")
+        turn_idx = enc.combatants.index(next_cb) + 1 if next_cb in enc.combatants else "?"
+        total = len(enc.combatants)
         embed = discord.Embed(
-            title=f"⏳ {cb.name} delays{init_note}",
+            title=f"{cb.name} delays{init_note}",
             color=discord.Color.dark_gold(),
             description="\n".join(delay_desc),
         )
-        embed.set_footer(text=f"Round {enc.round}")
-        await interaction.response.send_message(content=f"{mention}{_render_encounter(enc, guild)}", embed=embed)
+        embed.set_footer(text=f"Round {enc.round}  |  Turn {turn_idx} of {total}")
+        await interaction.response.send_message(
+            content=mention, embed=embed,
+            allowed_mentions=_PING_MENTIONS,
+        )
         if enc.round != prev_round:
             await _d.combat_log(guild, f"--- Round {enc.round} ---")
         await _d.combat_log(guild, f"Delay: {cb.name} delayed (auto-advance){init_note}")
         cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
         await _d.combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
-        await _refresh_board(enc, guild)
+        await _repost_board(enc, guild)
     else:
         if new_initiative is not None:
             cb.initiative = new_initiative
@@ -6216,7 +6249,7 @@ async def combat_delay(
             init_note = f" (init → {cb.initiative})"
         _d.save_encounter(guild, enc)
         embed = discord.Embed(
-            title=f"⏳ {cb.name} delays{init_note}",
+            title=f"{cb.name} delays{init_note}",
             color=discord.Color.dark_gold(),
         )
         embed.set_footer(text=f"Set by {interaction.user.display_name}")
@@ -6314,24 +6347,33 @@ async def combat_turn_done(
     if next_cb.center_bonus_available:
         rec = _d.resolve_combatant_record(guild, next_cb)
         vr = rec.character.void_ring if rec else "?"
-        desc_parts.append(f"🎯 **Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. +10 Initiative this Round.")
+        desc_parts.append(
+            f"**Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. "
+            "+10 Initiative this Round."
+        )
     reminders = condition_effects.condition_reminders(next_cb.conditions)
     if reminders:
         desc_parts.append("\n".join(reminders))
+    if next_cb.is_npc:
+        desc_parts.append("*Staff controls this combatant.*")
+    turn_idx = enc.combatants.index(next_cb) + 1 if next_cb in enc.combatants else "?"
+    total = len(enc.combatants)
     embed = discord.Embed(
-        title=f"➡️ {next_cb.name}'s Turn",
+        title=f"{next_cb.name}'s Turn",
         color=discord.Color.green(),
         description="\n".join(desc_parts),
     )
-    embed.set_footer(text=f"Round {enc.round}")
-    tracker = _render_encounter(enc, guild)
-    await interaction.response.send_message(content=f"{mention}{tracker}", embed=embed)
+    embed.set_footer(text=f"Round {enc.round}  |  Turn {turn_idx} of {total}")
+    await interaction.response.send_message(
+        content=mention, embed=embed,
+        allowed_mentions=_PING_MENTIONS,
+    )
     if enc.round != prev_round:
         await _d.combat_log(guild, f"--- Round {enc.round} ---")
     await _d.combat_log(guild, f"Turn done: {ended_name}")
     cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
     await _d.combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
-    await _refresh_board(enc, guild)
+    await _repost_board(enc, guild)
 
 
 @combat_turn.command(name="surprise", description="Toggle the surprise round flag on the current encounter. [Fortune]")
