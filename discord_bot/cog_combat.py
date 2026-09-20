@@ -1228,6 +1228,68 @@ def _build_board_embed(enc: encounter.Encounter, guild_id: str) -> discord.Embed
     return embed
 
 
+_CAST_ELEMENTS = ("air", "earth", "fire", "water", "void")
+
+
+def _best_element_for_all_spell(c: Character) -> str | None:
+    """For 'All' element spells, pick the element with the highest ring that has slots."""
+    best: str | None = None
+    best_ring = -1
+    slots_tracked = bool(c.spell_slots)
+    for elem in _CAST_ELEMENTS:
+        if elem == "void":
+            continue
+        if slots_tracked:
+            slot = c.spell_slots.get(elem, 0)
+            if slot <= 0 and c.void_spell_bonus <= 0:
+                continue
+        ring = stats.ring_value(c, elem)
+        if ring > best_ring:
+            best_ring = ring
+            best = elem
+    return best
+
+
+def _build_castable_spells(c: Character) -> list[tuple[str, dict, str]]:
+    """Return (spell_name, spell_data, element_key) for each castable known spell."""
+    result: list[tuple[str, dict, str]] = []
+    slots_tracked = bool(c.spell_slots)
+    for name in c.spells_known:
+        s = spells.get(name)
+        if s is None:
+            continue
+        elem = s["element"].lower()
+        if elem not in _CAST_ELEMENTS:
+            elem_pick = _best_element_for_all_spell(c)
+            if elem_pick is None:
+                continue
+            elem = elem_pick
+        if slots_tracked:
+            slot = c.spell_slots.get(elem, 0)
+            if slot <= 0 and c.void_spell_bonus <= 0:
+                continue
+        affinity = c.affinity_element.lower() == elem if c.affinity_element else False
+        deficiency = c.deficiency_element.lower() == elem if c.deficiency_element else False
+        effective = c.school_rank + (1 if affinity else 0) + (-1 if deficiency else 0)
+        if effective <= 0:
+            continue
+        result.append((s["name"], s, elem))
+    return result
+
+
+def _slot_display(c: Character, element: str) -> str:
+    slot = c.spell_slots.get(element)
+    if slot is None:
+        return "slots: untracked"
+    mx = stats.spell_slot_max(c, element)
+    bonus = c.void_spell_bonus
+    if slot > 0:
+        return f"{slot}/{mx} {element.title()}"
+    if bonus > 0:
+        return f"0/{mx} {element.title()}, {bonus} bonus"
+    return f"0/{mx} {element.title()}"
+
+
 class CombatBoardView(views_base.PersistentView):
     KIND = "combat_board"
 
@@ -1462,6 +1524,59 @@ class CombatBoardView(views_base.PersistentView):
         view = _BoardAttackTargetSelect(self.guild_id, self.channel_id, cur.name, options)
         await interaction.response.send_message(
             f"Select a target for **{cur.name}**'s attack:", view=view, ephemeral=True,
+        )
+
+    @discord.ui.button(label="Cast Spell", style=discord.ButtonStyle.blurple, row=2)
+    async def cast_spell_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        if not enc.started:
+            await interaction.response.send_message(
+                "Encounter has not started yet. Use `/combat next` to begin.", ephemeral=True,
+            )
+            return
+        cur = enc.current()
+        if cur is None:
+            await interaction.response.send_message("No current combatant.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        if not self._is_active_player(uid, enc) and not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"It is **{cur.name}**'s turn, not yours.", ephemeral=True,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cur)
+        if rec is None:
+            await interaction.response.send_message(
+                f"Cannot resolve sheet for **{cur.name}**.", ephemeral=True,
+            )
+            return
+        c = rec.character
+        if not c.spells_known:
+            await interaction.response.send_message(
+                f"**{c.name}** knows no spells.", ephemeral=True,
+            )
+            return
+        castable = _build_castable_spells(c)
+        if not castable:
+            await interaction.response.send_message(
+                f"**{c.name}** has no castable spells (no slots remaining or deficiency blocks all).\n"
+                f"A DM must call `/dm new_day` to refresh spell slots.",
+                ephemeral=True,
+            )
+            return
+        options: list[discord.SelectOption] = []
+        for spell_name, s, elem in castable[:25]:
+            tn = combat.spell_casting_tn(s["mastery"])
+            slot_info = _slot_display(c, elem)
+            label = spell_name[:100]
+            desc = f"{s['element']} M{s['mastery']} TN {tn} | {slot_info}"[:100]
+            options.append(discord.SelectOption(label=label, value=spell_name, description=desc))
+        view = _BoardSpellSelect(self.guild_id, self.channel_id, cur.name, interaction.user.id, options)
+        await interaction.response.send_message(
+            f"Select a spell for **{cur.name}** to cast:", view=view, ephemeral=True,
         )
 
 
@@ -1713,6 +1828,203 @@ class _BoardTechniqueSelect(discord.ui.View):
                 pass
         await _d.combat_log(self.guild_id, f"Technique: {cb.name} declares {tech_name}{cost_note}")
         await _refresh_board(enc, self.guild_id)
+
+
+class _BoardSpellSelect(discord.ui.View):
+    def __init__(self, guild_id: str, channel_id: int, caster_name: str,
+                 caster_user_id: int, options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.caster_name = caster_name
+        self.caster_user_id = caster_user_id
+        self.spell_select.options = options
+
+    @discord.ui.select(placeholder="Choose a spell to cast...")
+    async def spell_select(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        spell_name = select.values[0]
+        s = spells.get(spell_name)
+        if s is None:
+            await interaction.response.edit_message(content=f"Unknown spell: {spell_name}", view=None)
+            return
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            await interaction.response.edit_message(content="No active encounter.", view=None)
+            return
+        cb = enc.find(self.caster_name)
+        if cb is None:
+            await interaction.response.edit_message(
+                content=f"**{self.caster_name}** is no longer in initiative.", view=None,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cb)
+        if rec is None:
+            await interaction.response.edit_message(
+                content=f"Cannot resolve sheet for **{self.caster_name}**.", view=None,
+            )
+            return
+        c = rec.character
+        element = s["element"].lower()
+        if element not in _CAST_ELEMENTS:
+            element = _best_element_for_all_spell(c)
+            if element is None:
+                await interaction.response.edit_message(
+                    content="No spell slots available for any element.", view=None,
+                )
+                return
+        used_bonus_slot = False
+        slot_remaining = c.spell_slots.get(element)
+        if slot_remaining is not None and slot_remaining <= 0:
+            if c.void_spell_bonus > 0:
+                used_bonus_slot = True
+            else:
+                slot_max = stats.spell_slot_max(c, element)
+                bonus_max = stats.void_bonus_max(c)
+                await interaction.response.edit_message(
+                    content=(
+                        f"**{c.name}** has no **{element.title()}** spell slots remaining "
+                        f"(0/{slot_max}) and no Void bonus slots (0/{bonus_max})."
+                    ),
+                    view=None,
+                )
+                return
+        affinity = c.affinity_element.lower() == element if c.affinity_element else False
+        deficiency = c.deficiency_element.lower() == element if c.deficiency_element else False
+        fear_r = cb.fear_penalty
+        wound_pen = stats.wound_penalty(c)
+        ring_val = stats.ring_value(c, element)
+        result = combat.resolve_spell_casting(
+            ring_val, c.school_rank, s["mastery"], _d.engine,
+            affinity=affinity, deficiency=deficiency,
+            extra_rolled=-fear_r, extra_kept=0,
+            raises=0, extra_flat=wound_pen,
+        )
+        if result.get("cannot_cast"):
+            await interaction.response.edit_message(
+                content=f"**{c.name}** cannot cast **{s['name']}**: {result['reason']}.",
+                view=None,
+            )
+            return
+        if used_bonus_slot:
+            c.void_spell_bonus = max(0, c.void_spell_bonus - 1)
+        elif element in c.spell_slots:
+            c.spell_slots[element] = max(0, c.spell_slots[element] - 1)
+        _d.store.save(rec)
+        success = result["success"]
+        embed = discord.Embed(
+            title=f"{'SUCCESS' if success else 'FAILED'}: {c.name} casts {s['name']}",
+            color=discord.Color.gold() if success else discord.Color.red(),
+        )
+        notes: list[str] = []
+        if affinity:
+            notes.append(f"Affinity ({element.title()}): Effective rank {result['effective_rank']}")
+        if deficiency:
+            notes.append(f"Deficiency ({element.title()}): Effective rank {result['effective_rank']}")
+        if wound_pen:
+            notes.append(f"Wound penalty: {wound_pen}")
+        if fear_r:
+            notes.append(f"Fear: -{fear_r}k0")
+        if used_bonus_slot:
+            bonus_max = stats.void_bonus_max(c)
+            notes.append(f"Void bonus slot used ({c.void_spell_bonus}/{bonus_max} left)")
+        elif element in c.spell_slots:
+            slot_max = stats.spell_slot_max(c, element)
+            notes.append(f"{element.title()} slots: {c.spell_slots[element]}/{slot_max}")
+        roll_desc = (
+            f"**{s['element']}** Ring {ring_val} + School Rank {result['effective_rank']}"
+            f" = {result['rolled']}k{result['kept']}\n"
+            f"Roll **{result['total']}** vs TN **{result['tn']}**"
+            f": {'**SUCCESS**' if success else '**FAILED** (slot consumed)'}"
+        )
+        embed.add_field(name="Spell Casting Roll", value=roll_desc, inline=False)
+        if notes:
+            embed.add_field(name="Modifiers", value=" | ".join(notes), inline=False)
+        if success:
+            spell_info = f"**Mastery {s['mastery']}** | Range: {s['range']} | Duration: {s['duration']}"
+            embed.add_field(name="Spell", value=spell_info, inline=False)
+            if s.get("effect"):
+                effect_text = s["effect"][:1024]
+                embed.add_field(name="Effect", value=effect_text, inline=False)
+        embed.set_footer(text=f"Cast by {interaction.user.display_name} | Use /spell cast for raises, Void, and concealment")
+        await interaction.response.edit_message(
+            content=f"**{c.name}** {'casts' if success else 'fails to cast'} **{s['name']}**.",
+            view=None,
+        )
+        ch = _d.bot_client.get_channel(self.channel_id)
+        conds = spell_conditions(s.get("effect", "")) if success else []
+        if ch is not None:
+            if conds:
+                targets = [t for t in enc.combatants]
+                if targets:
+                    target_view = _SpellConditionTargetSelect(
+                        self.guild_id, self.channel_id, self.caster_name,
+                        self.caster_user_id, s["name"], conds, targets,
+                    )
+                    try:
+                        await ch.send(embed=embed, view=target_view)
+                    except discord.HTTPException:
+                        await ch.send(embed=embed)
+                else:
+                    try:
+                        await ch.send(embed=embed)
+                    except discord.HTTPException:
+                        pass
+            else:
+                try:
+                    await ch.send(embed=embed)
+                except discord.HTTPException:
+                    pass
+        tag = "SUCCESS" if success else "FAILED"
+        await _d.combat_log(
+            self.guild_id,
+            f"Spell: {c.name} {tag} {s['name']} ({s['element']} M{s['mastery']}) "
+            f"roll {result['total']} vs TN {result['tn']}"
+        )
+        await _refresh_board(enc, self.guild_id)
+
+
+class _SpellConditionTargetSelect(discord.ui.View):
+    """Dropdown attached to a successful spell cast: Select a target to request conditions on."""
+
+    def __init__(self, guild_id: str, channel_id: int, caster_name: str,
+                 caster_user_id: int, spell_name: str,
+                 conds: list[tuple[str, int]],
+                 targets: list[encounter.Combatant]) -> None:
+        super().__init__(timeout=300)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.caster_name = caster_name
+        self.caster_user_id = caster_user_id
+        self.spell_name = spell_name
+        self.conds = conds
+        options = [
+            discord.SelectOption(label=t.name[:100], value=t.name[:100])
+            for t in targets[:25]
+        ]
+        self.target_select.options = options
+
+    @discord.ui.select(placeholder="Apply conditions to...")
+    async def target_select(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        if interaction.user.id != self.caster_user_id and not _d.is_dm(interaction):
+            await interaction.response.send_message("Only the caster or a DM can do this.", ephemeral=True)
+            return
+        target_name = select.values[0]
+        enc = _d.encounters.get(self.channel_id)
+        tgt_cb = enc.find(target_name) if enc else None
+        if tgt_cb is None:
+            await interaction.response.send_message(
+                f"**{target_name}** is no longer in initiative.", ephemeral=True,
+            )
+            return
+        prompt_view = SpellConditionPromptView(
+            self.guild_id, self.channel_id, tgt_cb.name, self.caster_user_id,
+            self.spell_name, self.conds,
+        )
+        cond_names = ", ".join(c_name.title() for c_name, _ in self.conds)
+        await interaction.response.send_message(
+            f"**{self.spell_name}** on **{tgt_cb.name}**: Request conditions ({cond_names})",
+            view=prompt_view,
+        )
 
 
 async def _refresh_board(enc: encounter.Encounter, guild_id: str) -> None:
@@ -5067,7 +5379,7 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
     enc.note_join(rec.creature.name, creature.creature_wound_level(rec.creature))
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
-    await interaction.response.send_message(_render_encounter(enc, guild))
+    await interaction.response.send_message(_render_encounter(enc, guild), ephemeral=True)
     await _refresh_board(enc, guild)
 
 
@@ -5143,7 +5455,7 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
         description=desc[:4096],
     )
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
-    await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
+    await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed, ephemeral=True)
     await _refresh_board(enc, guild)
 
 
