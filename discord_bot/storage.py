@@ -185,6 +185,13 @@ CREATE TABLE IF NOT EXISTS weather_channels (
     message_id TEXT NOT NULL DEFAULT ''
 );
 """,
+    # 14: multi-axis weather (cloud, precip, wind, temperature)
+    """\
+ALTER TABLE weather ADD COLUMN cloud TEXT NOT NULL DEFAULT '';
+ALTER TABLE weather ADD COLUMN precip TEXT NOT NULL DEFAULT '';
+ALTER TABLE weather ADD COLUMN wind TEXT NOT NULL DEFAULT '';
+ALTER TABLE weather ADD COLUMN temperature TEXT NOT NULL DEFAULT '';
+""",
 ]
 
 # How many before-states to keep per character/creature for /dm undo.
@@ -1607,26 +1614,37 @@ class Store:
     def get_weather(self, guild_id: str) -> dict | None:
         with self._lock:
             row = self._conn.execute(
-                "SELECT weather_type, set_by, set_at FROM weather WHERE guild_id = ?",
+                "SELECT weather_type, cloud, precip, wind, temperature, set_by, set_at "
+                "FROM weather WHERE guild_id = ?",
                 (guild_id,),
             ).fetchone()
         if row is None:
             return None
         return {
             "weather_type": row["weather_type"],
+            "cloud": row["cloud"],
+            "precip": row["precip"],
+            "wind": row["wind"],
+            "temperature": row["temperature"],
             "set_by": row["set_by"],
             "set_at": row["set_at"],
         }
 
-    def set_weather(self, guild_id: str, weather_type: str, set_by: str) -> None:
+    def set_weather(
+        self, guild_id: str, weather_type: str, set_by: str,
+        cloud: str = "", precip: str = "", wind: str = "", temperature: str = "",
+    ) -> None:
         with self._lock, self._conn:
             self._conn.execute(
-                "INSERT INTO weather (guild_id, weather_type, set_by, set_at) "
-                "VALUES (?, ?, ?, ?) "
+                "INSERT INTO weather "
+                "(guild_id, weather_type, cloud, precip, wind, temperature, set_by, set_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(guild_id) DO UPDATE SET "
-                "weather_type = excluded.weather_type, set_by = excluded.set_by, "
-                "set_at = excluded.set_at",
-                (guild_id, weather_type, set_by, time.time()),
+                "weather_type = excluded.weather_type, "
+                "cloud = excluded.cloud, precip = excluded.precip, "
+                "wind = excluded.wind, temperature = excluded.temperature, "
+                "set_by = excluded.set_by, set_at = excluded.set_at",
+                (guild_id, weather_type, cloud, precip, wind, temperature, set_by, time.time()),
             )
 
     def get_weather_channel(self, guild_id: str) -> tuple[str, str] | None:
