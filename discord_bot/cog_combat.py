@@ -1120,6 +1120,237 @@ _WEAPON_MATERIAL_CHOICES = [
     app_commands.Choice(name="Nemuranai (magical)", value="nemuranai"),
 ]
 # ===========================================================================
+# Combat Board: persistent initiative display with player action buttons
+# ===========================================================================
+
+_BOARD_STANCE_OPTIONS = [
+    discord.SelectOption(label="Attack (standard)", value="attack"),
+    discord.SelectOption(label="Full Attack (+2k1 hit, -10 ATN)", value="full_attack"),
+    discord.SelectOption(label="Defense (+Air+Defense to ATN)", value="defense"),
+    discord.SelectOption(label="Center (forfeit actions, +1k1+Void next)", value="center"),
+]
+
+
+def _build_board_embed(enc: encounter.Encounter, guild_id: str) -> discord.Embed:
+    tracker = _render_encounter(enc, guild_id)
+    embed = discord.Embed(
+        title="Combat Board",
+        description=tracker,
+        color=discord.Color.dark_red(),
+    )
+    cur = enc.current()
+    if enc.started and cur is not None:
+        owner_tag = f"<@{cur.owner_id}>" if cur.owner_id and not cur.is_npc else cur.name
+        embed.set_footer(text=f"Current turn: {cur.name}  |  Attacks: /fight attack")
+    elif not enc.started:
+        embed.set_footer(text="Waiting to start  |  /combat next to begin")
+    else:
+        embed.set_footer(text="Attacks: /fight attack")
+    return embed
+
+
+class CombatBoardView(views_base.PersistentView):
+    KIND = "combat_board"
+
+    def __init__(self, guild_id: str, channel_id: int) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+
+    def _get_enc(self) -> encounter.Encounter | None:
+        return _d.encounters.get(self.channel_id)
+
+    def _is_active_player(self, user_id: str, enc: encounter.Encounter) -> bool:
+        if not enc.started:
+            return False
+        cur = enc.current()
+        return cur is not None and cur.owner_id == user_id and not cur.is_npc
+
+    @discord.ui.button(label="Stance", style=discord.ButtonStyle.primary, row=0)
+    async def stance_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        if not self._is_active_player(uid, enc) and not _d.is_dm(interaction):
+            cur = enc.current()
+            name = cur.name if cur else "unknown"
+            await interaction.response.send_message(
+                f"It is **{name}**'s turn, not yours.", ephemeral=True
+            )
+            return
+        cur = enc.current()
+        view = _BoardStanceSelect(self.guild_id, self.channel_id, cur.name)
+        await interaction.response.send_message(
+            f"Select stance for **{cur.name}**:", view=view, ephemeral=True,
+        )
+
+    @discord.ui.button(label="End Turn", style=discord.ButtonStyle.secondary, row=0)
+    async def end_turn_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        if not enc.started:
+            await interaction.response.send_message(
+                "Encounter has not started yet. Use `/combat next` to begin.", ephemeral=True,
+            )
+            return
+        if not enc.combatants:
+            await interaction.response.send_message("No combatants.", ephemeral=True)
+            return
+        cur = enc.current()
+        if cur is None:
+            await interaction.response.send_message("No current combatant.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        if not self._is_active_player(uid, enc) and not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"It is **{cur.name}**'s turn, not yours.", ephemeral=True,
+            )
+            return
+        ended_name = cur.name
+        prev_round = enc.round
+        next_cb = enc.advance()
+        guild = self.guild_id
+        _d.save_encounter(guild, enc)
+        mention = f"<@{next_cb.owner_id}> " if next_cb.owner_id and not next_cb.is_npc else ""
+        desc_parts: list[str] = [f"**{ended_name}**'s turn is done."]
+        expiry = _expiry_notes(enc)
+        if expiry:
+            desc_parts.extend(expiry)
+        if next_cb.center_bonus_available:
+            rec = _d.resolve_combatant_record(guild, next_cb)
+            vr = rec.character.void_ring if rec else "?"
+            desc_parts.append(
+                f"**Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. "
+                "+10 Initiative this Round."
+            )
+        reminders = condition_effects.condition_reminders(next_cb.conditions)
+        if reminders:
+            desc_parts.append("\n".join(reminders))
+        embed = discord.Embed(
+            title=f">> {next_cb.name}'s Turn",
+            color=discord.Color.green(),
+            description="\n".join(desc_parts),
+        )
+        embed.set_footer(text=f"Round {enc.round}")
+        await interaction.response.send_message(
+            content=mention, embed=embed,
+            allowed_mentions=_PING_MENTIONS,
+        )
+        if enc.round != prev_round:
+            await _d.combat_log(guild, f"--- Round {enc.round} ---")
+        await _d.combat_log(guild, f"Turn done: {ended_name}")
+        cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
+        await _d.combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
+        await _refresh_board(enc, guild)
+
+    @discord.ui.button(label="End Combat", style=discord.ButtonStyle.danger, row=0)
+    async def end_combat_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"Only **{_d.ROLE_FORTUNE}** or **{_d.ROLE_KAMI}** can end combat.", ephemeral=True,
+            )
+            return
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        guild = self.guild_id
+        embed, logs = _render_summary(enc, guild, final=True)
+        await _close_roster_message(enc, guild, "Encounter ended.")
+        _d.encounters.pop(self.channel_id, None)
+        _d.delete_encounter(self.channel_id)
+        self._disable()
+        enc.board_message_id = 0
+        await interaction.response.send_message(content="Encounter ended.", embed=embed)
+        await _d.combat_log(guild, "--- Encounter ended --- " + (" | ".join(logs) if logs else ""))
+
+
+class _BoardStanceSelect(discord.ui.View):
+    def __init__(self, guild_id: str, channel_id: int, combatant_name: str) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.combatant_name = combatant_name
+
+    @discord.ui.select(
+        placeholder="Choose a stance...",
+        options=_BOARD_STANCE_OPTIONS,
+    )
+    async def pick(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        stance_val = select.values[0]
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            await interaction.response.edit_message(content="No active encounter.", view=None)
+            return
+        cb = enc.find(self.combatant_name)
+        if cb is None:
+            await interaction.response.edit_message(
+                content=f"**{self.combatant_name}** is no longer in initiative.", view=None,
+            )
+            return
+        if stance_val == "full_defense":
+            await interaction.response.edit_message(
+                content="Use `/fight full_defense` instead: Full Defense requires a Defense/Reflexes roll.",
+                view=None,
+            )
+            return
+        blocked, block_reason = condition_effects.invalid_stance(cb.conditions, stance_val)
+        if blocked:
+            await interaction.response.edit_message(
+                content=f"**{cb.name}** cannot use that stance: {block_reason}", view=None,
+            )
+            return
+        cb.stance = stance_val
+        if stance_val == "center":
+            cb.center_bonus_available = False
+            cb.center_init_boost = 0
+        _d.save_encounter(self.guild_id, enc)
+        label = stance_val.replace("_", " ").title()
+        effects = combat.stance_effects(stance_val)
+        msg = f"**{cb.name}**: {label} Stance"
+        if effects:
+            msg += f"\n{effects}"
+        await interaction.response.edit_message(content=msg, view=None)
+        await _d.combat_log(self.guild_id, f"Stance: {cb.name} >> {label}")
+        await _refresh_board(enc, self.guild_id)
+
+
+async def _refresh_board(enc: encounter.Encounter, guild_id: str) -> None:
+    if not enc.board_message_id:
+        return
+    ch = _d.bot_client.get_channel(enc.channel_id)
+    if ch is None:
+        return
+    try:
+        msg = await ch.fetch_message(enc.board_message_id)
+    except discord.NotFound:
+        enc.board_message_id = 0
+        _d.save_encounter(guild_id, enc)
+        return
+    except discord.HTTPException:
+        return
+    embed = _build_board_embed(enc, guild_id)
+    view = CombatBoardView(guild_id, enc.channel_id)
+    try:
+        await msg.edit(embed=embed, view=view)
+    except discord.HTTPException:
+        pass
+
+
+async def _post_board(channel: discord.TextChannel, enc: encounter.Encounter, guild_id: str) -> None:
+    embed = _build_board_embed(enc, guild_id)
+    view = CombatBoardView(guild_id, enc.channel_id)
+    msg = await channel.send(embed=embed, view=view)
+    await view.persist(msg)
+    enc.board_message_id = msg.id
+    _d.save_encounter(guild_id, enc)
+
+
+# ===========================================================================
 # /combat group: initiative tracker
 # ===========================================================================
 combat_group = app_commands.Group(name="combat", description="Track combat initiative and turn order.")
@@ -1909,6 +2140,7 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
     enc, init_total = _join_record(guild, interaction.channel_id, str(owner.id), rec)
     await interaction.response.send_message(_render_encounter(enc, guild))
     await _d.combat_log(guild, f"Joined: {rec.character.name} (Init {init_total})")
+    await _refresh_board(enc, guild)
 
 
 def _join_record(guild: str, channel_id: int, owner_id: str, rec: _storage_mod.CharacterRecord) -> tuple[encounter.Encounter, int]:
@@ -2035,6 +2267,8 @@ class RosterView(views_base.PersistentView):
             notes = await self._roll_in(interaction, enc, [uid])
             extra = "\n".join(notes) + "\n" + _render_encounter(enc, self.guild_id) if notes else ""
         await self._refresh(interaction, enc, extra)
+        if enc.roster_begun:
+            await _refresh_board(enc, self.guild_id)
 
     @discord.ui.button(label="Decline", style=discord.ButtonStyle.secondary, emoji="❌")
     async def decline(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -2076,6 +2310,8 @@ class RosterView(views_base.PersistentView):
         await self._refresh(interaction, enc, extra)
         if forced:
             await _d.combat_log(self.guild_id, f"Roster: {interaction.user.display_name} forced {len(forced)} player(s) in")
+            if enc.roster_begun:
+                await _refresh_board(enc, self.guild_id)
 
     @discord.ui.button(label="Begin", style=discord.ButtonStyle.primary, emoji="⚔️")
     async def begin(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -2100,6 +2336,7 @@ class RosterView(views_base.PersistentView):
                  + "\nStaff: Add NPCs with `/combat add`, `/combat npc` or `/combat creature`, then `/combat next`." + tail)
         await self._refresh(interaction, enc, extra)
         await _d.combat_log(self.guild_id, f"Roster begun by {interaction.user.display_name}: {len(notes)} rolled")
+        await _refresh_board(enc, self.guild_id)
 
 
 class _RosterPickView(discord.ui.View):
@@ -2348,6 +2585,7 @@ async def combat_add(
     _d.save_encounter(guild, enc)
     await interaction.response.send_message(_render_encounter(enc, guild))
     await _d.combat_log(guild, f"Added NPC: {name} (Init {result.total})")
+    await _refresh_board(enc, guild)
 
 
 @combat_group.command(name="next", description="Advance to the next combatant's turn.")
@@ -2400,6 +2638,7 @@ async def combat_next(interaction: discord.Interaction) -> None:
         await _d.combat_log(guild, f"--- Round {enc.round} ---")
     cond_str = f" [{', '.join(sorted(current.conditions))}]" if current.conditions else ""
     await _d.combat_log(guild, f"Turn: {current.name}{cond_str}")
+    await _refresh_board(enc, guild)
 
 
 @combat_group.command(name="status", description="Show the current initiative order.")
@@ -2410,6 +2649,37 @@ async def combat_status(interaction: discord.Interaction) -> None:
     if enc is None:
         return
     await interaction.response.send_message(_render_encounter(enc, str(interaction.guild_id)))
+
+
+@combat_group.command(name="board", description="Post (or refresh) the combat board with action buttons.")
+async def combat_board(interaction: discord.Interaction) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    enc = await _d.require_encounter(interaction)
+    if enc is None:
+        return
+    guild = str(interaction.guild_id)
+    if enc.board_message_id:
+        ch = interaction.channel
+        try:
+            old_msg = await ch.fetch_message(enc.board_message_id)
+            old_view = CombatBoardView(guild, enc.channel_id)
+            old_view._persist_message_id = enc.board_message_id
+            old_view._disable()
+            try:
+                await old_msg.edit(view=old_view)
+            except discord.HTTPException:
+                pass
+        except discord.NotFound:
+            pass
+        enc.board_message_id = 0
+    await interaction.response.defer()
+    embed = _build_board_embed(enc, guild)
+    view = CombatBoardView(guild, enc.channel_id)
+    msg = await interaction.followup.send(embed=embed, view=view, wait=True)
+    await view.persist(msg)
+    enc.board_message_id = msg.id
+    _d.save_encounter(guild, enc)
 
 
 @combat_group.command(name="remove", description="Remove a combatant from initiative. [Fortune]")
@@ -2429,6 +2699,7 @@ async def combat_remove(interaction: discord.Interaction, name: str) -> None:
     embed = discord.Embed(title=f"✖️ Removed: {name}", color=discord.Color.greyple())
     embed.set_footer(text=f"Removed by {interaction.user.display_name}")
     await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
+    await _refresh_board(enc, guild)
 
 
 def _end_level(enc: encounter.Encounter, guild: str, name: str) -> str:
@@ -2526,6 +2797,17 @@ async def combat_end(interaction: discord.Interaction) -> None:
         return
     embed, logs = _render_summary(enc, guild, final=True)
     await _close_roster_message(enc, guild, "Encounter ended.")
+    if enc.board_message_id:
+        ch = _d.bot_client.get_channel(enc.channel_id)
+        if ch is not None:
+            try:
+                board_msg = await ch.fetch_message(enc.board_message_id)
+                bv = CombatBoardView(guild, enc.channel_id)
+                bv._persist_message_id = enc.board_message_id
+                bv._disable()
+                await board_msg.edit(view=bv)
+            except discord.HTTPException:
+                pass
     _d.encounters.pop(interaction.channel_id, None)
     _d.delete_encounter(interaction.channel_id)
     await interaction.response.send_message(content="⚔️ Encounter ended.", embed=embed)
@@ -2625,6 +2907,7 @@ async def combat_npc(interaction: discord.Interaction, name: str) -> None:
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     await interaction.response.send_message(_render_encounter(enc, guild))
+    await _refresh_board(enc, guild)
 
 
 _CONDITION_CHOICES = [
@@ -2677,6 +2960,7 @@ async def combat_condition_set(
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
     await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
     await _d.combat_log(str(interaction.guild_id), f"Condition: {c.name} +{condition.name}{dur}")
+    await _refresh_board(enc, guild)
 
 
 @combat_condition.command(name="clear", description="Remove a condition from a combatant. [Fortune]")
@@ -2712,6 +2996,7 @@ async def combat_condition_clear(
     embed.set_footer(text=f"Cleared by {interaction.user.display_name}")
     await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
     await _d.combat_log(str(interaction.guild_id), f"Condition: {c.name} -{condition.name}")
+    await _refresh_board(enc, guild)
 
 
 @combat_condition.command(name="list", description="Show a combatant's active conditions.")
@@ -3153,6 +3438,7 @@ async def combat_full_defense(
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
     await _d.combat_log(str(interaction.guild_id), f"Full Defense: {cb.name} (+{result['bonus']} Armor TN)")
+    await _refresh_board(enc, guild)
 
 # ===========================================================================
 # /combat void group: round-level Void Point effects (GDD s25)
@@ -4271,6 +4557,7 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     await interaction.response.send_message(_render_encounter(enc, guild))
+    await _refresh_board(enc, guild)
 
 
 @combat_group.command(
@@ -4346,6 +4633,7 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
     )
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
     await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
+    await _refresh_board(enc, guild)
 
 
 @combat_group.command(
@@ -4408,6 +4696,7 @@ async def combat_room(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
     for entry in added:
         await _d.combat_log(guild, f"Room join: {entry}")
+    await _refresh_board(enc, guild)
 
 # ---------------------------------------------------------------------------
 # Phase 42: Stance Tracking (#1)
@@ -4485,6 +4774,7 @@ async def combat_stance(
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
     await _d.combat_log(str(interaction.guild_id), f"Stance: {cb.name} → {label}")
+    await _refresh_board(enc, str(interaction.guild_id))
 
 
 @combat_turn.command(name="init", description="Adjust a combatant's initiative value. [Fortune]")
@@ -4524,6 +4814,7 @@ async def combat_init(
     )
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
     await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
+    await _refresh_board(enc, guild)
 
 
 @combat_turn.command(name="hold", description="Mark a combatant as holding their action. [Fortune]")
@@ -4559,6 +4850,7 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         embed.set_footer(text=f"Released by {interaction.user.display_name}")
         await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
         await _d.combat_log(guild, f"Hold: {cb.name} released")
+        await _refresh_board(enc, guild)
         return
 
     cb.held = True
@@ -4588,6 +4880,7 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         await _d.combat_log(guild, f"Hold: {cb.name} held (auto-advance)")
         cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
         await _d.combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
+        await _refresh_board(enc, guild)
     else:
         _d.save_encounter(guild, enc)
         embed = discord.Embed(
@@ -4597,6 +4890,7 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         embed.set_footer(text=f"Set by {interaction.user.display_name}")
         await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
         await _d.combat_log(guild, f"Hold: {cb.name} held")
+        await _refresh_board(enc, guild)
 
 
 @combat_turn.command(name="delay", description="Mark a combatant as delaying. [Fortune]")
@@ -4636,6 +4930,7 @@ async def combat_delay(
         embed.set_footer(text=f"Released by {interaction.user.display_name}")
         await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
         await _d.combat_log(guild, f"Delay: {cb.name} released")
+        await _refresh_board(enc, guild)
         return
 
     cb.delayed = True
@@ -4672,6 +4967,7 @@ async def combat_delay(
         await _d.combat_log(guild, f"Delay: {cb.name} delayed (auto-advance){init_note}")
         cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
         await _d.combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
+        await _refresh_board(enc, guild)
     else:
         if new_initiative is not None:
             cb.initiative = new_initiative
@@ -4687,6 +4983,7 @@ async def combat_delay(
         embed.set_footer(text=f"Set by {interaction.user.display_name}")
         await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
         await _d.combat_log(guild, f"Delay: {cb.name} delayed{init_note}")
+        await _refresh_board(enc, guild)
 
 
 @combat_turn.command(name="act", description="A held/delayed combatant takes their action now. [Fortune]")
@@ -4721,6 +5018,7 @@ async def combat_act(interaction: discord.Interaction, name: str) -> None:
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
     await interaction.response.send_message(content=_render_encounter(enc, guild), embed=embed)
     await _d.combat_log(guild, f"Act: {cb.name} (was {was})")
+    await _refresh_board(enc, guild)
 
 
 @combat_turn.command(name="done", description="End your turn (or a named combatant's turn). Advances to the next combatant.")
@@ -4794,6 +5092,7 @@ async def combat_turn_done(
     await _d.combat_log(guild, f"Turn done: {ended_name}")
     cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
     await _d.combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
+    await _refresh_board(enc, guild)
 
 
 @combat_turn.command(name="surprise", description="Toggle the surprise round flag on the current encounter. [Fortune]")

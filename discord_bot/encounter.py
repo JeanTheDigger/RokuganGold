@@ -186,6 +186,8 @@ class Encounter:
     deaths: list[str] = field(default_factory=list)
     # Conditions that ended at the last round boundary ("Name: Dazed"); transient.
     last_expired: list[str] = field(default_factory=list)
+    # Combat board: the message id of the persistent board embed (0 = no board).
+    board_message_id: int = 0
 
     def expire_conditions(self) -> list[str]:
         """Clear timed conditions due at the current Round. Returns 'Name: Condition' lines."""
@@ -359,6 +361,7 @@ class Encounter:
             "started_at": self.started_at,
             "tally": {k: dict(v) for k, v in self.tally.items()},
             "deaths": list(self.deaths),
+            "board_message_id": self.board_message_id,
         }
 
     @classmethod
@@ -379,6 +382,7 @@ class Encounter:
             started_at=d.get("started_at", 0.0),
             tally={k: dict(v) for k, v in d.get("tally", {}).items()},
             deaths=list(d.get("deaths", [])),
+            board_message_id=d.get("board_message_id", 0),
         )
         enc.combatants = [Combatant.from_dict(c) for c in d.get("combatants", [])]
         return enc
