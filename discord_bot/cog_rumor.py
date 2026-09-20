@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import discord
 from discord import app_commands
+from l5r_rules import enums, families, schools
 
 # ---------------------------------------------------------------------------
 # Dependency injection (same pattern as cog_checks / cog_combat / etc.)
@@ -133,6 +134,62 @@ async def _find_support_channel(
 
 
 # ---------------------------------------------------------------------------
+# Autocomplete helpers for rumor targeting filters
+# ---------------------------------------------------------------------------
+
+async def _clan_autocomplete(
+    interaction: discord.Interaction, current: str,
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    clans = schools.creation_clans()
+    return [app_commands.Choice(name=c, value=c) for c in clans if cur in c.lower()][:25]
+
+
+async def _family_autocomplete(
+    interaction: discord.Interaction, current: str,
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    names = families.names()
+    return [app_commands.Choice(name=n, value=n) for n in names if cur in n.lower()][:25]
+
+
+async def _school_autocomplete(
+    interaction: discord.Interaction, current: str,
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    names = sorted({s["name"] for s in schools.ALL})
+    return [app_commands.Choice(name=n, value=n) for n in names if cur in n.lower()][:25]
+
+
+async def _school_type_autocomplete(
+    interaction: discord.Interaction, current: str,
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    return [
+        app_commands.Choice(name=t, value=t)
+        for t in enums.SCHOOL_TYPES
+        if cur in t.lower()
+    ][:25]
+
+
+async def _character_autocomplete(
+    interaction: discord.Interaction, current: str,
+) -> list[app_commands.Choice[str]]:
+    if interaction.guild_id is None or _d.store is None:
+        return []
+    cur = current.lower().strip()
+    guild_id = str(interaction.guild_id)
+    names: list[str] = []
+    for _owner_id, rec in _d.store.list_active_pcs(guild_id):
+        if cur in rec.character.name.lower():
+            names.append(rec.character.name)
+    for rec in _d.store.list_by_owner(guild_id, _d.npc_owner):
+        if cur in rec.character.name.lower():
+            names.append(rec.character.name)
+    return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
+
+
+# ---------------------------------------------------------------------------
 # /rumor post - send a targeted rumor to matching characters
 # ---------------------------------------------------------------------------
 
@@ -230,6 +287,13 @@ async def rumor_post(
         summary += f"\nCould not deliver to: {', '.join(failed)} (no support channel found or missing permissions)."
 
     await interaction.followup.send(summary, ephemeral=True)
+
+
+rumor_post.autocomplete("clan")(_clan_autocomplete)
+rumor_post.autocomplete("family")(_family_autocomplete)
+rumor_post.autocomplete("school")(_school_autocomplete)
+rumor_post.autocomplete("school_type")(_school_type_autocomplete)
+rumor_post.autocomplete("character")(_character_autocomplete)
 
 
 # ---------------------------------------------------------------------------
@@ -405,6 +469,13 @@ async def rumor_broadcast(
     await interaction.followup.send(
         f"Rumor **#{rumor_id}**: " + " | ".join(parts), ephemeral=True,
     )
+
+
+rumor_broadcast.autocomplete("clan")(_clan_autocomplete)
+rumor_broadcast.autocomplete("family")(_family_autocomplete)
+rumor_broadcast.autocomplete("school")(_school_autocomplete)
+rumor_broadcast.autocomplete("school_type")(_school_type_autocomplete)
+rumor_broadcast.autocomplete("character")(_character_autocomplete)
 
 
 # ---------------------------------------------------------------------------
