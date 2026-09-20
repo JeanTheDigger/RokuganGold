@@ -3208,11 +3208,14 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         if guild_id:
             rec = _d.resolve_combatant_record(guild_id, c)
             if rec is not None:
-                pen = stats.wound_penalty(rec.character)
-                if pen:
-                    lvl = stats.wound_level_name(rec.character)
-                    wound_tag = f"  ⚠️{lvl}({pen})"
                 ch_rec = rec.character
+                w_taken = ch_rec.wounds_taken
+                w_cap = stats.total_wound_capacity(ch_rec)
+                lvl = stats.wound_level_name(ch_rec)
+                pen = stats.wound_penalty(ch_rec)
+                if w_taken > 0:
+                    pen_str = f", {pen}" if pen else ""
+                    wound_tag = f"  {w_taken}/{w_cap} **{lvl}**{pen_str}"
                 if ch_rec.max_void_points > 0:
                     vp_tag = f"  VP:{ch_rec.current_void_points}/{ch_rec.max_void_points}"
                 if ch_rec.spell_slots:
@@ -3225,29 +3228,46 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
                     if parts:
                         bonus = f"+{ch_rec.void_spell_bonus}V" if ch_rec.void_spell_bonus else ""
                         spell_tag = f"  **S**: {' '.join(parts)}{bonus}"
-        detail = f"  ·  {c.initiative_detail}" if c.initiative_detail else ""
-        stance_str = f"  ⚔️{c.stance.replace('_', ' ').title()}" if c.stance != "attack" else ""
+        init_val = c.effective_initiative
+        stance_str = f" {c.stance.replace('_', ' ').title()}" if c.stance != "attack" else ""
         acts = f"  [{c.actions_used}/2 acts]" if enc.started and c.actions_used > 0 else ""
+        main_line = f"{marker}**{c.name}**{tag}{wound_tag}{vp_tag}: Init **{init_val}**{stance_str}{acts}"
+        extras: list[str] = []
         cond_labels = [
             f"{k}({c.rounds_left(k, enc.round)}r)" if k in c.condition_expiry else k for k in sorted(c.conditions)
         ]
-        cond = f"  [{', '.join(cond_labels)}]" if c.conditions else ""
-        guard = f"  🛡️→{c.guarding}" if c.guarding else ""
-        fd = f"  🛡️FD+{c.full_defense_bonus}" if c.full_defense_bonus else ""
-        void_atn = f"  🌀ATN+{c.void_armor_tn_bonus}" if c.void_armor_tn_bonus else ""
-        void_init = f"  🌀Init+{c.void_initiative_boost}" if c.void_initiative_boost else ""
-        center_tag = "  🎯Center+1k1" if c.center_bonus_available else ""
-        center_init = f"  🎯Init+{c.center_init_boost}" if c.center_init_boost else ""
-        held = "  ⏸️HELD" if c.held else ""
-        delayed = "  ⏳DELAYED" if c.delayed else ""
-        cover = f"  🪨Cover{'+' if c.cover_bonus > 0 else ''}{c.cover_bonus}" if c.cover_bonus else ""
-        fear = f"  😨-{c.fear_penalty}k0" if c.fear_penalty else ""
-        techs = ""
+        if c.conditions:
+            extras.append(f"[{', '.join(cond_labels)}]")
+        if c.guarding:
+            extras.append(f"Guard->{c.guarding}")
+        if c.full_defense_bonus:
+            extras.append(f"FD+{c.full_defense_bonus}")
+        if c.void_armor_tn_bonus:
+            extras.append(f"ATN+{c.void_armor_tn_bonus}")
+        if c.void_initiative_boost:
+            extras.append(f"Init+{c.void_initiative_boost}")
+        if c.center_bonus_available:
+            extras.append("Center+1k1")
+        if c.center_init_boost:
+            extras.append(f"CInit+{c.center_init_boost}")
+        if c.cover_bonus:
+            sign = "+" if c.cover_bonus > 0 else ""
+            extras.append(f"Cover{sign}{c.cover_bonus}")
+        if c.fear_penalty:
+            extras.append(f"Fear-{c.fear_penalty}k0")
+        if c.held:
+            extras.append("HELD")
+        if c.delayed:
+            extras.append("DELAYED")
         if c.declared_techniques:
             tech_names = [e.get("display", k) for k, e in c.declared_techniques.items()]
-            techs = "  **T**: " + ", ".join(tech_names)
-        init_val = c.effective_initiative
-        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}{vp_tag}: Init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{fear}{held}{delayed}{techs}{spell_tag}")
+            extras.append("**T**: " + ", ".join(tech_names))
+        if spell_tag:
+            extras.append(spell_tag.strip())
+        if extras:
+            lines.append(f"{main_line}\n> {' | '.join(extras)}")
+        else:
+            lines.append(main_line)
     header = f"⚔️ **Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
