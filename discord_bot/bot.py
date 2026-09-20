@@ -1138,7 +1138,7 @@ async def _armor_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
     cur = current.lower().strip()
-    names = [a for a in combat.ARMOR_CATALOG if cur in a] + (["none"] if cur in "none" else [])
+    names = [a for a in combat.ARMOR_CATALOG if cur in a.lower()] + (["none"] if cur in "none" else [])
     return [app_commands.Choice(name=a, value=a) for a in names][:25]
 
 def _adv_choices(current: str, kind: str | None) -> list[app_commands.Choice[str]]:
@@ -4506,7 +4506,7 @@ async def sheet_tattoo_remove(
             f"**{c.name}** doesn't have a **{name}** tattoo.", ephemeral=True
         )
         return
-    if c.active_tattoo.lower() == key:
+    if (c.active_tattoo or "").lower() == key:
         c.active_tattoo = ""
     store.save(rec)
     await interaction.response.send_message(
@@ -11801,14 +11801,14 @@ async def dm_announce(
         embed.add_field(name="When", value=date, inline=False)
     embed.add_field(
         name="RSVP",
-        value="React below:\nAttending  Maybe  Can't make it",
+        value="React below:\n✅ Attending  ❓ Maybe  ❌ Can't make it",
         inline=False,
     )
     embed.set_footer(text=f"Posted by {interaction.user.display_name}")
     msg = await target_ch.send(embed=embed)
-    await msg.add_reaction("attending")
-    await msg.add_reaction("maybe")
-    await msg.add_reaction("decline")
+    await msg.add_reaction("✅")
+    await msg.add_reaction("❓")
+    await msg.add_reaction("❌")
     await interaction.response.send_message(
         f"Announcement posted in {target_ch.mention}.", ephemeral=True,
     )
