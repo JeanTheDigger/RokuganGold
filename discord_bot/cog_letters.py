@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import discord
 from discord import app_commands
+from helpers import find_support_channel
 
 
 # ---------------------------------------------------------------------------
@@ -81,15 +82,6 @@ def _build_letter_embed(
     return embed
 
 
-async def _find_support_channel(
-    guild: discord.Guild, character_name: str,
-) -> discord.TextChannel | None:
-    cat = discord.utils.get(guild.categories, name=_d.cat_player_support)
-    if cat is None:
-        return None
-    slug = character_name.lower().replace(" ", "-")
-    return discord.utils.get(cat.text_channels, name=slug)
-
 
 def _pc_names(guild_id: str) -> list[str]:
     return [rec.character.name for _, rec in _d.store.list_active_pcs(guild_id)]
@@ -143,7 +135,7 @@ async def letter_send(
         )
         return
 
-    ch = await _find_support_channel(guild, matched)
+    ch = await find_support_channel(guild, matched, _d.cat_player_support)
     if ch is None:
         await interaction.response.send_message(
             f"Could not find a support channel for **{matched}**.", ephemeral=True,
@@ -241,7 +233,7 @@ async def letter_sendas(
         )
         return
 
-    ch = await _find_support_channel(guild, matched)
+    ch = await find_support_channel(guild, matched, _d.cat_player_support)
     if ch is None:
         await interaction.response.send_message(
             f"Could not find a support channel for **{matched}**.", ephemeral=True,

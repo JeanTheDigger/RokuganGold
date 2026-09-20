@@ -10,6 +10,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 from l5r_rules import enums, families, schools
+from helpers import match_character, find_support_channel
 
 # ---------------------------------------------------------------------------
 # Dependency injection (same pattern as cog_checks / cog_combat / etc.)
@@ -105,32 +106,6 @@ def _build_rumor_embed(
     return embed
 
 
-def _match_character(char, filters: list[tuple[str, str]]) -> bool:
-    """Return True if the character matches ANY of the given (type, value) filters (OR logic)."""
-    for ftype, fvalue in filters:
-        fval_lower = fvalue.lower()
-        if ftype == "clan" and char.clan.lower() == fval_lower:
-            return True
-        if ftype == "family" and char.family.lower() == fval_lower:
-            return True
-        if ftype == "school" and char.school.lower() == fval_lower:
-            return True
-        if ftype == "school_type" and char.school_type.lower() == fval_lower:
-            return True
-        if ftype == "character" and char.name.lower() == fval_lower:
-            return True
-    return False
-
-
-async def _find_support_channel(
-    guild: discord.Guild, character_name: str,
-) -> discord.TextChannel | None:
-    """Find a character's private support channel in the Player Support category."""
-    cat = discord.utils.get(guild.categories, name=_d.cat_player_support)
-    if cat is None:
-        return None
-    slug = character_name.lower().replace(" ", "-")
-    return discord.utils.get(cat.text_channels, name=slug)
 
 
 # ---------------------------------------------------------------------------
@@ -269,9 +244,9 @@ async def rumor_post(
     failed: list[str] = []
 
     for _owner_id, rec in active_pcs:
-        if not _match_character(rec.character, filters):
+        if not match_character(rec.character, filters):
             continue
-        ch = await _find_support_channel(guild, rec.character.name)
+        ch = await find_support_channel(guild, rec.character.name, _d.cat_player_support)
         if ch is None:
             failed.append(rec.character.name)
             continue
@@ -451,9 +426,9 @@ async def rumor_broadcast(
         delivered = 0
         failed: list[str] = []
         for _owner_id, rec in active_pcs:
-            if not _match_character(rec.character, filters):
+            if not match_character(rec.character, filters):
                 continue
-            ch = await _find_support_channel(guild, rec.character.name)
+            ch = await find_support_channel(guild, rec.character.name, _d.cat_player_support)
             if ch is None:
                 failed.append(rec.character.name)
                 continue
@@ -556,7 +531,7 @@ async def rumor_view(
             await interaction.response.send_message("No active character.", ephemeral=True)
             return
         filters = _d.store.get_rumor_filters(guild_id, rumor_id)
-        if not _match_character(rec.character, filters):
+        if not match_character(rec.character, filters):
             await interaction.response.send_message(f"Rumor **#{rumor_id}** not found.", ephemeral=True)
             return
 

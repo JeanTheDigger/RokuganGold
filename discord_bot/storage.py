@@ -24,6 +24,7 @@ from dataclasses import dataclass
 
 from l5r_rules.character import Character
 from l5r_rules.creature import Creature
+from helpers import match_character
 
 _VERSION_TABLE = """\
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -1437,7 +1438,7 @@ class Store:
                     (r["id"],),
                 ).fetchall()
                 filter_list = [(f["filter_type"], f["filter_value"]) for f in filters]
-                if self._character_matches(character, filter_list):
+                if match_character(character, filter_list):
                     result.append({
                         "id": r["id"],
                         "title": r["title"],
@@ -1448,22 +1449,6 @@ class Store:
                     if len(result) >= limit:
                         break
         return result
-
-    @staticmethod
-    def _character_matches(char, filters: list[tuple[str, str]]) -> bool:
-        for ftype, fvalue in filters:
-            fval_lower = fvalue.lower()
-            if ftype == "clan" and char.clan.lower() == fval_lower:
-                return True
-            if ftype == "family" and char.family.lower() == fval_lower:
-                return True
-            if ftype == "school" and char.school.lower() == fval_lower:
-                return True
-            if ftype == "school_type" and char.school_type.lower() == fval_lower:
-                return True
-            if ftype == "character" and char.name.lower() == fval_lower:
-                return True
-        return False
 
     def get_rumor(self, guild_id: str, rumor_id: int) -> dict | None:
         with self._lock:
