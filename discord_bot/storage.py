@@ -440,9 +440,9 @@ class Store:
             version = i + 1
             try:
                 self._conn.executescript(_MIGRATIONS[i])
+                self._conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (version,))
             except sqlite3.OperationalError:
                 pass
-            self._conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (version,))
 
     # -- internal helpers ------------------------------------------------------
     def _row_to_record(self, row: sqlite3.Row) -> CharacterRecord:

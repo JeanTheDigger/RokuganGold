@@ -140,7 +140,7 @@ class DiceEngine:
                 die_total += bonus
                 explosion_count += 1
                 if explodes:
-                    while bonus == 10:
+                    while bonus >= explode_at:
                         bonus = self._roll_d10()
                         die_total += bonus
                         explosion_count += 1
