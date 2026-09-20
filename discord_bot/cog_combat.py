@@ -553,10 +553,13 @@ class DamageView(views_base.PersistentView):
                 color=discord.Color.green() if dis["disarmed"] else discord.Color.orange(),
             )
             dis_armor_label = f" ({target.armor_name.replace('_', ' ').title()})" if target.armor_name else ""
+            dis_value = (
+                f"{_d.format_dice(dis['damage_dice'])}\nRaw **{dis['damage']}** − reduction "
+                f"{applied['reduction']}{dis_armor_label} = **{applied['final_damage']}** wounds{void_line}"
+            )
             embed.add_field(
                 name="Damage (2k1)",
-                value=f"{_d.format_dice(dis['damage_dice'])}\nRaw **{dis['damage']}** − reduction "
-                f"{applied['reduction']}{dis_armor_label} = **{applied['final_damage']}** wounds{void_line}",
+                value=dis_value[:1024],
                 inline=False,
             )
             embed.add_field(
@@ -1694,8 +1697,8 @@ async def attack(
     if man != "none":
         atk_desc += f"  ·  Maneuver: {man.title()}"
     atk_desc += void_line
-    embed.add_field(name="Attacker", value=atk_desc, inline=False)
-    embed.add_field(name="Attack roll", value=_d.format_dice(outcome["dice"]), inline=False)
+    embed.add_field(name="Attacker", value=atk_desc[:1024], inline=False)
+    embed.add_field(name="Attack roll", value=_d.format_dice(outcome["dice"])[:1024], inline=False)
 
     tn_note = f"Armor TN **{outcome['target_tn']}**"
     if outcome["raises"]:
@@ -3443,6 +3446,7 @@ async def grapple_initiate(
             )
     atk_cb.actions_used = 2
     _d.save_encounter(guild, enc)
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
     tag = "GRAPPLED" if grappled else ("RESISTED" if hit else "MISS")
     await _d.combat_log(guild, f"Grapple: {atk_cb.name} → {def_cb.name} {tag}")
@@ -3517,6 +3521,7 @@ async def grapple_control(
         embed.add_field(name="Control", value=f"**{winner}** has control.", inline=False)
     else:
         embed.add_field(name="Control", value=f"**{winner}**", inline=False)
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
     await _d.combat_log(guild, f"Grapple Control: {winner} wins")
 
@@ -3627,11 +3632,16 @@ async def grapple_throw(
     thrower_cb.actions_used = 2
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"🤼 **{thrower_cb.name}** throws **{target_cb.name}**!\n"
-        f"  Both are now **Prone**. The grapple ends.\n"
-        f"  (Standing up is a Simple Action.)"
+    embed = discord.Embed(
+        title=f"🤼 {thrower_cb.name} throws {target_cb.name}",
+        description=(
+            f"Both are now **Prone**. The grapple ends.\n"
+            f"Standing up is a Simple Action."
+        ),
+        color=discord.Color.orange(),
     )
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
     await _d.combat_log(guild, f"Grapple Throw: {thrower_cb.name} throws {target_cb.name} (both prone, grapple ends)")
 
 
@@ -3674,11 +3684,17 @@ async def grapple_pin(
     ctrl_cb.actions_used = 2
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
-    await interaction.response.send_message(
-        f"🤼 **{ctrl_cb.name}** pins **{tgt_cb.name}**!\n"
-        f"  {tgt_cb.name} is **Pinned**: Fully immobilized. Can only speak or cast verbal-only Mastery 1 spells.\n"
-        f"  (Pin is a prerequisite for Bind.)"
+    embed = discord.Embed(
+        title=f"🤼 {ctrl_cb.name} pins {tgt_cb.name}",
+        description=(
+            f"{tgt_cb.name} is **Pinned**: Fully immobilized. "
+            f"Can only speak or cast verbal-only Mastery 1 spells.\n"
+            f"Pin is a prerequisite for Bind."
+        ),
+        color=discord.Color.orange(),
     )
+    embed.set_footer(text=f"Applied by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed)
     await _d.combat_log(guild, f"Grapple Pin: {ctrl_cb.name} pins {tgt_cb.name}")
 
 
@@ -3720,10 +3736,16 @@ async def grapple_break(
         cb.conditions.discard("pinned")
         cb.actions_used += 1
         _d.save_encounter(guild, enc)
-        await interaction.response.send_message(
-            f"🤼 **{cb.name}** breaks free from the grapple (controller break, Simple Action).\n"
-            f"  Grappled condition removed. [{cb.actions_used}/2 actions used]"
+        embed = discord.Embed(
+            title=f"🤼 {cb.name} breaks free",
+            description=(
+                f"Controller break (Simple Action). Grappled condition removed.\n"
+                f"[{cb.actions_used}/2 actions used]"
+            ),
+            color=discord.Color.green(),
         )
+        embed.set_footer(text=f"Applied by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
         await _d.combat_log(guild, f"Grapple Break: {cb.name} breaks free (controller)")
         return
 
@@ -3783,6 +3805,7 @@ async def grapple_break(
             inline=False,
         )
     _d.save_encounter(guild, enc)
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
     tag = "FREE" if defender_wins else "HELD"
     await _d.combat_log(guild, f"Grapple Break: {cb.name} vs {opp_cb.name} → {tag}")
@@ -4821,7 +4844,8 @@ async def battle_roll(
     embed.add_field(name="Margin", value=f"{result['margin']:+d}", inline=True)
     embed.add_field(name="Description", value=info["description"], inline=False)
     dice_str = _d.format_dice(result["dice"])
-    embed.add_field(name="Dice", value=dice_str, inline=False)
+    embed.add_field(name="Dice", value=dice_str[:1024], inline=False)
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -4854,7 +4878,7 @@ async def battle_damage(
     embed = discord.Embed(title=f"Mass Battle Damage: {engagement.name}", color=discord.Color.dark_red())
     embed.add_field(name="Damage", value=f"**{result['damage']}** ({result['rolled']}k{result['kept']})", inline=True)
     if result["dice"]:
-        embed.add_field(name="Dice", value=_d.format_dice(result["dice"]), inline=False)
+        embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
     embed.set_footer(text="Apply with /sheet wound or /npc wound, subtracting armor Reduction.")
     await interaction.response.send_message(embed=embed)
 
@@ -4955,7 +4979,7 @@ async def battle_table(
     embed.add_field(name="Result", value="\n".join(lines), inline=False)
 
     if result["wound_roll"]:
-        embed.add_field(name="Wound Dice", value=_d.format_dice(result["wound_roll"]), inline=False)
+        embed.add_field(name="Wound Dice", value=_d.format_dice(result["wound_roll"])[:1024], inline=False)
 
     embed.set_footer(text="Apply wounds with /sheet wound or /npc wound, subtracting armor Reduction.")
     await interaction.response.send_message(embed=embed)
@@ -5034,8 +5058,8 @@ async def battle_status(
 
     embed.add_field(name="Margin", value=f"{result['diff']:+d} (need ±5 for Winning/Losing)", inline=False)
 
-    dice_a = _d.format_dice(result["dice_a"])
-    dice_b = _d.format_dice(result["dice_b"])
+    dice_a = _d.format_dice(result["dice_a"])[:1024]
+    dice_b = _d.format_dice(result["dice_b"])[:1024]
     embed.add_field(name=f"{ca.name} Dice", value=dice_a, inline=True)
     embed.add_field(name=f"{cb.name} Dice", value=dice_b, inline=True)
 

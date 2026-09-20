@@ -270,7 +270,7 @@ def _build_check_embed(
     if void_line:
         roll_text += f"\n{void_line}"
     embed.add_field(name="Roll", value=roll_text, inline=False)
-    embed.add_field(name="Dice", value=_d.format_dice(result["dice"]), inline=False)
+    embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
     verdict = success_text if success else fail_text
     embed.add_field(
         name="Result",
@@ -431,9 +431,9 @@ async def contest(
     )
     if void_line_a:
         a_text += f"\n{void_line_a}"
-    embed.add_field(name=ca.name, value=a_text, inline=False)
+    embed.add_field(name=ca.name, value=a_text[:1024], inline=False)
     if adv_notes_a:
-        embed.add_field(name=f"{ca.name} Adv/Disadv", value="\n".join(adv_notes_a), inline=False)
+        embed.add_field(name=f"{ca.name} Adv/Disadv", value="\n".join(adv_notes_a)[:1024], inline=False)
     b_text = (
         f"{b_label} ({result['rolled_b']}k{result['kept_b']}"
         f"{b_wp_str}{b_bonus_str}) → **{result['total_b']}**\n"
@@ -441,9 +441,9 @@ async def contest(
     )
     if void_line_b:
         b_text += f"\n{void_line_b}"
-    embed.add_field(name=cb.name, value=b_text, inline=False)
+    embed.add_field(name=cb.name, value=b_text[:1024], inline=False)
     if adv_notes_b:
-        embed.add_field(name=f"{cb.name} Adv/Disadv", value="\n".join(adv_notes_b), inline=False)
+        embed.add_field(name=f"{cb.name} Adv/Disadv", value="\n".join(adv_notes_b)[:1024], inline=False)
     embed.add_field(name="Result", value=verdict, inline=False)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
@@ -533,7 +533,7 @@ async def fear_check(
     if void_line:
         roll_text += f"\n{void_line}"
     embed.add_field(name="Roll", value=roll_text, inline=False)
-    embed.add_field(name="Dice", value=_d.format_dice(result["dice"]), inline=False)
+    embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
     if success:
         verdict = "✅ **Resists the Fear!**"
     else:
@@ -598,7 +598,7 @@ async def honor_roll(
         ),
         inline=False,
     )
-    embed.add_field(name="Dice", value=_d.format_dice(result["dice"]), inline=False)
+    embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
     verdict = "✅ **Honor holds!**" if success else "❌ **Honor wavers.**"
     embed.add_field(
         name="Result",
@@ -670,7 +670,7 @@ async def poison_resist(
     if void_line:
         roll_text += f"\n{void_line}"
     embed.add_field(name="Roll", value=roll_text, inline=False)
-    embed.add_field(name="Dice", value=_d.format_dice(result["dice"]), inline=False)
+    embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
     verdict = "✅ **Resists the poison!**" if success else "❌ **Succumbs!** Apply poison effects."
     embed.add_field(
         name="Result",
@@ -760,7 +760,7 @@ async def medicine_check(
     if void_line:
         roll_text += f"\n{void_line}"
     embed.add_field(name="Roll", value=roll_text, inline=False)
-    embed.add_field(name="Dice", value=_d.format_dice(result["dice"]), inline=False)
+    embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
     verdict = "✅ **Treatment successful!**" if success else "❌ **Treatment fails.**"
     embed.add_field(
         name="Result",
@@ -975,7 +975,7 @@ async def check_cooperative(
     if void_line:
         roll_text += f"\n{void_line}"
     embed.add_field(name="Primary Roll", value=roll_text, inline=False)
-    embed.add_field(name="Dice", value=_d.format_dice(result["dice"]), inline=False)
+    embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
     verdict = "✅ **Success!**" if result["success"] else "❌ **Failure.**"
     embed.add_field(
         name="Result",

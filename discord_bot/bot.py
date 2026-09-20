@@ -1020,7 +1020,7 @@ async def roll(
             value=f"TN {tn}" + (f" + {raises}×5 = **{outcome['tn']}**" if raises else ""),
             inline=True,
         )
-        embed.add_field(name="Result", value=_format_dice(result), inline=False)
+        embed.add_field(name="Result", value=_format_dice(result)[:1024], inline=False)
         verdict = "✅ **Success**" if success else "❌ **Failure**"
         embed.add_field(
             name="Total",
@@ -1032,7 +1032,7 @@ async def roll(
         total = result.total + bonus
         embed = discord.Embed(title=title, color=discord.Color.blurple())
         embed.add_field(name="Request", value=f"`{rolled}k{kept}`" + (f" + {bonus}" if bonus else ""), inline=True)
-        embed.add_field(name="Result", value=_format_dice(result), inline=False)
+        embed.add_field(name="Result", value=_format_dice(result)[:1024], inline=False)
         total_str = f"**{total}**"
         if bonus:
             total_str += f"  (dice {result.total} {'+' if bonus >= 0 else '−'} {abs(bonus)})"
@@ -1098,7 +1098,7 @@ async def dice_quick(
         embed = discord.Embed(
             title=title, color=discord.Color.green() if success else discord.Color.red()
         )
-        embed.add_field(name="Result", value=_format_dice(result), inline=False)
+        embed.add_field(name="Result", value=_format_dice(result)[:1024], inline=False)
         verdict = "✅ **Success**" if success else "❌ **Failure**"
         embed.add_field(
             name="Total",
@@ -1109,7 +1109,7 @@ async def dice_quick(
         result = engine.roll_and_keep(rolled, kept, True, False)
         total = result.total + bonus
         embed = discord.Embed(title=title, color=discord.Color.blurple())
-        embed.add_field(name="Result", value=_format_dice(result), inline=False)
+        embed.add_field(name="Result", value=_format_dice(result)[:1024], inline=False)
         total_str = f"**{total}**"
         if bonus:
             total_str += f"  (dice {result.total} {'+' if bonus >= 0 else '−'} {abs(bonus)})"
@@ -3848,6 +3848,44 @@ class _PaginatorView(discord.ui.View):
     async def on_timeout(self) -> None:
         pass
 
+
+class _EmbedPaginatorView(discord.ui.View):
+    """Paginator that swaps embeds instead of plain content."""
+
+    def __init__(self, embeds: list[discord.Embed], user_id: int, *, timeout: float = 120) -> None:
+        super().__init__(timeout=timeout)
+        self._embeds = embeds
+        self._user_id = user_id
+        self._index = 0
+        self._update_buttons()
+
+    def _update_buttons(self) -> None:
+        self.prev_btn.disabled = self._index == 0
+        self.next_btn.disabled = self._index >= len(self._embeds) - 1
+        self.prev_btn.label = f"◀ {self._index}" if self._index > 0 else "◀"
+        self.next_btn.label = f"▶ {self._index + 2}" if self._index < len(self._embeds) - 1 else "▶"
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary)
+    async def prev_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self._user_id:
+            await interaction.response.send_message("Not your paginator.", ephemeral=True)
+            return
+        self._index = max(0, self._index - 1)
+        self._update_buttons()
+        await interaction.response.edit_message(embed=self._embeds[self._index], view=self)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary)
+    async def next_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if interaction.user.id != self._user_id:
+            await interaction.response.send_message("Not your paginator.", ephemeral=True)
+            return
+        self._index = min(len(self._embeds) - 1, self._index + 1)
+        self._update_buttons()
+        await interaction.response.edit_message(embed=self._embeds[self._index], view=self)
+
+    async def on_timeout(self) -> None:
+        pass
+
 def _paginate(lines: list[str], header: str, *, per_page: int = 15) -> list[str]:
     """Split lines into pages with a header and page indicator.
 
@@ -3878,6 +3916,35 @@ def _paginate(lines: list[str], header: str, *, per_page: int = 15) -> list[str]
         footer = f"\n*Page {i + 1}/{len(pages)}*" if len(pages) > 1 else ""
         result.append(header + "\n".join(chunk) + footer)
     return result
+
+def _paginate_embeds(
+    lines: list[str], title: str, color: discord.Color, *, per_page: int = 15
+) -> list[discord.Embed]:
+    total_pages = max(1, math.ceil(len(lines) / per_page))
+    raw_pages: list[list[str]] = []
+    for i in range(total_pages):
+        raw_pages.append(lines[i * per_page : (i + 1) * per_page])
+    pages: list[list[str]] = []
+    for chunk in raw_pages:
+        current: list[str] = []
+        current_len = 0
+        for line in chunk:
+            line_len = len(line) + 1
+            if current and current_len + line_len > 3800:
+                pages.append(current)
+                current = [line]
+                current_len = line_len
+            else:
+                current.append(line)
+                current_len += line_len
+        if current:
+            pages.append(current)
+    embeds: list[discord.Embed] = []
+    for i, chunk in enumerate(pages):
+        page_title = title if len(pages) == 1 else f"{title} (page {i + 1}/{len(pages)})"
+        embed = discord.Embed(title=page_title, description="\n".join(chunk), color=color)
+        embeds.append(embed)
+    return embeds
 
 @stat_group.command(name="trait", description="Set a Trait (or Void) on the active character. [Fortune]")
 @app_commands.describe(
@@ -5647,7 +5714,7 @@ async def void_refresh(
             value=f"Meditation/Void ({rolled}k{kept}{wp_str}) vs TN **{meditation_tn}**",
             inline=False,
         )
-        embed.add_field(name="Dice", value=_format_dice(result), inline=False)
+        embed.add_field(name="Dice", value=_format_dice(result)[:1024], inline=False)
         if success:
             embed.add_field(
                 name="Result",
@@ -5987,12 +6054,12 @@ async def npc_list(interaction: discord.Interaction) -> None:
             )
         else:
             lines.append(f"• {dead}**{r.character.name}**")
-    pages = _paginate(lines, "🎭 **NPCs on this server: **\n")
-    if len(pages) == 1:
-        await interaction.response.send_message(pages[0])
+    embeds = _paginate_embeds(lines, f"🎭 NPCs ({len(recs)})", discord.Color.dark_gold())
+    if len(embeds) == 1:
+        await interaction.response.send_message(embed=embeds[0])
     else:
-        view = _PaginatorView(pages, interaction.user.id)
-        await interaction.response.send_message(pages[0], view=view)
+        view = _EmbedPaginatorView(embeds, interaction.user.id)
+        await interaction.response.send_message(embed=embeds[0], view=view)
 
 @npc_group.command(name="delete", description="Delete a stored NPC. [Fortune]")
 @app_commands.describe(name="The NPC to delete.")
@@ -6807,13 +6874,14 @@ class CreatureAttackView(_DisableableView):
             title="👹 Creature damage applied",
             color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
         )
+        cre_dmg_text = (
+            f"{self.creature_name} → **{self.target_name}**\n{_format_dice(dmg['dice'])}\n"
+            f"Raw **{dmg['raw']}** − reduction {applied['reduction']} = "
+            f"**{applied['final_damage']}** wounds"
+        )
         embed.add_field(
             name="Damage",
-            value=(
-                f"{self.creature_name} → **{self.target_name}**\n{_format_dice(dmg['dice'])}\n"
-                f"Raw **{dmg['raw']}** − reduction {applied['reduction']} = "
-                f"**{applied['final_damage']}** wounds"
-            ),
+            value=cre_dmg_text[:1024],
             inline=False,
         )
         if applied["level_changed"]:
@@ -7543,12 +7611,12 @@ async def creature_list(interaction: discord.Interaction) -> None:
             )
         else:
             lines.append(f"• **{r.creature.name}**: {lvl}")
-    pages = _paginate(lines, "👹 **Creatures: **\n")
-    if len(pages) == 1:
-        await interaction.response.send_message(pages[0])
+    embeds = _paginate_embeds(lines, f"👹 Creatures ({len(recs)})", discord.Color.dark_gold())
+    if len(embeds) == 1:
+        await interaction.response.send_message(embed=embeds[0])
     else:
-        view = _PaginatorView(pages, interaction.user.id)
-        await interaction.response.send_message(pages[0], view=view)
+        view = _EmbedPaginatorView(embeds, interaction.user.id)
+        await interaction.response.send_message(embed=embeds[0], view=view)
 
 @creature_group.command(name="view", description="View a spawned creature's full stat block. [Fortune]")
 @app_commands.describe(name="The creature to view.")
@@ -7708,7 +7776,7 @@ async def creature_attack_cmd(
     embed.add_field(
         name="Attack", value=f"{cr.attack_name} **{cr.attack_rolled}k{cr.attack_kept}**", inline=False
     )
-    embed.add_field(name="Attack roll", value=_format_dice(outcome["dice"]), inline=False)
+    embed.add_field(name="Attack roll", value=_format_dice(outcome["dice"])[:1024], inline=False)
     verdict = "✅ **HIT**" if hit else "❌ **MISS**"
     embed.add_field(
         name="Result",
@@ -9818,7 +9886,7 @@ async def craft_extended(
         roll_text += f"\n{void_line}"
     embed.add_field(name="Roll", value=roll_text, inline=True)
     embed.add_field(name="Progress", value=f"+{result['total']} toward TN **{tn}**", inline=False)
-    embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
+    embed.add_field(name="Dice", value=_format_dice(result["dice"])[:1024], inline=False)
     quality_thresholds = [
         (tn * 2, "Exceptional Quality (+1k0 relevant rolls)"),
         (int(tn * 1.5), "Fine Quality (+0k1 relevant rolls)"),
@@ -9865,7 +9933,7 @@ async def spell_damage(
         color=discord.Color.dark_magenta(),
     )
     embed.add_field(name="Damage Roll", value=f"({rolled}k{kept}{f'+{bonus}' if bonus else ''}) = **{total}**", inline=False)
-    embed.add_field(name="Dice", value=_format_dice(result), inline=False)
+    embed.add_field(name="Dice", value=_format_dice(result)[:1024], inline=False)
     if target:
         guild = str(interaction.guild_id)
         rec = _find_any_character(guild, target)
@@ -10243,7 +10311,7 @@ async def dm_treat(
         ),
         inline=False,
     )
-    embed.add_field(name="Dice", value=_format_dice(result["dice"]), inline=False)
+    embed.add_field(name="Dice", value=_format_dice(result["dice"])[:1024], inline=False)
     verdict = "✅ **Treatment successful!**" if success else "❌ **Treatment fails.**"
     embed.add_field(
         name="Result",
@@ -10446,9 +10514,13 @@ async def macro_list(interaction: discord.Interaction) -> None:
         mod_str = f"+{m.modifier}" if m.modifier > 0 else (str(m.modifier) if m.modifier < 0 else "")
         desc = f": {m.label}" if m.label else ""
         lines.append(f"• **{m.name}** → `{m.rolled}k{m.kept}{mod_str}`{desc}")
-    await interaction.response.send_message(
-        f"💾 **Your macros ({len(macros)}): **\n" + "\n".join(lines), ephemeral=True
+    body = "\n".join(lines)
+    embed = discord.Embed(
+        title=f"💾 Your Macros ({len(macros)})",
+        description=body[:4000],
+        color=discord.Color.dark_gold(),
     )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @macro_group.command(name="roll", description="Roll a saved macro.")
 @app_commands.describe(name="Which macro to roll.")
@@ -10469,7 +10541,7 @@ async def macro_roll(interaction: discord.Interaction, name: str) -> None:
     embed = discord.Embed(title=title, color=discord.Color.teal())
     embed.add_field(
         name=f"{m.rolled}k{m.kept}{mod_str}",
-        value=_format_dice(result) + (f"\n+{m.modifier} modifier = **{total}**" if m.modifier else ""),
+        value=(_format_dice(result) + (f"\n+{m.modifier} modifier = **{total}**" if m.modifier else ""))[:1024],
         inline=False,
     )
     embed.set_footer(text=f"Total: {total}")
@@ -10584,6 +10656,7 @@ async def compare_characters(
         ),
         inline=False,
     )
+    embed.set_footer(text=f"Compared by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 # ===========================================================================

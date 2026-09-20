@@ -659,7 +659,8 @@ async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
         title=f"Heritage Roll: {clan}",
         color=discord.Color.dark_teal(),
     )
-    embed.add_field(name=f"Roll: {result['roll']}: {result['name']}", value=result["effect"], inline=False)
+    embed.add_field(name=f"Roll: {result['roll']}: {result['name']}", value=result["effect"][:1024], inline=False)
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
 
@@ -670,7 +671,8 @@ async def heritage_table(interaction: discord.Interaction, clan: str) -> None:
         return
     table = heritage.get_table(clan)
     lines = [f"**{r['roll']}.** {r['name']}: {r['effect']}" for r in table]
-    embed = discord.Embed(title=f"Heritage Table: {clan}", description="\n".join(lines), color=discord.Color.dark_teal())
+    desc = "\n".join(lines)
+    embed = discord.Embed(title=f"Heritage Table: {clan}", description=desc[:4000], color=discord.Color.dark_teal())
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
