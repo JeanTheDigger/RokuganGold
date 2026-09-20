@@ -35,6 +35,7 @@ import cog_letters
 import cog_npc_builder
 import cog_rumor
 import cog_seasons
+import cog_weather
 import ref_commands
 import storage
 import views_base
@@ -5035,6 +5036,8 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         await _update_date_display(guild, date_str, reason="A new day dawns in Rokugan.")
     if interaction.guild and old_cal and new_cal:
         await cog_seasons.on_day_advanced(interaction.guild, old_cal, new_cal)
+    if interaction.guild and new_cal:
+        await cog_weather.on_day_advanced(interaction.guild, new_cal)
 
 
 @dm.command(name="mount", description="Toggle mounted state on a character (outside combat). [Fortune]")
@@ -11442,7 +11445,16 @@ async def _setup_server_inner(
         await msg.pin()
         store.set_date_channel(guild_id, str(cal_ch.id), str(msg.id))
 
-    # --- 3b. Public Notices channel (rumor board) in IC Information ---
+    # --- 3b. Weather channel in IC Information ---
+    if "weather" not in existing_names:
+        weather_ch = await icinfo_cat.create_text_channel("weather")
+        created_items.append("#weather (daily weather)")
+    else:
+        weather_ch = discord.utils.get(icinfo_cat.text_channels, name="weather")
+    if weather_ch:
+        store.set_weather_channel(str(guild.id), str(weather_ch.id))
+
+    # --- 3c. Public Notices channel (rumor board) in IC Information ---
     if "public-notices" not in existing_names:
         notices_ch = await icinfo_cat.create_text_channel("public-notices")
         created_items.append("#public-notices (rumor board)")
@@ -11975,6 +11987,14 @@ cog_letters.init(
 
 cog_seasons.init(store=store, bot_client=client)
 
+cog_weather.init(
+    store=store,
+    bot_client=client,
+    require_guild=_require_guild,
+    require_dm_role=_require_dm_role,
+    is_dm=_is_dm,
+)
+
 client.tree.add_command(sheet)
 client.tree.add_command(stat_group)
 client.tree.add_command(xp_group)
@@ -11993,6 +12013,7 @@ client.tree.add_command(cog_checks.check)
 client.tree.add_command(ref_commands.ref)
 client.tree.add_command(cog_rumor.rumor)
 client.tree.add_command(cog_letters.letter)
+client.tree.add_command(cog_weather.weather)
 client.tree.add_command(setup_group)
 _HELP_COMMANDS.extend(client.tree.get_commands())
 

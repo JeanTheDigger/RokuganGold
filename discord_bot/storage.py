@@ -170,6 +170,21 @@ CREATE INDEX IF NOT EXISTS idx_letters_guild ON letters (guild_id, created_at DE
 CREATE INDEX IF NOT EXISTS idx_letters_chars ON letters (guild_id, sender COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_letters_recip ON letters (guild_id, recipient COLLATE NOCASE);
 """,
+    # 13: weather system - current weather per guild + display channel
+    """\
+CREATE TABLE IF NOT EXISTS weather (
+    guild_id     TEXT NOT NULL PRIMARY KEY,
+    weather_type TEXT NOT NULL,
+    set_by       TEXT NOT NULL DEFAULT 'system',
+    set_at       REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS weather_channels (
+    guild_id   TEXT NOT NULL PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL DEFAULT ''
+);
+""",
 ]
 
 # How many before-states to keep per character/creature for /dm undo.
@@ -1583,4 +1598,55 @@ class Store:
             self._conn.execute(
                 "DELETE FROM letters WHERE guild_id = ? AND id = ?",
                 (guild_id, letter_id),
+            )
+
+    # ------------------------------------------------------------------
+    # Weather
+    # ------------------------------------------------------------------
+
+    def get_weather(self, guild_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT weather_type, set_by, set_at FROM weather WHERE guild_id = ?",
+                (guild_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "weather_type": row["weather_type"],
+            "set_by": row["set_by"],
+            "set_at": row["set_at"],
+        }
+
+    def set_weather(self, guild_id: str, weather_type: str, set_by: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO weather (guild_id, weather_type, set_by, set_at) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET "
+                "weather_type = excluded.weather_type, set_by = excluded.set_by, "
+                "set_at = excluded.set_at",
+                (guild_id, weather_type, set_by, time.time()),
+            )
+
+    def get_weather_channel(self, guild_id: str) -> tuple[str, str] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT channel_id, message_id FROM weather_channels WHERE guild_id = ?",
+                (guild_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return (row["channel_id"], row["message_id"])
+
+    def set_weather_channel(
+        self, guild_id: str, channel_id: str, message_id: str = "",
+    ) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO weather_channels (guild_id, channel_id, message_id) "
+                "VALUES (?, ?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET "
+                "channel_id = excluded.channel_id, message_id = excluded.message_id",
+                (guild_id, channel_id, message_id),
             )
