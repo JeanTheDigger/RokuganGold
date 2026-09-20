@@ -1307,6 +1307,13 @@ class CombatBoardView(views_base.PersistentView):
         cur = enc.current()
         return cur is not None and cur.owner_id == user_id and not cur.is_npc
 
+    @staticmethod
+    def _find_owned_combatant(user_id: str, enc: encounter.Encounter) -> encounter.Combatant | None:
+        for cb in enc.combatants:
+            if cb.owner_id == user_id and not cb.is_npc:
+                return cb
+        return None
+
     @discord.ui.button(label="Stance", style=discord.ButtonStyle.primary, row=0)
     async def stance_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enc = self._get_enc()
@@ -1526,7 +1533,141 @@ class CombatBoardView(views_base.PersistentView):
             f"Select a target for **{cur.name}**'s attack:", view=view, ephemeral=True,
         )
 
-    @discord.ui.button(label="Cast Spell", style=discord.ButtonStyle.blurple, row=2)
+    @discord.ui.button(label="Void Armor", style=discord.ButtonStyle.secondary, row=2)
+    async def void_armor_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        cb = self._find_owned_combatant(uid, enc)
+        if cb is None and _d.is_dm(interaction):
+            cur = enc.current()
+            if cur is not None:
+                cb = cur
+        if cb is None:
+            await interaction.response.send_message(
+                "You have no combatant in this encounter. Use `/fight void armor` instead.", ephemeral=True,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cb)
+        if rec is None:
+            await interaction.response.send_message(f"Cannot resolve sheet for **{cb.name}**.", ephemeral=True)
+            return
+        c = rec.character
+        ok, reason = advantage_effects.can_spend_void_on_roll(c)
+        if not ok:
+            await interaction.response.send_message(reason, ephemeral=True)
+            return
+        if c.current_void_points <= 0:
+            await interaction.response.send_message(
+                f"**{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True,
+            )
+            return
+        if not cb.consume_once("void_combat", "round"):
+            await interaction.response.send_message(
+                f"**{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True,
+            )
+            return
+        c.current_void_points -= 1
+        _d.tally(self.channel_id, cb.name, "void")
+        cb.void_armor_tn_bonus += 10
+        _d.store.save(rec)
+        guild = str(self.guild_id)
+        _d.save_encounter(guild, enc)
+        await interaction.response.send_message(
+            f"**{cb.name}**: +10 Armor TN this Round ({c.current_void_points}/{c.max_void_points} VP left).",
+            ephemeral=True,
+        )
+        ch = _d.bot_client.get_channel(self.channel_id)
+        if ch is not None:
+            embed = discord.Embed(
+                title=f"{cb.name}: Void Armor",
+                color=discord.Color.purple(),
+                description=(
+                    f"**+10 Armor TN** for this Round\n"
+                    f"Armor TN bonus: +{cb.void_armor_tn_bonus} | VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+                    f"Clears at the start of the next Round."
+                ),
+            )
+            embed.set_footer(text=f"Spent by {interaction.user.display_name}")
+            try:
+                await ch.send(embed=embed)
+            except discord.HTTPException:
+                pass
+        await _d.combat_log(guild, f"Void Armor: {cb.name} (+10 ATN, {c.current_void_points} VP left)")
+        await _refresh_board(enc, guild)
+
+    @discord.ui.button(label="Void Init", style=discord.ButtonStyle.secondary, row=2)
+    async def void_init_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        cb = self._find_owned_combatant(uid, enc)
+        if cb is None and _d.is_dm(interaction):
+            cur = enc.current()
+            if cur is not None:
+                cb = cur
+        if cb is None:
+            await interaction.response.send_message(
+                "You have no combatant in this encounter. Use `/fight void initiative` instead.", ephemeral=True,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cb)
+        if rec is None:
+            await interaction.response.send_message(f"Cannot resolve sheet for **{cb.name}**.", ephemeral=True)
+            return
+        c = rec.character
+        ok, reason = advantage_effects.can_spend_void_on_roll(c)
+        if not ok:
+            await interaction.response.send_message(reason, ephemeral=True)
+            return
+        if c.current_void_points <= 0:
+            await interaction.response.send_message(
+                f"**{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True,
+            )
+            return
+        if not cb.consume_once("void_combat", "round"):
+            await interaction.response.send_message(
+                f"**{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True,
+            )
+            return
+        c.current_void_points -= 1
+        _d.tally(self.channel_id, cb.name, "void")
+        cb.void_initiative_boost += 10
+        cur_before = enc.current() if enc.started else None
+        enc._sort()
+        if cur_before is not None:
+            enc.turn_index = enc.combatants.index(cur_before)
+        _d.store.save(rec)
+        guild = str(self.guild_id)
+        _d.save_encounter(guild, enc)
+        await interaction.response.send_message(
+            f"**{cb.name}**: +10 Initiative ({c.current_void_points}/{c.max_void_points} VP left).",
+            ephemeral=True,
+        )
+        ch = _d.bot_client.get_channel(self.channel_id)
+        if ch is not None:
+            embed = discord.Embed(
+                title=f"{cb.name}: Void Initiative",
+                color=discord.Color.purple(),
+                description=(
+                    f"**+10 Initiative** for the skirmish\n"
+                    f"Effective initiative: **{cb.effective_initiative}** | VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+                    f"Persists until the encounter ends."
+                ),
+            )
+            embed.set_footer(text=f"Spent by {interaction.user.display_name}")
+            try:
+                await ch.send(embed=embed)
+            except discord.HTTPException:
+                pass
+        await _d.combat_log(guild, f"Void Init: {cb.name} (+10, now {cb.effective_initiative}, {c.current_void_points} VP left)")
+        await _refresh_board(enc, guild)
+
+    @discord.ui.button(label="Cast Spell", style=discord.ButtonStyle.blurple, row=3)
     async def cast_spell_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enc = self._get_enc()
         if enc is None:
