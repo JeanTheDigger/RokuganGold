@@ -90,6 +90,7 @@ GUILD_ID = os.environ.get("DISCORD_GUILD_ID")
 DB_PATH = os.environ.get("DB_PATH", "rokugan.db")
 
 intents = discord.Intents.default()
+intents.members = True
 
 engine = DiceEngine()
 store = storage.Store(DB_PATH)

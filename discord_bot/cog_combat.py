@@ -2474,12 +2474,23 @@ class RosterView(views_base.PersistentView):
 class _RosterPickView(discord.ui.View):
     """Ephemeral member picker shown by /combat setup."""
 
-    def __init__(self, organizer: discord.Member) -> None:
+    def __init__(self, organizer: discord.Member, members: list[discord.Member]) -> None:
         super().__init__(timeout=600)
         self.organizer = organizer
+        self._member_map: dict[str, discord.Member] = {str(m.id): m for m in members}
+        options = [
+            discord.SelectOption(label=m.display_name, value=str(m.id))
+            for m in members
+        ][:25]
+        select = discord.ui.Select(
+            placeholder="Who is in this encounter?",
+            min_values=1, max_values=min(len(options), 25),
+            options=options,
+        )
+        select.callback = self._pick
+        self.add_item(select)
 
-    @discord.ui.select(cls=discord.ui.UserSelect, placeholder="Who is in this encounter?", min_values=1, max_values=25)
-    async def pick(self, interaction: discord.Interaction, select: discord.ui.UserSelect) -> None:
+    async def _pick(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != self.organizer.id:
             await interaction.response.send_message("Only the organizer can pick the roster.", ephemeral=True)
             return
@@ -2490,27 +2501,16 @@ class _RosterPickView(discord.ui.View):
             return
         enc = encounter.Encounter(channel_id=interaction.channel_id)
         enc.organizer_id = str(self.organizer.id)
-        excluded: list[str] = []
-        channel = interaction.channel
-        for user in select.values:
-            if getattr(user, "bot", False):
+        select: discord.ui.Select = self.children[0]  # type: ignore[assignment]
+        for uid in select.values:
+            member = self._member_map.get(uid)
+            if member is None:
                 continue
-            perms = channel.permissions_for(user)
-            if not perms.read_messages:
-                excluded.append(user.display_name)
-                continue
-            enc.roster[str(user.id)] = "accepted" if user.id == self.organizer.id else "pending"
+            enc.roster[uid] = "accepted" if member.id == self.organizer.id else "pending"
         if not enc.roster:
-            if excluded:
-                names = ", ".join(excluded)
-                await interaction.response.send_message(
-                    f"No valid players selected. Excluded (not in this channel): {names}",
-                    ephemeral=True,
-                )
-            else:
-                await interaction.response.send_message(
-                    "Pick at least one player (bots do not fight).", ephemeral=True,
-                )
+            await interaction.response.send_message(
+                "Pick at least one player.", ephemeral=True,
+            )
             return
         _d.encounters[interaction.channel_id] = enc
         _d.save_encounter(guild, enc)
@@ -2525,12 +2525,6 @@ class _RosterPickView(discord.ui.View):
         enc.roster_message_id = msg.id
         _d.save_encounter(guild, enc)
         await _d.combat_log(guild, f"--- Encounter roster set up by {self.organizer.display_name} ({len(enc.roster)} invited) ---")
-        if excluded:
-            names = ", ".join(excluded)
-            await interaction.followup.send(
-                f"Excluded (not in this channel): {names}",
-                ephemeral=True,
-            )
 
 
 async def _fetch_roster_message(enc: encounter.Encounter) -> discord.Message | None:
@@ -2682,9 +2676,17 @@ async def combat_setup(interaction: discord.Interaction) -> None:
     if existing is not None and existing.started:
         await interaction.response.send_message("A fight is already running here. `/combat end` it first.", ephemeral=True)
         return
+    channel = interaction.channel
+    members = [m for m in channel.members if not m.bot] if hasattr(channel, "members") else []
+    if not members:
+        await interaction.response.send_message(
+            "No players found in this channel. Make sure the bot has the Server Members intent enabled.",
+            ephemeral=True,
+        )
+        return
     await interaction.response.send_message(
         "Pick the players for this encounter (you may include yourself). Staff add NPCs and creatures after **Begin**.",
-        view=_RosterPickView(interaction.user), ephemeral=True,
+        view=_RosterPickView(interaction.user, members), ephemeral=True,
     )
 
 
