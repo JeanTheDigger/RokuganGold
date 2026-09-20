@@ -1268,6 +1268,104 @@ class CombatBoardView(views_base.PersistentView):
         await interaction.response.send_message(content="Encounter ended.", embed=embed)
         await _d.combat_log(guild, "--- Encounter ended --- " + (" | ".join(logs) if logs else ""))
 
+    @discord.ui.button(label="Attack", style=discord.ButtonStyle.success, row=1)
+    async def attack_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        if not enc.started:
+            await interaction.response.send_message(
+                "Encounter has not started yet. Use `/combat next` to begin.", ephemeral=True,
+            )
+            return
+        cur = enc.current()
+        if cur is None:
+            await interaction.response.send_message("No current combatant.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        if not self._is_active_player(uid, enc) and not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"It is **{cur.name}**'s turn, not yours.", ephemeral=True,
+            )
+            return
+        targets = [c for c in enc.combatants if c.name.lower() != cur.name.lower()]
+        if not targets:
+            await interaction.response.send_message("No valid targets in this encounter.", ephemeral=True)
+            return
+        options = [
+            discord.SelectOption(label=t.name[:100], value=t.name[:100])
+            for t in targets[:25]
+        ]
+        view = _BoardAttackTargetSelect(self.guild_id, self.channel_id, cur.name, options)
+        await interaction.response.send_message(
+            f"Select a target for **{cur.name}**'s attack:", view=view, ephemeral=True,
+        )
+
+
+class _BoardAttackTargetSelect(discord.ui.View):
+    def __init__(self, guild_id: str, channel_id: int, attacker_name: str,
+                 options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.attacker_name = attacker_name
+        self.target_select.options = options
+
+    @discord.ui.select(placeholder="Choose target...")
+    async def target_select(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        target_name = select.values[0]
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            await interaction.response.edit_message(content="No active encounter.", view=None)
+            return
+        atk_cb = enc.find(self.attacker_name)
+        if atk_cb is None:
+            await interaction.response.edit_message(
+                content=f"**{self.attacker_name}** is no longer in initiative.", view=None,
+            )
+            return
+        tgt_cb = enc.find(target_name)
+        if tgt_cb is None:
+            await interaction.response.edit_message(
+                content=f"**{target_name}** is no longer in initiative.", view=None,
+            )
+            return
+        guild = self.guild_id
+        attacker_rec = _d.resolve_combatant_record(guild, atk_cb)
+        if attacker_rec is None:
+            await interaction.response.edit_message(
+                content=f"Cannot resolve sheet for **{self.attacker_name}**.", view=None,
+            )
+            return
+        target_rec = None
+        target_creature_rec = None
+        if tgt_cb.is_npc:
+            target_rec = _d.store.get_by_name(guild, _d.NPC_OWNER, tgt_cb.name)
+            if target_rec is None:
+                target_creature_rec = _d.store.get_creature_by_name(guild, tgt_cb.name)
+        else:
+            if tgt_cb.owner_id:
+                target_rec = _d.store.get_active(guild, tgt_cb.owner_id)
+        if target_rec is None and target_creature_rec is None:
+            await interaction.response.edit_message(
+                content=f"Cannot resolve sheet or creature record for **{target_name}**.", view=None,
+            )
+            return
+        weapon = attacker_rec.character.equipped_weapon or "unarmed"
+        await interaction.response.edit_message(
+            content=f"Rolling **{self.attacker_name}** attack on **{target_name}** with **{weapon.replace('_', ' ').title()}**...",
+            view=None,
+        )
+        await _execute_attack(
+            interaction, guild, attacker_rec, target_rec, target_creature_rec,
+            weapon, raises=0, increased_damage=0, man="none",
+            spend_void=False, void_damage=False,
+            a_stance_explicit=None, d_stance_explicit=None,
+            bonus_tn=0, mat="normal", off_hand=False,
+            response_used=True,
+        )
+
 
 class _BoardStanceSelect(discord.ui.View):
     def __init__(self, guild_id: str, channel_id: int, combatant_name: str) -> None:
@@ -1484,7 +1582,42 @@ async def attack(
     a_stance_explicit = attacker_stance.value if attacker_stance else None
     d_stance_explicit = defender_stance.value if defender_stance else None
     man = maneuver.value if maneuver else "none"
+    mat = weapon_material.value if weapon_material else "normal"
 
+    await _execute_attack(
+        interaction, guild, attacker_rec, target_rec, target_creature_rec,
+        weapon, raises, increased_damage, man, spend_void, void_damage,
+        a_stance_explicit, d_stance_explicit, bonus_tn, mat, off_hand,
+    )
+
+
+async def _execute_attack(
+    interaction: discord.Interaction,
+    guild: str,
+    attacker_rec,
+    target_rec,
+    target_creature_rec,
+    weapon: str,
+    raises: int,
+    increased_damage: int,
+    man: str,
+    spend_void: bool,
+    void_damage: bool,
+    a_stance_explicit: str | None,
+    d_stance_explicit: str | None,
+    bonus_tn: int,
+    mat: str,
+    off_hand: bool,
+    response_used: bool = False,
+) -> None:
+    async def _reply(content: str = "", *, ephemeral: bool = False, **kwargs):
+        nonlocal response_used
+        if response_used:
+            return await interaction.followup.send(content=content, ephemeral=ephemeral, wait=True, **kwargs)
+        else:
+            await interaction.response.send_message(content=content, ephemeral=ephemeral, **kwargs)
+            response_used = True
+            return await interaction.original_response()
     # Early encounter/combatant lookup for action economy enforcement.
     enc = _d.encounters.get(interaction.channel_id)
     atk_combatant = enc.find(attacker_rec.character.name) if enc else None
@@ -1494,12 +1627,12 @@ async def attack(
         wpn_size = combat.get_weapon_profile(weapon).get("size", "Medium")
         blocked, block_reason = condition_effects.cannot_attack(atk_combatant.conditions, wpn_size)
         if blocked:
-            await interaction.response.send_message(f"**{atk_combatant.name}** cannot attack: {block_reason}", ephemeral=True)
+            await _reply(f"**{atk_combatant.name}** cannot attack: {block_reason}", ephemeral=True)
             return
 
     # Action economy (s40): attack is a Complex Action - requires full action budget.
     if atk_combatant is not None and atk_combatant.actions_used > 0:
-        await interaction.response.send_message(
+        await _reply(
             f"**{atk_combatant.name}** has already used actions this turn ({atk_combatant.actions_used}/2). "
             f"Use `/fight action action_type:Reset` to override.",
             ephemeral=True,
@@ -1507,20 +1640,20 @@ async def attack(
         return
 
     if target_creature_rec is not None and man in ("disarm", "knockdown"):
-        await interaction.response.send_message(
+        await _reply(
             "Disarm/Knockdown aren't supported against creatures yet: Use a plain attack or Feint.",
             ephemeral=True,
         )
         return
     if man == "called_shot" and raises < 1:
-        await interaction.response.send_message(
+        await _reply(
             "Called Shot requires at least 1 raise (1=limb, 2=hand/foot, 3=head, 4=eye/ear/finger).",
             ephemeral=True,
         )
         return
     if man == "extra_attack":
         if atk_combatant and "extra_attack" in atk_combatant.used_this_turn:
-            await interaction.response.send_message(
+            await _reply(
                 "Extra Attack can only be used once per Turn.", ephemeral=True
             )
             return
@@ -1543,7 +1676,7 @@ async def attack(
     _atk_profile = combat.get_weapon_profile(weapon)
     _atk_skill = _atk_profile.get("skill", "Kenjutsu")
     if _atk_char.skills.get(_atk_skill, 0) == 0 and (raises or increased_damage or maneuver_raises):
-        await interaction.response.send_message(
+        await _reply(
             f"**{_atk_char.name}** is Unskilled in {_atk_skill}: An Unskilled Roll may not benefit from "
             "Raises of any kind, called, maneuver or Free. Attack without them.",
             ephemeral=True,
@@ -1557,7 +1690,7 @@ async def attack(
     _man_called = max(0, maneuver_raises - _free)
     _called = raises + increased_damage + _man_called
     if _called > combat.max_raises(_atk_char):
-        await interaction.response.send_message(
+        await _reply(
             f"Too many Raises: **{_called}** called (raises {raises} + increased damage {increased_damage}"
             f" + maneuver {_man_called} after Free Raises) but the maximum per roll is the Void Ring, "
             f"**{combat.max_raises(_atk_char)}**.",
@@ -1585,7 +1718,7 @@ async def attack(
     # Katana void damage: validate weapon eligibility (VP spent at damage time).
     atk_weapon_profile = combat.get_weapon_profile(weapon)
     if void_damage and not atk_weapon_profile.get("void_damage"):
-        await interaction.response.send_message(
+        await _reply(
             f"**{weapon}** does not support void_damage - only katana can spend VP for +1k1 damage.",
             ephemeral=True,
         )
@@ -1911,7 +2044,6 @@ async def attack(
 
     a_name = attacker_rec.character.name
     hit = outcome["hit"]
-    mat = weapon_material.value if weapon_material else "normal"
     embed = discord.Embed(
         title=f"⚔️ {a_name} attacks {t_name}",
         color=discord.Color.green() if hit else discord.Color.greyple(),
@@ -2002,7 +2134,7 @@ async def attack(
         target_owner_id = target_rec.owner_id if target_rec is not None else None
         owner_ping = f" <@{target_owner_id}>" if target_owner_id and target_owner_id != _d.NPC_OWNER else ""
         if approval_ch:
-            await interaction.response.send_message(
+            await _reply(
                 content=f"⚔️ **{a_name}** hit **{t_name}** - damage approval pending in the DM channel.{owner_ping}",
                 embed=embed,
             )
@@ -2010,12 +2142,12 @@ async def attack(
             embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
             await view.persist(await approval_ch.send(content=f"{_d.dm_ping(interaction.guild)}{prompt}", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
         else:
-            await interaction.response.send_message(content=f"{_d.dm_ping(interaction.guild)}{prompt}{owner_ping}", embed=embed, view=view, allowed_mentions=_PING_MENTIONS)
-            await view.persist(await interaction.original_response())
+            msg = await _reply(content=f"{_d.dm_ping(interaction.guild)}{prompt}{owner_ping}", embed=embed, view=view, allowed_mentions=_PING_MENTIONS)
+            await view.persist(msg)
         await _d.combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) HIT (roll {outcome['roll']} vs TN {outcome['target_tn']})")
         _d.tally(interaction.channel_id, a_name, "attacks"); _d.tally(interaction.channel_id, a_name, "hits")
     else:
-        await interaction.response.send_message(embed=embed)
+        await _reply(embed=embed)
         await _d.combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) MISS (roll {outcome['roll']} vs TN {outcome['target_tn']})")
         _d.tally(interaction.channel_id, a_name, "attacks")
 
