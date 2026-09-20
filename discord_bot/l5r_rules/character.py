@@ -15,7 +15,7 @@ Pure data. Serialises to/from a plain dict for JSON storage.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict, fields
+from dataclasses import dataclass, field, asdict, fields, MISSING
 
 from . import enums
 
@@ -144,6 +144,21 @@ class Character:
     @classmethod
     def from_dict(cls, data: dict) -> "Character":
         # Tolerate missing/extra keys so sheets stay forward-compatible as the
-        # model grows in later phases.
+        # model grows in later phases.  Coerce null values to their field
+        # defaults so callers never hit AttributeError on None.
+        field_defaults: dict = {}
+        for f in fields(cls):
+            if f.default is not MISSING:
+                field_defaults[f.name] = f.default
+            elif f.default_factory is not MISSING:
+                field_defaults[f.name] = f.default_factory
         known = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in data.items() if k in known})
+        cleaned = {}
+        for k, v in data.items():
+            if k not in known:
+                continue
+            if v is None and k in field_defaults:
+                d = field_defaults[k]
+                v = d() if callable(d) else d
+            cleaned[k] = v
+        return cls(**cleaned)

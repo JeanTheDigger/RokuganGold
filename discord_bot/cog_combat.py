@@ -2085,7 +2085,7 @@ class _BoardTechniqueSelect(discord.ui.View):
         if ch:
             announce = f"**{cb.name}** activates **{tech_name}**{cost_note}"
             if entry.get("manual"):
-                announce += " -- Fortune adjudicates."
+                announce += " (Fortune adjudicates)"
             try:
                 await ch.send(announce)
             except discord.HTTPException:
