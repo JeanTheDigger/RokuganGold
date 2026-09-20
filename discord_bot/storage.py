@@ -128,6 +128,33 @@ CREATE TABLE IF NOT EXISTS npc_templates (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_npc_template_unique ON npc_templates (guild_id, name COLLATE NOCASE);
 """,
+    # 11: rumor board - targeted and public rumors
+    """\
+CREATE TABLE IF NOT EXISTS rumors (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    content    TEXT NOT NULL,
+    tier       TEXT NOT NULL DEFAULT 'hearsay',
+    public     INTEGER NOT NULL DEFAULT 0,
+    author_id  TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rumors_guild ON rumors (guild_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS rumor_filters (
+    rumor_id     INTEGER NOT NULL,
+    filter_type  TEXT NOT NULL,
+    filter_value TEXT NOT NULL,
+    FOREIGN KEY (rumor_id) REFERENCES rumors(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_rumor_filters ON rumor_filters (rumor_id);
+
+CREATE TABLE IF NOT EXISTS rumor_board_channels (
+    guild_id   TEXT NOT NULL PRIMARY KEY,
+    channel_id TEXT NOT NULL
+);
+""",
 ]
 
 # How many before-states to keep per character/creature for /dm undo.
@@ -1293,3 +1320,168 @@ class Store:
     def delete_location(self, location_id: int) -> None:
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM locations WHERE id = ?", (location_id,))
+
+    # ------------------------------------------------------------------
+    # Rumor board
+    # ------------------------------------------------------------------
+
+    def create_rumor(
+        self,
+        guild_id: str,
+        title: str,
+        content: str,
+        tier: str,
+        filters: list[tuple[str, str]],
+        author_id: str,
+        *,
+        public: bool = False,
+    ) -> int:
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "INSERT INTO rumors (guild_id, title, content, tier, public, author_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (guild_id, title, content, tier, int(public), author_id, time.time()),
+            )
+            rumor_id = cur.lastrowid
+            for ftype, fvalue in filters:
+                self._conn.execute(
+                    "INSERT INTO rumor_filters (rumor_id, filter_type, filter_value) VALUES (?, ?, ?)",
+                    (rumor_id, ftype, fvalue),
+                )
+        return rumor_id
+
+    def list_rumors(self, guild_id: str, *, limit: int = 25) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, title, tier, public, author_id, created_at FROM rumors "
+                "WHERE guild_id = ? ORDER BY created_at DESC LIMIT ?",
+                (guild_id, limit),
+            ).fetchall()
+            result: list[dict] = []
+            for r in rows:
+                filters = self._conn.execute(
+                    "SELECT filter_type, filter_value FROM rumor_filters WHERE rumor_id = ?",
+                    (r["id"],),
+                ).fetchall()
+                targets = ", ".join(f"{f['filter_type']}: {f['filter_value']}" for f in filters)
+                result.append({
+                    "id": r["id"],
+                    "title": r["title"],
+                    "tier": r["tier"],
+                    "public": bool(r["public"]),
+                    "targets": targets,
+                })
+        return result
+
+    def list_rumors_for_character(
+        self, guild_id: str, character, *, limit: int = 25,
+    ) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, title, tier, public, author_id, created_at FROM rumors "
+                "WHERE guild_id = ? ORDER BY created_at DESC",
+                (guild_id,),
+            ).fetchall()
+            result: list[dict] = []
+            for r in rows:
+                if r["public"]:
+                    result.append({
+                        "id": r["id"],
+                        "title": r["title"],
+                        "tier": r["tier"],
+                        "public": True,
+                        "targets": "",
+                    })
+                    if len(result) >= limit:
+                        break
+                    continue
+                filters = self._conn.execute(
+                    "SELECT filter_type, filter_value FROM rumor_filters WHERE rumor_id = ?",
+                    (r["id"],),
+                ).fetchall()
+                filter_list = [(f["filter_type"], f["filter_value"]) for f in filters]
+                if self._character_matches(character, filter_list):
+                    result.append({
+                        "id": r["id"],
+                        "title": r["title"],
+                        "tier": r["tier"],
+                        "public": False,
+                        "targets": "",
+                    })
+                    if len(result) >= limit:
+                        break
+        return result
+
+    @staticmethod
+    def _character_matches(char, filters: list[tuple[str, str]]) -> bool:
+        for ftype, fvalue in filters:
+            fval_lower = fvalue.lower()
+            if ftype == "clan" and char.clan.lower() == fval_lower:
+                return True
+            if ftype == "family" and char.family.lower() == fval_lower:
+                return True
+            if ftype == "school" and char.school.lower() == fval_lower:
+                return True
+            if ftype == "school_type" and char.school_type.lower() == fval_lower:
+                return True
+            if ftype == "character" and char.name.lower() == fval_lower:
+                return True
+        return False
+
+    def get_rumor(self, guild_id: str, rumor_id: int) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, title, content, tier, public, author_id, created_at "
+                "FROM rumors WHERE guild_id = ? AND id = ?",
+                (guild_id, rumor_id),
+            ).fetchone()
+            if row is None:
+                return None
+            filters = self._conn.execute(
+                "SELECT filter_type, filter_value FROM rumor_filters WHERE rumor_id = ?",
+                (rumor_id,),
+            ).fetchall()
+        targets = ", ".join(f"{f['filter_type']}: {f['filter_value']}" for f in filters)
+        return {
+            "id": row["id"],
+            "title": row["title"],
+            "content": row["content"],
+            "tier": row["tier"],
+            "public": bool(row["public"]),
+            "author_id": row["author_id"],
+            "targets": targets,
+        }
+
+    def get_rumor_filters(self, guild_id: str, rumor_id: int) -> list[tuple[str, str]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT filter_type, filter_value FROM rumor_filters WHERE rumor_id = ?",
+                (rumor_id,),
+            ).fetchall()
+        return [(r["filter_type"], r["filter_value"]) for r in rows]
+
+    def delete_rumor(self, guild_id: str, rumor_id: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM rumor_filters WHERE rumor_id = ?", (rumor_id,),
+            )
+            self._conn.execute(
+                "DELETE FROM rumors WHERE guild_id = ? AND id = ?",
+                (guild_id, rumor_id),
+            )
+
+    def set_rumor_board_channel(self, guild_id: str, channel_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO rumor_board_channels (guild_id, channel_id) VALUES (?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id",
+                (guild_id, channel_id),
+            )
+
+    def get_rumor_board_channel(self, guild_id: str) -> str | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT channel_id FROM rumor_board_channels WHERE guild_id = ?",
+                (guild_id,),
+            ).fetchone()
+        return row["channel_id"] if row else None

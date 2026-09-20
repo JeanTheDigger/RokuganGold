@@ -32,6 +32,7 @@ import cog_combat
 import cog_hub
 import cog_inventory
 import cog_npc_builder
+import cog_rumor
 import ref_commands
 import storage
 import views_base
@@ -11435,6 +11436,15 @@ async def _setup_server_inner(
         await msg.pin()
         store.set_date_channel(guild_id, str(cal_ch.id), str(msg.id))
 
+    # --- 3b. Public Notices channel (rumor board) in IC Information ---
+    if "public-notices" not in existing_names:
+        notices_ch = await icinfo_cat.create_text_channel("public-notices")
+        created_items.append("#public-notices (rumor board)")
+    else:
+        notices_ch = discord.utils.get(icinfo_cat.text_channels, name="public-notices")
+    if notices_ch:
+        store.set_rumor_board_channel(str(guild.id), str(notices_ch.id))
+
     # --- 4. Remove legacy "In Character" category if present ---
     ic_cat = discord.utils.get(guild.categories, name="In Character")
     if ic_cat is not None:
@@ -11932,6 +11942,18 @@ ref_commands.init(
     anyadv_autocomplete=_anyadv_autocomplete,
 )
 
+cog_rumor.init(
+    store=store,
+    bot_client=client,
+    require_guild=_require_guild,
+    require_dm_role=_require_dm_role,
+    is_dm=_is_dm,
+    npc_owner=NPC_OWNER,
+    role_fortune=ROLE_FORTUNE,
+    role_kami=ROLE_KAMI,
+    cat_player_support=CAT_PLAYER_SUPPORT,
+)
+
 client.tree.add_command(sheet)
 client.tree.add_command(stat_group)
 client.tree.add_command(xp_group)
@@ -11948,6 +11970,7 @@ client.tree.add_command(cog_combat.engage_group)
 client.tree.add_command(spell_group)
 client.tree.add_command(cog_checks.check)
 client.tree.add_command(ref_commands.ref)
+client.tree.add_command(cog_rumor.rumor)
 client.tree.add_command(setup_group)
 _HELP_COMMANDS.extend(client.tree.get_commands())
 
