@@ -155,6 +155,21 @@ CREATE TABLE IF NOT EXISTS rumor_board_channels (
     channel_id TEXT NOT NULL
 );
 """,
+    # 12: IC letters between characters
+    """\
+CREATE TABLE IF NOT EXISTS letters (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   TEXT NOT NULL,
+    sender     TEXT NOT NULL,
+    recipient  TEXT NOT NULL,
+    content    TEXT NOT NULL,
+    author_id  TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_letters_guild ON letters (guild_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_letters_chars ON letters (guild_id, sender COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_letters_recip ON letters (guild_id, recipient COLLATE NOCASE);
+""",
 ]
 
 # How many before-states to keep per character/creature for /dm undo.
@@ -1485,3 +1500,87 @@ class Store:
                 (guild_id,),
             ).fetchone()
         return row["channel_id"] if row else None
+
+    # ------------------------------------------------------------------
+    # IC Letters
+    # ------------------------------------------------------------------
+
+    def create_letter(
+        self,
+        guild_id: str,
+        sender: str,
+        recipient: str,
+        content: str,
+        author_id: str,
+    ) -> int:
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "INSERT INTO letters (guild_id, sender, recipient, content, author_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (guild_id, sender, recipient, content, author_id, time.time()),
+            )
+        return cur.lastrowid
+
+    def list_letters(self, guild_id: str, *, limit: int = 25) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, sender, recipient, content, created_at FROM letters "
+                "WHERE guild_id = ? ORDER BY created_at DESC LIMIT ?",
+                (guild_id, limit),
+            ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "sender": r["sender"],
+                "recipient": r["recipient"],
+                "preview": r["content"][:60] + ("…" if len(r["content"]) > 60 else ""),
+                "content": r["content"],
+            }
+            for r in rows
+        ]
+
+    def list_letters_for_character(
+        self, guild_id: str, character_name: str, *, limit: int = 25,
+    ) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, sender, recipient, content, created_at FROM letters "
+                "WHERE guild_id = ? AND (sender = ? COLLATE NOCASE OR recipient = ? COLLATE NOCASE) "
+                "ORDER BY created_at DESC LIMIT ?",
+                (guild_id, character_name, character_name, limit),
+            ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "sender": r["sender"],
+                "recipient": r["recipient"],
+                "preview": r["content"][:60] + ("…" if len(r["content"]) > 60 else ""),
+                "content": r["content"],
+                "_viewer": character_name,
+            }
+            for r in rows
+        ]
+
+    def get_letter(self, guild_id: str, letter_id: int) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, sender, recipient, content, author_id, created_at "
+                "FROM letters WHERE guild_id = ? AND id = ?",
+                (guild_id, letter_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "sender": row["sender"],
+            "recipient": row["recipient"],
+            "content": row["content"],
+            "author_id": row["author_id"],
+        }
+
+    def delete_letter(self, guild_id: str, letter_id: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM letters WHERE guild_id = ? AND id = ?",
+                (guild_id, letter_id),
+            )

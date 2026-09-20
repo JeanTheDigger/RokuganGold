@@ -31,8 +31,10 @@ import cog_checks
 import cog_combat
 import cog_hub
 import cog_inventory
+import cog_letters
 import cog_npc_builder
 import cog_rumor
+import cog_seasons
 import ref_commands
 import storage
 import views_base
@@ -5014,7 +5016,9 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         slots_str += f", Bonus {c.void_spell_bonus}"
         parts.append(f"slots: {slots_str}")
         lines.append(f"**{c.name}**: {' · '.join(parts)}")
+    old_cal = store.get_calendar(guild)
     date_str = _advance_calendar(guild)
+    new_cal = store.get_calendar(guild)
     embed = discord.Embed(
         title="New Day",
         description="\n".join(lines),
@@ -5029,6 +5033,8 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed)
     if date_str:
         await _update_date_display(guild, date_str, reason="A new day dawns in Rokugan.")
+    if interaction.guild and old_cal and new_cal:
+        await cog_seasons.on_day_advanced(interaction.guild, old_cal, new_cal)
 
 
 @dm.command(name="mount", description="Toggle mounted state on a character (outside combat). [Fortune]")
@@ -11954,6 +11960,21 @@ cog_rumor.init(
     cat_player_support=CAT_PLAYER_SUPPORT,
 )
 
+cog_letters.init(
+    store=store,
+    bot_client=client,
+    require_guild=_require_guild,
+    require_dm_role=_require_dm_role,
+    is_dm=_is_dm,
+    npc_owner=NPC_OWNER,
+    role_fortune=ROLE_FORTUNE,
+    role_kami=ROLE_KAMI,
+    cat_player_support=CAT_PLAYER_SUPPORT,
+    pc_autocomplete=_any_character_autocomplete,
+)
+
+cog_seasons.init(store=store, bot_client=client)
+
 client.tree.add_command(sheet)
 client.tree.add_command(stat_group)
 client.tree.add_command(xp_group)
@@ -11971,6 +11992,7 @@ client.tree.add_command(spell_group)
 client.tree.add_command(cog_checks.check)
 client.tree.add_command(ref_commands.ref)
 client.tree.add_command(cog_rumor.rumor)
+client.tree.add_command(cog_letters.letter)
 client.tree.add_command(setup_group)
 _HELP_COMMANDS.extend(client.tree.get_commands())
 
