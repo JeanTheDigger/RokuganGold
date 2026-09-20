@@ -3204,6 +3204,7 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         tag = " *(NPC)*" if c.is_npc else ""
         wound_tag = ""
         spell_tag = ""
+        vp_tag = ""
         if guild_id:
             rec = _d.resolve_combatant_record(guild_id, c)
             if rec is not None:
@@ -3212,6 +3213,8 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
                     lvl = stats.wound_level_name(rec.character)
                     wound_tag = f"  ⚠️{lvl}({pen})"
                 ch_rec = rec.character
+                if ch_rec.max_void_points > 0:
+                    vp_tag = f"  VP:{ch_rec.current_void_points}/{ch_rec.max_void_points}"
                 if ch_rec.spell_slots:
                     parts: list[str] = []
                     for el in _CAST_ELEMENTS:
@@ -3244,7 +3247,7 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
             tech_names = [e.get("display", k) for k, e in c.declared_techniques.items()]
             techs = "  **T**: " + ", ".join(tech_names)
         init_val = c.effective_initiative
-        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: Init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{fear}{held}{delayed}{techs}{spell_tag}")
+        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}{vp_tag}: Init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{fear}{held}{delayed}{techs}{spell_tag}")
     header = f"⚔️ **Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
