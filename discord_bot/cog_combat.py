@@ -2121,12 +2121,27 @@ class _RosterPickView(discord.ui.View):
             return
         enc = encounter.Encounter(channel_id=interaction.channel_id)
         enc.organizer_id = str(self.organizer.id)
+        excluded: list[str] = []
+        channel = interaction.channel
         for user in select.values:
             if getattr(user, "bot", False):
                 continue
+            perms = channel.permissions_for(user)
+            if not perms.read_messages:
+                excluded.append(user.display_name)
+                continue
             enc.roster[str(user.id)] = "accepted" if user.id == self.organizer.id else "pending"
         if not enc.roster:
-            await interaction.response.send_message("Pick at least one player (bots do not fight).", ephemeral=True)
+            if excluded:
+                names = ", ".join(excluded)
+                await interaction.response.send_message(
+                    f"No valid players selected. Excluded (not in this channel): {names}",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    "Pick at least one player (bots do not fight).", ephemeral=True,
+                )
             return
         _d.encounters[interaction.channel_id] = enc
         _d.save_encounter(guild, enc)
@@ -2141,6 +2156,12 @@ class _RosterPickView(discord.ui.View):
         enc.roster_message_id = msg.id
         _d.save_encounter(guild, enc)
         await _d.combat_log(guild, f"--- Encounter roster set up by {self.organizer.display_name} ({len(enc.roster)} invited) ---")
+        if excluded:
+            names = ", ".join(excluded)
+            await interaction.followup.send(
+                f"Excluded (not in this channel): {names}",
+                ephemeral=True,
+            )
 
 
 async def _fetch_roster_message(enc: encounter.Encounter) -> discord.Message | None:
@@ -2207,6 +2228,12 @@ async def combat_roster_add(interaction: discord.Interaction, member: discord.Me
         return
     if member.bot:
         await interaction.response.send_message("Bots do not fight.", ephemeral=True)
+        return
+    perms = interaction.channel.permissions_for(member)
+    if not perms.read_messages:
+        await interaction.response.send_message(
+            f"{member.display_name} does not have access to this channel.", ephemeral=True,
+        )
         return
     uid = str(member.id)
     if enc.roster.get(uid) in encounter.ROSTER_IN:
