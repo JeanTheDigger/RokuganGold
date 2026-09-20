@@ -17,7 +17,8 @@ import encounter
 import storage as _storage_mod
 import views_base
 from l5r_rules import (
-    advantage_effects, advantages, combat, condition_effects, creature, enums,
+    advantage_effects, advantages, combat, condition_effects, creature,
+    declarable_techniques, enums,
     kata, kata_effects, kiho, kiho_effects, mass_battle, skill_mastery,
     spells, stats, tattoo_effects, technique_effects,
 )
@@ -390,6 +391,39 @@ class DamageView(views_base.PersistentView):
                 t_dmg_notes.append(e9_note)
             if fe_note:
                 t_dmg_notes.append(fe_note)
+            cre_decl_dmg_explode = False
+            cre_decl_reduction_ignore = 0
+            cre_decl_on_hit_condition = ""
+            atk_cb_cre = enc.find(attacker.name) if enc else None
+            if atk_cb_cre and atk_cb_cre.declared_techniques:
+                for tkey, tentry in list(atk_cb_cre.declared_techniques.items()):
+                    if tentry.get("manual"):
+                        continue
+                    efx = tentry.get("effects", {})
+                    if not efx:
+                        continue
+                    t_display = tentry.get("display", tkey)
+                    if efx.get("dmg_rolled"):
+                        extra_rolled += efx["dmg_rolled"]
+                    if efx.get("dmg_kept"):
+                        t_kept += efx["dmg_kept"]
+                    if efx.get("dmg_flat"):
+                        t_flat += efx["dmg_flat"]
+                    if efx.get("dmg_explode"):
+                        cre_decl_dmg_explode = True
+                    if efx.get("reduction_ignore"):
+                        cre_decl_reduction_ignore += efx["reduction_ignore"]
+                    if efx.get("on_hit_condition"):
+                        cre_decl_on_hit_condition = efx["on_hit_condition"]
+                    d_parts: list[str] = []
+                    for k in ("dmg_rolled", "dmg_kept", "dmg_flat", "dmg_explode",
+                               "reduction_ignore", "on_hit_condition"):
+                        if efx.get(k):
+                            d_parts.append(f"{k}={efx[k]}")
+                    if d_parts:
+                        t_dmg_notes.append(f"{t_display}: {', '.join(d_parts)}")
+            if cre_decl_dmg_explode:
+                force_explode = True
             dmg = combat.resolve_damage(
                 attacker, self.weapon, _d.engine, self.increased_damage,
                 extra_rolled, t_kept, t_flat, explode_9=explode_9, force_explode=force_explode,
@@ -429,7 +463,7 @@ class DamageView(views_base.PersistentView):
                     true_note = f"True: Reduction −{true_sub} (wielder Strength {attacker.strength})"
                     cre_base_red = max(0, cre_base_red - attacker.strength)
             kata_line = "".join(f"\n⚑ {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, *t_dmg_notes) if n)
-            reduction = max(0, cre_base_red - ignore - tsu_ignore)
+            reduction = max(0, cre_base_red - ignore - tsu_ignore - cre_decl_reduction_ignore)
             radiant = combat.has_weapon_quality(attacker, self.weapon, "radiant")
             bypasses = radiant or self.weapon_material in ("jade", "crystal", "obsidian", "nemuranai")
             applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction, bypasses_invuln=bypasses)
@@ -648,6 +682,42 @@ class DamageView(views_base.PersistentView):
             t_dmg_notes.append(e9_note)
         if fe_note:
             t_dmg_notes.append(fe_note)
+        decl_dmg_explode = False
+        decl_reduction_ignore = 0
+        decl_target_red_penalty = 0
+        decl_on_hit_condition = ""
+        atk_cb = enc.find(attacker.name) if enc else None
+        if atk_cb and atk_cb.declared_techniques:
+            for tkey, tentry in list(atk_cb.declared_techniques.items()):
+                if tentry.get("manual"):
+                    continue
+                efx = tentry.get("effects", {})
+                if not efx:
+                    continue
+                t_display = tentry.get("display", tkey)
+                if efx.get("dmg_rolled"):
+                    extra_rolled += efx["dmg_rolled"]
+                if efx.get("dmg_kept"):
+                    t_kept += efx["dmg_kept"]
+                if efx.get("dmg_flat"):
+                    t_flat += efx["dmg_flat"]
+                if efx.get("dmg_explode"):
+                    decl_dmg_explode = True
+                if efx.get("reduction_ignore"):
+                    decl_reduction_ignore += efx["reduction_ignore"]
+                if efx.get("target_reduction_penalty"):
+                    decl_target_red_penalty += efx["target_reduction_penalty"]
+                if efx.get("on_hit_condition"):
+                    decl_on_hit_condition = efx["on_hit_condition"]
+                d_parts: list[str] = []
+                for k in ("dmg_rolled", "dmg_kept", "dmg_flat", "dmg_explode",
+                           "reduction_ignore", "target_reduction_penalty", "on_hit_condition"):
+                    if efx.get(k):
+                        d_parts.append(f"{k}={efx[k]}")
+                if d_parts:
+                    t_dmg_notes.append(f"{t_display}: {', '.join(d_parts)}")
+        if decl_dmg_explode:
+            force_explode = True
         dmg = combat.resolve_damage(
             attacker, self.weapon, _d.engine, self.increased_damage,
             extra_rolled, t_kept, t_flat, explode_9=explode_9, force_explode=force_explode,
@@ -694,7 +764,7 @@ class DamageView(views_base.PersistentView):
         kata_line = "".join(
             f"\n⚑ {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, duel_red_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes, *tat_red_notes) if n
         )
-        reduction = max(0, base_red - ignore - tsu_ignore + crab_bonus + tech_red + kiho_red + tat_red + self.duel_strike_reduction)
+        reduction = max(0, base_red - ignore - tsu_ignore - decl_reduction_ignore - decl_target_red_penalty + crab_bonus + tech_red + kiho_red + tat_red + self.duel_strike_reduction)
         if wp.get("ignore_all_reduction"):
             reduction = 0
         applied = combat.apply_damage(target, raw, reduction)
@@ -762,6 +832,15 @@ class DamageView(views_base.PersistentView):
                 f"{self.target_name} **{kd_result['defender_roll']}**: {kd_verdict}"
             )
 
+        decl_cond_line = ""
+        if decl_on_hit_condition and applied["final_damage"] > 0 and not applied["is_dead"]:
+            enc_dc = _d.encounters.get(self.channel_id)
+            def_cb = enc_dc.find(target.name) if enc_dc else None
+            if def_cb and decl_on_hit_condition in encounter.VALID_CONDITIONS:
+                def_cb.set_condition(decl_on_hit_condition, 0, enc_dc.round if enc_dc else 0)
+                _d.save_encounter(str(interaction.guild_id), enc_dc)
+                decl_cond_line = f"\n⚑ **{decl_on_hit_condition.title()}** inflicted by technique"
+
         called_shot_line = ""
         if self.maneuver == "called_shot" and self.called_shot_raises > 0:
             part = combat.CALLED_SHOT_PARTS.get(
@@ -785,7 +864,7 @@ class DamageView(views_base.PersistentView):
             f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}\n"
             f"{_d.format_dice(dmg['dice'])}{feint_line}{kata_line}{called_shot_line}\n"
             f"Raw **{raw}** − reduction {applied['reduction']}{armor_label} = "
-            f"**{applied['final_damage']}** wounds{void_line}{break_line}"
+            f"**{applied['final_damage']}** wounds{void_line}{decl_cond_line}{break_line}"
         )
         if len(dmg_text) > 1024:
             dmg_text = dmg_text[:1021] + "..."
@@ -1268,6 +1347,89 @@ class CombatBoardView(views_base.PersistentView):
         await interaction.response.send_message(content="Encounter ended.", embed=embed)
         await _d.combat_log(guild, "--- Encounter ended --- " + (" | ".join(logs) if logs else ""))
 
+    @discord.ui.button(label="Techniques", style=discord.ButtonStyle.blurple, row=1)
+    async def technique_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        if not enc.started:
+            await interaction.response.send_message(
+                "Encounter has not started yet.", ephemeral=True,
+            )
+            return
+        cur = enc.current()
+        if cur is None:
+            await interaction.response.send_message("No current combatant.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        if not self._is_active_player(uid, enc) and not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"It is **{cur.name}**'s turn, not yours.", ephemeral=True,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cur)
+        if rec is None:
+            await interaction.response.send_message(
+                f"Cannot resolve sheet for **{cur.name}**.", ephemeral=True,
+            )
+            return
+        available = declarable_techniques.known_declarable(rec.character.techniques)
+        if not available:
+            await interaction.response.send_message(
+                f"**{cur.name}** has no declarable techniques.", ephemeral=True,
+            )
+            return
+        active_keys = set(cur.declared_techniques.keys())
+        usable: list[dict] = []
+        for entry in available:
+            key = entry["display"].lower()
+            if key in active_keys:
+                continue
+            limit = entry.get("limit", "none")
+            max_uses = entry.get("max_uses", 1)
+            if limit in ("encounter", "skirmish"):
+                if cur.technique_uses_enc.get(key, 0) >= max_uses:
+                    continue
+            elif limit == "turn":
+                if key in cur.used_this_turn:
+                    continue
+            elif limit == "round":
+                if key in cur.used_this_round:
+                    continue
+            usable.append(entry)
+        if not usable:
+            active_names = [e.get("display", k) for k, e in cur.declared_techniques.items()]
+            msg = f"**{cur.name}** has no more techniques available this turn."
+            if active_names:
+                msg += f"\nActive: {', '.join(active_names)}"
+            await interaction.response.send_message(msg, ephemeral=True)
+            return
+        options = []
+        for entry in usable[:25]:
+            cost_str = ""
+            if entry.get("cost") == 1:
+                cost_str = "[1 VP] "
+            elif isinstance(entry.get("cost"), int) and entry["cost"] > 1:
+                cost_str = f"[{entry['cost']} VP] "
+            elif entry.get("cost") == "slot":
+                cost_str = "[Spell slot] "
+            limit_str = ""
+            lim = entry.get("limit", "none")
+            if lim != "none":
+                limit_str = f" (1x/{lim})"
+            label = f"{entry['display']}"[:100]
+            desc_text = f"{cost_str}{entry.get('desc', '')}{limit_str}"[:100]
+            options.append(discord.SelectOption(
+                label=label,
+                value=entry["display"],
+                description=desc_text,
+            ))
+        view = _BoardTechniqueSelect(self.guild_id, self.channel_id, cur.name, options)
+        await interaction.response.send_message(
+            f"Declare a technique for **{cur.name}**:", view=view, ephemeral=True,
+        )
+
     @discord.ui.button(label="Attack", style=discord.ButtonStyle.success, row=1)
     async def attack_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enc = self._get_enc()
@@ -1414,6 +1576,142 @@ class _BoardStanceSelect(discord.ui.View):
             msg += f"\n{effects}"
         await interaction.response.edit_message(content=msg, view=None)
         await _d.combat_log(self.guild_id, f"Stance: {cb.name} >> {label}")
+        await _refresh_board(enc, self.guild_id)
+
+
+class _BoardTechniqueSelect(discord.ui.View):
+    def __init__(self, guild_id: str, channel_id: int, combatant_name: str,
+                 options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.combatant_name = combatant_name
+        self.tech_select.options = options
+
+    @discord.ui.select(placeholder="Choose a technique to declare...")
+    async def tech_select(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        tech_name = select.values[0]
+        entry = declarable_techniques.get(tech_name)
+        if entry is None:
+            await interaction.response.edit_message(
+                content=f"Unknown technique: {tech_name}", view=None,
+            )
+            return
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            await interaction.response.edit_message(content="No active encounter.", view=None)
+            return
+        cb = enc.find(self.combatant_name)
+        if cb is None:
+            await interaction.response.edit_message(
+                content=f"**{self.combatant_name}** is no longer in initiative.", view=None,
+            )
+            return
+        key = tech_name.lower()
+        cost = entry.get("cost", 0)
+        if isinstance(cost, int) and cost > 0:
+            rec = _d.resolve_combatant_record(self.guild_id, cb)
+            if rec is None:
+                await interaction.response.edit_message(
+                    content=f"Cannot resolve sheet for **{cb.name}**.", view=None,
+                )
+                return
+            c = rec.character
+            ok, reason_block = advantage_effects.can_spend_void_on_roll(c)
+            if not ok:
+                await interaction.response.edit_message(
+                    content=f"**{cb.name}** cannot spend Void Points: {reason_block}", view=None,
+                )
+                return
+            if c.current_void_points < cost:
+                await interaction.response.edit_message(
+                    content=f"**{cb.name}** needs {cost} VP but has {c.current_void_points}.", view=None,
+                )
+                return
+            c.current_void_points -= cost
+            _d.store.save(rec)
+            _d.tally(self.channel_id, cb.name, "void")
+        if not cb.declare_technique(key, entry):
+            limit = entry.get("limit", "none")
+            await interaction.response.edit_message(
+                content=f"**{tech_name}** already used this {limit}.", view=None,
+            )
+            return
+        _d.save_encounter(self.guild_id, enc)
+        cost_note = ""
+        if isinstance(cost, int) and cost > 0:
+            rec = _d.resolve_combatant_record(self.guild_id, cb)
+            vp_left = rec.character.current_void_points if rec else "?"
+            cost_note = f" ({cost} VP spent, {vp_left} remaining)"
+        elif cost == "slot":
+            cost_note = " (spell slot consumed)"
+        effects_str = ""
+        efx = entry.get("effects", {})
+        if efx and not entry.get("manual"):
+            parts: list[str] = []
+            if efx.get("atk_rolled") or efx.get("atk_kept") or efx.get("atk_flat"):
+                r = efx.get("atk_rolled", 0)
+                k = efx.get("atk_kept", 0)
+                f_val = efx.get("atk_flat", 0)
+                bits = []
+                if r or k:
+                    bits.append(f"+{r}k{k}")
+                if f_val:
+                    bits.append(f"+{f_val}")
+                parts.append(f"Attack {' '.join(bits)}")
+            if efx.get("dmg_rolled") or efx.get("dmg_kept") or efx.get("dmg_flat"):
+                r = efx.get("dmg_rolled", 0)
+                k = efx.get("dmg_kept", 0)
+                f_val = efx.get("dmg_flat", 0)
+                bits = []
+                if r or k:
+                    bits.append(f"+{r}k{k}")
+                if f_val:
+                    bits.append(f"+{f_val}")
+                parts.append(f"Damage {' '.join(bits)}")
+            if efx.get("dmg_explode"):
+                parts.append("Damage dice explode")
+            if efx.get("reduction_ignore"):
+                val = efx["reduction_ignore"]
+                parts.append("Ignore all Reduction" if val >= 999 else f"Ignore {val} Reduction")
+            if efx.get("target_reduction_penalty"):
+                parts.append(f"Target Reduction -{efx['target_reduction_penalty']}")
+            if efx.get("on_hit_condition"):
+                parts.append(f"Inflict {efx['on_hit_condition'].title()} on hit")
+            if efx.get("ignore_wound_penalties"):
+                parts.append("Ignore wound penalties")
+            if efx.get("simple_action_attack"):
+                parts.append("Attacks as Simple Actions")
+            if efx.get("atn_bonus"):
+                parts.append(f"+{efx['atn_bonus']} Armor TN")
+            if efx.get("reduction_bonus"):
+                parts.append(f"+{efx['reduction_bonus']} Reduction")
+            if efx.get("ignore_target_stance_atn"):
+                parts.append("Ignore target stance ATN bonuses")
+            if parts:
+                effects_str = "\nEffects (auto-applied): " + ", ".join(parts)
+        manual_note = ""
+        if entry.get("manual"):
+            manual_note = "\nFortune adjudicates the effects."
+        duration = entry.get("duration", "attack")
+        dur_label = duration.replace("_", " ").title()
+        msg = (
+            f"**{cb.name}** declares **{tech_name}**{cost_note}\n"
+            f"*{entry.get('desc', '')}*\n"
+            f"Duration: {dur_label}"
+            f"{effects_str}{manual_note}"
+        )
+        await interaction.response.edit_message(content=msg, view=None)
+        ch = _d.bot_client.get_channel(self.channel_id)
+        if ch:
+            announce = f"**{cb.name}** activates **{tech_name}**{cost_note}"
+            if entry.get("manual"):
+                announce += " -- Fortune adjudicates."
+            try:
+                await ch.send(announce)
+            except discord.HTTPException:
+                pass
+        await _d.combat_log(self.guild_id, f"Technique: {cb.name} declares {tech_name}{cost_note}")
         await _refresh_board(enc, self.guild_id)
 
 
@@ -2019,6 +2317,81 @@ async def _execute_attack(
         else:
             tn = combat.armor_tn(target_rec.character, d_stance, bonus_tn + def_kata_bonus + cond_def_mod + guard_mod + fd_bonus + void_tn_bonus + cover_mod + arrow_tn_adj + staff_tn_adj + dw_def_bonus)
 
+    # Declared technique effects: auto-apply bonuses from techniques the player
+    # activated via the combat board Techniques button.
+    decl_ignore_wound = False
+    decl_reduction_ignore = 0
+    decl_target_red_penalty = 0
+    decl_on_hit_condition = ""
+    decl_ignore_stance_atn = False
+    if atk_combatant and atk_combatant.declared_techniques:
+        for tkey, tentry in list(atk_combatant.declared_techniques.items()):
+            if tentry.get("manual"):
+                continue
+            efx = tentry.get("effects", {})
+            if not efx:
+                continue
+            t_display = tentry.get("display", tkey)
+            parts: list[str] = []
+            if efx.get("atk_rolled"):
+                bonus_rolled += efx["atk_rolled"]
+                parts.append(f"+{efx['atk_rolled']}k0 atk")
+            if efx.get("atk_kept"):
+                bonus_kept += efx["atk_kept"]
+                parts.append(f"+0k{efx['atk_kept']} atk")
+            if efx.get("atk_flat"):
+                atk_flat += efx["atk_flat"]
+                parts.append(f"+{efx['atk_flat']} atk flat")
+            if efx.get("dmg_rolled"):
+                parts.append(f"+{efx['dmg_rolled']}k0 dmg")
+            if efx.get("dmg_kept"):
+                parts.append(f"+0k{efx['dmg_kept']} dmg")
+            if efx.get("dmg_flat"):
+                parts.append(f"+{efx['dmg_flat']} dmg flat")
+            if efx.get("dmg_explode"):
+                parts.append("dmg dice explode")
+            if efx.get("reduction_ignore"):
+                decl_reduction_ignore += efx["reduction_ignore"]
+                val = efx["reduction_ignore"]
+                parts.append("ignore all Reduction" if val >= 999 else f"ignore {val} Reduction")
+            if efx.get("target_reduction_penalty"):
+                decl_target_red_penalty += efx["target_reduction_penalty"]
+                parts.append(f"target Reduction -{efx['target_reduction_penalty']}")
+            if efx.get("on_hit_condition"):
+                decl_on_hit_condition = efx["on_hit_condition"]
+                parts.append(f"inflict {efx['on_hit_condition']}")
+            if efx.get("ignore_wound_penalties"):
+                decl_ignore_wound = True
+                parts.append("ignore wound penalties")
+            if efx.get("atn_bonus"):
+                def_kata_bonus += efx["atn_bonus"]
+                parts.append(f"+{efx['atn_bonus']} ATN")
+            if efx.get("reduction_bonus"):
+                parts.append(f"+{efx['reduction_bonus']} Reduction")
+            if efx.get("ignore_target_stance_atn"):
+                decl_ignore_stance_atn = True
+                parts.append("ignore target stance ATN")
+            if parts:
+                kata_notes.append(f"{t_display}: {', '.join(parts)}")
+            dur = tentry.get("duration", "attack")
+            if dur in ("instant", "attack"):
+                del atk_combatant.declared_techniques[tkey]
+    if decl_ignore_wound:
+        base_wp = stats.wound_penalty(attacker)
+        if base_wp:
+            atk_flat -= base_wp
+            kata_notes.append(f"Wound penalties ignored (technique): negated {base_wp:+d}")
+    if decl_ignore_stance_atn and target_creature_rec is None and target_rec is not None:
+        stance_atn_adj = 0
+        d_char = target_rec.character
+        if d_stance == "full_attack":
+            stance_atn_adj = 10
+        elif d_stance == "defense":
+            stance_atn_adj = -(stats.ring_value(d_char, "air") + d_char.skills.get("Defense", 0))
+        if stance_atn_adj:
+            tn += stance_atn_adj
+            kata_notes.append(f"Target stance ATN ignored (technique): {stance_atn_adj:+d}")
+
     # Center Stance bonus (s40): +1k1 + Void Ring on one roll, from centering last Round.
     center_line = ""
     if atk_combatant and atk_combatant.center_bonus_available:
@@ -2184,8 +2557,12 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
         delayed = "  ⏳DELAYED" if c.delayed else ""
         cover = f"  🪨Cover{'+' if c.cover_bonus > 0 else ''}{c.cover_bonus}" if c.cover_bonus else ""
         fear = f"  😨-{c.fear_penalty}k0" if c.fear_penalty else ""
+        techs = ""
+        if c.declared_techniques:
+            tech_names = [e.get("display", k) for k, e in c.declared_techniques.items()]
+            techs = "  **T**: " + ", ".join(tech_names)
         init_val = c.effective_initiative
-        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: Init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{fear}{held}{delayed}")
+        lines.append(f"{marker}**{c.name}**{tag}{wound_tag}: Init **{init_val}**{detail}{stance_str}{acts}{cond}{guard}{fd}{void_atn}{void_init}{center_tag}{center_init}{cover}{fear}{held}{delayed}{techs}")
     header = f"⚔️ **Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"

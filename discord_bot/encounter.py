@@ -76,6 +76,11 @@ class Combatant:
     # Timed conditions: condition -> the Round at whose start it clears.
     # Conditions without an entry last until cleared by hand.
     condition_expiry: dict[str, int] = field(default_factory=dict)
+    # Declared techniques: lowercase technique name -> catalog entry dict.
+    # Populated when a player declares a technique via the combat board.
+    declared_techniques: dict[str, dict] = field(default_factory=dict)
+    # Per-encounter / per-skirmish usage counters: lowercase technique name -> uses spent.
+    technique_uses_enc: dict[str, int] = field(default_factory=dict)
 
     def set_condition(self, condition: str, rounds: int, current_round: int) -> None:
         """Apply a condition; rounds > 0 makes it end at the start of Round current + rounds."""
@@ -96,6 +101,46 @@ class Combatant:
     @property
     def effective_initiative(self) -> int:
         return self.initiative + self.void_initiative_boost + self.center_init_boost
+
+    def declare_technique(self, key: str, entry: dict) -> bool:
+        """Activate a declarable technique. Returns False if usage limit exhausted."""
+        limit = entry.get("limit", "none")
+        max_uses = entry.get("max_uses", 1)
+        if limit in ("encounter", "skirmish"):
+            used = self.technique_uses_enc.get(key, 0)
+            if used >= max_uses:
+                return False
+            self.technique_uses_enc[key] = used + 1
+        elif limit == "turn":
+            if key in self.used_this_turn:
+                return False
+            self.used_this_turn.add(key)
+        elif limit == "round":
+            if key in self.used_this_round:
+                return False
+            self.used_this_round.add(key)
+        self.declared_techniques[key] = entry
+        return True
+
+    def expire_techniques_turn(self) -> list[str]:
+        """Remove techniques with turn / attack / instant duration. Returns expired display names."""
+        expired: list[str] = []
+        for key in list(self.declared_techniques):
+            dur = self.declared_techniques[key].get("duration", "attack")
+            if dur in ("instant", "attack", "turn"):
+                expired.append(self.declared_techniques[key].get("display", key))
+                del self.declared_techniques[key]
+        return expired
+
+    def expire_techniques_round(self) -> list[str]:
+        """Remove techniques with round duration. Returns expired display names."""
+        expired: list[str] = []
+        for key in list(self.declared_techniques):
+            dur = self.declared_techniques[key].get("duration", "attack")
+            if dur == "round":
+                expired.append(self.declared_techniques[key].get("display", key))
+                del self.declared_techniques[key]
+        return expired
 
     def consume_once(self, key: str, scope: str) -> bool:
         """Try to spend a once-per-`scope` ability ('turn' or 'round'). Returns
@@ -130,6 +175,8 @@ class Combatant:
             "cover_bonus": self.cover_bonus,
             "fear_penalty": self.fear_penalty,
             "condition_expiry": dict(self.condition_expiry),
+            "declared_techniques": dict(self.declared_techniques),
+            "technique_uses_enc": dict(self.technique_uses_enc),
         }
 
     @classmethod
@@ -157,6 +204,8 @@ class Combatant:
             cover_bonus=d.get("cover_bonus", 0),
             fear_penalty=d.get("fear_penalty", 0),
             condition_expiry={k: int(v) for k, v in d.get("condition_expiry", {}).items()},
+            declared_techniques=dict(d.get("declared_techniques", {})),
+            technique_uses_enc=dict(d.get("technique_uses_enc", {})),
         )
 
 
@@ -276,6 +325,7 @@ class Encounter:
         self.turn_started_at = time.time()
         self.nudged = False
         cur.used_this_turn.clear()
+        cur.expire_techniques_turn()
         cur.guarding = ""
         cur.full_defense_bonus = 0
         cur.stance = "attack"
@@ -323,6 +373,7 @@ class Encounter:
             resort = False
             for c in self.combatants:
                 c.used_this_round.clear()
+                c.expire_techniques_round()
                 c.void_armor_tn_bonus = 0
                 c.center_init_boost = 0
                 c.center_bonus_available = False
