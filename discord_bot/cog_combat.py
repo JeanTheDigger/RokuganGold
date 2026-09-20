@@ -1667,6 +1667,59 @@ class CombatBoardView(views_base.PersistentView):
         await _d.combat_log(guild, f"Void Init: {cb.name} (+10, now {cb.effective_initiative}, {c.current_void_points} VP left)")
         await _refresh_board(enc, guild)
 
+    @discord.ui.button(label="Void Swap", style=discord.ButtonStyle.secondary, row=2)
+    async def void_swap_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        cb = self._find_owned_combatant(uid, enc)
+        if cb is None and _d.is_dm(interaction):
+            cur = enc.current()
+            if cur is not None:
+                cb = cur
+        if cb is None:
+            await interaction.response.send_message(
+                "You have no combatant in this encounter. Use `/fight void swap` instead.", ephemeral=True,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cb)
+        if rec is None:
+            await interaction.response.send_message(f"Cannot resolve sheet for **{cb.name}**.", ephemeral=True)
+            return
+        c = rec.character
+        ok, reason = advantage_effects.can_spend_void_on_roll(c)
+        if not ok:
+            await interaction.response.send_message(reason, ephemeral=True)
+            return
+        if c.current_void_points <= 0:
+            await interaction.response.send_message(
+                f"**{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True,
+            )
+            return
+        if "void_combat" in cb.used_this_round:
+            await interaction.response.send_message(
+                f"**{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True,
+            )
+            return
+        targets = [t for t in enc.combatants if t.name != cb.name]
+        if not targets:
+            await interaction.response.send_message("No other combatants to swap with.", ephemeral=True)
+            return
+        options = [
+            discord.SelectOption(
+                label=t.name[:100],
+                value=t.name[:100],
+                description=f"Init {t.effective_initiative}",
+            )
+            for t in targets[:25]
+        ]
+        view = _BoardVoidSwapSelect(self.guild_id, self.channel_id, cb.name, interaction.user.id, options)
+        await interaction.response.send_message(
+            f"Swap **{cb.name}**'s initiative (currently {cb.effective_initiative}) with:", view=view, ephemeral=True,
+        )
+
     @discord.ui.button(label="Cast Spell", style=discord.ButtonStyle.blurple, row=3)
     async def cast_spell_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enc = self._get_enc()
@@ -2166,6 +2219,104 @@ class _SpellConditionTargetSelect(discord.ui.View):
             f"**{self.spell_name}** on **{tgt_cb.name}**: Request conditions ({cond_names})",
             view=prompt_view,
         )
+
+
+class _BoardVoidSwapSelect(discord.ui.View):
+    def __init__(self, guild_id: str, channel_id: int, spender_name: str,
+                 spender_user_id: int, options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.spender_name = spender_name
+        self.spender_user_id = spender_user_id
+        self.swap_target.options = options
+
+    @discord.ui.select(placeholder="Swap initiative with...")
+    async def swap_target(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        target_name = select.values[0]
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            await interaction.response.edit_message(content="No active encounter.", view=None)
+            return
+        cb_s = enc.find(self.spender_name)
+        if cb_s is None:
+            await interaction.response.edit_message(
+                content=f"**{self.spender_name}** is no longer in initiative.", view=None,
+            )
+            return
+        cb_t = enc.find(target_name)
+        if cb_t is None:
+            await interaction.response.edit_message(
+                content=f"**{target_name}** is no longer in initiative.", view=None,
+            )
+            return
+        guild = str(self.guild_id)
+        rec = _d.resolve_combatant_record(guild, cb_s)
+        if rec is None:
+            await interaction.response.edit_message(
+                content=f"Cannot resolve sheet for **{cb_s.name}**.", view=None,
+            )
+            return
+        c = rec.character
+        ok, reason = advantage_effects.can_spend_void_on_roll(c)
+        if not ok:
+            await interaction.response.edit_message(content=reason, view=None)
+            return
+        if c.current_void_points <= 0:
+            await interaction.response.edit_message(
+                content=f"**{cb_s.name}** has no Void Points (0/{c.max_void_points}).", view=None,
+            )
+            return
+        if not cb_s.consume_once("void_combat", "round"):
+            await interaction.response.edit_message(
+                content=f"**{cb_s.name}** has already spent a Void Point this Round.", view=None,
+            )
+            return
+        c.current_void_points -= 1
+        _d.tally(self.channel_id, cb_s.name, "void")
+        old_s = cb_s.effective_initiative
+        old_t = cb_t.effective_initiative
+        cb_s.initiative, cb_t.initiative = cb_t.initiative, cb_s.initiative
+        cb_s.void_initiative_boost, cb_t.void_initiative_boost = cb_t.void_initiative_boost, cb_s.void_initiative_boost
+        cur_before = enc.current() if enc.started else None
+        enc._sort()
+        if cur_before is not None:
+            enc.turn_index = enc.combatants.index(cur_before)
+        _d.store.save(rec)
+        _d.save_encounter(guild, enc)
+        await interaction.response.edit_message(
+            content=(
+                f"**{cb_s.name}** swapped initiative with **{cb_t.name}**\n"
+                f"{cb_s.name}: {old_s} -> {cb_s.effective_initiative} | "
+                f"{cb_t.name}: {old_t} -> {cb_t.effective_initiative}"
+            ),
+            view=None,
+        )
+        ch = _d.bot_client.get_channel(self.channel_id)
+        if ch is not None:
+            embed = discord.Embed(
+                title=f"Initiative Swap",
+                color=discord.Color.purple(),
+                description=(
+                    f"**{cb_s.name}** exchanges Initiative with **{cb_t.name}**\n"
+                    f"{cb_s.name}: {old_s} -> **{cb_s.effective_initiative}** | "
+                    f"{cb_t.name}: {old_t} -> **{cb_t.effective_initiative}**\n"
+                    f"VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+                    f"Persists until the encounter ends."
+                ),
+            )
+            embed.set_footer(text=f"Spent by {interaction.user.display_name}")
+            try:
+                await ch.send(embed=embed)
+            except discord.HTTPException:
+                pass
+        await _d.combat_log(
+            guild,
+            f"Void Swap: {cb_s.name} <-> {cb_t.name} "
+            f"({old_s}->{cb_s.effective_initiative}, {old_t}->{cb_t.effective_initiative}, "
+            f"{c.current_void_points} VP left)"
+        )
+        await _refresh_board(enc, guild)
 
 
 async def _refresh_board(enc: encounter.Encounter, guild_id: str) -> None:
