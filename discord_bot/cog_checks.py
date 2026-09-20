@@ -921,7 +921,7 @@ async def check_cooperative(
         if hrec is None:
             hrec = _d.store.get_by_name(guild, _d.NPC_OWNER, hname)
         if hrec is None:
-            helper_lines.append(f"**{hname}**: Not found Not found")
+            helper_lines.append(f"**{hname}**: Not found")
             continue
         hc = hrec.character
         htv = stats.trait_value(hc, trait.value)
