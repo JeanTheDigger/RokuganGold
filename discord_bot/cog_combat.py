@@ -1346,7 +1346,7 @@ def _build_castable_spells(c: Character) -> list[tuple[str, dict, str]]:
 def _slot_display(c: Character, element: str) -> str:
     slot = c.spell_slots.get(element)
     if slot is None:
-        return "slots: untracked"
+        return "slots: Untracked"
     mx = stats.spell_slot_max(c, element)
     bonus = c.void_spell_bonus
     if slot > 0:
@@ -3077,7 +3077,7 @@ async def _execute_attack(
         base_wp = stats.wound_penalty(attacker)
         if base_wp:
             atk_flat -= base_wp
-            kata_notes.append(f"Wound penalties ignored (technique): negated {base_wp:+d}")
+            kata_notes.append(f"Wound penalties ignored (technique): Negated {base_wp:+d}")
     if decl_ignore_stance_atn and target_creature_rec is None and target_rec is not None:
         stance_atn_adj = 0
         d_char = target_rec.character

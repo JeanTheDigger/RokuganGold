@@ -9546,7 +9546,7 @@ async def spell_interrupt(
         embed.add_field(name="Modifiers", value=" · ".join(notes), inline=False)
     embed.add_field(
         name="Rule",
-        value="L5R 4e: interrupted caster rolls Willpower vs TN 10 (distraction) or TN 5 + damage. "
+        value="L5R 4e: Interrupted caster rolls Willpower vs TN 10 (distraction) or TN 5 + damage. "
               "Failure = spell disrupted but slot not consumed.",
         inline=False,
     )
@@ -9716,7 +9716,7 @@ async def spell_importune(
         f"Ring {ring_val} + School Rank {effective_rank} → {cast_rolled}k{cast_kept}\n"
         f"Roll **{cast_total}** vs TN **{cast_tn}** (importune TN: 15 + {ml}×5"
         + (f" + {raises}×5 raises" if raises else "") + ")\n"
-        f"{'**SUCCESS**:the kami grant the spell!' if cast_success else '**FAILED** (slot consumed)'}"
+        f"{'**SUCCESS**: The kami grant the spell!' if cast_success else '**FAILED** (slot consumed)'}"
     )
     if cast_notes:
         cast_desc += "\n" + " · ".join(cast_notes)
