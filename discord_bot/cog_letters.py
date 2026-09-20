@@ -71,9 +71,8 @@ letter = app_commands.Group(
 def _build_letter_embed(
     sender_name: str, content: str, sealed: bool = True,
 ) -> discord.Embed:
-    icon = "\U0001f4e8" if sealed else "\U0001f4dc"
     embed = discord.Embed(
-        title=f"{icon} Letter from {sender_name}",
+        title=f"Letter from {sender_name}",
         description=content[:4000],
         color=discord.Color.from_rgb(210, 180, 120),
     )
@@ -170,7 +169,7 @@ async def letter_send(
         return
 
     confirm = discord.Embed(
-        title="\U0001f4e8 Letter Sent",
+        title="Letter Sent",
         description=f"Your letter to **{matched}** has been delivered.",
         color=discord.Color.green(),
     )
@@ -180,7 +179,7 @@ async def letter_send(
     staff_ch = await _get_staff_log_channel(guild)
     if staff_ch:
         log_embed = discord.Embed(
-            title=f"\U0001f4e8 Letter: {sender_name} → {matched}",
+            title=f"Letter: {sender_name} to {matched}",
             description=message[:4000],
             color=discord.Color.dark_gold(),
         )
@@ -267,7 +266,7 @@ async def letter_sendas(
         return
 
     confirm = discord.Embed(
-        title="\U0001f4e8 Letter Sent (as Staff)",
+        title="Letter Sent (as Staff)",
         description=f"Letter from **{sender_name.strip()}** delivered to **{matched}**.",
         color=discord.Color.green(),
     )
@@ -334,14 +333,14 @@ async def letter_list(
 
     lines: list[str] = []
     for lt in letters:
-        direction = "→" if lt["sender"] != lt.get("_viewer", "") else "←"
+        direction = "to" if lt["sender"] != lt.get("_viewer", "") else "from"
         lines.append(
             f"**#{lt['id']}** {lt['sender']} {direction} {lt['recipient']} "
             f"- {lt['preview']}"
         )
 
     embed = discord.Embed(
-        title=f"\U0001f4e8 {label} ({len(letters)})",
+        title=f"{label} ({len(letters)})",
         description="\n".join(lines)[:4000],
         color=discord.Color.from_rgb(210, 180, 120),
     )
@@ -416,7 +415,7 @@ async def letter_delete(
 
     _d.store.delete_letter(guild_id, letter_id)
     await interaction.response.send_message(
-        f"Deleted letter **#{letter_id}**: {lt['sender']} → {lt['recipient']}",
+        f"Deleted letter **#{letter_id}**: {lt['sender']} to {lt['recipient']}",
         ephemeral=True,
     )
 

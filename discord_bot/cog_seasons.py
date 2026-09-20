@@ -39,13 +39,6 @@ SEASON_COLORS = {
     "Winter": discord.Color.from_rgb(160, 190, 220),
 }
 
-SEASON_ICONS = {
-    "Spring": "\U0001f338",
-    "Summer": "☀️",
-    "Autumn": "\U0001f341",
-    "Winter": "❄️",
-}
-
 SEASON_ARRIVAL: dict[str, list[str]] = {
     "Spring": [
         "The snows retreat and the first cherry blossoms appear on the branches. Spring has come to Rokugan.",
@@ -152,10 +145,9 @@ async def on_day_advanced(
 
     if old_season != new_season:
         color = SEASON_COLORS.get(new_season, discord.Color.dark_gold())
-        icon = SEASON_ICONS.get(new_season, "")
         flavor = random.choice(SEASON_ARRIVAL.get(new_season, ["A new season begins."]))
         embed = discord.Embed(
-            title=f"{icon} {new_season} Has Come",
+            title=f"{new_season} Has Come",
             description=flavor,
             color=color,
         )

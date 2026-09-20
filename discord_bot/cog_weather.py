@@ -50,92 +50,74 @@ def init(
 WEATHER_TYPES: dict[str, dict] = {
     "clear": {
         "name": "Clear Skies",
-        "icon": "☀️",
         "color": discord.Color.from_rgb(135, 206, 235),
     },
     "partly_cloudy": {
         "name": "Partly Cloudy",
-        "icon": "⛅",
         "color": discord.Color.from_rgb(180, 200, 220),
     },
     "overcast": {
         "name": "Overcast",
-        "icon": "☁️",
         "color": discord.Color.from_rgb(140, 150, 160),
     },
     "light_rain": {
         "name": "Light Rain",
-        "icon": "\U0001f326️",
         "color": discord.Color.from_rgb(100, 140, 180),
     },
     "rain": {
         "name": "Rain",
-        "icon": "\U0001f327️",
         "color": discord.Color.from_rgb(70, 110, 160),
     },
     "heavy_rain": {
         "name": "Heavy Rain",
-        "icon": "\U0001f327️",
         "color": discord.Color.from_rgb(50, 80, 130),
     },
     "thunderstorm": {
         "name": "Thunderstorm",
-        "icon": "⛈️",
         "color": discord.Color.from_rgb(60, 60, 90),
     },
     "fog": {
         "name": "Fog",
-        "icon": "\U0001f32b️",
         "color": discord.Color.from_rgb(190, 190, 190),
     },
     "wind": {
         "name": "Strong Winds",
-        "icon": "\U0001f32c️",
         "color": discord.Color.from_rgb(160, 190, 170),
     },
     "hot": {
         "name": "Scorching Heat",
-        "icon": "\U0001f525",
         "color": discord.Color.from_rgb(230, 150, 50),
     },
     "humid": {
         "name": "Hot and Humid",
-        "icon": "\U0001f4a7",
         "color": discord.Color.from_rgb(200, 180, 100),
     },
     "cool": {
         "name": "Cool Breeze",
-        "icon": "\U0001f343",
         "color": discord.Color.from_rgb(150, 190, 160),
     },
     "frost": {
         "name": "Frost",
-        "icon": "❄️",
         "color": discord.Color.from_rgb(180, 210, 230),
     },
     "snow": {
         "name": "Snowfall",
-        "icon": "\U0001f328️",
         "color": discord.Color.from_rgb(200, 215, 230),
     },
     "heavy_snow": {
         "name": "Heavy Snow",
-        "icon": "\U0001f328️",
         "color": discord.Color.from_rgb(170, 190, 210),
     },
     "blizzard": {
         "name": "Blizzard",
-        "icon": "\U0001f32c️❄️",
         "color": discord.Color.from_rgb(140, 160, 190),
     },
     "ice": {
         "name": "Ice Storm",
-        "icon": "\U0001fa78",
         "color": discord.Color.from_rgb(160, 180, 200),
     },
     "mist": {
         "name": "Morning Mist",
-        "icon": "\U0001f32b️",
         "color": discord.Color.from_rgb(200, 200, 190),
     },
 }
@@ -279,7 +261,7 @@ def _weather_embed(weather_key: str, date_str: str | None = None) -> discord.Emb
     info = WEATHER_TYPES.get(weather_key, WEATHER_TYPES["clear"])
     flavor = random.choice(WEATHER_FLAVOR.get(weather_key, ["The weather is unremarkable."]))
     embed = discord.Embed(
-        title=f"{info['icon']} {info['name']}",
+        title=info["name"],
         description=flavor,
         color=info["color"],
     )
@@ -332,7 +314,7 @@ async def weather_now(interaction: discord.Interaction) -> None:
     weather_type="The weather to set.",
 )
 @app_commands.choices(weather_type=[
-    app_commands.Choice(name=f"{v['icon']} {v['name']}", value=k)
+    app_commands.Choice(name=v["name"], value=k)
     for k, v in WEATHER_TYPES.items()
 ][:25])
 async def weather_set(
@@ -384,19 +366,18 @@ async def weather_forecast(interaction: discord.Interaction) -> None:
     _year, month, _day = cal
     _month_name, season = ROKUGANI_MONTHS[month - 1]
 
-    from cog_seasons import SEASON_COLORS, SEASON_ICONS
+    from cog_seasons import SEASON_COLORS
     table = SEASON_WEATHER.get(season, [])
     total = sum(w for _, w in table)
     lines: list[str] = []
     for wtype, weight in table:
         info = WEATHER_TYPES.get(wtype, {})
         pct = (weight / total * 100) if total > 0 else 0
-        lines.append(f"{info.get('icon', '')} **{info.get('name', wtype)}** - {pct:.0f}%")
+        lines.append(f"**{info.get('name', wtype)}** - {pct:.0f}%")
 
-    icon = SEASON_ICONS.get(season, "")
     color = SEASON_COLORS.get(season, discord.Color.dark_gold())
     embed = discord.Embed(
-        title=f"{icon} {season} Weather Forecast",
+        title=f"{season} Weather Forecast",
         description="\n".join(lines),
         color=color,
     )
@@ -442,7 +423,7 @@ async def _post_weather_to_locations(
     info = WEATHER_TYPES.get(weather_key, WEATHER_TYPES["clear"])
     flavor = random.choice(WEATHER_FLAVOR.get(weather_key, ["The weather shifts."]))
     embed = discord.Embed(
-        description=f"{info['icon']} {flavor}",
+        description=flavor,
         color=info["color"],
     )
 

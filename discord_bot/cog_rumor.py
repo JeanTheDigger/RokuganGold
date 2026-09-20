@@ -70,12 +70,6 @@ TIER_COLORS = {
     TIER_WHISPER: discord.Color.dark_purple(),
 }
 
-TIER_ICONS = {
-    TIER_OFFICIAL: "\U0001f4dc",   # scroll
-    TIER_HEARSAY: "\U0001f5e3️",  # speaking head
-    TIER_WHISPER: "\U0001f90b",    # ear (whisper)
-}
-
 FILTER_TYPES = ("clan", "family", "school", "school_type", "character")
 
 
@@ -95,11 +89,10 @@ rumor = app_commands.Group(
 def _build_rumor_embed(
     title: str, content: str, tier: str, author_name: str, rumor_id: int | None = None,
 ) -> discord.Embed:
-    icon = TIER_ICONS.get(tier, "")
     label = TIER_LABELS.get(tier, tier.title())
     color = TIER_COLORS.get(tier, discord.Color.dark_gold())
     embed = discord.Embed(
-        title=f"{icon} {title}",
+        title=title,
         description=content[:4000],
         color=color,
     )
@@ -447,16 +440,16 @@ async def rumor_list(
 
     lines: list[str] = []
     for r in rumors:
-        icon = TIER_ICONS.get(r["tier"], "")
-        pub = " \U0001f4e2" if r["public"] else ""
+        tier_tag = TIER_LABELS.get(r["tier"], r["tier"].title())
+        pub = " [Public]" if r["public"] else ""
         targets = r.get("targets", "")
         target_str = f" [{targets}]" if targets and dm else ""
-        lines.append(f"{icon} **#{r['id']}** {r['title']}{pub}{target_str}")
+        lines.append(f"**#{r['id']}** [{tier_tag}] {r['title']}{pub}{target_str}")
 
     body = "\n".join(lines)
     label = "All Rumors" if dm else "Your Rumors"
     embed = discord.Embed(
-        title=f"\U0001f4dc {label} ({len(rumors)})",
+        title=f"{label} ({len(rumors)})",
         description=body[:4000],
         color=discord.Color.dark_gold(),
     )
@@ -556,7 +549,7 @@ async def rumor_channel(
 
     _d.store.set_rumor_board_channel(str(interaction.guild_id), str(channel.id))
     embed = discord.Embed(
-        title="\U0001f4dc Notice Board Configured",
+        title="Notice Board Configured",
         description=f"Public rumors will now post to {channel.mention}.",
         color=discord.Color.dark_gold(),
     )
