@@ -174,6 +174,95 @@ _MANEUVER_APPLY_LABEL = {
 }
 
 
+class _VoidWoundReduceView(discord.ui.View):
+    """Offered to the target player after damage resolves: Spend 1 VP for -10 wounds."""
+
+    def __init__(self, target_id: int, target_name: str, guild_id: str,
+                 channel_id: int, target_owner_id: str) -> None:
+        super().__init__(timeout=120)
+        self.target_id = target_id
+        self.target_name = target_name
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.target_owner_id = target_owner_id
+        self._used = False
+
+    @discord.ui.button(label="Void Reduce (-10 wounds)", style=discord.ButtonStyle.primary)
+    async def void_reduce(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        uid = str(interaction.user.id)
+        if uid != self.target_owner_id and not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"Only **{self.target_name}**'s player or a Fortune can do this.", ephemeral=True,
+            )
+            return
+        if self._used:
+            await interaction.response.send_message("Already used.", ephemeral=True)
+            return
+        self._used = True
+        target_rec = _d.store.get_by_id(self.target_id)
+        if target_rec is None:
+            for child in self.children:
+                child.disabled = True
+            await interaction.response.edit_message(view=self)
+            return
+        c = target_rec.character
+        ok, reason = advantage_effects.can_spend_void_on_roll(c, is_wound_reduction=True)
+        if not ok:
+            await interaction.response.send_message(reason, ephemeral=True)
+            self._used = False
+            return
+        if c.current_void_points <= 0:
+            await interaction.response.send_message(
+                f"**{c.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True,
+            )
+            self._used = False
+            return
+        void_saved = min(10, c.wounds_taken)
+        if void_saved <= 0:
+            await interaction.response.send_message(
+                f"**{c.name}** has no wounds to reduce.", ephemeral=True,
+            )
+            self._used = False
+            return
+        c.wounds_taken = max(0, c.wounds_taken - void_saved)
+        c.current_void_points -= 1
+        _d.tally(self.channel_id, c.name, "void")
+        _d.store.save(target_rec, note="Void wound reduction")
+        new_level = stats.wound_level_name(c)
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(
+            content=(
+                f"**{c.name}** spent a Void Point: **-{void_saved}** wounds "
+                f"({c.wounds_taken} wounds, **{new_level}**, {c.current_void_points}/{c.max_void_points} VP)"
+            ),
+            view=self,
+        )
+        await _d.combat_log(
+            self.guild_id,
+            f"Void Reduce: {c.name} -{void_saved} wounds ({c.wounds_taken} wounds, {new_level})",
+        )
+        enc = _d.encounters.get(self.channel_id)
+        if enc:
+            await _refresh_board(enc, self.guild_id)
+
+    @discord.ui.button(label="No", style=discord.ButtonStyle.secondary)
+    async def decline(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        uid = str(interaction.user.id)
+        if uid != self.target_owner_id and not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"Only **{self.target_name}**'s player or a Fortune can do this.", ephemeral=True,
+            )
+            return
+        self._used = True
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(
+            content=f"**{self.target_name}** declines Void wound reduction.",
+            view=self,
+        )
+
+
 class DamageView(views_base.PersistentView):
     """DM-only buttons attached to a landed attack: resolve the hit, or waive it.
 
@@ -223,18 +312,9 @@ class DamageView(views_base.PersistentView):
         self.atk_init = atk_init
         self.def_init = def_init
         self.duel_strike_reduction = duel_strike_reduction
-        # Relabel the primary button to match the maneuver, and hide the Void
-        # button when it would be nonsensical (knockdown has no damage roll;
-        # creature targets have no VP pool).
-        hide_void = target_creature_id is not None
-        to_remove = []
         for child in self.children:
             if isinstance(child, discord.ui.Button) and child.style == discord.ButtonStyle.danger:
                 child.label = _MANEUVER_APPLY_LABEL.get(maneuver, "Roll & Apply Damage")
-            if isinstance(child, discord.ui.Button) and child.style == discord.ButtonStyle.primary and hide_void:
-                to_remove.append(child)
-        for child in to_remove:
-            self.remove_item(child)
 
     async def _post_result(self, interaction: discord.Interaction, embed: discord.Embed, text: str = "") -> None:
         """Post result to source channel when using approval routing, or inline."""
@@ -245,6 +325,32 @@ class DamageView(views_base.PersistentView):
             await interaction.followup.send(f"Resolved in <#{self.source_channel_id}>.")
         else:
             await interaction.followup.send(content=text or None, embed=embed)
+
+    async def _offer_void_reduce(self, guild_id: str, target_rec: _storage_mod.CharacterRecord, applied: dict) -> None:
+        """Post a Void wound reduction button to the combat channel for the target player."""
+        if applied["is_dead"] or applied["final_damage"] <= 0:
+            return
+        if self.target_creature_id is not None:
+            return
+        c = target_rec.character
+        ok, _ = advantage_effects.can_spend_void_on_roll(c, is_wound_reduction=True)
+        if not ok or c.current_void_points <= 0:
+            return
+        combat_ch_id = self.source_channel_id or self.channel_id
+        ch = _d.bot_client.get_channel(combat_ch_id)
+        if ch is None:
+            return
+        owner_id = target_rec.owner_id or ""
+        view = _VoidWoundReduceView(
+            target_rec.id, self.target_name, guild_id, combat_ch_id, owner_id,
+        )
+        try:
+            await ch.send(
+                content=f"**{self.target_name}** took **{applied['final_damage']}** wounds. Spend a Void Point for -10?",
+                view=view,
+            )
+        except discord.HTTPException:
+            pass
 
     def _wound_status(self, target_rec: _storage_mod.CharacterRecord, applied: dict) -> str:
         c = target_rec.character
@@ -282,16 +388,7 @@ class DamageView(views_base.PersistentView):
         if not self.claim():
             await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
             return
-        await self._resolve_damage(interaction, void_reduce=False)
-
-    @discord.ui.button(label="Void Reduce (−10 wounds)", style=discord.ButtonStyle.primary, emoji="🔮")
-    async def void_reduce_apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not await _d.require_dm_role(interaction):
-            return
-        if not self.claim():
-            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
-            return
-        await self._resolve_damage(interaction, void_reduce=True)
+        await self._resolve_damage(interaction)
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary, emoji="🛡️")
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -314,8 +411,8 @@ class DamageView(views_base.PersistentView):
         else:
             await interaction.followup.send(msg)
 
-    async def _resolve_damage(self, interaction: discord.Interaction, void_reduce: bool = False) -> None:
-        """Shared damage resolution for both normal and Void-reduced paths."""
+    async def _resolve_damage(self, interaction: discord.Interaction) -> None:
+        """Resolve damage from a hit. Void wound reduction is offered to the target player after."""
 
         # Creature target: apply the attacker's weapon damage to the creature's
         # own wound track (plain hit or Feint only; disarm/knockdown are blocked
@@ -559,23 +656,6 @@ class DamageView(views_base.PersistentView):
             dr, df, _ = condition_effects.contested_roll_modifier(d_conds)
             dis = combat.resolve_disarm(attacker, target, _d.engine, ar, af, dr, df)
             applied = combat.apply_damage(target, dis["damage"], target.armor_reduction)
-            void_line = ""
-            if void_reduce:
-                ok, reason_block = advantage_effects.can_spend_void_on_roll(target, is_wound_reduction=True)
-                if not ok:
-                    void_line = f"\n🔮 {reason_block}"
-                elif target.current_void_points > 0:
-                    void_saved = min(10, applied["final_damage"])
-                    target.wounds_taken = max(0, target.wounds_taken - void_saved)
-                    target.current_void_points -= 1
-                    _d.tally(self.channel_id, target.name, "void")
-                    applied["final_damage"] -= void_saved
-                    applied["new_wound_level"] = stats.wound_level_name(target)
-                    applied["is_dead"] = stats.is_dead(target)
-                    applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
-                    void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
-                else:
-                    void_line = "\n🔮 No Void Points available: Full damage applied"
             _d.store.save(target_rec, note="attack damage")
             _d.tally(self.channel_id, self.attacker_name, "dealt", applied["final_damage"])
             _d.tally(self.channel_id, self.target_name, "taken", applied["final_damage"])
@@ -589,7 +669,7 @@ class DamageView(views_base.PersistentView):
             dis_armor_label = f" ({target.armor_name.replace('_', ' ').title()})" if target.armor_name else ""
             dis_value = (
                 f"{_d.format_dice(dis['damage_dice'])}\nRaw **{dis['damage']}** − reduction "
-                f"{applied['reduction']}{dis_armor_label} = **{applied['final_damage']}** wounds{void_line}"
+                f"{applied['reduction']}{dis_armor_label} = **{applied['final_damage']}** wounds"
             )
             embed.add_field(
                 name="Damage (2k1)",
@@ -617,6 +697,7 @@ class DamageView(views_base.PersistentView):
                 f"Disarm: {self.attacker_name} → {self.target_name} ({disarm_tag}, "
                 f"{applied['final_damage']} wounds [{applied['new_wound_level']}])",
             )
+            await self._offer_void_reduce(str(interaction.guild_id), target_rec, applied)
             return
 
         # Plain hit or Feint: weapon damage (+ feint bonus, + active-kata, Technique & Mastery mods).
@@ -768,23 +849,6 @@ class DamageView(views_base.PersistentView):
         if wp.get("ignore_all_reduction"):
             reduction = 0
         applied = combat.apply_damage(target, raw, reduction)
-        void_line = ""
-        if void_reduce:
-            ok, reason_block = advantage_effects.can_spend_void_on_roll(target, is_wound_reduction=True)
-            if not ok:
-                void_line = f"\n🔮 {reason_block}"
-            elif target.current_void_points > 0:
-                void_saved = min(10, applied["final_damage"])
-                target.wounds_taken = max(0, target.wounds_taken - void_saved)
-                target.current_void_points -= 1
-                _d.tally(self.channel_id, target.name, "void")
-                applied["final_damage"] -= void_saved
-                applied["new_wound_level"] = stats.wound_level_name(target)
-                applied["is_dead"] = stats.is_dead(target)
-                applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
-                void_line = f"\n🔮 Void Point spent: **−{void_saved}** wounds ({target.current_void_points} VP remaining)"
-            else:
-                void_line = "\n🔮 No Void Points available: Full damage applied"
         heal_line = ""
         if applied["is_dead"]:
             heal_amt, heal_notes = advantage_effects.post_kill_heal(attacker)
@@ -864,7 +928,7 @@ class DamageView(views_base.PersistentView):
             f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}\n"
             f"{_d.format_dice(dmg['dice'])}{feint_line}{kata_line}{called_shot_line}\n"
             f"Raw **{raw}** − reduction {applied['reduction']}{armor_label} = "
-            f"**{applied['final_damage']}** wounds{void_line}{decl_cond_line}{break_line}"
+            f"**{applied['final_damage']}** wounds{decl_cond_line}{break_line}"
         )
         if len(dmg_text) > 1024:
             dmg_text = dmg_text[:1021] + "..."
@@ -892,6 +956,8 @@ class DamageView(views_base.PersistentView):
                 str(interaction.guild_id),
                 f"Knockdown: {self.attacker_name} → {self.target_name} ({kd_tag})",
             )
+
+        await self._offer_void_reduce(str(interaction.guild_id), target_rec, applied)
 
         if self.maneuver == "extra_attack" and not applied["is_dead"]:
             await self._second_attack(interaction, attacker_rec, target_rec)
