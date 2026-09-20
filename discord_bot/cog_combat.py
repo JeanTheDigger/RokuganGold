@@ -1459,7 +1459,7 @@ class CombatBoardView(views_base.PersistentView):
         await _d.combat_log(guild, f"Turn done: {ended_name}")
         cond_str = f" [{', '.join(sorted(next_cb.conditions))}]" if next_cb.conditions else ""
         await _d.combat_log(guild, f"Turn: {next_cb.name}{cond_str}")
-        await _refresh_board(enc, guild)
+        await _repost_board(enc, guild)
 
     @discord.ui.button(label="End Combat", style=discord.ButtonStyle.danger, row=0)
     async def end_combat_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -2405,6 +2405,29 @@ async def _refresh_board(enc: encounter.Encounter, guild_id: str) -> None:
         await msg.edit(embed=embed, view=view)
     except discord.HTTPException:
         pass
+
+
+async def _repost_board(enc: encounter.Encounter, guild_id: str) -> None:
+    """Delete the old board message and post a fresh one at the bottom of the channel."""
+    ch = _d.bot_client.get_channel(enc.channel_id)
+    if ch is None:
+        return
+    if enc.board_message_id:
+        try:
+            old_msg = await ch.fetch_message(enc.board_message_id)
+            try:
+                await old_msg.delete()
+            except discord.HTTPException:
+                pass
+        except discord.NotFound:
+            pass
+        enc.board_message_id = 0
+    embed = _build_board_embed(enc, guild_id)
+    view = CombatBoardView(guild_id, enc.channel_id)
+    msg = await ch.send(embed=embed, view=view)
+    await view.persist(msg)
+    enc.board_message_id = msg.id
+    _d.save_encounter(guild_id, enc)
 
 
 async def _post_board(channel: discord.TextChannel, enc: encounter.Encounter, guild_id: str) -> None:
@@ -3854,7 +3877,7 @@ async def combat_next(interaction: discord.Interaction) -> None:
         await _d.combat_log(guild, f"--- Round {enc.round} ---")
     cond_str = f" [{', '.join(sorted(current.conditions))}]" if current.conditions else ""
     await _d.combat_log(guild, f"Turn: {current.name}{cond_str}")
-    await _refresh_board(enc, guild)
+    await _repost_board(enc, guild)
 
 
 @combat_group.command(name="status", description="Show the current initiative order.")
