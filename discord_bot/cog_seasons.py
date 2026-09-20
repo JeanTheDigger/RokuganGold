@@ -175,5 +175,5 @@ async def on_day_advanced(
             for embed in embeds:
                 try:
                     await ch.send(embed=embed)
-                except discord.Forbidden:
+                except discord.HTTPException:
                     pass

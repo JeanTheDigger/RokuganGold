@@ -242,7 +242,7 @@ async def rumor_post(
 
     if not filters:
         await interaction.response.send_message(
-            "Provide at least one filter: `clan`, `family`, `school`, `school_type`, or `character`.",
+            "At least one filter is required (`clan`, `family`, `school`, `school_type`, or `character`).",
             ephemeral=True,
         )
         return
@@ -345,6 +345,8 @@ async def rumor_public(
         )
         return
 
+    await interaction.response.defer(ephemeral=True)
+
     rumor_id = _d.store.create_rumor(
         guild_id, title, content, tier_val,
         [], str(interaction.user.id), public=True,
@@ -354,13 +356,14 @@ async def rumor_public(
 
     try:
         await board_ch.send(embed=embed)
-    except discord.Forbidden:
-        await interaction.response.send_message(
-            f"Cannot send to {board_ch.mention}: Missing permissions.", ephemeral=True,
+    except discord.HTTPException:
+        await interaction.followup.send(
+            f"Cannot send to {board_ch.mention}: Missing permissions or channel error.",
+            ephemeral=True,
         )
         return
 
-    await interaction.response.send_message(
+    await interaction.followup.send(
         f"Public notice **#{rumor_id}** posted to {board_ch.mention}.",
         ephemeral=True,
     )

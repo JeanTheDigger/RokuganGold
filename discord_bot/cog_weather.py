@@ -359,7 +359,6 @@ def _weather_title(cloud: str, precip: str, wind: str, temp: str) -> str:
     special = _detect_special(cloud, precip, wind, temp)
     if special:
         return special
-    is_cold = temp in ("freezing", "cold")
     if precip != "none":
         return _precip_label(precip, temp)
     return CLOUD_LABELS.get(cloud, "Weather")
@@ -500,7 +499,7 @@ async def weather_set(
 
     if temperature is None and cloud is None and wind_level is None and precipitation is None:
         await interaction.response.send_message(
-            "Provide at least one axis to set: `temperature`, `cloud`, `wind_level`, or `precipitation`.",
+            "At least one axis is required (`temperature`, `cloud`, `wind_level`, or `precipitation`).",
             ephemeral=True,
         )
         return
@@ -646,12 +645,15 @@ async def _update_weather_display(
             msg = await channel.fetch_message(int(message_id))
             await msg.edit(embed=embed)
             return
-        except discord.NotFound:
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             pass
-    new_msg = await channel.send(embed=embed)
+    try:
+        new_msg = await channel.send(embed=embed)
+    except discord.HTTPException:
+        return
     try:
         await new_msg.pin()
-    except discord.Forbidden:
+    except discord.HTTPException:
         pass
     _d.store.set_weather_channel(guild_id, channel_id, str(new_msg.id))
 

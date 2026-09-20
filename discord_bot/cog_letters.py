@@ -73,7 +73,7 @@ def _build_letter_embed(
 ) -> discord.Embed:
     embed = discord.Embed(
         title=f"Letter from {sender_name}",
-        description=content[:4000],
+        description=(content or "")[:4000],
         color=discord.Color.from_rgb(210, 180, 120),
     )
     if sealed:

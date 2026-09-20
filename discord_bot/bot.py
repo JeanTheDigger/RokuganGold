@@ -6664,13 +6664,14 @@ async def room_create(
             "Create a room from a normal text channel (not inside a thread or DM).", ephemeral=True
         )
         return
+    await interaction.response.defer()
     try:
         thread = await interaction.channel.create_thread(
             name=name, type=discord.ChannelType.private_thread, invitable=False
         )
         await thread.add_user(interaction.user)
     except discord.Forbidden:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "I need **Create Private Threads**, **Send Messages in Threads**, and **Manage Threads** "
             "permissions here. Ask a server admin to grant them (see README).",
             ephemeral=True,
@@ -6680,13 +6681,13 @@ async def room_create(
         str(interaction.guild_id), str(interaction.channel_id), str(thread.id), name, str(interaction.user.id),
         description=description or "",
     )
-    await interaction.response.send_message(
+    await interaction.followup.send(
         f"Room **{name}** created: {thread.mention} (host {interaction.user.mention}). "
         f"Invite people with `/room invite` inside the room."
     )
     await thread.send(
         f"Welcome to **{name}**. {interaction.user.mention} is the host. "
-        f"Play happens here:`/sheet`, `/roll`, `/fight attack`, and `/combat` all work inside this room."
+        f"Play happens here: `/sheet`, `/roll`, `/fight attack`, and `/combat` all work inside this room."
     )
     if description:
         embed = discord.Embed(title=name, description=description, color=0xC4A747)
@@ -6813,7 +6814,7 @@ async def room_list(interaction: discord.Interaction) -> None:
             f"• <#{r.thread_id}>: **{r.name}** (host <@{r.host_id}>, "
             f"{n_members} member{'s' if n_members != 1 else ''}{npc_tag})"
         )
-    await interaction.response.send_message("**Open rooms: **\n" + "\n".join(lines[:40]), ephemeral=True)
+    await interaction.response.send_message("**Open rooms:**\n" + "\n".join(lines[:40]), ephemeral=True)
 
 @room_group.command(name="close", description="Close this room (archives the thread). Host or Fortune.")
 async def room_close(interaction: discord.Interaction) -> None:
@@ -8243,10 +8244,11 @@ async def location_area_create(
         overwrites[m] = discord.PermissionOverwrite(
             view_channel=True, send_messages=True, read_message_history=True,
         )
+    await interaction.response.defer()
     try:
         category = await guild.create_category(clean_name, overwrites=overwrites, reason=f"Location area by {interaction.user}")
     except discord.Forbidden:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "I need **Manage Channels** permission to create categories.", ephemeral=True,
         )
         return
@@ -8291,7 +8293,7 @@ async def location_area_create(
         store.create_location_area(guild_id, str(category.id), clean_name, str(interaction.user.id))
     except storage.DuplicateNameError:
         await category.delete(reason="Duplicate area cleanup")
-        await interaction.response.send_message(f"Area **{clean_name}** already exists.", ephemeral=True)
+        await interaction.followup.send(f"Area **{clean_name}** already exists.", ephemeral=True)
         return
 
     parts = [f"Created location area **{clean_name}**."]
@@ -8301,7 +8303,7 @@ async def location_area_create(
         parts.append(f"Access granted to: {', '.join(m.mention for m in extra_members)}.")
     if description:
         parts.append("Description channel created.")
-    await interaction.response.send_message(" ".join(parts))
+    await interaction.followup.send(" ".join(parts))
 
 
 @location_area_group.command(name="delete", description="Delete a location area and all its locations. [Fortune]")
@@ -8491,12 +8493,13 @@ async def location_create(
             ch_overwrites[m] = discord.PermissionOverwrite(
                 view_channel=True, send_messages=True, read_message_history=True,
             )
+    await interaction.response.defer()
     try:
         channel = await cat_ch.create_text_channel(
             clean_name, overwrites=ch_overwrites or {}, reason=f"Location by {interaction.user}",
         )
     except discord.Forbidden:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "I need **Manage Channels** permission in this category.", ephemeral=True,
         )
         return
@@ -8511,7 +8514,7 @@ async def location_create(
         )
     except storage.DuplicateNameError:
         await channel.delete(reason="Duplicate location cleanup")
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"A location named **{clean_name}** already exists in **{area_rec.name}**.", ephemeral=True,
         )
         return
@@ -8520,7 +8523,7 @@ async def location_create(
         parts.append("(Private)")
     if extra_members:
         parts.append(f"Access: {', '.join(m.mention for m in extra_members)}.")
-    await interaction.response.send_message(" ".join(parts))
+    await interaction.followup.send(" ".join(parts))
     if description:
         embed = discord.Embed(title=clean_name, description=description, color=0xC4A747)
         pin_msg = await channel.send(embed=embed)
