@@ -1,10 +1,8 @@
-"""In-memory initiative tracker for combat encounters.
+"""Initiative tracker for combat encounters.
 
 One Encounter per Discord channel. Combatants are ordered by initiative total
-(highest first); ties keep insertion order. This is ephemeral scratch state for
-running a fight's turn order: it is not persisted, so a bot restart clears any
-in-progress encounters (acceptable for a turn tracker; sheets and wounds are in
-the database and survive).
+(highest first); ties keep insertion order. Encounters are persisted to the
+database so they survive bot restarts.
 
 Pure Python: no Discord, no rules imports. The bot rolls initiative via
 l5r_rules.combat.roll_initiative and hands the totals here.
