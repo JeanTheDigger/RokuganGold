@@ -471,7 +471,7 @@ class DamageView(views_base.PersistentView):
                 color=discord.Color.dark_red() if applied["is_dead"] else discord.Color.red(),
             )
             dmg_text = (
-                f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+                f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}\n"
                 f"{_d.format_dice(dmg['dice'])}{feint_line}{kata_line}{cre_cs_line}{mat_line}\n"
                 f"Raw **{raw}** − reduction {applied['reduction']} = "
                 f"**{applied['final_damage']}** wounds{special_line}{break_line}"
@@ -782,7 +782,7 @@ class DamageView(views_base.PersistentView):
         )
         armor_label = f" ({target.armor_name.replace('_', ' ').title()})" if target.armor_name else ""
         dmg_text = (
-            f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+            f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}\n"
             f"{_d.format_dice(dmg['dice'])}{feint_line}{kata_line}{called_shot_line}\n"
             f"Raw **{raw}** − reduction {applied['reduction']}{armor_label} = "
             f"**{applied['final_damage']}** wounds{void_line}{break_line}"
@@ -929,7 +929,7 @@ class DamageView(views_base.PersistentView):
             title="⚔️ Extra Attack: 2nd strike",
             color=discord.Color.green() if hit else discord.Color.light_grey(),
         )
-        detail = (f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+        detail = (f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}\n"
                   f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
                   f": {'**HIT**' if hit else 'miss'}")
         if notes:
@@ -1018,7 +1018,7 @@ class DamageView(views_base.PersistentView):
             title="⚔️ Extra Attack: 2nd strike",
             color=discord.Color.green() if hit else discord.Color.light_grey(),
         )
-        detail = (f"{self.attacker_name} → **{self.target_name}** with {self.weapon}\n"
+        detail = (f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}\n"
                   f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
                   f": {'**HIT**' if hit else 'miss'}")
         if notes:
@@ -1687,7 +1687,7 @@ async def attack(
     )
     atk_desc = (
         f"{outcome['skill_name']} {outcome['skill_rank']} / "
-        f"{outcome['trait_name'].capitalize()} with **{weapon}**"
+        f"{outcome['trait_name'].capitalize()} with **{weapon.replace('_', ' ').title()}**"
     )
     if mat != "normal":
         atk_desc += f"  ·  🔶 {mat.title()}"

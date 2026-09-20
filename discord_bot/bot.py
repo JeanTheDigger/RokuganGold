@@ -925,20 +925,24 @@ async def date_cmd(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed)
 
 def _format_dice(result: DiceResult) -> str:
-    kept = " + ".join(f"**{d}**" for d in result.kept_dice) or " "
+    _GREEN = "\u001b[1;32m"
+    _RED = "\u001b[2;31m"
+    _WHITE = "\u001b[1;37m"
+    _RST = "\u001b[0m"
+    kept = " + ".join(f"{_GREEN}{d}{_RST}" for d in result.kept_dice) or " "
     total_kept = sum(result.kept_dice)
-    line = f"[{kept}] = **{total_kept}**"
+    line = f"[{kept}] = {_WHITE}{total_kept}{_RST}"
     if result.dropped_dice:
-        dropped = ", ".join(f"~~{d}~~" for d in result.dropped_dice)
-        line += f"   ·   dropped: {dropped}"
-    extras = []
+        dropped = ", ".join(f"{_RED}{d}{_RST}" for d in result.dropped_dice)
+        line += f"   dropped: {dropped}"
+    extras: list[str] = []
     if result.explosions:
-        extras.append(f"💥 {result.explosions} explosion{'s' if result.explosions != 1 else ''}")
+        extras.append(f"{result.explosions} explosion{'s' if result.explosions != 1 else ''}")
     if result.overflow_bonus:
         extras.append(f"+{result.overflow_bonus} overflow (10-dice cap)")
     if extras:
-        line += "\n" + "   ·   ".join(extras)
-    return line
+        line += "\n" + "   ".join(extras)
+    return f"```ansi\n{line}\n```"
 
 async def _combat_log(guild_id: str, message: str) -> None:
     """Post a compact line to the server's combat log channel, if configured."""
