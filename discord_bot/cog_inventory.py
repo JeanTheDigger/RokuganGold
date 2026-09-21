@@ -392,7 +392,7 @@ class InventoryPanel(discord.ui.View):
                                                 embed=build_inventory_embed(self.rec), view=None)
 
 
-@app_commands.command(name="inventory", description="Your gear and purse in one panel: wield, weapons, items, koku (staff: any character or NPC).")
+@app_commands.command(name="inventory", description="Your gear and purse in one panel: Wield, weapons, items, koku (staff: Any character or NPC).")
 @app_commands.describe(member="Another player's character [Fortune].", npc="An NPC's inventory [Fortune].")
 async def inventory(interaction: discord.Interaction, member: discord.Member | None = None, npc: str | None = None) -> None:
     if not await _d.require_guild(interaction):

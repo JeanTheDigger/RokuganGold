@@ -14,7 +14,7 @@ import discord
 from discord import app_commands
 
 import storage
-from l5r_rules import taint, tattoo_catalog
+from l5r_rules import stats, taint, tattoo_catalog
 
 HUB_IDLE_SECONDS: float = 900.0
 
@@ -55,6 +55,10 @@ class _VoidReasonModal(discord.ui.Modal, title="Spend a Void Point"):
             await interaction.response.send_message("That character no longer exists.", ephemeral=True)
             return
         c = rec.character
+        if stats.is_dead(c):
+            await interaction.response.send_message(
+                f"**{c.name}** is dead. PC death is permanent.", ephemeral=True)
+            return
         if c.current_void_points <= 0:
             await interaction.response.send_message(
                 f"**{c.name}** has no Void Points remaining (0/{taint.void_point_cap(c)}).", ephemeral=True)

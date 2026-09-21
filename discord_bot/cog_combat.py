@@ -134,6 +134,7 @@ def init(
     combat_npc.autocomplete("name")(npc_autocomplete)
     duel_start.autocomplete("duelist_a")(_duelist_autocomplete)
     duel_start.autocomplete("duelist_b")(_duelist_autocomplete)
+    duel_strike.autocomplete("weapon")(weapon_autocomplete)
     battle_start.autocomplete("general_a")(_duelist_autocomplete)
     battle_start.autocomplete("general_b")(_duelist_autocomplete)
 
