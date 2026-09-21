@@ -2617,8 +2617,8 @@ class _BoardVoidSwapSelect(discord.ui.View):
                 pass
         await _d.combat_log(
             guild,
-            f"Void Swap: {cb_s.name} <-> {cb_t.name} "
-            f"({old_s}->{cb_s.effective_initiative}, {old_t}->{cb_t.effective_initiative}, "
+            f"Void Swap: {cb_s.name} ↔ {cb_t.name} "
+            f"({old_s}→{cb_s.effective_initiative}, {old_t}→{cb_t.effective_initiative}, "
             f"{c.current_void_points} VP left)"
         )
         await _refresh_board(enc, guild)
@@ -7163,7 +7163,7 @@ class DuelBoardView(views_base.PersistentView):
         tag = "HIT" if hit else "MISS"
         await _d.combat_log(
             self.guild_id,
-            f"Duel {title_prefix}: {atk.name} -> {tgt.name} (katana) {tag} "
+            f"Duel {title_prefix}: {atk.name} → {tgt.name} (katana) {tag} "
             f"(roll {result['total']} vs TN {result['tn']})",
         )
         ch = _d.bot_client.get_channel(self.channel_id)
@@ -7235,7 +7235,7 @@ class DuelBoardView(views_base.PersistentView):
             tag = "HIT" if hit else "MISS"
             await _d.combat_log(
                 self.guild_id,
-                f"Duel Kharmic Strike: {atk.name} -> {tgt.name} (katana) {tag} "
+                f"Duel Kharmic Strike: {atk.name} → {tgt.name} (katana) {tag} "
                 f"(roll {result['total']} vs TN {result['tn']})",
             )
 

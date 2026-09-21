@@ -1383,7 +1383,7 @@ async def horsemanship_check(
     name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
-    bonus: int = 0,
+    bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
     emphasis: str | None = None,

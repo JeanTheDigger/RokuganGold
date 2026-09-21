@@ -1262,6 +1262,13 @@ async def _spell_autocomplete(
     ]
     return out[:25]
 
+_SPELL_ELEMENTS = ["air", "earth", "fire", "water", "void"]
+async def _element_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    cur = current.lower().strip()
+    return [app_commands.Choice(name=e.title(), value=e) for e in _SPELL_ELEMENTS if cur in e]
+
 async def _kata_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -1343,9 +1350,9 @@ def _apply_numeric_field(c: Character, field: str, value: float) -> None:
         c.school_rank = max(1, min(10, int(value)))
     elif field == "void_points_max":
         c.max_void_points = max(0, int(value))
-        c.current_void_points = min(c.current_void_points, c.max_void_points)
+        c.current_void_points = min(c.current_void_points, taint.void_point_cap(c))
     elif field == "void_points_current":
-        c.current_void_points = max(0, min(int(value), c.max_void_points))
+        c.current_void_points = max(0, min(int(value), taint.void_point_cap(c)))
     elif field == "armor_tn_bonus":
         c.armor_tn_bonus = max(0, int(value))
     elif field == "armor_reduction":
@@ -1543,7 +1550,8 @@ async def _go_to_school_choice(interaction: discord.Interaction, state: dict) ->
 class _SchoolClanSelect(discord.ui.Select):
     def __init__(self, state: dict):
         self.state = state
-        options = [discord.SelectOption(label=c) for c in _ALL_SCHOOL_CLANS]
+        own_clan = state.get("clan", "")
+        options = [discord.SelectOption(label=c) for c in _ALL_SCHOOL_CLANS if c != own_clan]
         super().__init__(placeholder="Pick school clan...", options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -1615,6 +1623,13 @@ async def _show_confirmation(interaction: discord.Interaction, state: dict) -> N
                 char.clan = family_entry["clan"]
         applied = schools.get(state["school_name"])
         report = schools.apply_to_character(char, applied) if applied else None
+        if state.get("clan"):
+            char.clan = state["clan"]
+        if state.get("different_school") and "Different School" not in char.advantages:
+            char.advantages.append("Different School")
+        heritage_grants = state.get("heritage_grants", {})
+        if heritage_grants:
+            heritage.apply_heritage(char, {"grants": heritage_grants})
         try:
             record = store.create_character(state["guild_id"], state["user_id"], char)
         except storage.DuplicateNameError:
@@ -2172,6 +2187,7 @@ def _materialize_character(state: dict) -> Character:
     if state.get("concept"):
         char.notes = state["concept"]
 
+    char.current_void_points = char.max_void_points
     return char
 
 
@@ -2510,6 +2526,8 @@ class _AdvantageSelect(discord.ui.Select):
             base = a["name"].split(" (")[0]
             if base in _CHARGEN_CHOICES:
                 chosen_names.add(base)
+        if state.get("different_school"):
+            chosen_names.add("Different School")
         advs = [a for a in advantages.by_kind("advantage")
                 if a.get("points") is not None and a["name"] not in chosen_names
                 and (a.get("category") or "") == category]
@@ -2968,6 +2986,19 @@ class _EmphasisModal(discord.ui.Modal):
                 await interaction.response.send_message(
                     f"Your school already grants {self.skill}: {existing}.", ephemeral=True)
                 return
+        base = _build_base_char(self.state)
+        existing_count = len(base.emphases.get(self.skill, []))
+        bought_count = sum(1 for e in emphs if e["skill"] == self.skill)
+        skill_rank = base.skills.get(self.skill, 0)
+        for sp in self.state.get("skill_purchases", {}).items():
+            if sp[0] == self.skill:
+                skill_rank += sp[1]
+        limit = advancement.emphasis_limit(skill_rank)
+        if existing_count + bought_count >= limit:
+            await interaction.response.send_message(
+                f"{self.skill} (rank {skill_rank}) can have at most {limit} "
+                f"emphasis{'es' if limit != 1 else ''}.", ephemeral=True)
+            return
         emphs.append({"skill": self.skill, "emphasis": emph_name})
         _, remaining = _calc_chargen_xp(self.state)
         if remaining < 0:
@@ -5605,6 +5636,7 @@ def _resolve_duelist(
     member="Player spending VP (uses their active character). Omit = yourself.",
     npc_name="NPC name [Fortune]",
 )
+@app_commands.autocomplete(npc_name=_npc_autocomplete)
 async def void_spend(
     interaction: discord.Interaction,
     reason: str,
@@ -5663,6 +5695,7 @@ async def void_spend(
     app_commands.Choice(name="Rest (full refresh)", value="rest"),
     app_commands.Choice(name="Meditation (roll Meditation/Void, recover 1 on success)", value="meditation"),
 ])
+@app_commands.autocomplete(npc_name=_npc_autocomplete)
 async def void_refresh(
     interaction: discord.Interaction,
     mode: app_commands.Choice[str],
@@ -5766,6 +5799,7 @@ async def void_refresh(
     member="Player to check (uses their active character). Omit = yourself.",
     npc_name="NPC name [Fortune]",
 )
+@app_commands.autocomplete(npc_name=_npc_autocomplete)
 async def void_status(
     interaction: discord.Interaction,
     member: discord.Member | None = None,
@@ -7024,6 +7058,11 @@ class SpellDamageView(_DisableableView):
             self._disable()
             await interaction.response.edit_message(view=self)
             await interaction.followup.send("Target no longer exists.", ephemeral=True)
+            return
+        if stats.is_dead(rec.character):
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(f"**{rec.character.name}** is already dead.", ephemeral=True)
             return
         applied = combat.apply_damage(rec.character, self.raw_damage, rec.character.armor_reduction)
         void_line = ""
@@ -10304,6 +10343,8 @@ async def spell_resist(
         await interaction.response.send_message(f"No character named **{target}**.", ephemeral=True)
         return
     c = rec.character
+    if await _refuse_if_dead(interaction, c):
+        return
     willpower = c.willpower
     extra_rolled = 0
     extra_kept = 0
@@ -10318,6 +10359,7 @@ async def spell_resist(
             )
             return
         c.current_void_points -= 1
+        _tally(interaction.channel_id, c.name, "void")
         extra_rolled = extra_kept = 1
         store.save(rec)
     rolled = willpower + extra_rolled
@@ -10357,7 +10399,7 @@ async def spell_resist(
     damage="Damage taken (0 = mere distraction, TN 10; >0 = TN 5 + damage).",
     void_bonus="Refund goes to the Void bonus pool instead of the element pool.",
 )
-@app_commands.autocomplete(caster=_any_character_autocomplete)
+@app_commands.autocomplete(caster=_any_character_autocomplete, element=_element_autocomplete)
 async def spell_interrupt(
     interaction: discord.Interaction,
     caster: str,
@@ -10375,6 +10417,8 @@ async def spell_interrupt(
         await interaction.response.send_message(f"No character named **{caster}**.", ephemeral=True)
         return
     c = rec.character
+    if await _refuse_if_dead(interaction, c):
+        return
     tn = (5 + damage) if damage > 0 else 10
     willpower = c.willpower
     wound_pen = stats.wound_penalty(c)
@@ -10488,14 +10532,14 @@ async def spell_importune(
         )
         return
     wound_pen = stats.wound_penalty(caster)
+    fear_r = _fear_penalty(interaction.channel_id, caster.name)
     # Step 1: Spellcraft (Importune) / Ring check.
     spellcraft_rank = caster.skills.get("Spellcraft", 0)
     has_importune = "Importune" in caster.emphases.get("Spellcraft", [])
-    importune_bonus = 1 if has_importune else 0
-    imp_rolled = ring_val + spellcraft_rank + importune_bonus
+    imp_rolled = ring_val + spellcraft_rank - fear_r
     imp_kept = ring_val
     imp_tn = 15 + 5 * ml
-    imp_result = engine.roll_and_keep(max(1, imp_rolled), max(1, imp_kept))
+    imp_result = engine.roll_and_keep(max(1, imp_rolled), max(1, imp_kept), emphasis=has_importune)
     imp_total = imp_result.total + wound_pen
     imp_success = imp_total >= imp_tn
     embed = discord.Embed(
@@ -10504,7 +10548,9 @@ async def spell_importune(
     )
     imp_notes = f"Spellcraft {spellcraft_rank}"
     if has_importune:
-        imp_notes += " (Importune emphasis: +1k0)"
+        imp_notes += " (Importune emphasis: Reroll 1s)"
+    if fear_r:
+        imp_notes += f" (Fear: -{fear_r}k0)"
     imp_notes += f" / {s['element']} Ring {ring_val}"
     imp_desc = (
         f"{imp_notes} → {imp_rolled}k{imp_kept}\n"
@@ -10555,7 +10601,7 @@ async def spell_importune(
         caster.current_void_points -= 1
         _tally(interaction.channel_id, caster.name, "void")
         extra_rolled = extra_kept = 1
-    cast_rolled = ring_val + effective_rank + extra_rolled
+    cast_rolled = ring_val + effective_rank + extra_rolled - fear_r
     cast_kept = ring_val + extra_kept
     cast_base_tn = 15 + 5 * ml
     cast_tn = cast_base_tn + raises * 5
@@ -10732,6 +10778,7 @@ async def craft_extended(
             void_line = f"No Void Points to spend (0/{taint.void_point_cap(c)})"
         else:
             c.current_void_points -= 1
+            _tally(interaction.channel_id, c.name, "void")
             void_r = void_k = 1
             void_spent = True
             void_line = f"Void +1k1 ({c.current_void_points} VP left)"
@@ -10746,6 +10793,7 @@ async def craft_extended(
                 void_line = f"No Void Points to spend (0/{taint.void_point_cap(c)})"
             else:
                 c.current_void_points -= 1
+                _tally(interaction.channel_id, c.name, "void")
                 skill_rank = 1
                 void_spent = True
                 void_line = f"Void: Skill 0→1 (unskilled penalty removed, {c.current_void_points} VP left)"
@@ -10788,7 +10836,7 @@ async def craft_extended(
     reason="Spell name or label.",
     caster="The caster (a combatant here): Credits the damage and any kill in the fight summary.",
 )
-@app_commands.autocomplete(caster=cog_combat._combatant_autocomplete)
+@app_commands.autocomplete(caster=cog_combat._combatant_autocomplete, target=_any_character_autocomplete)
 async def spell_damage(
     interaction: discord.Interaction,
     rolled: app_commands.Range[int, 1, 30],
@@ -11195,11 +11243,13 @@ async def dm_treat(
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
-    if success and heal_amount > 0 and pc.wounds_taken > 0:
+    heals_wounds = treatment.value == "wound_treatment" or wounds_healed is not None
+    if success and heals_wounds and heal_amount > 0 and pc.wounds_taken > 0:
         effective_heal = min(heal_amount, pc.wounds_taken)
+        heal_note = f"(Intelligence {hc.intelligence} × 2 = {hc.intelligence * 2})" if wounds_healed is None else f"(custom: {wounds_healed})"
         embed.add_field(
             name="Healing",
-            value=f"**{effective_heal}** wounds to heal (Intelligence {hc.intelligence} × 2 = {hc.intelligence * 2})",
+            value=f"**{effective_heal}** wounds to heal {heal_note}",
             inline=False,
         )
         approval_ch_id = store.get_damage_approval_channel(guild) or store.get_approval_channel(guild)
@@ -11452,6 +11502,7 @@ client.tree.add_command(macro_group)
     member_a="Owner of first character (omit for your own).",
     member_b="Owner of second character (omit for your own).",
 )
+@app_commands.autocomplete(name_a=_any_character_autocomplete, name_b=_any_character_autocomplete)
 async def compare_characters(
     interaction: discord.Interaction,
     name_a: str,
