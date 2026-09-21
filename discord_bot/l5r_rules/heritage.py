@@ -90,7 +90,7 @@ HERITAGE_TABLES: dict[str, list[dict]] = {
     ],
     "Scorpion": [
         {"roll": 1, "name": "Master Spy", "effect": "Ancestor was a legendary spy. +1 rank in Stealth (free).", "grants": {"skills": {"Stealth": 1}}},
-        {"roll": 2, "name": "Poison Expert", "effect": "Family knows poisons well. +1 rank in Medicine (Poison emphasis, free).", "grants": {"skills": {"Medicine": 1}}},
+        {"roll": 2, "name": "Poison Expert", "effect": "Family knows poisons well. +1 rank in Medicine (Poison emphasis, free).", "grants": {"skills": {"Medicine": 1}, "emphases": {"Medicine": ["Poison"]}}},
         {"roll": 3, "name": "Blackmail Network", "effect": "Family has leverage. +1 rank in Intimidation (free).", "grants": {"skills": {"Intimidation": 1}}},
         {"roll": 4, "name": "Double Agent", "effect": "Ancestor was a double agent. Family is distrusted even within Scorpion. −5 Glory points, +1 rank in Sincerity (free).", "grants": {"glory": -5.0, "skills": {"Sincerity": 1}}},
         {"roll": 5, "name": "Seductress/Seductor", "effect": "Ancestor was legendarily charming. +1 rank in Temptation (free).", "grants": {"skills": {"Temptation": 1}}},
@@ -154,6 +154,14 @@ def apply_heritage(char: Character, result: dict) -> list[str]:
             current = char.skills.get(skill_name, 0)
             char.skills[skill_name] = current + rank_bonus
             notes.append(f"+{rank_bonus} {skill_name}")
+    if "emphases" in grants:
+        for skill_name, emph_list in grants["emphases"].items():
+            existing = char.emphases.get(skill_name, [])
+            for e in emph_list:
+                if e not in existing:
+                    existing.append(e)
+            char.emphases[skill_name] = existing
+            notes.append(f"Emphasis: {skill_name} ({', '.join(emph_list)})")
     if "honor" in grants:
         char.honor += grants["honor"]
         notes.append(f"Honor {grants['honor']:+.1f}")

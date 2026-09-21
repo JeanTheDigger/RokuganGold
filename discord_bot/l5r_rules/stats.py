@@ -94,13 +94,13 @@ def insight(c: Character) -> int:
     rings_sum = sum(ring_value(c, r) for r in ("air", "earth", "fire", "water", "void"))
     total_skill_ranks = sum(c.skills.values())
     base = rings_sum * 10 + total_skill_ranks
-    # Courtier/Etiquette mastery: +3 Insight at R3, +10 total at R7
+    # Courtier/Etiquette mastery: +3 Insight at R3, +10 more at R7 (cumulative)
     for sk in ("Courtier", "Etiquette"):
         rank = _skill_rank(c, sk)
+        if rank >= 3:
+            base += 3
         if rank >= 7:
             base += 10
-        elif rank >= 3:
-            base += 3
     return base
 
 

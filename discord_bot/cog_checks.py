@@ -33,6 +33,7 @@ class _Deps:
     fear_penalty: object
     set_fear_penalty: object
     is_dm: object
+    tally: object
     ROLE_FORTUNE: str
     NPC_OWNER: str
 
@@ -56,6 +57,7 @@ def init(
     fear_penalty,
     set_fear_penalty,
     is_dm,
+    tally,
     role_fortune,
 ) -> None:
     _d.store = store
@@ -70,6 +72,7 @@ def init(
     _d.fear_penalty = fear_penalty
     _d.set_fear_penalty = set_fear_penalty
     _d.is_dm = is_dm
+    _d.tally = tally
     _d.ROLE_FORTUNE = role_fortune
     _d.NPC_OWNER = npc_owner
 
@@ -403,8 +406,10 @@ async def contest(
     )
     if void_spent_a:
         _d.store.save(rec_a)
+        _d.tally(interaction.channel_id, ca.name, "void")
     if void_spent_b:
         _d.store.save(rec_b)
+        _d.tally(interaction.channel_id, cb.name, "void")
     title = "Contested Check"
     if reason:
         title += f": {reason}"
@@ -510,6 +515,7 @@ async def fear_check(
     )
     if void_spent:
         _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
     success = result["success"]
     tn = result["tn"]
     # GDD s46: failure = -Xk0 (X = Fear Rank) to all rolls until the encounter
@@ -652,6 +658,7 @@ async def poison_resist(
     result = combat.resolve_poison_resist(c.stamina, strength, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k)
     if void_spent:
         _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
     success = result["success"]
     tn = result["tn"]
     title = f"Poison Resistance: {c.name}"
@@ -742,6 +749,7 @@ async def medicine_check(
     result = combat.resolve_medicine_check(c.intelligence, medicine_skill, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
     success = result["success"]
     title = "Medicine Check"
     if reason:
@@ -842,6 +850,7 @@ async def skill_check_cmd(
     result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "Skill Check" + (" (secret)" if secret else "")
     if reason:
@@ -986,6 +995,7 @@ async def check_cooperative(
         embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
     if void_spent:
         _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
@@ -1051,6 +1061,7 @@ async def stealth_check(
     result = combat.resolve_skill_check(c.agility, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
     skill_label = f"Stealth {sk}" if sk > 0 else "Stealth (unskilled)"
     title = "Stealth Check" + ("" if secret else "")
     if reason:
@@ -1128,6 +1139,7 @@ async def investigate_check(
     result = combat.resolve_skill_check(c.perception, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(inv_emph))
     if void_spent:
         _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
     has_emphasis = emp_name and emp_name in c.emphases.get("Investigation", [])
     skill_label = f"Investigation {sk}" if sk > 0 else "Investigation (unskilled)"
     if emp_name:
@@ -1214,6 +1226,7 @@ async def social_check(
     result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
     skill_label = f"{skill.value} {sk}" if sk > 0 else f"{skill.value} (unskilled)"
     trait_display = trait_attr.capitalize()
     title = "Social Check"
@@ -1284,6 +1297,7 @@ async def craft_check(
     result = combat.resolve_skill_check(c.intelligence, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "Craft Check"
     if reason:
@@ -1353,6 +1367,7 @@ async def lore_check(
     result = combat.resolve_skill_check(c.intelligence, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
     skill_label = f"{specialty} {sk}" if sk > 0 else f"{specialty} (unskilled)"
     title = "Lore Check"
     if reason:
@@ -1417,6 +1432,7 @@ async def horsemanship_check(
     result = combat.resolve_skill_check(c.agility, skill_rank, tn, _d.engine, bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
     embed = _build_check_embed(
         reason or "Horsemanship Check", c.name, "Horsemanship", "Agility", result, wp, bonus,
         success_text="Maneuver succeeds!", fail_text="The rider falters!",

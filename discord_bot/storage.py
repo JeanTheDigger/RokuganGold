@@ -439,11 +439,14 @@ class Store:
         current = row["version"]
         for i in range(current, len(_MIGRATIONS)):
             version = i + 1
-            try:
-                self._conn.executescript(_MIGRATIONS[i])
-                self._conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (version,))
-            except sqlite3.OperationalError:
-                pass
+            script = _MIGRATIONS[i]
+            stmts = [s.strip() for s in script.split(";") if s.strip()]
+            for stmt in stmts:
+                try:
+                    self._conn.execute(stmt)
+                except sqlite3.OperationalError:
+                    pass
+            self._conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (version,))
 
     # -- internal helpers ------------------------------------------------------
     def _row_to_record(self, row: sqlite3.Row) -> CharacterRecord:

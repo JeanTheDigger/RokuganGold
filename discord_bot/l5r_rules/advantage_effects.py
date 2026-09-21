@@ -428,11 +428,12 @@ def skill_check_modifiers(
         rolled -= 2
         notes.append("Jurojin's Curse -2k0 (resist poison/disease)")
 
-    # Weakness: chosen Trait treated as 1 Rank lower
+    # Weakness: chosen Trait treated as 1 Rank lower → -1k1
     weak_param = _get_disadv_param(character, "Weakness")
     if weak_param and weak_param.lower() == tr:
-        flat -= 1
-        notes.append(f"Weakness -1 ({weak_param}: trait rolls as 1 lower)")
+        rolled -= 1
+        kept -= 1
+        notes.append(f"Weakness -1k1 ({weak_param}: Trait treated as 1 lower)")
 
     # --- Skill Mastery Abilities (L5R 4e RAW) ---
     _sr = character.skills.get(skill_name, 0)

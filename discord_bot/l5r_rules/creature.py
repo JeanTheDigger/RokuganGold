@@ -55,8 +55,23 @@ class Creature:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Creature":
+        from dataclasses import MISSING
+        field_defaults: dict = {}
+        for f in fields(cls):
+            if f.default is not MISSING:
+                field_defaults[f.name] = f.default
+            elif f.default_factory is not MISSING:
+                field_defaults[f.name] = f.default_factory
         known = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in data.items() if k in known})
+        cleaned = {}
+        for k, v in data.items():
+            if k not in known:
+                continue
+            if v is None and k in field_defaults:
+                d = field_defaults[k]
+                v = d() if callable(d) else d
+            cleaned[k] = v
+        return cls(**cleaned)
 
 
 from .creature_catalog import CATALOG_DATA

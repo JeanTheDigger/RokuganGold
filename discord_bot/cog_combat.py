@@ -5729,6 +5729,7 @@ async def grapple_start(
     defender_stance="Target's stance.",
 )
 @app_commands.choices(defender_stance=_DEFENDER_STANCES)
+@app_commands.autocomplete(attacker=_combatant_autocomplete, target=_combatant_autocomplete)
 async def grapple_initiate(
     interaction: discord.Interaction,
     attacker: str,
@@ -5859,6 +5860,7 @@ async def grapple_initiate(
     combatant_a="First grapple participant.",
     combatant_b="Second grapple participant.",
 )
+@app_commands.autocomplete(combatant_a=_combatant_autocomplete, combatant_b=_combatant_autocomplete)
 async def grapple_control(
     interaction: discord.Interaction,
     combatant_a: str,
@@ -5933,6 +5935,7 @@ async def grapple_control(
     attacker="The combatant in control (dealing damage).",
     target="The grapple participant receiving damage.",
 )
+@app_commands.autocomplete(attacker=_combatant_autocomplete, target=_combatant_autocomplete)
 async def grapple_hit(
     interaction: discord.Interaction,
     attacker: str,
@@ -5997,6 +6000,7 @@ async def grapple_hit(
     thrower="The combatant in control (throwing).",
     target="The combatant being thrown.",
 )
+@app_commands.autocomplete(thrower=_combatant_autocomplete, target=_combatant_autocomplete)
 async def grapple_throw(
     interaction: discord.Interaction,
     thrower: str,
@@ -6226,6 +6230,7 @@ async def grapple_break(
     a_member="First duelist is another player's character.",
     b_member="Second duelist is another player's character.",
 )
+@app_commands.autocomplete(duelist_a=_duelist_autocomplete, duelist_b=_duelist_autocomplete)
 async def duel_assess(
     interaction: discord.Interaction,
     duelist_a: str,
@@ -6369,6 +6374,7 @@ async def duel_assess(
     a_member="First duelist is another player's character.",
     b_member="Second duelist is another player's character.",
 )
+@app_commands.autocomplete(duelist_a=_duelist_autocomplete, duelist_b=_duelist_autocomplete)
 async def duel_focus(
     interaction: discord.Interaction,
     duelist_a: str,
@@ -6512,6 +6518,7 @@ async def duel_focus(
     attacker_member="Attacker is another player's character.",
     target_member="Target is another player's character.",
 )
+@app_commands.autocomplete(attacker=_duelist_autocomplete, target=_duelist_autocomplete)
 async def duel_strike(
     interaction: discord.Interaction,
     attacker: str,
@@ -8244,6 +8251,7 @@ class MassBattleBoardView(views_base.PersistentView):
     is_npc="Target is an NPC.",
     bonus="Flat bonus (advantages, terrain, etc.).",
 )
+@app_commands.autocomplete(name=_duelist_autocomplete)
 async def battle_roll(
     interaction: discord.Interaction,
     name: str,
@@ -8332,6 +8340,7 @@ async def battle_damage(
     is_npc="Target is an NPC.",
     bonus="Flat bonus (advantages, terrain, wound penalties applied automatically).",
 )
+@app_commands.autocomplete(name=_duelist_autocomplete)
 @app_commands.choices(
     army_status=[
         app_commands.Choice(name="Winning (general won contest by 5+)", value="winning"),
@@ -8436,6 +8445,7 @@ async def battle_table(
     bonus_a="Flat bonus for Side A (terrain, numbers, Heroic Opportunities, etc.).",
     bonus_b="Flat bonus for Side B (terrain, numbers, Heroic Opportunities, etc.).",
 )
+@app_commands.autocomplete(general_a=_duelist_autocomplete, general_b=_duelist_autocomplete)
 async def battle_status(
     interaction: discord.Interaction,
     general_a: str,

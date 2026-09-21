@@ -4012,7 +4012,7 @@ async def sheet_trait(
     rec.character.set_trait(trait.value, value)
     if trait.value == "void":
         rec.character.max_void_points = rec.character.void_ring
-        rec.character.current_void_points = min(rec.character.current_void_points, rec.character.max_void_points)
+        rec.character.current_void_points = min(rec.character.current_void_points, taint.void_point_cap(rec.character))
     rank_msg = _check_insight_rank_advance(rec.character)
     changed = store.save(rec, note="stat trait")
     await _audit_stat(interaction, rec, "stat trait", changed)
@@ -5667,6 +5667,8 @@ async def void_spend(
             await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
             return
     c = rec.character
+    if await _refuse_if_dead(interaction, c):
+        return
     vp_cap = taint.void_point_cap(c)
     if c.current_void_points <= 0:
         await interaction.response.send_message(
@@ -6165,7 +6167,7 @@ async def npc_trait(
     rec.character.set_trait(trait.value, value)
     if trait.value == "void":
         rec.character.max_void_points = rec.character.void_ring
-        rec.character.current_void_points = min(rec.character.current_void_points, rec.character.max_void_points)
+        rec.character.current_void_points = min(rec.character.current_void_points, taint.void_point_cap(rec.character))
     store.save(rec)
     label = "Void" if trait.value == "void" else trait.value.capitalize()
     await interaction.response.send_message(
@@ -12791,6 +12793,7 @@ cog_checks.init(
     fear_penalty=_fear_penalty,
     set_fear_penalty=_set_fear_penalty,
     is_dm=_is_dm,
+    tally=_tally,
     role_fortune=ROLE_FORTUNE,
 )
 

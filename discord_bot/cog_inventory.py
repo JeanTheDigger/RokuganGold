@@ -114,7 +114,7 @@ class _ItemModal(discord.ui.Modal, title="Add an item"):
         await self.panel.commit(interaction, msg)
 
 
-class _KokuModal(discord.ui.Modal, title="Koku: add or spend"):
+class _KokuModal(discord.ui.Modal, title="Koku: Add or Spend"):
     amount = discord.ui.TextInput(label="Amount (negative spends)", placeholder="5 or -2.5", max_length=10)
     reason = discord.ui.TextInput(label="Reason (optional)", required=False, max_length=100)
 
