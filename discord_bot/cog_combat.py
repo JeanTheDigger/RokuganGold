@@ -3229,73 +3229,14 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
     for i, c in enumerate(enc.combatants):
         marker = ">> " if (enc.started and c is cur) else f"{i + 1}. "
         tag = " *(NPC)*" if c.is_npc else ""
-        wound_tag = ""
-        spell_tag = ""
-        vp_tag = ""
-        if guild_id:
-            rec = _d.resolve_combatant_record(guild_id, c)
-            if rec is not None:
-                ch_rec = rec.character
-                w_taken = ch_rec.wounds_taken
-                w_cap = stats.total_wound_capacity(ch_rec)
-                lvl = stats.wound_level_name(ch_rec)
-                pen = stats.wound_penalty(ch_rec)
-                if w_taken > 0:
-                    pen_str = f", {pen}" if pen else ""
-                    wound_tag = f"  {w_taken}/{w_cap} **{lvl}**{pen_str}"
-                if ch_rec.max_void_points > 0:
-                    vp_tag = f"  VP:{ch_rec.current_void_points}/{ch_rec.max_void_points}"
-                if ch_rec.spell_slots and "shugenja" in ch_rec.school_type.lower():
-                    parts: list[str] = []
-                    _elem_labels = {"air": "Air", "earth": "Earth", "fire": "Fire", "water": "Water", "void": "Void"}
-                    for el in _CAST_ELEMENTS:
-                        sl = ch_rec.spell_slots.get(el)
-                        if sl is not None:
-                            mx = stats.spell_slot_max(ch_rec, el)
-                            parts.append(f"{_elem_labels.get(el, el.title())} {sl}/{mx}")
-                    if parts:
-                        bonus = f" +{ch_rec.void_spell_bonus} Void bonus" if ch_rec.void_spell_bonus else ""
-                        spell_tag = f"  **Spells**: {' | '.join(parts)}{bonus}"
         init_val = c.effective_initiative
-        stance_str = f" {c.stance.replace('_', ' ').title()}" if c.stance != "attack" else ""
-        acts = f"  [{c.actions_used}/2 acts]" if enc.started and c.actions_used > 0 else ""
-        main_line = f"{marker}**{c.name}**{tag}{wound_tag}{vp_tag}: Init **{init_val}**{stance_str}{acts}"
-        extras: list[str] = []
-        cond_labels = [
-            f"{k}({c.rounds_left(k, enc.round)}r)" if k in c.condition_expiry else k for k in sorted(c.conditions)
-        ]
-        if c.conditions:
-            extras.append(f"[{', '.join(cond_labels)}]")
-        if c.guarding:
-            extras.append(f"Guard->{c.guarding}")
-        if c.full_defense_bonus:
-            extras.append(f"FD+{c.full_defense_bonus}")
-        if c.void_armor_tn_bonus:
-            extras.append(f"ATN+{c.void_armor_tn_bonus}")
-        if c.void_initiative_boost:
-            extras.append(f"Init+{c.void_initiative_boost}")
-        if c.center_bonus_available:
-            extras.append("Center+1k1")
-        if c.center_init_boost:
-            extras.append(f"CInit+{c.center_init_boost}")
-        if c.cover_bonus:
-            sign = "+" if c.cover_bonus > 0 else ""
-            extras.append(f"Cover{sign}{c.cover_bonus}")
-        if c.fear_penalty:
-            extras.append(f"Fear-{c.fear_penalty}k0")
+        acts = f" [{c.actions_used}/2 acts]" if enc.started and c.actions_used > 0 else ""
+        line = f"{marker}**{c.name}**{tag}: Init **{init_val}**{acts}"
         if c.held:
-            extras.append("HELD")
+            line += " HELD"
         if c.delayed:
-            extras.append("DELAYED")
-        if c.declared_techniques:
-            tech_names = [e.get("display", k) for k, e in c.declared_techniques.items()]
-            extras.append("**T**: " + ", ".join(tech_names))
-        if spell_tag:
-            extras.append(spell_tag.strip())
-        if extras:
-            lines.append(f"{main_line}\n> {' | '.join(extras)}")
-        else:
-            lines.append(main_line)
+            line += " DELAYED"
+        lines.append(line)
     header = f"**Round {enc.round}**"
     if enc.surprise_round:
         header += " *(Surprise)*"
@@ -3306,7 +3247,7 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
     notes_line = f"\n*{enc.notes}*" if enc.notes else ""
     result = header + notes_line + "\n" + "\n".join(lines)
     if len(result) > 1700:
-        result = result[:1700] + "\n*(truncated - use `/combat summary` for full view)*"
+        result = result[:1700] + "\n*(truncated)*"
     return result
 @combat_group.command(name="start", description="Start a fresh initiative tracker in this channel.")
 async def combat_start(interaction: discord.Interaction) -> None:
