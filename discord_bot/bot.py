@@ -11057,6 +11057,11 @@ async def _setup_server_inner(
         "Ox": "#A0522D",
         "Sparrow": "#DEB887",
         "Tortoise": "#2E8B57",
+        "Boar": "#6B4226",
+        "Centipede": "#CC5500",
+        "Fox": "#C45B28",
+        "Tiger": "#B8860B",
+        "Wasp": "#DAA520",
     }
     clan_roles_created: list[discord.Role] = []
     for clan_name in _GREAT_CLANS + _MINOR_CLANS:
