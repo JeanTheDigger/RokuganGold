@@ -57,7 +57,7 @@ class _VoidReasonModal(discord.ui.Modal, title="Spend a Void Point"):
         c = rec.character
         if c.current_void_points <= 0:
             await interaction.response.send_message(
-                f"**{c.name}** has no Void Points remaining (0/{c.max_void_points}).", ephemeral=True)
+                f"**{c.name}** has no Void Points remaining (0/{taint.void_point_cap(c)}).", ephemeral=True)
             return
         c.current_void_points -= 1
         _d.tally(interaction.channel_id, c.name, "void")
@@ -65,7 +65,7 @@ class _VoidReasonModal(discord.ui.Modal, title="Spend a Void Point"):
         await self.hub.refresh(interaction)
         await interaction.followup.send(
             f"**{c.name}** spends a Void Point: {self.reason.value.strip()}\n"
-            f"  VP remaining: **{c.current_void_points}/{c.max_void_points}**")
+            f"  VP remaining: **{c.current_void_points}/{taint.void_point_cap(c)}**")
 
 
 class _Pick(discord.ui.Select):

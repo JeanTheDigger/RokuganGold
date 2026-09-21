@@ -867,7 +867,7 @@ def _whoami_lines(interaction: discord.Interaction, rec: storage.CharacterRecord
     wound_str = f"**{lvl}**" + (f" ({pen} penalty)" if pen else "") + f": {c.wounds_taken}/{cap}"
     if pen:
         wound_str = f"{wound_str}"
-    vp_str = f"{c.current_void_points}/{c.max_void_points} VP"
+    vp_str = f"{c.current_void_points}/{taint.void_point_cap(c)} VP"
     header = " · ".join(b for b in (c.clan, c.school) if b) or " "
     water = stats.water_ring(c)
     move_str = f"Move: {water * 5} ft (Free) / {water * 10} ft (Simple)"
@@ -4919,7 +4919,7 @@ async def party_overview(interaction: discord.Interaction) -> None:
         pen = stats.wound_penalty(c)
         cap = stats.total_wound_capacity(c)
         wound_str = f"{lvl}" + (f" ({pen})" if pen else "") + f": {c.wounds_taken}/{cap}"
-        vp_str = f"VP {c.current_void_points}/{c.max_void_points}"
+        vp_str = f"VP {c.current_void_points}/{taint.void_point_cap(c)}"
         header = " · ".join(b for b in (c.clan, c.school) if b) or " "
         val_parts = [
             f"{header} (Rank {stats.insight_rank(c)})",
@@ -8383,7 +8383,8 @@ async def location_area_list(interaction: discord.Interaction) -> None:
 async def location_area_fix_permissions(interaction: discord.Interaction) -> None:
     if not await _require_guild(interaction):
         return
-    if not await _require_dm_role(interaction):
+    if not _is_kami(interaction):
+        await interaction.response.send_message("Only a **Kami** can repair location permissions.", ephemeral=True)
         return
     guild = interaction.guild
     guild_id = str(guild.id)
@@ -9182,7 +9183,7 @@ class _XpCategorySelect(discord.ui.View):
             cur = c.void_ring if trait == "void" else c.get_trait(trait)
             can = avail >= cost
             opts.append(discord.SelectOption(
-                label=f"{label_name}: {cur} -> {new_rank}  ({cost} XP)",
+                label=f"{label_name}: {cur} → {new_rank}  ({cost} XP)",
                 value=trait,
                 description=f"{'Can afford' if can else 'Not enough XP'} (you have {avail:g})",
             ))
@@ -9201,7 +9202,7 @@ class _XpCategorySelect(discord.ui.View):
             new_rank, cost = quote
             can = avail >= cost
             opts.append(discord.SelectOption(
-                label=f"{sk}: {rank} -> {new_rank}  ({cost} XP)",
+                label=f"{sk}: {rank} → {new_rank}  ({cost} XP)",
                 value=f"raise:{sk}",
                 description=f"{'Can afford' if can else 'Not enough XP'} (you have {avail:g})",
             ))
@@ -10102,7 +10103,7 @@ async def spell_view(interaction: discord.Interaction, name: str) -> None:
     member="Cast as another player's character [Fortune]",
     target="Combatant the spell is aimed at: Enables Request-condition buttons for Dazed, Prone, etc.",
 )
-@app_commands.autocomplete(name=_spell_autocomplete, target=cog_combat._combatant_autocomplete)
+@app_commands.autocomplete(name=_spell_autocomplete, target=cog_combat._combatant_autocomplete, attacker_npc=_npc_autocomplete)
 async def spell_cast(
     interaction: discord.Interaction,
     name: str,
@@ -10422,7 +10423,7 @@ async def spell_interrupt(
     attacker_npc="Importune as a stored NPC [Fortune]",
     member="Importune as another player's character [Fortune]",
 )
-@app_commands.autocomplete(name=_spell_autocomplete)
+@app_commands.autocomplete(name=_spell_autocomplete, attacker_npc=_npc_autocomplete)
 async def spell_importune(
     interaction: discord.Interaction,
     name: str,
@@ -10605,7 +10606,7 @@ async def spell_importune(
     member="Player whose character to check (omit for caller's).",
     is_npc="Target is an NPC.",
 )
-@app_commands.autocomplete(name=_npc_autocomplete)
+@app_commands.autocomplete(name=_any_character_autocomplete)
 async def taint_command(
     interaction: discord.Interaction,
     name: str | None = None,
@@ -10728,7 +10729,7 @@ async def craft_extended(
         if not ok:
             void_line = f"{reason_block}"
         elif c.current_void_points <= 0:
-            void_line = f"No Void Points to spend (0/{c.max_void_points})"
+            void_line = f"No Void Points to spend (0/{taint.void_point_cap(c)})"
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
@@ -10742,7 +10743,7 @@ async def craft_extended(
             if not ok:
                 void_line = f"{reason_block}"
             elif c.current_void_points <= 0:
-                void_line = f"No Void Points to spend (0/{c.max_void_points})"
+                void_line = f"No Void Points to spend (0/{taint.void_point_cap(c)})"
             else:
                 c.current_void_points -= 1
                 skill_rank = 1
@@ -10861,7 +10862,7 @@ async def spell_damage(
     change="Influence points to add (negative to subtract).",
     reason="Why the influence changed.",
 )
-@app_commands.autocomplete(name=_npc_autocomplete)
+@app_commands.autocomplete(name=_any_character_autocomplete)
 async def influence_track(
     interaction: discord.Interaction,
     name: str,
@@ -11981,8 +11982,8 @@ async def _setup_server_inner(
     _EXPECTED_CATEGORIES: dict[str, set[str]] = {
         "Lobby": {"lore", "welcome", "character-submission"},
         "Out of Character": {"general", "off-topic", "announcements", "rules-reference"},
-        "IC Information": {"calendar"},
-        "Staff Members": {"dm-discussion", "approvals"},
+        "IC Information": {"calendar", "weather", "public-notices"},
+        "Staff Members": {"dm-discussion", "approvals", "damage-approvals", "xp-log"},
     }
     deleted_dupes: list[str] = []
     deleted_channels: list[str] = []

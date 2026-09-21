@@ -20,7 +20,7 @@ from l5r_rules import (
     advantage_effects, advantages, combat, condition_effects, creature,
     declarable_techniques, enums,
     kata, kata_effects, kiho, kiho_effects, mass_battle, skill_mastery,
-    spells, stats, tattoo_catalog, tattoo_effects, technique_effects,
+    spells, stats, taint, tattoo_catalog, tattoo_effects, technique_effects,
 )
 from l5r_rules.character import Character
 
@@ -240,7 +240,7 @@ class _VoidWoundReduceView(discord.ui.View):
             return
         if c.current_void_points <= 0:
             await interaction.response.send_message(
-                f"**{c.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True,
+                f"**{c.name}** has no Void Points (0/{taint.void_point_cap(c)}).", ephemeral=True,
             )
             self._used = False
             return
@@ -261,7 +261,7 @@ class _VoidWoundReduceView(discord.ui.View):
         await interaction.response.edit_message(
             content=(
                 f"**{c.name}** spent a Void Point: **-{void_saved}** wounds "
-                f"({c.wounds_taken} wounds, **{new_level}**, {c.current_void_points}/{c.max_void_points} VP)"
+                f"({c.wounds_taken} wounds, **{new_level}**, {c.current_void_points}/{taint.void_point_cap(c)} VP)"
             ),
             view=self,
         )
@@ -1716,7 +1716,7 @@ class CombatBoardView(views_base.PersistentView):
             return
         if c.current_void_points <= 0:
             await interaction.response.send_message(
-                f"**{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True,
+                f"**{cb.name}** has no Void Points (0/{taint.void_point_cap(c)}).", ephemeral=True,
             )
             return
         if not cb.consume_once("void_combat", "round"):
@@ -1731,7 +1731,7 @@ class CombatBoardView(views_base.PersistentView):
         guild = str(self.guild_id)
         _d.save_encounter(guild, enc)
         await interaction.response.send_message(
-            f"**{cb.name}**: +10 Armor TN this Round ({c.current_void_points}/{c.max_void_points} VP left).",
+            f"**{cb.name}**: +10 Armor TN this Round ({c.current_void_points}/{taint.void_point_cap(c)} VP left).",
             ephemeral=True,
         )
         ch = _d.bot_client.get_channel(self.channel_id)
@@ -1741,7 +1741,7 @@ class CombatBoardView(views_base.PersistentView):
                 color=discord.Color.purple(),
                 description=(
                     f"**+10 Armor TN** for this Round\n"
-                    f"Armor TN bonus: +{cb.void_armor_tn_bonus} | VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+                    f"Armor TN bonus: +{cb.void_armor_tn_bonus} | VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
                     f"Clears at the start of the next Round."
                 ),
             )
@@ -1781,7 +1781,7 @@ class CombatBoardView(views_base.PersistentView):
             return
         if c.current_void_points <= 0:
             await interaction.response.send_message(
-                f"**{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True,
+                f"**{cb.name}** has no Void Points (0/{taint.void_point_cap(c)}).", ephemeral=True,
             )
             return
         if not cb.consume_once("void_combat", "round"):
@@ -1800,7 +1800,7 @@ class CombatBoardView(views_base.PersistentView):
         guild = str(self.guild_id)
         _d.save_encounter(guild, enc)
         await interaction.response.send_message(
-            f"**{cb.name}**: +10 Initiative ({c.current_void_points}/{c.max_void_points} VP left).",
+            f"**{cb.name}**: +10 Initiative ({c.current_void_points}/{taint.void_point_cap(c)} VP left).",
             ephemeral=True,
         )
         ch = _d.bot_client.get_channel(self.channel_id)
@@ -1810,7 +1810,7 @@ class CombatBoardView(views_base.PersistentView):
                 color=discord.Color.purple(),
                 description=(
                     f"**+10 Initiative** for the skirmish\n"
-                    f"Effective initiative: **{cb.effective_initiative}** | VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+                    f"Effective initiative: **{cb.effective_initiative}** | VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
                     f"Persists until the encounter ends."
                 ),
             )
@@ -1850,7 +1850,7 @@ class CombatBoardView(views_base.PersistentView):
             return
         if c.current_void_points <= 0:
             await interaction.response.send_message(
-                f"**{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True,
+                f"**{cb.name}** has no Void Points (0/{taint.void_point_cap(c)}).", ephemeral=True,
             )
             return
         if "void_combat" in cb.used_this_round:
@@ -2569,7 +2569,7 @@ class _BoardVoidSwapSelect(discord.ui.View):
             return
         if c.current_void_points <= 0:
             await interaction.response.edit_message(
-                content=f"**{cb_s.name}** has no Void Points (0/{c.max_void_points}).", view=None,
+                content=f"**{cb_s.name}** has no Void Points (0/{taint.void_point_cap(c)}).", view=None,
             )
             return
         if not cb_s.consume_once("void_combat", "round"):
@@ -2592,8 +2592,8 @@ class _BoardVoidSwapSelect(discord.ui.View):
         await interaction.response.edit_message(
             content=(
                 f"**{cb_s.name}** swapped initiative with **{cb_t.name}**\n"
-                f"{cb_s.name}: {old_s} -> {cb_s.effective_initiative} | "
-                f"{cb_t.name}: {old_t} -> {cb_t.effective_initiative}"
+                f"{cb_s.name}: {old_s} → {cb_s.effective_initiative} | "
+                f"{cb_t.name}: {old_t} → {cb_t.effective_initiative}"
             ),
             view=None,
         )
@@ -2604,9 +2604,9 @@ class _BoardVoidSwapSelect(discord.ui.View):
                 color=discord.Color.purple(),
                 description=(
                     f"**{cb_s.name}** exchanges Initiative with **{cb_t.name}**\n"
-                    f"{cb_s.name}: {old_s} -> **{cb_s.effective_initiative}** | "
-                    f"{cb_t.name}: {old_t} -> **{cb_t.effective_initiative}**\n"
-                    f"VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+                    f"{cb_s.name}: {old_s} → **{cb_s.effective_initiative}** | "
+                    f"{cb_t.name}: {old_t} → **{cb_t.effective_initiative}**\n"
+                    f"VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
                     f"Persists until the encounter ends."
                 ),
             )
@@ -4499,7 +4499,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             cap = stats.total_wound_capacity(c)
             tn = combat.armor_tn(c, cb.stance)
             pen_str = f" **{pen} penalty**" if pen else ""
-            vp = f"{c.current_void_points}/{c.max_void_points} VP"
+            vp = f"{c.current_void_points}/{taint.void_point_cap(c)} VP"
             conds = ", ".join(sorted(cb.conditions)) if cb.conditions else " "
             fd = f", FD+{cb.full_defense_bonus}" if cb.full_defense_bonus else ""
             v_atn = f", ATN+{cb.void_armor_tn_bonus}" if cb.void_armor_tn_bonus else ""
@@ -4906,7 +4906,7 @@ async def fight_status(interaction: discord.Interaction, member: discord.Member 
     level = stats.wound_level_name(c)
     lines = [
         f"Wounds **{c.wounds_taken}/{stats.total_wound_capacity(c)}** - **{level}** (penalty {stats.wound_penalty(c):+d} to rolls)",
-        f"Void **{c.current_void_points}/{c.max_void_points}**",
+        f"Void **{c.current_void_points}/{taint.void_point_cap(c)}**",
         f"Weapon **{c.equipped_weapon or 'katana'}**" + (f" · off-hand {c.off_hand_weapon}" if c.off_hand_weapon else ""),
     ]
     stance = cb.stance if cb else "attack"
@@ -5131,7 +5131,7 @@ async def combat_void_armor(interaction: discord.Interaction, combatant: str) ->
         await interaction.response.send_message(f"{reason}", ephemeral=True)
         return
     if c.current_void_points <= 0:
-        await interaction.response.send_message(f"**{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
+        await interaction.response.send_message(f"**{cb.name}** has no Void Points (0/{taint.void_point_cap(c)}).", ephemeral=True)
         return
     if not cb.consume_once("void_combat", "round"):
         await interaction.response.send_message(f"**{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
@@ -5146,7 +5146,7 @@ async def combat_void_armor(interaction: discord.Interaction, combatant: str) ->
         color=discord.Color.purple(),
         description=(
             f"**+10 Armor TN** for this Round\n"
-            f"Armor TN bonus: +{cb.void_armor_tn_bonus} · VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+            f"Armor TN bonus: +{cb.void_armor_tn_bonus} · VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
             f"Clears at the start of the next Round."
         ),
     )
@@ -5184,7 +5184,7 @@ async def combat_void_initiative(interaction: discord.Interaction, combatant: st
         await interaction.response.send_message(f"{reason}", ephemeral=True)
         return
     if c.current_void_points <= 0:
-        await interaction.response.send_message(f"**{cb.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
+        await interaction.response.send_message(f"**{cb.name}** has no Void Points (0/{taint.void_point_cap(c)}).", ephemeral=True)
         return
     if not cb.consume_once("void_combat", "round"):
         await interaction.response.send_message(f"**{cb.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
@@ -5203,7 +5203,7 @@ async def combat_void_initiative(interaction: discord.Interaction, combatant: st
         color=discord.Color.purple(),
         description=(
             f"**+10 Initiative** for the skirmish\n"
-            f"Effective initiative: **{cb.effective_initiative}** · VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+            f"Effective initiative: **{cb.effective_initiative}** · VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
             f"Persists until the encounter ends."
         ),
     )
@@ -5254,7 +5254,7 @@ async def combat_void_swap(interaction: discord.Interaction, spender: str, targe
         await interaction.response.send_message(f"{reason}", ephemeral=True)
         return
     if c.current_void_points <= 0:
-        await interaction.response.send_message(f"**{cb_s.name}** has no Void Points (0/{c.max_void_points}).", ephemeral=True)
+        await interaction.response.send_message(f"**{cb_s.name}** has no Void Points (0/{taint.void_point_cap(c)}).", ephemeral=True)
         return
     if not cb_s.consume_once("void_combat", "round"):
         await interaction.response.send_message(f"**{cb_s.name}** has already spent a Void Point this Round (one per Round limit).", ephemeral=True)
@@ -5278,7 +5278,7 @@ async def combat_void_swap(interaction: discord.Interaction, spender: str, targe
             f"**{cb_s.name}** exchanges Initiative with **{cb_t.name}**\n"
             f"{cb_s.name}: {old_s} → **{cb_s.effective_initiative}** · "
             f"{cb_t.name}: {old_t} → **{cb_t.effective_initiative}**\n"
-            f"VP remaining: {c.current_void_points}/{c.max_void_points}\n"
+            f"VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
             f"Persists for the remainder of the skirmish."
         ),
     )
@@ -5506,7 +5506,7 @@ class GrappleBoardView(views_base.PersistentView):
         _d.save_encounter(self.guild_id, enc)
         embed = discord.Embed(
             title=f"{cb_ctrl.name} throws {cb_def.name}",
-            description="Both are now **Prone**. The grapple ends.\nStanding up is a Simple Action.",
+            description=f"**{cb_def.name}** is now **Prone**. The grapple ends.\nStanding up is a Simple Action.",
             color=discord.Color.orange(),
         )
         embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
@@ -5520,7 +5520,7 @@ class GrappleBoardView(views_base.PersistentView):
         self._disable()
         await _d.combat_log(
             self.guild_id,
-            f"Grapple Throw: {cb_ctrl.name} throws {cb_def.name} (both prone, grapple ends)",
+            f"Grapple Throw: {cb_ctrl.name} throws {cb_def.name} ({cb_def.name} prone, grapple ends)",
         )
 
     @discord.ui.button(label="Pin", style=discord.ButtonStyle.danger, row=1)
@@ -6036,14 +6036,14 @@ async def grapple_throw(
     embed = discord.Embed(
         title=f"{thrower_cb.name} throws {target_cb.name}",
         description=(
-            f"Both are now **Prone**. The grapple ends.\n"
+            f"**{target_cb.name}** is now **Prone**. The grapple ends.\n"
             f"Standing up is a Simple Action."
         ),
         color=discord.Color.orange(),
     )
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
-    await _d.combat_log(guild, f"Grapple Throw: {thrower_cb.name} throws {target_cb.name} (both prone, grapple ends)")
+    await _d.combat_log(guild, f"Grapple Throw: {thrower_cb.name} throws {target_cb.name} ({target_cb.name} prone, grapple ends)")
 
 
 @combat_grapple.command(name="pin", description="Grapple Pin: Immobilize the target (Complex Action, controller only). [Fortune]")
@@ -6859,9 +6859,9 @@ class DuelBoardView(views_base.PersistentView):
 
         focus_bonus = ""
         if self.a_focus_bonus:
-            focus_bonus = f"**{ca.name}** exceeded by {diff_ab} -> **+1k1** on Focus roll."
+            focus_bonus = f"**{ca.name}** exceeded by {diff_ab} → **+1k1** on Focus roll."
         elif self.b_focus_bonus:
-            focus_bonus = f"**{cb_char.name}** exceeded by {-diff_ab} -> **+1k1** on Focus roll."
+            focus_bonus = f"**{cb_char.name}** exceeded by {-diff_ab} → **+1k1** on Focus roll."
 
         embed = discord.Embed(title="Iaijutsu Duel: Assessment", color=discord.Color.gold())
 
@@ -6890,7 +6890,7 @@ class DuelBoardView(views_base.PersistentView):
         embed.add_field(
             name=f"{ca.name}: Assessment",
             value=(
-                f"{res_a['rolled']}k{res_a['kept']} -> **{res_a['total']}** vs TN **{res_a['tn']}**"
+                f"{res_a['rolled']}k{res_a['kept']} → **{res_a['total']}** vs TN **{res_a['tn']}**"
                 f": {'**SUCCESS**' if res_a['success'] else '**FAILED**'}"
                 + _duel_notes(wp_a, tech_notes_a)
                 + "\n" + _reveal_text(res_a, cb_char)
@@ -6900,7 +6900,7 @@ class DuelBoardView(views_base.PersistentView):
         embed.add_field(
             name=f"{cb_char.name}: Assessment",
             value=(
-                f"{res_b['rolled']}k{res_b['kept']} -> **{res_b['total']}** vs TN **{res_b['tn']}**"
+                f"{res_b['rolled']}k{res_b['kept']} → **{res_b['total']}** vs TN **{res_b['tn']}**"
                 f": {'**SUCCESS**' if res_b['success'] else '**FAILED**'}"
                 + _duel_notes(wp_b, tech_notes_b)
                 + "\n" + _reveal_text(res_b, ca)
@@ -7001,12 +7001,12 @@ class DuelBoardView(views_base.PersistentView):
         b_notes = f" ({', '.join(b_mods)})" if b_mods else ""
         embed.add_field(
             name=f"{ca.name}: Focus (Iaijutsu/Void)",
-            value=f"{result['a_rolled']}k{result['a_kept']}{a_notes} -> **{result['a_total']}**",
+            value=f"{result['a_rolled']}k{result['a_kept']}{a_notes} → **{result['a_total']}**",
             inline=True,
         )
         embed.add_field(
             name=f"{cb_char.name}: Focus (Iaijutsu/Void)",
-            value=f"{result['b_rolled']}k{result['b_kept']}{b_notes} -> **{result['b_total']}**",
+            value=f"{result['b_rolled']}k{result['b_kept']}{b_notes} → **{result['b_total']}**",
             inline=True,
         )
 
@@ -7023,7 +7023,7 @@ class DuelBoardView(views_base.PersistentView):
             fr = result["free_raises"]
             fr_text = f" with **{fr} Free Raise{'s' if fr != 1 else ''}**" if fr else ""
             outcome = (
-                f"**{winner}** wins Focus by {diff} -> strikes first{fr_text}.\n"
+                f"**{winner}** wins Focus by {diff} → strikes first{fr_text}.\n"
                 f"**{loser}** may strike after if still alive."
             )
         embed.add_field(name="Result", value=outcome, inline=False)
@@ -7108,7 +7108,7 @@ class DuelBoardView(views_base.PersistentView):
             color=discord.Color.red() if hit else discord.Color.greyple(),
         )
         roll_text = (
-            f"Iaijutsu/Reflexes: {result['rolled']}k{result['kept']} -> **{result['total']}**"
+            f"Iaijutsu/Reflexes: {result['rolled']}k{result['kept']} → **{result['total']}**"
             f" vs TN **{result['tn']}**: {'**HIT**' if hit else '**MISS**'}"
         )
         notes = []
@@ -7204,7 +7204,7 @@ class DuelBoardView(views_base.PersistentView):
                 _d.tally(self.channel_id, atk.name, "hits")
 
             roll_text = (
-                f"Iaijutsu/Reflexes: {result['rolled']}k{result['kept']} -> **{result['total']}**"
+                f"Iaijutsu/Reflexes: {result['rolled']}k{result['kept']} → **{result['total']}**"
                 f" vs TN **{result['tn']}**: {'**HIT**' if hit else '**MISS**'}"
             )
             notes = []
@@ -7260,7 +7260,7 @@ class DuelBoardView(views_base.PersistentView):
         for atk_name, tgt_name, dv in damage_views:
             if ch:
                 dv_msg = await ch.send(
-                    content=f"{_d.dm_ping(interaction.guild)}Authorize damage: **{atk_name}** -> **{tgt_name}**",
+                    content=f"{_d.dm_ping(interaction.guild)}Authorize damage: **{atk_name}** → **{tgt_name}**",
                     view=dv, allowed_mentions=_PING_MENTIONS,
                 )
                 await dv.persist(dv_msg)

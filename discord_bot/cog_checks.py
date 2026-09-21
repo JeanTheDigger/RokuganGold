@@ -140,7 +140,7 @@ def _try_spend_void(
         if not ok:
             void_line = f"Void: {reason}"
         elif c.current_void_points <= 0:
-            void_line = f"Void: No Void Points to spend (0/{c.max_void_points})"
+            void_line = f"Void: No Void Points to spend (0/{taint.void_point_cap(c)})"
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
@@ -154,7 +154,7 @@ def _try_spend_void(
             if not ok:
                 void_line = f"Void: {reason}"
             elif c.current_void_points <= 0:
-                void_line = f"Void: No Void Points to spend (0/{c.max_void_points})"
+                void_line = f"Void: No Void Points to spend (0/{taint.void_point_cap(c)})"
             else:
                 c.current_void_points -= 1
                 sk = 1

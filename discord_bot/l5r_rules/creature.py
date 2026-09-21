@@ -118,7 +118,7 @@ def randomize_stats(cr: Creature) -> list[str]:
         new_val = max(1, base + delta)
         if new_val != base:
             setattr(cr, ring, new_val)
-            changes.append(f"{ring.capitalize()}: {base} -> {new_val}")
+            changes.append(f"{ring.capitalize()}: {base} → {new_val}")
 
     for tname, tval in list(cr.traits.items()):
         if tval <= 0:
@@ -129,7 +129,7 @@ def randomize_stats(cr: Creature) -> list[str]:
         new_val = max(1, tval + delta)
         if new_val != tval:
             cr.traits[tname] = new_val
-            changes.append(f"{tname}: {tval} -> {new_val}")
+            changes.append(f"{tname}: {tval} → {new_val}")
 
     for label, r_attr, k_attr in [
         ("Initiative", "initiative_rolled", "initiative_kept"),
@@ -147,14 +147,14 @@ def randomize_stats(cr: Creature) -> list[str]:
         if new_r != rolled or new_k != kept:
             setattr(cr, r_attr, new_r)
             setattr(cr, k_attr, new_k)
-            changes.append(f"{label}: {rolled}k{kept} -> {new_r}k{new_k}")
+            changes.append(f"{label}: {rolled}k{kept} → {new_r}k{new_k}")
 
     base_atn = cr.armor_tn
     atn_delta = random.choice([-5, 0, 5])
     if atn_delta != 0:
         cr.armor_tn = max(5, base_atn + atn_delta)
         if cr.armor_tn != base_atn:
-            changes.append(f"Armor TN: {base_atn} -> {cr.armor_tn}")
+            changes.append(f"Armor TN: {base_atn} → {cr.armor_tn}")
 
     base_red = cr.reduction
     red_delta = random.choice([-1, 0, 1])
@@ -162,7 +162,7 @@ def randomize_stats(cr: Creature) -> list[str]:
         new_red = max(0, base_red + red_delta)
         if new_red != base_red:
             cr.reduction = new_red
-            changes.append(f"Reduction: {base_red} -> {cr.reduction}")
+            changes.append(f"Reduction: {base_red} → {cr.reduction}")
 
     if cr.wound_thresholds:
         factor = random.uniform(0.85, 1.15)
@@ -170,7 +170,7 @@ def randomize_stats(cr: Creature) -> list[str]:
             old_dead = cr.wounds_dead
             cr.wound_thresholds = [max(1, round(t * factor)) for t in cr.wound_thresholds]
             cr.wounds_dead = max(cr.wound_thresholds[-1] + 1, round(old_dead * factor))
-            changes.append(f"Wounds Dead: {old_dead} -> {cr.wounds_dead}")
+            changes.append(f"Wounds Dead: {old_dead} → {cr.wounds_dead}")
 
     return changes
 
