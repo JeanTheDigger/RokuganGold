@@ -360,9 +360,8 @@ async def letter_list(
 
     lines: list[str] = []
     for lt in letters:
-        direction = "to" if lt["sender"] != lt.get("_viewer", "") else "from"
         lines.append(
-            f"**#{lt['id']}** {lt['sender']} {direction} {lt['recipient']} "
+            f"**#{lt['id']}** {lt['sender']} → {lt['recipient']} "
             f"- {lt['preview']}"
         )
 

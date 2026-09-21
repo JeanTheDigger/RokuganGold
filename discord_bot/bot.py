@@ -2137,6 +2137,9 @@ def _materialize_character(state: dict) -> Character:
         if adv["name"] not in char.advantages:
             char.advantages.append(adv["name"])
 
+    if state.get("different_school") and "Different School" not in char.advantages:
+        char.advantages.append("Different School")
+
     for dis in state.get("disadvantages_chosen", []):
         if dis["name"] not in char.disadvantages:
             char.disadvantages.append(dis["name"])
@@ -2339,7 +2342,8 @@ class _TraitRaiseSelect(discord.ui.Select):
             await interaction.response.defer()
             return
         purchases = self.state.setdefault("trait_purchases", {})
-        purchases[chosen] = purchases.get(chosen, 0) + 1
+        prev = purchases.pop(chosen, 0)
+        purchases[chosen] = prev + 1
         _, remaining = _calc_chargen_xp(self.state)
         if remaining < 0:
             purchases[chosen] -= 1
@@ -2790,7 +2794,8 @@ class _SkillSelect(discord.ui.Select):
             await interaction.response.defer()
             return
         purchases = self.state.setdefault("skill_purchases", {})
-        purchases[chosen] = purchases.get(chosen, 0) + 1
+        prev = purchases.pop(chosen, 0)
+        purchases[chosen] = prev + 1
         _, remaining = _calc_chargen_xp(self.state)
         if remaining < 0:
             purchases[chosen] -= 1
@@ -3699,8 +3704,6 @@ async def sheet_delete(
     guild = str(interaction.guild_id)
     owner_target = interaction.user
     if member is not None and member.id != interaction.user.id:
-        if not await _require_dm_role(interaction):
-            return
         owner_target = member
     rec = store.get_by_name(guild, str(owner_target.id), name)
     if rec is None and member is None and _is_dm(interaction):
@@ -3976,6 +3979,9 @@ async def sheet_trait(
         await interaction.response.send_message(err, ephemeral=True)
         return
     rec.character.set_trait(trait.value, value)
+    if trait.value == "void":
+        rec.character.max_void_points = rec.character.void_ring
+        rec.character.current_void_points = min(rec.character.current_void_points, rec.character.max_void_points)
     rank_msg = _check_insight_rank_advance(rec.character)
     changed = store.save(rec, note="stat trait")
     await _audit_stat(interaction, rec, "stat trait", changed)
@@ -5629,9 +5635,10 @@ async def void_spend(
             await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
             return
     c = rec.character
+    vp_cap = taint.void_point_cap(c)
     if c.current_void_points <= 0:
         await interaction.response.send_message(
-            f"**{c.name}** has no Void Points remaining (0/{c.max_void_points}).", ephemeral=True
+            f"**{c.name}** has no Void Points remaining (0/{vp_cap}).", ephemeral=True
         )
         return
     c.current_void_points -= 1
@@ -5640,7 +5647,7 @@ async def void_spend(
     embed = discord.Embed(
         title=f"{c.name}: Void Point Spent",
         color=discord.Color.purple(),
-        description=f"{reason}\nVP remaining: **{c.current_void_points}/{c.max_void_points}**",
+        description=f"{reason}\nVP remaining: **{c.current_void_points}/{vp_cap}**",
     )
     embed.set_footer(text=f"Spent by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
@@ -5738,7 +5745,7 @@ async def void_refresh(
                 name="Result",
                 value=(
                     f"**{total}** vs TN {meditation_tn}: **Success!** Recovers 1 VP.\n"
-                    f"VP: **{c.current_void_points}/{c.max_void_points}**"
+                    f"VP: **{c.current_void_points}/{vp_cap}**"
                 ),
                 inline=False,
             )
@@ -5747,7 +5754,7 @@ async def void_refresh(
                 name="Result",
                 value=(
                     f"**{total}** vs TN {meditation_tn}: **Fails.** No VP recovered.\n"
-                    f"VP: **{c.current_void_points}/{c.max_void_points}**"
+                    f"VP: **{c.current_void_points}/{vp_cap}**"
                 ),
                 inline=False,
             )
@@ -6122,6 +6129,9 @@ async def npc_trait(
         await interaction.response.send_message(err, ephemeral=True)
         return
     rec.character.set_trait(trait.value, value)
+    if trait.value == "void":
+        rec.character.max_void_points = rec.character.void_ring
+        rec.character.current_void_points = min(rec.character.current_void_points, rec.character.max_void_points)
     store.save(rec)
     label = "Void" if trait.value == "void" else trait.value.capitalize()
     await interaction.response.send_message(
@@ -7194,12 +7204,12 @@ class DmDamageView(_DisableableView):
         self.amount = max(0, self.amount - 10)
         self.void_reduced = True
         store.save(rec, note="Void Point spent (damage reduction)")
-        # Re-persist so the reduction survives a restart before Apply/Deny.
         self._persist_args.update(amount=self.amount, void_reduced=True)
         await self.persist(interaction.message)
+        vp_cap = taint.void_point_cap(c)
         await interaction.response.send_message(
             f"**{self.target_name}** spends 1 VP → damage reduced to **{self.amount}**. "
-            f"({c.current_void_points}/{c.max_void_points} VP left). "
+            f"({c.current_void_points}/{vp_cap} VP left). "
             f"DM: Now click Apply Damage or Deny."
         )
 
@@ -8834,7 +8844,7 @@ def _kata_school_ok(c: Character, schools_str: str) -> tuple[bool, str]:
             clan_req = parts[1]
             if c.clan.lower() != clan_req.lower():
                 return False, f"requires {clan_req} clan (you are {c.clan})"
-            if "bushi" not in c.school_type.lower():
+            if parts[2].lower() == "bushi" and "bushi" not in c.school_type.lower():
                 return False, f"requires a {clan_req} Bushi school (you are {c.school_type})"
             return True, ""
         if len(parts) == 2 and parts[1].lower() == "bushi":
@@ -8859,6 +8869,8 @@ async def xp_kata(
     mastery_level: app_commands.Range[int, 1, 10] | None = None,
     member: discord.Member | None = None,
 ) -> None:
+    if not await _require_guild(interaction):
+        return
     kata_entry = kata.get(name)
     ml = mastery_level if mastery_level is not None else (kata_entry["mastery"] if kata_entry else None)
     if ml is None:
@@ -8897,6 +8909,8 @@ async def xp_kiho(
     shugenja: bool = False,
     member: discord.Member | None = None,
 ) -> None:
+    if not await _require_guild(interaction):
+        return
     if non_brotherhood and shugenja:
         await interaction.response.send_message("Pick one: `non_brotherhood` or `shugenja`, not both.", ephemeral=True)
         return
@@ -8948,6 +8962,8 @@ async def xp_spell(
     mastery_level: app_commands.Range[int, 1, 10] | None = None,
     member: discord.Member | None = None,
 ) -> None:
+    if not await _require_guild(interaction):
+        return
     spell = spells.get(name)
     ml = mastery_level if mastery_level is not None else (spell["mastery"] if spell else None)
     if ml is None:
@@ -10608,9 +10624,7 @@ async def taint_command(
     elif member is not None:
         rec = store.get_active(guild, str(member.id))
     elif name:
-        rec = store.get_by_name(guild, NPC_OWNER, name)
-        if rec is None:
-            rec = store.get_active(guild, str(interaction.user.id))
+        rec = _find_any_character(guild, name)
     else:
         rec = store.get_active(guild, str(interaction.user.id))
     if rec is None:
@@ -10793,7 +10807,8 @@ async def spell_damage(
         title=reason or "Spell Damage",
         color=discord.Color.dark_magenta(),
     )
-    embed.add_field(name="Damage Roll", value=f"({rolled}k{kept}{f'+{bonus}' if bonus else ''}) = **{total}**", inline=False)
+    bonus_str = f"{bonus:+d}" if bonus else ""
+    embed.add_field(name="Damage Roll", value=f"({rolled}k{kept}{bonus_str}) = **{total}**", inline=False)
     embed.add_field(name="Dice", value=_format_dice(result)[:1024], inline=False)
     if target:
         guild = str(interaction.guild_id)

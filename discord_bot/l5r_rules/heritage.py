@@ -165,6 +165,8 @@ def apply_heritage(char: Character, result: dict) -> list[str]:
         notes.append(f"Status {grants['status']:+.1f}")
     if "void" in grants:
         char.void_ring += grants["void"]
+        char.max_void_points = char.void_ring
+        char.current_void_points = char.void_ring
         notes.append(f"+{grants['void']} Void")
     if "willpower" in grants:
         char.willpower += grants["willpower"]

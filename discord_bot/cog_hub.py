@@ -97,7 +97,9 @@ class CharacterHub(discord.ui.View):
         return fresh
 
     async def refresh(self, interaction: discord.Interaction) -> None:
-        self.reload()
+        if self.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
         self.build()
         await interaction.response.edit_message(content=None, embed=hub_embed(interaction, self.rec), view=self)
 

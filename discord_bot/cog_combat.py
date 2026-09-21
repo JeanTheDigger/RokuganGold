@@ -3474,7 +3474,7 @@ async def _execute_attack(
                 decl_ignore_wound = True
                 parts.append("ignore wound penalties")
             if efx.get("atn_bonus"):
-                def_kata_bonus += efx["atn_bonus"]
+                tn += efx["atn_bonus"]
                 parts.append(f"+{efx['atn_bonus']} ATN")
             if efx.get("reduction_bonus"):
                 parts.append(f"+{efx['reduction_bonus']} Reduction")
@@ -3494,9 +3494,7 @@ async def _execute_attack(
     if decl_ignore_stance_atn and target_creature_rec is None and target_rec is not None:
         stance_atn_adj = 0
         d_char = target_rec.character
-        if d_stance == "full_attack":
-            stance_atn_adj = 10
-        elif d_stance == "defense":
+        if d_stance == "defense":
             stance_atn_adj = -(stats.ring_value(d_char, "air") + d_char.skills.get("Defense", 0))
         if stance_atn_adj:
             tn += stance_atn_adj
@@ -5449,7 +5447,6 @@ class GrappleBoardView(views_base.PersistentView):
             )
             return
         cb_ctrl.conditions.discard("grappled")
-        cb_ctrl.conditions.add("prone")
         cb_def.conditions.discard("grappled")
         cb_def.conditions.discard("pinned")
         cb_def.conditions.add("prone")
@@ -5978,7 +5975,6 @@ async def grapple_throw(
             f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
         return
     thrower_cb.conditions.discard("grappled")
-    thrower_cb.conditions.add("prone")
     target_cb.conditions.discard("grappled")
     target_cb.conditions.discard("pinned")
     target_cb.conditions.add("prone")
@@ -7595,12 +7591,11 @@ async def combat_init(
         await interaction.response.send_message(f"No combatant **{name}**.", ephemeral=True)
         return
     old = cb.initiative
+    cur = enc.current() if enc.started else None
     cb.initiative = value
     enc._sort()
-    if enc.started:
-        cur = enc.current()
-        if cur is not None:
-            enc.turn_index = enc.combatants.index(cur)
+    if cur is not None:
+        enc.turn_index = enc.combatants.index(cur)
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
