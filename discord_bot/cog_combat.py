@@ -1089,6 +1089,32 @@ class DamageView(views_base.PersistentView):
             trait_ovr, trait_ovr_name = to_val, to_name
             notes.append(to_note)
 
+        if atk_combatant and atk_combatant.declared_techniques:
+            for tkey, tentry in list(atk_combatant.declared_techniques.items()):
+                if tentry.get("manual"):
+                    continue
+                efx = tentry.get("effects", {})
+                if not efx:
+                    continue
+                t_display = tentry.get("display", tkey)
+                parts: list[str] = []
+                if efx.get("atk_rolled"):
+                    bonus_rolled += efx["atk_rolled"]
+                    parts.append(f"+{efx['atk_rolled']}k0 atk")
+                if efx.get("atk_kept"):
+                    bonus_kept += efx["atk_kept"]
+                    parts.append(f"+0k{efx['atk_kept']} atk")
+                if efx.get("atk_flat"):
+                    atk_flat += efx["atk_flat"]
+                    parts.append(f"+{efx['atk_flat']} atk flat")
+                if efx.get("ignore_wound_penalties"):
+                    base_wp = stats.wound_penalty(attacker)
+                    if base_wp:
+                        atk_flat -= base_wp
+                        parts.append("ignore wound penalties")
+                if parts:
+                    notes.append(f"{t_display}: {', '.join(parts)}")
+
         outcome = combat.resolve_attack(
             attacker, self.weapon, tn, 0, _d.engine,
             attacker_stance=a_stance,
@@ -1177,6 +1203,32 @@ class DamageView(views_base.PersistentView):
         if to_val is not None:
             trait_ovr, trait_ovr_name = to_val, to_name
             notes.append(to_note)
+
+        if atk_combatant and atk_combatant.declared_techniques:
+            for tkey, tentry in list(atk_combatant.declared_techniques.items()):
+                if tentry.get("manual"):
+                    continue
+                efx = tentry.get("effects", {})
+                if not efx:
+                    continue
+                t_display = tentry.get("display", tkey)
+                parts: list[str] = []
+                if efx.get("atk_rolled"):
+                    bonus_rolled += efx["atk_rolled"]
+                    parts.append(f"+{efx['atk_rolled']}k0 atk")
+                if efx.get("atk_kept"):
+                    bonus_kept += efx["atk_kept"]
+                    parts.append(f"+0k{efx['atk_kept']} atk")
+                if efx.get("atk_flat"):
+                    atk_flat += efx["atk_flat"]
+                    parts.append(f"+{efx['atk_flat']} atk flat")
+                if efx.get("ignore_wound_penalties"):
+                    base_wp = stats.wound_penalty(attacker)
+                    if base_wp:
+                        atk_flat -= base_wp
+                        parts.append("ignore wound penalties")
+                if parts:
+                    notes.append(f"{t_display}: {', '.join(parts)}")
 
         outcome = combat.resolve_attack(
             attacker, self.weapon, tn, 0, _d.engine,

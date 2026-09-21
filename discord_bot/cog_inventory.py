@@ -277,6 +277,8 @@ class InventoryPanel(discord.ui.View):
             await self.render(interaction)
             return
         c.off_hand_weapon = "" if off == c.equipped_weapon else off
+        if _is_arrow(c.equipped_weapon or "") and not _is_bow(c.off_hand_weapon or ""):
+            c.equipped_weapon = ""
         msg = f"Off hand: **{c.off_hand_weapon.replace('_', ' ') or 'nothing'}**." if off != c.equipped_weapon else "That weapon is already in the main hand."
         await self.commit(interaction, msg, "wield")
 

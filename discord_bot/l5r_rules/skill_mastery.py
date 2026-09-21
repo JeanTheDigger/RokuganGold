@@ -158,10 +158,10 @@ def defender_armor_tn_bonus(defender: Character) -> tuple[int, list[str]]:
     rank = defender.skills.get("War Fan", 0)
     bonus = 0
     notes: list[str] = []
-    if rank >= 5:
-        bonus += 1; notes.append("War Fan R5 +1 Armor TN")
     if rank >= 7:
         bonus += 3; notes.append("War Fan R7 +3 Armor TN")
+    elif rank >= 5:
+        bonus += 1; notes.append("War Fan R5 +1 Armor TN")
     return bonus, notes
 
 
