@@ -11911,6 +11911,8 @@ cog_combat.init(
     weapon_autocomplete=_weapon_autocomplete,
     creature_instance_autocomplete=_creature_instance_autocomplete,
     category_autocomplete=_category_autocomplete,
+    activate_kata=_activate_kata,
+    activate_kiho=_activate_kiho,
 )
 
 cog_inventory.init(

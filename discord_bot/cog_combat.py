@@ -56,6 +56,8 @@ class _Deps:
     weapon_autocomplete: object
     creature_instance_autocomplete: object
     category_autocomplete: object
+    activate_kata: object
+    activate_kiho: object
 
 
 _d = _Deps()
@@ -90,6 +92,8 @@ def init(
     weapon_autocomplete,
     creature_instance_autocomplete,
     category_autocomplete,
+    activate_kata,
+    activate_kiho,
 ) -> None:
     _d.store = store
     _d.engine = engine
@@ -117,6 +121,8 @@ def init(
     _d.weapon_autocomplete = weapon_autocomplete
     _d.creature_instance_autocomplete = creature_instance_autocomplete
     _d.category_autocomplete = category_autocomplete
+    _d.activate_kata = activate_kata
+    _d.activate_kiho = activate_kiho
 
     # Wire autocompletes programmatically (injected functions can't be used in decorators)
     attack.autocomplete("attacker_npc")(npc_autocomplete)
@@ -1790,7 +1796,105 @@ class CombatBoardView(views_base.PersistentView):
             f"Swap **{cb.name}**'s initiative (currently {cb.effective_initiative}) with:", view=view, ephemeral=True,
         )
 
-    @discord.ui.button(label="Cast Spell", style=discord.ButtonStyle.blurple, row=3)
+    @discord.ui.button(label="Kata", style=discord.ButtonStyle.secondary, row=3)
+    async def kata_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        if not enc.started:
+            await interaction.response.send_message("Encounter has not started yet.", ephemeral=True)
+            return
+        cur = enc.current()
+        if cur is None:
+            await interaction.response.send_message("No current combatant.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        if not self._is_active_player(uid, enc) and not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"It is **{cur.name}**'s turn, not yours.", ephemeral=True,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cur)
+        if rec is None:
+            await interaction.response.send_message(
+                f"Cannot resolve sheet for **{cur.name}**.", ephemeral=True,
+            )
+            return
+        c = rec.character
+        if not c.katas:
+            await interaction.response.send_message(
+                f"**{c.name}** knows no Kata.", ephemeral=True,
+            )
+            return
+        active = (c.active_kata or "").lower()
+        options: list[discord.SelectOption] = []
+        if active:
+            options.append(discord.SelectOption(
+                label="Drop current Kata",
+                value="__drop__",
+                description=f"Deactivate {c.active_kata}",
+            ))
+        for k_name in c.katas[:24]:
+            is_active = k_name.lower() == active
+            options.append(discord.SelectOption(
+                label=k_name[:100],
+                value=k_name,
+                description="Currently active" if is_active else "Activate",
+                default=is_active,
+            ))
+        view = _BoardKataSelect(self.guild_id, self.channel_id, cur.name, options)
+        await interaction.response.send_message(
+            f"Select a Kata for **{cur.name}**:", view=view, ephemeral=True,
+        )
+
+    @discord.ui.button(label="Kiho", style=discord.ButtonStyle.secondary, row=3)
+    async def kiho_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        if not enc.started:
+            await interaction.response.send_message("Encounter has not started yet.", ephemeral=True)
+            return
+        cur = enc.current()
+        if cur is None:
+            await interaction.response.send_message("No current combatant.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        if not self._is_active_player(uid, enc) and not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"It is **{cur.name}**'s turn, not yours.", ephemeral=True,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cur)
+        if rec is None:
+            await interaction.response.send_message(
+                f"Cannot resolve sheet for **{cur.name}**.", ephemeral=True,
+            )
+            return
+        c = rec.character
+        if not c.kiho:
+            await interaction.response.send_message(
+                f"**{c.name}** knows no Kiho.", ephemeral=True,
+            )
+            return
+        active_lower = [a.lower() for a in getattr(c, "active_kiho", []) or []]
+        options: list[discord.SelectOption] = []
+        for k_name in c.kiho[:25]:
+            is_active = k_name.lower() in active_lower
+            options.append(discord.SelectOption(
+                label=k_name[:100],
+                value=k_name,
+                description="Active (select to deactivate)" if is_active else "Activate",
+                default=is_active,
+            ))
+        view = _BoardKihoSelect(self.guild_id, self.channel_id, cur.name, options)
+        await interaction.response.send_message(
+            f"Select a Kiho for **{cur.name}**:", view=view, ephemeral=True,
+        )
+
+    @discord.ui.button(label="Cast Spell", style=discord.ButtonStyle.blurple, row=4)
     async def cast_spell_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enc = self._get_enc()
         if enc is None:
@@ -2387,6 +2491,82 @@ class _BoardVoidSwapSelect(discord.ui.View):
             f"{c.current_void_points} VP left)"
         )
         await _refresh_board(enc, guild)
+
+
+class _BoardKataSelect(discord.ui.View):
+    def __init__(self, guild_id: str, channel_id: int, combatant_name: str,
+                 options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.combatant_name = combatant_name
+        self.kata_select.options = options
+
+    @discord.ui.select(placeholder="Choose Kata...")
+    async def kata_select(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        chosen = select.values[0]
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            await interaction.response.edit_message(content="No active encounter.", view=None)
+            return
+        cb = enc.find(self.combatant_name)
+        if cb is None:
+            await interaction.response.edit_message(
+                content=f"**{self.combatant_name}** is no longer in initiative.", view=None,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cb)
+        if rec is None:
+            await interaction.response.edit_message(
+                content=f"Cannot resolve sheet for **{self.combatant_name}**.", view=None,
+            )
+            return
+        kata_name = None if chosen == "__drop__" else chosen
+        ok, msg = _d.activate_kata(rec.character, kata_name)
+        if not ok:
+            await interaction.response.edit_message(content=msg, view=None)
+            return
+        _d.store.save(rec)
+        await interaction.response.edit_message(content=msg, view=None)
+
+
+class _BoardKihoSelect(discord.ui.View):
+    def __init__(self, guild_id: str, channel_id: int, combatant_name: str,
+                 options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.combatant_name = combatant_name
+        self.kiho_select.options = options
+
+    @discord.ui.select(placeholder="Choose Kiho...")
+    async def kiho_select(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        chosen = select.values[0]
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            await interaction.response.edit_message(content="No active encounter.", view=None)
+            return
+        cb = enc.find(self.combatant_name)
+        if cb is None:
+            await interaction.response.edit_message(
+                content=f"**{self.combatant_name}** is no longer in initiative.", view=None,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cb)
+        if rec is None:
+            await interaction.response.edit_message(
+                content=f"Cannot resolve sheet for **{self.combatant_name}**.", view=None,
+            )
+            return
+        c = rec.character
+        active_lower = [a.lower() for a in getattr(c, "active_kiho", []) or []]
+        is_active = chosen.lower() in active_lower
+        ok, msg = _d.activate_kiho(c, chosen, off=is_active)
+        if not ok:
+            await interaction.response.edit_message(content=msg, view=None)
+            return
+        _d.store.save(rec)
+        await interaction.response.edit_message(content=msg, view=None)
 
 
 async def _refresh_board(enc: encounter.Encounter, guild_id: str) -> None:
