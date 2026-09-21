@@ -5801,7 +5801,7 @@ _HELP_BLURBS: dict[str, str] = {
     "sheet": "Your character sheet: Create, view, Void, Kata, Kiho, export. One character per player; staff use activate to act as NPCs.",
     "stat": "Staff sheet edits: Traits, skills, numeric fields, armor, qualities, advantages. Players use /inventory for gear and /xp to advance.",
     "inventory": "Your gear and purse in one panel: Wield, weapons, items, koku.",
-    "xp": "Spend Experience on traits, skills, emphases, kata, kiho, spells and advantages.",
+    "xp": "Spend Experience: /xp spend opens a guided menu; or use /xp trait, /xp skill, etc. directly.",
     "roll": "Roll & Keep dice, with optional TN, Raises and Emphasis.",
     "dice": "Quick dice shorthand: 5k3, 7k2+5.",
     "macro": "Save and roll your usual dice pools.",
@@ -5814,6 +5814,7 @@ _HELP_BLURBS: dict[str, str] = {
     "players": "Directory of approved player characters.",
     "compare": "Compare two characters side by side.",
     "whoami": "Your character hub: Status card with buttons for Void, Kata, Kiho, tattoos, inventory, full sheet, export.",
+    "letter": "Send in-character letters to PCs or NPCs. Staff can send as any character.",
     "room": "Private play rooms (threads) with invites.",
     "location": "In-character areas and location channels.",
     "date": "The current Rokugani calendar date.",
@@ -5830,7 +5831,7 @@ _HELP_BLURBS: dict[str, str] = {
 }
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Getting started", ["help", "whoami", "players", "compare", "date"]),
-    ("Your character", ["sheet", "inventory", "xp", "stat"]),
+    ("Your character", ["sheet", "inventory", "xp", "letter", "stat"]),
     ("Dice and checks", ["roll", "dice", "check", "macro", "history"]),
     ("Fights and magic", ["combat", "fight", "engage", "spell"]),
     ("Places", ["room", "location"]),
