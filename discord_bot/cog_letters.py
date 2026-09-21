@@ -87,16 +87,28 @@ def _pc_names(guild_id: str) -> list[str]:
     return [rec.character.name for _, rec in _d.store.list_active_pcs(guild_id)]
 
 
+def _all_character_names(guild_id: str) -> list[str]:
+    names = _pc_names(guild_id)
+    for rec in _d.store.list_by_owner(guild_id, _d.npc_owner):
+        names.append(rec.character.name)
+    return names
+
+
+def _is_npc(guild_id: str, name: str) -> bool:
+    rec = _d.store.get_by_name(guild_id, _d.npc_owner, name)
+    return rec is not None
+
+
 # ---------------------------------------------------------------------------
 # /letter send - player sends a letter to another PC
 # ---------------------------------------------------------------------------
 
 @letter.command(
     name="send",
-    description="Send an in-character letter to another player character.",
+    description="Send an in-character letter to another character (PC or NPC).",
 )
 @app_commands.describe(
-    recipient="The character to send the letter to.",
+    recipient="The character to send the letter to (PC or NPC).",
     message="The content of your letter (in character).",
 )
 async def letter_send(
@@ -117,15 +129,15 @@ async def letter_send(
         )
         return
 
-    pc_names = _pc_names(guild_id)
+    all_names = _all_character_names(guild_id)
     matched = None
-    for name in pc_names:
+    for name in all_names:
         if name.lower() == recipient.lower():
             matched = name
             break
     if matched is None:
         await interaction.response.send_message(
-            f"No active PC named **{recipient}** found.", ephemeral=True,
+            f"No active character named **{recipient}** found.", ephemeral=True,
         )
         return
 
@@ -135,12 +147,23 @@ async def letter_send(
         )
         return
 
-    ch = await find_support_channel(guild, matched, _d.cat_player_support)
-    if ch is None:
-        await interaction.response.send_message(
-            f"Could not find a support channel for **{matched}**.", ephemeral=True,
-        )
-        return
+    npc_recipient = _is_npc(guild_id, matched)
+
+    if npc_recipient:
+        ch = await _get_staff_log_channel(guild)
+        if ch is None:
+            await interaction.response.send_message(
+                f"**{matched}** is an NPC. No staff channel found to deliver the letter.",
+                ephemeral=True,
+            )
+            return
+    else:
+        ch = await find_support_channel(guild, matched, _d.cat_player_support)
+        if ch is None:
+            await interaction.response.send_message(
+                f"Could not find a support channel for **{matched}**.", ephemeral=True,
+            )
+            return
 
     await interaction.response.defer(ephemeral=True)
 
@@ -168,18 +191,19 @@ async def letter_send(
     confirm.set_footer(text=f"Letter #{letter_id} • Sent by {interaction.user.display_name}")
     await interaction.followup.send(embed=confirm, ephemeral=True)
 
-    staff_ch = await _get_staff_log_channel(guild)
-    if staff_ch:
-        log_embed = discord.Embed(
-            title=f"Letter: {sender_name} to {matched}",
-            description=message[:4000],
-            color=discord.Color.dark_gold(),
-        )
-        log_embed.set_footer(text=f"Letter #{letter_id} • Player: {interaction.user.display_name}")
-        try:
-            await staff_ch.send(embed=log_embed)
-        except discord.Forbidden:
-            pass
+    if not npc_recipient:
+        staff_ch = await _get_staff_log_channel(guild)
+        if staff_ch:
+            log_embed = discord.Embed(
+                title=f"Letter: {sender_name} to {matched}",
+                description=message[:4000],
+                color=discord.Color.dark_gold(),
+            )
+            log_embed.set_footer(text=f"Letter #{letter_id} • Player: {interaction.user.display_name}")
+            try:
+                await staff_ch.send(embed=log_embed)
+            except discord.Forbidden:
+                pass
 
 
 @letter_send.autocomplete("recipient")
@@ -190,7 +214,7 @@ async def _send_recipient_ac(
         return []
     guild_id = str(interaction.guild_id)
     cur = current.lower().strip()
-    names = [n for n in _pc_names(guild_id) if cur in n.lower()]
+    names = [n for n in _all_character_names(guild_id) if cur in n.lower()]
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
 
@@ -221,24 +245,35 @@ async def letter_sendas(
     guild_id = str(interaction.guild_id)
     guild = interaction.guild
 
-    pc_names = _pc_names(guild_id)
+    all_names = _all_character_names(guild_id)
     matched = None
-    for name in pc_names:
+    for name in all_names:
         if name.lower() == recipient.lower():
             matched = name
             break
     if matched is None:
         await interaction.response.send_message(
-            f"No active PC named **{recipient}** found.", ephemeral=True,
+            f"No active character named **{recipient}** found.", ephemeral=True,
         )
         return
 
-    ch = await find_support_channel(guild, matched, _d.cat_player_support)
-    if ch is None:
-        await interaction.response.send_message(
-            f"Could not find a support channel for **{matched}**.", ephemeral=True,
-        )
-        return
+    npc_recipient = _is_npc(guild_id, matched)
+
+    if npc_recipient:
+        ch = await _get_staff_log_channel(guild)
+        if ch is None:
+            await interaction.response.send_message(
+                f"**{matched}** is an NPC. No staff channel found to deliver the letter.",
+                ephemeral=True,
+            )
+            return
+    else:
+        ch = await find_support_channel(guild, matched, _d.cat_player_support)
+        if ch is None:
+            await interaction.response.send_message(
+                f"Could not find a support channel for **{matched}**.", ephemeral=True,
+            )
+            return
 
     await interaction.response.defer(ephemeral=True)
 
@@ -274,7 +309,7 @@ async def _sendas_recipient_ac(
         return []
     guild_id = str(interaction.guild_id)
     cur = current.lower().strip()
-    names = [n for n in _pc_names(guild_id) if cur in n.lower()]
+    names = [n for n in _all_character_names(guild_id) if cur in n.lower()]
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
 
