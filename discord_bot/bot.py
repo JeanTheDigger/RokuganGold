@@ -4774,6 +4774,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/engage grapple initiate", "Start a grapple (Jiujutsu/Agility)"),
         ("/engage grapple control", "Contested control (Jiujutsu/Strength)"),
         ("/engage grapple hit / throw / pin / break_free", "Grapple actions"),
+        ("/engage duel start", "Start a duel with interactive board"),
         ("/engage duel assess", "Assessment (Iaijutsu/Awareness)"),
         ("/engage duel focus", "Focus (contested Iaijutsu/Void)"),
         ("/engage duel strike", "Strike (Iaijutsu/Reflexes + damage)"),

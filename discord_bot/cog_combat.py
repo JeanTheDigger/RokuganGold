@@ -132,6 +132,8 @@ def init(
     combat_creature.autocomplete("name")(creature_instance_autocomplete)
     combat_category.autocomplete("category")(category_autocomplete)
     combat_npc.autocomplete("name")(npc_autocomplete)
+    duel_start.autocomplete("duelist_a")(_duelist_autocomplete)
+    duel_start.autocomplete("duelist_b")(_duelist_autocomplete)
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +149,23 @@ async def _combatant_autocomplete(
     cur = current.lower().strip()
     names = [c.name for c in enc.combatants if cur in c.name.lower()]
     return [app_commands.Choice(name=n, value=n) for n in names[:25]]
+
+
+async def _duelist_autocomplete(
+    interaction: discord.Interaction, current: str,
+) -> list[app_commands.Choice[str]]:
+    names: list[str] = []
+    enc = _d.encounters.get(interaction.channel_id)
+    if enc and enc.combatants:
+        names.extend(c.name for c in enc.combatants)
+    if interaction.guild_id:
+        guild_id = str(interaction.guild_id)
+        for rec in _d.store.list_by_owner(guild_id, _d.NPC_OWNER):
+            if rec.character.name not in names:
+                names.append(rec.character.name)
+    cur = current.lower().strip()
+    filtered = [n for n in names if cur in n.lower()]
+    return [app_commands.Choice(name=n, value=n) for n in filtered[:25]]
 
 
 def _is_own_combatant(interaction: discord.Interaction, cb) -> bool:
@@ -6107,6 +6126,761 @@ async def duel_strike(
         await interaction.response.send_message(embed=embed)
     tag = "HIT" if hit else "MISS"
     await _d.combat_log(guild, f"Duel Strike: {atk.name} → {tgt.name} ({weapon}) {tag} (roll {result['total']} vs TN {result['tn']})")
+
+
+# ---------------------------------------------------------------------------
+# Duel Board: interactive button panel for running a full duel
+# ---------------------------------------------------------------------------
+
+def _build_duel_embed(
+    a_name: str, b_name: str, phase: str,
+    a_focus_bonus: bool = False, b_focus_bonus: bool = False,
+    first_striker: str = "", free_raises: int = 0,
+    a_struck: bool = False, b_struck: bool = False,
+) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"Iaijutsu Duel: {a_name} vs {b_name}",
+        color=discord.Color.gold(),
+    )
+    lines: list[str] = []
+    if phase == "assess":
+        lines.append("**Phase: Assessment**")
+        lines.append("Both duelists will roll Iaijutsu (Assessment) / Awareness.")
+    elif phase == "focus":
+        lines.append("**Phase: Focus**")
+        bonus_parts: list[str] = []
+        if a_focus_bonus:
+            bonus_parts.append(f"**{a_name}** has +1k1 Focus bonus from Assessment.")
+        if b_focus_bonus:
+            bonus_parts.append(f"**{b_name}** has +1k1 Focus bonus from Assessment.")
+        if bonus_parts:
+            lines.extend(bonus_parts)
+        else:
+            lines.append("Neither duelist gained a Focus bonus.")
+        lines.append("Both duelists will roll Iaijutsu (Focus) / Void.")
+    elif phase == "strike":
+        lines.append("**Phase: Strike**")
+        if first_striker == "kharmic":
+            lines.append("**Kharmic Strike**: Both duelists strike simultaneously.")
+        elif first_striker == "a":
+            fr_text = f" with **{free_raises} Free Raise{'s' if free_raises != 1 else ''}**" if free_raises else ""
+            lines.append(f"**{a_name}** strikes first{fr_text}.")
+            if a_struck and not b_struck:
+                lines.append(f"**{b_name}** may return strike if still alive.")
+        elif first_striker == "b":
+            fr_text = f" with **{free_raises} Free Raise{'s' if free_raises != 1 else ''}**" if free_raises else ""
+            lines.append(f"**{b_name}** strikes first{fr_text}.")
+            if b_struck and not a_struck:
+                lines.append(f"**{a_name}** may return strike if still alive.")
+    elif phase == "done":
+        lines.append("**Duel complete.**")
+
+    embed.description = "\n".join(lines)
+
+    if phase == "assess":
+        embed.set_footer(text="Click Assess to begin.")
+    elif phase == "focus":
+        embed.set_footer(text="Click Focus to continue, or Concede to end the duel.")
+    elif phase == "strike":
+        if first_striker == "kharmic":
+            embed.set_footer(text="Click Strike to resolve both simultaneous strikes.")
+        elif (first_striker == "a" and not a_struck) or (first_striker == "b" and not b_struck):
+            embed.set_footer(text="Click Strike to resolve the first strike.")
+        else:
+            embed.set_footer(text="Click Return Strike to resolve the return strike.")
+    elif phase == "done":
+        embed.set_footer(text="Duel ended.")
+    return embed
+
+
+class DuelBoardView(views_base.PersistentView):
+    KIND = "duel_board"
+
+    def __init__(
+        self,
+        guild_id: str,
+        channel_id: int,
+        a_id: int,
+        b_id: int,
+        a_name: str,
+        b_name: str,
+        a_is_npc: bool = False,
+        b_is_npc: bool = False,
+        phase: str = "assess",
+        a_focus_bonus: bool = False,
+        b_focus_bonus: bool = False,
+        first_striker: str = "",
+        free_raises: int = 0,
+        a_struck: bool = False,
+        b_struck: bool = False,
+    ) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.a_id = a_id
+        self.b_id = b_id
+        self.a_name = a_name
+        self.b_name = b_name
+        self.a_is_npc = a_is_npc
+        self.b_is_npc = b_is_npc
+        self.phase = phase
+        self.a_focus_bonus = a_focus_bonus
+        self.b_focus_bonus = b_focus_bonus
+        self.first_striker = first_striker
+        self.free_raises = free_raises
+        self.a_struck = a_struck
+        self.b_struck = b_struck
+        self._sync_buttons()
+
+    def _sync_buttons(self) -> None:
+        self.assess_btn.disabled = self.phase != "assess"
+        self.focus_btn.disabled = self.phase != "focus"
+        self.concede_btn.disabled = self.phase not in ("focus",)
+        self.end_btn.disabled = self.phase == "done"
+        if self.phase == "strike":
+            self.strike_btn.disabled = False
+            if self.first_striker == "kharmic":
+                self.strike_btn.label = "Strike (Simultaneous)"
+                if self.a_struck and self.b_struck:
+                    self.strike_btn.disabled = True
+            elif self.first_striker == "a":
+                if not self.a_struck:
+                    self.strike_btn.label = f"Strike: {self.a_name}"[:80]
+                elif not self.b_struck:
+                    self.strike_btn.label = f"Return Strike: {self.b_name}"[:80]
+                else:
+                    self.strike_btn.disabled = True
+            elif self.first_striker == "b":
+                if not self.b_struck:
+                    self.strike_btn.label = f"Strike: {self.b_name}"[:80]
+                elif not self.a_struck:
+                    self.strike_btn.label = f"Return Strike: {self.a_name}"[:80]
+                else:
+                    self.strike_btn.disabled = True
+        else:
+            self.strike_btn.disabled = True
+
+    def _updated_args(self) -> dict:
+        return dict(
+            guild_id=self.guild_id, channel_id=self.channel_id,
+            a_id=self.a_id, b_id=self.b_id,
+            a_name=self.a_name, b_name=self.b_name,
+            a_is_npc=self.a_is_npc, b_is_npc=self.b_is_npc,
+            phase=self.phase,
+            a_focus_bonus=self.a_focus_bonus, b_focus_bonus=self.b_focus_bonus,
+            first_striker=self.first_striker, free_raises=self.free_raises,
+            a_struck=self.a_struck, b_struck=self.b_struck,
+        )
+
+    async def _repost(self, channel) -> None:
+        if self._persist_message_id:
+            try:
+                old = await channel.fetch_message(self._persist_message_id)
+                await old.delete()
+            except discord.HTTPException:
+                pass
+            self.forget()
+        if self.phase == "done":
+            return
+        embed = _build_duel_embed(
+            self.a_name, self.b_name, self.phase,
+            self.a_focus_bonus, self.b_focus_bonus,
+            self.first_striker, self.free_raises,
+            self.a_struck, self.b_struck,
+        )
+        new_view = DuelBoardView(**self._updated_args())
+        msg = await channel.send(embed=embed, view=new_view)
+        await new_view.persist(msg)
+
+    def _load_recs(self):
+        rec_a = _d.store.get_by_id(self.a_id)
+        rec_b = _d.store.get_by_id(self.b_id)
+        return rec_a, rec_b
+
+    def _enc_combatant(self, name: str):
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            return None, None, set()
+        cb = enc.find(name)
+        if cb is None:
+            return enc, None, set()
+        return enc, cb, cb.conditions
+
+    # --- Row 0: Assess / Focus ---
+
+    @discord.ui.button(label="Assess", style=discord.ButtonStyle.primary, row=0)
+    async def assess_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can run duel stages.", ephemeral=True,
+            )
+            return
+        rec_a, rec_b = self._load_recs()
+        if rec_a is None or rec_b is None:
+            await interaction.response.send_message("A duelist's character sheet is missing.", ephemeral=True)
+            return
+        ca, cb_char = rec_a.character, rec_b.character
+        if await _d.refuse_if_cannot_act(interaction, ca) or await _d.refuse_if_cannot_act(interaction, cb_char):
+            return
+
+        enc = _d.encounters.get(self.channel_id)
+        for ch_obj, label in ((ca, self.a_name), (cb_char, self.b_name)):
+            cb_enc = enc.find(ch_obj.name) if enc else None
+            if cb_enc and "dazed" in cb_enc.conditions:
+                await interaction.response.send_message(
+                    f"**{label}** is Dazed and cannot perform an Iaijutsu duel.", ephemeral=True,
+                )
+                return
+
+        ir_a = stats.insight_rank(ca)
+        ir_b = stats.insight_rank(cb_char)
+        wp_a = stats.wound_penalty(ca)
+        wp_b = stats.wound_penalty(cb_char)
+        _, cb_a_enc, conds_a = self._enc_combatant(ca.name)
+        _, cb_b_enc, conds_b = self._enc_combatant(cb_char.name)
+        cr_a, cf_a, _ = condition_effects.contested_roll_modifier(conds_a)
+        cr_b, cf_b, _ = condition_effects.contested_roll_modifier(conds_b)
+
+        tr_a, tk_a, tf_a, tn_a = technique_effects.iaijutsu_roll_bonus(ca, "assessment")
+        tr_b, tk_b, tf_b, tn_b = technique_effects.iaijutsu_roll_bonus(cb_char, "assessment")
+        ex9_a, ex9n_a = technique_effects.iaijutsu_explode_9(ca, "assessment")
+        ex9_b, ex9n_b = technique_effects.iaijutsu_explode_9(cb_char, "assessment")
+        tech_notes_a = tn_a + ex9n_a
+        tech_notes_b = tn_b + ex9n_b
+        fear_a = cb_a_enc.fear_penalty if cb_a_enc else 0
+        fear_b = cb_b_enc.fear_penalty if cb_b_enc else 0
+        cr_a -= fear_a; cr_b -= fear_b
+        if fear_a: tech_notes_a = tech_notes_a + [f"Fear -{fear_a}k0"]
+        if fear_b: tech_notes_b = tech_notes_b + [f"Fear -{fear_b}k0"]
+
+        res_a = combat.resolve_iaijutsu_assessment(
+            ca.awareness, ca.skills.get("Iaijutsu", 0), ir_b, _d.engine,
+            extra_flat=wp_a + tf_a + cf_a, bonus_rolled=tr_a + cr_a, bonus_kept=tk_a,
+            explode_9=ex9_a,
+        )
+        res_b = combat.resolve_iaijutsu_assessment(
+            cb_char.awareness, cb_char.skills.get("Iaijutsu", 0), ir_a, _d.engine,
+            extra_flat=wp_b + tf_b + cf_b, bonus_rolled=tr_b + cr_b, bonus_kept=tk_b,
+            explode_9=ex9_b,
+        )
+
+        diff_ab = res_a["total"] - res_b["total"]
+        self.a_focus_bonus = diff_ab >= 10
+        self.b_focus_bonus = diff_ab <= -10
+
+        focus_bonus = ""
+        if self.a_focus_bonus:
+            focus_bonus = f"**{ca.name}** exceeded by {diff_ab} -> **+1k1** on Focus roll."
+        elif self.b_focus_bonus:
+            focus_bonus = f"**{cb_char.name}** exceeded by {-diff_ab} -> **+1k1** on Focus roll."
+
+        embed = discord.Embed(title="Iaijutsu Duel: Assessment", color=discord.Color.gold())
+
+        def _reveal_text(res, opponent):
+            if not res["success"]:
+                return "Failed: No information learned."
+            reveals = res["reveals"]
+            opponent_iaijutsu = opponent.skills.get("Iaijutsu", 0)
+            available = [
+                f"Void Ring: **{opponent.void_ring}**",
+                f"Reflexes: **{opponent.reflexes}**",
+                f"Iaijutsu Skill: **{opponent_iaijutsu}**",
+                f"Iaijutsu Emphases: **{'Assessment, Focus' if opponent_iaijutsu >= 1 else 'none listed'}**",
+                f"Void Points: **{opponent.current_void_points}**",
+                f"Wound Level: **{stats.wound_level_name(opponent)}**",
+            ]
+            return "Learned " + str(reveals) + ":\n" + "\n".join(available[:reveals])
+
+        def _duel_notes(wp, tech_notes):
+            parts = []
+            if wp:
+                parts.append(f"wound penalty {wp}")
+            parts.extend(tech_notes)
+            return f"\n({', '.join(parts)})" if parts else ""
+
+        embed.add_field(
+            name=f"{ca.name}: Assessment",
+            value=(
+                f"{res_a['rolled']}k{res_a['kept']} -> **{res_a['total']}** vs TN **{res_a['tn']}**"
+                f": {'**SUCCESS**' if res_a['success'] else '**FAILED**'}"
+                + _duel_notes(wp_a, tech_notes_a)
+                + "\n" + _reveal_text(res_a, cb_char)
+            ),
+            inline=False,
+        )
+        embed.add_field(
+            name=f"{cb_char.name}: Assessment",
+            value=(
+                f"{res_b['rolled']}k{res_b['kept']} -> **{res_b['total']}** vs TN **{res_b['tn']}**"
+                f": {'**SUCCESS**' if res_b['success'] else '**FAILED**'}"
+                + _duel_notes(wp_b, tech_notes_b)
+                + "\n" + _reveal_text(res_b, ca)
+            ),
+            inline=False,
+        )
+        if focus_bonus:
+            embed.add_field(name="Focus Bonus", value=focus_bonus.strip(), inline=False)
+        embed.set_footer(text="Either duelist may concede. Otherwise click Focus on the duel board.")
+
+        self.phase = "focus"
+        self._persist_args = self._updated_args()
+        self._sync_buttons()
+        await interaction.response.send_message(embed=embed)
+        await _d.combat_log(self.guild_id, f"Duel Assess: {ca.name} vs {cb_char.name}")
+        ch = _d.bot_client.get_channel(self.channel_id)
+        if ch:
+            await self._repost(ch)
+
+    @discord.ui.button(label="Focus", style=discord.ButtonStyle.primary, row=0)
+    async def focus_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can run duel stages.", ephemeral=True,
+            )
+            return
+        rec_a, rec_b = self._load_recs()
+        if rec_a is None or rec_b is None:
+            await interaction.response.send_message("A duelist's character sheet is missing.", ephemeral=True)
+            return
+        ca, cb_char = rec_a.character, rec_b.character
+        if await _d.refuse_if_cannot_act(interaction, ca) or await _d.refuse_if_cannot_act(interaction, cb_char):
+            return
+
+        enc = _d.encounters.get(self.channel_id)
+        for ch_obj, label in ((ca, self.a_name), (cb_char, self.b_name)):
+            cb_enc = enc.find(ch_obj.name) if enc else None
+            if cb_enc and "dazed" in cb_enc.conditions:
+                await interaction.response.send_message(
+                    f"**{label}** is Dazed and cannot perform an Iaijutsu duel.", ephemeral=True,
+                )
+                return
+
+        _, cb_a_enc, conds_a = self._enc_combatant(ca.name)
+        _, cb_b_enc, conds_b = self._enc_combatant(cb_char.name)
+        cr_a, cf_a, _ = condition_effects.contested_roll_modifier(conds_a)
+        cr_b, cf_b, _ = condition_effects.contested_roll_modifier(conds_b)
+
+        bonus_r_a = 1 if self.a_focus_bonus else 0
+        bonus_k_a = 1 if self.a_focus_bonus else 0
+        bonus_r_b = 1 if self.b_focus_bonus else 0
+        bonus_k_b = 1 if self.b_focus_bonus else 0
+        wp_a = stats.wound_penalty(ca)
+        wp_b = stats.wound_penalty(cb_char)
+
+        tr_a, tk_a, tf_a, tn_a = technique_effects.iaijutsu_roll_bonus(ca, "focus")
+        tr_b, tk_b, tf_b, tn_b = technique_effects.iaijutsu_roll_bonus(cb_char, "focus")
+        ex9_a, ex9n_a = technique_effects.iaijutsu_explode_9(ca, "focus")
+        ex9_b, ex9n_b = technique_effects.iaijutsu_explode_9(cb_char, "focus")
+        wt_a, rd_a, ftn_a = technique_effects.iaijutsu_focus_thresholds(ca)
+        wt_b, rd_b, ftn_b = technique_effects.iaijutsu_focus_thresholds(cb_char)
+        tech_notes_a = tn_a + ex9n_a + ftn_a
+        tech_notes_b = tn_b + ex9n_b + ftn_b
+        fear_a = cb_a_enc.fear_penalty if cb_a_enc else 0
+        fear_b = cb_b_enc.fear_penalty if cb_b_enc else 0
+        cr_a -= fear_a; cr_b -= fear_b
+        if fear_a: tech_notes_a = tech_notes_a + [f"Fear -{fear_a}k0"]
+        if fear_b: tech_notes_b = tech_notes_b + [f"Fear -{fear_b}k0"]
+
+        result = combat.resolve_iaijutsu_focus(
+            ca.void_ring, ca.skills.get("Iaijutsu", 0),
+            cb_char.void_ring, cb_char.skills.get("Iaijutsu", 0),
+            _d.engine,
+            bonus_rolled_a=bonus_r_a + tr_a + cr_a, bonus_kept_a=bonus_k_a + tk_a,
+            bonus_rolled_b=bonus_r_b + tr_b + cr_b, bonus_kept_b=bonus_k_b + tk_b,
+            extra_flat_a=wp_a + tf_a + cf_a, extra_flat_b=wp_b + tf_b + cf_b,
+            explode_9_a=ex9_a, explode_9_b=ex9_b,
+            win_threshold_a=wt_a, win_threshold_b=wt_b,
+            raise_divisor_a=rd_a, raise_divisor_b=rd_b,
+        )
+
+        self.first_striker = result["first_striker"]
+        self.free_raises = result["free_raises"]
+
+        embed = discord.Embed(title="Iaijutsu Duel: Focus", color=discord.Color.dark_gold())
+        a_mods, b_mods = [], []
+        if self.a_focus_bonus:
+            a_mods.append("+1k1 Assessment")
+        if wp_a:
+            a_mods.append(f"wound {wp_a}")
+        a_mods.extend(tech_notes_a)
+        if self.b_focus_bonus:
+            b_mods.append("+1k1 Assessment")
+        if wp_b:
+            b_mods.append(f"wound {wp_b}")
+        b_mods.extend(tech_notes_b)
+        a_notes = f" ({', '.join(a_mods)})" if a_mods else ""
+        b_notes = f" ({', '.join(b_mods)})" if b_mods else ""
+        embed.add_field(
+            name=f"{ca.name}: Focus (Iaijutsu/Void)",
+            value=f"{result['a_rolled']}k{result['a_kept']}{a_notes} -> **{result['a_total']}**",
+            inline=True,
+        )
+        embed.add_field(
+            name=f"{cb_char.name}: Focus (Iaijutsu/Void)",
+            value=f"{result['b_rolled']}k{result['b_kept']}{b_notes} -> **{result['b_total']}**",
+            inline=True,
+        )
+
+        diff = abs(result["diff"])
+        fs = result["first_striker"]
+        if fs == "kharmic":
+            outcome = (
+                f"Margin **{diff}** - neither exceeds their threshold: **Kharmic Strike** (simultaneous).\n"
+                f"Both attack at the same time; the cause is considered dropped."
+            )
+        else:
+            winner = ca.name if fs == "a" else cb_char.name
+            loser = cb_char.name if fs == "a" else ca.name
+            fr = result["free_raises"]
+            fr_text = f" with **{fr} Free Raise{'s' if fr != 1 else ''}**" if fr else ""
+            outcome = (
+                f"**{winner}** wins Focus by {diff} -> strikes first{fr_text}.\n"
+                f"**{loser}** may strike after if still alive."
+            )
+        embed.add_field(name="Result", value=outcome, inline=False)
+        embed.set_footer(text="Click Strike on the duel board to proceed.")
+
+        self.phase = "strike"
+        self._persist_args = self._updated_args()
+        self._sync_buttons()
+        await interaction.response.send_message(embed=embed)
+        if fs == "kharmic":
+            await _d.combat_log(self.guild_id, f"Duel Focus: {ca.name} vs {cb_char.name}: Kharmic Strike")
+        else:
+            winner = ca.name if fs == "a" else cb_char.name
+            await _d.combat_log(self.guild_id, f"Duel Focus: {winner} strikes first (margin {diff})")
+        ch = _d.bot_client.get_channel(self.channel_id)
+        if ch:
+            await self._repost(ch)
+
+    # --- Row 1: Strike ---
+
+    @discord.ui.button(label="Strike", style=discord.ButtonStyle.danger, row=1)
+    async def strike_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can run duel stages.", ephemeral=True,
+            )
+            return
+        rec_a, rec_b = self._load_recs()
+        if rec_a is None or rec_b is None:
+            await interaction.response.send_message("A duelist's character sheet is missing.", ephemeral=True)
+            return
+
+        if self.first_striker == "kharmic":
+            await self._resolve_kharmic(interaction, rec_a, rec_b)
+        else:
+            if self.first_striker == "a":
+                if not self.a_struck:
+                    await self._resolve_single_strike(interaction, rec_a, rec_b, "a")
+                elif not self.b_struck:
+                    await self._resolve_single_strike(interaction, rec_b, rec_a, "b")
+            elif self.first_striker == "b":
+                if not self.b_struck:
+                    await self._resolve_single_strike(interaction, rec_b, rec_a, "b")
+                elif not self.a_struck:
+                    await self._resolve_single_strike(interaction, rec_a, rec_b, "a")
+
+    async def _resolve_single_strike(self, interaction, atk_rec, tgt_rec, who: str) -> None:
+        atk = atk_rec.character
+        tgt = tgt_rec.character
+        if await _d.refuse_if_cannot_act(interaction, atk):
+            return
+        wp = stats.wound_penalty(atk)
+        enc = _d.encounters.get(self.channel_id)
+        atk_enc = enc.find(atk.name) if enc else None
+        atk_conds = atk_enc.conditions if atk_enc else set()
+        cr, cf, _ = condition_effects.contested_roll_modifier(atk_conds)
+
+        tr, tk, tf, tech_notes = technique_effects.iaijutsu_roll_bonus(atk, "strike")
+        fear_s = atk_enc.fear_penalty if atk_enc else 0
+        cr -= fear_s
+        if fear_s:
+            tech_notes = tech_notes + [f"Fear -{fear_s}k0"]
+        def_tn_bonus, def_tn_notes = technique_effects.defender_armor_tn_bonus(tgt, "center")
+        target_tn = combat.armor_tn(tgt, "center", 0) + def_tn_bonus
+        duel_red, duel_red_notes = technique_effects.iaijutsu_strike_reduction(tgt)
+
+        fr = self.free_raises if who == self.first_striker else 0
+        result = combat.resolve_iaijutsu_strike(
+            atk.reflexes, atk.skills.get("Iaijutsu", 0), target_tn, _d.engine,
+            free_raises=fr, extra_flat=wp + tf + cf,
+            bonus_rolled=tr + cr, bonus_kept=tk,
+        )
+        hit = result["hit"]
+        _d.tally(self.channel_id, atk.name, "attacks")
+        if hit:
+            _d.tally(self.channel_id, atk.name, "hits")
+
+        is_return = (who != self.first_striker)
+        title_prefix = "Return Strike" if is_return else "Strike"
+        embed = discord.Embed(
+            title=f"{title_prefix}: {atk.name} at {tgt.name}",
+            color=discord.Color.red() if hit else discord.Color.greyple(),
+        )
+        roll_text = (
+            f"Iaijutsu/Reflexes: {result['rolled']}k{result['kept']} -> **{result['total']}**"
+            f" vs TN **{result['tn']}**: {'**HIT**' if hit else '**MISS**'}"
+        )
+        notes = []
+        if wp:
+            notes.append(f"wound penalty {wp}")
+        if fr:
+            notes.append(f"{fr} Free Raise{'s' if fr != 1 else ''} from Focus")
+        notes.extend(tech_notes)
+        notes.extend(def_tn_notes)
+        notes.extend(duel_red_notes)
+        if notes:
+            roll_text += f"\n({', '.join(notes)})"
+        embed.add_field(name="Strike Roll", value=roll_text, inline=False)
+
+        if who == "a":
+            self.a_struck = True
+        else:
+            self.b_struck = True
+
+        view = None
+        if hit:
+            view = DamageView(
+                attacker_id=atk_rec.id,
+                target_id=tgt_rec.id,
+                weapon="katana",
+                increased_damage=fr,
+                attacker_name=atk.name,
+                target_name=tgt.name,
+                maneuver="none",
+                attack_margin=result["margin"],
+                channel_id=self.channel_id,
+                duel_strike_reduction=duel_red,
+            )
+        else:
+            embed.set_footer(text="The strike misses.")
+
+        if self.a_struck and self.b_struck:
+            self.phase = "done"
+
+        self._persist_args = self._updated_args()
+        self._sync_buttons()
+
+        if view is not None:
+            await interaction.response.send_message(
+                content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the strike's damage below.",
+                embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+            )
+            await view.persist(await interaction.original_response())
+        else:
+            await interaction.response.send_message(embed=embed)
+
+        tag = "HIT" if hit else "MISS"
+        await _d.combat_log(
+            self.guild_id,
+            f"Duel {title_prefix}: {atk.name} -> {tgt.name} (katana) {tag} "
+            f"(roll {result['total']} vs TN {result['tn']})",
+        )
+        ch = _d.bot_client.get_channel(self.channel_id)
+        if ch:
+            await self._repost(ch)
+
+    async def _resolve_kharmic(self, interaction, rec_a, rec_b) -> None:
+        ca, cb_char = rec_a.character, rec_b.character
+        if await _d.refuse_if_cannot_act(interaction, ca) or await _d.refuse_if_cannot_act(interaction, cb_char):
+            return
+
+        results = []
+        damage_views = []
+        for atk_rec, tgt_rec, label in ((rec_a, rec_b, "a"), (rec_b, rec_a, "b")):
+            atk, tgt = atk_rec.character, tgt_rec.character
+            wp = stats.wound_penalty(atk)
+            enc = _d.encounters.get(self.channel_id)
+            atk_enc = enc.find(atk.name) if enc else None
+            atk_conds = atk_enc.conditions if atk_enc else set()
+            cr, cf, _ = condition_effects.contested_roll_modifier(atk_conds)
+            tr, tk, tf, tech_notes = technique_effects.iaijutsu_roll_bonus(atk, "strike")
+            fear_s = atk_enc.fear_penalty if atk_enc else 0
+            cr -= fear_s
+            if fear_s:
+                tech_notes = tech_notes + [f"Fear -{fear_s}k0"]
+            def_tn_bonus, def_tn_notes = technique_effects.defender_armor_tn_bonus(tgt, "center")
+            target_tn = combat.armor_tn(tgt, "center", 0) + def_tn_bonus
+            duel_red, duel_red_notes = technique_effects.iaijutsu_strike_reduction(tgt)
+
+            result = combat.resolve_iaijutsu_strike(
+                atk.reflexes, atk.skills.get("Iaijutsu", 0), target_tn, _d.engine,
+                free_raises=0, extra_flat=wp + tf + cf,
+                bonus_rolled=tr + cr, bonus_kept=tk,
+            )
+            hit = result["hit"]
+            _d.tally(self.channel_id, atk.name, "attacks")
+            if hit:
+                _d.tally(self.channel_id, atk.name, "hits")
+
+            roll_text = (
+                f"Iaijutsu/Reflexes: {result['rolled']}k{result['kept']} -> **{result['total']}**"
+                f" vs TN **{result['tn']}**: {'**HIT**' if hit else '**MISS**'}"
+            )
+            notes = []
+            if wp:
+                notes.append(f"wound penalty {wp}")
+            notes.extend(tech_notes)
+            notes.extend(def_tn_notes)
+            notes.extend(duel_red_notes)
+            if notes:
+                roll_text += f"\n({', '.join(notes)})"
+            results.append((atk.name, tgt.name, roll_text, hit))
+
+            if hit:
+                dv = DamageView(
+                    attacker_id=atk_rec.id,
+                    target_id=tgt_rec.id,
+                    weapon="katana",
+                    increased_damage=0,
+                    attacker_name=atk.name,
+                    target_name=tgt.name,
+                    maneuver="none",
+                    attack_margin=result["margin"],
+                    channel_id=self.channel_id,
+                    duel_strike_reduction=duel_red,
+                )
+                damage_views.append((atk.name, tgt.name, dv))
+
+            tag = "HIT" if hit else "MISS"
+            await _d.combat_log(
+                self.guild_id,
+                f"Duel Kharmic Strike: {atk.name} -> {tgt.name} (katana) {tag} "
+                f"(roll {result['total']} vs TN {result['tn']})",
+            )
+
+        embed = discord.Embed(title="Kharmic Strike: Simultaneous", color=discord.Color.dark_red())
+        for atk_name, tgt_name, roll_text, hit in results:
+            embed.add_field(
+                name=f"{atk_name} at {tgt_name}: {'HIT' if hit else 'MISS'}",
+                value=roll_text,
+                inline=False,
+            )
+        if not damage_views:
+            embed.set_footer(text="Both strikes missed.")
+
+        self.a_struck = True
+        self.b_struck = True
+        self.phase = "done"
+        self._persist_args = self._updated_args()
+        self._sync_buttons()
+
+        await interaction.response.send_message(embed=embed)
+        ch = _d.bot_client.get_channel(self.channel_id)
+        for atk_name, tgt_name, dv in damage_views:
+            if ch:
+                dv_msg = await ch.send(
+                    content=f"{_d.dm_ping(interaction.guild)}Authorize damage: **{atk_name}** -> **{tgt_name}**",
+                    view=dv, allowed_mentions=_PING_MENTIONS,
+                )
+                await dv.persist(dv_msg)
+        if ch:
+            await self._repost(ch)
+
+    # --- Row 2: Concede / End ---
+
+    @discord.ui.button(label="Concede", style=discord.ButtonStyle.secondary, row=2)
+    async def concede_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can declare a concession.", ephemeral=True,
+            )
+            return
+        self.phase = "done"
+        self._persist_args = self._updated_args()
+        self._sync_buttons()
+        embed = discord.Embed(
+            title="Duel Conceded",
+            description=f"The duel between **{self.a_name}** and **{self.b_name}** ends by concession.",
+            color=discord.Color.light_grey(),
+        )
+        await interaction.response.send_message(embed=embed)
+        await _d.combat_log(self.guild_id, f"Duel Conceded: {self.a_name} vs {self.b_name}")
+        ch = _d.bot_client.get_channel(self.channel_id)
+        if ch:
+            await self._repost(ch)
+
+    @discord.ui.button(label="End Duel", style=discord.ButtonStyle.danger, row=2)
+    async def end_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can end a duel.", ephemeral=True,
+            )
+            return
+        self.phase = "done"
+        self._persist_args = self._updated_args()
+        self._sync_buttons()
+        self._disable()
+        embed = discord.Embed(
+            title="Duel Ended",
+            description=f"The duel between **{self.a_name}** and **{self.b_name}** has been ended.",
+            color=discord.Color.dark_grey(),
+        )
+        await interaction.response.send_message(embed=embed)
+        await _d.combat_log(self.guild_id, f"Duel Ended: {self.a_name} vs {self.b_name}")
+        if self._persist_message_id:
+            ch = _d.bot_client.get_channel(self.channel_id)
+            if ch:
+                try:
+                    old = await ch.fetch_message(self._persist_message_id)
+                    await old.delete()
+                except discord.HTTPException:
+                    pass
+
+
+# /engage duel start
+@combat_duel.command(
+    name="start",
+    description="Start an Iaijutsu duel between two characters. Posts an interactive duel board. [Fortune]",
+)
+@app_commands.describe(
+    duelist_a="First duelist (name, NPC, or @player).",
+    duelist_b="Second duelist (name, NPC, or @player).",
+    a_is_npc="First duelist is a stored NPC.",
+    b_is_npc="Second duelist is a stored NPC.",
+    a_member="First duelist is another player's character.",
+    b_member="Second duelist is another player's character.",
+)
+async def duel_start(
+    interaction: discord.Interaction,
+    duelist_a: str,
+    duelist_b: str,
+    a_is_npc: bool = False,
+    b_is_npc: bool = False,
+    a_member: discord.Member | None = None,
+    b_member: discord.Member | None = None,
+) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    if not await _d.require_dm_role(interaction):
+        return
+    guild = str(interaction.guild_id)
+    ch = interaction.channel_id
+    rec_a = _d.resolve_duelist(guild, ch, duelist_a, a_is_npc, a_member)
+    rec_b = _d.resolve_duelist(guild, ch, duelist_b, b_is_npc, b_member)
+    if rec_a is None:
+        await interaction.response.send_message(f"No character found for **{duelist_a}**.", ephemeral=True)
+        return
+    if rec_b is None:
+        await interaction.response.send_message(f"No character found for **{duelist_b}**.", ephemeral=True)
+        return
+    ca, cb_char = rec_a.character, rec_b.character
+    if await _d.refuse_if_cannot_act(interaction, ca) or await _d.refuse_if_cannot_act(interaction, cb_char):
+        return
+
+    embed = _build_duel_embed(ca.name, cb_char.name, "assess")
+    view = DuelBoardView(
+        guild_id=guild, channel_id=ch,
+        a_id=rec_a.id, b_id=rec_b.id,
+        a_name=ca.name, b_name=cb_char.name,
+        a_is_npc=a_is_npc, b_is_npc=b_is_npc,
+    )
+    await interaction.response.send_message(embed=embed, view=view)
+    msg = await interaction.original_response()
+    await view.persist(msg)
+    await _d.combat_log(guild, f"Duel Start: {ca.name} vs {cb_char.name}")
+
 
 @combat_group.command(name="creature", description="Add a spawned creature to initiative (rolls its initiative). [Fortune]")
 @app_commands.describe(name="The creature to add.")
