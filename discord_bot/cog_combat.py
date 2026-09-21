@@ -2404,8 +2404,9 @@ async def _refresh_board(enc: encounter.Encounter, guild_id: str) -> None:
     except discord.HTTPException:
         return
     embed = _build_board_embed(enc, guild_id)
+    view = CombatBoardView(guild_id, enc.channel_id)
     try:
-        await msg.edit(embed=embed, view=None)
+        await msg.edit(embed=embed, view=view)
     except discord.HTTPException:
         pass
 
@@ -2426,14 +2427,18 @@ async def _repost_board(enc: encounter.Encounter, guild_id: str) -> None:
             pass
         enc.board_message_id = 0
     embed = _build_board_embed(enc, guild_id)
-    msg = await ch.send(embed=embed)
+    view = CombatBoardView(guild_id, enc.channel_id)
+    msg = await ch.send(embed=embed, view=view)
+    await view.persist(msg)
     enc.board_message_id = msg.id
     _d.save_encounter(guild_id, enc)
 
 
 async def _post_board(channel: discord.TextChannel, enc: encounter.Encounter, guild_id: str) -> None:
     embed = _build_board_embed(enc, guild_id)
-    msg = await channel.send(embed=embed)
+    view = CombatBoardView(guild_id, enc.channel_id)
+    msg = await channel.send(embed=embed, view=view)
+    await view.persist(msg)
     enc.board_message_id = msg.id
     _d.save_encounter(guild_id, enc)
 
@@ -3840,7 +3845,7 @@ async def combat_status(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(_render_encounter(enc, str(interaction.guild_id)))
 
 
-@combat_group.command(name="board", description="Post (or refresh) the combat initiative board.")
+@combat_group.command(name="board", description="Post (or refresh) the combat board with action buttons.")
 async def combat_board(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -3852,8 +3857,11 @@ async def combat_board(interaction: discord.Interaction) -> None:
         ch = interaction.channel
         try:
             old_msg = await ch.fetch_message(enc.board_message_id)
+            old_view = CombatBoardView(guild, enc.channel_id)
+            old_view._persist_message_id = enc.board_message_id
+            old_view._disable()
             try:
-                await old_msg.delete()
+                await old_msg.edit(view=old_view)
             except discord.HTTPException:
                 pass
         except discord.NotFound:
@@ -3861,7 +3869,9 @@ async def combat_board(interaction: discord.Interaction) -> None:
         enc.board_message_id = 0
     await interaction.response.defer()
     embed = _build_board_embed(enc, guild)
-    msg = await interaction.followup.send(embed=embed, wait=True)
+    view = CombatBoardView(guild, enc.channel_id)
+    msg = await interaction.followup.send(embed=embed, view=view, wait=True)
+    await view.persist(msg)
     enc.board_message_id = msg.id
     _d.save_encounter(guild, enc)
 
@@ -3986,7 +3996,10 @@ async def combat_end(interaction: discord.Interaction) -> None:
         if ch is not None:
             try:
                 board_msg = await ch.fetch_message(enc.board_message_id)
-                await board_msg.delete()
+                bv = CombatBoardView(guild, enc.channel_id)
+                bv._persist_message_id = enc.board_message_id
+                bv._disable()
+                await board_msg.edit(view=bv)
             except discord.HTTPException:
                 pass
     _d.encounters.pop(interaction.channel_id, None)
