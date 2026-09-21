@@ -526,15 +526,17 @@ class NpcWizard(discord.ui.View):
                 chosen = st[key]
                 opts = [_opt(("[+] " if a["name"] in chosen else "") + a["name"], a["name"], description=a.get("cost_text") or None)
                         for a in advantages.by_kind(kind) if a.get("category") == st[cat_key]]
-                self.add_item(_Pick(f"{kind.capitalize()}...", opts, self._on_adv, 1))
+                if opts:
+                    self.add_item(_Pick(f"{kind.capitalize()}...", opts, self._on_adv, 1))
         elif key == "gear":
             groups = sorted({w["skill"] for w in combat.WEAPON_CATALOG.values()})
             self.add_item(_Pick("Weapon group...", [_opt(g, default=g == st["weapon_group"]) for g in groups], self._on_weapon_group, 0))
             if st["weapon_group"]:
                 opts = [_opt(("[+] " if k == st["weapon"] else "") + k.replace("_", " "), k, description=f"DR {w['rolled']}k{w['kept']}")
                         for k, w in combat.WEAPON_CATALOG.items() if w["skill"] == st["weapon_group"]]
-                self.add_item(_Pick("Weapon in hand...", opts, self._on_weapon, 1))
-                self.add_item(_Pick("Off-hand (optional)...", [_opt("(none)", "")] + opts, self._on_off_hand, 2))
+                if opts:
+                    self.add_item(_Pick("Weapon in hand...", opts, self._on_weapon, 1))
+                    self.add_item(_Pick("Off-hand (optional)...", [_opt("(none)", "")] + opts, self._on_off_hand, 2))
             armor_opts = [_opt("(no armor)", "none", default=st["armor"] in ("", "none"))] + [
                 _opt(k.replace("_", " "), k, description=f"ATN +{a['tn_bonus']}, Reduction {a['reduction']}", default=k == st["armor"])
                 for k, a in combat.ARMOR_CATALOG.items()

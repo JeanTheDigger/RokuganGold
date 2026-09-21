@@ -125,7 +125,7 @@ class CharacterHub(discord.ui.View):
             self.add_item(_Pick("Kiho: Pick to activate, pick again to end...", opts, self._on_kiho, row)); row += 1
         if c.tattoos:
             opts = [discord.SelectOption(label="(deactivate tattoo)", value="", default=not c.active_tattoo)] + [
-                discord.SelectOption(label=t[:100], value=t[:100], default=t.lower() == c.active_tattoo.lower()) for t in c.tattoos]
+                discord.SelectOption(label=t[:100], value=t[:100], default=t.lower() == (c.active_tattoo or "").lower()) for t in c.tattoos]
             self.add_item(_Pick("Active tattoo...", opts, self._on_tattoo, row)); row += 1
         for label, cb in (("Export JSON", self._on_export), ("Refresh", self._on_refresh), ("Done", self._on_done)):
             b = discord.ui.Button(label=label, style=discord.ButtonStyle.secondary, row=4)

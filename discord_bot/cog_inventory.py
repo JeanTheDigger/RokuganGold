@@ -199,11 +199,11 @@ class InventoryPanel(discord.ui.View):
         c = self.rec.character
         owned = [w for w in c.weapons]
         hand_opts = [discord.SelectOption(label="unarmed", value="", default=not c.equipped_weapon)] + [
-            discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w.lower() == c.equipped_weapon.lower()) for w in owned
+            discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w.lower() == (c.equipped_weapon or "").lower()) for w in owned
         ]
         self.add_item(_Pick("Main hand...", hand_opts, self._on_main, 0))
         off_opts = [discord.SelectOption(label="(no off-hand)", value="", default=not c.off_hand_weapon)] + [
-            discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w.lower() == c.off_hand_weapon.lower()) for w in owned
+            discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w.lower() == (c.off_hand_weapon or "").lower()) for w in owned
         ]
         self.add_item(_Pick("Off hand...", off_opts, self._on_off, 1))
         groups = sorted({w["skill"] for w in combat.WEAPON_CATALOG.values()})
@@ -320,9 +320,9 @@ class InventoryPanel(discord.ui.View):
         c = self.rec.character
         w = values[0]
         c.weapons = [x for x in c.weapons if x.lower() != w.lower()]
-        if c.equipped_weapon.lower() == w.lower():
+        if (c.equipped_weapon or "").lower() == w.lower():
             c.equipped_weapon = ""
-        if c.off_hand_weapon.lower() == w.lower():
+        if (c.off_hand_weapon or "").lower() == w.lower():
             c.off_hand_weapon = ""
         await self.commit(interaction, f"Dropped **{w}**.", "equip")
 
