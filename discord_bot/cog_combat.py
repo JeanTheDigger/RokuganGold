@@ -20,7 +20,7 @@ from l5r_rules import (
     advantage_effects, advantages, combat, condition_effects, creature,
     declarable_techniques, enums,
     kata, kata_effects, kiho, kiho_effects, mass_battle, skill_mastery,
-    spells, stats, tattoo_effects, technique_effects,
+    spells, stats, tattoo_catalog, tattoo_effects, technique_effects,
 )
 from l5r_rules.character import Character
 
@@ -1894,6 +1894,58 @@ class CombatBoardView(views_base.PersistentView):
             f"Select a Kiho for **{cur.name}**:", view=view, ephemeral=True,
         )
 
+    @discord.ui.button(label="Tattoo", style=discord.ButtonStyle.secondary, row=3)
+    async def tattoo_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        enc = self._get_enc()
+        if enc is None:
+            await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        if not enc.started:
+            await interaction.response.send_message("Encounter has not started yet.", ephemeral=True)
+            return
+        cur = enc.current()
+        if cur is None:
+            await interaction.response.send_message("No current combatant.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        if not self._is_active_player(uid, enc) and not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"It is **{cur.name}**'s turn, not yours.", ephemeral=True,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cur)
+        if rec is None:
+            await interaction.response.send_message(
+                f"Cannot resolve sheet for **{cur.name}**.", ephemeral=True,
+            )
+            return
+        c = rec.character
+        if not c.tattoos:
+            await interaction.response.send_message(
+                f"**{c.name}** has no tattoos.", ephemeral=True,
+            )
+            return
+        active = (c.active_tattoo or "").lower()
+        options: list[discord.SelectOption] = []
+        if active:
+            options.append(discord.SelectOption(
+                label="Deactivate tattoo",
+                value="__deactivate__",
+                description=f"Deactivate {c.active_tattoo}",
+            ))
+        for t_name in c.tattoos[:24]:
+            is_active = t_name.lower() == active
+            options.append(discord.SelectOption(
+                label=t_name[:100],
+                value=t_name,
+                description="Currently active" if is_active else "Activate",
+                default=is_active,
+            ))
+        view = _BoardTattooSelect(self.guild_id, self.channel_id, cur.name, options)
+        await interaction.response.send_message(
+            f"Select a tattoo for **{cur.name}**:", view=view, ephemeral=True,
+        )
+
     @discord.ui.button(label="Cast Spell", style=discord.ButtonStyle.blurple, row=4)
     async def cast_spell_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         enc = self._get_enc()
@@ -2491,6 +2543,160 @@ class _BoardVoidSwapSelect(discord.ui.View):
             f"{c.current_void_points} VP left)"
         )
         await _refresh_board(enc, guild)
+
+
+_BUGEI_SKILLS = [
+    "Athletics", "Battle", "Chain Weapons", "Defense", "Heavy Weapons",
+    "Horsemanship", "Hunting", "Iaijutsu", "Jiujutsu", "Kenjutsu",
+    "Knives", "Kyujutsu", "Polearms", "Spears", "Staves", "War Fan",
+]
+
+
+class _BoardTattooSelect(discord.ui.View):
+    def __init__(self, guild_id: str, channel_id: int, combatant_name: str,
+                 options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.combatant_name = combatant_name
+        self.tattoo_select.options = options
+
+    @discord.ui.select(placeholder="Choose Tattoo...")
+    async def tattoo_select(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        chosen = select.values[0]
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            await interaction.response.edit_message(content="No active encounter.", view=None)
+            return
+        cb = enc.find(self.combatant_name)
+        if cb is None:
+            await interaction.response.edit_message(
+                content=f"**{self.combatant_name}** is no longer in initiative.", view=None,
+            )
+            return
+        rec = _d.resolve_combatant_record(self.guild_id, cb)
+        if rec is None:
+            await interaction.response.edit_message(
+                content=f"Cannot resolve sheet for **{self.combatant_name}**.", view=None,
+            )
+            return
+        c = rec.character
+        if chosen == "__deactivate__":
+            old = c.active_tattoo or "(none)"
+            c.active_tattoo = ""
+            c.bear_tattoo_choice = ""
+            c.lion_tattoo_skill = ""
+            _d.store.save(rec)
+            await interaction.response.edit_message(
+                content=f"**{c.name}** deactivates the **{old}** tattoo.", view=None,
+            )
+            return
+        key = chosen.lower().strip()
+        if key not in [x.lower() for x in c.tattoos]:
+            await interaction.response.edit_message(
+                content=f"**{c.name}** doesn't have a **{chosen}** tattoo.", view=None,
+            )
+            return
+        if key == "bear":
+            view = _BoardBearTattooChoice(self.guild_id, self.channel_id, self.combatant_name)
+            await interaction.response.edit_message(
+                content=f"Bear Tattoo: Choose **Stamina** (+School Rank) or **Strength** (+ceil(SR/2)):",
+                view=view,
+            )
+            return
+        if key == "lion":
+            options = [
+                discord.SelectOption(label=s, value=s.lower()) for s in _BUGEI_SKILLS
+            ]
+            view = _BoardLionTattooSkill(self.guild_id, self.channel_id, self.combatant_name, options)
+            await interaction.response.edit_message(
+                content=f"Lion Tattoo: Choose a Bugei skill to boost by +SR ranks:",
+                view=view,
+            )
+            return
+        t = tattoo_catalog.get_tattoo(key)
+        label = t["name"] if t else key.title()
+        c.active_tattoo = label
+        c.bear_tattoo_choice = ""
+        c.lion_tattoo_skill = ""
+        _d.store.save(rec)
+        effect = f"\n> {t['effect']}" if t else ""
+        await interaction.response.edit_message(
+            content=f"**{c.name}** activates the **{label}** tattoo.{effect}", view=None,
+        )
+
+
+class _BoardBearTattooChoice(discord.ui.View):
+    def __init__(self, guild_id: str, channel_id: int, combatant_name: str) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.combatant_name = combatant_name
+
+    @discord.ui.button(label="Stamina (+SR)", style=discord.ButtonStyle.primary)
+    async def stamina_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._activate(interaction, "stamina")
+
+    @discord.ui.button(label="Strength (+ceil(SR/2))", style=discord.ButtonStyle.primary)
+    async def strength_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._activate(interaction, "strength")
+
+    async def _activate(self, interaction: discord.Interaction, choice: str) -> None:
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            await interaction.response.edit_message(content="No active encounter.", view=None)
+            return
+        cb = enc.find(self.combatant_name)
+        rec = _d.resolve_combatant_record(self.guild_id, cb) if cb else None
+        if rec is None:
+            await interaction.response.edit_message(content="Cannot resolve combatant.", view=None)
+            return
+        c = rec.character
+        c.active_tattoo = "Bear"
+        c.bear_tattoo_choice = choice
+        c.lion_tattoo_skill = ""
+        _d.store.save(rec)
+        import math as _m
+        if choice == "stamina":
+            extra = f"**Stamina +{c.school_rank}**"
+        else:
+            extra = f"**Strength +{_m.ceil(c.school_rank / 2)}**"
+        await interaction.response.edit_message(
+            content=f"**{c.name}** activates the **Bear** tattoo. Choice: {extra} (locked for duration).",
+            view=None,
+        )
+
+
+class _BoardLionTattooSkill(discord.ui.View):
+    def __init__(self, guild_id: str, channel_id: int, combatant_name: str,
+                 options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.combatant_name = combatant_name
+        self.skill_select.options = options
+
+    @discord.ui.select(placeholder="Choose Bugei skill...")
+    async def skill_select(self, interaction: discord.Interaction, select: discord.ui.Select) -> None:
+        skill = select.values[0]
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            await interaction.response.edit_message(content="No active encounter.", view=None)
+            return
+        cb = enc.find(self.combatant_name)
+        rec = _d.resolve_combatant_record(self.guild_id, cb) if cb else None
+        if rec is None:
+            await interaction.response.edit_message(content="Cannot resolve combatant.", view=None)
+            return
+        c = rec.character
+        c.active_tattoo = "Lion"
+        c.bear_tattoo_choice = ""
+        c.lion_tattoo_skill = skill.strip()
+        _d.store.save(rec)
+        await interaction.response.edit_message(
+            content=f"**{c.name}** activates the **Lion** tattoo. Skill: **{skill.strip().title()} +{c.school_rank}** ranks (locked for duration).",
+            view=None,
+        )
 
 
 class _BoardKataSelect(discord.ui.View):
