@@ -66,7 +66,8 @@ class _VoidReasonModal(discord.ui.Modal, title="Spend a Void Point"):
         c.current_void_points -= 1
         _d.tally(interaction.channel_id, c.name, "void")
         _d.store.save(rec)
-        await self.hub.refresh(interaction)
+        if not await self.hub.refresh(interaction):
+            return
         await interaction.followup.send(
             f"**{c.name}** spends a Void Point: {self.reason.value.strip()}\n"
             f"  VP remaining: **{c.current_void_points}/{taint.void_point_cap(c)}**")
@@ -100,12 +101,13 @@ class CharacterHub(discord.ui.View):
             self.rec = fresh
         return fresh
 
-    async def refresh(self, interaction: discord.Interaction) -> None:
+    async def refresh(self, interaction: discord.Interaction) -> bool:
         if self.reload() is None:
             await interaction.response.send_message("That character no longer exists.", ephemeral=True)
-            return
+            return False
         self.build()
         await interaction.response.edit_message(content=None, embed=hub_embed(interaction, self.rec), view=self)
+        return True
 
     def build(self) -> None:
         self.clear_items()
@@ -167,12 +169,17 @@ class CharacterHub(discord.ui.View):
             await interaction.response.send_message("That character no longer exists.", ephemeral=True)
             return
         c = rec.character
+        if stats.is_dead(c):
+            await interaction.response.send_message(
+                f"**{c.name}** is dead. PC death is permanent.", ephemeral=True)
+            return
         cap = taint.void_point_cap(c)
         old = c.current_void_points
         c.current_void_points = cap
         _d.store.save(rec)
         cap_note = f" (Taint Rank {taint.taint_rank(c)}: Max VP -1)" if cap < c.max_void_points else ""
-        await self.refresh(interaction)
+        if not await self.refresh(interaction):
+            return
         await interaction.followup.send(
             f"**{c.name}** rests and recovers all Void Points.\n  VP: {old} → **{c.current_void_points}/{cap}**{cap_note}")
 
@@ -181,12 +188,17 @@ class CharacterHub(discord.ui.View):
             await interaction.response.send_message(msg, ephemeral=True)
             return
         _d.store.save(self.rec)
-        await self.refresh(interaction)
+        if not await self.refresh(interaction):
+            return
         await interaction.followup.send(msg)
 
     async def _on_kata(self, interaction: discord.Interaction, value: str) -> None:
         if self.reload() is None:
             await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
+        if stats.is_dead(self.rec.character):
+            await interaction.response.send_message(
+                f"**{self.rec.character.name}** is dead. PC death is permanent.", ephemeral=True)
             return
         ok, msg = _d.activate_kata(self.rec.character, value or None)
         await self._apply(interaction, ok, msg)
@@ -194,6 +206,10 @@ class CharacterHub(discord.ui.View):
     async def _on_kiho(self, interaction: discord.Interaction, value: str) -> None:
         if self.reload() is None:
             await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
+        if stats.is_dead(self.rec.character):
+            await interaction.response.send_message(
+                f"**{self.rec.character.name}** is dead. PC death is permanent.", ephemeral=True)
             return
         c = self.rec.character
         off = value.lower() in [x.lower() for x in c.active_kiho]
@@ -203,6 +219,10 @@ class CharacterHub(discord.ui.View):
     async def _on_tattoo(self, interaction: discord.Interaction, value: str) -> None:
         if self.reload() is None:
             await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
+        if stats.is_dead(self.rec.character):
+            await interaction.response.send_message(
+                f"**{self.rec.character.name}** is dead. PC death is permanent.", ephemeral=True)
             return
         c = self.rec.character
         if not value:

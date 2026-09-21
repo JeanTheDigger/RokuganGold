@@ -10,6 +10,7 @@ Every change is saved with an undo snapshot and an audit line.
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
@@ -128,6 +129,9 @@ class _KokuModal(discord.ui.Modal, title="Koku: Add or Spend"):
         except ValueError:
             await interaction.response.send_message("Amount must be a number, e.g. 5 or -2.5.", ephemeral=True)
             return
+        if not math.isfinite(amount):
+            await interaction.response.send_message("Amount must be a finite number.", ephemeral=True)
+            return
         c = self.panel.rec.character
         if amount < 0 and c.koku + amount < 0:
             await interaction.response.send_message(
@@ -158,7 +162,7 @@ class InventoryPanel(discord.ui.View):
         ("remove_item", "Remove items", False),
         ("wear_armor", "Put on / take off armor", False),
         ("add_item", "Add an item (staff)", True),
-        ("koku", "Koku: add or spend (staff)", True),
+        ("koku", "Koku: Add or spend (staff)", True),
         ("armor", "Assign armor (staff)", True),
         ("qualities", "Weapon qualities (staff)", True),
     ]

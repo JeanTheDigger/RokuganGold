@@ -10,6 +10,7 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 from helpers import find_support_channel
+from l5r_rules import stats
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +127,11 @@ async def letter_send(
     if sender_rec is None:
         await interaction.response.send_message(
             "You have no active character. Use `/sheet create` first.", ephemeral=True,
+        )
+        return
+    if stats.is_dead(sender_rec.character):
+        await interaction.response.send_message(
+            f"**{sender_rec.character.name}** is dead. PC death is permanent.", ephemeral=True,
         )
         return
 

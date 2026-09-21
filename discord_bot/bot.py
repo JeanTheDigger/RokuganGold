@@ -905,7 +905,7 @@ def _whoami_lines(interaction: discord.Interaction, rec: storage.CharacterRecord
         uid = str(interaction.user.id)
         for cb in enc.combatants:
             if cb.owner_id == uid and cb.name.lower() == c.name.lower():
-                conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "none"
+                conds = ", ".join(sorted(cb.conditions)) if cb.conditions else "None"
                 lines.append(f"In combat: Conditions: {conds}")
                 break
     return lines
@@ -2187,7 +2187,7 @@ def _materialize_character(state: dict) -> Character:
     if state.get("concept"):
         char.notes = state["concept"]
 
-    char.current_void_points = char.max_void_points
+    char.current_void_points = taint.void_point_cap(char)
     return char
 
 
@@ -3672,7 +3672,7 @@ async def sheet_activate(interaction: discord.Interaction, name: app_commands.Ra
         rec = store.get_by_name(guild, NPC_OWNER, name)
         as_npc = rec is not None
     if rec is None:
-        mine = ", ".join(r.character.name for r in store.list_by_owner(guild, uid)) or "none"
+        mine = ", ".join(r.character.name for r in store.list_by_owner(guild, uid)) or "None"
         await interaction.response.send_message(
             f"No character or NPC called **{name}**. Yours: {mine}. NPCs: See `/npc list`.", ephemeral=True,
         )
@@ -4434,7 +4434,7 @@ def _activate_kiho(c: Character, name: str, off: bool = False) -> tuple[bool, st
         c.active_kiho.append(canonical)
     tlabel = h["type"] if h and h.get("type") else "Kiho"
     return True, (f"**{c.name}** activates the {tlabel} Kiho **{canonical}**{replaced}. "
-                  f"*(Activation cost: A Void Point or Meditation/Void roll: And duration are "
+                  f"*(Activation cost: A Void Point or Meditation/Void roll, and duration are "
                   f"DM-adjudicated; its combat effect is shown as a reminder on attacks.)*")
 
 @sheet_kata_grp.command(name="activate", description="Set your active Kata (Simple Action; only one active). Blank name drops it.")
@@ -4451,6 +4451,8 @@ async def sheet_kata_activate(
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
+        return
+    if await _refuse_if_dead(interaction, rec.character):
         return
     ok, msg = _activate_kata(rec.character, name)
     if not ok:
@@ -4474,6 +4476,8 @@ async def sheet_kiho_activate(
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
+        return
+    if await _refuse_if_dead(interaction, rec.character):
         return
     ok, msg = _activate_kiho(rec.character, name, off)
     if not ok:
@@ -4575,6 +4579,8 @@ async def sheet_tattoo_activate(
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
+        return
+    if await _refuse_if_dead(interaction, rec.character):
         return
     c = rec.character
     if off:
@@ -5107,6 +5113,8 @@ async def dm_mount(
         )
         return
     c = rec.character
+    if await _refuse_if_dead(interaction, c):
+        return
     mounting = not dismount
     if c.is_mounted == mounting:
         state = "already mounted" if mounting else "already dismounted"
@@ -5746,6 +5754,8 @@ async def void_refresh(
         embed.set_footer(text=f"Refreshed by {interaction.user.display_name}")
         await interaction.response.send_message(embed=embed)
     else:
+        if await _refuse_if_dead(interaction, c):
+            return
         if c.current_void_points >= vp_cap:
             await interaction.response.send_message(
                 f"**{c.name}** is already at full VP ({c.current_void_points}/{vp_cap}){cap_note}.",
@@ -8693,11 +8703,13 @@ async def location_close(interaction: discord.Interaction) -> None:
 # /xp group: Experience: DMs grant, players spend to advance (L5R 4e RAW)
 # ===========================================================================
 
-async def _buy_named(interaction, member, name, mastery_level, attr, label, emoji, note="", cost=None):
+async def _buy_named(interaction, member, name, mastery_level, attr, label, note="", cost=None):
     """Shared handler for Kata / Kiho / memorised Spell (cost = 1 x Mastery Level unless overridden)."""
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
+        return
+    if await _refuse_if_dead(interaction, rec.character):
         return
     c = rec.character
     lst = getattr(c, attr)
@@ -8717,7 +8729,7 @@ async def _buy_named(interaction, member, name, mastery_level, attr, label, emoj
     changed = store.save(rec, note="xp spend")
     await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
-        f"{emoji} **{c.name}** learns the {label} **{name}** (ML {mastery_level}) for **{cost}** XP.{note}\n"
+        f"**{c.name}** learns the {label} **{name}** (ML {mastery_level}) for **{cost}** XP.{note}\n"
         f"XP left {c.xp:g}", embed=build_sheet_embed(rec))
 
 @xp_group.command(name="grant", description="Grant (or correct) a player's Experience. [Fortune]")
@@ -8786,6 +8798,8 @@ async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
+    if await _refuse_if_dead(interaction, rec.character):
+        return
     c = rec.character
     quote = advancement.trait_raise_quote(c, trait.value)
     label = "Void" if trait.value == "void" else trait.value.capitalize()
@@ -8818,6 +8832,8 @@ async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[s
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
+    if await _refuse_if_dead(interaction, rec.character):
+        return
     c = rec.character
     skill_name = skill.strip().title()
     quote = advancement.skill_raise_quote(c, skill_name)
@@ -8848,6 +8864,8 @@ async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Rang
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
+        return
+    if await _refuse_if_dead(interaction, rec.character):
         return
     c = rec.character
     skill_name = skill.strip().title()
@@ -8881,22 +8899,22 @@ def _kata_school_ok(c: Character, schools_str: str) -> tuple[bool, str]:
         if len(parts) == 3 and parts[2].lower() in ("bushi", "school"):
             if parts[1].lower() == "bushi":
                 if "bushi" not in c.school_type.lower():
-                    return False, f"requires a Bushi school (you are {c.school_type})"
+                    return False, f"Requires a Bushi school (you are {c.school_type})"
                 return True, ""
             clan_req = parts[1]
             if c.clan.lower() != clan_req.lower():
-                return False, f"requires {clan_req} clan (you are {c.clan})"
+                return False, f"Requires {clan_req} clan (you are {c.clan})"
             if parts[2].lower() == "bushi" and "bushi" not in c.school_type.lower():
-                return False, f"requires a {clan_req} Bushi school (you are {c.school_type})"
+                return False, f"Requires a {clan_req} Bushi school (you are {c.school_type})"
             return True, ""
         if len(parts) == 2 and parts[1].lower() == "bushi":
             if "bushi" not in c.school_type.lower():
-                return False, f"requires a Bushi school (you are {c.school_type})"
+                return False, f"Requires a Bushi school (you are {c.school_type})"
             return True, ""
     allowed = [s.strip().lower() for s in base.split(",")]
     if c.school.strip().lower() in allowed:
         return True, ""
-    return False, f"requires school: {base}"
+    return False, f"Requires school: {base}"
 
 @xp_group.command(name="kata", description="Learn a Kata (cost = 1 x Mastery Level).")
 @app_commands.describe(
@@ -8932,7 +8950,7 @@ async def xp_kata(
                 ephemeral=True)
             return
     canonical = kata_entry["name"] if kata_entry else name.strip()
-    await _buy_named(interaction, member, canonical, ml, "katas", "kata", "")
+    await _buy_named(interaction, member, canonical, ml, "katas", "kata")
 
 @xp_group.command(name="kiho", description="Learn a Kiho (Brotherhood 1x ML; non-Brotherhood monks 1.5x; shugenja 2x).")
 @app_commands.describe(
@@ -8989,7 +9007,7 @@ async def xp_kiho(
     canonical = kiho_entry["name"] if kiho_entry else name.strip()
     cost = advancement.kiho_cost(ml, non_brotherhood=non_brotherhood, shugenja=shugenja)
     note = " *(shugenja: 2x cost)*" if shugenja else (" *(non-Brotherhood monk: 1.5x cost)*" if non_brotherhood else "")
-    await _buy_named(interaction, member, canonical, ml, "kiho", "kiho", "", note=note, cost=cost)
+    await _buy_named(interaction, member, canonical, ml, "kiho", "kiho", note=note, cost=cost)
 
 @xp_group.command(name="spell", description="Memorise a spell so no scroll is needed (cost = 1 x Mastery Level).")
 @app_commands.describe(
@@ -9024,7 +9042,7 @@ async def xp_spell(
                 f"Only Shugenja can memorise spells.", ephemeral=True)
             return
     canonical = spell["name"] if spell else name.strip()
-    await _buy_named(interaction, member, canonical, ml, "spells_known", "spell", "")
+    await _buy_named(interaction, member, canonical, ml, "spells_known", "spell")
 
 @xp_group.command(name="advantage", description="Buy an Advantage with XP (cost = its point value).")
 @app_commands.describe(
@@ -9044,6 +9062,8 @@ async def xp_advantage(
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
+        return
+    if await _refuse_if_dead(interaction, rec.character):
         return
     input_name = name.strip()
     base_name = input_name.split(":")[0].strip() if ":" in input_name else input_name
@@ -9102,6 +9122,8 @@ async def xp_remove_disadvantage(
     rec, err = await _resolve_active_for_edit(interaction, member)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
+        return
+    if await _refuse_if_dead(interaction, rec.character):
         return
     c = rec.character
     name_stripped = name.strip()
@@ -9881,7 +9903,7 @@ class _XpAdvCategoryPick(discord.ui.View):
             pts = entry.get("points")
             if pts is None:
                 cost_str = f"Variable ({entry.get('cost_text', '?')})"
-                desc_suffix = "Variable cost: Use `/xp advantage` with points: instead"
+                desc_suffix = "Variable cost: Use /xp advantage with points param"
             else:
                 cost_str = f"{pts} XP"
                 can = c.xp >= pts
@@ -10014,6 +10036,8 @@ async def school_learn(
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
+    if await _refuse_if_dead(interaction, rec.character):
+        return
     c = rec.character
     if school_name and c.school and school_name.strip().lower() != c.school.strip().lower():
         if not await _require_dm_role(interaction):
@@ -10065,11 +10089,11 @@ def build_spell_embed(s: dict) -> discord.Embed:
     embed.description = f"**{s['element']} {s['mastery']}**{kw}"
     line = []
     if s["range"]:
-        line.append(f"**Range: ** {s['range']}")
+        line.append(f"**Range:** {s['range']}")
     if s["area"]:
-        line.append(f"**Area: ** {s['area']}")
+        line.append(f"**Area:** {s['area']}")
     if s["duration"]:
-        line.append(f"**Duration: ** {s['duration']}")
+        line.append(f"**Duration:** {s['duration']}")
     if line:
         embed.add_field(name="​", value="  ·  ".join(line), inline=False)
     if s["raises"]:
@@ -10224,8 +10248,6 @@ async def spell_cast(
         if caster.current_void_points <= 0:
             await interaction.response.send_message("No Void Points remaining.", ephemeral=True)
             return
-        caster.current_void_points -= 1
-        _tally(interaction.channel_id, caster.name, "void")
         extra_rolled = extra_kept = 1
     fear_r = _fear_penalty(interaction.channel_id, caster.name)
     extra_rolled -= fear_r
@@ -10240,6 +10262,9 @@ async def spell_cast(
             f"**{caster.name}** cannot cast **{s['name']}**: {result['reason']}.", ephemeral=True
         )
         return
+    if spend_void:
+        caster.current_void_points -= 1
+        _tally(interaction.channel_id, caster.name, "void")
     # Consume a spell slot (L5R 4e: consumed whether the roll succeeds or fails).
     if used_bonus_slot:
         caster.void_spell_bonus = max(0, caster.void_spell_bonus - 1)
