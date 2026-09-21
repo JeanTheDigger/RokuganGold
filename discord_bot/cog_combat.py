@@ -1413,15 +1413,21 @@ class CombatBoardView(views_base.PersistentView):
         if enc is None:
             await interaction.response.send_message("No active encounter.", ephemeral=True)
             return
-        uid = str(interaction.user.id)
-        if not self._is_active_player(uid, enc) and not _d.is_dm(interaction):
-            cur = enc.current()
-            name = cur.name if cur else "unknown"
+        if not enc.started:
             await interaction.response.send_message(
-                f"It is **{name}**'s turn, not yours.", ephemeral=True
+                "Encounter has not started yet. Use `/combat next` to begin.", ephemeral=True,
             )
             return
         cur = enc.current()
+        if cur is None:
+            await interaction.response.send_message("No current combatant.", ephemeral=True)
+            return
+        uid = str(interaction.user.id)
+        if not self._is_active_player(uid, enc) and not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"It is **{cur.name}**'s turn, not yours.", ephemeral=True
+            )
+            return
         view = _BoardStanceSelect(self.guild_id, self.channel_id, cur.name)
         await interaction.response.send_message(
             f"Select stance for **{cur.name}**:", view=view, ephemeral=True,
