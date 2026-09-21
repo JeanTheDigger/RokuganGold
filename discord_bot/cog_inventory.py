@@ -9,6 +9,7 @@ Every change is saved with an undo snapshot and an audit line.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
@@ -17,6 +18,8 @@ from discord import app_commands
 
 import storage
 from l5r_rules import combat
+
+log = logging.getLogger(__name__)
 
 PANEL_IDLE_SECONDS: float = 900.0
 
@@ -407,8 +410,17 @@ async def inventory(interaction: discord.Interaction, member: discord.Member | N
         if err:
             await interaction.response.send_message(err, ephemeral=True)
             return
-    panel = InventoryPanel(rec, interaction.user.id, staff)
-    await interaction.response.send_message(content=panel.content(), embed=build_inventory_embed(rec), view=panel, ephemeral=True)
+    try:
+        panel = InventoryPanel(rec, interaction.user.id, staff)
+        embed = build_inventory_embed(rec)
+    except Exception as exc:
+        log.error("inventory panel build failed for %s: %s", rec.character.name, exc, exc_info=True)
+        await interaction.response.send_message(
+            f"Failed to build inventory for **{rec.character.name}**: {exc}",
+            ephemeral=True,
+        )
+        return
+    await interaction.response.send_message(content=panel.content(), embed=embed, view=panel, ephemeral=True)
 
 
 def init(*, tree: app_commands.CommandTree, store, npc_owner: str, require_guild, is_dm, resolve_active_for_edit,
