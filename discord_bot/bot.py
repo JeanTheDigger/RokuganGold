@@ -9088,9 +9088,848 @@ async def xp_remove_disadvantage(
 async def xp_costs(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
         "**Experience costs (L5R 4e RAW)**\n" + advancement.cost_table()
-        + "\n\nA DM grants XP with `/xp grant`; spend it with `/xp trait`, `/xp skill`, `/xp emphasis`, "
-        "`/xp kata`, `/xp kiho`, `/xp spell`. Insight Rank follows automatically. Prerequisites and "
-        "learning-a-Technique roleplay are DM-adjudicated.", ephemeral=True)
+        + "\n\nA DM grants XP with `/xp grant`; spend it with `/xp spend` (guided) or the "
+        "individual commands (`/xp trait`, `/xp skill`, etc). Insight Rank follows automatically. "
+        "Prerequisites and learning-a-Technique roleplay are DM-adjudicated.", ephemeral=True)
+
+
+# ---------------------------------------------------------------------------
+# /xp spend: Guided interactive XP spending flow
+# ---------------------------------------------------------------------------
+
+_XP_CATEGORIES = [
+    ("trait", "Raise a Trait or Void", "New rank x4 (Void: x6)"),
+    ("skill", "Raise or learn a Skill", "New rank x1"),
+    ("emphasis", "Add a Skill Emphasis", "Flat 2 XP"),
+    ("kata", "Learn a Kata", "1 x Mastery Level"),
+    ("kiho", "Learn a Kiho", "1-2 x Mastery Level"),
+    ("spell", "Memorize a Spell", "1 x Mastery Level"),
+    ("advantage", "Buy an Advantage", "Its point value"),
+]
+
+
+class _XpCategorySelect(discord.ui.View):
+    def __init__(self, guild_id: str, user_id: int) -> None:
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        opts = [
+            discord.SelectOption(label=label, value=val, description=desc)
+            for val, label, desc in _XP_CATEGORIES
+        ]
+        sel = discord.ui.Select(placeholder="What do you want to spend XP on?", options=opts, row=0)
+        sel.callback = self._pick
+        self.add_item(sel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        choice = interaction.data["values"][0]
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.edit_message(content="No active character found.", view=None)
+            return
+        c = rec.character
+        avail = c.xp
+
+        if choice == "trait":
+            await self._show_traits(interaction, c, avail)
+        elif choice == "skill":
+            await self._show_skills(interaction, c, avail)
+        elif choice == "emphasis":
+            await self._show_emphasis_skills(interaction, c, avail)
+        elif choice == "kata":
+            await self._show_kata(interaction, c, avail)
+        elif choice == "kiho":
+            await self._show_kiho_elements(interaction, c, avail)
+        elif choice == "spell":
+            await self._show_spell_elements(interaction, c, avail)
+        elif choice == "advantage":
+            await self._show_advantage_categories(interaction, c, avail)
+
+    async def _show_traits(self, interaction: discord.Interaction, c: Character, avail: float) -> None:
+        opts: list[discord.SelectOption] = []
+        for trait in advancement.TRAIT_NAMES:
+            quote = advancement.trait_raise_quote(c, trait)
+            if quote is None:
+                continue
+            new_rank, cost = quote
+            label_name = "Void" if trait == "void" else trait.capitalize()
+            cur = c.void_ring if trait == "void" else c.get_trait(trait)
+            can = avail >= cost
+            opts.append(discord.SelectOption(
+                label=f"{label_name}: {cur} -> {new_rank}  ({cost} XP)",
+                value=trait,
+                description=f"{'Can afford' if can else 'Not enough XP'} (you have {avail:g})",
+            ))
+        if not opts:
+            await interaction.response.edit_message(content="All Traits and Void are at maximum rank.", view=None)
+            return
+        view = _XpTraitPick(self.guild_id, self.user_id, opts)
+        await interaction.response.edit_message(content=f"**{c.name}** -- Pick a Trait to raise ({avail:g} XP available):", view=view)
+
+    async def _show_skills(self, interaction: discord.Interaction, c: Character, avail: float) -> None:
+        opts: list[discord.SelectOption] = []
+        for sk, rank in sorted(c.skills.items()):
+            quote = advancement.skill_raise_quote(c, sk)
+            if quote is None:
+                continue
+            new_rank, cost = quote
+            can = avail >= cost
+            opts.append(discord.SelectOption(
+                label=f"{sk}: {rank} -> {new_rank}  ({cost} XP)",
+                value=f"raise:{sk}",
+                description=f"{'Can afford' if can else 'Not enough XP'} (you have {avail:g})",
+            ))
+        if len(opts) >= 25:
+            opts = opts[:24]
+        opts.append(discord.SelectOption(
+            label="Learn a new skill...",
+            value="new_skill",
+            description="Type in the name of a skill you don't have yet (costs 1 XP)",
+        ))
+        view = _XpSkillPick(self.guild_id, self.user_id, opts)
+        await interaction.response.edit_message(content=f"**{c.name}** -- Pick a Skill to raise ({avail:g} XP available):", view=view)
+
+    async def _show_emphasis_skills(self, interaction: discord.Interaction, c: Character, avail: float) -> None:
+        if avail < advancement.EMPHASIS_COST:
+            await interaction.response.edit_message(
+                content=f"Not enough XP: An Emphasis costs {advancement.EMPHASIS_COST}, but you have {avail:g}.", view=None)
+            return
+        opts: list[discord.SelectOption] = []
+        for sk, rank in sorted(c.skills.items()):
+            if rank < 1:
+                continue
+            existing = list(c.emphases.get(sk, []))
+            limit = advancement.emphasis_limit(rank)
+            if len(existing) >= limit:
+                continue
+            emph_str = f" ({', '.join(existing)})" if existing else ""
+            opts.append(discord.SelectOption(
+                label=f"{sk} (rank {rank}){emph_str}",
+                value=sk,
+                description=f"{len(existing)}/{limit} emphases used",
+            ))
+        if not opts:
+            await interaction.response.edit_message(
+                content="No skills have room for another Emphasis. Raise a skill first.", view=None)
+            return
+        if len(opts) > 25:
+            opts = opts[:25]
+        view = _XpEmphasisSkillPick(self.guild_id, self.user_id, opts)
+        await interaction.response.edit_message(
+            content=f"**{c.name}** -- Pick a skill to add an Emphasis to ({avail:g} XP available, cost {advancement.EMPHASIS_COST}):", view=view)
+
+    async def _show_kata(self, interaction: discord.Interaction, c: Character, avail: float) -> None:
+        from l5r_rules import kata_catalog
+        opts: list[discord.SelectOption] = []
+        known_lower = {k.lower() for k in c.katas}
+        for entry in sorted(kata_catalog.KATA_DATA, key=lambda e: (e["mastery"], e["name"])):
+            if entry["name"].lower() in known_lower:
+                continue
+            ok, _reason = _kata_school_ok(c, entry.get("schools", ""))
+            if not ok:
+                continue
+            cost = advancement.misc_cost(entry["mastery"])
+            can = avail >= cost
+            opts.append(discord.SelectOption(
+                label=f"{entry['name']} (ML {entry['mastery']}, {cost} XP)",
+                value=entry["name"],
+                description=f"{entry['element']} | {'Can afford' if can else 'Not enough XP'}",
+            ))
+        if not opts:
+            await interaction.response.edit_message(
+                content="No kata available. Either you know them all, or none match your school.", view=None)
+            return
+        pages = [opts[i:i+25] for i in range(0, len(opts), 25)]
+        view = _XpKataPick(self.guild_id, self.user_id, pages, 0)
+        total = sum(len(p) for p in pages)
+        pg = f" (page 1/{len(pages)})" if len(pages) > 1 else ""
+        await interaction.response.edit_message(
+            content=f"**{c.name}** -- Pick a Kata to learn ({avail:g} XP available, {total} available){pg}:", view=view)
+
+    async def _show_kiho_elements(self, interaction: discord.Interaction, c: Character, avail: float) -> None:
+        stype = c.school_type.lower()
+        if "monk" not in stype and "shugenja" not in stype:
+            await interaction.response.edit_message(
+                content=f"**{c.name}** is a {c.school_type}. Only Monks and Shugenja can learn Kiho.", view=None)
+            return
+        opts = [
+            discord.SelectOption(label="Air", value="air"),
+            discord.SelectOption(label="Earth", value="earth"),
+            discord.SelectOption(label="Fire", value="fire"),
+            discord.SelectOption(label="Water", value="water"),
+            discord.SelectOption(label="All elements", value="all"),
+        ]
+        view = _XpKihoElementPick(self.guild_id, self.user_id, opts)
+        await interaction.response.edit_message(
+            content=f"**{c.name}** -- Filter Kiho by element ({avail:g} XP available):", view=view)
+
+    async def _show_spell_elements(self, interaction: discord.Interaction, c: Character, avail: float) -> None:
+        if "shugenja" not in c.school_type.lower():
+            await interaction.response.edit_message(
+                content=f"**{c.name}** is a {c.school_type}, not a Shugenja. Only Shugenja can memorize spells.", view=None)
+            return
+        opts = [
+            discord.SelectOption(label="Air", value="air"),
+            discord.SelectOption(label="Earth", value="earth"),
+            discord.SelectOption(label="Fire", value="fire"),
+            discord.SelectOption(label="Water", value="water"),
+            discord.SelectOption(label="Void", value="void"),
+            discord.SelectOption(label="All elements", value="all"),
+        ]
+        view = _XpSpellElementPick(self.guild_id, self.user_id, opts)
+        await interaction.response.edit_message(
+            content=f"**{c.name}** -- Filter spells by element ({avail:g} XP available):", view=view)
+
+    async def _show_advantage_categories(self, interaction: discord.Interaction, c: Character, avail: float) -> None:
+        opts = [
+            discord.SelectOption(label="Physical", value="Physical"),
+            discord.SelectOption(label="Mental", value="Mental"),
+            discord.SelectOption(label="Social", value="Social"),
+            discord.SelectOption(label="Spiritual", value="Spiritual"),
+            discord.SelectOption(label="Material", value="Material"),
+            discord.SelectOption(label="All categories", value="all"),
+        ]
+        view = _XpAdvCategoryPick(self.guild_id, self.user_id, opts)
+        await interaction.response.edit_message(
+            content=f"**{c.name}** -- Filter Advantages by category ({avail:g} XP available):", view=view)
+
+class _XpTraitPick(discord.ui.View):
+    def __init__(self, guild_id: str, user_id: int, options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        sel = discord.ui.Select(placeholder="Pick a Trait...", options=options, row=0)
+        sel.callback = self._pick
+        self.add_item(sel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        trait = interaction.data["values"][0]
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.edit_message(content="No active character found.", view=None)
+            return
+        c = rec.character
+        quote = advancement.trait_raise_quote(c, trait)
+        label = "Void" if trait == "void" else trait.capitalize()
+        if quote is None:
+            await interaction.response.edit_message(content=f"{label} is already at maximum rank.", view=None)
+            return
+        new_rank, cost = quote
+        if c.xp < cost:
+            await interaction.response.edit_message(
+                content=f"Not enough XP: Raising {label} to **{new_rank}** costs **{cost}**, but **{c.name}** has {c.xp:g}.",
+                view=None)
+            return
+        advancement.apply_trait_raise(c, trait)
+        c.xp -= cost
+        c.xp_spent += cost
+        rank_msg = _check_insight_rank_advance(c)
+        changed = store.save(rec, note="xp spend")
+        await _xp_spend_log(interaction, rec, changed)
+        await interaction.response.edit_message(
+            content=f"**{c.name}** raises **{label}** to rank **{new_rank}** for **{cost}** XP.\n"
+            f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) -- XP left {c.xp:g}{rank_msg}",
+            view=None)
+
+
+class _XpSkillPick(discord.ui.View):
+    def __init__(self, guild_id: str, user_id: int, options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        sel = discord.ui.Select(placeholder="Pick a Skill...", options=options, row=0)
+        sel.callback = self._pick
+        self.add_item(sel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        val = interaction.data["values"][0]
+        if val == "new_skill":
+            await interaction.response.send_modal(_XpNewSkillModal(self.guild_id, self.user_id))
+            return
+        skill_name = val.split(":", 1)[1]
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.edit_message(content="No active character found.", view=None)
+            return
+        c = rec.character
+        quote = advancement.skill_raise_quote(c, skill_name)
+        if quote is None:
+            await interaction.response.edit_message(content=f"**{skill_name}** is already at maximum rank.", view=None)
+            return
+        new_rank, cost = quote
+        if c.xp < cost:
+            await interaction.response.edit_message(
+                content=f"Not enough XP: Raising **{skill_name}** to **{new_rank}** costs **{cost}**, but **{c.name}** has {c.xp:g}.",
+                view=None)
+            return
+        advancement.apply_skill_raise(c, skill_name)
+        c.xp -= cost
+        c.xp_spent += cost
+        rank_msg = _check_insight_rank_advance(c)
+        changed = store.save(rec, note="xp spend")
+        await _xp_spend_log(interaction, rec, changed)
+        await interaction.response.edit_message(
+            content=f"**{c.name}** raises **{skill_name}** to rank **{new_rank}** for **{cost}** XP.\n"
+            f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) -- XP left {c.xp:g}{rank_msg}",
+            view=None)
+
+
+class _XpNewSkillModal(discord.ui.Modal, title="Learn a new Skill"):
+    skill_input = discord.ui.TextInput(label="Skill name", placeholder="e.g. Lore: Shadowlands", max_length=40)
+
+    def __init__(self, guild_id: str, user_id: int) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.user_id = user_id
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        skill_name = self.skill_input.value.strip().title()
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.send_message("No active character found.", ephemeral=True)
+            return
+        c = rec.character
+        quote = advancement.skill_raise_quote(c, skill_name)
+        if quote is None:
+            await interaction.response.send_message(f"**{skill_name}** is already at maximum rank.", ephemeral=True)
+            return
+        new_rank, cost = quote
+        if c.xp < cost:
+            await interaction.response.send_message(
+                f"Not enough XP: Learning **{skill_name}** costs **{cost}**, but **{c.name}** has {c.xp:g}.", ephemeral=True)
+            return
+        advancement.apply_skill_raise(c, skill_name)
+        c.xp -= cost
+        c.xp_spent += cost
+        rank_msg = _check_insight_rank_advance(c)
+        changed = store.save(rec, note="xp spend")
+        await _xp_spend_log(interaction, rec, changed)
+        await interaction.response.send_message(
+            f"**{c.name}** learns **{skill_name}** at rank **{new_rank}** for **{cost}** XP.\n"
+            f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) -- XP left {c.xp:g}{rank_msg}",
+            ephemeral=True)
+
+
+class _XpEmphasisSkillPick(discord.ui.View):
+    def __init__(self, guild_id: str, user_id: int, options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        sel = discord.ui.Select(placeholder="Pick a Skill to add an Emphasis to...", options=options, row=0)
+        sel.callback = self._pick
+        self.add_item(sel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        skill_name = interaction.data["values"][0]
+        await interaction.response.send_modal(_XpEmphasisModal(self.guild_id, self.user_id, skill_name))
+
+
+class _XpEmphasisModal(discord.ui.Modal, title="Add Emphasis"):
+    emphasis_input = discord.ui.TextInput(label="Emphasis name", placeholder="e.g. Katana", max_length=40)
+
+    def __init__(self, guild_id: str, user_id: int, skill_name: str) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.skill_name = skill_name
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        emph = self.emphasis_input.value.strip().title()
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.send_message("No active character found.", ephemeral=True)
+            return
+        c = rec.character
+        cost, problem = advancement.emphasis_quote(c, self.skill_name, emph)
+        if problem:
+            await interaction.response.send_message(problem, ephemeral=True)
+            return
+        if c.xp < cost:
+            await interaction.response.send_message(
+                f"Not enough XP: An Emphasis costs **{cost}**, but **{c.name}** has {c.xp:g}.", ephemeral=True)
+            return
+        advancement.apply_emphasis(c, self.skill_name, emph)
+        c.xp -= cost
+        c.xp_spent += cost
+        changed = store.save(rec, note="xp spend")
+        await _xp_spend_log(interaction, rec, changed)
+        await interaction.response.send_message(
+            f"**{c.name}** gains **{self.skill_name} (Emphasis: {emph})** for **{cost}** XP. XP left {c.xp:g}",
+            ephemeral=True)
+
+
+class _XpKataPick(discord.ui.View):
+    def __init__(self, guild_id: str, user_id: int, pages: list[list[discord.SelectOption]], page: int) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.pages = pages
+        self.page = page
+        sel = discord.ui.Select(placeholder="Pick a Kata...", options=pages[page], row=0)
+        sel.callback = self._pick
+        self.add_item(sel)
+        if len(pages) > 1:
+            if page > 0:
+                prev_btn = discord.ui.Button(label="Previous", style=discord.ButtonStyle.secondary, row=1)
+                prev_btn.callback = self._prev
+                self.add_item(prev_btn)
+            if page < len(pages) - 1:
+                nxt_btn = discord.ui.Button(label="Next", style=discord.ButtonStyle.secondary, row=1)
+                nxt_btn.callback = self._next
+                self.add_item(nxt_btn)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    async def _prev(self, interaction: discord.Interaction) -> None:
+        view = _XpKataPick(self.guild_id, self.user_id, self.pages, self.page - 1)
+        pg = f" (page {self.page}/{len(self.pages)})"
+        await interaction.response.edit_message(content=interaction.message.content.rsplit("(page", 1)[0].rstrip() + pg, view=view)
+
+    async def _next(self, interaction: discord.Interaction) -> None:
+        view = _XpKataPick(self.guild_id, self.user_id, self.pages, self.page + 1)
+        pg = f" (page {self.page + 2}/{len(self.pages)})"
+        await interaction.response.edit_message(content=interaction.message.content.rsplit("(page", 1)[0].rstrip() + pg, view=view)
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        name = interaction.data["values"][0]
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.edit_message(content="No active character found.", view=None)
+            return
+        c = rec.character
+        kata_entry = kata.get(name)
+        ml = kata_entry["mastery"] if kata_entry else 1
+        cost = advancement.misc_cost(ml)
+        if any(k.lower() == name.lower() for k in c.katas):
+            await interaction.response.edit_message(content=f"**{c.name}** already knows **{name}**.", view=None)
+            return
+        if c.xp < cost:
+            await interaction.response.edit_message(
+                content=f"Not enough XP: **{name}** (ML {ml}) costs **{cost}**, but **{c.name}** has {c.xp:g}.",
+                view=None)
+            return
+        c.katas.append(kata_entry["name"] if kata_entry else name)
+        c.xp -= cost
+        c.xp_spent += cost
+        changed = store.save(rec, note="xp spend")
+        await _xp_spend_log(interaction, rec, changed)
+        await interaction.response.edit_message(
+            content=f"**{c.name}** learns the kata **{name}** (ML {ml}) for **{cost}** XP. XP left {c.xp:g}",
+            view=None)
+
+
+class _XpKihoElementPick(discord.ui.View):
+    def __init__(self, guild_id: str, user_id: int, options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        sel = discord.ui.Select(placeholder="Filter by element...", options=options, row=0)
+        sel.callback = self._pick
+        self.add_item(sel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        element = interaction.data["values"][0]
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.edit_message(content="No active character found.", view=None)
+            return
+        c = rec.character
+        from l5r_rules import kiho_catalog
+        known_lower = {k.lower() for k in c.kiho}
+        is_shugenja = "shugenja" in c.school_type.lower()
+        is_brotherhood = "brotherhood" in c.school.lower() if c.school else False
+        entries = kiho_catalog.KIHO_DATA if element == "all" else kiho.by_element(element)
+        opts: list[discord.SelectOption] = []
+        for entry in sorted(entries, key=lambda e: (e["mastery"], e["name"])):
+            if entry["name"].lower() in known_lower:
+                continue
+            ml = entry["mastery"]
+            elem = entry.get("element", "").lower()
+            if elem != "void" and elem:
+                ring_val = stats.ring_value(c, elem)
+                if ring_val < ml:
+                    continue
+            cost = advancement.kiho_cost(ml, non_brotherhood=not is_brotherhood and not is_shugenja, shugenja=is_shugenja)
+            can = c.xp >= cost
+            opts.append(discord.SelectOption(
+                label=f"{entry['name']} (ML {ml}, {cost} XP)",
+                value=entry["name"],
+                description=f"{entry.get('element', '?')} {entry.get('type', '')} | {'Can afford' if can else 'Not enough XP'}",
+            ))
+        if not opts:
+            await interaction.response.edit_message(
+                content="No kiho available for that element (either you know them all or your Ring is too low).", view=None)
+            return
+        pages = [opts[i:i+25] for i in range(0, len(opts), 25)]
+        view = _XpKihoPick(self.guild_id, self.user_id, pages, 0)
+        pg = f" (page 1/{len(pages)})" if len(pages) > 1 else ""
+        await interaction.response.edit_message(
+            content=f"**{c.name}** -- Pick a Kiho to learn ({c.xp:g} XP available){pg}:", view=view)
+
+
+class _XpKihoPick(discord.ui.View):
+    def __init__(self, guild_id: str, user_id: int, pages: list[list[discord.SelectOption]], page: int) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.pages = pages
+        self.page = page
+        sel = discord.ui.Select(placeholder="Pick a Kiho...", options=pages[page], row=0)
+        sel.callback = self._pick
+        self.add_item(sel)
+        if len(pages) > 1:
+            if page > 0:
+                prev_btn = discord.ui.Button(label="Previous", style=discord.ButtonStyle.secondary, row=1)
+                prev_btn.callback = self._prev
+                self.add_item(prev_btn)
+            if page < len(pages) - 1:
+                nxt_btn = discord.ui.Button(label="Next", style=discord.ButtonStyle.secondary, row=1)
+                nxt_btn.callback = self._next
+                self.add_item(nxt_btn)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    async def _prev(self, interaction: discord.Interaction) -> None:
+        view = _XpKihoPick(self.guild_id, self.user_id, self.pages, self.page - 1)
+        await interaction.response.edit_message(view=view)
+
+    async def _next(self, interaction: discord.Interaction) -> None:
+        view = _XpKihoPick(self.guild_id, self.user_id, self.pages, self.page + 1)
+        await interaction.response.edit_message(view=view)
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        name = interaction.data["values"][0]
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.edit_message(content="No active character found.", view=None)
+            return
+        c = rec.character
+        kiho_entry = kiho.get(name)
+        ml = kiho_entry["mastery"] if kiho_entry else 1
+        is_shugenja = "shugenja" in c.school_type.lower()
+        is_brotherhood = "brotherhood" in c.school.lower() if c.school else False
+        cost = advancement.kiho_cost(ml, non_brotherhood=not is_brotherhood and not is_shugenja, shugenja=is_shugenja)
+        if any(k.lower() == name.lower() for k in c.kiho):
+            await interaction.response.edit_message(content=f"**{c.name}** already knows **{name}**.", view=None)
+            return
+        if c.xp < cost:
+            await interaction.response.edit_message(
+                content=f"Not enough XP: **{name}** (ML {ml}) costs **{cost}**, but **{c.name}** has {c.xp:g}.",
+                view=None)
+            return
+        c.kiho.append(kiho_entry["name"] if kiho_entry else name)
+        c.xp -= cost
+        c.xp_spent += cost
+        changed = store.save(rec, note="xp spend")
+        await _xp_spend_log(interaction, rec, changed)
+        note = ""
+        if is_shugenja:
+            note = " (shugenja: 2x cost)"
+        elif not is_brotherhood:
+            note = " (non-Brotherhood monk: 1.5x cost)"
+        await interaction.response.edit_message(
+            content=f"**{c.name}** learns the kiho **{name}** (ML {ml}) for **{cost}** XP{note}. XP left {c.xp:g}",
+            view=None)
+
+
+class _XpSpellElementPick(discord.ui.View):
+    def __init__(self, guild_id: str, user_id: int, options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        sel = discord.ui.Select(placeholder="Filter by element...", options=options, row=0)
+        sel.callback = self._pick
+        self.add_item(sel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        element = interaction.data["values"][0]
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.edit_message(content="No active character found.", view=None)
+            return
+        c = rec.character
+        from l5r_rules import spells_catalog
+        known_lower = {s.lower() for s in c.spells_known}
+        entries = spells_catalog.SPELLS_DATA if element == "all" else spells.by_element(element)
+        opts: list[discord.SelectOption] = []
+        for entry in sorted(entries, key=lambda e: (e["mastery"], e["name"])):
+            if entry["name"].lower() in known_lower:
+                continue
+            ml = entry["mastery"]
+            cost = advancement.misc_cost(ml)
+            can = c.xp >= cost
+            opts.append(discord.SelectOption(
+                label=f"{entry['name']} (ML {ml}, {cost} XP)",
+                value=entry["name"],
+                description=f"{entry['element']} | {'Can afford' if can else 'Not enough XP'}",
+            ))
+        if not opts:
+            await interaction.response.edit_message(
+                content="No spells available for that element (you may already know them all).", view=None)
+            return
+        pages = [opts[i:i+25] for i in range(0, len(opts), 25)]
+        view = _XpSpellPick(self.guild_id, self.user_id, pages, 0)
+        total = sum(len(p) for p in pages)
+        pg = f" (page 1/{len(pages)})" if len(pages) > 1 else ""
+        await interaction.response.edit_message(
+            content=f"**{c.name}** -- Pick a Spell to memorize ({c.xp:g} XP available, {total} available){pg}:", view=view)
+
+
+class _XpSpellPick(discord.ui.View):
+    def __init__(self, guild_id: str, user_id: int, pages: list[list[discord.SelectOption]], page: int) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.pages = pages
+        self.page = page
+        sel = discord.ui.Select(placeholder="Pick a Spell...", options=pages[page], row=0)
+        sel.callback = self._pick
+        self.add_item(sel)
+        if len(pages) > 1:
+            if page > 0:
+                prev_btn = discord.ui.Button(label="Previous", style=discord.ButtonStyle.secondary, row=1)
+                prev_btn.callback = self._prev
+                self.add_item(prev_btn)
+            if page < len(pages) - 1:
+                nxt_btn = discord.ui.Button(label="Next", style=discord.ButtonStyle.secondary, row=1)
+                nxt_btn.callback = self._next
+                self.add_item(nxt_btn)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    async def _prev(self, interaction: discord.Interaction) -> None:
+        view = _XpSpellPick(self.guild_id, self.user_id, self.pages, self.page - 1)
+        pg = f" (page {self.page}/{len(self.pages)})"
+        await interaction.response.edit_message(
+            content=interaction.message.content.rsplit("(page", 1)[0].rstrip() + pg, view=view)
+
+    async def _next(self, interaction: discord.Interaction) -> None:
+        view = _XpSpellPick(self.guild_id, self.user_id, self.pages, self.page + 1)
+        pg = f" (page {self.page + 2}/{len(self.pages)})"
+        await interaction.response.edit_message(
+            content=interaction.message.content.rsplit("(page", 1)[0].rstrip() + pg, view=view)
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        name = interaction.data["values"][0]
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.edit_message(content="No active character found.", view=None)
+            return
+        c = rec.character
+        spell_entry = spells.get(name)
+        ml = spell_entry["mastery"] if spell_entry else 1
+        cost = advancement.misc_cost(ml)
+        if any(s.lower() == name.lower() for s in c.spells_known):
+            await interaction.response.edit_message(content=f"**{c.name}** already knows **{name}**.", view=None)
+            return
+        if c.xp < cost:
+            await interaction.response.edit_message(
+                content=f"Not enough XP: **{name}** (ML {ml}) costs **{cost}**, but **{c.name}** has {c.xp:g}.",
+                view=None)
+            return
+        c.spells_known.append(spell_entry["name"] if spell_entry else name)
+        c.xp -= cost
+        c.xp_spent += cost
+        changed = store.save(rec, note="xp spend")
+        await _xp_spend_log(interaction, rec, changed)
+        await interaction.response.edit_message(
+            content=f"**{c.name}** memorizes the spell **{name}** (ML {ml}) for **{cost}** XP. XP left {c.xp:g}",
+            view=None)
+
+
+class _XpAdvCategoryPick(discord.ui.View):
+    def __init__(self, guild_id: str, user_id: int, options: list[discord.SelectOption]) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        sel = discord.ui.Select(placeholder="Filter by category...", options=options, row=0)
+        sel.callback = self._pick
+        self.add_item(sel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        category = interaction.data["values"][0]
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.edit_message(content="No active character found.", view=None)
+            return
+        c = rec.character
+        owned_lower = {a.lower() for a in c.advantages}
+        if category == "all":
+            entries = advantages.by_kind("advantage")
+        else:
+            entries = [a for a in advantages.by_kind("advantage") if a.get("category") == category]
+        opts: list[discord.SelectOption] = []
+        for entry in sorted(entries, key=lambda e: e["name"]):
+            if entry["name"].lower() in owned_lower:
+                continue
+            pts = entry.get("points")
+            if pts is None:
+                cost_str = f"Variable ({entry.get('cost_text', '?')})"
+                desc_suffix = "Variable cost: Use `/xp advantage` with points: instead"
+            else:
+                cost_str = f"{pts} XP"
+                can = c.xp >= pts
+                desc_suffix = f"{'Can afford' if can else 'Not enough XP'} (you have {c.xp:g})"
+            opts.append(discord.SelectOption(
+                label=f"{entry['name']} ({cost_str})"[:100],
+                value=entry["name"][:100],
+                description=desc_suffix[:100],
+            ))
+        if not opts:
+            await interaction.response.edit_message(
+                content="No advantages available in that category (you may already have them all).", view=None)
+            return
+        pages = [opts[i:i+25] for i in range(0, len(opts), 25)]
+        view = _XpAdvPick(self.guild_id, self.user_id, pages, 0)
+        total = sum(len(p) for p in pages)
+        pg = f" (page 1/{len(pages)})" if len(pages) > 1 else ""
+        await interaction.response.edit_message(
+            content=f"**{c.name}** -- Pick an Advantage to buy ({c.xp:g} XP available, {total} available){pg}:", view=view)
+
+
+class _XpAdvPick(discord.ui.View):
+    def __init__(self, guild_id: str, user_id: int, pages: list[list[discord.SelectOption]], page: int) -> None:
+        super().__init__(timeout=60)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.pages = pages
+        self.page = page
+        sel = discord.ui.Select(placeholder="Pick an Advantage...", options=pages[page], row=0)
+        sel.callback = self._pick
+        self.add_item(sel)
+        if len(pages) > 1:
+            if page > 0:
+                prev_btn = discord.ui.Button(label="Previous", style=discord.ButtonStyle.secondary, row=1)
+                prev_btn.callback = self._prev
+                self.add_item(prev_btn)
+            if page < len(pages) - 1:
+                nxt_btn = discord.ui.Button(label="Next", style=discord.ButtonStyle.secondary, row=1)
+                nxt_btn.callback = self._next
+                self.add_item(nxt_btn)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    async def _prev(self, interaction: discord.Interaction) -> None:
+        view = _XpAdvPick(self.guild_id, self.user_id, self.pages, self.page - 1)
+        await interaction.response.edit_message(view=view)
+
+    async def _next(self, interaction: discord.Interaction) -> None:
+        view = _XpAdvPick(self.guild_id, self.user_id, self.pages, self.page + 1)
+        await interaction.response.edit_message(view=view)
+
+    async def _pick(self, interaction: discord.Interaction) -> None:
+        name = interaction.data["values"][0]
+        rec = store.get_active(self.guild_id, str(self.user_id))
+        if rec is None:
+            await interaction.response.edit_message(content="No active character found.", view=None)
+            return
+        c = rec.character
+        adv = advantages.get(name, "advantage")
+        if adv is None:
+            await interaction.response.edit_message(content=f"Advantage **{name}** not found.", view=None)
+            return
+        pts = adv.get("points")
+        if pts is None:
+            await interaction.response.edit_message(
+                content=f"**{adv['name']}** has a Variable cost ({adv.get('cost_text', '?')}). "
+                f"Use `/xp advantage {adv['name']}` with `points:` to set the cost.", view=None)
+            return
+        if name.lower() in {a.lower() for a in c.advantages}:
+            await interaction.response.edit_message(content=f"**{c.name}** already has **{name}**.", view=None)
+            return
+        if c.xp < pts:
+            await interaction.response.edit_message(
+                content=f"Not enough XP: **{name}** costs **{pts}**, but **{c.name}** has {c.xp:g}.",
+                view=None)
+            return
+        c.advantages.append(adv["name"])
+        c.xp -= pts
+        c.xp_spent += pts
+        changed = store.save(rec, note="xp spend")
+        await _xp_spend_log(interaction, rec, changed)
+        param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(adv["name"])
+        hint = ""
+        if param_hint:
+            hint = f"\nHint: Use `/xp advantage {adv['name']}: <{param_hint}>` to record the chosen option."
+        await interaction.response.edit_message(
+            content=f"**{c.name}** gains the advantage **{adv['name']}** for **{pts}** XP. XP left {c.xp:g}{hint}",
+            view=None)
+
+
+@xp_group.command(name="spend", description="Guided XP spending: Pick what to improve from a menu.")
+async def xp_spend(interaction: discord.Interaction) -> None:
+    if not await _require_guild(interaction):
+        return
+    rec = store.get_active(str(interaction.guild_id), str(interaction.user.id))
+    if rec is None:
+        await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
+        return
+    c = rec.character
+    view = _XpCategorySelect(str(interaction.guild_id), interaction.user.id)
+    await interaction.response.send_message(
+        f"**{c.name}** -- XP available: **{c.xp:g}** (spent {c.xp_spent:g}). "
+        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}).\n"
+        f"What do you want to spend XP on?",
+        view=view, ephemeral=True)
+
 
 # ===========================================================================
 # /school group: schools & techniques (GDD s29)
