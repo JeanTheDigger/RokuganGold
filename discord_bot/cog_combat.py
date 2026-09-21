@@ -134,6 +134,8 @@ def init(
     combat_npc.autocomplete("name")(npc_autocomplete)
     duel_start.autocomplete("duelist_a")(_duelist_autocomplete)
     duel_start.autocomplete("duelist_b")(_duelist_autocomplete)
+    battle_start.autocomplete("general_a")(_duelist_autocomplete)
+    battle_start.autocomplete("general_b")(_duelist_autocomplete)
 
 
 # ---------------------------------------------------------------------------
@@ -7503,6 +7505,249 @@ async def combat_surprise(interaction: discord.Interaction) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _build_mass_battle_embed(
+    gen_a_name: str, gen_b_name: str,
+    side_a_label: str, side_b_label: str,
+    round_num: int, army_status_a: str,
+    bonus_a: int, bonus_b: int,
+) -> discord.Embed:
+    if army_status_a == "winning":
+        color = discord.Color.blue()
+        status_text = f"**{side_a_label}** is Winning"
+    elif army_status_a == "losing":
+        color = discord.Color.red()
+        status_text = f"**{side_b_label}** is Winning"
+    elif army_status_a == "stalemate":
+        color = discord.Color.greyple()
+        status_text = "Stalemate"
+    else:
+        color = discord.Color.dark_grey()
+        status_text = "Pending general contest"
+    embed = discord.Embed(title=f"Mass Battle: Round {round_num}", color=color)
+    a_val = f"**{gen_a_name}**"
+    if bonus_a:
+        a_val += f" (bonus: {bonus_a:+d})"
+    embed.add_field(name=f"{side_a_label} General", value=a_val, inline=True)
+    b_val = f"**{gen_b_name}**"
+    if bonus_b:
+        b_val += f" (bonus: {bonus_b:+d})"
+    embed.add_field(name=f"{side_b_label} General", value=b_val, inline=True)
+    embed.add_field(name="Army Status", value=status_text, inline=False)
+    if army_status_a in ("winning", "losing", "stalemate"):
+        if army_status_a == "stalemate":
+            ref = "Both sides: Select **Stalemate**"
+        elif army_status_a == "winning":
+            ref = (
+                f"{side_a_label} PCs: Select **Winning**\n"
+                f"{side_b_label} PCs: Select **Losing**"
+            )
+        else:
+            ref = (
+                f"{side_a_label} PCs: Select **Losing**\n"
+                f"{side_b_label} PCs: Select **Winning**"
+            )
+        embed.add_field(name="Battle Table Reference", value=ref, inline=False)
+    embed.set_footer(text="Use /engage battle table for each PC this round.")
+    return embed
+
+
+class MassBattleBoardView(views_base.PersistentView):
+    KIND = "mass_battle"
+
+    def __init__(
+        self,
+        guild_id: str,
+        channel_id: int,
+        gen_a_id: int,
+        gen_b_id: int,
+        gen_a_name: str,
+        gen_b_name: str,
+        gen_a_is_npc: bool = False,
+        gen_b_is_npc: bool = False,
+        side_a_label: str = "Side A",
+        side_b_label: str = "Side B",
+        round_num: int = 1,
+        army_status_a: str = "pending",
+        bonus_a: int = 0,
+        bonus_b: int = 0,
+    ) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.gen_a_id = gen_a_id
+        self.gen_b_id = gen_b_id
+        self.gen_a_name = gen_a_name
+        self.gen_b_name = gen_b_name
+        self.gen_a_is_npc = gen_a_is_npc
+        self.gen_b_is_npc = gen_b_is_npc
+        self.side_a_label = side_a_label
+        self.side_b_label = side_b_label
+        self.round_num = round_num
+        self.army_status_a = army_status_a
+        self.bonus_a = bonus_a
+        self.bonus_b = bonus_b
+
+    def _updated_args(self) -> dict:
+        return dict(
+            guild_id=self.guild_id, channel_id=self.channel_id,
+            gen_a_id=self.gen_a_id, gen_b_id=self.gen_b_id,
+            gen_a_name=self.gen_a_name, gen_b_name=self.gen_b_name,
+            gen_a_is_npc=self.gen_a_is_npc, gen_b_is_npc=self.gen_b_is_npc,
+            side_a_label=self.side_a_label, side_b_label=self.side_b_label,
+            round_num=self.round_num, army_status_a=self.army_status_a,
+            bonus_a=self.bonus_a, bonus_b=self.bonus_b,
+        )
+
+    async def _repost(self, channel) -> None:
+        if self._persist_message_id:
+            try:
+                old = await channel.fetch_message(self._persist_message_id)
+                await old.delete()
+            except discord.HTTPException:
+                pass
+            self.forget()
+        embed = _build_mass_battle_embed(
+            self.gen_a_name, self.gen_b_name,
+            self.side_a_label, self.side_b_label,
+            self.round_num, self.army_status_a,
+            self.bonus_a, self.bonus_b,
+        )
+        new_view = MassBattleBoardView(**self._updated_args())
+        msg = await channel.send(embed=embed, view=new_view)
+        await new_view.persist(msg)
+
+    # --- Row 0: General Contest ---
+
+    @discord.ui.button(label="Roll General Contest", style=discord.ButtonStyle.primary, row=0)
+    async def contest_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can run mass battle commands.", ephemeral=True,
+            )
+            return
+        rec_a = _d.store.get_by_id(self.gen_a_id)
+        rec_b = _d.store.get_by_id(self.gen_b_id)
+        if rec_a is None or rec_b is None:
+            await interaction.response.send_message("A general's character sheet is missing.", ephemeral=True)
+            return
+        ca, cb = rec_a.character, rec_b.character
+        if await _d.refuse_if_cannot_act(interaction, ca) or await _d.refuse_if_cannot_act(interaction, cb):
+            return
+        wp_a = stats.wound_penalty(ca)
+        wp_b = stats.wound_penalty(cb)
+        battle_a = ca.skills.get("Battle", 0)
+        battle_b = cb.skills.get("Battle", 0)
+        result = mass_battle.resolve_general_contest(
+            ca.perception, battle_a, cb.perception, battle_b,
+            _d.engine, self.bonus_a + wp_a, self.bonus_b + wp_b,
+        )
+        self.army_status_a = result["status_a"]
+
+        status_a_label = mass_battle.ARMY_STATUS_NAMES.get(result["status_a"], result["status_a"])
+        status_b_label = mass_battle.ARMY_STATUS_NAMES.get(result["status_b"], result["status_b"])
+        if result["status_a"] == "winning":
+            color = discord.Color.blue()
+        elif result["status_b"] == "winning":
+            color = discord.Color.red()
+        else:
+            color = discord.Color.greyple()
+        embed = discord.Embed(title=f"General Contest: Round {self.round_num}", color=color)
+        a_line = f"({result['rolled_a']}k{result['kept_a']}) = **{result['total_a']}**"
+        eff_a = self.bonus_a + wp_a
+        if eff_a != 0:
+            a_line += f" (mod {eff_a:+d})"
+        embed.add_field(
+            name=f"{self.side_a_label}: {ca.name}",
+            value=f"{a_line}\nStatus: **{status_a_label}**",
+            inline=True,
+        )
+        b_line = f"({result['rolled_b']}k{result['kept_b']}) = **{result['total_b']}**"
+        eff_b = self.bonus_b + wp_b
+        if eff_b != 0:
+            b_line += f" (mod {eff_b:+d})"
+        embed.add_field(
+            name=f"{self.side_b_label}: {cb.name}",
+            value=f"{b_line}\nStatus: **{status_b_label}**",
+            inline=True,
+        )
+        embed.add_field(
+            name="Margin",
+            value=f"{result['diff']:+d} (need +/-5 for Winning/Losing)",
+            inline=False,
+        )
+        dice_a = _d.format_dice(result["dice_a"])[:1024]
+        dice_b = _d.format_dice(result["dice_b"])[:1024]
+        embed.add_field(name=f"{ca.name} Dice", value=dice_a, inline=True)
+        embed.add_field(name=f"{cb.name} Dice", value=dice_b, inline=True)
+        await interaction.response.send_message(embed=embed)
+        self._persist_args = self._updated_args()
+        await self._repost(interaction.channel)
+
+    # --- Row 1: Bonus adjustments ---
+
+    @discord.ui.button(label="A +1", style=discord.ButtonStyle.secondary, row=1)
+    async def bonus_a_up(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        self.bonus_a += 1
+        await interaction.response.defer()
+        self._persist_args = self._updated_args()
+        await self._repost(interaction.channel)
+
+    @discord.ui.button(label="A -1", style=discord.ButtonStyle.secondary, row=1)
+    async def bonus_a_down(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        self.bonus_a -= 1
+        await interaction.response.defer()
+        self._persist_args = self._updated_args()
+        await self._repost(interaction.channel)
+
+    @discord.ui.button(label="B +1", style=discord.ButtonStyle.secondary, row=1)
+    async def bonus_b_up(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        self.bonus_b += 1
+        await interaction.response.defer()
+        self._persist_args = self._updated_args()
+        await self._repost(interaction.channel)
+
+    @discord.ui.button(label="B -1", style=discord.ButtonStyle.secondary, row=1)
+    async def bonus_b_down(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        self.bonus_b -= 1
+        await interaction.response.defer()
+        self._persist_args = self._updated_args()
+        await self._repost(interaction.channel)
+
+    # --- Row 2: Round control ---
+
+    @discord.ui.button(label="Next Round", style=discord.ButtonStyle.success, row=2)
+    async def next_round_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        self.round_num += 1
+        self.army_status_a = "pending"
+        await interaction.response.defer()
+        self._persist_args = self._updated_args()
+        await self._repost(interaction.channel)
+
+    @discord.ui.button(label="End Battle", style=discord.ButtonStyle.danger, row=2)
+    async def end_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        if not self.claim():
+            return
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await _d.combat_log(self.guild_id, f"Mass Battle ended after round {self.round_num}")
 
 
 @combat_battle.command(name="roll", description="Battle/Perception roll to determine engagement level. [Fortune]")
@@ -7774,6 +8019,66 @@ async def battle_status(
 
     embed.set_footer(text="Use the resulting status with /combat battle table for individual PCs.")
     await interaction.response.send_message(embed=embed)
+
+
+@combat_battle.command(name="start", description="Start a mass battle with interactive board. [Fortune]")
+@app_commands.describe(
+    general_a="General of Side A (character name).",
+    general_b="General of Side B (character name).",
+    a_is_npc="Side A general is a stored NPC.",
+    b_is_npc="Side B general is a stored NPC.",
+    a_member="Side A general belongs to this player.",
+    b_member="Side B general belongs to this player.",
+    side_a_label="Label for Side A (default: Side A).",
+    side_b_label="Label for Side B (default: Side B).",
+    bonus_a="Starting bonus for Side A.",
+    bonus_b="Starting bonus for Side B.",
+)
+async def battle_start(
+    interaction: discord.Interaction,
+    general_a: str,
+    general_b: str,
+    a_is_npc: bool = False,
+    b_is_npc: bool = False,
+    a_member: discord.Member | None = None,
+    b_member: discord.Member | None = None,
+    side_a_label: str = "Side A",
+    side_b_label: str = "Side B",
+    bonus_a: int = 0,
+    bonus_b: int = 0,
+) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    if not await _d.require_dm_role(interaction):
+        return
+    guild = str(interaction.guild_id)
+    ch = interaction.channel_id
+    rec_a = _d.resolve_duelist(guild, ch, general_a, a_is_npc, a_member)
+    rec_b = _d.resolve_duelist(guild, ch, general_b, b_is_npc, b_member)
+    if rec_a is None:
+        await interaction.response.send_message(f"No character found for **{general_a}**.", ephemeral=True)
+        return
+    if rec_b is None:
+        await interaction.response.send_message(f"No character found for **{general_b}**.", ephemeral=True)
+        return
+    ca, cb = rec_a.character, rec_b.character
+
+    embed = _build_mass_battle_embed(
+        ca.name, cb.name, side_a_label, side_b_label,
+        1, "pending", bonus_a, bonus_b,
+    )
+    view = MassBattleBoardView(
+        guild_id=guild, channel_id=ch,
+        gen_a_id=rec_a.id, gen_b_id=rec_b.id,
+        gen_a_name=ca.name, gen_b_name=cb.name,
+        gen_a_is_npc=a_is_npc, gen_b_is_npc=b_is_npc,
+        side_a_label=side_a_label, side_b_label=side_b_label,
+        bonus_a=bonus_a, bonus_b=bonus_b,
+    )
+    await interaction.response.send_message(embed=embed, view=view)
+    msg = await interaction.original_response()
+    await view.persist(msg)
+    await _d.combat_log(guild, f"Mass Battle Start: {ca.name} ({side_a_label}) vs {cb.name} ({side_b_label})")
 
 
 def _sync_mount_to_sheet(guild: str, cb, mounting: bool) -> str:

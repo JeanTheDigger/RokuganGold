@@ -4778,6 +4778,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/engage duel assess", "Assessment (Iaijutsu/Awareness)"),
         ("/engage duel focus", "Focus (contested Iaijutsu/Void)"),
         ("/engage duel strike", "Strike (Iaijutsu/Reflexes + damage)"),
+        ("/engage battle start", "Start a mass battle with interactive board"),
         ("/engage battle roll / damage", "Mass battle engagement and damage"),
     ]),
     ("", "Skill Checks", "Roll skill and trait checks for characters.", [
