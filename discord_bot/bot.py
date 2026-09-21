@@ -4771,6 +4771,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/combat turn surprise", "Toggle the surprise round flag"),
     ]),
     ("", "Grapple, Duel & Battle", "Subsystem combat mechanics.", [
+        ("/engage grapple start", "Start a grapple with interactive board"),
         ("/engage grapple initiate", "Start a grapple (Jiujutsu/Agility)"),
         ("/engage grapple control", "Contested control (Jiujutsu/Strength)"),
         ("/engage grapple hit / throw / pin / break_free", "Grapple actions"),

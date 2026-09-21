@@ -5233,6 +5233,439 @@ async def combat_void_swap(interaction: discord.Interaction, spender: str, targe
     )
     await _d.combat_log(guild, f"Void Swap: {cb_s.name} ↔ {cb_t.name} initiative ({c.current_void_points} VP left)")
 
+
+# ---------------------------------------------------------------------------
+# Grapple Board (interactive persistent view)
+# ---------------------------------------------------------------------------
+
+
+def _build_grapple_embed(ctrl_name: str, def_name: str) -> discord.Embed:
+    embed = discord.Embed(title="Grapple", color=discord.Color.orange())
+    embed.add_field(name="Controller", value=f"**{ctrl_name}**", inline=True)
+    embed.add_field(name="Defender", value=f"**{def_name}**", inline=True)
+    embed.set_footer(text="Controller actions: Hit / Throw / Pin. Either side: Contest or Break Free.")
+    return embed
+
+
+class GrappleBoardView(views_base.PersistentView):
+    KIND = "grapple_board"
+
+    def __init__(
+        self,
+        guild_id: str,
+        channel_id: int,
+        ctrl_name: str,
+        def_name: str,
+    ) -> None:
+        super().__init__()
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.ctrl_name = ctrl_name
+        self.def_name = def_name
+
+    def _updated_args(self) -> dict:
+        return dict(
+            guild_id=self.guild_id, channel_id=self.channel_id,
+            ctrl_name=self.ctrl_name, def_name=self.def_name,
+        )
+
+    async def _repost(self, channel) -> None:
+        if self._persist_message_id:
+            try:
+                old = await channel.fetch_message(self._persist_message_id)
+                await old.delete()
+            except discord.HTTPException:
+                pass
+            self.forget()
+        embed = _build_grapple_embed(self.ctrl_name, self.def_name)
+        new_view = GrappleBoardView(**self._updated_args())
+        msg = await channel.send(embed=embed, view=new_view)
+        await new_view.persist(msg)
+
+    def _load_encounter(self):
+        enc = _d.encounters.get(self.channel_id)
+        if enc is None:
+            return None, None, None
+        cb_ctrl = enc.find(self.ctrl_name)
+        cb_def = enc.find(self.def_name)
+        return enc, cb_ctrl, cb_def
+
+    async def _end_grapple(self, interaction: discord.Interaction, reason: str) -> None:
+        enc, cb_ctrl, cb_def = self._load_encounter()
+        if enc is not None:
+            if cb_ctrl is not None:
+                cb_ctrl.conditions.discard("grappled")
+                cb_ctrl.conditions.discard("pinned")
+            if cb_def is not None:
+                cb_def.conditions.discard("grappled")
+                cb_def.conditions.discard("pinned")
+            _d.save_encounter(self.guild_id, enc)
+        if self._persist_message_id:
+            try:
+                old = await interaction.channel.fetch_message(self._persist_message_id)
+                await old.delete()
+            except discord.HTTPException:
+                pass
+        self._disable()
+        await _d.combat_log(self.guild_id, f"Grapple End: {self.ctrl_name} vs {self.def_name} ({reason})")
+
+    # --- Row 0: Contest Control ---
+
+    @discord.ui.button(label="Contest Control", style=discord.ButtonStyle.primary, row=0)
+    async def contest_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message(
+                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can run grapple commands.", ephemeral=True,
+            )
+            return
+        enc, cb_ctrl, cb_def = self._load_encounter()
+        if enc is None or cb_ctrl is None or cb_def is None:
+            await interaction.response.send_message("Encounter or combatants no longer exist.", ephemeral=True)
+            return
+        rec_ctrl = _d.resolve_combatant_record(self.guild_id, cb_ctrl)
+        rec_def = _d.resolve_combatant_record(self.guild_id, cb_def)
+        if rec_ctrl is None or rec_def is None:
+            await interaction.response.send_message(
+                "Both combatants need stored character sheets.", ephemeral=True,
+            )
+            return
+        str_c = rec_ctrl.character.strength
+        jiu_c = rec_ctrl.character.skills.get("Jiujutsu", 0)
+        str_d = rec_def.character.strength
+        jiu_d = rec_def.character.skills.get("Jiujutsu", 0)
+        wp_c = stats.wound_penalty(rec_ctrl.character)
+        wp_d = stats.wound_penalty(rec_def.character)
+        ar_c, af_c, _ = condition_effects.contested_roll_modifier(cb_ctrl.conditions)
+        ar_d, af_d, _ = condition_effects.contested_roll_modifier(cb_def.conditions)
+        ar_c -= cb_ctrl.fear_penalty
+        ar_d -= cb_def.fear_penalty
+        result = combat.resolve_grapple_control(
+            str_c, jiu_c, str_d, jiu_d, _d.engine, wp_c, wp_d,
+            ar_c, af_c, ar_d, af_d,
+        )
+        if result["winner"] == "a":
+            winner_name = self.ctrl_name
+            control_text = f"**{self.ctrl_name}** retains control."
+        elif result["winner"] == "b":
+            winner_name = self.def_name
+            self.ctrl_name, self.def_name = self.def_name, self.ctrl_name
+            control_text = f"**{winner_name}** seizes control!"
+        else:
+            winner_name = self.ctrl_name
+            control_text = f"Tie: **{self.ctrl_name}** retains control."
+        embed = discord.Embed(
+            title="Grapple Control: Contested Jiujutsu/Strength",
+            color=discord.Color.blue(),
+        )
+        embed.add_field(
+            name=cb_ctrl.name,
+            value=f"({str_c + jiu_c + ar_c}k{str_c}) → **{result['total_a']}**",
+            inline=True,
+        )
+        embed.add_field(
+            name=cb_def.name,
+            value=f"({str_d + jiu_d + ar_d}k{str_d}) → **{result['total_b']}**",
+            inline=True,
+        )
+        embed.add_field(name="Control", value=control_text, inline=False)
+        embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
+        self._persist_args = self._updated_args()
+        await self._repost(interaction.channel)
+
+    # --- Row 1: Controller actions ---
+
+    @discord.ui.button(label="Hit", style=discord.ButtonStyle.danger, row=1)
+    async def hit_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        enc, cb_ctrl, cb_def = self._load_encounter()
+        if enc is None or cb_ctrl is None or cb_def is None:
+            await interaction.response.send_message("Encounter or combatants no longer exist.", ephemeral=True)
+            return
+        blocked, block_reason = condition_effects.cannot_act(cb_ctrl.conditions)
+        if blocked:
+            await interaction.response.send_message(
+                f"**{cb_ctrl.name}** cannot act: {block_reason}", ephemeral=True,
+            )
+            return
+        if cb_ctrl.actions_used > 0:
+            await interaction.response.send_message(
+                f"**{cb_ctrl.name}** has already used actions this turn ({cb_ctrl.actions_used}/2). "
+                f"Use `/fight action action_type:Reset` to override.", ephemeral=True,
+            )
+            return
+        atk_rec = _d.resolve_combatant_record(self.guild_id, cb_ctrl)
+        def_rec = _d.resolve_combatant_record(self.guild_id, cb_def)
+        if atk_rec is None or def_rec is None:
+            await interaction.response.send_message("Character sheets missing.", ephemeral=True)
+            return
+        cb_ctrl.actions_used = 2
+        _d.save_encounter(self.guild_id, enc)
+        embed = discord.Embed(
+            title=f"Grapple Hit: {cb_ctrl.name} strikes {cb_def.name}",
+            description="Unarmed damage, no attack roll (controller's Complex Action).",
+            color=discord.Color.orange(),
+        )
+        view = DamageView(
+            atk_rec.id, def_rec.id, "unarmed", 0,
+            cb_ctrl.name, cb_def.name,
+            maneuver="none", attack_margin=0,
+            defender_stance="attack",
+            channel_id=interaction.channel_id,
+        )
+        await interaction.response.send_message(
+            content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the damage below.",
+            embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+        )
+        await view.persist(await interaction.original_response())
+
+    @discord.ui.button(label="Throw", style=discord.ButtonStyle.danger, row=1)
+    async def throw_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        enc, cb_ctrl, cb_def = self._load_encounter()
+        if enc is None or cb_ctrl is None or cb_def is None:
+            await interaction.response.send_message("Encounter or combatants no longer exist.", ephemeral=True)
+            return
+        blocked, block_reason = condition_effects.cannot_act(cb_ctrl.conditions)
+        if blocked:
+            await interaction.response.send_message(
+                f"**{cb_ctrl.name}** cannot act: {block_reason}", ephemeral=True,
+            )
+            return
+        if cb_ctrl.actions_used > 0:
+            await interaction.response.send_message(
+                f"**{cb_ctrl.name}** has already used actions this turn ({cb_ctrl.actions_used}/2). "
+                f"Use `/fight action action_type:Reset` to override.", ephemeral=True,
+            )
+            return
+        cb_ctrl.conditions.discard("grappled")
+        cb_ctrl.conditions.add("prone")
+        cb_def.conditions.discard("grappled")
+        cb_def.conditions.discard("pinned")
+        cb_def.conditions.add("prone")
+        cb_ctrl.actions_used = 2
+        _d.save_encounter(self.guild_id, enc)
+        embed = discord.Embed(
+            title=f"{cb_ctrl.name} throws {cb_def.name}",
+            description="Both are now **Prone**. The grapple ends.\nStanding up is a Simple Action.",
+            color=discord.Color.orange(),
+        )
+        embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
+        if self._persist_message_id:
+            try:
+                old = await interaction.channel.fetch_message(self._persist_message_id)
+                await old.delete()
+            except discord.HTTPException:
+                pass
+        self._disable()
+        await _d.combat_log(
+            self.guild_id,
+            f"Grapple Throw: {cb_ctrl.name} throws {cb_def.name} (both prone, grapple ends)",
+        )
+
+    @discord.ui.button(label="Pin", style=discord.ButtonStyle.danger, row=1)
+    async def pin_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        enc, cb_ctrl, cb_def = self._load_encounter()
+        if enc is None or cb_ctrl is None or cb_def is None:
+            await interaction.response.send_message("Encounter or combatants no longer exist.", ephemeral=True)
+            return
+        blocked, block_reason = condition_effects.cannot_act(cb_ctrl.conditions)
+        if blocked:
+            await interaction.response.send_message(
+                f"**{cb_ctrl.name}** cannot act: {block_reason}", ephemeral=True,
+            )
+            return
+        if cb_ctrl.actions_used > 0:
+            await interaction.response.send_message(
+                f"**{cb_ctrl.name}** has already used actions this turn ({cb_ctrl.actions_used}/2). "
+                f"Use `/fight action action_type:Reset` to override.", ephemeral=True,
+            )
+            return
+        cb_def.conditions.add("pinned")
+        cb_ctrl.actions_used = 2
+        _d.save_encounter(self.guild_id, enc)
+        embed = discord.Embed(
+            title=f"{cb_ctrl.name} pins {cb_def.name}",
+            description=(
+                f"{cb_def.name} is **Pinned**: Fully immobilized. "
+                f"Can only speak or cast verbal-only Mastery 1 spells.\n"
+                f"Pin is a prerequisite for Bind."
+            ),
+            color=discord.Color.orange(),
+        )
+        embed.set_footer(text=f"Applied by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
+
+    # --- Row 2: Break free / End ---
+
+    @discord.ui.button(label="Ctrl Break Free", style=discord.ButtonStyle.secondary, row=2)
+    async def ctrl_break_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        enc, cb_ctrl, _ = self._load_encounter()
+        if enc is None or cb_ctrl is None:
+            await interaction.response.send_message("Encounter or controller not found.", ephemeral=True)
+            return
+        blocked, block_reason = condition_effects.cannot_act(cb_ctrl.conditions)
+        if blocked:
+            await interaction.response.send_message(
+                f"**{cb_ctrl.name}** cannot act: {block_reason}", ephemeral=True,
+            )
+            return
+        if cb_ctrl.actions_used >= 2:
+            await interaction.response.send_message(
+                f"**{cb_ctrl.name}** has already used actions this turn ({cb_ctrl.actions_used}/2). "
+                f"Use `/fight action action_type:Reset` to override.", ephemeral=True,
+            )
+            return
+        cb_ctrl.conditions.discard("grappled")
+        cb_ctrl.conditions.discard("pinned")
+        cb_ctrl.actions_used += 1
+        _d.save_encounter(self.guild_id, enc)
+        embed = discord.Embed(
+            title=f"{cb_ctrl.name} breaks free",
+            description=(
+                f"Controller break (Simple Action). Grappled condition removed.\n"
+                f"[{cb_ctrl.actions_used}/2 actions used]"
+            ),
+            color=discord.Color.green(),
+        )
+        embed.set_footer(text=f"Applied by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
+        await self._end_grapple(interaction, "controller break")
+
+    @discord.ui.button(label="Def Break Free", style=discord.ButtonStyle.secondary, row=2)
+    async def def_break_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        enc, cb_ctrl, cb_def = self._load_encounter()
+        if enc is None or cb_ctrl is None or cb_def is None:
+            await interaction.response.send_message("Encounter or combatants no longer exist.", ephemeral=True)
+            return
+        blocked, block_reason = condition_effects.cannot_act(cb_def.conditions)
+        if blocked:
+            await interaction.response.send_message(
+                f"**{cb_def.name}** cannot act: {block_reason}", ephemeral=True,
+            )
+            return
+        if cb_def.actions_used > 0:
+            await interaction.response.send_message(
+                f"**{cb_def.name}** has already used actions this turn ({cb_def.actions_used}/2). "
+                f"Use `/fight action action_type:Reset` to override.", ephemeral=True,
+            )
+            return
+        rec_def = _d.resolve_combatant_record(self.guild_id, cb_def)
+        rec_ctrl = _d.resolve_combatant_record(self.guild_id, cb_ctrl)
+        if rec_def is None or rec_ctrl is None:
+            await interaction.response.send_message("Character sheets missing.", ephemeral=True)
+            return
+        str_def = rec_def.character.strength
+        jiu_def = rec_def.character.skills.get("Jiujutsu", 0)
+        str_ctrl = rec_ctrl.character.strength
+        jiu_ctrl = rec_ctrl.character.skills.get("Jiujutsu", 0)
+        wp_def = stats.wound_penalty(rec_def.character)
+        wp_ctrl = stats.wound_penalty(rec_ctrl.character)
+        ar_def, af_def, _ = condition_effects.contested_roll_modifier(cb_def.conditions)
+        ar_ctrl, af_ctrl, _ = condition_effects.contested_roll_modifier(cb_ctrl.conditions)
+        result = combat.resolve_grapple_control(
+            str_def, jiu_def, str_ctrl, jiu_ctrl, _d.engine, wp_def, wp_ctrl,
+            ar_def, af_def, ar_ctrl, af_ctrl,
+        )
+        defender_wins = result["winner"] == "a"
+        cb_def.actions_used = 2
+        embed = discord.Embed(
+            title=f"{cb_def.name} tries to break free from {cb_ctrl.name}",
+            color=discord.Color.green() if defender_wins else discord.Color.red(),
+        )
+        embed.add_field(
+            name=f"{cb_def.name} (Jiujutsu/Strength)",
+            value=f"({str_def + jiu_def}k{str_def}) → **{result['total_a']}**",
+            inline=True,
+        )
+        embed.add_field(
+            name=f"{cb_ctrl.name} (Jiujutsu/Strength)",
+            value=f"({str_ctrl + jiu_ctrl}k{str_ctrl}) → **{result['total_b']}**",
+            inline=True,
+        )
+        if defender_wins:
+            cb_def.conditions.discard("grappled")
+            cb_def.conditions.discard("pinned")
+            embed.add_field(
+                name="Result",
+                value=f"**{cb_def.name}** breaks free! Grappled condition removed.",
+                inline=False,
+            )
+        else:
+            embed.add_field(
+                name="Result",
+                value=f"**{cb_def.name}** fails to escape. {cb_ctrl.name} retains control.",
+                inline=False,
+            )
+        _d.save_encounter(self.guild_id, enc)
+        embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
+        if defender_wins:
+            await self._end_grapple(interaction, "defender break")
+
+    @discord.ui.button(label="End Grapple", style=discord.ButtonStyle.danger, row=2)
+    async def end_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not _d.is_dm(interaction):
+            await interaction.response.send_message("DM only.", ephemeral=True)
+            return
+        if not self.claim():
+            return
+        await interaction.response.defer()
+        await self._end_grapple(interaction, "DM ended")
+
+
+@combat_grapple.command(name="start", description="Start a grapple with interactive board (after successful initiation). [Fortune]")
+@app_commands.describe(
+    controller="The combatant who has grapple control.",
+    defender="The grappled combatant.",
+)
+@app_commands.autocomplete(controller=_combatant_autocomplete, defender=_combatant_autocomplete)
+async def grapple_start(
+    interaction: discord.Interaction,
+    controller: str,
+    defender: str,
+) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    if not await _d.require_dm_role(interaction):
+        return
+    enc = await _d.require_encounter(interaction)
+    if enc is None:
+        return
+    cb_ctrl = enc.find(controller)
+    cb_def = enc.find(defender)
+    if cb_ctrl is None:
+        await interaction.response.send_message(f"No combatant named **{controller}**.", ephemeral=True)
+        return
+    if cb_def is None:
+        await interaction.response.send_message(f"No combatant named **{defender}**.", ephemeral=True)
+        return
+    guild = str(interaction.guild_id)
+    embed = _build_grapple_embed(cb_ctrl.name, cb_def.name)
+    view = GrappleBoardView(
+        guild_id=guild, channel_id=interaction.channel_id,
+        ctrl_name=cb_ctrl.name, def_name=cb_def.name,
+    )
+    await interaction.response.send_message(embed=embed, view=view)
+    msg = await interaction.original_response()
+    await view.persist(msg)
+    await _d.combat_log(guild, f"Grapple Board: {cb_ctrl.name} (ctrl) vs {cb_def.name}")
+
+
 @combat_grapple.command(name="initiate", description="Initiate a Grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus). [Fortune]")
 @app_commands.describe(
     attacker="The combatant initiating the grapple.",
