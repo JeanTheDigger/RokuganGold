@@ -7,3 +7,8 @@
 !.claude/settings.json
 !.claude/hooks/
 !.claude/hooks/setup_godot.sh
+
+# SQLite runtime artifacts
+*.db-shm
+*.db-wal
+*.db-journal
