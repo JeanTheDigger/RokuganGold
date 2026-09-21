@@ -3245,16 +3245,17 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
                     wound_tag = f"  {w_taken}/{w_cap} **{lvl}**{pen_str}"
                 if ch_rec.max_void_points > 0:
                     vp_tag = f"  VP:{ch_rec.current_void_points}/{ch_rec.max_void_points}"
-                if ch_rec.spell_slots:
+                if ch_rec.spell_slots and "shugenja" in ch_rec.school_type.lower():
                     parts: list[str] = []
+                    _elem_labels = {"air": "Air", "earth": "Earth", "fire": "Fire", "water": "Water", "void": "Void"}
                     for el in _CAST_ELEMENTS:
                         sl = ch_rec.spell_slots.get(el)
                         if sl is not None:
                             mx = stats.spell_slot_max(ch_rec, el)
-                            parts.append(f"{el[0].upper()}{sl}/{mx}")
+                            parts.append(f"{_elem_labels.get(el, el.title())} {sl}/{mx}")
                     if parts:
-                        bonus = f"+{ch_rec.void_spell_bonus}V" if ch_rec.void_spell_bonus else ""
-                        spell_tag = f"  **S**: {' '.join(parts)}{bonus}"
+                        bonus = f" +{ch_rec.void_spell_bonus} Void bonus" if ch_rec.void_spell_bonus else ""
+                        spell_tag = f"  **Spells**: {' | '.join(parts)}{bonus}"
         init_val = c.effective_initiative
         stance_str = f" {c.stance.replace('_', ' ').title()}" if c.stance != "attack" else ""
         acts = f"  [{c.actions_used}/2 acts]" if enc.started and c.actions_used > 0 else ""
