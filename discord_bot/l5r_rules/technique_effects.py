@@ -61,7 +61,7 @@ def _known(character: Character) -> set[str]:
     raw = getattr(character, "techniques", [])
     result: set[str] = set()
     for t in raw:
-        lowered = t.lower().strip()
+        lowered = t.lower().strip().replace("‘", "'").replace("’", "'")
         result.add(lowered.rstrip(":").rstrip())
         colon_pos = lowered.find(": ")
         if colon_pos > 0:
@@ -69,6 +69,24 @@ def _known(character: Character) -> set[str]:
             if name_part:
                 result.add(name_part)
     return result
+
+
+def _from_school(character: Character, school_prefix: str, tech_name: str) -> bool:
+    """True if the character knows *tech_name* from a school matching *school_prefix*.
+
+    PC techniques are stored as "School Name: Technique Name" so we can
+    check the full label.  NPC techniques are bare names, so we fall back
+    to checking character.school.
+    """
+    prefix = school_prefix.lower().strip()
+    name = tech_name.lower().strip()
+    for t in getattr(character, "techniques", []):
+        low = t.lower().strip().replace("‘", "'").replace("’", "'")
+        if low == f"{prefix}: {name}":
+            return True
+    if name in _known(character):
+        return (getattr(character, "school", "") or "").lower().strip().startswith(prefix)
+    return False
 
 
 def _skill(weapon_profile: dict) -> str:
@@ -118,8 +136,8 @@ def attacker_attack_dice(
         rolled += 1; notes.append("Always Be Ready +1k0 attack (bow)")
     if "the subtle sting" in known and _is_small(weapon_profile):
         rolled += 2; notes.append("The Subtle Sting +2k0 attack (Small weapon)")
-    if "the togashi tattooed order" in known and wname == "unarmed":
-        rolled += 1; kept += 1; notes.append("Togashi Tattooed Order +1k1 attack (unarmed)")
+    if "body of stone" in known and wname == "unarmed":
+        rolled += 1; kept += 1; notes.append("Body of Stone +1k1 attack (unarmed)")
     if "temper steel with honor" in known and wname in ("jitte", "sasumata"):
         rolled += 1; notes.append("Temper Steel With Honor +1k0 attack (jitte/sasumata)")
     if "the way of magari-yarijutsu" in known and skill in _SPEAR_POLEARM:
@@ -274,8 +292,8 @@ def attacker_damage(
         rolled += 1; notes.append("The Way of the Unicorn +1k0 damage (scimitar / two-handed)")
     if "the arrow knows the way" in known and _is_bow(weapon_profile):
         rolled += 2; notes.append("The Arrow Knows the Way +2k0 damage (bow)")
-    if "the togashi tattooed order" in known and wname == "unarmed":
-        rolled += 1; kept += 1; notes.append("Togashi Tattooed Order +1k1 damage (unarmed)")
+    if "body of stone" in known and wname == "unarmed":
+        rolled += 1; kept += 1; notes.append("Body of Stone +1k1 damage (unarmed)")
     if "the hand of thunder" in known and wname == "unarmed":
         kept += 1; notes.append("The Hand of Thunder +0k1 damage (unarmed)")
     if "the lion's roar" in known:
@@ -307,8 +325,8 @@ def attacker_damage(
         v = attacker.strength // 2
         if v:
             kept += v; notes.append(f"Moto Cannot Yield +0k{v} damage (½ Strength, Full Attack, Samurai/two-handed)")
-    if "the hitomi kikage zumi order" in known and wname == "unarmed" and attacker.school_rank >= 4:
-        rolled += 1; kept += 1; notes.append("Kikage Zumi R4 +1k1 damage (unarmed)")
+    if _from_school(attacker, "the hitomi kikage zumi order", "strike the center") and wname == "unarmed":
+        rolled += 1; kept += 1; notes.append("Strike the Center +1k1 damage (unarmed)")
     if "never beyond my reach" in known and wname in _NINJA_WEAPONS:
         rolled += 1; kept += 1; notes.append("Never Beyond My Reach +1k1 damage (Ninja weapon)")
     if "master of the quick blade" in known and wname in _KNIFE_WEAPONS:
@@ -461,9 +479,9 @@ def defender_armor_tn_bonus(
             hw = defender.skills.get("Heavy Weapons", defender.skills.get("heavy weapons", 0))
             if hw:
                 bonus += hw; notes.append(f"Way of the Iron Crane +{hw} Armor TN (Heavy Weapons rank, Defense)")
-    if "the hitomi kikage zumi order" in known:
+    if _from_school(defender, "the hitomi kikage zumi order", "the gift of the lady"):
         bonus += defender.reflexes
-        notes.append(f"Kikage Zumi R1 +{defender.reflexes} Armor TN (Reflexes)")
+        notes.append(f"The Gift of the Lady +{defender.reflexes} Armor TN (Reflexes)")
     if "speed of the hare" in known and defender_stance not in ("full_attack", "center"):
         ath = defender.skills.get("Athletics", defender.skills.get("athletics", 0))
         if ath:
@@ -520,9 +538,9 @@ def maneuver_free_raises(
     wname = weapon_name.lower().strip()
     free = 0
     notes: list[str] = []
-    if "the hitomi kikage zumi order" in known and attacker.school_rank >= 4 \
+    if _from_school(attacker, "the hitomi kikage zumi order", "strike the center") \
             and maneuver == "knockdown" and wname == "unarmed":
-        free += 1; notes.append("Kikage Zumi R4: Knockdown costs 1 less Raise (unarmed)")
+        free += 1; notes.append("Strike the Center: Knockdown costs 1 less Raise (unarmed)")
     if "pincers and tail" in known and maneuver == "feint":
         free += 1; notes.append("Pincers and Tail: Feint costs 1 less Raise")
     if "wearing down the mountain" in known and maneuver == "extra_attack" and \

@@ -2591,7 +2591,7 @@ async def _chargen_adv_category(interaction: discord.Interaction, state: dict, c
 class _AdvCategorySelect(discord.ui.Select):
     def __init__(self, state: dict):
         self.state = state
-        cats = ["Mental", "Physical", "Social", "Spiritual", "Material"]
+        cats = ["Mental", "Physical", "Social", "Spiritual", "Material", "Mystical"]
         options = [discord.SelectOption(label=c) for c in cats]
         super().__init__(placeholder="Pick a category to browse...", options=options)
 
@@ -2723,7 +2723,7 @@ async def _chargen_disadv_category(interaction: discord.Interaction, state: dict
 class _DisadvCategorySelect(discord.ui.Select):
     def __init__(self, state: dict):
         self.state = state
-        cats = ["Mental", "Physical", "Social", "Spiritual"]
+        cats = ["Mental", "Physical", "Social", "Spiritual", "Material"]
         options = [discord.SelectOption(label=c) for c in cats]
         super().__init__(placeholder="Pick a category to browse...", options=options)
 
@@ -9377,6 +9377,7 @@ class _XpCategorySelect(discord.ui.View):
             discord.SelectOption(label="Social", value="Social"),
             discord.SelectOption(label="Spiritual", value="Spiritual"),
             discord.SelectOption(label="Material", value="Material"),
+            discord.SelectOption(label="Mystical", value="Mystical"),
             discord.SelectOption(label="All categories", value="all"),
         ]
         view = _XpAdvCategoryPick(self.guild_id, self.user_id, opts)
