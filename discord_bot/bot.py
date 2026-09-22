@@ -9405,6 +9405,9 @@ class _XpTraitPick(discord.ui.View):
             await interaction.response.edit_message(content="No active character found.", view=None)
             return
         c = rec.character
+        if stats.is_dead(c):
+            await interaction.response.edit_message(content=f"**{c.name}** is dead. PC death is permanent.", view=None)
+            return
         quote = advancement.trait_raise_quote(c, trait)
         label = "Void" if trait == "void" else trait.capitalize()
         if quote is None:
@@ -9454,6 +9457,9 @@ class _XpSkillPick(discord.ui.View):
             await interaction.response.edit_message(content="No active character found.", view=None)
             return
         c = rec.character
+        if stats.is_dead(c):
+            await interaction.response.edit_message(content=f"**{c.name}** is dead. PC death is permanent.", view=None)
+            return
         quote = advancement.skill_raise_quote(c, skill_name)
         if quote is None:
             await interaction.response.edit_message(content=f"**{skill_name}** is already at maximum rank.", view=None)
@@ -9491,6 +9497,9 @@ class _XpNewSkillModal(discord.ui.Modal, title="Learn a new Skill"):
             await interaction.response.send_message("No active character found.", ephemeral=True)
             return
         c = rec.character
+        if stats.is_dead(c):
+            await interaction.response.send_message(f"**{c.name}** is dead. PC death is permanent.", ephemeral=True)
+            return
         quote = advancement.skill_raise_quote(c, skill_name)
         if quote is None:
             await interaction.response.send_message(f"**{skill_name}** is already at maximum rank.", ephemeral=True)
@@ -9548,6 +9557,9 @@ class _XpEmphasisModal(discord.ui.Modal, title="Add Emphasis"):
             await interaction.response.send_message("No active character found.", ephemeral=True)
             return
         c = rec.character
+        if stats.is_dead(c):
+            await interaction.response.send_message(f"**{c.name}** is dead. PC death is permanent.", ephemeral=True)
+            return
         cost, problem = advancement.emphasis_quote(c, self.skill_name, emph)
         if problem:
             await interaction.response.send_message(problem, ephemeral=True)
@@ -9609,6 +9621,9 @@ class _XpKataPick(discord.ui.View):
             await interaction.response.edit_message(content="No active character found.", view=None)
             return
         c = rec.character
+        if stats.is_dead(c):
+            await interaction.response.edit_message(content=f"**{c.name}** is dead. PC death is permanent.", view=None)
+            return
         kata_entry = kata.get(name)
         ml = kata_entry["mastery"] if kata_entry else 1
         cost = advancement.misc_cost(ml)
@@ -9726,6 +9741,9 @@ class _XpKihoPick(discord.ui.View):
             await interaction.response.edit_message(content="No active character found.", view=None)
             return
         c = rec.character
+        if stats.is_dead(c):
+            await interaction.response.edit_message(content=f"**{c.name}** is dead. PC death is permanent.", view=None)
+            return
         kiho_entry = kiho.get(name)
         ml = kiho_entry["mastery"] if kiho_entry else 1
         is_shugenja = "shugenja" in c.school_type.lower()
@@ -9848,6 +9866,9 @@ class _XpSpellPick(discord.ui.View):
             await interaction.response.edit_message(content="No active character found.", view=None)
             return
         c = rec.character
+        if stats.is_dead(c):
+            await interaction.response.edit_message(content=f"**{c.name}** is dead. PC death is permanent.", view=None)
+            return
         spell_entry = spells.get(name)
         ml = spell_entry["mastery"] if spell_entry else 1
         cost = advancement.misc_cost(ml)
@@ -9966,6 +9987,9 @@ class _XpAdvPick(discord.ui.View):
             await interaction.response.edit_message(content="No active character found.", view=None)
             return
         c = rec.character
+        if stats.is_dead(c):
+            await interaction.response.edit_message(content=f"**{c.name}** is dead. PC death is permanent.", view=None)
+            return
         adv = advantages.get(name, "advantage")
         if adv is None:
             await interaction.response.edit_message(content=f"Advantage **{name}** not found.", view=None)
@@ -10005,6 +10029,8 @@ async def xp_spend(interaction: discord.Interaction) -> None:
     rec = store.get_active(str(interaction.guild_id), str(interaction.user.id))
     if rec is None:
         await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
+        return
+    if await _refuse_if_dead(interaction, rec.character):
         return
     c = rec.character
     view = _XpCategorySelect(str(interaction.guild_id), interaction.user.id)
