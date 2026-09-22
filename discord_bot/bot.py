@@ -2503,9 +2503,9 @@ class _AdvChoiceModal(discord.ui.Modal):
                 await _chargen_advantages(interaction, self.state)
         else:
             current_disadv_xp = sum(d["points"] for d in self.state.get("disadvantages_chosen", []))
-            if current_disadv_xp >= _MAX_DISADVANTAGE_XP:
+            if current_disadv_xp + self.entry["points"] > _MAX_DISADVANTAGE_XP:
                 await interaction.response.send_message(
-                    f"Maximum {_MAX_DISADVANTAGE_XP} XP from disadvantages already reached.", ephemeral=True,
+                    f"That would exceed the {_MAX_DISADVANTAGE_XP} XP disadvantage limit.", ephemeral=True,
                 )
                 return
             self.state.setdefault("disadvantages_chosen", []).append(entry_data)
@@ -2683,9 +2683,9 @@ class _DisadvantageSelect(discord.ui.Select):
             await interaction.response.send_message("That disadvantage has a variable cost; ask a DM.", ephemeral=True)
             return
         current_disadv_xp = sum(d["points"] for d in self.state.get("disadvantages_chosen", []))
-        if current_disadv_xp >= _MAX_DISADVANTAGE_XP:
+        if current_disadv_xp + dis["points"] > _MAX_DISADVANTAGE_XP:
             await interaction.response.send_message(
-                f"You've already reached the maximum {_MAX_DISADVANTAGE_XP} XP from disadvantages.",
+                f"That would exceed the {_MAX_DISADVANTAGE_XP} XP disadvantage limit.",
                 ephemeral=True,
             )
             return
