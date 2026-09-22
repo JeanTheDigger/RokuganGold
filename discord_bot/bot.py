@@ -7435,7 +7435,7 @@ async def creature_catalog(interaction: discord.Interaction, search: str | None 
         f"{t.damage_rolled}k{t.damage_kept}, TN {t.armor_tn}, red {t.reduction}, dead {t.wounds_dead})"
         for tid, t in matches
     ]
-    pages = _paginate(lines, f"**{len(matches)} match(es) for `{search}`: **\n")
+    pages = _paginate(lines, f"**{len(matches)} match(es) for `{search}`:**\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:
@@ -7490,7 +7490,7 @@ async def creature_search(interaction: discord.Interaction, query: str) -> None:
             f"Dead {t.wounds_dead}{fear_s}\n"
             f"  {tags_s}"
         )
-    pages = _paginate(lines, f"**{len(matches)} match(es) for `{query}`: **\n", per_page=5)
+    pages = _paginate(lines, f"**{len(matches)} match(es) for `{query}`:**\n", per_page=5)
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:
@@ -10165,7 +10165,7 @@ async def spell_search(interaction: discord.Interaction, query: str) -> None:
         await interaction.response.send_message(f"No spells match `{query}`.", ephemeral=True)
         return
     lines = [f"• **{s['name']}** ({s['element']} {s['mastery']})" for s in matches]
-    pages = _paginate(lines, f"**{len(matches)} spell(s) matching `{query}`: **\n")
+    pages = _paginate(lines, f"**{len(matches)} spell(s) matching `{query}`:**\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:
