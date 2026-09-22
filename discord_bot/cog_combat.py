@@ -178,6 +178,18 @@ def _is_own_combatant(interaction: discord.Interaction, cb) -> bool:
     return False
 
 
+def _find_encounter_channel(char_name: str, exclude_channel: int) -> int | None:
+    """Return the channel_id of an encounter containing *char_name*, skipping
+    *exclude_channel*. Returns None when the character is not in any other
+    encounter."""
+    for ch_id, enc in _d.encounters.items():
+        if ch_id == exclude_channel:
+            continue
+        if enc.find(char_name) is not None:
+            return ch_id
+    return None
+
+
 # ===========================================================================
 # /attack: combat with DM-authorized damage
 # ===========================================================================
@@ -3041,6 +3053,28 @@ async def attack(
     if target_rec is not None and await _d.refuse_if_dead(interaction, target_rec.character):
         return
 
+    # Channel-lock: if attacker or target is in an encounter elsewhere, refuse.
+    atk_other = _find_encounter_channel(attacker_rec.character.name, interaction.channel_id)
+    if atk_other is not None:
+        await interaction.response.send_message(
+            f"**{attacker_rec.character.name}** is in an active encounter in <#{atk_other}>. "
+            f"Use combat commands there.",
+            ephemeral=True,
+        )
+        return
+    target_name = (
+        target_creature_rec.creature.name if target_creature_rec is not None
+        else target_rec.character.name
+    )
+    tgt_other = _find_encounter_channel(target_name, interaction.channel_id)
+    if tgt_other is not None:
+        await interaction.response.send_message(
+            f"**{target_name}** is in an active encounter in <#{tgt_other}>. "
+            f"Use combat commands there.",
+            ephemeral=True,
+        )
+        return
+
     a_stance_explicit = attacker_stance.value if attacker_stance else None
     d_stance_explicit = defender_stance.value if defender_stance else None
     man = maneuver.value if maneuver else "none"
@@ -3769,6 +3803,15 @@ async def combat_join(interaction: discord.Interaction, member: discord.Member |
         await interaction.response.send_message(f"{who} no active character. Use `/sheet create` first.", ephemeral=True)
         return
     if await _d.refuse_if_cannot_act(interaction, rec.character):
+        return
+    # Channel-lock: refuse if already in an encounter in another channel.
+    other_ch = _find_encounter_channel(rec.character.name, interaction.channel_id)
+    if other_ch is not None and not _d.is_dm(interaction):
+        await interaction.response.send_message(
+            f"**{rec.character.name}** is already in an active encounter in <#{other_ch}>. "
+            f"Finish or leave that encounter first.",
+            ephemeral=True,
+        )
         return
     enc = _d.encounters.get(interaction.channel_id)
     if enc is not None and enc.find(rec.character.name) is not None and not _d.is_dm(interaction):
@@ -4543,6 +4586,14 @@ async def combat_npc(interaction: discord.Interaction, name: str) -> None:
     rec = _d.store.get_by_name(str(interaction.guild_id), _d.NPC_OWNER, name)
     if rec is None:
         await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
+        return
+    # Channel-lock: warn if this NPC is already in an encounter elsewhere.
+    other_ch = _find_encounter_channel(rec.character.name, interaction.channel_id)
+    if other_ch is not None:
+        await interaction.response.send_message(
+            f"**{rec.character.name}** is already in an active encounter in <#{other_ch}>.",
+            ephemeral=True,
+        )
         return
     idr, idk, idn = technique_effects.initiative_dice_bonus(rec.character)
     result = combat.roll_initiative(rec.character, _d.engine, idr, idk)
@@ -7394,6 +7445,13 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
     if creature.creature_is_dead(rec.creature):
         await interaction.response.send_message(f"**{rec.creature.name}** has been slain.", ephemeral=True)
         return
+    other_ch = _find_encounter_channel(rec.creature.name, interaction.channel_id)
+    if other_ch is not None:
+        await interaction.response.send_message(
+            f"**{rec.creature.name}** is already in an active encounter in <#{other_ch}>.",
+            ephemeral=True,
+        )
+        return
     result = creature.roll_creature_initiative(rec.creature, _d.engine)
     enc = _get_or_create(interaction.channel_id)
     enc.remove(rec.creature.name)
@@ -7434,11 +7492,15 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
     enc = _get_or_create(interaction.channel_id)
     added: list[str] = []
     not_found: list[str] = []
+    skipped_elsewhere: list[str] = []
     for etype, ename in members:
         if etype == "npc":
             rec = _d.store.get_by_name(guild, _d.NPC_OWNER, ename)
             if rec is None:
                 not_found.append(f"NPC {ename}")
+                continue
+            if _find_encounter_channel(rec.character.name, interaction.channel_id) is not None:
+                skipped_elsewhere.append(rec.character.name)
                 continue
             idr, idk, idn = technique_effects.initiative_dice_bonus(rec.character)
             result = combat.roll_initiative(rec.character, _d.engine, idr, idk)
@@ -7463,6 +7525,9 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
             if rec_c is None:
                 not_found.append(f"Creature {ename}")
                 continue
+            if _find_encounter_channel(rec_c.creature.name, interaction.channel_id) is not None:
+                skipped_elsewhere.append(rec_c.creature.name)
+                continue
             result = creature.roll_creature_initiative(rec_c.creature, _d.engine)
             enc.remove(rec_c.creature.name)
             enc.add(encounter.Combatant(
@@ -7476,6 +7541,8 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
             added.append(rec_c.creature.name)
     _d.save_encounter(guild, enc)
     desc = f"Added {len(added)} creature(s) to initiative." if added else "No creatures added."
+    if skipped_elsewhere:
+        desc += f"\nAlready in another encounter (skipped): {', '.join(skipped_elsewhere)}"
     if not_found:
         desc += f"\nNot found (skipped): {', '.join(not_found)}"
     embed = discord.Embed(
@@ -7508,10 +7575,14 @@ async def combat_room(interaction: discord.Interaction) -> None:
     enc = _get_or_create(interaction.channel_id)
     added: list[str] = []
     skipped: list[str] = []
+    skipped_elsewhere: list[str] = []
     for uid in member_ids:
         char_rec = _d.store.get_active(guild, uid)
         if char_rec is None:
             skipped.append(f"<@{uid}>")
+            continue
+        if _find_encounter_channel(char_rec.character.name, interaction.channel_id) is not None:
+            skipped_elsewhere.append(char_rec.character.name)
             continue
         idr, idk, idn = technique_effects.initiative_dice_bonus(char_rec.character)
         result = combat.roll_initiative(char_rec.character, _d.engine, idr, idk)
@@ -7535,6 +7606,8 @@ async def combat_room(interaction: discord.Interaction) -> None:
     desc_parts: list[str] = []
     if added:
         desc_parts.append("Added: " + ", ".join(added))
+    if skipped_elsewhere:
+        desc_parts.append("Already in another encounter: " + ", ".join(skipped_elsewhere))
     if skipped:
         desc_parts.append("Skipped (no active character): " + ", ".join(skipped))
     if not added and not skipped:
