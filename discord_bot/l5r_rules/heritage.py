@@ -499,18 +499,117 @@ _LION_TABLE: dict = {
     ],
 }
 
-_LEGACY_MANTIS: list[dict] = [
-    {"roll": 1, "name": "Sea Raider", "effect": "Ancestor was a legendary pirate-hunter. +1 rank in Sailing (free).", "grants": {"skills": {"Sailing": 1}}},
-    {"roll": 2, "name": "Storm Blessed", "effect": "Family survived a great storm. +1k0 on Sailing checks in storms.", "grants": {"advantages": ["Heritage: Storm Blessed (+1k0 Sailing in storms)"]}},
-    {"roll": 3, "name": "Merchant Prince", "effect": "Family has trade connections. Starting koku +5.", "grants": {"koku": 5}},
-    {"roll": 4, "name": "Questionable Methods", "effect": "Ancestor used dishonorable tactics. +1 rank in Commerce (free).", "grants": {"skills": {"Commerce": 1}}},
-    {"roll": 5, "name": "Island Holdings", "effect": "Family holds small islands. +1 rank in Navigation (free).", "grants": {"skills": {"Navigation": 1}}},
-    {"roll": 6, "name": "Archery Champion", "effect": "Ancestor won an archery tournament. +1 rank in Kyujutsu (free).", "grants": {"skills": {"Kyujutsu": 1}}},
-    {"roll": 7, "name": "Kitsune Blood", "effect": "Distant fox-spirit blood. Animals are calmer around you.", "grants": {"advantages": ["Heritage: Kitsune Blood"]}},
-    {"roll": 8, "name": "Resourceful", "effect": "Family thrives in adversity.", "grants": {"advantages": ["Heritage: Resourceful"]}},
-    {"roll": 9, "name": "Great Navigator", "effect": "Ancestor charted unknown waters. +1 rank in Lore: Navigation (free).", "grants": {"skills": {"Lore: Navigation": 1}}},
-    {"roll": 10, "name": "Tempest Fury", "effect": "Born during a typhoon. +1 Stamina for endurance checks at sea.", "grants": {"stamina": 1}},
-]
+_MANTIS_TABLE: dict = {
+    "categories": [
+        {"rolls": [1, 2, 3, 4], "name": "Shameful Past", "table": "shameful"},
+        {"rolls": [5, 6, 7], "name": "Illustrious Past", "table": "illustrious"},
+        {"rolls": [8, 9, 10], "name": "Mixed Blessings", "table": "mixed"},
+    ],
+    "shameful": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor thought he was the one in charge of the scam, he was wrong. His weakness is yours as well. You gain the Can't Lie Disadvantage.",
+            "grants": {"disadvantages": ["Can't Lie"]},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor fought on the losing side in a famous battle. He was convinced the Mantis would win... right up until the end. You gain the Overconfident Disadvantage.",
+            "grants": {"disadvantages": ["Overconfident"]},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your line is filled with pirates. One ancestor was particularly noted for harassing other clans. You gain a Sworn Enemy in a clan of the Fortune's choice.",
+            "grants": {"disadvantages": ["Sworn Enemy (another clan)"]},
+            "notes": ["Fortune determines which clan holds the grudge."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor fought and died in a war far from Rokugan's shores. No one in Rokugan has ever heard of it, nor would they want to. Lose 1.0 Glory.",
+            "grants": {"glory": -1.0},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your family was on the losing side of a commercial dispute and has never recovered. You gain the Disadvantage Seven Fortune's Curse: Daikoku.",
+            "grants": {"disadvantages": ["Seven Fortune's Curse (Daikoku)"]},
+        },
+        {
+            "rolls": [10],
+            "effect": "One of your ancestors committed seppuku to atone for the Gusai family's treachery. You gain Social Disadvantage: Gusai Ancestor.",
+            "grants": {"disadvantages": ["Social Disadvantage (Gusai Ancestor)"]},
+        },
+    ],
+    "illustrious": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor was a merchant patron of some renown within the Empire. You start with 2 extra koku in your Outfit.",
+            "grants": {"koku": 2},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor proved himself during one of the great battles of his time, and his derring-do is still remembered today. His blood runs true in your veins. You may purchase the Daredevil Advantage for 1 less Experience Point.",
+            "grants": {},
+            "notes": ["May take the Daredevil Advantage for 1 less XP."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor was a legendary sailor and explorer. You gain 1 free Rank in either the Sailing Skill or the Navigation Skill.",
+            "grants": {},
+            "notes": ["Gain 1 free Rank in either Sailing or Navigation (your choice)."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "You can trace your family line back to Kaimetsu-Uo himself. You may take the Blood of Osano-Wo Advantage for 1 less point.",
+            "grants": {},
+            "notes": ["May take the Blood of Osano-Wo Advantage for 1 less XP."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor was a mercenary in the early days of the Mantis Clan. He made contacts across the Empire, but became especially good friends while serving in the army of one particular clan. You gain a free 3-point Ally in another clan of your choice.",
+            "grants": {"advantages": ["Ally (3 points, another clan)"]},
+            "notes": ["Choose which clan the Ally belongs to."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor won the blessing of the Thunder Dragon during a great storm. You may take a Rank of the Magic Resistance Advantage for 1 less Experience Point.",
+            "grants": {},
+            "notes": ["May take a Rank of Magic Resistance for 1 less XP."],
+        },
+    ],
+    "mixed": [
+        {
+            "rolls": [1],
+            "effect": "You are one of the secret descendants of the Gusai family. You gain Dark Secret: Gusai Family but also gain 1.0 Status.",
+            "grants": {"status": 1.0, "disadvantages": ["Dark Secret (Gusai Family)"]},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor was involved in covert trade with gaijin. You may take the Gaijin Gear Advantage for 1 less Experience Point, but you have an Obligation (3 points) to his foreign trading partner.",
+            "grants": {"disadvantages": ["Obligation (3 points, foreign trading partner)"]},
+            "notes": ["May take the Gaijin Gear Advantage for 1 less XP."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor was an ally of the Cornejo family and learned things which no Rokugani should know. You have the Advantage Forbidden Knowledge: Gaijin Pepper.",
+            "grants": {"advantages": ["Forbidden Knowledge (Gaijin Pepper)"]},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor was a prosperous smuggler, and while this enriched your family it also damaged their repute. You start with 1 additional koku in your Outfit, but lose 0.5 Glory.",
+            "grants": {"koku": 1, "glory": -0.5},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your family history is filled with scoundrels and misfits. You gain 1.0 Infamy but also gain 1 free Rank in the Skill of Lore: Underworld.",
+            "grants": {"skills": {"Lore: Underworld": 1}, "infamy": 1.0},
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor married a komouri shapeshifter spirit. You may purchase the Child of Chikushudo Advantage.",
+            "grants": {},
+            "notes": ["May purchase the Child of Chikushudo Advantage."],
+        },
+    ],
+}
 
 _LEGACY_PHOENIX: list[dict] = [
     {"roll": 1, "name": "Elemental Master", "effect": "Ancestor was an Elemental Master. +1 rank in Spellcraft (free).", "grants": {"skills": {"Spellcraft": 1}}},
@@ -557,7 +656,7 @@ HERITAGE_TABLES: dict[str, dict | list] = {
     "Crane": _CRANE_TABLE,
     "Dragon": _DRAGON_TABLE,
     "Lion": _LION_TABLE,
-    "Mantis": _LEGACY_MANTIS,
+    "Mantis": _MANTIS_TABLE,
     "Phoenix": _LEGACY_PHOENIX,
     "Scorpion": _LEGACY_SCORPION,
     "Unicorn": _LEGACY_UNICORN,
@@ -697,6 +796,9 @@ def apply_heritage(char: Character, result: dict) -> list[str]:
     if "taint" in grants:
         char.taint += grants["taint"]
         applied.append(f"Taint {grants['taint']:+.1f}")
+    if "infamy" in grants:
+        char.infamy += grants["infamy"]
+        applied.append(f"Infamy {grants['infamy']:+.1f}")
     if "koku" in grants:
         char.koku += grants["koku"]
         applied.append(f"{grants['koku']:+g} koku")
