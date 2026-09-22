@@ -1315,13 +1315,13 @@ def _active_ability_reminders(c: Character, role: str, drop_rate_limited: bool =
     kata_text = kata_effects.active_kata_reminder(c)
     if kata_text and not (drop_rate_limited and kata_effects.is_rate_limited(c.active_kata)):
         active = c.active_kata
-        lines.append(f"**{role.capitalize()} kata: {active}: ** {kata_text}")
+        lines.append(f"**{role.capitalize()} kata: {active}:** {kata_text}")
     for name in getattr(c, "active_kiho", []) or []:
         if kiho_effects.is_auto(name):
             continue
         rec = kiho.get(name)
         effect = rec["effect"] if rec else ""
-        lines.append(f"**{role.capitalize()} kiho: {name}: ** {effect}")
+        lines.append(f"**{role.capitalize()} kiho: {name}:** {effect}")
     tat_reminder = tattoo_effects.active_tattoo_reminder(c)
     if tat_reminder:
         lines.append(f"**{role.capitalize()} tattoo:** {tat_reminder}")

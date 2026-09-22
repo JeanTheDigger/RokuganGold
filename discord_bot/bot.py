@@ -608,37 +608,37 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
 
     extras = []
     if c.techniques:
-        extras.append("**Techniques: ** " + ", ".join(c.techniques))
+        extras.append("**Techniques:** " + ", ".join(c.techniques))
     if c.katas:
         act = (c.active_kata or "").lower()
-        extras.append("**Kata: ** " + ", ".join(
+        extras.append("**Kata:** " + ", ".join(
             (f"[+]{k}" if k.lower() == act else k) for k in c.katas))
     if c.kiho:
         active_kiho = [a.lower() for a in getattr(c, "active_kiho", [])]
-        extras.append("**Kiho: ** " + ", ".join(
+        extras.append("**Kiho:** " + ", ".join(
             (f"[+]{k}" if k.lower() in active_kiho else k) for k in c.kiho))
     if c.tattoos:
         act_t = (c.active_tattoo or "").lower()
-        extras.append("**Tattoos: ** " + ", ".join(
+        extras.append("**Tattoos:** " + ", ".join(
             (f"[+]{t}" if t.lower() == act_t else t) for t in c.tattoos))
     if c.emphases:
-        extras.append("**Emphases: ** " + ", ".join(
+        extras.append("**Emphases:** " + ", ".join(
             f"{sk} ({', '.join(em)})" for sk, em in sorted(c.emphases.items()) if em))
     if c.spells_known:
-        extras.append("**Spells: ** " + ", ".join(c.spells_known))
+        extras.append("**Spells:** " + ", ".join(c.spells_known))
     if c.advantages:
-        extras.append("**Advantages: ** " + ", ".join(c.advantages))
+        extras.append("**Advantages:** " + ", ".join(c.advantages))
     if c.disadvantages:
-        extras.append("**Disadvantages: ** " + ", ".join(c.disadvantages))
+        extras.append("**Disadvantages:** " + ", ".join(c.disadvantages))
     if c.taint > 0:
-        extras.append(f"**Taint: ** {c.taint:g}")
+        extras.append(f"**Taint:** {c.taint:g}")
     if c.koku:
-        extras.append(f"**Koku: ** {c.koku:g}")
+        extras.append(f"**Koku:** {c.koku:g}")
     if c.inventory:
         inv_parts = []
         for iname, qty in sorted(c.inventory.items()):
             inv_parts.append(f"{iname} ×{qty}" if qty > 1 else iname)
-        extras.append("**Inventory: ** " + ", ".join(inv_parts))
+        extras.append("**Inventory:** " + ", ".join(inv_parts))
     if c.notes:
         extras.append(f"*{c.notes}*")
     if extras:
@@ -1412,13 +1412,13 @@ def _wizard_embed(state: dict) -> discord.Embed:
     embed = discord.Embed(title=f"Character Wizard: {state['name']}", color=discord.Color.gold())
     lines: list[str] = []
     if state.get("clan"):
-        lines.append(f"**Clan: ** {state['clan']}")
+        lines.append(f"**Clan:** {state['clan']}")
     if state.get("family_name"):
         fam = families.get(state["family_name"])
         bonus = f" (+1 {fam['bonus_trait'].capitalize()})" if fam else ""
-        lines.append(f"**Family: ** {state['family_name']}{bonus}")
+        lines.append(f"**Family:** {state['family_name']}{bonus}")
     if state.get("heritage_result"):
-        lines.append(f"**Heritage: ** {state['heritage_result']}")
+        lines.append(f"**Heritage:** {state['heritage_result']}")
     if state.get("different_school"):
         lines.append("**Different School** advantage (5 pts)")
     if state.get("school_name"):
@@ -1426,7 +1426,7 @@ def _wizard_embed(state: dict) -> discord.Embed:
         if sch:
             ben = schools.parse_benefit(sch.get("benefit", ""))
             ben_str = f" (+{ben[1]} {ben[0].capitalize()})" if ben else ""
-            lines.append(f"**School: ** {sch['name']}{ben_str}")
+            lines.append(f"**School:** {sch['name']}{ben_str}")
     embed.description = "\n".join(lines) if lines else "Starting..."
     return embed
 
@@ -10149,8 +10149,8 @@ async def spell_list(interaction: discord.Interaction, element: str | None = Non
     by_ml: dict[int, list[str]] = {}
     for s in matches:
         by_ml.setdefault(s["mastery"], []).append(s["name"])
-    lines = [f"**ML {ml}: ** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
-    pages = _paginate(lines, f"**{element} spells ({len(matches)}): **\n", per_page=10)
+    lines = [f"**ML {ml}:** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
+    pages = _paginate(lines, f"**{element} spells ({len(matches)}):**\n", per_page=10)
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:
