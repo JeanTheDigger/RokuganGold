@@ -822,7 +822,7 @@ def known_declarable(technique_names: list[str]) -> list[dict]:
     results: list[dict] = []
     seen: set[str] = set()
     for raw in technique_names:
-        low = raw.lower().strip().rstrip(":").strip()
+        low = raw.lower().strip().replace("‘", "'").replace("’", "'").rstrip(":").strip()
         candidates = [low]
         colon = low.find(": ")
         if colon > 0:
@@ -836,4 +836,4 @@ def known_declarable(technique_names: list[str]) -> list[dict]:
 
 def get(name: str) -> dict | None:
     """Look up a technique by display name (case-insensitive)."""
-    return CATALOG.get(name.lower().strip())
+    return CATALOG.get(name.lower().strip().replace("‘", "'").replace("’", "'"))
