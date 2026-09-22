@@ -5988,6 +5988,11 @@ _HELP_BLURBS: dict[str, str] = {
     "creature": "Bestiary creatures: Spawn, wound, attack [Fortune].",
     "category": "Group NPCs and creatures for bulk actions [Fortune].",
     "dm": "Fortune and Kami tools: Approvals, new day, damage, undo, revive, channels.",
+    "void": "Void Point management: Spend, refresh, status.",
+    "rumor": "Start and spread rumors among characters.",
+    "weather": "View or set the current weather. [Fortune]",
+    "grapple": "Shortcut to start or manage a grapple. [Fortune]",
+    "duel": "Shortcut to start an Iaijutsu duel. [Fortune]",
     "ref": "Weapons, armor, schools, families, kata, kiho, advantages, tattoos, heritage, travel, modifiers.",
     "setup": "Server setup [Kami].",
     "sync": "Re-sync slash commands [Kami].",
@@ -5996,12 +6001,12 @@ _HELP_BLURBS: dict[str, str] = {
 }
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Getting started", ["help", "whoami", "players", "compare", "date"]),
-    ("Your character", ["sheet", "inventory", "xp", "letter", "stat"]),
+    ("Your character", ["sheet", "inventory", "xp", "void", "letter", "rumor", "stat"]),
     ("Dice and checks", ["roll", "dice", "check", "macro", "history"]),
-    ("Fights and magic", ["combat", "fight", "engage", "spell"]),
+    ("Fights and magic", ["combat", "fight", "engage", "grapple", "duel", "spell"]),
     ("Places", ["room", "location"]),
     ("Rules reference", ["ref"]),
-    ("Staff [Fortune]", ["npc", "npc-edit", "creature", "category", "dm"]),
+    ("Staff [Fortune]", ["npc", "npc-edit", "creature", "category", "weather", "dm"]),
     ("Admin [Kami]", ["setup", "sync", "ping"]),
 ]
 _HELP_ORDER: list[str] = [name for _, names in _HELP_SECTIONS for name in names]
