@@ -107,6 +107,9 @@ class _ItemModal(discord.ui.Modal, title="Add an item"):
         if not 1 <= qty <= 9999:
             await interaction.response.send_message("Quantity must be 1-9999.", ephemeral=True)
             return
+        if self.panel.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
         c = self.panel.rec.character
         ok, msg = _d.modify_inventory(c.inventory, c.name, self.name.value.strip(), qty, False)
         if not ok:
@@ -131,6 +134,9 @@ class _KokuModal(discord.ui.Modal, title="Koku: Add or Spend"):
             return
         if not math.isfinite(amount):
             await interaction.response.send_message("Amount must be a finite number.", ephemeral=True)
+            return
+        if self.panel.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
             return
         c = self.panel.rec.character
         if amount < 0 and c.koku + amount < 0:
@@ -175,6 +181,12 @@ class InventoryPanel(discord.ui.View):
         self.action = ""      # current action value, or "add:<group>"
         self.status = ""      # last change, shown above the embed
         self.build()
+
+    def reload(self) -> storage.CharacterRecord | None:
+        fresh = _d.store.get_by_id(self.rec.id)
+        if fresh is not None:
+            self.rec = fresh
+        return fresh
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.user_id:
@@ -251,6 +263,9 @@ class InventoryPanel(discord.ui.View):
 
     # -- handlers ------------------------------------------------------------
     async def _on_main(self, interaction: discord.Interaction, values: list[str]) -> None:
+        if self.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
         c = self.rec.character
         new_weapon = values[0].lower() if values else ""
         if not new_weapon:
@@ -270,6 +285,9 @@ class InventoryPanel(discord.ui.View):
         await self.commit(interaction, f"**{c.name}** wields **{c.equipped_weapon.replace('_', ' ')}**.", "wield")
 
     async def _on_off(self, interaction: discord.Interaction, values: list[str]) -> None:
+        if self.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
         c = self.rec.character
         off = values[0].lower() if values else ""
         if off and not c.equipped_weapon:
@@ -312,6 +330,9 @@ class InventoryPanel(discord.ui.View):
         await self.render(interaction)
 
     async def _on_add_weapon(self, interaction: discord.Interaction, values: list[str]) -> None:
+        if self.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
         c = self.rec.character
         w = values[0].lower()
         if w in [x.lower() for x in c.weapons]:
@@ -323,6 +344,9 @@ class InventoryPanel(discord.ui.View):
         await self.commit(interaction, f"Added **{w}** (DR {spec['rolled']}k{spec['kept']}, {spec['skill']}).", "equip")
 
     async def _on_drop(self, interaction: discord.Interaction, values: list[str]) -> None:
+        if self.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
         c = self.rec.character
         w = values[0]
         c.weapons = [x for x in c.weapons if x.lower() != w.lower()]
@@ -333,6 +357,9 @@ class InventoryPanel(discord.ui.View):
         await self.commit(interaction, f"Dropped **{w}**.", "equip")
 
     async def _on_remove_items(self, interaction: discord.Interaction, values: list[str]) -> None:
+        if self.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
         c = self.rec.character
         if not values:
             self.action = ""
@@ -347,6 +374,9 @@ class InventoryPanel(discord.ui.View):
         await self.commit(interaction, "Removed: " + ", ".join(f"**{r}**" for r in removed) + ".", "item")
 
     async def _on_wear_armor(self, interaction: discord.Interaction, values: list[str]) -> None:
+        if self.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
         c = self.rec.character
         choice = values[0] if values else ""
         if choice == "off" and c.armor_name:
@@ -368,6 +398,9 @@ class InventoryPanel(discord.ui.View):
             await self.render(interaction)
 
     async def _on_armor(self, interaction: discord.Interaction, values: list[str]) -> None:
+        if self.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
         c = self.rec.character
         a = values[0]
         if a == "none":
@@ -386,6 +419,9 @@ class InventoryPanel(discord.ui.View):
         await self.commit(interaction, f"**{c.name}** wears **{a.replace('_', ' ')}**: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}.{note}", "armor")
 
     async def _on_qualities(self, interaction: discord.Interaction, values: list[str]) -> None:
+        if self.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
         c = self.rec.character
         c.weapon_qualities = sorted(set(values))
         await self.commit(interaction, f"Weapon qualities: **{', '.join(c.weapon_qualities) or 'none'}**.", "quality")
