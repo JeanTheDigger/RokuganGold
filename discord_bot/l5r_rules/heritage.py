@@ -6,7 +6,8 @@ Blessings), then a second d10 determines the specific result within
 that category.  Source: lasthaiku.wikidot.com/heritage.
 
 Great Clans each have their own table.  Minor Clans share a single
-table.  Unknown clan names fall back to the Minor Clan table.
+table.  Ronin and Brotherhood of Shinsei each have their own table.
+Unknown clan names fall back to the Minor Clan table.
 """
 
 from __future__ import annotations
@@ -1178,6 +1179,119 @@ _BROTHERHOOD_TABLE: dict = {
     ],
 }
 
+_RONIN_TABLE: dict = {
+    "categories": [
+        {"rolls": [1, 2], "name": "Shameful Past", "table": "shameful"},
+        {"rolls": [3, 4, 5], "name": "Illustrious Past", "table": "illustrious"},
+        {"rolls": [6, 7, 8, 9, 10], "name": "Mixed Blessings", "table": "mixed"},
+    ],
+    "shameful": [
+        {
+            "rolls": [1],
+            "effect": "One of your ancestors was a notorious criminal, and to this day there are those who seek to collect on the bounty that was once placed on his head. You gain 0.5 points of Infamy and the Sworn Enemy Disadvantage (a magistrate or bounty hunter, 3 points).",
+            "grants": {"infamy": 0.5, "disadvantages": ["Sworn Enemy (magistrate or bounty hunter, 3 points)"]},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your family has a long tradition of larceny and law-breaking, and as a result you are unable to forge any real connections to the common people. You cannot purchase the Way of the Land, Hero of the People, or Ally Advantages.",
+            "grants": {},
+            "notes": ["Cannot purchase Way of the Land, Hero of the People, or Ally Advantages."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "One of your ancestors did something so terrible that you cannot stop trying to atone for his sins. You gain a 3-point Compulsion Disadvantage.",
+            "grants": {"disadvantages": ["Compulsion (3 points)"]},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "A member of one of the Great Clans has singled your family out as targets for punishment due to a perceived insult on the part of one of your ancestors. You gain the Sworn Enemy Disadvantage (a clan samurai, 4 points).",
+            "grants": {"disadvantages": ["Sworn Enemy (clan samurai, 4 points)"]},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "You are something of a hothead, having come from a line of ancestors known for their violent tempers. You gain the Brash Disadvantage.",
+            "grants": {"disadvantages": ["Brash"]},
+        },
+        {
+            "rolls": [10],
+            "effect": "There is something in your family's past, something unspeakable that consumed your family's honor entirely. Everyone in your family was destroyed by it, and you carry the taint of its legacy. You gain the Consumed Disadvantage.",
+            "grants": {"disadvantages": ["Consumed"]},
+        },
+    ],
+    "illustrious": [
+        {
+            "rolls": [1],
+            "effect": "One of your ancestors was a particularly skilled ronin who established a fighting school of sorts. If your Fortune approves, you may begin play knowing a ronin Technique of a higher Rank than your own.",
+            "grants": {},
+            "notes": ["Fortune may grant access to a higher-rank ronin Technique."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor was a renowned swordsman whose lessons have been passed down through the generations. You gain one additional rank in a weapon Skill of your choice.",
+            "grants": {},
+            "notes": ["Gain +1 rank in a weapon Skill of your choice."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Despite your ronin status, your family has managed to retain ties to one of the Great Clans. You gain the Ally Advantage (3 points, a member of a Great Clan).",
+            "grants": {"advantages": ["Ally (3 points, Great Clan)"]},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestors were well-known and well-liked among the ronin community. You have two Allies among the ronin, each worth 2 points.",
+            "grants": {},
+            "notes": ["Fortune determines two 2-point ronin Allies."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestors lived among the common people for so long that you feel a natural kinship with them. You gain the Hero of the People Advantage.",
+            "grants": {"advantages": ["Hero of the People"]},
+        },
+        {
+            "rolls": [10],
+            "effect": "One of your ancestors once served a Great Clan in a significant capacity, and as a reward received a weapon of incredible quality. You may purchase a Sacred Weapon if your Fortune approves.",
+            "grants": {},
+            "notes": ["Fortune may approve purchase of a Sacred Weapon."],
+        },
+    ],
+    "mixed": [
+        {
+            "rolls": [1],
+            "effect": "Your family has a strong tradition of living simply and in harmony with the natural world. Bushi characters gain the Friend of the Elements Advantage for free. Shugenja characters gain the Friend of the Brotherhood of Shinsei Advantage for free. You also gain the Ascetic Disadvantage.",
+            "grants": {"disadvantages": ["Ascetic"]},
+            "notes": ["Bushi gain Friend of the Elements free. Shugenja gain Friend of the Brotherhood of Shinsei free."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your family was once nearly wiped out by a single samurai. Your ancestors learned the art of the blade out of necessity. You gain one rank of Iaijutsu, but you also have the Sworn Enemy Disadvantage (3 points).",
+            "grants": {"skills": {"Iaijutsu": 1}, "disadvantages": ["Sworn Enemy (3 points)"]},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestors were smugglers and criminals, but this has left you with an impressive collection of ill-gotten wealth, including a weapon. You gain 5 additional koku and a weapon, but you also gain the Dark Secret: Criminal Disadvantage.",
+            "grants": {"koku": 5, "disadvantages": ["Dark Secret: Criminal"]},
+            "notes": ["Also receive a weapon of your choice."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your family has a long and tangled history of connections to others. You gain the Kharmic Tie Advantage and the Ally Advantage, but you also have a True Love or Lost Love (Fortune determines which and the details).",
+            "grants": {"advantages": ["Kharmic Tie"]},
+            "notes": ["Also gain an Ally Advantage. Fortune determines True Love or Lost Love and their details."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor made a powerful enemy, but also many friends along the way. You gain a 5-point Sworn Enemy Disadvantage, but you also gain up to three Ally Advantages, each worth 3 points.",
+            "grants": {"disadvantages": ["Sworn Enemy (5 points)"]},
+            "notes": ["Fortune determines up to three 3-point Allies."],
+        },
+        {
+            "rolls": [10],
+            "effect": "One of your ancestors stumbled upon a cache of forbidden lore. You gain Forbidden Knowledge: Maho and one Rank of Taint.",
+            "grants": {"taint": 1.0, "disadvantages": ["Forbidden Knowledge: Maho"]},
+        },
+    ],
+}
+
 HERITAGE_TABLES: dict[str, dict] = {
     "Crab": _CRAB_TABLE,
     "Crane": _CRANE_TABLE,
@@ -1198,6 +1312,7 @@ HERITAGE_TABLES: dict[str, dict] = {
     "Monkey": _MINOR_CLAN_TABLE,
     "Oriole": _MINOR_CLAN_TABLE,
     "Ox": _MINOR_CLAN_TABLE,
+    "Ronin": _RONIN_TABLE,
     "Sparrow": _MINOR_CLAN_TABLE,
     "Tiger": _MINOR_CLAN_TABLE,
     "Tortoise": _MINOR_CLAN_TABLE,
