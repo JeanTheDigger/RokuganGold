@@ -648,7 +648,7 @@ async def kiho_view(interaction: discord.Interaction, name: str) -> None:
 # ---------------------------------------------------------------------------
 
 @ref_heritage.command(name="roll", description="Roll on a clan's Heritage Table (1d10). [Fortune]")
-@app_commands.describe(clan="Clan name (any Great or Minor Clan).")
+@app_commands.describe(clan="Clan name (Great Clan, Minor Clan, Ronin, or Brotherhood).")
 async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
     if not await _d.require_guild(interaction):
         return
