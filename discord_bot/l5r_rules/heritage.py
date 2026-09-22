@@ -383,18 +383,121 @@ _DRAGON_TABLE: dict = {
     ],
 }
 
-_LEGACY_LION: list[dict] = [
-    {"roll": 1, "name": "War Hero", "effect": "Ancestor was a legendary general. +3 Glory points.", "grants": {"glory": 3.0}},
-    {"roll": 2, "name": "Tactical Genius", "effect": "Family tradition of strategy. +1 rank in Battle (free).", "grants": {"skills": {"Battle": 1}}},
-    {"roll": 3, "name": "Berserker Blood", "effect": "Ancestor fought with terrifying fury. +1k0 damage when at Hurt or worse.", "grants": {"advantages": ["Heritage: Berserker Blood (+1k0 damage at Hurt+)"]}},
-    {"roll": 4, "name": "Dishonored Ancestor", "effect": "An ancestor was stripped of honor. +1 Willpower.", "grants": {"willpower": 1}},
-    {"roll": 5, "name": "Historian's Legacy", "effect": "Family keeps meticulous records. +1 rank in Lore: History (free).", "grants": {"skills": {"Lore: History": 1}}},
-    {"roll": 6, "name": "Kitsu Bloodline", "effect": "Distant Kitsu blood. Occasional spiritual sensitivity.", "grants": {"advantages": ["Heritage: Kitsu Bloodline"]}},
-    {"roll": 7, "name": "Martial Discipline", "effect": "Family drills are legendary. +1 rank in one Bugei skill (free).", "grants": {"advantages": ["Heritage: Martial Discipline (+1 Bugei skill, Fortune chooses)"]}},
-    {"roll": 8, "name": "Political Connections", "effect": "Family has ties to the Imperial Court. +5 Status points.", "grants": {"status": 5.0}},
-    {"roll": 9, "name": "Ancestral Armor", "effect": "A suit of Light Armor handed down through generations.", "grants": {"advantages": ["Heritage: Ancestral Armor"], "armor": "light"}},
-    {"roll": 10, "name": "Destined for Glory", "effect": "+1 Void Point maximum.", "grants": {"void": 1}},
-]
+_LION_TABLE: dict = {
+    "categories": [
+        {"rolls": [1, 2], "name": "Shameful Past", "table": "shameful"},
+        {"rolls": [3, 4, 5, 6, 7], "name": "Illustrious Past", "table": "illustrious"},
+        {"rolls": [8, 9, 10], "name": "Mixed Blessings", "table": "mixed"},
+    ],
+    "shameful": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor was a Deathseeker who never redeemed his name. Your family still labors under his failure. You start with 2.0 less Honor.",
+            "grants": {"honor": -2.0},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor had a vice, and someone else found out about it. You have the Blackmailed Disadvantage.",
+            "grants": {"disadvantages": ["Blackmailed"]},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor lacked the courage to stand on the front lines of battle. He ran, leading to a defeat that cost many lives. Your family lives under the shadow of his failure. You start with 0.0 Glory and gain the Disadvantage Phobia: Combat (1 point).",
+            "grants": {"disadvantages": ["Phobia: Combat (1 point)"]},
+            "notes": ["Starting Glory is set to 0.0 regardless of school."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor made an enemy in a family from another clan, and they've never forgotten it. You gain a Sworn Enemy from that clan.",
+            "grants": {"disadvantages": ["Sworn Enemy (another clan)"]},
+            "notes": ["Fortune determines which clan holds the grudge."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor served in an army destined for inglorious defeat. The Lion tend not to talk about this particular battle, but they do give you funny looks. You lose 0.5 Glory and gain the Disadvantage Driven: Prove Self.",
+            "grants": {"glory": -0.5, "disadvantages": ["Driven (Prove Self)"]},
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor found true love in the arms of a Crane. They were forbidden to see each other again, and being a dutiful Lion your ancestor obeyed, but you have inherited his passionate nature. You gain either the True Love or Lost Love Disadvantage (your choice).",
+            "grants": {},
+            "notes": ["Choose either the True Love or Lost Love Disadvantage."],
+        },
+    ],
+    "illustrious": [
+        {
+            "rolls": [1],
+            "effect": "The blood of your ancestors runs strong in your veins. You may take a Lion Ancestor for 2 less points.",
+            "grants": {},
+            "notes": ["May take a Lion Ancestor Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "You can trace your line directly back to your family's founder. Honors and gifts from those early years have been passed down to you. You may take the Lion Sacred Weapon Advantage for 2 less points.",
+            "grants": {},
+            "notes": ["May take the Sacred Weapon (Lion) Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor served honorably and memorably in the Imperial Legions. You gain 0.5 Honor and 0.5 Status.",
+            "grants": {"honor": 0.5, "status": 0.5},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor died a hero's death while fighting in one of the major battles of his time. His skills are reborn in you. You gain 1 free Rank in a Weapon Skill of your choice.",
+            "grants": {},
+            "notes": ["Gain 1 free Rank in a Weapon Skill of your choice."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor rose to be a Rikugunshokan, commanding one of the four Lion armies in a great battle of his age. He led well, and his legacy is in your blood. You may take the Advantage Leadership for 2 less Experience Points.",
+            "grants": {},
+            "notes": ["May take the Leadership Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor died defending the Emperor from an assassination attempt. The Emperor proclaimed his line, of which you are the scion, to be Sacrosanct.",
+            "grants": {"advantages": ["Sacrosanct"]},
+        },
+    ],
+    "mixed": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor was a Kitsu who met a spirit creature he shouldn't have. You still labor under the effects of that long-ago encounter. You gain the Cursed by the Realm Disadvantage but may take the Inner Gift Advantage for 2 less Experience Points.",
+            "grants": {"disadvantages": ["Cursed by the Realm"]},
+            "notes": ["May take the Inner Gift Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor was a famous Ikoma Bard and you possess a great many of her traits. You may take the Sensation Advantage for 1 less point, but you love the adulation of the audience, and gain the Disadvantage Compulsion: Perform (2 points) as well.",
+            "grants": {"disadvantages": ["Compulsion: Perform (2 points)"]},
+            "notes": ["May take the Sensation Advantage for 1 less XP."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your gempukku took place on the battlefield where your ancestor died. He guides your steps, walking beside you ever since. You gain the Haunted Disadvantage but also gain 1 free Rank in a Bugei Skill of your choice.",
+            "grants": {"disadvantages": ["Haunted"]},
+            "notes": ["Gain 1 free Rank in a Bugei Skill of your choice."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor took part in a battle that was a defeat for the Lion, but which is now used to teach students at the War College. You lose 1.0 Glory but gain 0.5 Honor.",
+            "grants": {"glory": -1.0, "honor": 0.5},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor was one of the Ikoma Lion's Shadow. His subtle and pragmatic ways have passed down to you. You start with 1.5 less Honor, but you may take either the Crafty or the Silent Advantage for 2 less Experience Points.",
+            "grants": {"honor": -1.5},
+            "notes": ["May take either the Crafty or the Silent Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor took part in a victorious battle, but the Lion histories consider the battle to have been run ineptly. You lose 1.0 Glory but gain 1 free Rank in a Weapon Skill of your choice.",
+            "grants": {"glory": -1.0},
+            "notes": ["Gain 1 free Rank in a Weapon Skill of your choice."],
+        },
+    ],
+}
 
 _LEGACY_MANTIS: list[dict] = [
     {"roll": 1, "name": "Sea Raider", "effect": "Ancestor was a legendary pirate-hunter. +1 rank in Sailing (free).", "grants": {"skills": {"Sailing": 1}}},
@@ -453,7 +556,7 @@ HERITAGE_TABLES: dict[str, dict | list] = {
     "Crab": _CRAB_TABLE,
     "Crane": _CRANE_TABLE,
     "Dragon": _DRAGON_TABLE,
-    "Lion": _LEGACY_LION,
+    "Lion": _LION_TABLE,
     "Mantis": _LEGACY_MANTIS,
     "Phoenix": _LEGACY_PHOENIX,
     "Scorpion": _LEGACY_SCORPION,
