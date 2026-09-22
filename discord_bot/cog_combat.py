@@ -5803,18 +5803,66 @@ async def grapple_start(
     await _d.combat_log(guild, f"Grapple Board: {cb_ctrl.name} (ctrl) vs {cb_def.name}")
 
 
-@app_commands.command(name="grapple", description="Start a grapple board between two combatants.")
+class _GrappleSetupView(discord.ui.View):
+    def __init__(self, combatant_names: list[str]) -> None:
+        super().__init__(timeout=120)
+        opts = [discord.SelectOption(label=n, value=n) for n in combatant_names[:25]]
+        self.ctrl_select = discord.ui.Select(
+            placeholder="Controller (has grapple control)",
+            options=list(opts), row=0,
+        )
+        self.def_select = discord.ui.Select(
+            placeholder="Defender (being grappled)",
+            options=list(opts), row=1,
+        )
+        self.ctrl_select.callback = self._noop
+        self.def_select.callback = self._noop
+        self.add_item(self.ctrl_select)
+        self.add_item(self.def_select)
+
+    async def _noop(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+
+    @discord.ui.button(label="Start Grapple", style=discord.ButtonStyle.success, row=2)
+    async def start_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not self.ctrl_select.values or not self.def_select.values:
+            await interaction.response.send_message("Select both a controller and a defender.", ephemeral=True)
+            return
+        ctrl = self.ctrl_select.values[0]
+        defn = self.def_select.values[0]
+        if ctrl == defn:
+            await interaction.response.send_message("Controller and defender must be different combatants.", ephemeral=True)
+            return
+        self.stop()
+        await grapple_start.callback(interaction, ctrl, defn)
+
+
+@app_commands.command(name="grapple", description="Start a grapple board. Pick combatants from a menu, or name them directly.")
 @app_commands.describe(
-    controller="The combatant who has grapple control.",
-    defender="The grappled combatant.",
+    controller="The combatant who has grapple control (optional).",
+    defender="The grappled combatant (optional).",
 )
 @app_commands.autocomplete(controller=_combatant_autocomplete, defender=_combatant_autocomplete)
 async def grapple_shortcut(
     interaction: discord.Interaction,
-    controller: str,
-    defender: str,
+    controller: str | None = None,
+    defender: str | None = None,
 ) -> None:
-    await grapple_start.callback(interaction, controller, defender)
+    if controller and defender:
+        await grapple_start.callback(interaction, controller, defender)
+        return
+    if not await _d.require_guild(interaction):
+        return
+    enc = _d.encounters.get(interaction.channel_id)
+    if enc is None or not enc.combatants:
+        await interaction.response.send_message("No active encounter in this channel. Use `/combat start` first.", ephemeral=True)
+        return
+    names = [c.name for c in enc.combatants]
+    if len(names) < 2:
+        await interaction.response.send_message("Need at least two combatants in the encounter.", ephemeral=True)
+        return
+    view = _GrappleSetupView(names)
+    await interaction.response.send_message("Select the grapple participants:", view=view, ephemeral=True)
 
 
 @combat_grapple.command(name="initiate", description="Initiate a Grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus).")
@@ -7496,10 +7544,44 @@ async def duel_start(
     await _d.combat_log(guild, f"Duel Start: {ca.name} vs {cb_char.name}")
 
 
-@app_commands.command(name="duel", description="Start an Iaijutsu duel board between two characters.")
+class _DuelSetupView(discord.ui.View):
+    def __init__(self, character_names: list[str]) -> None:
+        super().__init__(timeout=120)
+        opts = [discord.SelectOption(label=n, value=n) for n in character_names[:25]]
+        self.a_select = discord.ui.Select(
+            placeholder="First duelist",
+            options=list(opts), row=0,
+        )
+        self.b_select = discord.ui.Select(
+            placeholder="Second duelist",
+            options=list(opts), row=1,
+        )
+        self.a_select.callback = self._noop
+        self.b_select.callback = self._noop
+        self.add_item(self.a_select)
+        self.add_item(self.b_select)
+
+    async def _noop(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+
+    @discord.ui.button(label="Start Duel", style=discord.ButtonStyle.success, row=2)
+    async def start_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not self.a_select.values or not self.b_select.values:
+            await interaction.response.send_message("Select both duelists.", ephemeral=True)
+            return
+        a_name = self.a_select.values[0]
+        b_name = self.b_select.values[0]
+        if a_name == b_name:
+            await interaction.response.send_message("Duelists must be different characters.", ephemeral=True)
+            return
+        self.stop()
+        await duel_start.callback(interaction, a_name, b_name)
+
+
+@app_commands.command(name="duel", description="Start an Iaijutsu duel board. Pick duelists from a menu, or name them directly.")
 @app_commands.describe(
-    duelist_a="First duelist (name, NPC, or @player).",
-    duelist_b="Second duelist (name, NPC, or @player).",
+    duelist_a="First duelist (optional).",
+    duelist_b="Second duelist (optional).",
     a_is_npc="First duelist is a stored NPC.",
     b_is_npc="Second duelist is a stored NPC.",
     a_member="First duelist is another player's character.",
@@ -7508,14 +7590,31 @@ async def duel_start(
 @app_commands.autocomplete(duelist_a=_duelist_autocomplete, duelist_b=_duelist_autocomplete)
 async def duel_shortcut(
     interaction: discord.Interaction,
-    duelist_a: str,
-    duelist_b: str,
+    duelist_a: str | None = None,
+    duelist_b: str | None = None,
     a_is_npc: bool = False,
     b_is_npc: bool = False,
     a_member: discord.Member | None = None,
     b_member: discord.Member | None = None,
 ) -> None:
-    await duel_start.callback(interaction, duelist_a, duelist_b, a_is_npc, b_is_npc, a_member, b_member)
+    if duelist_a and duelist_b:
+        await duel_start.callback(interaction, duelist_a, duelist_b, a_is_npc, b_is_npc, a_member, b_member)
+        return
+    if not await _d.require_guild(interaction):
+        return
+    guild_id = str(interaction.guild_id)
+    names: list[str] = []
+    enc = _d.encounters.get(interaction.channel_id)
+    if enc and enc.combatants:
+        names.extend(c.name for c in enc.combatants)
+    for rec in _d.store.list_by_owner(guild_id, _d.NPC_OWNER):
+        if rec.character.name not in names:
+            names.append(rec.character.name)
+    if len(names) < 2:
+        await interaction.response.send_message("Not enough characters available for a duel.", ephemeral=True)
+        return
+    view = _DuelSetupView(names)
+    await interaction.response.send_message("Select the duelists:", view=view, ephemeral=True)
 
 
 @combat_group.command(name="creature", description="Add a spawned creature to initiative (rolls its initiative). [Fortune]")
