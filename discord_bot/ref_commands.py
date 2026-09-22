@@ -125,9 +125,9 @@ def build_school_embed(s: dict) -> discord.Embed:
     benefit_display = s["benefit"].split("|")[0].strip() if s["benefit"] else ""
     meta = []
     if benefit_display:
-        meta.append(f"**Benefit: ** {benefit_display}")
+        meta.append(f"**Benefit:** {benefit_display}")
     if eff_honor:
-        meta.append(f"**Honor: ** {eff_honor}")
+        meta.append(f"**Honor:** {eff_honor}")
     if meta:
         embed.add_field(name="​", value="  ·  ".join(meta), inline=False)
     if eff_skills:
@@ -321,7 +321,7 @@ async def lookup(
     lines = [f"`{cat:10s}` **{name}**: {detail}" for cat, name, detail in results[:25]]
     extra = f"\n*…{len(results) - 25} more: Narrow your search.*" if len(results) > 25 else ""
     await interaction.response.send_message(
-        f"**{len(results)} result(s) for `{query}`: **\n" + "\n".join(lines) + extra,
+        f"**{len(results)} result(s) for `{query}`:**\n" + "\n".join(lines) + extra,
         ephemeral=True,
     )
 
@@ -344,7 +344,7 @@ async def school_list(interaction: discord.Interaction, clan: str | None = None)
         for cat, label in (("basic", "Basic"), ("advanced", "Advanced"), ("alternate", "Alternate Paths")):
             names = [s["name"] for s in matches if s.get("category", "basic") == cat]
             if names:
-                lines.append(f"**{label} ({len(names)}): ** " + ", ".join(names))
+                lines.append(f"**{label} ({len(names)}):** " + ", ".join(names))
         text = f"**{clan}: {len(matches)} schools/paths**\n" + "\n".join(lines)
         await interaction.response.send_message(text[:1990], ephemeral=True)
         return
@@ -396,7 +396,7 @@ async def weapon_list(interaction: discord.Interaction) -> None:
     by_skill: dict[str, list[str]] = {}
     for wid, w in combat.WEAPON_CATALOG.items():
         by_skill.setdefault(w["skill"], []).append(f"{wid} {w['rolled']}k{w['kept']}")
-    lines = [f"**{sk}: ** " + ", ".join(sorted(v)) for sk, v in sorted(by_skill.items())]
+    lines = [f"**{sk}:** " + ", ".join(sorted(v)) for sk, v in sorted(by_skill.items())]
     await interaction.response.send_message(
         f"**{len(combat.WEAPON_CATALOG)} weapons** (name DR):\n" + "\n".join(lines), ephemeral=True
     )
@@ -500,7 +500,7 @@ async def advantage_list(interaction: discord.Interaction, kind: app_commands.Ch
     pool = sorted(advantages.by_kind(kind.value), key=lambda r: r["name"])
     icon = '' if kind.value == 'advantage' else ''
     lines = [f"• {icon} **{r['name']}** ({r['cost_text']})" for r in pool]
-    pages = _d.paginate(lines, f"{icon} **{kind.name} ({len(pool)}): **\n")
+    pages = _d.paginate(lines, f"{icon} **{kind.name} ({len(pool)}):**\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:
@@ -519,7 +519,7 @@ async def advantage_search(interaction: discord.Interaction, query: str) -> None
         f"{'' if r['kind'] == 'advantage' else ''} **{r['name']}** ({r['cost_text']})"
         for r in matches
     ]
-    pages = _d.paginate(lines, f"**{len(matches)} match(es) for `{query}`: **\n")
+    pages = _d.paginate(lines, f"**{len(matches)} match(es) for `{query}`:**\n")
     if len(pages) == 1:
         await interaction.response.send_message(pages[0], ephemeral=True)
     else:
@@ -561,8 +561,8 @@ async def kata_list(interaction: discord.Interaction, element: str | None = None
     by_ml: dict[int, list[str]] = {}
     for k in matches:
         by_ml.setdefault(k["mastery"], []).append(k["name"])
-    lines = [f"**ML {ml}: ** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
-    text = f"**{element} Kata ({len(matches)}):** \n" + "\n".join(lines)
+    lines = [f"**ML {ml}:** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
+    text = f"**{element} Kata ({len(matches)}):**\n" + "\n".join(lines)
     await interaction.response.send_message(text[:1990], ephemeral=True)
 
 
@@ -614,8 +614,8 @@ async def kiho_list(interaction: discord.Interaction, element: str | None = None
     by_ml: dict[int, list[str]] = {}
     for k in matches:
         by_ml.setdefault(k["mastery"], []).append(k["name"])
-    lines = [f"**ML {ml}: ** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
-    text = f"**{element} Kiho ({len(matches)}): **\n" + "\n".join(lines)
+    lines = [f"**ML {ml}:** " + ", ".join(sorted(by_ml[ml])) for ml in sorted(by_ml)]
+    text = f"**{element} Kiho ({len(matches)}):**\n" + "\n".join(lines)
     await interaction.response.send_message(text[:1990], ephemeral=True)
 
 
