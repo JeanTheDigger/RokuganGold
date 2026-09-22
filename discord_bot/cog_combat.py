@@ -5803,6 +5803,20 @@ async def grapple_start(
     await _d.combat_log(guild, f"Grapple Board: {cb_ctrl.name} (ctrl) vs {cb_def.name}")
 
 
+@app_commands.command(name="grapple", description="Start a grapple board between two combatants.")
+@app_commands.describe(
+    controller="The combatant who has grapple control.",
+    defender="The grappled combatant.",
+)
+@app_commands.autocomplete(controller=_combatant_autocomplete, defender=_combatant_autocomplete)
+async def grapple_shortcut(
+    interaction: discord.Interaction,
+    controller: str,
+    defender: str,
+) -> None:
+    await grapple_start.callback(interaction, controller, defender)
+
+
 @combat_grapple.command(name="initiate", description="Initiate a Grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus).")
 @app_commands.describe(
     attacker="The combatant initiating the grapple.",
@@ -7480,6 +7494,28 @@ async def duel_start(
     msg = await interaction.original_response()
     await view.persist(msg)
     await _d.combat_log(guild, f"Duel Start: {ca.name} vs {cb_char.name}")
+
+
+@app_commands.command(name="duel", description="Start an Iaijutsu duel board between two characters.")
+@app_commands.describe(
+    duelist_a="First duelist (name, NPC, or @player).",
+    duelist_b="Second duelist (name, NPC, or @player).",
+    a_is_npc="First duelist is a stored NPC.",
+    b_is_npc="Second duelist is a stored NPC.",
+    a_member="First duelist is another player's character.",
+    b_member="Second duelist is another player's character.",
+)
+@app_commands.autocomplete(duelist_a=_duelist_autocomplete, duelist_b=_duelist_autocomplete)
+async def duel_shortcut(
+    interaction: discord.Interaction,
+    duelist_a: str,
+    duelist_b: str,
+    a_is_npc: bool = False,
+    b_is_npc: bool = False,
+    a_member: discord.Member | None = None,
+    b_member: discord.Member | None = None,
+) -> None:
+    await duel_start.callback(interaction, duelist_a, duelist_b, a_is_npc, b_is_npc, a_member, b_member)
 
 
 @combat_group.command(name="creature", description="Add a spawned creature to initiative (rolls its initiative). [Fortune]")
