@@ -124,6 +124,9 @@ class Character:
     # -- Free-form DM/player notes (bot convenience, not a game mechanic) --
     notes: str = ""
 
+    # -- Heritage roll result text (includes Fortune notes for DM adjudication) --
+    heritage_result: str = ""
+
     # -- Trait access helpers (mirror get/set_trait_value in the GDScript) --
     _TRAIT_ATTR = {
         "stamina": "stamina", "willpower": "willpower", "strength": "strength",

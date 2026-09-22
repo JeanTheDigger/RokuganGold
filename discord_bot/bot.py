@@ -639,6 +639,8 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         for iname, qty in sorted(c.inventory.items()):
             inv_parts.append(f"{iname} ×{qty}" if qty > 1 else iname)
         extras.append("**Inventory:** " + ", ".join(inv_parts))
+    if c.heritage_result:
+        extras.append(f"**Heritage:** {c.heritage_result}")
     if c.notes:
         extras.append(f"*{c.notes}*")
     if extras:
@@ -1634,6 +1636,8 @@ async def _show_confirmation(interaction: discord.Interaction, state: dict) -> N
         heritage_grants = state.get("heritage_grants", {})
         if heritage_grants:
             heritage.apply_heritage(char, {"grants": heritage_grants})
+        if state.get("heritage_result"):
+            char.heritage_result = state["heritage_result"]
         try:
             record = store.create_character(state["guild_id"], state["user_id"], char)
         except storage.DuplicateNameError:
@@ -2184,6 +2188,8 @@ def _materialize_character(state: dict) -> Character:
     heritage_grants = state.get("heritage_grants", {})
     if heritage_grants:
         heritage.apply_heritage(char, {"grants": heritage_grants})
+    if state.get("heritage_result"):
+        char.heritage_result = state["heritage_result"]
 
     spent, remaining = _calc_chargen_xp(state)
     char.xp_spent = float(spent)
