@@ -178,6 +178,34 @@ def _is_own_combatant(interaction: discord.Interaction, cb) -> bool:
     return False
 
 
+def _owns_combatant(interaction: discord.Interaction, cb_name: str) -> bool:
+    """True if *cb_name* in the current channel's encounter belongs to the
+    invoking user (their active character), or if the user is staff."""
+    if _d.is_dm(interaction):
+        return True
+    enc = _d.encounters.get(interaction.channel_id)
+    if enc is None:
+        return False
+    cb = enc.find(cb_name)
+    if cb is None:
+        return False
+    return cb.owner_id == str(interaction.user.id)
+
+
+def _is_own_duelist(
+    interaction: discord.Interaction,
+    a_is_npc: bool, b_is_npc: bool,
+    a_member: discord.Member | None, b_member: discord.Member | None,
+) -> bool:
+    """True if the invoker owns at least one duelist slot, or is staff."""
+    if _d.is_dm(interaction):
+        return True
+    uid = interaction.user.id
+    a_own = not a_is_npc and (a_member is None or a_member.id == uid)
+    b_own = not b_is_npc and (b_member is None or b_member.id == uid)
+    return a_own or b_own
+
+
 def _find_encounter_channel(char_name: str, exclude_channel: int) -> int | None:
     """Return the channel_id of an encounter containing *char_name*, skipping
     *exclude_channel*. Returns None when the character is not in any other
@@ -5422,9 +5450,9 @@ class GrappleBoardView(views_base.PersistentView):
 
     @discord.ui.button(label="Contest Control", style=discord.ButtonStyle.primary, row=0)
     async def contest_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _d.is_dm(interaction):
+        if not _d.is_dm(interaction) and not _owns_combatant(interaction, self.ctrl_name) and not _owns_combatant(interaction, self.def_name):
             await interaction.response.send_message(
-                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can run grapple commands.", ephemeral=True,
+                "Only a participant or a DM can contest grapple control.", ephemeral=True,
             )
             return
         enc, cb_ctrl, cb_def = self._load_encounter()
@@ -5486,8 +5514,8 @@ class GrappleBoardView(views_base.PersistentView):
 
     @discord.ui.button(label="Hit", style=discord.ButtonStyle.danger, row=1)
     async def hit_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _d.is_dm(interaction):
-            await interaction.response.send_message("DM only.", ephemeral=True)
+        if not _owns_combatant(interaction, self.ctrl_name):
+            await interaction.response.send_message("Only the controller's player or a DM can hit.", ephemeral=True)
             return
         enc, cb_ctrl, cb_def = self._load_encounter()
         if enc is None or cb_ctrl is None or cb_def is None:
@@ -5532,8 +5560,8 @@ class GrappleBoardView(views_base.PersistentView):
 
     @discord.ui.button(label="Throw", style=discord.ButtonStyle.danger, row=1)
     async def throw_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _d.is_dm(interaction):
-            await interaction.response.send_message("DM only.", ephemeral=True)
+        if not _owns_combatant(interaction, self.ctrl_name):
+            await interaction.response.send_message("Only the controller's player or a DM can throw.", ephemeral=True)
             return
         enc, cb_ctrl, cb_def = self._load_encounter()
         if enc is None or cb_ctrl is None or cb_def is None:
@@ -5578,8 +5606,8 @@ class GrappleBoardView(views_base.PersistentView):
 
     @discord.ui.button(label="Pin", style=discord.ButtonStyle.danger, row=1)
     async def pin_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _d.is_dm(interaction):
-            await interaction.response.send_message("DM only.", ephemeral=True)
+        if not _owns_combatant(interaction, self.ctrl_name):
+            await interaction.response.send_message("Only the controller's player or a DM can pin.", ephemeral=True)
             return
         enc, cb_ctrl, cb_def = self._load_encounter()
         if enc is None or cb_ctrl is None or cb_def is None:
@@ -5616,8 +5644,8 @@ class GrappleBoardView(views_base.PersistentView):
 
     @discord.ui.button(label="Ctrl Break Free", style=discord.ButtonStyle.secondary, row=2)
     async def ctrl_break_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _d.is_dm(interaction):
-            await interaction.response.send_message("DM only.", ephemeral=True)
+        if not _owns_combatant(interaction, self.ctrl_name):
+            await interaction.response.send_message("Only the controller's player or a DM can break free.", ephemeral=True)
             return
         enc, cb_ctrl, _ = self._load_encounter()
         if enc is None or cb_ctrl is None:
@@ -5653,8 +5681,8 @@ class GrappleBoardView(views_base.PersistentView):
 
     @discord.ui.button(label="Def Break Free", style=discord.ButtonStyle.secondary, row=2)
     async def def_break_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _d.is_dm(interaction):
-            await interaction.response.send_message("DM only.", ephemeral=True)
+        if not _owns_combatant(interaction, self.def_name):
+            await interaction.response.send_message("Only the defender's player or a DM can break free.", ephemeral=True)
             return
         enc, cb_ctrl, cb_def = self._load_encounter()
         if enc is None or cb_ctrl is None or cb_def is None:
@@ -5760,6 +5788,9 @@ async def grapple_start(
     if cb_def is None:
         await interaction.response.send_message(f"No combatant named **{defender}**.", ephemeral=True)
         return
+    if not _d.is_dm(interaction) and not _owns_combatant(interaction, controller) and not _owns_combatant(interaction, defender):
+        await interaction.response.send_message("You can only start a grapple involving your own character.", ephemeral=True)
+        return
     guild = str(interaction.guild_id)
     embed = _build_grapple_embed(cb_ctrl.name, cb_def.name)
     view = GrappleBoardView(
@@ -5796,6 +5827,9 @@ async def grapple_initiate(
     atk_cb = enc.find(attacker)
     if atk_cb is None:
         await interaction.response.send_message(f"No combatant named **{attacker}**.", ephemeral=True)
+        return
+    if not _owns_combatant(interaction, attacker):
+        await interaction.response.send_message("You can only initiate a grapple with your own character.", ephemeral=True)
         return
     def_cb = enc.find(target)
     if def_cb is None:
@@ -5928,6 +5962,9 @@ async def grapple_control(
     if cb_b is None:
         await interaction.response.send_message(f"No combatant named **{combatant_b}**.", ephemeral=True)
         return
+    if not _d.is_dm(interaction) and not _owns_combatant(interaction, combatant_a) and not _owns_combatant(interaction, combatant_b):
+        await interaction.response.send_message("You can only contest grapple control with your own character.", ephemeral=True)
+        return
     guild = str(interaction.guild_id)
     rec_a = _d.resolve_combatant_record(guild, cb_a)
     rec_b = _d.resolve_combatant_record(guild, cb_b)
@@ -5998,6 +6035,9 @@ async def grapple_hit(
     if atk_cb is None:
         await interaction.response.send_message(f"No combatant named **{attacker}**.", ephemeral=True)
         return
+    if not _owns_combatant(interaction, attacker):
+        await interaction.response.send_message("You can only use grapple hit with your own character.", ephemeral=True)
+        return
     if def_cb is None:
         await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
         return
@@ -6061,6 +6101,9 @@ async def grapple_throw(
     if thrower_cb is None:
         await interaction.response.send_message(f"No combatant named **{thrower}**.", ephemeral=True)
         return
+    if not _owns_combatant(interaction, thrower):
+        await interaction.response.send_message("You can only throw with your own character.", ephemeral=True)
+        return
     if target_cb is None:
         await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
         return
@@ -6114,6 +6157,9 @@ async def grapple_pin(
     if ctrl_cb is None:
         await interaction.response.send_message(f"No combatant named **{controller}**.", ephemeral=True)
         return
+    if not _owns_combatant(interaction, controller):
+        await interaction.response.send_message("You can only pin with your own character.", ephemeral=True)
+        return
     if tgt_cb is None:
         await interaction.response.send_message(f"No combatant named **{target}**.", ephemeral=True)
         return
@@ -6163,6 +6209,9 @@ async def grapple_break(
     cb = enc.find(combatant)
     if cb is None:
         await interaction.response.send_message(f"No combatant named **{combatant}**.", ephemeral=True)
+        return
+    if not _owns_combatant(interaction, combatant):
+        await interaction.response.send_message("You can only break free with your own character.", ephemeral=True)
         return
     blocked, block_reason = condition_effects.cannot_act(cb.conditions)
     if blocked:
@@ -6280,6 +6329,12 @@ async def duel_assess(
     b_member: discord.Member | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
+        return
+    if not _is_own_duelist(interaction, a_is_npc, b_is_npc, a_member, b_member):
+        await interaction.response.send_message(
+            "You can only assess in a duel involving your own character.",
+            ephemeral=True,
+        )
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
@@ -6425,6 +6480,12 @@ async def duel_focus(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
+    if not _is_own_duelist(interaction, a_is_npc, b_is_npc, a_member, b_member):
+        await interaction.response.send_message(
+            "You can only focus in a duel involving your own character.",
+            ephemeral=True,
+        )
+        return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
     rec_a = _d.resolve_duelist(guild, ch, duelist_a, a_is_npc, a_member)
@@ -6567,6 +6628,12 @@ async def duel_strike(
     target_member: discord.Member | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
+        return
+    if not _is_own_duelist(interaction, attacker_npc, target_npc, attacker_member, target_member):
+        await interaction.response.send_message(
+            "You can only strike in a duel involving your own character.",
+            ephemeral=True,
+        )
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
@@ -6839,9 +6906,9 @@ class DuelBoardView(views_base.PersistentView):
 
     @discord.ui.button(label="Assess", style=discord.ButtonStyle.primary, row=0)
     async def assess_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _d.is_dm(interaction):
+        if not _d.is_dm(interaction) and not _owns_combatant(interaction, self.a_name) and not _owns_combatant(interaction, self.b_name):
             await interaction.response.send_message(
-                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can run duel stages.", ephemeral=True,
+                "Only a duelist's player or a DM can run duel stages.", ephemeral=True,
             )
             return
         rec_a, rec_b = self._load_recs()
@@ -6962,9 +7029,9 @@ class DuelBoardView(views_base.PersistentView):
 
     @discord.ui.button(label="Focus", style=discord.ButtonStyle.primary, row=0)
     async def focus_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _d.is_dm(interaction):
+        if not _d.is_dm(interaction) and not _owns_combatant(interaction, self.a_name) and not _owns_combatant(interaction, self.b_name):
             await interaction.response.send_message(
-                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can run duel stages.", ephemeral=True,
+                "Only a duelist's player or a DM can run duel stages.", ephemeral=True,
             )
             return
         rec_a, rec_b = self._load_recs()
@@ -7086,9 +7153,9 @@ class DuelBoardView(views_base.PersistentView):
 
     @discord.ui.button(label="Strike", style=discord.ButtonStyle.danger, row=1)
     async def strike_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _d.is_dm(interaction):
+        if not _d.is_dm(interaction) and not _owns_combatant(interaction, self.a_name) and not _owns_combatant(interaction, self.b_name):
             await interaction.response.send_message(
-                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can run duel stages.", ephemeral=True,
+                "Only a duelist's player or a DM can run duel stages.", ephemeral=True,
             )
             return
         rec_a, rec_b = self._load_recs()
@@ -7311,9 +7378,9 @@ class DuelBoardView(views_base.PersistentView):
 
     @discord.ui.button(label="Concede", style=discord.ButtonStyle.secondary, row=2)
     async def concede_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _d.is_dm(interaction):
+        if not _d.is_dm(interaction) and not _owns_combatant(interaction, self.a_name) and not _owns_combatant(interaction, self.b_name):
             await interaction.response.send_message(
-                f"Only **{_d.ROLE_FORTUNE}** / **{_d.ROLE_KAMI}** can declare a concession.", ephemeral=True,
+                "Only a duelist's player or a DM can concede.", ephemeral=True,
             )
             return
         self.phase = "done"
@@ -7381,6 +7448,12 @@ async def duel_start(
     b_member: discord.Member | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
+        return
+    if not _is_own_duelist(interaction, a_is_npc, b_is_npc, a_member, b_member):
+        await interaction.response.send_message(
+            "You can only start a duel involving your own character.",
+            ephemeral=True,
+        )
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
