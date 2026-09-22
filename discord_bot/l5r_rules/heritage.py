@@ -268,18 +268,120 @@ _CRANE_TABLE: dict = {
     ],
 }
 
-_LEGACY_DRAGON: list[dict] = [
-    {"roll": 1, "name": "Tattooed Ancestor", "effect": "Ancestor bore powerful tattoos. +1 rank in Lore: Theology (free).", "grants": {"skills": {"Lore: Theology": 1}}},
-    {"roll": 2, "name": "Mountain Hermit", "effect": "Family tradition of meditation retreats. +1 rank in Meditation (free).", "grants": {"skills": {"Meditation": 1}}},
-    {"roll": 3, "name": "Twin Sword Legacy", "effect": "Ancestor mastered niten. +1 rank in Kenjutsu (free).", "grants": {"skills": {"Kenjutsu": 1}}},
-    {"roll": 4, "name": "Eccentric Reputation", "effect": "Family is known for eccentricity.", "grants": {"disadvantages": ["Heritage: Eccentric Reputation"]}},
-    {"roll": 5, "name": "Investigator's Eye", "effect": "Ancestor served as a magistrate. +1 rank in Investigation (free).", "grants": {"skills": {"Investigation": 1}}},
-    {"roll": 6, "name": "Enigmatic Past", "effect": "Something in the family's past is hidden. Fortune determines a secret.", "grants": {"disadvantages": ["Heritage: Enigmatic Past"]}},
-    {"roll": 7, "name": "Mountain Holdings", "effect": "Family controls mountain passes. Starting koku +3.", "grants": {"koku": 3}},
-    {"roll": 8, "name": "Spiritual Sensitivity", "effect": "Heightened spiritual awareness. +1k0 on rolls to sense supernatural phenomena.", "grants": {"advantages": ["Heritage: Spiritual Sensitivity (+1k0 sense supernatural)"]}},
-    {"roll": 9, "name": "Ancient Scroll", "effect": "Family possesses an old scroll of wisdom. +1 rank in Lore: History (free).", "grants": {"skills": {"Lore: History": 1}}},
-    {"roll": 10, "name": "Prophetic Dreams", "effect": "Character has vivid, sometimes prophetic dreams.", "grants": {"advantages": ["Heritage: Prophetic Dreams"]}},
-]
+_DRAGON_TABLE: dict = {
+    "categories": [
+        {"rolls": [1, 2], "name": "Shameful Past", "table": "shameful"},
+        {"rolls": [3, 4, 5], "name": "Illustrious Past", "table": "illustrious"},
+        {"rolls": [6, 7, 8, 9, 10], "name": "Mixed Blessings", "table": "mixed"},
+    ],
+    "shameful": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor gave away vital information about Dragon troop movements. His foolishness still haunts your family's reputation. You gain the Infamous Disadvantage.",
+            "grants": {"disadvantages": ["Infamous"]},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor was the victim of an elaborate confidence scheme which ended with his seppuku. Unfortunately, you share his weaknesses and your family's status has never recovered from his failure. You gain the Gullible Disadvantage and lose 0.5 Status.",
+            "grants": {"disadvantages": ["Gullible"], "status": -0.5},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor lacked the courage to face the enemies of the Dragon, fleeing from battle. It is up to you to rebuild your family's reputation. You start with 0.0 Glory and it will take you twice as long (20 Glory Points) to reach Glory Rank 1.",
+            "grants": {},
+            "notes": ["Starting Glory is set to 0.0 regardless of school. Reaching Glory Rank 1 requires 20 Glory Points (double normal)."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your mother became pregnant with you after swearing an oath of celibacy to her daimyo. She committed seppuku after giving birth. You start with the Black Sheep Disadvantage.",
+            "grants": {"disadvantages": ["Black Sheep"]},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor successfully pursued a love match within another clan, disrupting others' marriage plans and earning their eternal hatred. You gain a Nemesis within that clan.",
+            "grants": {"disadvantages": ["Nemesis (another clan)"]},
+            "notes": ["Fortune determines which clan holds the grudge."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor lost focus during an alchemy experiment, causing it to fail horribly. Ever since then your family has been cursed with Epilepsy, and you are no exception.",
+            "grants": {"disadvantages": ["Epilepsy"]},
+        },
+    ],
+    "illustrious": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor was significantly involved in a famous major battle of his time. Gain a free 2-point Ally from another clan of your choice and 1 rank in the Lore Skill for that clan.",
+            "grants": {"advantages": ["Ally (2 points, another clan)"]},
+            "notes": ["Choose another clan: Gain a 2-point Ally and 1 Rank in that clan's Lore Skill."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor performed admirably while occupying a high-profile position in the Dragon Clan. You gain 1 free Rank in a High Skill of your choice.",
+            "grants": {},
+            "notes": ["Gain 1 free Rank in a High Skill of your choice."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor had a romantic affair during winter court that was the inspiration for many pillow books. Some of that past glory reflects on you. You gain 0.5 Glory and may take the Advantage Seven Fortunes Blessing: Benten's Blessing for 1 less Experience Point.",
+            "grants": {"glory": 0.5},
+            "notes": ["May take Seven Fortunes Blessing: Benten's Blessing for 1 less XP."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor played an instrumental role in a small battle. You gain 1 free Rank in a Bugei Skill of your choice.",
+            "grants": {},
+            "notes": ["Gain 1 free Rank in a Bugei Skill of your choice."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor died while carrying the clan banner in battle. His superiors found him still holding it upright the next morning. Your family still reveres his name and his glory redounds to your benefit. You gain 1.0 Glory and 0.5 Honor.",
+            "grants": {"glory": 1.0, "honor": 0.5},
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor was a tattooed man famous for his unusual nature, including the fact that he married and had children. You gain 1 free Rank in any one Skill which is not a School Skill for you.",
+            "grants": {},
+            "notes": ["Gain 1 free Rank in any one Skill which is not a School Skill for you."],
+        },
+    ],
+    "mixed": [
+        {
+            "rolls": [1],
+            "effect": "One of your parents was of the Tattooed Order and you were given a tattoo shortly before your gempukku. Unfortunately, your mind was not fully prepared for such power. You gain a Togashi tattoo of the Fortune's choice, but you also gain the Enlightened Madness Disadvantage connected to the tattoo.",
+            "grants": {"disadvantages": ["Enlightened Madness"]},
+            "notes": ["Gain a Togashi tattoo (Fortune determines which). The Enlightened Madness is connected to the tattoo."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "One of your ancestors picked up an item from a battlefield on a whim. It has since been passed down to you. Although no one is quite sure what it does, family legend speaks of a spirit that makes its home within...",
+            "grants": {},
+            "notes": ["Fortune determines the nature of this ancestral battlefield item and the spirit within it."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor escalated a minor matter of honor into a duel to the death with a samurai from another clan. He won the duel, fortunately, but it was his temper which brought it on in the first place. You have inherited his nature and legacy. You gain 1.0 Glory and 1 free Rank in the Lore Skill for the clan of the duelist he defeated, but you also gain the Brash Disadvantage.",
+            "grants": {"glory": 1.0, "disadvantages": ["Brash"]},
+            "notes": ["Gain 1 free Rank in the Lore Skill for the defeated duelist's clan (Fortune determines which)."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your family has never been wealthy, but your ascetic lifestyle has helped you on the path to enlightenment. You gain 1 free Rank in the Meditation Skill, but you also have the Ascetic Disadvantage.",
+            "grants": {"skills": {"Meditation": 1}, "disadvantages": ["Ascetic"]},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor was a very creative soul, but saw into the Elements too deeply. You gain a +1k0 bonus to all Craft rolls, but you also gain the Frail Mind Disadvantage.",
+            "grants": {"advantages": ["+1k0 to all Craft rolls"], "disadvantages": ["Frail Mind"]},
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor followed one of the False Paths. You may take the Sage Advantage for 1 less Experience Point, but you also gain the Disbeliever Disadvantage.",
+            "grants": {"disadvantages": ["Disbeliever"]},
+            "notes": ["May take the Sage Advantage for 1 less XP."],
+        },
+    ],
+}
 
 _LEGACY_LION: list[dict] = [
     {"roll": 1, "name": "War Hero", "effect": "Ancestor was a legendary general. +3 Glory points.", "grants": {"glory": 3.0}},
@@ -350,7 +452,7 @@ _LEGACY_UNICORN: list[dict] = [
 HERITAGE_TABLES: dict[str, dict | list] = {
     "Crab": _CRAB_TABLE,
     "Crane": _CRANE_TABLE,
-    "Dragon": _LEGACY_DRAGON,
+    "Dragon": _DRAGON_TABLE,
     "Lion": _LEGACY_LION,
     "Mantis": _LEGACY_MANTIS,
     "Phoenix": _LEGACY_PHOENIX,
