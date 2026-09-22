@@ -724,18 +724,121 @@ _PHOENIX_TABLE: dict = {
     ],
 }
 
-_LEGACY_SCORPION: list[dict] = [
-    {"roll": 1, "name": "Master Spy", "effect": "Ancestor was a legendary spy. +1 rank in Stealth (free).", "grants": {"skills": {"Stealth": 1}}},
-    {"roll": 2, "name": "Poison Expert", "effect": "Family knows poisons well. +1 rank in Medicine (Poison emphasis, free).", "grants": {"skills": {"Medicine": 1}, "emphases": {"Medicine": ["Poison"]}}},
-    {"roll": 3, "name": "Blackmail Network", "effect": "Family has leverage. +1 rank in Intimidation (free).", "grants": {"skills": {"Intimidation": 1}}},
-    {"roll": 4, "name": "Double Agent", "effect": "Ancestor was a double agent. Family is distrusted. +1 rank in Sincerity (free).", "grants": {"skills": {"Sincerity": 1}}},
-    {"roll": 5, "name": "Seductress", "effect": "Ancestor was legendarily charming. +1 rank in Temptation (free).", "grants": {"skills": {"Temptation": 1}}},
-    {"roll": 6, "name": "Hidden Wealth", "effect": "Family has secret caches. Starting koku +5.", "grants": {"koku": 5}},
-    {"roll": 7, "name": "Assassin's Blood", "effect": "Ancestor was a notorious assassin. +1 rank in Knives (free).", "grants": {"skills": {"Knives": 1}}},
-    {"roll": 8, "name": "Political Maneuverer", "effect": "Family excels at court. +1 rank in Courtier (free).", "grants": {"skills": {"Courtier": 1}}},
-    {"roll": 9, "name": "Mask of Secrets", "effect": "An ancestral mask with a hidden compartment.", "grants": {"advantages": ["Heritage: Mask of Secrets"]}},
-    {"roll": 10, "name": "Fortune's Favor", "effect": "Ancestor struck a bargain with fate.", "grants": {"advantages": ["Heritage: Fortune's Favor"]}},
-]
+_SCORPION_TABLE: dict = {
+    "categories": [
+        {"rolls": [1, 2], "name": "Shameful Past", "table": "shameful"},
+        {"rolls": [3, 4, 5], "name": "Illustrious Past", "table": "illustrious"},
+        {"rolls": [6, 7, 8, 9, 10], "name": "Mixed Blessings", "table": "mixed"},
+    ],
+    "shameful": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor was branded with the name \"junshin\", and you find that you're junshin too. The clan will probably never trust you with anything important.",
+            "grants": {},
+            "notes": ["Fortune determines the consequences of being considered junshin by the Scorpion Clan."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor was played for a fool in the courts for all to see. His weak nature is reborn in you. You gain the Gullible Disadvantage.",
+            "grants": {"disadvantages": ["Gullible"]},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor gave away vital information to the enemy, forever tainting your family's name as disloyal. You lose 1.0 Glory and 0.5 Status and may never have the Gentry Advantage.",
+            "grants": {"glory": -1.0, "status": -0.5},
+            "notes": ["You may never take the Gentry Advantage."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor was supposed to target and eliminate an enemy, either politically or physically. Regardless, he fell in love with his target instead and never completed his mission. Your family has been fighting his legacy ever since. You lose 0.5 Status and gain the Disadvantage Failure of Bushido: Duty.",
+            "grants": {"status": -0.5, "disadvantages": ["Failure of Bushido (Duty)"]},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor was in command of a battle that should have been an easy win for the Scorpion. Instead, they were defeated, resulting in many years of lost time for the Scorpion in the courts. You gain the Overconfident Disadvantage.",
+            "grants": {"disadvantages": ["Overconfident"]},
+        },
+        {
+            "rolls": [10],
+            "effect": "You aren't sure what your ancestor did, but somewhere there's a tree with his name on it.",
+            "grants": {},
+            "notes": ["Fortune determines the nature of this ancestor's disgrace."],
+        },
+    ],
+    "illustrious": [
+        {
+            "rolls": [1],
+            "effect": "Charisma runs in your blood. Your ancestors were all notable seductresses and seducers. You gain the Dangerous Beauty Advantage.",
+            "grants": {"advantages": ["Dangerous Beauty"]},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor had a winter romance that the Scorpion were able to use to further their agenda. You may take Blackmail on someone in another clan for 2 less Experience Points.",
+            "grants": {},
+            "notes": ["May take the Blackmail Advantage (on someone in another clan) for 2 less XP."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor was adept at finding others' weaknesses and twisting them to her benefit, and you are her true heir. You gain the Heartless Advantage for 1 less Experience Point.",
+            "grants": {},
+            "notes": ["May take the Heartless Advantage for 1 less XP."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor sacrificed without hesitation or question in order to further a larger plot, and his loyalty runs in your veins. You may take the Advantage Paragon of Duty for 2 less Experience Points.",
+            "grants": {},
+            "notes": ["May take the Paragon of Duty Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor was a shinobi who assassinated vital targets. Some of his skills are reborn in you. You gain 1 free Rank in the Stealth Skill.",
+            "grants": {"skills": {"Stealth": 1}},
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor performed a mission for the Shosuro Infiltrators, for which they owe your family a debt. You may call on their assistance once in your life and they will help you.",
+            "grants": {},
+            "notes": ["Fortune determines exactly how the Shosuro Infiltrators will assist when the debt is called in."],
+        },
+    ],
+    "mixed": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor was a Rikugunshokan in command of the Scorpion army. He was instructed to lose a specific battle, but despite his best efforts he won instead. You may take a Rank in the Luck Advantage for 1 less Experience Point, but you also gain the Infamous Disadvantage.",
+            "grants": {"disadvantages": ["Infamous"]},
+            "notes": ["May take a Rank of the Luck Advantage for 1 less XP."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "After your gempukku you were given a nemuranai. You were told nothing about its history or nature, only that you are to keep it safe, hidden, and never ever to use it.",
+            "grants": {},
+            "notes": ["Fortune determines the nature and properties of this nemuranai."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your family has always had connections with the criminal underworld, and someone knows about it. You gain either 2 free Ranks of Lore: Underworld or a 2-point Ally in the criminal classes, but you also gain the Blackmailed Disadvantage.",
+            "grants": {"disadvantages": ["Blackmailed"]},
+            "notes": ["Choose: Gain either 2 free Ranks in Lore: Underworld or a 2-point Ally in the criminal classes."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor died in a duel to prove a point. You share both his nature and his legacy. You may take the Advantage Paragon of Duty for 2 less Experience Points, but you also gain a Nemesis in the appropriate clan.",
+            "grants": {"disadvantages": ["Nemesis (another clan)"]},
+            "notes": ["May take the Paragon of Duty Advantage for 2 less XP. Fortune determines which clan holds the Nemesis."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor joined the shinobi and a few of the skills he was taught have been passed down. You gain 1 free Rank in the Ninjutsu Skill but you also have the Disadvantage Dark Secret.",
+            "grants": {"skills": {"Ninjutsu": 1}, "disadvantages": ["Dark Secret"]},
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor was Shadow Branded. Due to the Shadow's ongoing influence over your family line, you gain the Silent advantage, but the Shadow is looking for you...",
+            "grants": {"advantages": ["Silent"]},
+            "notes": ["The Shadow is looking for you. Fortune determines the nature of this pursuit."],
+        },
+    ],
+}
 
 _LEGACY_UNICORN: list[dict] = [
     {"roll": 1, "name": "Gaijin Blood", "effect": "Foreign ancestry. +1 rank in one Gaijin skill (free). Distinct features.", "grants": {"advantages": ["Heritage: Gaijin Blood (+1 Gaijin skill, Fortune chooses)"], "disadvantages": ["Heritage: Gaijin Blood (Social TN +5 conservative courts)"]}},
@@ -758,7 +861,7 @@ HERITAGE_TABLES: dict[str, dict | list] = {
     "Lion": _LION_TABLE,
     "Mantis": _MANTIS_TABLE,
     "Phoenix": _PHOENIX_TABLE,
-    "Scorpion": _LEGACY_SCORPION,
+    "Scorpion": _SCORPION_TABLE,
     "Unicorn": _LEGACY_UNICORN,
 }
 
