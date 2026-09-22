@@ -5852,6 +5852,65 @@ async def void_status(
     )
 
 # ===========================================================================
+# /void top-level shortcuts (forward to /sheet void subcommands)
+# ===========================================================================
+
+void_group = app_commands.Group(name="void", description="Void Point management: Spend, refresh, status.")
+
+
+@void_group.command(name="spend", description="Spend a Void Point (general purpose: +1k1, negate Conditional, etc.).")
+@app_commands.describe(
+    reason="What the VP is for (e.g. '+1k1 on Investigation check').",
+    member="Player spending VP (uses their active character). Omit = yourself.",
+    npc_name="NPC name [Fortune]",
+)
+@app_commands.autocomplete(npc_name=_npc_autocomplete)
+async def void_spend_shortcut(
+    interaction: discord.Interaction,
+    reason: str,
+    member: discord.Member | None = None,
+    npc_name: str | None = None,
+) -> None:
+    await void_spend.callback(interaction, reason, member, npc_name)
+
+
+@void_group.command(name="refresh", description="Refresh Void Points (rest = full, or Meditation/Void check for 1).")
+@app_commands.describe(
+    mode="How VP are being refreshed.",
+    member="Player refreshing (uses their active character). Omit = yourself.",
+    npc_name="NPC name [Fortune]",
+    tn="Meditation TN (only for meditation mode; default 20).",
+)
+@app_commands.choices(mode=[
+    app_commands.Choice(name="Rest (full refresh)", value="rest"),
+    app_commands.Choice(name="Meditation (roll Meditation/Void, recover 1 on success)", value="meditation"),
+])
+@app_commands.autocomplete(npc_name=_npc_autocomplete)
+async def void_refresh_shortcut(
+    interaction: discord.Interaction,
+    mode: app_commands.Choice[str],
+    member: discord.Member | None = None,
+    npc_name: str | None = None,
+    tn: app_commands.Range[int, 1, 100] | None = None,
+) -> None:
+    await void_refresh.callback(interaction, mode, member, npc_name, tn)
+
+
+@void_group.command(name="status", description="Show current Void Points for a character.")
+@app_commands.describe(
+    member="Player to check (uses their active character). Omit = yourself.",
+    npc_name="NPC name [Fortune]",
+)
+@app_commands.autocomplete(npc_name=_npc_autocomplete)
+async def void_status_shortcut(
+    interaction: discord.Interaction,
+    member: discord.Member | None = None,
+    npc_name: str | None = None,
+) -> None:
+    await void_status.callback(interaction, member, npc_name)
+
+
+# ===========================================================================
 # /help: categorized command reference
 # ===========================================================================
 
@@ -12993,6 +13052,7 @@ client.tree.add_command(cog_combat.fight_group)
 client.tree.add_command(cog_combat.engage_group)
 client.tree.add_command(cog_combat.grapple_shortcut)
 client.tree.add_command(cog_combat.duel_shortcut)
+client.tree.add_command(void_group)
 client.tree.add_command(spell_group)
 client.tree.add_command(cog_checks.check)
 client.tree.add_command(ref_commands.ref)
