@@ -828,6 +828,28 @@ async def _resolve_active_for_edit(
         return None, "You have no active character. Use `/sheet create` first."
     return rec, None
 
+
+async def _require_xp_channel(interaction: discord.Interaction, character_name: str) -> bool:
+    """Ensure XP spending happens in the character's Player Support channel.
+
+    Returns True if allowed.  Sends an ephemeral error and returns False if
+    the invoker is not staff and the channel is not the character's personal
+    support channel.  Staff (Fortune/Kami) are exempt.
+    """
+    if _is_dm(interaction):
+        return True
+    channel = interaction.channel
+    cat = getattr(channel, "category", None) if channel else None
+    slug = character_name.lower().replace(" ", "-")
+    if cat is not None and cat.name == CAT_PLAYER_SUPPORT and channel.name == slug:
+        return True
+    await interaction.response.send_message(
+        f"XP spending is only available in your personal character channel (#{slug}).",
+        ephemeral=True,
+    )
+    return False
+
+
 # ===========================================================================
 # Top-level commands
 # ===========================================================================
@@ -8782,6 +8804,8 @@ async def _buy_named(interaction, member, name, mastery_level, attr, label, note
         return
     if await _refuse_if_dead(interaction, rec.character):
         return
+    if not await _require_xp_channel(interaction, rec.character.name):
+        return
     c = rec.character
     lst = getattr(c, attr)
     if any(x.lower() == name.lower() for x in lst):
@@ -8871,6 +8895,8 @@ async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[
         return
     if await _refuse_if_dead(interaction, rec.character):
         return
+    if not await _require_xp_channel(interaction, rec.character.name):
+        return
     c = rec.character
     quote = advancement.trait_raise_quote(c, trait.value)
     label = "Void" if trait.value == "void" else trait.value.capitalize()
@@ -8905,6 +8931,8 @@ async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[s
         return
     if await _refuse_if_dead(interaction, rec.character):
         return
+    if not await _require_xp_channel(interaction, rec.character.name):
+        return
     c = rec.character
     skill_name = skill.strip().title()
     quote = advancement.skill_raise_quote(c, skill_name)
@@ -8937,6 +8965,8 @@ async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Rang
         await interaction.response.send_message(err, ephemeral=True)
         return
     if await _refuse_if_dead(interaction, rec.character):
+        return
+    if not await _require_xp_channel(interaction, rec.character.name):
         return
     c = rec.character
     skill_name = skill.strip().title()
@@ -9136,6 +9166,8 @@ async def xp_advantage(
         return
     if await _refuse_if_dead(interaction, rec.character):
         return
+    if not await _require_xp_channel(interaction, rec.character.name):
+        return
     input_name = name.strip()
     base_name = input_name.split(":")[0].strip() if ":" in input_name else input_name
     adv = advantages.get(base_name, "advantage")
@@ -9195,6 +9227,8 @@ async def xp_remove_disadvantage(
         await interaction.response.send_message(err, ephemeral=True)
         return
     if await _refuse_if_dead(interaction, rec.character):
+        return
+    if not await _require_xp_channel(interaction, rec.character.name):
         return
     c = rec.character
     name_stripped = name.strip()
@@ -10103,6 +10137,8 @@ async def xp_spend(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
         return
     if await _refuse_if_dead(interaction, rec.character):
+        return
+    if not await _require_xp_channel(interaction, rec.character.name):
         return
     c = rec.character
     view = _XpCategorySelect(str(interaction.guild_id), interaction.user.id)
