@@ -5736,7 +5736,7 @@ class GrappleBoardView(views_base.PersistentView):
         await self._end_grapple(interaction, "DM ended")
 
 
-@combat_grapple.command(name="start", description="Start a grapple with interactive board (after successful initiation). [Fortune]")
+@combat_grapple.command(name="start", description="Start a grapple with interactive board (after successful initiation).")
 @app_commands.describe(
     controller="The combatant who has grapple control.",
     defender="The grappled combatant.",
@@ -5748,8 +5748,6 @@ async def grapple_start(
     defender: str,
 ) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     enc = await _d.require_encounter(interaction)
     if enc is None:
@@ -5774,7 +5772,7 @@ async def grapple_start(
     await _d.combat_log(guild, f"Grapple Board: {cb_ctrl.name} (ctrl) vs {cb_def.name}")
 
 
-@combat_grapple.command(name="initiate", description="Initiate a Grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus). [Fortune]")
+@combat_grapple.command(name="initiate", description="Initiate a Grapple: Jiujutsu/Agility vs Armor TN (ignoring armor bonus).")
 @app_commands.describe(
     attacker="The combatant initiating the grapple.",
     target="The target being grappled.",
@@ -5791,8 +5789,6 @@ async def grapple_initiate(
     defender_stance: app_commands.Choice[str] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     enc = await _d.require_encounter(interaction)
     if enc is None:
@@ -5908,7 +5904,7 @@ async def grapple_initiate(
     await _d.combat_log(guild, f"Grapple: {atk_cb.name} → {def_cb.name} {tag}")
 
 
-@combat_grapple.command(name="control", description="Contested Jiujutsu/Strength roll for grapple control. [Fortune]")
+@combat_grapple.command(name="control", description="Contested Jiujutsu/Strength roll for grapple control.")
 @app_commands.describe(
     combatant_a="First grapple participant.",
     combatant_b="Second grapple participant.",
@@ -5920,8 +5916,6 @@ async def grapple_control(
     combatant_b: str,
 ) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     enc = await _d.require_encounter(interaction)
     if enc is None:
@@ -5983,7 +5977,7 @@ async def grapple_control(
     await _d.combat_log(guild, f"Grapple Control: {winner} wins")
 
 
-@combat_grapple.command(name="hit", description="Grapple Hit: Unarmed damage on a grappled opponent (no attack roll). [Fortune]")
+@combat_grapple.command(name="hit", description="Grapple Hit: Unarmed damage on a grappled opponent (no attack roll).")
 @app_commands.describe(
     attacker="The combatant in control (dealing damage).",
     target="The grapple participant receiving damage.",
@@ -5995,8 +5989,6 @@ async def grapple_hit(
     target: str,
 ) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     enc = await _d.require_encounter(interaction)
     if enc is None:
@@ -6048,7 +6040,7 @@ async def grapple_hit(
     await view.persist(await interaction.original_response())
 
 
-@combat_grapple.command(name="throw", description="Grapple Throw: Target becomes Prone and leaves the grapple. [Fortune]")
+@combat_grapple.command(name="throw", description="Grapple Throw: Target becomes Prone and leaves the grapple.")
 @app_commands.describe(
     thrower="The combatant in control (throwing).",
     target="The combatant being thrown.",
@@ -6060,8 +6052,6 @@ async def grapple_throw(
     target: str,
 ) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     enc = await _d.require_encounter(interaction)
     if enc is None:
@@ -6103,7 +6093,7 @@ async def grapple_throw(
     await _d.combat_log(guild, f"Grapple Throw: {thrower_cb.name} throws {target_cb.name} ({target_cb.name} prone, grapple ends)")
 
 
-@combat_grapple.command(name="pin", description="Grapple Pin: Immobilize the target (Complex Action, controller only). [Fortune]")
+@combat_grapple.command(name="pin", description="Grapple Pin: Immobilize the target (Complex Action, controller only).")
 @app_commands.describe(
     controller="The combatant in control.",
     target="The grapple participant being pinned.",
@@ -6115,8 +6105,6 @@ async def grapple_pin(
     target: str,
 ) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     enc = await _d.require_encounter(interaction)
     if enc is None:
@@ -6156,7 +6144,7 @@ async def grapple_pin(
     await _d.combat_log(guild, f"Grapple Pin: {ctrl_cb.name} pins {tgt_cb.name}")
 
 
-@combat_grapple.command(name="break_free", description="Break free from a grapple (controller: Simple, defender: Complex contested). [Fortune]")
+@combat_grapple.command(name="break_free", description="Break free from a grapple (controller: Simple, defender: Complex contested).")
 @app_commands.describe(
     combatant="The combatant trying to break free.",
     opponent="The grapple opponent (required for defender break-free contested roll; omit for controller break).",
@@ -6168,8 +6156,6 @@ async def grapple_break(
     opponent: str | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     enc = await _d.require_encounter(interaction)
     if enc is None:
@@ -6274,7 +6260,7 @@ async def grapple_break(
 
 
 
-@combat_duel.command(name="assess", description="Assessment stage: Both duelists roll Iaijutsu(Assessment)/Awareness. [Fortune]")
+@combat_duel.command(name="assess", description="Assessment stage: Both duelists roll Iaijutsu(Assessment)/Awareness.")
 @app_commands.describe(
     duelist_a="First duelist (combatant name or character).",
     duelist_b="Second duelist (combatant name or character).",
@@ -6294,8 +6280,6 @@ async def duel_assess(
     b_member: discord.Member | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
@@ -6416,7 +6400,7 @@ async def duel_assess(
     await _d.combat_log(str(interaction.guild_id), f"Duel Assess: {ca.name} vs {cb_char.name}")
 
 
-@combat_duel.command(name="focus", description="Focus stage: Contested Iaijutsu(Focus)/Void roll. [Fortune]")
+@combat_duel.command(name="focus", description="Focus stage: Contested Iaijutsu(Focus)/Void roll.")
 @app_commands.describe(
     duelist_a="First duelist.",
     duelist_b="Second duelist.",
@@ -6440,8 +6424,6 @@ async def duel_focus(
     b_member: discord.Member | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
@@ -6559,7 +6541,7 @@ async def duel_focus(
         await _d.combat_log(str(interaction.guild_id), f"Duel Focus: {winner} strikes first (margin {diff})")
 
 
-@combat_duel.command(name="strike", description="Strike stage: Iaijutsu/Reflexes attack roll + damage. [Fortune]")
+@combat_duel.command(name="strike", description="Strike stage: Iaijutsu/Reflexes attack roll + damage.")
 @app_commands.describe(
     attacker="The duelist striking.",
     target="The opponent being struck.",
@@ -6585,8 +6567,6 @@ async def duel_strike(
     target_member: discord.Member | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
@@ -7381,7 +7361,7 @@ class DuelBoardView(views_base.PersistentView):
 # /engage duel start
 @combat_duel.command(
     name="start",
-    description="Start an Iaijutsu duel between two characters. Posts an interactive duel board. [Fortune]",
+    description="Start an Iaijutsu duel between two characters. Posts an interactive duel board.",
 )
 @app_commands.describe(
     duelist_a="First duelist (name, NPC, or @player).",
@@ -7401,8 +7381,6 @@ async def duel_start(
     b_member: discord.Member | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
