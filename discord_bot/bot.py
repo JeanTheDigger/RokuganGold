@@ -1487,7 +1487,11 @@ async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dic
                 await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
                 return
             result = heritage.roll_heritage(clan)
-            state["heritage_result"] = f"{result['name']}: {result['effect']}"
+            heritage_text = f"{result['name']}: {result['effect']}"
+            notes = result.get("notes", [])
+            if notes:
+                heritage_text += "\n[Fortune]: " + "; ".join(notes)
+            state["heritage_result"] = heritage_text
             state["heritage_grants"] = result.get("grants", {})
             await _go_to_school_choice(btn_inter, state)
 

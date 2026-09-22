@@ -659,7 +659,22 @@ async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
         title=f"Heritage Roll: {clan}",
         color=discord.Color.dark_teal(),
     )
-    embed.add_field(name=f"Roll: {result['roll']}: {result['name']}", value=result["effect"][:1024], inline=False)
+    embed.add_field(name=f"Roll: {result['roll']} ({result['name']})", value=result["effect"][:1024], inline=False)
+    notes = result.get("notes", [])
+    if notes:
+        embed.add_field(name="Fortune Notes", value="\n".join(notes)[:1024], inline=False)
+    grants = result.get("grants", {})
+    if grants:
+        grant_parts: list[str] = []
+        for key, val in grants.items():
+            if isinstance(val, list):
+                grant_parts.extend(str(v) for v in val)
+            elif isinstance(val, dict):
+                grant_parts.extend(f"{k}: {v}" for k, v in val.items())
+            else:
+                grant_parts.append(f"{key}: {val:+g}" if isinstance(val, (int, float)) else f"{key}: {val}")
+        if grant_parts:
+            embed.add_field(name="Mechanical Effects", value=", ".join(grant_parts)[:1024], inline=False)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
 
@@ -669,9 +684,7 @@ async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
 async def heritage_table(interaction: discord.Interaction, clan: str) -> None:
     if not await _d.require_guild(interaction):
         return
-    table = heritage.get_table(clan)
-    lines = [f"**{r['roll']}.** {r['name']}: {r['effect']}" for r in table]
-    desc = "\n".join(lines)
+    desc = heritage.format_table(clan)
     embed = discord.Embed(title=f"Heritage Table: {clan}", description=desc[:4000], color=discord.Color.dark_teal())
     await interaction.response.send_message(embed=embed, ephemeral=True)
 

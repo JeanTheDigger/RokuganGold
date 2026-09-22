@@ -1,10 +1,12 @@
 """L5R 4e Heritage Tables: random character background rolls.
 
-Core Rulebook p.109-115: Each clan has a Heritage Table. Player rolls 1d10
-on their clan table, gaining a mixed-blessing result (some purely beneficial,
-some with drawbacks). The DM may allow or require a heritage roll at creation.
+Real L5R 4e heritage uses a two-stage d10 system: first roll determines
+a category (Shameful Past, Illustrious Past, or Mixed Blessings), then
+a second d10 determines the specific result within that category.
 
-Tables reproduced from L5R 4e Core Rulebook.
+Verified tables use the two-stage dict format.  Unverified tables (not yet
+checked against source material) use a legacy single-stage list format
+and are marked accordingly.
 """
 
 from __future__ import annotations
@@ -15,129 +17,333 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from l5r_rules.character import Character
 
-HERITAGE_TABLES: dict[str, list[dict]] = {
-    "Crab": [
-        {"roll": 1, "name": "Famous Deed", "effect": "Ancestor once performed a heroic defense of the Wall. +3 Glory points.", "grants": {"glory": 3.0}},
-        {"roll": 2, "name": "Glorious Battle", "effect": "Ancestor died gloriously fighting the Shadowlands. +1 Honor Rank.", "grants": {"honor": 1.0}},
-        {"roll": 3, "name": "Mixed Blessing: Jade Hand", "effect": "Ancestor was touched by jade. +1k0 vs Shadowlands creatures, but skin has a faint green tint (Social TN +5 outside Crab lands).", "grants": {"advantages": ["Heritage: Jade Hand (+1k0 vs Shadowlands)"], "disadvantages": ["Heritage: Jade Hand (Social TN +5 outside Crab lands)"]}},
-        {"roll": 4, "name": "Tainted Past", "effect": "Ancestor fell to the Taint. Family is watched carefully. −5 Glory points, +1 Willpower for Taint resistance.", "grants": {"glory": -5.0, "willpower": 1}},
-        {"roll": 5, "name": "Siege Master", "effect": "Ancestor designed a key section of the Wall. +1 rank in Engineering (free).", "grants": {"skills": {"Engineering": 1}}},
-        {"roll": 6, "name": "Dark Secret", "effect": "Ancestor used maho to defend the Wall. If discovered: −3 Honor points, −5 Glory points.", "grants": {"disadvantages": ["Dark Secret (Maho ancestry)"]}},
-        {"roll": 7, "name": "Wealthy", "effect": "Family holdings are prosperous. +1 koku per month (starting koku +5).", "grants": {"koku": 5}},
-        {"roll": 8, "name": "Diplomatic Heritage", "effect": "Ancestor served as ambassador to another clan. +1 rank in Etiquette (free).", "grants": {"skills": {"Etiquette": 1}}},
-        {"roll": 9, "name": "Ancestral Weapon", "effect": "A Fine-quality ancestral weapon has been passed down. Choose one weapon: +1k0 damage.", "grants": {"advantages": ["Heritage: Ancestral Weapon (Fine, +1k0 damage)"]}},
-        {"roll": 10, "name": "Prophecy", "effect": "A fortune-teller foretold great deeds. Once per session, reroll a single die (before knowing the result).", "grants": {"advantages": ["Heritage: Prophecy (1/session reroll)"]}},
+
+def _roll_range_str(rolls: list[int]) -> str:
+    """Format a list of ints as a die-range string: [2,3] -> '2-3'."""
+    if len(rolls) == 1:
+        return str(rolls[0])
+    return f"{rolls[0]}-{rolls[-1]}"
+
+
+def _find_entry(subtable: list[dict], roll: int) -> dict:
+    """Find the entry in a subtable whose rolls list contains *roll*."""
+    for entry in subtable:
+        if roll in entry["rolls"]:
+            return entry
+    return subtable[0]
+
+
+# ---- Verified two-stage tables (real L5R 4e data) -------------------------
+
+_CRAB_TABLE: dict = {
+    "categories": [
+        {"rolls": [1, 2, 3], "name": "Shameful Past", "table": "shameful"},
+        {"rolls": [4, 5, 6, 7], "name": "Illustrious Past", "table": "illustrious"},
+        {"rolls": [8, 9, 10], "name": "Mixed Blessings", "table": "mixed"},
     ],
-    "Crane": [
-        {"roll": 1, "name": "Artisan Legacy", "effect": "Ancestor was a legendary artisan. +1 rank in one Artisan skill (free).", "grants": {"advantages": ["Heritage: Artisan Legacy (+1 Artisan skill, Fortune chooses)"]}},
-        {"roll": 2, "name": "Political Marriage", "effect": "Family has strong political ties. +3 Status points.", "grants": {"status": 3.0}},
-        {"roll": 3, "name": "Dueling Prodigy", "effect": "Ancestor was a famous duelist. +1 rank in Iaijutsu (free).", "grants": {"skills": {"Iaijutsu": 1}}},
-        {"roll": 4, "name": "Bitter Rival", "effect": "Family has a longstanding feud with another Crane family. −1 Glory point when interacting with that family.", "grants": {"disadvantages": ["Heritage: Bitter Rival (-1 Glory with rival family)"]}},
-        {"roll": 5, "name": "Courtier's Grace", "effect": "Ancestor was a renowned courtier. +1 rank in Courtier (free).", "grants": {"skills": {"Courtier": 1}}},
-        {"roll": 6, "name": "Scandal", "effect": "An ancestor caused a scandal. −5 Glory points, but family is resilient: +1 Willpower.", "grants": {"glory": -5.0, "willpower": 1}},
-        {"roll": 7, "name": "Imperial Favor", "effect": "Family once held Imperial favor. +5 Status points.", "grants": {"status": 5.0}},
-        {"roll": 8, "name": "Patron of the Arts", "effect": "Family is known for patronage. Starting koku +3.", "grants": {"koku": 3}},
-        {"roll": 9, "name": "Blessed Lineage", "effect": "Fortune-blessed bloodline. +1 Void Point maximum.", "grants": {"void": 1}},
-        {"roll": 10, "name": "Tactical Mind", "effect": "Ancestor served with distinction in battle. +1 rank in Battle (free).", "grants": {"skills": {"Battle": 1}}},
+    "shameful": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor summoned a powerful kami during a time of need. Your ancestor made promises to the kami in return for its help, but never followed through. You gain the Disadvantage Wrath of the Kami.",
+            "grants": {"disadvantages": ["Wrath of the Kami"]},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor was a merchant patron who thought he was getting the better end of a deal, only to discover he'd had the wool pulled over his eyes. Your family has been impoverished ever since. Start with three less koku in your Outfit.",
+            "grants": {"koku": -3},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor fell to the Shadowlands and returned to fight his former clan as one of the Lost. His failure haunts your line to this day. You start with 0.1 Taint and your starting Honor is 1.0 lower.",
+            "grants": {"taint": 0.1, "honor": -1.0},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "A creature from the Shadowlands cursed your line with its dying breath. You start play with the Disadvantage Bad Fortune: Lingering Misfortune.",
+            "grants": {"disadvantages": ["Bad Fortune (Lingering Misfortune)"]},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor abandoned a comrade to die in the Shadowlands. The other man's family swore a blood feud against yours. You gain the Sworn Enemy Disadvantage.",
+            "grants": {"disadvantages": ["Sworn Enemy"]},
+            "notes": ["Fortune determines which family holds the blood feud."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor was seduced by the Shadowlands and in the generations since has taken several of his descendants to join him there. You are next on the list.",
+            "grants": {},
+            "notes": ["Fortune determines the nature and timing of this ancestral threat."],
+        },
     ],
-    "Dragon": [
-        {"roll": 1, "name": "Tattooed Ancestor", "effect": "Ancestor bore powerful tattoos. +1 rank in Lore: Theology (free).", "grants": {"skills": {"Lore: Theology": 1}}},
-        {"roll": 2, "name": "Mountain Hermit", "effect": "Family tradition of meditation retreats. +1 rank in Meditation (free).", "grants": {"skills": {"Meditation": 1}}},
-        {"roll": 3, "name": "Twin Sword Legacy", "effect": "Ancestor mastered niten. +1 rank in Kenjutsu (free).", "grants": {"skills": {"Kenjutsu": 1}}},
-        {"roll": 4, "name": "Eccentric Reputation", "effect": "Family is known for eccentricity. −5 TN for Social at Crane/Scorpion courts, +5 TN for Social at Dragon courts.", "grants": {"advantages": ["Heritage: Eccentric Reputation (-5 Social TN at Crane/Scorpion courts)"], "disadvantages": ["Heritage: Eccentric Reputation (+5 Social TN at Dragon courts)"]}},
-        {"roll": 5, "name": "Investigator's Eye", "effect": "Ancestor served as a magistrate. +1 rank in Investigation (free).", "grants": {"skills": {"Investigation": 1}}},
-        {"roll": 6, "name": "Enigmatic Past", "effect": "Something in the family's past is hidden. DM determines a secret the character doesn't know.", "grants": {"disadvantages": ["Heritage: Enigmatic Past (hidden family secret)"]}},
-        {"roll": 7, "name": "Mountain Holdings", "effect": "Family controls mountain passes. Starting koku +3.", "grants": {"koku": 3}},
-        {"roll": 8, "name": "Spiritual Sensitivity", "effect": "Heightened spiritual awareness. +1k0 on rolls to sense supernatural phenomena.", "grants": {"advantages": ["Heritage: Spiritual Sensitivity (+1k0 sense supernatural)"]}},
-        {"roll": 9, "name": "Ancient Scroll", "effect": "Family possesses an old scroll of wisdom. +1 rank in Lore: History (free).", "grants": {"skills": {"Lore: History": 1}}},
-        {"roll": 10, "name": "Prophetic Dreams", "effect": "Character has vivid, sometimes prophetic dreams. Once per session, DM may provide a cryptic hint.", "grants": {"advantages": ["Heritage: Prophetic Dreams (1/session cryptic hint)"]}},
+    "illustrious": [
+        {
+            "rolls": [1],
+            "effect": "A particular kami took an interest in your family line, and it senses a similarity to your ancestor in you. You may take the Friendly Kami Advantage (if you are a shugenja) or the Friend of the Elements Advantage for one less Experience Point.",
+            "grants": {},
+            "notes": ["May take Friendly Kami (shugenja) or Friend of the Elements for 1 less XP."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor made many political connections with another clan which have lasted to this day. You gain a 3-point Ally Advantage in that clan for free.",
+            "grants": {"advantages": ["Ally (3 points, another clan)"]},
+            "notes": ["Fortune determines which clan the Ally belongs to."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor single-handedly turned back an enemy sally during a siege. His deeds still bring fame to your family today. Gain 1.0 Glory.",
+            "grants": {"glory": 1.0},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor died a hero's death fighting the Shadowlands. His legacy of heroism inspires you today. Gain 1 free Rank in a Weapon Skill of your choice.",
+            "grants": {},
+            "notes": ["Gain 1 free Rank in a Weapon Skill of your choice."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "A visiting dignitary got caught in a Shadowlands attack while touring the Wall. Your ancestor saved his life and in thanks was granted an additional stipend. Your starting Outfit gains 2 koku.",
+            "grants": {"koku": 2},
+        },
+        {
+            "rolls": [10],
+            "effect": "During a fierce battle with another clan, your ancestor saved the life of one of his enemies. Their descendants remain indebted to your line. You gain a free 3-point Obligation with their clan.",
+            "grants": {"disadvantages": ["Obligation (3 points, another clan)"]},
+            "notes": ["Fortune determines which clan holds the Obligation."],
+        },
     ],
-    "Lion": [
-        {"roll": 1, "name": "War Hero", "effect": "Ancestor was a legendary general. +3 Glory points.", "grants": {"glory": 3.0}},
-        {"roll": 2, "name": "Tactical Genius", "effect": "Family tradition of strategy. +1 rank in Battle (free).", "grants": {"skills": {"Battle": 1}}},
-        {"roll": 3, "name": "Berserker Blood", "effect": "Ancestor fought with terrifying fury. +1k0 damage when at Hurt or worse, but must make Honor Roll TN 15 to retreat from battle.", "grants": {"advantages": ["Heritage: Berserker Blood (+1k0 damage at Hurt+)"], "disadvantages": ["Heritage: Berserker Blood (Honor TN 15 to retreat)"]}},
-        {"roll": 4, "name": "Dishonored Ancestor", "effect": "An ancestor was stripped of honor. −5 Honor points, but character is driven: +1 Willpower.", "grants": {"honor": -5.0, "willpower": 1}},
-        {"roll": 5, "name": "Historian's Legacy", "effect": "Family keeps meticulous records. +1 rank in Lore: History (free).", "grants": {"skills": {"Lore: History": 1}}},
-        {"roll": 6, "name": "Kitsu Bloodline", "effect": "Distant Kitsu blood. Occasional spiritual sensitivity. +1k0 on Commune rolls.", "grants": {"advantages": ["Heritage: Kitsu Bloodline (+1k0 Commune)"]}},
-        {"roll": 7, "name": "Martial Discipline", "effect": "Family drills are legendary. +1 rank in one Bugei skill (free).", "grants": {"advantages": ["Heritage: Martial Discipline (+1 Bugei skill, Fortune chooses)"]}},
-        {"roll": 8, "name": "Political Connections", "effect": "Family has ties to the Imperial Court. +5 Status points.", "grants": {"status": 5.0}},
-        {"roll": 9, "name": "Ancestral Armor", "effect": "A suit of Light Armor handed down through generations (already equipped, free).", "grants": {"advantages": ["Heritage: Ancestral Armor (free Light Armor)"], "armor": "light"}},
-        {"roll": 10, "name": "Destined for Glory", "effect": "The stars aligned at birth. +1 Void Point maximum.", "grants": {"void": 1}},
+    "mixed": [
+        {
+            "rolls": [1],
+            "effect": "Your family is known for something disreputable, not necessarily undeserved. You gain the Infamous Disadvantage. However, you have learned from your family's illicit activities and gain one free Rank in a Low Skill.",
+            "grants": {"disadvantages": ["Infamous"]},
+            "notes": ["Gain 1 free Rank in a Low Skill of your choice."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor discovered something very interesting, and very taboo. You may take the Forbidden Knowledge Advantage for one less Experience Point.",
+            "grants": {},
+            "notes": ["May take Forbidden Knowledge for 1 less XP."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your family has always had good relations with the Nezumi. You gain a free 2-point Ally who is a Nezumi.",
+            "grants": {"advantages": ["Ally (2 points, Nezumi)"]},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Due to various mishaps and misfortunes, you are the last of your line, and have all your family's titles and responsibilities resting squarely on your shoulders. You gain 0.5 Status but you are also under a 3-point Obligation to the Crab to keep your family line alive.",
+            "grants": {"status": 0.5, "disadvantages": ["Obligation (3 points, Crab Clan)"]},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor participated in a battle with another clan, where he unexpectedly distinguished himself in a duel. However, the descendants of the samurai he defeated would like a rematch. You gain 1.0 Glory but you also have a Sworn Enemy in another clan's family.",
+            "grants": {"glory": 1.0, "disadvantages": ["Sworn Enemy (another clan)"]},
+            "notes": ["Fortune determines which clan's family holds the grudge."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor was a Kaiu craftsman of singular skills. One of his creations was passed on to you. Unfortunately he was afflicted with too much Fire and sometimes didn't seem himself. You gain the Sacred Weapon: Kaiu Blade Advantage for free, but the blade is afflicted with some manner of curse known only to your Fortune.",
+            "grants": {"advantages": ["Sacred Weapon (Kaiu Blade)"]},
+            "notes": ["The blade is afflicted with a curse determined by the Fortune."],
+        },
     ],
-    "Mantis": [
-        {"roll": 1, "name": "Sea Raider", "effect": "Ancestor was a legendary pirate-hunter. +1 rank in Sailing (free).", "grants": {"skills": {"Sailing": 1}}},
-        {"roll": 2, "name": "Storm Blessed", "effect": "Family survived a great storm. +1k0 on Sailing checks in storms.", "grants": {"advantages": ["Heritage: Storm Blessed (+1k0 Sailing in storms)"]}},
-        {"roll": 3, "name": "Merchant Prince", "effect": "Family has trade connections. Starting koku +5.", "grants": {"koku": 5}},
-        {"roll": 4, "name": "Questionable Methods", "effect": "Ancestor used dishonorable tactics. −5 Honor points, but +1 rank in Commerce (free).", "grants": {"honor": -5.0, "skills": {"Commerce": 1}}},
-        {"roll": 5, "name": "Island Holdings", "effect": "Family holds small islands. +1 rank in Navigation (free).", "grants": {"skills": {"Navigation": 1}}},
-        {"roll": 6, "name": "Archery Champion", "effect": "Ancestor won an archery tournament. +1 rank in Kyujutsu (free).", "grants": {"skills": {"Kyujutsu": 1}}},
-        {"roll": 7, "name": "Kitsune Blood", "effect": "Distant fox-spirit blood. Animals are calmer around you. +1k0 Animal Handling.", "grants": {"advantages": ["Heritage: Kitsune Blood (+1k0 Animal Handling)"]}},
-        {"roll": 8, "name": "Resourceful", "effect": "Family thrives in adversity. Once per session, find a useful mundane item.", "grants": {"advantages": ["Heritage: Resourceful (1/session find mundane item)"]}},
-        {"roll": 9, "name": "Great Navigator", "effect": "Ancestor charted unknown waters. +1 rank in Lore: Navigation (free).", "grants": {"skills": {"Lore: Navigation": 1}}},
-        {"roll": 10, "name": "Tempest Fury", "effect": "Born during a typhoon. +1 Stamina for endurance checks at sea.", "grants": {"stamina": 1}},
-    ],
-    "Phoenix": [
-        {"roll": 1, "name": "Elemental Master", "effect": "Ancestor was an Elemental Master. +1 rank in Spellcraft (free).", "grants": {"skills": {"Spellcraft": 1}}},
-        {"roll": 2, "name": "Peaceful Scholar", "effect": "Family tradition of scholarship. +1 rank in Lore: Theology (free).", "grants": {"skills": {"Lore: Theology": 1}}},
-        {"roll": 3, "name": "Ishiken Blood", "effect": "Distant Void magic bloodline. +1k0 on Void spell casting (if shugenja).", "grants": {"advantages": ["Heritage: Ishiken Blood (+1k0 Void spells)"]}},
-        {"roll": 4, "name": "Pacifist Tradition", "effect": "Family avoids violence. −1k0 on attack rolls, but +1 Honor Rank.", "grants": {"honor": 1.0}},
-        {"roll": 5, "name": "Library Access", "effect": "Family maintains a great library. +1 rank in any one Lore skill (free).", "grants": {"advantages": ["Heritage: Library Access (+1 Lore skill, Fortune chooses)"]}},
-        {"roll": 6, "name": "Haunted", "effect": "An ancestor's spirit lingers. Occasional spiritual disturbances. DM provides occasional ghostly hints or complications.", "grants": {"disadvantages": ["Heritage: Haunted (ancestral spirit complications)"]}},
-        {"roll": 7, "name": "Healing Tradition", "effect": "Family is known for medicine. +1 rank in Medicine (free).", "grants": {"skills": {"Medicine": 1}}},
-        {"roll": 8, "name": "Temple Holdings", "effect": "Family maintains a prominent temple. +5 Status points.", "grants": {"status": 5.0}},
-        {"roll": 9, "name": "Ancient Texts", "effect": "Family possesses rare scrolls. +1 rank in Calligraphy (free).", "grants": {"skills": {"Calligraphy": 1}}},
-        {"roll": 10, "name": "Blessed by the Kami", "effect": "+1 Void Point maximum.", "grants": {"void": 1}},
-    ],
-    "Scorpion": [
-        {"roll": 1, "name": "Master Spy", "effect": "Ancestor was a legendary spy. +1 rank in Stealth (free).", "grants": {"skills": {"Stealth": 1}}},
-        {"roll": 2, "name": "Poison Expert", "effect": "Family knows poisons well. +1 rank in Medicine (Poison emphasis, free).", "grants": {"skills": {"Medicine": 1}, "emphases": {"Medicine": ["Poison"]}}},
-        {"roll": 3, "name": "Blackmail Network", "effect": "Family has leverage. +1 rank in Intimidation (free).", "grants": {"skills": {"Intimidation": 1}}},
-        {"roll": 4, "name": "Double Agent", "effect": "Ancestor was a double agent. Family is distrusted even within Scorpion. −5 Glory points, +1 rank in Sincerity (free).", "grants": {"glory": -5.0, "skills": {"Sincerity": 1}}},
-        {"roll": 5, "name": "Seductress/Seductor", "effect": "Ancestor was legendarily charming. +1 rank in Temptation (free).", "grants": {"skills": {"Temptation": 1}}},
-        {"roll": 6, "name": "Hidden Wealth", "effect": "Family has secret caches. Starting koku +5.", "grants": {"koku": 5}},
-        {"roll": 7, "name": "Assassin's Blood", "effect": "Ancestor was a notorious assassin. +1 rank in Knives (free).", "grants": {"skills": {"Knives": 1}}},
-        {"roll": 8, "name": "Political Maneuverer", "effect": "Family excels at court. +1 rank in Courtier (free).", "grants": {"skills": {"Courtier": 1}}},
-        {"roll": 9, "name": "Mask of Secrets", "effect": "An ancestral mask with a hidden compartment. Can conceal a small item.", "grants": {"advantages": ["Heritage: Mask of Secrets (concealed compartment)"]}},
-        {"roll": 10, "name": "Fortune's Favor", "effect": "Ancestor struck a bargain with fate. Once per session, force one opponent to reroll a die.", "grants": {"advantages": ["Heritage: Fortune's Favor (1/session force reroll)"]}},
-    ],
-    "Unicorn": [
-        {"roll": 1, "name": "Gaijin Blood", "effect": "Foreign ancestry. +1 rank in one Gaijin skill (free). Distinct features (Social TN +5 in conservative courts).", "grants": {"advantages": ["Heritage: Gaijin Blood (+1 Gaijin skill, Fortune chooses)"], "disadvantages": ["Heritage: Gaijin Blood (Social TN +5 in conservative courts)"]}},
-        {"roll": 2, "name": "Horse Lord", "effect": "Family raises the finest horses. Start with a Utaku steed. +1 rank in Horsemanship (free).", "grants": {"skills": {"Horsemanship": 1}}},
-        {"roll": 3, "name": "Desert Survivor", "effect": "Ancestor crossed the Burning Sands. +1 Stamina for endurance checks.", "grants": {"stamina": 1}},
-        {"roll": 4, "name": "Outsider's Perspective", "effect": "Family keeps foreign customs. −5 Honor points in traditional Rokugani eyes, +1 rank in Investigation (free).", "grants": {"honor": -5.0, "skills": {"Investigation": 1}}},
-        {"roll": 5, "name": "Cavalry Tradition", "effect": "Family excels at mounted combat. +1k0 on attack rolls while Mounted.", "grants": {"advantages": ["Heritage: Cavalry Tradition (+1k0 attack while Mounted)"]}},
-        {"roll": 6, "name": "Trade Routes", "effect": "Family controls trade routes. Starting koku +5, +1 rank in Commerce (free).", "grants": {"koku": 5, "skills": {"Commerce": 1}}},
-        {"roll": 7, "name": "War Dog Breeder", "effect": "Family breeds war dogs. Start with a trained war dog companion.", "grants": {"advantages": ["Heritage: War Dog Breeder (trained war dog companion)"]}},
-        {"roll": 8, "name": "Meishodo Practitioner", "effect": "Ancestor practiced name magic. +1 rank in Lore: Theology (free).", "grants": {"skills": {"Lore: Theology": 1}}},
-        {"roll": 9, "name": "Nomadic Heritage", "effect": "Family keeps nomadic traditions. +1 rank in Hunting (free).", "grants": {"skills": {"Hunting": 1}}},
-        {"roll": 10, "name": "Battle Hardened", "effect": "Family has fought in many wars. +1 rank in Battle (free).", "grants": {"skills": {"Battle": 1}}},
-    ],
+}
+
+
+# ---- Unverified legacy tables (fabricated, pending source material) --------
+# These use a single-stage d10 format and DO NOT match real L5R 4e.
+# They will be replaced as each clan's real data is provided.
+
+_LEGACY_CRANE: list[dict] = [
+    {"roll": 1, "name": "Artisan Legacy", "effect": "Ancestor was a legendary artisan. +1 rank in one Artisan skill (free).", "grants": {"advantages": ["Heritage: Artisan Legacy (+1 Artisan skill, Fortune chooses)"]}},
+    {"roll": 2, "name": "Political Marriage", "effect": "Family has strong political ties. +3 Status points.", "grants": {"status": 3.0}},
+    {"roll": 3, "name": "Dueling Prodigy", "effect": "Ancestor was a famous duelist. +1 rank in Iaijutsu (free).", "grants": {"skills": {"Iaijutsu": 1}}},
+    {"roll": 4, "name": "Bitter Rival", "effect": "Family has a longstanding feud with another Crane family.", "grants": {"disadvantages": ["Heritage: Bitter Rival"]}},
+    {"roll": 5, "name": "Courtier's Grace", "effect": "Ancestor was a renowned courtier. +1 rank in Courtier (free).", "grants": {"skills": {"Courtier": 1}}},
+    {"roll": 6, "name": "Scandal", "effect": "An ancestor caused a scandal. +1 Willpower.", "grants": {"willpower": 1}},
+    {"roll": 7, "name": "Imperial Favor", "effect": "Family once held Imperial favor. +5 Status points.", "grants": {"status": 5.0}},
+    {"roll": 8, "name": "Patron of the Arts", "effect": "Family is known for patronage. Starting koku +3.", "grants": {"koku": 3}},
+    {"roll": 9, "name": "Blessed Lineage", "effect": "Fortune-blessed bloodline. +1 Void Point maximum.", "grants": {"void": 1}},
+    {"roll": 10, "name": "Tactical Mind", "effect": "Ancestor served with distinction in battle. +1 rank in Battle (free).", "grants": {"skills": {"Battle": 1}}},
+]
+
+_LEGACY_DRAGON: list[dict] = [
+    {"roll": 1, "name": "Tattooed Ancestor", "effect": "Ancestor bore powerful tattoos. +1 rank in Lore: Theology (free).", "grants": {"skills": {"Lore: Theology": 1}}},
+    {"roll": 2, "name": "Mountain Hermit", "effect": "Family tradition of meditation retreats. +1 rank in Meditation (free).", "grants": {"skills": {"Meditation": 1}}},
+    {"roll": 3, "name": "Twin Sword Legacy", "effect": "Ancestor mastered niten. +1 rank in Kenjutsu (free).", "grants": {"skills": {"Kenjutsu": 1}}},
+    {"roll": 4, "name": "Eccentric Reputation", "effect": "Family is known for eccentricity.", "grants": {"disadvantages": ["Heritage: Eccentric Reputation"]}},
+    {"roll": 5, "name": "Investigator's Eye", "effect": "Ancestor served as a magistrate. +1 rank in Investigation (free).", "grants": {"skills": {"Investigation": 1}}},
+    {"roll": 6, "name": "Enigmatic Past", "effect": "Something in the family's past is hidden. Fortune determines a secret.", "grants": {"disadvantages": ["Heritage: Enigmatic Past"]}},
+    {"roll": 7, "name": "Mountain Holdings", "effect": "Family controls mountain passes. Starting koku +3.", "grants": {"koku": 3}},
+    {"roll": 8, "name": "Spiritual Sensitivity", "effect": "Heightened spiritual awareness. +1k0 on rolls to sense supernatural phenomena.", "grants": {"advantages": ["Heritage: Spiritual Sensitivity (+1k0 sense supernatural)"]}},
+    {"roll": 9, "name": "Ancient Scroll", "effect": "Family possesses an old scroll of wisdom. +1 rank in Lore: History (free).", "grants": {"skills": {"Lore: History": 1}}},
+    {"roll": 10, "name": "Prophetic Dreams", "effect": "Character has vivid, sometimes prophetic dreams.", "grants": {"advantages": ["Heritage: Prophetic Dreams"]}},
+]
+
+_LEGACY_LION: list[dict] = [
+    {"roll": 1, "name": "War Hero", "effect": "Ancestor was a legendary general. +3 Glory points.", "grants": {"glory": 3.0}},
+    {"roll": 2, "name": "Tactical Genius", "effect": "Family tradition of strategy. +1 rank in Battle (free).", "grants": {"skills": {"Battle": 1}}},
+    {"roll": 3, "name": "Berserker Blood", "effect": "Ancestor fought with terrifying fury. +1k0 damage when at Hurt or worse.", "grants": {"advantages": ["Heritage: Berserker Blood (+1k0 damage at Hurt+)"]}},
+    {"roll": 4, "name": "Dishonored Ancestor", "effect": "An ancestor was stripped of honor. +1 Willpower.", "grants": {"willpower": 1}},
+    {"roll": 5, "name": "Historian's Legacy", "effect": "Family keeps meticulous records. +1 rank in Lore: History (free).", "grants": {"skills": {"Lore: History": 1}}},
+    {"roll": 6, "name": "Kitsu Bloodline", "effect": "Distant Kitsu blood. Occasional spiritual sensitivity.", "grants": {"advantages": ["Heritage: Kitsu Bloodline"]}},
+    {"roll": 7, "name": "Martial Discipline", "effect": "Family drills are legendary. +1 rank in one Bugei skill (free).", "grants": {"advantages": ["Heritage: Martial Discipline (+1 Bugei skill, Fortune chooses)"]}},
+    {"roll": 8, "name": "Political Connections", "effect": "Family has ties to the Imperial Court. +5 Status points.", "grants": {"status": 5.0}},
+    {"roll": 9, "name": "Ancestral Armor", "effect": "A suit of Light Armor handed down through generations.", "grants": {"advantages": ["Heritage: Ancestral Armor"], "armor": "light"}},
+    {"roll": 10, "name": "Destined for Glory", "effect": "+1 Void Point maximum.", "grants": {"void": 1}},
+]
+
+_LEGACY_MANTIS: list[dict] = [
+    {"roll": 1, "name": "Sea Raider", "effect": "Ancestor was a legendary pirate-hunter. +1 rank in Sailing (free).", "grants": {"skills": {"Sailing": 1}}},
+    {"roll": 2, "name": "Storm Blessed", "effect": "Family survived a great storm. +1k0 on Sailing checks in storms.", "grants": {"advantages": ["Heritage: Storm Blessed (+1k0 Sailing in storms)"]}},
+    {"roll": 3, "name": "Merchant Prince", "effect": "Family has trade connections. Starting koku +5.", "grants": {"koku": 5}},
+    {"roll": 4, "name": "Questionable Methods", "effect": "Ancestor used dishonorable tactics. +1 rank in Commerce (free).", "grants": {"skills": {"Commerce": 1}}},
+    {"roll": 5, "name": "Island Holdings", "effect": "Family holds small islands. +1 rank in Navigation (free).", "grants": {"skills": {"Navigation": 1}}},
+    {"roll": 6, "name": "Archery Champion", "effect": "Ancestor won an archery tournament. +1 rank in Kyujutsu (free).", "grants": {"skills": {"Kyujutsu": 1}}},
+    {"roll": 7, "name": "Kitsune Blood", "effect": "Distant fox-spirit blood. Animals are calmer around you.", "grants": {"advantages": ["Heritage: Kitsune Blood"]}},
+    {"roll": 8, "name": "Resourceful", "effect": "Family thrives in adversity.", "grants": {"advantages": ["Heritage: Resourceful"]}},
+    {"roll": 9, "name": "Great Navigator", "effect": "Ancestor charted unknown waters. +1 rank in Lore: Navigation (free).", "grants": {"skills": {"Lore: Navigation": 1}}},
+    {"roll": 10, "name": "Tempest Fury", "effect": "Born during a typhoon. +1 Stamina for endurance checks at sea.", "grants": {"stamina": 1}},
+]
+
+_LEGACY_PHOENIX: list[dict] = [
+    {"roll": 1, "name": "Elemental Master", "effect": "Ancestor was an Elemental Master. +1 rank in Spellcraft (free).", "grants": {"skills": {"Spellcraft": 1}}},
+    {"roll": 2, "name": "Peaceful Scholar", "effect": "Family tradition of scholarship. +1 rank in Lore: Theology (free).", "grants": {"skills": {"Lore: Theology": 1}}},
+    {"roll": 3, "name": "Ishiken Blood", "effect": "Distant Void magic bloodline.", "grants": {"advantages": ["Heritage: Ishiken Blood"]}},
+    {"roll": 4, "name": "Pacifist Tradition", "effect": "Family avoids violence. +1 Honor Rank.", "grants": {"honor": 1.0}},
+    {"roll": 5, "name": "Library Access", "effect": "Family maintains a great library. +1 rank in any one Lore skill (free).", "grants": {"advantages": ["Heritage: Library Access (+1 Lore skill, Fortune chooses)"]}},
+    {"roll": 6, "name": "Haunted", "effect": "An ancestor's spirit lingers. Occasional spiritual disturbances.", "grants": {"disadvantages": ["Heritage: Haunted"]}},
+    {"roll": 7, "name": "Healing Tradition", "effect": "Family is known for medicine. +1 rank in Medicine (free).", "grants": {"skills": {"Medicine": 1}}},
+    {"roll": 8, "name": "Temple Holdings", "effect": "Family maintains a prominent temple. +5 Status points.", "grants": {"status": 5.0}},
+    {"roll": 9, "name": "Ancient Texts", "effect": "Family possesses rare scrolls. +1 rank in Calligraphy (free).", "grants": {"skills": {"Calligraphy": 1}}},
+    {"roll": 10, "name": "Blessed by the Kami", "effect": "+1 Void Point maximum.", "grants": {"void": 1}},
+]
+
+_LEGACY_SCORPION: list[dict] = [
+    {"roll": 1, "name": "Master Spy", "effect": "Ancestor was a legendary spy. +1 rank in Stealth (free).", "grants": {"skills": {"Stealth": 1}}},
+    {"roll": 2, "name": "Poison Expert", "effect": "Family knows poisons well. +1 rank in Medicine (Poison emphasis, free).", "grants": {"skills": {"Medicine": 1}, "emphases": {"Medicine": ["Poison"]}}},
+    {"roll": 3, "name": "Blackmail Network", "effect": "Family has leverage. +1 rank in Intimidation (free).", "grants": {"skills": {"Intimidation": 1}}},
+    {"roll": 4, "name": "Double Agent", "effect": "Ancestor was a double agent. Family is distrusted. +1 rank in Sincerity (free).", "grants": {"skills": {"Sincerity": 1}}},
+    {"roll": 5, "name": "Seductress", "effect": "Ancestor was legendarily charming. +1 rank in Temptation (free).", "grants": {"skills": {"Temptation": 1}}},
+    {"roll": 6, "name": "Hidden Wealth", "effect": "Family has secret caches. Starting koku +5.", "grants": {"koku": 5}},
+    {"roll": 7, "name": "Assassin's Blood", "effect": "Ancestor was a notorious assassin. +1 rank in Knives (free).", "grants": {"skills": {"Knives": 1}}},
+    {"roll": 8, "name": "Political Maneuverer", "effect": "Family excels at court. +1 rank in Courtier (free).", "grants": {"skills": {"Courtier": 1}}},
+    {"roll": 9, "name": "Mask of Secrets", "effect": "An ancestral mask with a hidden compartment.", "grants": {"advantages": ["Heritage: Mask of Secrets"]}},
+    {"roll": 10, "name": "Fortune's Favor", "effect": "Ancestor struck a bargain with fate.", "grants": {"advantages": ["Heritage: Fortune's Favor"]}},
+]
+
+_LEGACY_UNICORN: list[dict] = [
+    {"roll": 1, "name": "Gaijin Blood", "effect": "Foreign ancestry. +1 rank in one Gaijin skill (free). Distinct features.", "grants": {"advantages": ["Heritage: Gaijin Blood (+1 Gaijin skill, Fortune chooses)"], "disadvantages": ["Heritage: Gaijin Blood (Social TN +5 conservative courts)"]}},
+    {"roll": 2, "name": "Horse Lord", "effect": "Family raises the finest horses. +1 rank in Horsemanship (free).", "grants": {"skills": {"Horsemanship": 1}}},
+    {"roll": 3, "name": "Desert Survivor", "effect": "Ancestor crossed the Burning Sands. +1 Stamina for endurance checks.", "grants": {"stamina": 1}},
+    {"roll": 4, "name": "Outsider's Perspective", "effect": "Family keeps foreign customs. +1 rank in Investigation (free).", "grants": {"skills": {"Investigation": 1}}},
+    {"roll": 5, "name": "Cavalry Tradition", "effect": "Family excels at mounted combat.", "grants": {"advantages": ["Heritage: Cavalry Tradition (+1k0 attack while Mounted)"]}},
+    {"roll": 6, "name": "Trade Routes", "effect": "Family controls trade routes. Starting koku +5, +1 rank in Commerce (free).", "grants": {"koku": 5, "skills": {"Commerce": 1}}},
+    {"roll": 7, "name": "War Dog Breeder", "effect": "Family breeds war dogs. Start with a trained war dog companion.", "grants": {"advantages": ["Heritage: War Dog Breeder"]}},
+    {"roll": 8, "name": "Meishodo Practitioner", "effect": "Ancestor practiced name magic. +1 rank in Lore: Theology (free).", "grants": {"skills": {"Lore: Theology": 1}}},
+    {"roll": 9, "name": "Nomadic Heritage", "effect": "Family keeps nomadic traditions. +1 rank in Hunting (free).", "grants": {"skills": {"Hunting": 1}}},
+    {"roll": 10, "name": "Battle Hardened", "effect": "Family has fought in many wars. +1 rank in Battle (free).", "grants": {"skills": {"Battle": 1}}},
+]
+
+# Combined table: dict values are two-stage (verified), list values are legacy
+HERITAGE_TABLES: dict[str, dict | list] = {
+    "Crab": _CRAB_TABLE,
+    "Crane": _LEGACY_CRANE,
+    "Dragon": _LEGACY_DRAGON,
+    "Lion": _LEGACY_LION,
+    "Mantis": _LEGACY_MANTIS,
+    "Phoenix": _LEGACY_PHOENIX,
+    "Scorpion": _LEGACY_SCORPION,
+    "Unicorn": _LEGACY_UNICORN,
 }
 
 DEFAULT_TABLE: list[dict] = [
     {"roll": 1, "name": "Noble Heritage", "effect": "+3 Glory points.", "grants": {"glory": 3.0}},
     {"roll": 2, "name": "Military Tradition", "effect": "+1 rank in one Bugei skill (free).", "grants": {"advantages": ["Heritage: Military Tradition (+1 Bugei skill, Fortune chooses)"]}},
     {"roll": 3, "name": "Scholarly Lineage", "effect": "+1 rank in one Lore skill (free).", "grants": {"advantages": ["Heritage: Scholarly Lineage (+1 Lore skill, Fortune chooses)"]}},
-    {"roll": 4, "name": "Dark Secret", "effect": "Family harbors a secret. DM determines details.", "grants": {"disadvantages": ["Dark Secret (family secret)"]}},
+    {"roll": 4, "name": "Dark Secret", "effect": "Family harbors a secret. Fortune determines details.", "grants": {"disadvantages": ["Dark Secret (family secret)"]}},
     {"roll": 5, "name": "Wealthy Holdings", "effect": "Starting koku +3.", "grants": {"koku": 3}},
     {"roll": 6, "name": "Political Ties", "effect": "+5 Status points.", "grants": {"status": 5.0}},
     {"roll": 7, "name": "Spiritual Connection", "effect": "+1 rank in Meditation (free).", "grants": {"skills": {"Meditation": 1}}},
-    {"roll": 8, "name": "Mixed Blessing", "effect": "+1 to one Trait, −1 to another (DM chooses).", "grants": {"advantages": ["Heritage: Mixed Blessing (+1 Trait, DM chooses)"], "disadvantages": ["Heritage: Mixed Blessing (-1 Trait, DM chooses)"]}},
-    {"roll": 9, "name": "Ancestral Item", "effect": "Inherit a Fine-quality item of DM's choice.", "grants": {"advantages": ["Heritage: Ancestral Item (Fine-quality, DM chooses)"]}},
+    {"roll": 8, "name": "Mixed Blessing", "effect": "+1 to one Trait, -1 to another (Fortune chooses).", "grants": {"advantages": ["Heritage: Mixed Blessing (+1 Trait, Fortune chooses)"], "disadvantages": ["Heritage: Mixed Blessing (-1 Trait, Fortune chooses)"]}},
+    {"roll": 9, "name": "Ancestral Item", "effect": "Inherit a Fine-quality item of Fortune's choice.", "grants": {"advantages": ["Heritage: Ancestral Item (Fine-quality, Fortune chooses)"]}},
     {"roll": 10, "name": "Destiny", "effect": "+1 Void Point maximum.", "grants": {"void": 1}},
 ]
 
 
-def roll_heritage(clan: str) -> dict:
-    """Roll 1d10 on the clan's heritage table. Returns the result dict."""
-    table = HERITAGE_TABLES.get(clan, DEFAULT_TABLE)
+def _roll_legacy(table: list[dict]) -> dict:
+    """Roll 1d10 on a legacy single-stage table."""
     roll = random.randint(1, 10)
-    return table[roll - 1]
+    entry = table[roll - 1]
+    return {
+        "roll": str(roll),
+        "name": entry["name"],
+        "effect": entry["effect"],
+        "grants": entry.get("grants", {}),
+        "notes": entry.get("notes", []),
+    }
 
 
-def get_table(clan: str) -> list[dict]:
-    """Return the heritage table for a clan (or the default)."""
+def _roll_two_stage(table: dict) -> dict:
+    """Roll two d10s on a verified two-stage heritage table."""
+    cat_roll = random.randint(1, 10)
+    category = None
+    for cat in table["categories"]:
+        if cat_roll in cat["rolls"]:
+            category = cat
+            break
+    if category is None:
+        category = table["categories"][0]
+
+    subtable = table[category["table"]]
+    entry_roll = random.randint(1, 10)
+    entry = _find_entry(subtable, entry_roll)
+
+    return {
+        "roll": f"{cat_roll} then {entry_roll}",
+        "name": category["name"],
+        "effect": entry["effect"],
+        "grants": entry.get("grants", {}),
+        "notes": entry.get("notes", []),
+    }
+
+
+def roll_heritage(clan: str) -> dict:
+    """Roll on a clan's heritage table. Returns {roll, name, effect, grants, notes}."""
+    table = HERITAGE_TABLES.get(clan)
+    if table is None:
+        return _roll_legacy(DEFAULT_TABLE)
+    if isinstance(table, dict):
+        return _roll_two_stage(table)
+    return _roll_legacy(table)
+
+
+def get_table(clan: str) -> dict | list:
+    """Return the raw heritage table data for a clan (or the default)."""
     return HERITAGE_TABLES.get(clan, DEFAULT_TABLE)
+
+
+def format_table(clan: str) -> str:
+    """Return a formatted string showing a clan's full heritage table."""
+    table = get_table(clan)
+    if isinstance(table, list):
+        lines = [f"**{e['roll']}.** {e['name']}: {e['effect']}" for e in table]
+        return "\n".join(lines)
+
+    parts: list[str] = []
+    parts.append("**Category Roll (d10):**")
+    for cat in table["categories"]:
+        parts.append(f"{_roll_range_str(cat['rolls'])}: {cat['name']}")
+    for cat in table["categories"]:
+        subtable = table[cat["table"]]
+        parts.append(f"\n**{cat['name']}:**")
+        for entry in subtable:
+            rng = _roll_range_str(entry["rolls"])
+            text = entry["effect"]
+            if len(text) > 120:
+                text = text[:117] + "..."
+            parts.append(f"{rng}: {text}")
+    return "\n".join(parts)
 
 
 def apply_heritage(char: Character, result: dict) -> list[str]:
@@ -146,14 +352,14 @@ def apply_heritage(char: Character, result: dict) -> list[str]:
     Returns a list of human-readable notes about what was applied.
     """
     grants = result.get("grants", {})
-    if not grants:
-        return []
-    notes: list[str] = []
+    applied: list[str] = []
+    if not grants and not result.get("notes"):
+        return applied
     if "skills" in grants:
         for skill_name, rank_bonus in grants["skills"].items():
             current = char.skills.get(skill_name, 0)
             char.skills[skill_name] = current + rank_bonus
-            notes.append(f"+{rank_bonus} {skill_name}")
+            applied.append(f"+{rank_bonus} {skill_name}")
     if "emphases" in grants:
         for skill_name, emph_list in grants["emphases"].items():
             existing = char.emphases.get(skill_name, [])
@@ -161,40 +367,43 @@ def apply_heritage(char: Character, result: dict) -> list[str]:
                 if e not in existing:
                     existing.append(e)
             char.emphases[skill_name] = existing
-            notes.append(f"Emphasis: {skill_name} ({', '.join(emph_list)})")
+            applied.append(f"Emphasis: {skill_name} ({', '.join(emph_list)})")
     if "honor" in grants:
         char.honor += grants["honor"]
-        notes.append(f"Honor {grants['honor']:+.1f}")
+        applied.append(f"Honor {grants['honor']:+.1f}")
     if "glory" in grants:
         char.glory += grants["glory"]
-        notes.append(f"Glory {grants['glory']:+.1f}")
+        applied.append(f"Glory {grants['glory']:+.1f}")
     if "status" in grants:
         char.status += grants["status"]
-        notes.append(f"Status {grants['status']:+.1f}")
+        applied.append(f"Status {grants['status']:+.1f}")
     if "void" in grants:
         char.void_ring += grants["void"]
         char.max_void_points = char.void_ring
         char.current_void_points = char.void_ring
-        notes.append(f"+{grants['void']} Void")
+        applied.append(f"+{grants['void']} Void")
     if "willpower" in grants:
         char.willpower += grants["willpower"]
-        notes.append(f"+{grants['willpower']} Willpower")
+        applied.append(f"+{grants['willpower']} Willpower")
     if "stamina" in grants:
         char.stamina += grants["stamina"]
-        notes.append(f"+{grants['stamina']} Stamina")
+        applied.append(f"+{grants['stamina']} Stamina")
+    if "taint" in grants:
+        char.taint += grants["taint"]
+        applied.append(f"Taint {grants['taint']:+.1f}")
     if "koku" in grants:
         char.koku += grants["koku"]
-        notes.append(f"+{grants['koku']} koku")
+        applied.append(f"{grants['koku']:+g} koku")
     if "advantages" in grants:
         for adv in grants["advantages"]:
             if adv not in char.advantages:
                 char.advantages.append(adv)
-                notes.append(f"Advantage: {adv}")
+                applied.append(f"Advantage: {adv}")
     if "disadvantages" in grants:
         for dis in grants["disadvantages"]:
             if dis not in char.disadvantages:
                 char.disadvantages.append(dis)
-                notes.append(f"Disadvantage: {dis}")
+                applied.append(f"Disadvantage: {dis}")
     if "armor" in grants:
         from l5r_rules.combat import ARMOR_CATALOG
         armor_key = grants["armor"]
@@ -203,5 +412,7 @@ def apply_heritage(char: Character, result: dict) -> list[str]:
             char.armor_name = armor_key
             char.armor_tn_bonus = spec["tn_bonus"]
             char.armor_reduction = spec["reduction"]
-            notes.append(f"Equipped: {armor_key} armor (TN +{spec['tn_bonus']}, Reduction {spec['reduction']})")
-    return notes
+            applied.append(f"Equipped: {armor_key} armor (TN +{spec['tn_bonus']}, Reduction {spec['reduction']})")
+    for note in result.get("notes", []):
+        applied.append(f"[Fortune]: {note}")
+    return applied
