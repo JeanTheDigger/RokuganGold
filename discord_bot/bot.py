@@ -1805,10 +1805,10 @@ _CHARGEN_SKILL_CAP = 4
 
 _SKILL_CATEGORIES: dict[str, list[str]] = {
     "Bugei": [
-        "Athletics", "Battle", "Defense", "Heavy Weapons", "Horsemanship",
-        "Hunting", "Iaijutsu", "Jiujutsu", "Kenjutsu", "Knives", "Kyujutsu",
-        "Naginatajutsu", "Polearms", "Spears", "Staves", "War Fan",
-        "Chain Weapons",
+        "Athletics", "Battle", "Chain Weapons", "Defense", "Heavy Weapons",
+        "Horsemanship", "Hunting", "Iaijutsu", "Jiujutsu", "Kenjutsu",
+        "Knives", "Kyujutsu", "Naginatajutsu", "Ninjutsu", "Polearms",
+        "Spears", "Staves", "War Fan",
     ],
     "High": [
         "Artisan", "Calligraphy", "Courtier", "Divination", "Etiquette",
@@ -1826,7 +1826,8 @@ _SKILL_CATEGORIES: dict[str, list[str]] = {
 
 _WEAPON_SKILLS: list[str] = [
     "Chain Weapons", "Heavy Weapons", "Iaijutsu", "Kenjutsu", "Knives",
-    "Kyujutsu", "Naginatajutsu", "Polearms", "Spears", "Staves", "War Fan",
+    "Kyujutsu", "Naginatajutsu", "Ninjutsu", "Polearms", "Spears",
+    "Staves", "War Fan",
 ]
 _LORE_SKILLS: list[str] = [
     "Lore: Architecture", "Lore: Bushido", "Lore: Elements",
@@ -1865,10 +1866,10 @@ _SUBCAT_MAP: dict[str, list[str]] = {
 
 _CHARGEN_SKILL_CATS: dict[str, list[str]] = {
     "Bugei": [
-        "Athletics", "Battle", "Defense", "Heavy Weapons", "Horsemanship",
-        "Hunting", "Iaijutsu", "Jiujutsu", "Kenjutsu", "Knives", "Kyujutsu",
-        "Naginatajutsu", "Polearms", "Spears", "Staves", "War Fan",
-        "Chain Weapons",
+        "Athletics", "Battle", "Chain Weapons", "Defense", "Heavy Weapons",
+        "Horsemanship", "Hunting", "Iaijutsu", "Jiujutsu", "Kenjutsu",
+        "Knives", "Kyujutsu", "Naginatajutsu", "Ninjutsu", "Polearms",
+        "Spears", "Staves", "War Fan",
     ],
     "High": [
         "Calligraphy", "Courtier", "Divination", "Etiquette", "Games",
@@ -4612,9 +4613,10 @@ async def sheet_tattoo_activate(
         )
         return
     _BUGEI_SKILLS = {
-        "athletics", "battle", "defense", "horsemanship", "hunting", "iaijutsu",
-        "jiujutsu", "kenjutsu", "kyujutsu", "spears", "polearms", "heavy weapons",
-        "knives", "war fan", "chain weapons", "staves",
+        "athletics", "battle", "chain weapons", "defense", "heavy weapons",
+        "horsemanship", "hunting", "iaijutsu", "jiujutsu", "kenjutsu",
+        "knives", "kyujutsu", "naginatajutsu", "ninjutsu", "polearms",
+        "spears", "staves", "war fan",
     }
     if key == "lion":
         if not skill:

@@ -2628,7 +2628,8 @@ class _BoardVoidSwapSelect(discord.ui.View):
 _BUGEI_SKILLS = [
     "Athletics", "Battle", "Chain Weapons", "Defense", "Heavy Weapons",
     "Horsemanship", "Hunting", "Iaijutsu", "Jiujutsu", "Kenjutsu",
-    "Knives", "Kyujutsu", "Polearms", "Spears", "Staves", "War Fan",
+    "Knives", "Kyujutsu", "Naginatajutsu", "Ninjutsu", "Polearms",
+    "Spears", "Staves", "War Fan",
 ]
 
 
