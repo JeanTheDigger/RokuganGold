@@ -611,18 +611,118 @@ _MANTIS_TABLE: dict = {
     ],
 }
 
-_LEGACY_PHOENIX: list[dict] = [
-    {"roll": 1, "name": "Elemental Master", "effect": "Ancestor was an Elemental Master. +1 rank in Spellcraft (free).", "grants": {"skills": {"Spellcraft": 1}}},
-    {"roll": 2, "name": "Peaceful Scholar", "effect": "Family tradition of scholarship. +1 rank in Lore: Theology (free).", "grants": {"skills": {"Lore: Theology": 1}}},
-    {"roll": 3, "name": "Ishiken Blood", "effect": "Distant Void magic bloodline.", "grants": {"advantages": ["Heritage: Ishiken Blood"]}},
-    {"roll": 4, "name": "Pacifist Tradition", "effect": "Family avoids violence. +1 Honor Rank.", "grants": {"honor": 1.0}},
-    {"roll": 5, "name": "Library Access", "effect": "Family maintains a great library. +1 rank in any one Lore skill (free).", "grants": {"advantages": ["Heritage: Library Access (+1 Lore skill, Fortune chooses)"]}},
-    {"roll": 6, "name": "Haunted", "effect": "An ancestor's spirit lingers. Occasional spiritual disturbances.", "grants": {"disadvantages": ["Heritage: Haunted"]}},
-    {"roll": 7, "name": "Healing Tradition", "effect": "Family is known for medicine. +1 rank in Medicine (free).", "grants": {"skills": {"Medicine": 1}}},
-    {"roll": 8, "name": "Temple Holdings", "effect": "Family maintains a prominent temple. +5 Status points.", "grants": {"status": 5.0}},
-    {"roll": 9, "name": "Ancient Texts", "effect": "Family possesses rare scrolls. +1 rank in Calligraphy (free).", "grants": {"skills": {"Calligraphy": 1}}},
-    {"roll": 10, "name": "Blessed by the Kami", "effect": "+1 Void Point maximum.", "grants": {"void": 1}},
-]
+_PHOENIX_TABLE: dict = {
+    "categories": [
+        {"rolls": [1, 2, 3], "name": "Shameful Past", "table": "shameful"},
+        {"rolls": [4, 5, 6, 7], "name": "Illustrious Past", "table": "illustrious"},
+        {"rolls": [8, 9, 10], "name": "Mixed Blessings", "table": "mixed"},
+    ],
+    "shameful": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor was forced to undergo the Forgotten ritual, and remnants of it remain in your bloodline. You gain the Momoku Disadvantage.",
+            "grants": {"disadvantages": ["Momoku"]},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor lost a book containing the only copy of some vital information. He committed seppuku and your family has been committed to finding the knowledge ever since. You gain the Driven Disadvantage.",
+            "grants": {"disadvantages": ["Driven"]},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor was a yojimbo who failed to protect his charge in battle. The shame of his actions has not yet been purged. You gain 1.0 Infamy.",
+            "grants": {"infamy": 1.0},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor was an Ishiken who got a little too close to the Void. You gain the Touch of the Void Disadvantage.",
+            "grants": {"disadvantages": ["Touch of the Void"]},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor dabbled in maho. He summoned an oni and gave it his name. Ever since, that oni has been haunting your family line.",
+            "grants": {},
+            "notes": ["Fortune determines the nature and timing of this oni haunting."],
+        },
+        {
+            "rolls": [10],
+            "effect": "While researching powerful new magics, your ancestor disappeared in a flash of light, taking his notes with him. The Kitsu have determined his soul never made it to Meido. No one has been able to duplicate his work or determine where he has gone. Your family is obsessed with hunting for him; you gain the Consumed by Knowledge Disadvantage.",
+            "grants": {"disadvantages": ["Consumed by Knowledge"]},
+        },
+    ],
+    "illustrious": [
+        {
+            "rolls": [1],
+            "effect": "You can trace your line directly to your family's founder. You may take a Phoenix Clan Ancestor for 2 less Experience Points.",
+            "grants": {},
+            "notes": ["May take a Phoenix Clan Ancestor Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor was one of the Elemental Masters and your line is still granted respect for this today. You gain 1.0 Glory and 1.0 Status.",
+            "grants": {"glory": 1.0, "status": 1.0},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "This is not your first time around on the kharmic wheel, and you have been lucky enough to be reborn as your own descendant. You may take the Enlightened Advantage for 1 less point.",
+            "grants": {},
+            "notes": ["May take the Enlightened Advantage for 1 less XP."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor was instrumental in negotiating a peace treaty between two clans. His legacy of virtue and compassion is still carried forward in your line. You gain 1.0 Honor and you may purchase the Advantage Paragon of Compassion for 2 less Experience Points.",
+            "grants": {"honor": 1.0},
+            "notes": ["May take the Paragon of Compassion Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor was a yojimbo who fought and won a glorious duel in defense of his charge. His fame endures and you look to his example for guidance. Gain 1 free Rank in the Iaijutsu Skill and 0.5 Glory.",
+            "grants": {"skills": {"Iaijutsu": 1}, "glory": 0.5},
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor achieved one of the great breakthroughs of magic, and you have benefited from his work. Gain 1 free Rank in either the Lore: Shugenja Skill or the Spellcraft Skill.",
+            "grants": {},
+            "notes": ["Gain 1 free Rank in either Lore: Shugenja or Spellcraft (your choice)."],
+        },
+    ],
+    "mixed": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor was a shugenja of some renown with her Element, but was absolutely terrible with the opposing Element. You may take the Friend of the Elements (Element of your choice) Advantage for 1 less Experience Point, but also gain Wrath of the Kami in the opposing Element.",
+            "grants": {"disadvantages": ["Wrath of the Kami (opposing Element)"]},
+            "notes": ["May take Friend of the Elements (choose Element) for 1 less XP. Wrath of the Kami applies to the opposing Element."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "A kansen tempted your ancestor into using maho, leaving a stain on your family name. The kansen has since found you. It acts as the Friendly Kami advantage, but the bonuses only apply to casting Maho spells.",
+            "grants": {"advantages": ["Friendly Kami (Maho spells only)"]},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "One of your ancestors went missing for several months. No one is sure where he went, but when he returned he had no memories save for a message he claimed was from the Celestial Heavens. You may take the Advantage Chosen by the Oracles for 2 less Experience Points, but you also gain the Disadvantage Lord Moon's Curse.",
+            "grants": {"disadvantages": ["Lord Moon's Curse"]},
+            "notes": ["May take the Chosen by the Oracles Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor was repeatedly defeated at something, and your family has made a point of being the best at it ever since. Choose a Skill. You gain the Jealousy Disadvantage in that Skill, but you also gain either 2 free Ranks in that Skill or one free Emphasis in that Skill.",
+            "grants": {"disadvantages": ["Jealousy (chosen Skill)"]},
+            "notes": ["Choose a Skill: Gain either 2 free Ranks or 1 free Emphasis in that Skill. Jealousy applies to the same Skill."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor was a well-known mediator. In one particularly dangerous situation she took extreme and dishonorable measures to preserve the peace. Her dishonor and success both linger. You start with 1.0 less Honor but also gain a 2-point Ally in another clan.",
+            "grants": {"honor": -1.0, "advantages": ["Ally (2 points, another clan)"]},
+            "notes": ["Fortune determines which clan the Ally belongs to."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your family has always been one of the guardians of Gisei Toshi. You have access to the sacred knowledge and hidden items within Gisei Toshi should you need them, but you must never tell anyone about the city's location. Gain Dark Secret: Location of Gisei Toshi.",
+            "grants": {"disadvantages": ["Dark Secret (Location of Gisei Toshi)"]},
+        },
+    ],
+}
 
 _LEGACY_SCORPION: list[dict] = [
     {"roll": 1, "name": "Master Spy", "effect": "Ancestor was a legendary spy. +1 rank in Stealth (free).", "grants": {"skills": {"Stealth": 1}}},
@@ -657,7 +757,7 @@ HERITAGE_TABLES: dict[str, dict | list] = {
     "Dragon": _DRAGON_TABLE,
     "Lion": _LION_TABLE,
     "Mantis": _MANTIS_TABLE,
-    "Phoenix": _LEGACY_PHOENIX,
+    "Phoenix": _PHOENIX_TABLE,
     "Scorpion": _LEGACY_SCORPION,
     "Unicorn": _LEGACY_UNICORN,
 }
