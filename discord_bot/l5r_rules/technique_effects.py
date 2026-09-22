@@ -222,7 +222,7 @@ def attacker_attack_dice(
         gap = 2 * (max(rings) - min(rings))
         if gap:
             flat += gap; notes.append(f"Cracks Within the Elements +{gap} attack (2×(highest {max(rings)} − lowest {min(rings)}))")
-    if "the kaiu method" in known and skill == "war fans":
+    if "the kaiu method" in known and skill == "war fan":
         rolled += 1; notes.append("The Kaiu Method +1k0 attack (War Fan, School Skill)")
     if "the strength of indra" in known and skill in _KSHATRIYA_WEAPON_SKILLS:
         rolled += 1; notes.append(f"The Strength of Indra +1k0 attack ({skill}, School Weapon Skill)")

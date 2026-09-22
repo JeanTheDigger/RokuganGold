@@ -1805,8 +1805,8 @@ _CHARGEN_SKILL_CAP = 4
 
 _SKILL_CATEGORIES: dict[str, list[str]] = {
     "Bugei": [
-        "Athletics", "Battle", "Defense", "Horsemanship", "Hunting",
-        "Iaijutsu", "Jiujutsu", "Kenjutsu", "Knives", "Kyujutsu",
+        "Athletics", "Battle", "Defense", "Heavy Weapons", "Horsemanship",
+        "Hunting", "Iaijutsu", "Jiujutsu", "Kenjutsu", "Knives", "Kyujutsu",
         "Naginatajutsu", "Polearms", "Spears", "Staves", "War Fan",
         "Chain Weapons",
     ],
@@ -1825,8 +1825,8 @@ _SKILL_CATEGORIES: dict[str, list[str]] = {
 }
 
 _WEAPON_SKILLS: list[str] = [
-    "Chain Weapons", "Iaijutsu", "Kenjutsu", "Knives", "Kyujutsu",
-    "Naginatajutsu", "Polearms", "Spears", "Staves", "War Fan",
+    "Chain Weapons", "Heavy Weapons", "Iaijutsu", "Kenjutsu", "Knives",
+    "Kyujutsu", "Naginatajutsu", "Polearms", "Spears", "Staves", "War Fan",
 ]
 _LORE_SKILLS: list[str] = [
     "Lore: Architecture", "Lore: Bushido", "Lore: Elements",
@@ -1865,8 +1865,8 @@ _SUBCAT_MAP: dict[str, list[str]] = {
 
 _CHARGEN_SKILL_CATS: dict[str, list[str]] = {
     "Bugei": [
-        "Athletics", "Battle", "Defense", "Horsemanship", "Hunting",
-        "Iaijutsu", "Jiujutsu", "Kenjutsu", "Knives", "Kyujutsu",
+        "Athletics", "Battle", "Defense", "Heavy Weapons", "Horsemanship",
+        "Hunting", "Iaijutsu", "Jiujutsu", "Kenjutsu", "Knives", "Kyujutsu",
         "Naginatajutsu", "Polearms", "Spears", "Staves", "War Fan",
         "Chain Weapons",
     ],
