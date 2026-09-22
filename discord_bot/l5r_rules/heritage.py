@@ -1,12 +1,12 @@
 """L5R 4e Heritage Tables: random character background rolls.
 
-All clan tables use the real L5R 4e two-stage d10 system: first roll
+All tables use the real L5R 4e two-stage d10 system: first roll
 determines a category (Shameful Past, Illustrious Past, or Mixed
 Blessings), then a second d10 determines the specific result within
 that category.  Source: lasthaiku.wikidot.com/heritage.
 
-The DEFAULT_TABLE is a single-stage fallback for clans not in the
-main table (e.g. Minor Clans).
+Great Clans each have their own table.  Minor Clans share a single
+table.  Unknown clan names fall back to the Minor Clan table.
 """
 
 from __future__ import annotations
@@ -951,6 +951,119 @@ _UNICORN_TABLE: dict = {
     ],
 }
 
+_MINOR_CLAN_TABLE: dict = {
+    "categories": [
+        {"rolls": [1, 2, 3], "name": "Shameful Past", "table": "shameful"},
+        {"rolls": [4, 5, 6, 7], "name": "Illustrious Past", "table": "illustrious"},
+        {"rolls": [8, 9, 10], "name": "Mixed Blessings", "table": "mixed"},
+    ],
+    "shameful": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor was a disbeliever and has passed down this lack of belief to his descendants. You begin play with the Disbeliever Disadvantage.",
+            "grants": {"disadvantages": ["Disbeliever"]},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor thought he was getting the better end of a deal with a Great Clan merchant patron, only to discover too late that he had been tricked. Your family has been impoverished ever since. Start with two fewer koku in your Outfit.",
+            "grants": {"koku": -2},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor failed to perform a service for the clan, tarnishing his honor and standing. His failure haunts your line to this day. Your starting Honor is 1.0 lower and your starting Status is 0.1 lower.",
+            "grants": {"honor": -1.0, "status": -0.1},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor was considered one of the ugliest men in Rokugan, and you have his face. Gain the Disturbing Countenance Disadvantage.",
+            "grants": {"disadvantages": ["Disturbing Countenance"]},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor got the better of a Great Clan courtier in the Imperial Court. The courtier's family has held a grudge against yours ever since. You gain the Sworn Enemy Disadvantage.",
+            "grants": {"disadvantages": ["Sworn Enemy"]},
+            "notes": ["Fortune determines which Great Clan family holds the grudge."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor was a member of one of the fallen Minor Clans or families (Boar, Gusai family, etc). Gain the Dark Secret Disadvantage.",
+            "grants": {"disadvantages": ["Dark Secret"]},
+        },
+    ],
+    "illustrious": [
+        {
+            "rolls": [1],
+            "effect": "A particular kami took an interest in your family line, and it senses a similarity to your ancestor in you. You may take the Friendly Kami Advantage (if you are a shugenja) or the Friend of the Elements Advantage for one less Experience Point.",
+            "grants": {},
+            "notes": ["May take Friendly Kami (shugenja) or Friend of the Elements for 1 less XP."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor made political connections with members of a Great Clan, connections which have lasted to this day. You gain a 3-point Ally Advantage in that clan for no Experience Point cost.",
+            "grants": {"advantages": ["Ally (3 points, Great Clan)"]},
+            "notes": ["Fortune determines which Great Clan the Ally belongs to."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor was a genius on the battlefield. Due to his actions, others believe you and your family are honorable warriors as well. Gain 1.0 Glory.",
+            "grants": {"glory": 1.0},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor was extremely skilled in the ways of your clan, and you have carried on his legacy. Gain one Rank in an iconic School Skill for your school.",
+            "grants": {},
+            "notes": ["Gain 1 free Rank in an iconic School Skill for your school."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "One of your ancestors helped establish one of your clan's original villages. Your family has been caretaker of those lands since that time. Your starting Outfit gains 2 koku and you may take the Gentry Advantage for one less Experience Point.",
+            "grants": {"koku": 2},
+            "notes": ["May take the Gentry Advantage for 1 less XP."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your family has always lived in the heartlands of your clan and you have grown up learning its fields and hills like your own home. You gain the Way of the Land Advantage for your clan's land.",
+            "grants": {"advantages": ["Way of the Land"]},
+        },
+    ],
+    "mixed": [
+        {
+            "rolls": [1],
+            "effect": "Your family has long maintained a close relationship with the Imperial families, but this has caused you to suffer from the jealousy of Great Clan samurai. You begin play with a free 3-point Ally among the Imperial families (Tortoise: 4-point Ally instead), but you also start with a 3-point Sworn Enemy in a Great Clan.",
+            "grants": {"advantages": ["Ally (3 points, Imperial families)"], "disadvantages": ["Sworn Enemy (3 points, Great Clan)"]},
+            "notes": ["Tortoise characters gain a 4-point Ally instead. Fortune determines which Great Clan holds the Sworn Enemy."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor discovered something very interesting, and very taboo. You may take the Forbidden Knowledge Advantage for one less Experience Point.",
+            "grants": {},
+            "notes": ["May take the Forbidden Knowledge Advantage for 1 less XP."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor saved the life of a paragon from a Great Clan family. That family has looked out for your line since that time and recently arranged for your marriage to a member of the Imperial families. You gain the Imperial Spouse Advantage, but are under a 3-Point Obligation to the family who arranged the marriage.",
+            "grants": {"advantages": ["Imperial Spouse"], "disadvantages": ["Obligation (3 points, Great Clan family)"]},
+            "notes": ["Fortune determines which Great Clan family holds the Obligation."],
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Due to various mishaps and misfortunes, you are the last of your line and have all your family's titles and responsibilities resting squarely on your shoulders. Perhaps there is a reason your family members keep dying mysteriously? You gain 1.0 Status but also gain the Bad Fortune (Unknown Enemy) Disadvantage.",
+            "grants": {"status": 1.0, "disadvantages": ["Bad Fortune (Unknown Enemy)"]},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor was involved with some shady dealings with a member of one of the Great Clans. The deals went in your ancestor's favor, and the details have been passed on to you. You gain a 3-point Blackmail Advantage against someone in one of the Great Clans, but since they know that you hold the information you also gain the Sworn Enemy Disadvantage with them.",
+            "grants": {"advantages": ["Blackmail (3 points, Great Clan)"], "disadvantages": ["Sworn Enemy (same person)"]},
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor was a craftsman of singular skills. One of his creations was passed on to you. You gain a single item of superior quality; however, the item was originally intended as a gift for a member of a Great Clan, and his family wants it back.",
+            "grants": {},
+            "notes": ["Fortune determines the nature of this superior-quality item and which Great Clan family wants it returned."],
+        },
+    ],
+}
+
 HERITAGE_TABLES: dict[str, dict] = {
     "Crab": _CRAB_TABLE,
     "Crane": _CRANE_TABLE,
@@ -960,37 +1073,27 @@ HERITAGE_TABLES: dict[str, dict] = {
     "Phoenix": _PHOENIX_TABLE,
     "Scorpion": _SCORPION_TABLE,
     "Unicorn": _UNICORN_TABLE,
+    "Badger": _MINOR_CLAN_TABLE,
+    "Bat": _MINOR_CLAN_TABLE,
+    "Boar": _MINOR_CLAN_TABLE,
+    "Centipede": _MINOR_CLAN_TABLE,
+    "Dragonfly": _MINOR_CLAN_TABLE,
+    "Fox": _MINOR_CLAN_TABLE,
+    "Hare": _MINOR_CLAN_TABLE,
+    "Monkey": _MINOR_CLAN_TABLE,
+    "Oriole": _MINOR_CLAN_TABLE,
+    "Ox": _MINOR_CLAN_TABLE,
+    "Sparrow": _MINOR_CLAN_TABLE,
+    "Tiger": _MINOR_CLAN_TABLE,
+    "Tortoise": _MINOR_CLAN_TABLE,
+    "Wasp": _MINOR_CLAN_TABLE,
 }
 
-DEFAULT_TABLE: list[dict] = [
-    {"roll": 1, "name": "Noble Heritage", "effect": "+3 Glory points.", "grants": {"glory": 3.0}},
-    {"roll": 2, "name": "Military Tradition", "effect": "+1 rank in one Bugei skill (free).", "grants": {"advantages": ["Heritage: Military Tradition (+1 Bugei skill, Fortune chooses)"]}},
-    {"roll": 3, "name": "Scholarly Lineage", "effect": "+1 rank in one Lore skill (free).", "grants": {"advantages": ["Heritage: Scholarly Lineage (+1 Lore skill, Fortune chooses)"]}},
-    {"roll": 4, "name": "Dark Secret", "effect": "Family harbors a secret. Fortune determines details.", "grants": {"disadvantages": ["Dark Secret (family secret)"]}},
-    {"roll": 5, "name": "Wealthy Holdings", "effect": "Starting koku +3.", "grants": {"koku": 3}},
-    {"roll": 6, "name": "Political Ties", "effect": "+5 Status points.", "grants": {"status": 5.0}},
-    {"roll": 7, "name": "Spiritual Connection", "effect": "+1 rank in Meditation (free).", "grants": {"skills": {"Meditation": 1}}},
-    {"roll": 8, "name": "Mixed Blessing", "effect": "+1 to one Trait, -1 to another (Fortune chooses).", "grants": {"advantages": ["Heritage: Mixed Blessing (+1 Trait, Fortune chooses)"], "disadvantages": ["Heritage: Mixed Blessing (-1 Trait, Fortune chooses)"]}},
-    {"roll": 9, "name": "Ancestral Item", "effect": "Inherit a Fine-quality item of Fortune's choice.", "grants": {"advantages": ["Heritage: Ancestral Item (Fine-quality, Fortune chooses)"]}},
-    {"roll": 10, "name": "Destiny", "effect": "+1 Void Point maximum.", "grants": {"void": 1}},
-]
-
-
-def _roll_legacy(table: list[dict]) -> dict:
-    """Roll 1d10 on a legacy single-stage table."""
-    roll = random.randint(1, 10)
-    entry = table[roll - 1]
-    return {
-        "roll": str(roll),
-        "name": entry["name"],
-        "effect": entry["effect"],
-        "grants": entry.get("grants", {}),
-        "notes": entry.get("notes", []),
-    }
+DEFAULT_TABLE: dict = _MINOR_CLAN_TABLE
 
 
 def _roll_two_stage(table: dict) -> dict:
-    """Roll two d10s on a verified two-stage heritage table."""
+    """Roll two d10s on a two-stage heritage table."""
     cat_roll = random.randint(1, 10)
     category = None
     for cat in table["categories"]:
@@ -1015,15 +1118,11 @@ def _roll_two_stage(table: dict) -> dict:
 
 def roll_heritage(clan: str) -> dict:
     """Roll on a clan's heritage table. Returns {roll, name, effect, grants, notes}."""
-    table = HERITAGE_TABLES.get(clan)
-    if table is None:
-        return _roll_legacy(DEFAULT_TABLE)
-    if isinstance(table, dict):
-        return _roll_two_stage(table)
-    return _roll_legacy(table)
+    table = HERITAGE_TABLES.get(clan, DEFAULT_TABLE)
+    return _roll_two_stage(table)
 
 
-def get_table(clan: str) -> dict | list:
+def get_table(clan: str) -> dict:
     """Return the raw heritage table data for a clan (or the default)."""
     return HERITAGE_TABLES.get(clan, DEFAULT_TABLE)
 
@@ -1031,10 +1130,6 @@ def get_table(clan: str) -> dict | list:
 def format_table(clan: str) -> str:
     """Return a formatted string showing a clan's full heritage table."""
     table = get_table(clan)
-    if isinstance(table, list):
-        lines = [f"**{e['roll']}.** {e['name']}: {e['effect']}" for e in table]
-        return "\n".join(lines)
-
     parts: list[str] = []
     parts.append("**Category Roll (d10):**")
     for cat in table["categories"]:
