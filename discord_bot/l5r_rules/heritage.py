@@ -1,12 +1,12 @@
 """L5R 4e Heritage Tables: random character background rolls.
 
-Real L5R 4e heritage uses a two-stage d10 system: first roll determines
-a category (Shameful Past, Illustrious Past, or Mixed Blessings), then
-a second d10 determines the specific result within that category.
+All clan tables use the real L5R 4e two-stage d10 system: first roll
+determines a category (Shameful Past, Illustrious Past, or Mixed
+Blessings), then a second d10 determines the specific result within
+that category.  Source: lasthaiku.wikidot.com/heritage.
 
-Verified tables use the two-stage dict format.  Unverified tables (not yet
-checked against source material) use a legacy single-stage list format
-and are marked accordingly.
+The DEFAULT_TABLE is a single-stage fallback for clans not in the
+main table (e.g. Minor Clans).
 """
 
 from __future__ import annotations
@@ -149,10 +149,6 @@ _CRAB_TABLE: dict = {
     ],
 }
 
-
-# ---- Unverified legacy tables (fabricated, pending source material) --------
-# These use a single-stage d10 format and DO NOT match real L5R 4e.
-# They will be replaced as each clan's real data is provided.
 
 _CRANE_TABLE: dict = {
     "categories": [
@@ -840,21 +836,122 @@ _SCORPION_TABLE: dict = {
     ],
 }
 
-_LEGACY_UNICORN: list[dict] = [
-    {"roll": 1, "name": "Gaijin Blood", "effect": "Foreign ancestry. +1 rank in one Gaijin skill (free). Distinct features.", "grants": {"advantages": ["Heritage: Gaijin Blood (+1 Gaijin skill, Fortune chooses)"], "disadvantages": ["Heritage: Gaijin Blood (Social TN +5 conservative courts)"]}},
-    {"roll": 2, "name": "Horse Lord", "effect": "Family raises the finest horses. +1 rank in Horsemanship (free).", "grants": {"skills": {"Horsemanship": 1}}},
-    {"roll": 3, "name": "Desert Survivor", "effect": "Ancestor crossed the Burning Sands. +1 Stamina for endurance checks.", "grants": {"stamina": 1}},
-    {"roll": 4, "name": "Outsider's Perspective", "effect": "Family keeps foreign customs. +1 rank in Investigation (free).", "grants": {"skills": {"Investigation": 1}}},
-    {"roll": 5, "name": "Cavalry Tradition", "effect": "Family excels at mounted combat.", "grants": {"advantages": ["Heritage: Cavalry Tradition (+1k0 attack while Mounted)"]}},
-    {"roll": 6, "name": "Trade Routes", "effect": "Family controls trade routes. Starting koku +5, +1 rank in Commerce (free).", "grants": {"koku": 5, "skills": {"Commerce": 1}}},
-    {"roll": 7, "name": "War Dog Breeder", "effect": "Family breeds war dogs. Start with a trained war dog companion.", "grants": {"advantages": ["Heritage: War Dog Breeder"]}},
-    {"roll": 8, "name": "Meishodo Practitioner", "effect": "Ancestor practiced name magic. +1 rank in Lore: Theology (free).", "grants": {"skills": {"Lore: Theology": 1}}},
-    {"roll": 9, "name": "Nomadic Heritage", "effect": "Family keeps nomadic traditions. +1 rank in Hunting (free).", "grants": {"skills": {"Hunting": 1}}},
-    {"roll": 10, "name": "Battle Hardened", "effect": "Family has fought in many wars. +1 rank in Battle (free).", "grants": {"skills": {"Battle": 1}}},
-]
+_UNICORN_TABLE: dict = {
+    "categories": [
+        {"rolls": [1, 2], "name": "Shameful Past", "table": "shameful"},
+        {"rolls": [3, 4, 5, 6], "name": "Illustrious Past", "table": "illustrious"},
+        {"rolls": [7, 8, 9, 10], "name": "Mixed Blessings", "table": "mixed"},
+    ],
+    "shameful": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor was a Moto who fell to the Shadowlands, and he would very much like you to join him. You gain the Disadvantage Cursed by Jigoku.",
+            "grants": {"disadvantages": ["Cursed by Jigoku"]},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "As part of an investigation, your ancestor uncovered a dirty secret about another family... and spread the news widely. You gain the Rumormonger Disadvantage.",
+            "grants": {"disadvantages": ["Rumormonger"]},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor ran from his duties to the Unicorn and became a ronin. Although your family has survived, the shame still stains your reputation. You lose 0.5 Glory and 0.5 Status.",
+            "grants": {"glory": -0.5, "status": -0.5},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor was on the losing side during one of the famous battles of her day. You lose 1.0 Glory.",
+            "grants": {"glory": -1.0},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor was a Battle Maiden who betrayed her oath of chastity. Her passionate nature has passed down to you. You gain the Lechery Disadvantage.",
+            "grants": {"disadvantages": ["Lechery"]},
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestors were cursed by a gaijin wizard. Your family has been unable to lift the curse despite generations of effort. You gain the Weakness Disadvantage in a Trait chosen by the GM.",
+            "grants": {"disadvantages": ["Weakness"]},
+            "notes": ["Fortune determines which Trait the Weakness applies to."],
+        },
+    ],
+    "illustrious": [
+        {
+            "rolls": [1],
+            "effect": "You can trace your lineage back to the founding Kami, Lady Shinjo. You may take a Unicorn Ancestor for 2 less Experience Points.",
+            "grants": {},
+            "notes": ["May take a Unicorn Ancestor Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor was an Ujik-hai who joined the clan via a blood oath. You may take the Gaijin Gear Advantage for 2 less Experience Points.",
+            "grants": {},
+            "notes": ["May take the Gaijin Gear Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor fought bravely in a famous battle of his day, and you strive to live up to his glorious example. You gain 0.5 Glory and 1 free Rank in the Battle Skill.",
+            "grants": {"glory": 0.5, "skills": {"Battle": 1}},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor died while protecting a commander in the army of an allied clan. They have not forgotten his sacrifice. You may take a free 3-point Ally from that clan.",
+            "grants": {"advantages": ["Ally (3 points, another clan)"]},
+            "notes": ["Fortune determines which clan the Ally belongs to."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor died in a successful fighting retreat, saving her comrades. Her skills are reborn in you. You may take the Tactician Advantage for 1 less point.",
+            "grants": {},
+            "notes": ["May take the Tactician Advantage for 1 less XP."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor was a loyal samurai rewarded by his lord for years of dutiful service. His legacy has passed to you. You may purchase the Unicorn Sacred Weapon Advantage for 2 less Experience Points.",
+            "grants": {},
+            "notes": ["May take the Sacred Weapon (Unicorn) Advantage for 2 less XP."],
+        },
+    ],
+    "mixed": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor fell to the Lying Darkness, and your family has fought against it ever since. You gain the Shadow as a Sworn Enemy, but you have a small crystal item (a pendant, earring, or necklace).",
+            "grants": {"disadvantages": ["Sworn Enemy (Shadow)"]},
+            "notes": ["You possess a small crystal item (pendant, earring, or necklace). Fortune determines its properties."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor was originally from another clan, but joined the Unicorn through a politically arranged marriage. You may call in a favor from that clan, but once you do you will become Obligated to them.",
+            "grants": {},
+            "notes": ["May call in a favor from another clan (Fortune determines which), but doing so creates an Obligation to that clan."],
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor joined the Kolat, and your bloodline has served the conspiracy ever since. You gain the Advantage Forbidden Knowledge: Kolat but also gain the Disadvantage Dark Secret: Kolat.",
+            "grants": {"advantages": ["Forbidden Knowledge (Kolat)"], "disadvantages": ["Dark Secret (Kolat)"]},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor was a highly successful merchant in foreign lands. You inherited a strange artifact from him, but no one has any idea what it does.",
+            "grants": {},
+            "notes": ["Fortune determines the nature and properties of this strange foreign artifact."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your family has struggled financially, and you have been forced to study the ways of coin and craft in order to compensate. You start with 4 less koku in your Outfit, but you gain 1 free Rank in Commerce and 1 free Rank in a Craft Skill of your choice.",
+            "grants": {"koku": -4, "skills": {"Commerce": 1}},
+            "notes": ["Gain 1 free Rank in a Craft Skill of your choice."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor met a jinn while wandering the Burning Sands. They had a long and fruitful affair. You occasionally have strange urges and odd dreams...",
+            "grants": {},
+            "notes": ["Fortune determines the nature of the jinn's lingering influence on your bloodline."],
+        },
+    ],
+}
 
-# Combined table: dict values are two-stage (verified), list values are legacy
-HERITAGE_TABLES: dict[str, dict | list] = {
+HERITAGE_TABLES: dict[str, dict] = {
     "Crab": _CRAB_TABLE,
     "Crane": _CRANE_TABLE,
     "Dragon": _DRAGON_TABLE,
@@ -862,7 +959,7 @@ HERITAGE_TABLES: dict[str, dict | list] = {
     "Mantis": _MANTIS_TABLE,
     "Phoenix": _PHOENIX_TABLE,
     "Scorpion": _SCORPION_TABLE,
-    "Unicorn": _LEGACY_UNICORN,
+    "Unicorn": _UNICORN_TABLE,
 }
 
 DEFAULT_TABLE: list[dict] = [
