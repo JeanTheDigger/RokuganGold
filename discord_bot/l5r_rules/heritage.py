@@ -154,18 +154,119 @@ _CRAB_TABLE: dict = {
 # These use a single-stage d10 format and DO NOT match real L5R 4e.
 # They will be replaced as each clan's real data is provided.
 
-_LEGACY_CRANE: list[dict] = [
-    {"roll": 1, "name": "Artisan Legacy", "effect": "Ancestor was a legendary artisan. +1 rank in one Artisan skill (free).", "grants": {"advantages": ["Heritage: Artisan Legacy (+1 Artisan skill, Fortune chooses)"]}},
-    {"roll": 2, "name": "Political Marriage", "effect": "Family has strong political ties. +3 Status points.", "grants": {"status": 3.0}},
-    {"roll": 3, "name": "Dueling Prodigy", "effect": "Ancestor was a famous duelist. +1 rank in Iaijutsu (free).", "grants": {"skills": {"Iaijutsu": 1}}},
-    {"roll": 4, "name": "Bitter Rival", "effect": "Family has a longstanding feud with another Crane family.", "grants": {"disadvantages": ["Heritage: Bitter Rival"]}},
-    {"roll": 5, "name": "Courtier's Grace", "effect": "Ancestor was a renowned courtier. +1 rank in Courtier (free).", "grants": {"skills": {"Courtier": 1}}},
-    {"roll": 6, "name": "Scandal", "effect": "An ancestor caused a scandal. +1 Willpower.", "grants": {"willpower": 1}},
-    {"roll": 7, "name": "Imperial Favor", "effect": "Family once held Imperial favor. +5 Status points.", "grants": {"status": 5.0}},
-    {"roll": 8, "name": "Patron of the Arts", "effect": "Family is known for patronage. Starting koku +3.", "grants": {"koku": 3}},
-    {"roll": 9, "name": "Blessed Lineage", "effect": "Fortune-blessed bloodline. +1 Void Point maximum.", "grants": {"void": 1}},
-    {"roll": 10, "name": "Tactical Mind", "effect": "Ancestor served with distinction in battle. +1 rank in Battle (free).", "grants": {"skills": {"Battle": 1}}},
-]
+_CRANE_TABLE: dict = {
+    "categories": [
+        {"rolls": [1, 2, 3], "name": "Shameful Past", "table": "shameful"},
+        {"rolls": [4, 5, 6, 7, 8], "name": "Illustrious Past", "table": "illustrious"},
+        {"rolls": [9, 10], "name": "Mixed Blessings", "table": "mixed"},
+    ],
+    "shameful": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor was in charge when a clan treasure vanished. He committed seppuku and your family has worked to rebuild its reputation ever since. You gain the Driven Disadvantage.",
+            "grants": {"disadvantages": ["Driven"]},
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor was mildly obsessed with her looks, and people say you act just like her. You gain a 2-point Compulsion: Always Look Your Best.",
+            "grants": {"disadvantages": ["Compulsion (Always Look Your Best, 2 points)"]},
+        },
+        {
+            "rolls": [4, 5],
+            "effect": "Your ancestor was a clan magistrate but was rumored to sell justice to the highest bidder. His flaw has been passed down through the bloodline to you. You gain the Greedy Disadvantage.",
+            "grants": {"disadvantages": ["Greedy"]},
+        },
+        {
+            "rolls": [6, 7],
+            "effect": "Your ancestor was a soldier who deserted rather than face the enemies of the Crane. His deeds still stain your family's reputation. You start with 0.5 less Status and 0.5 less Glory than normal.",
+            "grants": {"status": -0.5, "glory": -0.5},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor lost an important duel and his failure still hangs over your line. You start with 1.0 less Honor and 0.5 less Status than normal.",
+            "grants": {"honor": -1.0, "status": -0.5},
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor claimed a rival's art as his own, winning praise from the Imperial Court. If the deceit is ever discovered, your family will be ruined. You gain the Dark Secret Disadvantage.",
+            "grants": {"disadvantages": ["Dark Secret"]},
+        },
+    ],
+    "illustrious": [
+        {
+            "rolls": [1],
+            "effect": "Your ancestor created a work of art that is still admired to this day. You gain 1 free Rank in the appropriate Artisan skill and 0.5 Glory.",
+            "grants": {"glory": 0.5},
+            "notes": ["Gain 1 free Rank in an Artisan skill (Fortune determines which)."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your family has ties of marriage or alliance with another clan. You may take the Different School Advantage for 2 less Experience Points.",
+            "grants": {},
+            "notes": ["May take the Different School Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [4, 5, 6],
+            "effect": "Your ancestor served the clan as a clerk in the Imperial bureaucracy. You may take the Precise Memory Advantage for 2 less points.",
+            "grants": {},
+            "notes": ["May take the Precise Memory Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [7],
+            "effect": "Your ancestor fought in one of the famous battles of his time, and his courageous deeds are still celebrated in the Crane Clan. You gain 0.5 Glory and a free Rank in either Battle or a Weapon Skill of your choice.",
+            "grants": {"glory": 0.5},
+            "notes": ["Gain 1 free Rank in either Battle or a Weapon Skill of your choice."],
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor nearly single-handedly averted a political catastrophe and turned it into a victory for the Crane. His brilliance is reflected in your own skills. You may take the Clear Thinker Advantage for 1 less Experience Point.",
+            "grants": {},
+            "notes": ["May take the Clear Thinker Advantage for 1 less XP."],
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor saved an Asahina Fetish Master from a serious social mishap. In thanks she gave your family a fetish which has since been passed down to you.",
+            "grants": {},
+            "notes": ["Fortune determines which Asahina fetish was passed down."],
+        },
+    ],
+    "mixed": [
+        {
+            "rolls": [1],
+            "effect": "At your gempukku you were given an item. It seemed commonplace, but you were told you were to be its keeper and only use it in a time of great need. You were also told no one was sure what it did.",
+            "grants": {},
+            "notes": ["Fortune determines the nature of this mysterious item and its power."],
+        },
+        {
+            "rolls": [2, 3],
+            "effect": "Your ancestor slew a major enemy of the Crane in a duel. His descendants remember this as well. You gain 0.5 Glory but also gain a Sworn Enemy in another clan.",
+            "grants": {"glory": 0.5, "disadvantages": ["Sworn Enemy (another clan)"]},
+            "notes": ["Fortune determines which clan holds the grudge."],
+        },
+        {
+            "rolls": [4, 5, 6],
+            "effect": "Your ancestor ignored his duty to the Crane and followed a personal quest to a different school in another clan. He made allies for your family but his obsessive nature has been passed down to you. You may take the Different School Advantage for two less points, but you have the Driven Disadvantage.",
+            "grants": {"disadvantages": ["Driven"]},
+            "notes": ["May take the Different School Advantage for 2 less XP."],
+        },
+        {
+            "rolls": [7],
+            "effect": "Your ancestor was a magistrate who revealed another family's dishonor. You have inherited his uncompromising and perceptive nature. You gain a free Rank in Investigation and the Contrary Disadvantage.",
+            "grants": {"skills": {"Investigation": 1}, "disadvantages": ["Contrary"]},
+        },
+        {
+            "rolls": [8, 9],
+            "effect": "Your ancestor was a highly successful merchant patron who cared little about scruples or propriety. You are a true heir to his traditions. You gain an additional 3 koku in your starting Outfit, but gain the Insensitive Disadvantage.",
+            "grants": {"koku": 3, "disadvantages": ["Insensitive"]},
+        },
+        {
+            "rolls": [10],
+            "effect": "Your ancestor was an artist of high renown and you're expected to follow in his footsteps, perhaps even to surpass him. You may take the Soul of Artistry Advantage for 2 less points, but you gain the Disadvantage Consumed by Perfection.",
+            "grants": {"disadvantages": ["Consumed by Perfection"]},
+            "notes": ["May take the Soul of Artistry Advantage for 2 less XP."],
+        },
+    ],
+}
 
 _LEGACY_DRAGON: list[dict] = [
     {"roll": 1, "name": "Tattooed Ancestor", "effect": "Ancestor bore powerful tattoos. +1 rank in Lore: Theology (free).", "grants": {"skills": {"Lore: Theology": 1}}},
@@ -248,7 +349,7 @@ _LEGACY_UNICORN: list[dict] = [
 # Combined table: dict values are two-stage (verified), list values are legacy
 HERITAGE_TABLES: dict[str, dict | list] = {
     "Crab": _CRAB_TABLE,
-    "Crane": _LEGACY_CRANE,
+    "Crane": _CRANE_TABLE,
     "Dragon": _LEGACY_DRAGON,
     "Lion": _LEGACY_LION,
     "Mantis": _LEGACY_MANTIS,
