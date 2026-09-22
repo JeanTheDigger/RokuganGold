@@ -13,6 +13,7 @@ Discord plumbing only. All game math lives in `l5r_rules/`; all persistence in
 from __future__ import annotations
 
 import copy
+import datetime
 import json
 import logging
 import math
@@ -1517,6 +1518,7 @@ async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dic
                 heritage_text += "\n[Fortune]: " + "; ".join(notes)
             state["heritage_result"] = heritage_text
             state["heritage_grants"] = result.get("grants", {})
+            store.record_heritage_roll(str(state["guild_id"]), str(state["user_id"]), heritage_text)
             await _go_to_school_choice(btn_inter, state)
 
         async def on_skip(btn_inter: discord.Interaction) -> None:
@@ -3402,6 +3404,20 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
 
     if state.get("heritage_result"):
         embed.add_field(name="Heritage", value=state["heritage_result"][:1024], inline=False)
+
+    since_24h = time.time() - 86400
+    prior_rolls = store.get_heritage_rolls_since(guild_id, str(state["user_id"]), since_24h)
+    if len(prior_rolls) > 1:
+        roll_lines = []
+        for ts, txt in prior_rolls:
+            dt_str = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).strftime("%H:%M UTC")
+            roll_lines.append(f"- {dt_str}: {txt[:120]}")
+        embed.add_field(
+            name="Warning: Multiple Heritage Rolls (24h)",
+            value=f"This player rolled heritage **{len(prior_rolls)} times** in the last 24 hours:\n"
+                  + "\n".join(roll_lines[:10]),
+            inline=False,
+        )
 
     view = _FullCharacterApprovalView(
         applicant_id=int(state["user_id"]),

@@ -193,6 +193,18 @@ ALTER TABLE weather ADD COLUMN precip TEXT NOT NULL DEFAULT '';
 ALTER TABLE weather ADD COLUMN wind TEXT NOT NULL DEFAULT '';
 ALTER TABLE weather ADD COLUMN temperature TEXT NOT NULL DEFAULT '';
 """,
+    # 15: heritage roll audit log (flag re-rolls to staff)
+    """\
+CREATE TABLE IF NOT EXISTS heritage_rolls (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id  TEXT NOT NULL,
+    user_id   TEXT NOT NULL,
+    rolled_at REAL NOT NULL,
+    result    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_heritage_rolls_user
+    ON heritage_rolls (guild_id, user_id, rolled_at);
+""",
 ]
 
 # How many before-states to keep per character/creature for /dm undo.
@@ -1073,6 +1085,22 @@ class Store:
                 (guild_id, user_id),
             )
 
+    # -- heritage roll audit ---------------------------------------------------
+    def record_heritage_roll(self, guild_id: str, user_id: str, result: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO heritage_rolls (guild_id, user_id, rolled_at, result) VALUES (?, ?, ?, ?)",
+                (guild_id, user_id, time.time(), result),
+            )
+
+    def get_heritage_rolls_since(self, guild_id: str, user_id: str, since: float) -> list[tuple[float, str]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT rolled_at, result FROM heritage_rolls "
+                "WHERE guild_id = ? AND user_id = ? AND rolled_at >= ? ORDER BY rolled_at",
+                (guild_id, user_id, since),
+            ).fetchall()
+        return [(r["rolled_at"], r["result"]) for r in rows]
 
     # -- encounter persistence -------------------------------------------------
     def save_encounter(self, channel_id: str, guild_id: str, data: str) -> None:
