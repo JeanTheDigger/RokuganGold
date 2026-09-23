@@ -11896,8 +11896,8 @@ async def _start_chargen_wizard(interaction: discord.Interaction) -> None:
 
 class _ChargenNameModal(discord.ui.Modal, title="Character Creation"):
     char_name = discord.ui.TextInput(
-        label="Given Name",
-        placeholder="e.g. Kachiko (family name is added automatically from your Family choice)",
+        label="Given Name Only (family name is added automatically)",
+        placeholder="e.g. Kachiko, Toshiro, Togashi",
         min_length=1, max_length=100,
     )
     concept = discord.ui.TextInput(
@@ -11975,6 +11975,7 @@ class _ChargenNameModal(discord.ui.Modal, title="Character Creation"):
         view.add_item(_ClanSelect(state, great=False))
         first_msg = await priv_channel.send(
             content=f"Welcome, {interaction.user.mention}! Let's build **{character_name}**.\n"
+                    f"Your family name will be added automatically when you pick your Family.\n"
                     f"**Step 1/10**: Choose your Clan.",
             embed=_chargen_embed(state), view=view,
         )
