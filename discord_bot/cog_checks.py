@@ -581,7 +581,6 @@ async def honor_roll(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    guild = str(interaction.guild_id)
     rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
         return
@@ -644,7 +643,6 @@ async def poison_resist(
 ) -> None:
     if not await _d.require_guild(interaction):
         return
-    guild = str(interaction.guild_id)
     rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
         return
@@ -726,7 +724,6 @@ async def medicine_check(
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
-    guild = str(interaction.guild_id)
     rec = await _resolve_roller(interaction, name, is_npc, member)
     if rec is None:
         return
@@ -1063,7 +1060,7 @@ async def stealth_check(
         _d.store.save(rec)
         _d.tally(interaction.channel_id, c.name, "void")
     skill_label = f"Stealth {sk}" if sk > 0 else "Stealth (unskilled)"
-    title = "Stealth Check" + ("" if secret else "")
+    title = "Stealth Check" + (" (secret)" if secret else "")
     if reason:
         title += f": {reason}"
     embed = _build_check_embed(
@@ -1144,7 +1141,7 @@ async def investigate_check(
     skill_label = f"Investigation {sk}" if sk > 0 else "Investigation (unskilled)"
     if emp_name:
         skill_label += f" [{emp_name}]"
-    title = "Investigation" + ("" if secret else "")
+    title = "Investigation" + (" (secret)" if secret else "")
     if emp_name:
         title += f" ({emp_name})"
     if reason:

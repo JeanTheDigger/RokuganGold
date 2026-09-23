@@ -160,9 +160,6 @@ async def on_day_advanced(
     )
     embeds.append(month_embed)
 
-    if not embeds:
-        return
-
     guild_id = str(guild.id)
     areas = _d.store.list_location_areas(guild_id)
     for area in areas:
