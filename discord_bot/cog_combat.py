@@ -499,17 +499,12 @@ class DamageView(views_base.PersistentView):
             extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
             bg_roll, _, bg_note = combat.blowgun_damage_bonus(attacker, self.weapon)
             extra_rolled += bg_roll
-            tp_roll, tp_kept, tp_note = combat.teppoudo_damage_bonus(attacker, self.weapon)
-            extra_rolled += tp_roll
             t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(
                 attacker, wp, self.weapon, self.attacker_stance, self.atk_init, self.def_init,
             )
             extra_rolled += t_roll
-            t_kept += tp_kept
             if bg_note:
                 t_dmg_notes = [bg_note] + t_dmg_notes
-            if tp_note:
-                t_dmg_notes = [tp_note] + t_dmg_notes
             m_roll, m_kept, m_flat, m_dmg_notes = skill_mastery.attacker_damage(attacker, wp, self.weapon)
             extra_rolled += m_roll
             t_kept += m_kept
@@ -773,18 +768,13 @@ class DamageView(views_base.PersistentView):
         extra_rolled, waves_note = kata_effects.attacker_damage_rolled_bonus(attacker, wp)
         bg_roll, _, bg_note = combat.blowgun_damage_bonus(attacker, self.weapon)
         extra_rolled += bg_roll
-        tp_roll, tp_kept, tp_note = combat.teppoudo_damage_bonus(attacker, self.weapon)
-        extra_rolled += tp_roll
         t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(
             attacker, wp, self.weapon, self.attacker_stance, self.atk_init, self.def_init,
             defender=target,
         )
         extra_rolled += t_roll
-        t_kept += tp_kept
         if bg_note:
             t_dmg_notes = [bg_note] + t_dmg_notes
-        if tp_note:
-            t_dmg_notes = [tp_note] + t_dmg_notes
         m_roll, m_kept, m_flat, m_dmg_notes = skill_mastery.attacker_damage(attacker, wp, self.weapon)
         extra_rolled += m_roll
         t_kept += m_kept

@@ -436,20 +436,6 @@ def has_weapon_quality(character: Character, weapon_used: str, quality: str) -> 
     return weapon_used.lower().strip() == character.equipped_weapon.lower().strip()
 
 
-def teppoudo_damage_bonus(attacker: Character, weapon_name: str) -> tuple[int, int, str]:
-    """Extra damage dice from Teppoudo mastery ranks (GDD s39).
-    Mastery 3: +1k0; Mastery 7: additionally +0k1 (cumulative = +1k1).
-    Returns (extra_rolled, extra_kept, note)."""
-    if weapon_name.lower().strip() not in FIREARM_WEAPONS:
-        return 0, 0, ""
-    teppoudo = attacker.skills.get("Teppoudo", 0)
-    if teppoudo >= 7:
-        return 1, 1, "Teppoudo R7: +1k1 damage (R3 +1k0, R7 +0k1)"
-    if teppoudo >= 3:
-        return 1, 0, "Teppoudo R3: +1k0 damage"
-    return 0, 0, ""
-
-
 def weapon_stance_penalty(weapon_name: str, is_mounted: bool) -> tuple[int, str]:
     """Flat penalty from weapon-specific stance restrictions (GDD s39).
     Bows: Dai-kyu +10 on foot, Yumi/Han-kyu +10 mounted.
@@ -619,8 +605,8 @@ def resolve_disarm(
     roll (Strength k Strength, non-exploding, + wound penalties + conditions).
     Attacker wins ties-broken by >."""
     dmg = dice_engine.roll_damage(2, 1)
-    a = dice_engine.roll_and_keep(max(attacker.strength + atk_rolled_mod, 1), max(attacker.strength, 1))
-    d = dice_engine.roll_and_keep(max(defender.strength + def_rolled_mod, 1), max(defender.strength, 1))
+    a = dice_engine.roll_and_keep(max(attacker.strength + atk_rolled_mod, 1), max(attacker.strength, 1), explodes=False)
+    d = dice_engine.roll_and_keep(max(defender.strength + def_rolled_mod, 1), max(defender.strength, 1), explodes=False)
     a_total = a.total + stats.wound_penalty(attacker) + atk_flat_mod
     d_total = d.total + stats.wound_penalty(defender) + def_flat_mod
     return {
@@ -640,8 +626,8 @@ def resolve_knockdown(
 ) -> dict:
     """Knockdown (s40): contested Strength roll (non-exploding, + wound penalties
     + conditions); a quadruped defender adds +4."""
-    a = dice_engine.roll_and_keep(max(attacker.strength + atk_rolled_mod, 1), max(attacker.strength, 1))
-    d = dice_engine.roll_and_keep(max(defender.strength + def_rolled_mod, 1), max(defender.strength, 1))
+    a = dice_engine.roll_and_keep(max(attacker.strength + atk_rolled_mod, 1), max(attacker.strength, 1), explodes=False)
+    d = dice_engine.roll_and_keep(max(defender.strength + def_rolled_mod, 1), max(defender.strength, 1), explodes=False)
     a_total = a.total + stats.wound_penalty(attacker) + atk_flat_mod
     d_total = d.total + stats.wound_penalty(defender) + def_flat_mod + (4 if is_quadruped else 0)
     return {

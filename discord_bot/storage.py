@@ -456,8 +456,10 @@ class Store:
             for stmt in stmts:
                 try:
                     self._conn.execute(stmt)
-                except sqlite3.OperationalError:
-                    pass
+                except sqlite3.OperationalError as exc:
+                    msg = str(exc).lower()
+                    if "duplicate column" not in msg and "already exists" not in msg:
+                        raise
             self._conn.execute("UPDATE schema_version SET version = ? WHERE id = 1", (version,))
 
     # -- internal helpers ------------------------------------------------------
