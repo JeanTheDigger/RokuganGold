@@ -1470,6 +1470,7 @@ class _ClanSelect(discord.ui.Select):
             await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
             return
         self.state["clan"] = self.values[0]
+        self.state["name"] = self.state.get("given_name", self.state["name"])
         clan_families = families.by_clan(self.state["clan"])
         if clan_families:
             view = _WizardView(self.state)
@@ -1497,6 +1498,8 @@ class _FamilySelect(discord.ui.Select):
             await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
             return
         self.state["family_name"] = self.values[0]
+        given = self.state.get("given_name", self.state["name"])
+        self.state["name"] = f"{self.state['family_name']} {given}"
         await _go_to_heritage_or_school(interaction, self.state)
 
 async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dict) -> None:
@@ -3652,6 +3655,7 @@ async def sheet_wizard(  # legacy in-channel wizard, no longer registered as a c
     state = {
         "guild_id": str(interaction.guild_id),
         "user_id": str(interaction.user.id),
+        "given_name": name,
         "name": name,
         "clan": "",
         "family_name": "",
@@ -11892,8 +11896,8 @@ async def _start_chargen_wizard(interaction: discord.Interaction) -> None:
 
 class _ChargenNameModal(discord.ui.Modal, title="Character Creation"):
     char_name = discord.ui.TextInput(
-        label="Character Name",
-        placeholder="e.g. Bayushi Kachiko",
+        label="Given Name",
+        placeholder="e.g. Kachiko (family name is added automatically from your Family choice)",
         min_length=1, max_length=100,
     )
     concept = discord.ui.TextInput(
@@ -11948,6 +11952,7 @@ class _ChargenNameModal(discord.ui.Modal, title="Character Creation"):
         state = {
             "guild_id": guild_id,
             "user_id": user_id,
+            "given_name": character_name,
             "name": character_name,
             "channel_id": priv_channel.id,
             "full_wizard": True,
