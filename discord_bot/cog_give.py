@@ -12,7 +12,7 @@ from discord import app_commands
 
 import storage as _storage_mod
 from l5r_rules import stats as _stats
-from l5r_rules.character import Character, format_purse
+from l5r_rules.character import Character, format_purse, normalise_purse
 
 
 # ---------------------------------------------------------------------------
@@ -84,20 +84,6 @@ async def _resolve_target(
     return await _d.resolve_active(interaction, member)
 
 
-# ---------------------------------------------------------------------------
-# Normalise purse: roll up excess zeni/bu into larger denominations
-# ---------------------------------------------------------------------------
-
-def _normalise_purse(c: Character) -> None:
-    total = c.koku * 50 + c.bu * 10 + c.zeni
-    if total < 0:
-        total = 0
-    c.koku = total // 50
-    remainder = total % 50
-    c.bu = remainder // 10
-    c.zeni = remainder % 10
-
-
 def _format_amount(koku: int, bu: int, zeni: int) -> str:
     parts: list[str] = []
     if koku:
@@ -135,7 +121,7 @@ async def _give(
 
     current = getattr(c, denomination)
     setattr(c, denomination, current + amount)
-    _normalise_purse(c)
+    normalise_purse(c)
 
     changed = _d.store.save(rec)
     await _d.audit_stat(interaction, rec, f"give {denomination}", changed)
@@ -315,7 +301,7 @@ async def pay_monthly_stipends(guild_id: str) -> list[str]:
         c.koku += koku
         c.bu += bu
         c.zeni += zeni
-        _normalise_purse(c)
+        normalise_purse(c)
         _d.store.save(rec, note="monthly stipend")
         lines.append(f"**{c.name}** ({clan}): +{_format_amount(koku, bu, zeni)} → {format_purse(c)}")
     await _d.combat_log(guild_id, f"STIPEND: Monthly stipends paid to {len(lines)} character(s)")

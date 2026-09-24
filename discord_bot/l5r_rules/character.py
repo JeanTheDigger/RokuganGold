@@ -189,6 +189,17 @@ def _migrate_koku(data: dict) -> None:
     data["zeni"] = remainder % 10
 
 
+def normalise_purse(c: Character) -> None:
+    """Roll up excess zeni/bu into larger denominations; clamp to zero."""
+    total = c.koku * 50 + c.bu * 10 + c.zeni
+    if total < 0:
+        total = 0
+    c.koku = total // 50
+    remainder = total % 50
+    c.bu = remainder // 10
+    c.zeni = remainder % 10
+
+
 def format_purse(c: Character) -> str:
     """Format the character's purse as a compact string."""
     parts: list[str] = []

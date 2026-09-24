@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from l5r_rules.character import Character
 
+from l5r_rules.character import normalise_purse
+
 
 def _roll_range_str(rolls: list[int]) -> str:
     """Format a list of ints as a die-range string: [2,3] -> '2-3'."""
@@ -1426,7 +1428,8 @@ def apply_heritage(char: Character, result: dict) -> list[str]:
         applied.append(f"Infamy {grants['infamy']:+.1f}")
     if "koku" in grants:
         char.koku += int(grants["koku"])
-        applied.append(f"{grants['koku']:+g} koku")
+        normalise_purse(char)
+        applied.append(f"{int(grants['koku']):+d} koku")
     if "advantages" in grants:
         for adv in grants["advantages"]:
             if adv not in char.advantages:
