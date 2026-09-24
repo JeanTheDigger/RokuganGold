@@ -1386,6 +1386,10 @@ sheet_data = app_commands.Group(name="data", description="Export / import charac
 xp_group = app_commands.Group(name="xp", description="Grant and spend Experience to advance characters.")
 
 _SCHOOL_CHOICES = [app_commands.Choice(name=s, value=s) for s in enums.SCHOOL_TYPES]
+_TRAIT_CHOICES = [
+    app_commands.Choice(name=("Void" if t == "void" else t.capitalize()), value=t)
+    for t in enums.TRAITS
+]
 
 @sheet.command(name="create", description="Create a new character - opens a private wizard channel.")
 async def sheet_create(interaction: discord.Interaction) -> None:
