@@ -2273,15 +2273,16 @@ class _BoardTechniqueSelect(discord.ui.View):
                     content=f"**{cb.name}** needs {cost} VP but has {c.current_void_points}.", view=None,
                 )
                 return
-            c.current_void_points -= cost
-            _d.store.save(rec)
-            _d.tally(self.channel_id, cb.name, "void")
         if not cb.declare_technique(key, entry):
             limit = entry.get("limit", "none")
             await interaction.response.edit_message(
                 content=f"**{tech_name}** already used this {limit}.", view=None,
             )
             return
+        if isinstance(cost, int) and cost > 0:
+            c.current_void_points -= cost
+            _d.store.save(rec)
+            _d.tally(self.channel_id, cb.name, "void")
         _d.save_encounter(self.guild_id, enc)
         cost_note = ""
         if isinstance(cost, int) and cost > 0:
