@@ -10917,7 +10917,7 @@ async def _start_chargen_wizard(interaction: discord.Interaction) -> None:
 
 class _ChargenNameModal(discord.ui.Modal, title="Character Creation"):
     char_name = discord.ui.TextInput(
-        label="Given Name Only (family name is added automatically)",
+        label="Given Name (family added automatically)",
         placeholder="e.g. Kachiko, Toshiro, Togashi",
         min_length=1, max_length=100,
     )
