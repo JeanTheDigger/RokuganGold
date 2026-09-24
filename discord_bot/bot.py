@@ -31,6 +31,7 @@ import encounter
 import cog_checks
 import cog_combat
 import cog_edit
+import cog_give
 import cog_hub
 import cog_inventory
 import cog_letters
@@ -5391,6 +5392,9 @@ _HELP_BLURBS: dict[str, str] = {
     "grapple": "Shortcut to start or manage a grapple. [Fortune]",
     "duel": "Shortcut to start an Iaijutsu duel. [Fortune]",
     "ref": "Weapons, armor, schools, families, kata, kiho, advantages, tattoos, heritage, travel, encumbrance, dual-wield, called shot, modifiers.",
+    "givekoku": "Give or take koku from a character. [Fortune]",
+    "givebu": "Give or take bu from a character. [Fortune]",
+    "givezeni": "Give or take zeni from a character. [Fortune]",
     "setup": "Server setup [Kami].",
     "sync": "Re-sync slash commands [Kami].",
     "ping": "Is the bot alive?",
@@ -5403,7 +5407,7 @@ _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Fights and magic", ["combat", "fight", "engage", "grapple", "duel", "spell"]),
     ("Places", ["room", "location"]),
     ("Rules reference", ["ref"]),
-    ("Staff [Fortune]", ["npc", "edit", "creature", "category", "weather", "dm"]),
+    ("Staff [Fortune]", ["npc", "edit", "givekoku", "givebu", "givezeni", "creature", "category", "weather", "dm"]),
     ("Admin [Kami]", ["setup", "sync", "ping"]),
 ]
 _HELP_ORDER: list[str] = [name for _, names in _HELP_SECTIONS for name in names]
@@ -12133,8 +12137,21 @@ cog_edit.init(
     modify_inventory=_modify_inventory,
 )
 
+cog_give.init(
+    store=store,
+    npc_owner=NPC_OWNER,
+    require_guild=_require_guild,
+    require_dm_role=_require_dm_role,
+    resolve_active=_resolve_active_for_edit,
+    audit_stat=_audit_stat,
+    npc_autocomplete=_npc_autocomplete,
+)
+
 client.tree.add_command(sheet)
 client.tree.add_command(cog_edit.edit_group)
+client.tree.add_command(cog_give.givekoku)
+client.tree.add_command(cog_give.givebu)
+client.tree.add_command(cog_give.givezeni)
 client.tree.add_command(xp_group)
 client.tree.add_command(dm)
 client.tree.add_command(npc_group)
