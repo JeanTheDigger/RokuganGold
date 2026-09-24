@@ -882,7 +882,7 @@ async def sync_commands(interaction: discord.Interaction) -> None:
             f"```\n{error[:1500]}\n```" + (f"\nOversized: {too_big}" if too_big else "")
         )
         return
-    await interaction.followup.send(f"Synced **{count}** commands to this server (global duplicates cleared).")
+    await interaction.followup.send(f"Synced **{count}** commands to this server (global duplicates cleared).", ephemeral=True)
 
 def _whoami_lines(interaction: discord.Interaction, rec: storage.CharacterRecord) -> list[str]:
     """The quick status card lines for a character (used by /whoami and the character hub)."""
@@ -951,7 +951,7 @@ async def date_cmd(interaction: discord.Interaction) -> None:
     year, month, day = cal
     date_str = _format_rokugani_date(year, month, day)
     embed = discord.Embed(title="Rokugani Calendar", description=date_str, color=0xC4A747)
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 def _format_dice(result: DiceResult) -> str:
     _GREEN = "\u001b[1;32m"
@@ -1087,7 +1087,7 @@ async def roll(
 
     log_total = outcome["total"] if tn is not None else total
     _log_roll(interaction.channel_id, interaction.user.display_name, title, log_total)
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 _DICE_RE = re.compile(
     r"^(\d{1,3})\s*k\s*(\d{1,3})"
@@ -1153,7 +1153,7 @@ async def dice_quick(
         embed.add_field(name="Total", value=total_str, inline=False)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     _log_roll(interaction.channel_id, interaction.user.display_name, title, outcome["total"] if tn else total)
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 async def _weapon_autocomplete(
     interaction: discord.Interaction, current: str
@@ -4704,7 +4704,7 @@ async def dm_setdate(
         description=date_str,
         color=0xC4A747,
     )
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
     await _update_date_display(guild, date_str, reason="The calendar has been set.")
 
 def _parse_advdis_name(raw: str, kind: str) -> tuple[dict | None, str]:
@@ -4809,7 +4809,8 @@ async def dm_damage(
         embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
         await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the damage below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
         await interaction.response.send_message(
-            f"Pending damage on **{c.name}** - approval routed to the DM channel.{owner_ping}"
+            f"Pending damage on **{c.name}** - approval routed to the DM channel.{owner_ping}",
+            ephemeral=True,
         )
     else:
         await interaction.response.send_message(
@@ -4875,7 +4876,8 @@ async def dm_heal(
         embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
         await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the healing below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
         await interaction.response.send_message(
-            f"Pending healing on **{c.name}** - approval routed to the DM channel.{owner_ping}"
+            f"Pending healing on **{c.name}** - approval routed to the DM channel.{owner_ping}",
+            ephemeral=True,
         )
     else:
         await interaction.response.send_message(
@@ -4930,7 +4932,7 @@ async def dm_revive(
         color=discord.Color.teal(),
     )
     embed.set_footer(text=f"Staff override by {interaction.user.display_name} - logged")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 def _undo_diff(entity_type: str, old: dict, new: dict) -> list[str]:
     """Human-readable differences between two saved states, key fields first."""
@@ -5039,7 +5041,7 @@ async def dm_undo(
     )
     remaining = len(store.list_undo(guild, sn.entity_name, limit=storage.UNDO_KEEP_PER_ENTITY))
     embed.set_footer(text=f"Staff action by {interaction.user.display_name} - logged. {remaining} earlier change(s) still undoable for {sn.entity_name}.")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 _PENDING_KIND_LABELS: dict[str, str] = {
     "attack_damage": "Attack damage", "spell_damage": "Spell damage", "dm_damage": "DM damage",
@@ -5173,7 +5175,7 @@ async def void_spend(
         description=f"{reason}\nVP remaining: **{c.current_void_points}/{vp_cap}**",
     )
     embed.set_footer(text=f"Spent by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @sheet_void.command(name="refresh", description="Refresh Void Points (rest = full, or Meditation/Void check for 1).")
 @app_commands.describe(
@@ -5233,7 +5235,7 @@ async def void_refresh(
             description=f"Rest: Full refresh.\nVP: {old} → **{c.current_void_points}/{vp_cap}**{cap_note}",
         )
         embed.set_footer(text=f"Refreshed by {interaction.user.display_name}")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
     else:
         if await _refuse_if_dead(interaction, c):
             return
@@ -5285,7 +5287,7 @@ async def void_refresh(
                 inline=False,
             )
         embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @sheet_void.command(name="status", description="Show current Void Points for a character.")
 @app_commands.describe(
@@ -5637,7 +5639,7 @@ async def npc_generate(
     note = f"Generated **{name}**: A Rank {insight_rank} {char.school_type} NPC (stats have random variance)."
     if not school_skills:
         note += " No skills set: Regenerate with `skills:` to give it school skills."
-    await interaction.response.send_message(content=note, embed=build_sheet_embed(rec))
+    await interaction.response.send_message(content=note, embed=build_sheet_embed(rec), ephemeral=True)
 
 @npc_group.command(name="view", description="View a stored NPC's full stat block. [Fortune]")
 @app_commands.describe(name="The NPC to view.")
@@ -5651,7 +5653,7 @@ async def npc_view(interaction: discord.Interaction, name: str) -> None:
     if rec is None:
         await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
         return
-    await interaction.response.send_message(embed=build_sheet_embed(rec))
+    await interaction.response.send_message(embed=build_sheet_embed(rec), ephemeral=True)
 
 @npc_group.command(name="list", description="List the NPCs on this server.")
 async def npc_list(interaction: discord.Interaction) -> None:
@@ -5676,10 +5678,10 @@ async def npc_list(interaction: discord.Interaction) -> None:
             lines.append(f"• {dead}**{r.character.name}**")
     embeds = _paginate_embeds(lines, f"NPCs ({len(recs)})", discord.Color.dark_gold())
     if len(embeds) == 1:
-        await interaction.response.send_message(embed=embeds[0])
+        await interaction.response.send_message(embed=embeds[0], ephemeral=True)
     else:
         view = _EmbedPaginatorView(embeds, interaction.user.id)
-        await interaction.response.send_message(embed=embeds[0], view=view)
+        await interaction.response.send_message(embed=embeds[0], view=view, ephemeral=True)
 
 @npc_group.command(name="delete", description="Delete a stored NPC. [Fortune]")
 @app_commands.describe(name="The NPC to delete.")
@@ -5756,7 +5758,8 @@ async def npc_place(interaction: discord.Interaction, name: str) -> None:
     npc_list = ", ".join(f"**{n}**" for n in sorted(npcs))
     await interaction.response.send_message(
         f"**{rec.character.name}** enters **{room.name}**.\n"
-        f"NPCs present: {npc_list}"
+        f"NPCs present: {npc_list}",
+        ephemeral=True,
     )
 
 @npc_group.command(name="dismiss", description="Remove an NPC from this room. [Fortune]")
@@ -5784,7 +5787,8 @@ async def npc_dismiss(interaction: discord.Interaction, name: str) -> None:
     remaining = store.list_room_npcs(room.id)
     npc_list = ", ".join(f"**{n}**" for n in sorted(remaining)) if remaining else "none"
     await interaction.response.send_message(
-        f"**{matched}** leaves **{room.name}**.\nNPCs present: {npc_list}"
+        f"**{matched}** leaves **{room.name}**.\nNPCs present: {npc_list}",
+        ephemeral=True,
     )
 
 @npc_group.command(name="say", description="Speak as an NPC (posts as their name via webhook). [Fortune]")
@@ -5847,6 +5851,7 @@ async def npc_clone(
     await interaction.response.send_message(
         f"Cloned **{rec.character.name}** → **{clone.name}**.",
         embed=build_sheet_embed(new_rec),
+        ephemeral=True,
     )
 
 # ===========================================================================
@@ -5898,7 +5903,8 @@ async def room_create(
     )
     await interaction.followup.send(
         f"Room **{name}** created: {thread.mention} (host {interaction.user.mention}). "
-        f"Invite people with `/room invite` inside the room."
+        f"Invite people with `/room invite` inside the room.",
+        ephemeral=True,
     )
     await thread.send(
         f"Welcome to **{name}**. {interaction.user.mention} is the host. "
@@ -5964,7 +5970,7 @@ async def room_invite(interaction: discord.Interaction, member: discord.Member) 
         color=discord.Color.green(),
     )
     embed.set_footer(text=f"Added by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @room_group.command(name="kick", description="Remove a member from this room (run inside the room's thread).")
 @app_commands.describe(member="Who to remove.")
@@ -5991,7 +5997,7 @@ async def room_kick(interaction: discord.Interaction, member: discord.Member) ->
         color=discord.Color.greyple(),
     )
     embed.set_footer(text=f"Removed by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @room_group.command(name="members", description="List who's in this room (run inside the room's thread).")
 async def room_members(interaction: discord.Interaction) -> None:
@@ -6051,7 +6057,7 @@ async def room_close(interaction: discord.Interaction) -> None:
         color=discord.Color.greyple(),
     )
     embed.set_footer(text=f"Closed by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
     try:
         await interaction.channel.edit(archived=True, locked=True)
     except discord.Forbidden:
@@ -6728,7 +6734,8 @@ async def creature_spawn(interaction: discord.Interaction, template: str, name: 
     if rand_changes:
         msg += "\n**Randomized:** " + ", ".join(rand_changes)
     await interaction.response.send_message(
-        content=msg, embed=build_creature_embed(rec)
+        content=msg, embed=build_creature_embed(rec),
+        ephemeral=True,
     )
 
 @creature_group.command(name="create", description="Create and spawn a custom creature from scratch. [Fortune]")
@@ -6823,7 +6830,8 @@ async def creature_create(
         )
         return
     await interaction.response.send_message(
-        content=f"Created custom creature **{name}**.", embed=build_creature_embed(rec)
+        content=f"Created custom creature **{name}**.", embed=build_creature_embed(rec),
+        ephemeral=True,
     )
 
 @creature_group.command(name="list", description="List spawned creatures on this server.")
@@ -6849,10 +6857,10 @@ async def creature_list(interaction: discord.Interaction) -> None:
             lines.append(f"• **{r.creature.name}**: {lvl}")
     embeds = _paginate_embeds(lines, f"Creatures ({len(recs)})", discord.Color.dark_gold())
     if len(embeds) == 1:
-        await interaction.response.send_message(embed=embeds[0])
+        await interaction.response.send_message(embed=embeds[0], ephemeral=True)
     else:
         view = _EmbedPaginatorView(embeds, interaction.user.id)
-        await interaction.response.send_message(embed=embeds[0], view=view)
+        await interaction.response.send_message(embed=embeds[0], view=view, ephemeral=True)
 
 @creature_group.command(name="view", description="View a spawned creature's full stat block. [Fortune]")
 @app_commands.describe(name="The creature to view.")
@@ -6862,7 +6870,7 @@ async def creature_view(interaction: discord.Interaction, name: str) -> None:
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
-    await interaction.response.send_message(embed=build_creature_embed(rec))
+    await interaction.response.send_message(embed=build_creature_embed(rec), ephemeral=True)
 
 @creature_group.command(name="delete", description="Remove a spawned creature. [Fortune]")
 @app_commands.describe(name="The creature to remove.")
@@ -6895,6 +6903,7 @@ async def creature_wound(
     await interaction.response.send_message(
         f"**{rec.creature.name}** takes **{amount}** → {rec.creature.wounds_taken}/{rec.creature.wounds_dead}{crossed}{dead}",
         embed=build_creature_embed(rec),
+        ephemeral=True,
     )
 
 @creature_group.command(name="heal", description="Heal a creature's wounds. [Fortune]")
@@ -6912,6 +6921,7 @@ async def creature_heal(
     await interaction.response.send_message(
         f"**{rec.creature.name}** healed **{amount}** → {rec.creature.wounds_taken}/{rec.creature.wounds_dead}",
         embed=build_creature_embed(rec),
+        ephemeral=True,
     )
 
 @creature_group.command(name="attack", description="A creature attacks a player/NPC (fixed stat block). [Fortune]")
@@ -7071,7 +7081,7 @@ async def category_create(interaction: discord.Interaction, name: app_commands.R
         color=discord.Color.dark_gold(),
     )
     embed.set_footer(text=f"Created by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @category_group.command(name="delete", description="Delete a category (members are NOT deleted). [Fortune]")
 @app_commands.describe(name="Category to delete.")
@@ -7112,7 +7122,7 @@ async def category_rename(
         color=discord.Color.dark_gold(),
     )
     embed.set_footer(text=f"Renamed by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @category_group.command(name="add", description="Add an NPC or creature to a category. [Fortune]")
 @app_commands.describe(
@@ -7154,7 +7164,7 @@ async def category_add(
         color=discord.Color.dark_gold(),
     )
     embed.set_footer(text=f"Added by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @category_group.command(name="remove", description="Remove an NPC or creature from a category. [Fortune]")
 @app_commands.describe(
@@ -7382,6 +7392,7 @@ async def category_spawn(interaction: discord.Interaction, category: str, random
     suffix = " (randomized)" if randomize and spawned else ""
     await interaction.response.send_message(
         f"Category **{cat.name}** - spawn{suffix}\n" + "\n".join(parts),
+        ephemeral=True,
     )
 
 # ===========================================================================
@@ -7523,7 +7534,7 @@ async def location_area_create(
         parts.append(f"Access granted to: {', '.join(m.mention for m in extra_members)}.")
     if description:
         parts.append("Description channel created.")
-    await interaction.followup.send(" ".join(parts))
+    await interaction.followup.send(" ".join(parts), ephemeral=True)
 
 
 @location_area_group.command(name="delete", description="Delete a location area and all its locations. [Fortune]")
@@ -7559,7 +7570,7 @@ async def location_area_delete(
         except discord.Forbidden:
             pass
     store.delete_location_area(area.id)
-    await interaction.followup.send(f"Deleted area **{area.name}** and {len(locs)} location(s).")
+    await interaction.followup.send(f"Deleted area **{area.name}** and {len(locs)} location(s).", ephemeral=True)
 
 
 @location_area_group.command(name="list", description="List all location areas on this server.")
@@ -7744,7 +7755,7 @@ async def location_create(
         parts.append("(Private)")
     if extra_members:
         parts.append(f"Access: {', '.join(m.mention for m in extra_members)}.")
-    await interaction.followup.send(" ".join(parts))
+    await interaction.followup.send(" ".join(parts), ephemeral=True)
     if description:
         embed = discord.Embed(title=clean_name, description=description, color=0xC4A747)
         pin_msg = await channel.send(embed=embed)
@@ -7847,7 +7858,7 @@ async def location_close(interaction: discord.Interaction) -> None:
         color=discord.Color.greyple(),
     )
     embed.set_footer(text=f"Closed by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
     try:
         await interaction.channel.delete(reason=f"Location closed by {interaction.user}")
     except discord.Forbidden:
@@ -7913,7 +7924,7 @@ async def xp_grant(interaction: discord.Interaction, member: discord.Member, amo
         ),
     )
     embed.set_footer(text=f"Granted by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
     logged = await _xp_log(
         str(interaction.guild_id),
         f"XP GRANT: {interaction.user.display_name} → {rec.character.name} ({member.display_name}) "
@@ -9355,7 +9366,7 @@ async def spell_view(interaction: discord.Interaction, name: str) -> None:
             f"No spell named **{name}**. Try `/spell search`.", ephemeral=True
         )
         return
-    await interaction.response.send_message(embed=build_spell_embed(s))
+    await interaction.response.send_message(embed=build_spell_embed(s), ephemeral=True)
 
 @spell_group.command(name="cast", description="Roll a Spell Casting Roll: (Ring + School Rank) keep Ring vs TN.")
 @app_commands.describe(
@@ -9542,9 +9553,9 @@ async def spell_cast(
         embed.set_footer(text=f"Cast by {interaction.user.display_name}")
     # discord.py's interaction response rejects view=None (only a real view or omitted).
     if prompt_view is not None:
-        await interaction.response.send_message(embed=embed, view=prompt_view)
+        await interaction.response.send_message(embed=embed, view=prompt_view, ephemeral=True)
     else:
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @spell_group.command(name="resist", description="Target resists a spell: Willpower roll vs TN. [Fortune]")
 @app_commands.describe(
@@ -9616,7 +9627,7 @@ async def spell_resist(
         value="L5R 4e: Target rolls raw Willpower (a Trait Roll: No skill, dice explode) vs the spell's TN.",
         inline=False,
     )
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @spell_group.command(name="interrupt", description="Willpower check when a caster is hit mid-cast. Disrupted = slot refunded. [Fortune]")
 @app_commands.describe(
@@ -9683,7 +9694,7 @@ async def spell_interrupt(
               "Failure = spell disrupted but slot not consumed.",
         inline=False,
     )
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @spell_group.command(name="importune", description="Entreat the kami for a spell you don't have: Spellcraft/Ring, then cast at higher TN.")
 @app_commands.describe(
@@ -9793,7 +9804,7 @@ async def spell_importune(
     )
     if not imp_success:
         embed.set_footer(text="The kami will not grant this prayer.")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
     # Step 2: Casting roll at importune TN (15 + 5×ML, not the normal 5 + 5×ML).
     # Spell slot check with Void bonus fallback.
@@ -9810,7 +9821,7 @@ async def spell_importune(
                 value=f"No {element.title()} slots (0/{slot_max}) or bonus slots (0/{bonus_max}): Cannot attempt the cast.",
                 inline=False,
             )
-            await interaction.response.send_message(embed=embed)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
     extra_rolled = 0
     extra_kept = 0
@@ -9818,11 +9829,11 @@ async def spell_importune(
         ok, reason_block = advantage_effects.can_spend_void_on_roll(caster)
         if not ok:
             embed.add_field(name="Step 2: Casting", value=f"{reason_block}", inline=False)
-            await interaction.response.send_message(embed=embed)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         if caster.current_void_points <= 0:
             embed.add_field(name="Step 2: Casting", value="No Void Points remaining: Cannot spend VP.", inline=False)
-            await interaction.response.send_message(embed=embed)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         caster.current_void_points -= 1
         _tally(interaction.channel_id, caster.name, "void")
@@ -9865,7 +9876,7 @@ async def spell_importune(
         if s.get("effect"):
             embed.add_field(name="Effect", value=s["effect"][:1024], inline=False)
     embed.color = discord.Color.gold() if cast_success else discord.Color.greyple()
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ---------------------------------------------------------------------------
 # Phase 42: Taint Progression (#14)
@@ -9922,7 +9933,7 @@ async def taint_command(
                 embed.add_field(name="Madness", value=crossing["madness"], inline=False)
             if crossing["is_lost"]:
                 embed.add_field(name="LOST TO THE TAINT", value="Character becomes an NPC.", inline=False)
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
     else:
         rank = taint.taint_rank(c)
         embed = discord.Embed(title=f"Taint: {c.name}", color=discord.Color.dark_purple())
@@ -10047,7 +10058,7 @@ async def craft_extended(
     if adv_notes:
         embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
     embed.set_footer(text="DM: Track cumulative total across rolls. Each roll = one crafting period.")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ---------------------------------------------------------------------------
 # Phase 42: Spell Damage (#8 partial)
@@ -10111,7 +10122,8 @@ async def spell_damage(
                 embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
                 await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the spell damage below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
                 await interaction.response.send_message(
-                    f"Spell damage on **{rec.character.name}** - approval routed to the DM channel.{owner_ping}"
+                    f"Spell damage on **{rec.character.name}** - approval routed to the DM channel.{owner_ping}",
+                    ephemeral=True,
                 )
             else:
                 await interaction.response.send_message(
@@ -10121,10 +10133,10 @@ async def spell_damage(
                 await view.persist(await interaction.original_response())
         else:
             embed.set_footer(text=f"Target '{target}' not found: Use exact character name.")
-            await interaction.response.send_message(embed=embed)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
     else:
         embed.set_footer(text="Add target: To route damage through the DM-approval gate.")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ---------------------------------------------------------------------------
 # Phase 42: Courtier/Social Influence (#5)
@@ -10151,7 +10163,7 @@ async def influence_track(
     sign = "+" if change >= 0 else ""
     embed.add_field(name=name, value=f"{sign}{change} Influence" + (f": {reason}" if reason else ""), inline=False)
     embed.set_footer(text="DM: Track cumulative influence totals for the court scene. Use /social for Courtier/Etiquette checks.")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ---------------------------------------------------------------------------
 # Phase 47: Medicine Treatment (wound healing with DM gate)
@@ -10289,7 +10301,8 @@ async def dm_log_channel(
     await interaction.response.send_message(
         f"Combat log channel set to {channel.mention}. "
         f"Attack outcomes, damage, healing, turn advances, and other combat events "
-        f"will be logged there automatically."
+        f"will be logged there automatically.",
+        ephemeral=True,
     )
 
 @dm.command(name="clear_log", description="Stop logging combat events. [Kami]")
@@ -10327,7 +10340,8 @@ async def dm_date_channel(
     store.set_date_channel(guild, str(channel.id), str(msg.id))
     await interaction.followup.send(
         f"Date channel set to {channel.mention}. The current date is pinned there and "
-        f"will update automatically when time advances."
+        f"will update automatically when time advances.",
+        ephemeral=True,
     )
 
 @dm.command(name="clear_date_channel", description="Stop updating the date display channel. [Kami]")
@@ -10354,7 +10368,8 @@ async def dm_approval_channel(
     store.set_approval_channel(str(interaction.guild_id), str(channel.id))
     await interaction.response.send_message(
         f"Character approval channel set to {channel.mention}. "
-        f"Character submissions will be routed there for DM review."
+        f"Character submissions will be routed there for DM review.",
+        ephemeral=True,
     )
 
 @dm.command(name="clear_approval", description="Stop routing character approvals to a DM channel. [Kami]")
@@ -10382,7 +10397,8 @@ async def dm_damage_channel(
     await interaction.response.send_message(
         f"Damage approval channel set to {channel.mention}. "
         f"Damage, healing, and spell approvals will be routed there for DM review. "
-        f"Results will be posted back in the combat room."
+        f"Results will be posted back in the combat room.",
+        ephemeral=True,
     )
 
 @dm.command(name="clear_damage_channel", description="Stop routing damage approvals to a separate channel. [Kami]")
@@ -10495,7 +10511,8 @@ async def dm_treat(
                 embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
             ))
             await interaction.response.send_message(
-                f"Treatment on **{pc.name}** succeeded - healing approval routed to the DM channel.{owner_ping}"
+                f"Treatment on **{pc.name}** succeeded - healing approval routed to the DM channel.{owner_ping}",
+                ephemeral=True,
             )
         else:
             await interaction.response.send_message(
@@ -10506,10 +10523,10 @@ async def dm_treat(
     elif success:
         if pc.wounds_taken <= 0:
             embed.add_field(name="Note", value=f"**{pc.name}** has no wounds to heal.", inline=False)
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
     else:
         embed.set_footer(text="L5R 4e: A failed Medicine check cannot be re-attempted on the same patient until the next day.")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ---------------------------------------------------------------------------
 # Phase 47: Character Import/Export
@@ -10699,7 +10716,7 @@ async def macro_roll(interaction: discord.Interaction, name: str) -> None:
     )
     embed.set_footer(text=f"Total: {total}")
     _log_roll(interaction.channel_id, interaction.user.display_name, title, total)
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @macro_group.command(name="delete", description="Delete a saved macro.")
 @app_commands.describe(name="Which macro to delete.")
@@ -12002,7 +12019,7 @@ async def players_cmd(interaction: discord.Interaction) -> None:
         )
     if len(pcs) > 25:
         embed.set_footer(text=f"Showing first 25 of {len(pcs)} characters.")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 cog_checks.init(
     store=store,

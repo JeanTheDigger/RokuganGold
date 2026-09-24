@@ -1037,7 +1037,7 @@ async def template_spawn(interaction: discord.Interaction, template: str,
     text = f"Spawned from **{tname}**: " + ", ".join(f"**{r.character.name}**" for r in made) + "."
     if skipped:
         text += f" Skipped (name taken): {', '.join(skipped)}."
-    await interaction.response.send_message(text, embed=_d.build_sheet_embed(made[0]))
+    await interaction.response.send_message(text, embed=_d.build_sheet_embed(made[0]), ephemeral=True)
 
 
 @template_group.command(name="list", description="List the NPC templates on this server.")

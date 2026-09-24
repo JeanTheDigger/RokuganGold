@@ -451,7 +451,7 @@ async def contest(
         embed.add_field(name=f"{cb.name} Adv/Disadv", value="\n".join(adv_notes_b)[:1024], inline=False)
     embed.add_field(name="Result", value=verdict, inline=False)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -501,6 +501,7 @@ async def fear_check(
         await interaction.response.send_message(
             f"Fear penalty cleared for **{c.name}**." if cleared
             else f"**{c.name}** is not in this channel's encounter; nothing to clear.",
+            ephemeral=True,
         )
         return
     wp = stats.wound_penalty(c)
@@ -553,7 +554,7 @@ async def fear_check(
         inline=False,
     )
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -611,7 +612,7 @@ async def honor_roll(
         inline=False,
     )
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -685,7 +686,7 @@ async def poison_resist(
     if adv_notes:
         embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -775,7 +776,7 @@ async def medicine_check(
     if adv_notes:
         embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -814,7 +815,7 @@ async def skill_check_cmd(
     void_unskilled: bool = False,
     emphasis: str | None = None,
     reason: str | None = None,
-    secret: bool = False,
+    secret: bool = True,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -994,7 +995,7 @@ async def check_cooperative(
         _d.store.save(rec)
         _d.tally(interaction.channel_id, c.name, "void")
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1028,7 +1029,7 @@ async def stealth_check(
     void_unskilled: bool = False,
     emphasis: str | None = None,
     reason: str | None = None,
-    secret: bool = False,
+    secret: bool = True,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -1106,7 +1107,7 @@ async def investigate_check(
     spend_void: bool = False,
     void_unskilled: bool = False,
     reason: str | None = None,
-    secret: bool = False,
+    secret: bool = True,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -1230,7 +1231,7 @@ async def social_check(
     if reason:
         title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, trait_display, result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1300,7 +1301,7 @@ async def craft_check(
     if reason:
         title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1370,7 +1371,7 @@ async def lore_check(
     if reason:
         title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1436,4 +1437,4 @@ async def horsemanship_check(
         adv_notes=adv_notes, void_line=void_line,
         footer=f"Rolled by {interaction.user.display_name}",
     )
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)

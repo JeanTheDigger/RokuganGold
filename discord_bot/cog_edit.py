@@ -254,6 +254,7 @@ async def edit_trait(
     await interaction.response.send_message(
         f"Set **{label}** to **{value}** on **{rec.character.name}**.{rank_msg}",
         embed=_d.build_sheet_embed(rec),
+        ephemeral=True,
     )
 
 
@@ -320,7 +321,7 @@ async def edit_skill(
     msg += _d.check_insight(c)
     changed = _d.store.save(rec, note="edit skill")
     await _d.audit_stat(interaction, rec, "edit skill", changed)
-    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec))
+    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec), ephemeral=True)
 
 
 # -- /edit field -------------------------------------------------------------
@@ -355,6 +356,7 @@ async def edit_field(
     await interaction.response.send_message(
         f"Updated **{field.value}** on **{rec.character.name}**.",
         embed=_d.build_sheet_embed(rec),
+        ephemeral=True,
     )
 
 
@@ -426,6 +428,7 @@ async def edit_identity(
     await interaction.response.send_message(
         f"Updated **{c.name}**: " + "; ".join(changes) + ".",
         embed=_d.build_sheet_embed(rec),
+        ephemeral=True,
     )
 
 
@@ -498,6 +501,7 @@ async def edit_equip(
     await interaction.response.send_message(
         f"**{c.name}** equipment updated:\n" + "\n".join(changes),
         embed=_d.build_sheet_embed(rec),
+        ephemeral=True,
     )
 
 
@@ -635,7 +639,7 @@ async def edit_feature(
 
     changed = _d.store.save(rec, note=f"edit feature ({category.name})")
     await _d.audit_stat(interaction, rec, f"edit feature ({category.name})", changed)
-    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec))
+    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec), ephemeral=True)
 
 
 # -- /edit elements ----------------------------------------------------------
@@ -679,7 +683,7 @@ async def edit_elements(
     changed = _d.store.save(rec, note="edit elements")
     await _d.audit_stat(interaction, rec, "edit elements", changed)
     await interaction.response.send_message(
-        f"**{c.name}**: " + ", ".join(changes) + ".",
+        f"**{c.name}**: " + ", ".join(changes) + ".", ephemeral=True,
         embed=_d.build_sheet_embed(rec),
     )
 
@@ -718,7 +722,7 @@ async def edit_wound(
         death_notes = await _d.on_death(str(interaction.guild_id), c.name, rec.owner_id, rec.id)
         dead = "  **DEAD**" + "".join(f"\n- {n}" for n in death_notes)
     await interaction.response.send_message(
-        f"**{c.name}** takes **{amount}** wounds → {c.wounds_taken} total{crossed}{dead}",
+        f"**{c.name}** takes **{amount}** wounds → {c.wounds_taken} total{crossed}{dead}", ephemeral=True,
         embed=_d.build_sheet_embed(rec),
     )
 
@@ -756,7 +760,7 @@ async def edit_heal(
     new = stats.wound_level_name(c)
     crossed = f"  ({old} → **{new}**)" if new != old else ""
     await interaction.response.send_message(
-        f"**{c.name}** heals **{amount}** wounds → {c.wounds_taken} total{crossed}",
+        f"**{c.name}** heals **{amount}** wounds → {c.wounds_taken} total{crossed}", ephemeral=True,
         embed=_d.build_sheet_embed(rec),
     )
 
@@ -926,7 +930,7 @@ async def edit_activate(
             msg = f"**{c.name}** activates the **{label}** tattoo.{effect}{extra}"
 
     _d.store.save(rec)
-    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec))
+    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec), ephemeral=True)
 
 
 # -- /edit rename ------------------------------------------------------------
@@ -962,6 +966,7 @@ async def edit_rename(
     _d.store.save(rec)
     await interaction.response.send_message(
         f"Renamed **{old_name}** → **{new_name}**.", embed=_d.build_sheet_embed(rec),
+        ephemeral=True,
     )
 
 
@@ -992,7 +997,7 @@ async def edit_notes(
         msg = f"Notes set on **{rec.character.name}**: *{rec.character.notes}*"
     else:
         msg = f"Notes cleared on **{rec.character.name}**."
-    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec))
+    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec), ephemeral=True)
 
 
 # -- /edit mount -------------------------------------------------------------
@@ -1047,7 +1052,7 @@ async def edit_mount(
             description=armor_note.strip() if armor_note else "Mounted condition cleared.",
         )
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # -- /edit item --------------------------------------------------------------
@@ -1081,7 +1086,7 @@ async def edit_item(
         await interaction.response.send_message(msg, ephemeral=True)
         return
     _d.store.save(rec)
-    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec))
+    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec), ephemeral=True)
 
 
 # -- /edit spell -------------------------------------------------------------
@@ -1127,4 +1132,4 @@ async def edit_spell(
         c.spells_known.append(spell_name)
         msg = f"Added spell **{spell_name}** to **{c.name}**."
     _d.store.save(rec)
-    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec))
+    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec), ephemeral=True)

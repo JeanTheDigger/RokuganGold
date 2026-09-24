@@ -603,4 +603,4 @@ async def rumor_channel(
         color=discord.Color.dark_gold(),
     )
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)

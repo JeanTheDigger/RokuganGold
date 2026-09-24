@@ -533,7 +533,7 @@ async def weather_set(
 
     embed = _weather_embed(new_cloud, new_precip, new_wind, new_temp, date_str)
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
     await _update_weather_display(
         interaction.guild, new_cloud, new_precip, new_wind, new_temp, date_str,

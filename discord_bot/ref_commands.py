@@ -384,7 +384,7 @@ async def school_view(interaction: discord.Interaction, name: str) -> None:
             f"No school named **{name}**. Try `/ref school search`.", ephemeral=True
         )
         return
-    await interaction.response.send_message(embed=build_school_embed(s))
+    await interaction.response.send_message(embed=build_school_embed(s), ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -418,7 +418,7 @@ async def weapon_view(interaction: discord.Interaction, name: str) -> None:
     embed.add_field(name="Type", value="Melee" if w.get("melee") else "Ranged", inline=True)
     if w.get("no_explode"):
         embed.set_footer(text="Damage dice do not explode.")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -534,7 +534,7 @@ async def advantage_view(interaction: discord.Interaction, name: str) -> None:
     if r is None:
         await interaction.response.send_message(f"No entry named **{name}**. Try `/ref advantage search`.", ephemeral=True)
         return
-    await interaction.response.send_message(embed=build_advantage_embed(r))
+    await interaction.response.send_message(embed=build_advantage_embed(r), ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -587,7 +587,7 @@ async def kata_view(interaction: discord.Interaction, name: str) -> None:
             f"No Kata named **{name}**. Try `/ref kata search`.", ephemeral=True
         )
         return
-    await interaction.response.send_message(embed=build_kata_embed(k))
+    await interaction.response.send_message(embed=build_kata_embed(k), ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -640,7 +640,7 @@ async def kiho_view(interaction: discord.Interaction, name: str) -> None:
             f"No Kiho named **{name}**. Try `/ref kiho search`.", ephemeral=True
         )
         return
-    await interaction.response.send_message(embed=build_kiho_embed(k))
+    await interaction.response.send_message(embed=build_kiho_embed(k), ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -676,7 +676,7 @@ async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
         if grant_parts:
             embed.add_field(name="Mechanical Effects", value=", ".join(grant_parts)[:1024], inline=False)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 @ref_heritage.command(name="table", description="Show a clan's full Heritage Table.")

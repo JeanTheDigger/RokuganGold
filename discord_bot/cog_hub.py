@@ -70,7 +70,8 @@ class _VoidReasonModal(discord.ui.Modal, title="Spend a Void Point"):
             return
         await interaction.followup.send(
             f"**{c.name}** spends a Void Point: {self.reason.value.strip()}\n"
-            f"  VP remaining: **{c.current_void_points}/{taint.void_point_cap(c)}**")
+            f"  VP remaining: **{c.current_void_points}/{taint.void_point_cap(c)}**",
+            ephemeral=True)
 
 
 class _Pick(discord.ui.Select):
@@ -181,7 +182,8 @@ class CharacterHub(discord.ui.View):
         if not await self.refresh(interaction):
             return
         await interaction.followup.send(
-            f"**{c.name}** rests and recovers all Void Points.\n  VP: {old} → **{c.current_void_points}/{cap}**{cap_note}")
+            f"**{c.name}** rests and recovers all Void Points.\n  VP: {old} → **{c.current_void_points}/{cap}**{cap_note}",
+            ephemeral=True)
 
     async def _apply(self, interaction: discord.Interaction, ok: bool, msg: str) -> None:
         if not ok:
@@ -190,7 +192,7 @@ class CharacterHub(discord.ui.View):
         _d.store.save(self.rec)
         if not await self.refresh(interaction):
             return
-        await interaction.followup.send(msg)
+        await interaction.followup.send(msg, ephemeral=True)
 
     async def _on_kata(self, interaction: discord.Interaction, value: str) -> None:
         if self.reload() is None:
