@@ -205,6 +205,17 @@ CREATE TABLE IF NOT EXISTS heritage_rolls (
 CREATE INDEX IF NOT EXISTS idx_heritage_rolls_user
     ON heritage_rolls (guild_id, user_id, rolled_at);
 """,
+    # 16: monthly clan stipends (Kami-configured, paid on IC month change)
+    """\
+CREATE TABLE IF NOT EXISTS stipends (
+    guild_id TEXT NOT NULL,
+    clan     TEXT NOT NULL,
+    koku     INTEGER NOT NULL DEFAULT 0,
+    bu       INTEGER NOT NULL DEFAULT 0,
+    zeni     INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, clan)
+);
+""",
 ]
 
 # How many before-states to keep per character/creature for /dm undo.
@@ -1686,3 +1697,31 @@ class Store:
                 "channel_id = excluded.channel_id, message_id = excluded.message_id",
                 (guild_id, channel_id, message_id),
             )
+
+    # -- stipends --------------------------------------------------------------
+
+    def set_stipend(self, guild_id: str, clan: str, koku: int, bu: int, zeni: int) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO stipends (guild_id, clan, koku, bu, zeni) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(guild_id, clan) DO UPDATE SET "
+                "koku = excluded.koku, bu = excluded.bu, zeni = excluded.zeni",
+                (guild_id, clan, koku, bu, zeni),
+            )
+
+    def delete_stipend(self, guild_id: str, clan: str) -> bool:
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "DELETE FROM stipends WHERE guild_id = ? AND clan = ?",
+                (guild_id, clan),
+            )
+        return cur.rowcount > 0
+
+    def get_stipends(self, guild_id: str) -> dict[str, tuple[int, int, int]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT clan, koku, bu, zeni FROM stipends WHERE guild_id = ? ORDER BY clan",
+                (guild_id,),
+            ).fetchall()
+        return {r["clan"]: (r["koku"], r["bu"], r["zeni"]) for r in rows}

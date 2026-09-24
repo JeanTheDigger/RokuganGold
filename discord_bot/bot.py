@@ -4595,6 +4595,15 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         await cog_seasons.on_day_advanced(interaction.guild, old_cal, new_cal)
     if interaction.guild and new_cal:
         await cog_weather.on_day_advanced(interaction.guild, new_cal)
+    if old_cal and new_cal and old_cal[1] != new_cal[1]:
+        stipend_lines = await cog_give.pay_monthly_stipends(guild)
+        if stipend_lines:
+            stipend_embed = discord.Embed(
+                title="Monthly Stipends Paid",
+                description="\n".join(stipend_lines),
+                color=0xC4A747,
+            )
+            await interaction.followup.send(embed=stipend_embed)
 
 
 def _format_rokugani_date(year: int, month: int, day: int) -> str:
@@ -5395,6 +5404,7 @@ _HELP_BLURBS: dict[str, str] = {
     "givekoku": "Give or take koku from a character. [Fortune]",
     "givebu": "Give or take bu from a character. [Fortune]",
     "givezeni": "Give or take zeni from a character. [Fortune]",
+    "stipend": "Configure monthly clan stipends, paid on IC month change. [Kami]",
     "setup": "Server setup [Kami].",
     "sync": "Re-sync slash commands [Kami].",
     "ping": "Is the bot alive?",
@@ -5407,7 +5417,7 @@ _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Fights and magic", ["combat", "fight", "engage", "grapple", "duel", "spell"]),
     ("Places", ["room", "location"]),
     ("Rules reference", ["ref"]),
-    ("Staff [Fortune]", ["npc", "edit", "givekoku", "givebu", "givezeni", "creature", "category", "weather", "dm"]),
+    ("Staff [Fortune]", ["npc", "edit", "givekoku", "givebu", "givezeni", "stipend", "creature", "category", "weather", "dm"]),
     ("Admin [Kami]", ["setup", "sync", "ping"]),
 ]
 _HELP_ORDER: list[str] = [name for _, names in _HELP_SECTIONS for name in names]
@@ -12140,11 +12150,14 @@ cog_edit.init(
 cog_give.init(
     store=store,
     npc_owner=NPC_OWNER,
+    role_kami=ROLE_KAMI,
     require_guild=_require_guild,
     require_dm_role=_require_dm_role,
+    is_kami=_is_kami,
     resolve_active=_resolve_active_for_edit,
     audit_stat=_audit_stat,
     npc_autocomplete=_npc_autocomplete,
+    combat_log=_combat_log,
 )
 
 client.tree.add_command(sheet)
@@ -12152,6 +12165,7 @@ client.tree.add_command(cog_edit.edit_group)
 client.tree.add_command(cog_give.givekoku)
 client.tree.add_command(cog_give.givebu)
 client.tree.add_command(cog_give.givezeni)
+client.tree.add_command(cog_give.stipend_group)
 client.tree.add_command(xp_group)
 client.tree.add_command(dm)
 client.tree.add_command(npc_group)
