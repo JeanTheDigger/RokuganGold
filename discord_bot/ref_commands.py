@@ -845,8 +845,8 @@ async def family_list(interaction: discord.Interaction, clan: str | None = None)
         for f in families.ALL:
             clans.setdefault(f["clan"], []).append(f"{f['name']} (+1 {f['bonus_trait'].capitalize()})")
         embed = discord.Embed(title="All Families", color=discord.Color.blue())
-        for clan_name in sorted(clans):
-            embed.add_field(name=clan_name, value=", ".join(clans[clan_name]), inline=False)
+        for clan_name in sorted(clans)[:25]:
+            embed.add_field(name=clan_name, value=", ".join(clans[clan_name])[:1024], inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 

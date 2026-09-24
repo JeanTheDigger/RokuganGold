@@ -4459,7 +4459,10 @@ async def party_overview(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("No active PCs on this server.", ephemeral=True)
         return
     embed = discord.Embed(title="Party Roster", color=discord.Color.gold())
+    shown = 0
     for owner_id, rec in active:
+        if shown >= 25:
+            break
         c = rec.character
         rings = stats.all_rings(c)
         ring_str = " / ".join(f"{r[0].upper()}{v}" for r, v in rings.items())
@@ -4487,7 +4490,11 @@ async def party_overview(interaction: discord.Interaction) -> None:
             value="\n".join(val_parts),
             inline=False,
         )
-    embed.set_footer(text=f"{len(active)} active PC{'s' if len(active) != 1 else ''}")
+        shown += 1
+    footer = f"{len(active)} active PC{'s' if len(active) != 1 else ''}"
+    if len(active) > 25:
+        footer += f" (showing first 25)"
+    embed.set_footer(text=footer)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @dm.command(name="roles", description="Show who has the Fortune and Kami roles on this server.")
@@ -4582,9 +4589,12 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
     old_cal = store.get_calendar(guild)
     date_str = _advance_calendar(guild)
     new_cal = store.get_calendar(guild)
+    desc = "\n".join(lines)
+    if len(desc) > 4000:
+        desc = desc[:4000] + "\n(...truncated)"
     embed = discord.Embed(
         title="New Day",
-        description="\n".join(lines),
+        description=desc,
         color=discord.Color.green(),
     )
     footer = "Rest: Full VP · Stamina x 2 healing · Spell slots: Ring per element + Void Ring bonus"
@@ -4603,9 +4613,12 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
     if old_cal and new_cal and old_cal[1] != new_cal[1]:
         stipend_lines = await cog_give.pay_monthly_stipends(guild)
         if stipend_lines:
+            stip_desc = "\n".join(stipend_lines)
+            if len(stip_desc) > 4000:
+                stip_desc = stip_desc[:4000] + "\n(...truncated)"
             stipend_embed = discord.Embed(
                 title="Monthly Stipends Paid",
-                description="\n".join(stipend_lines),
+                description=stip_desc,
                 color=0xC4A747,
             )
             await interaction.followup.send(embed=stipend_embed)
@@ -8317,6 +8330,7 @@ async def xp_remove_disadvantage(
         f"**{c.name}** overcomes the disadvantage **{canonical}** for **{cost}** XP "
         f"(2x base {base_cost}). XP left {c.xp:g}",
         embed=build_sheet_embed(rec),
+        ephemeral=True,
     )
 
 @xp_group.command(name="costs", description="Show the Experience cost reference (L5R 4e RAW).")
@@ -8416,8 +8430,8 @@ class _XpCategorySelect(discord.ui.View):
             new_rank, cost = quote
             can = avail >= cost
             opts.append(discord.SelectOption(
-                label=f"{sk}: {rank} → {new_rank}  ({cost} XP)",
-                value=f"raise:{sk}",
+                label=f"{sk}: {rank} → {new_rank}  ({cost} XP)"[:100],
+                value=f"raise:{sk}"[:100],
                 description=f"{'Can afford' if can else 'Not enough XP'} (you have {avail:g})",
             ))
         if len(opts) >= 25:
@@ -8445,8 +8459,8 @@ class _XpCategorySelect(discord.ui.View):
                 continue
             emph_str = f" ({', '.join(existing)})" if existing else ""
             opts.append(discord.SelectOption(
-                label=f"{sk} (rank {rank}){emph_str}",
-                value=sk,
+                label=f"{sk} (rank {rank}){emph_str}"[:100],
+                value=sk[:100],
                 description=f"{len(existing)}/{limit} emphases used",
             ))
         if not opts:
@@ -8472,8 +8486,8 @@ class _XpCategorySelect(discord.ui.View):
             cost = advancement.misc_cost(entry["mastery"])
             can = avail >= cost
             opts.append(discord.SelectOption(
-                label=f"{entry['name']} (ML {entry['mastery']}, {cost} XP)",
-                value=entry["name"],
+                label=f"{entry['name']} (ML {entry['mastery']}, {cost} XP)"[:100],
+                value=entry["name"][:100],
                 description=f"{entry['element']} | {'Can afford' if can else 'Not enough XP'}",
             ))
         if not opts:
@@ -8837,8 +8851,8 @@ class _XpKihoElementPick(discord.ui.View):
             cost = advancement.kiho_cost(ml, non_brotherhood=not is_brotherhood and not is_shugenja, shugenja=is_shugenja)
             can = c.xp >= cost
             opts.append(discord.SelectOption(
-                label=f"{entry['name']} (ML {ml}, {cost} XP)",
-                value=entry["name"],
+                label=f"{entry['name']} (ML {ml}, {cost} XP)"[:100],
+                value=entry["name"][:100],
                 description=f"{entry.get('element', '?')} {entry.get('type', '')} | {'Can afford' if can else 'Not enough XP'}",
             ))
         if not opts:
@@ -8957,8 +8971,8 @@ class _XpSpellElementPick(discord.ui.View):
             cost = advancement.misc_cost(ml)
             can = c.xp >= cost
             opts.append(discord.SelectOption(
-                label=f"{entry['name']} (ML {ml}, {cost} XP)",
-                value=entry["name"],
+                label=f"{entry['name']} (ML {ml}, {cost} XP)"[:100],
+                value=entry["name"][:100],
                 description=f"{entry['element']} | {'Can afford' if can else 'Not enough XP'}",
             ))
         if not opts:
@@ -10792,7 +10806,7 @@ async def compare_characters(
         inline=False,
     )
     embed.set_footer(text=f"Compared by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ===========================================================================
 # /history: recent roll log for this channel

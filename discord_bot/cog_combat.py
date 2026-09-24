@@ -1677,7 +1677,7 @@ class CombatBoardView(views_base.PersistentView):
             desc_text = f"{cost_str}{entry.get('desc', '')}{limit_str}"[:100]
             options.append(discord.SelectOption(
                 label=label,
-                value=entry["display"],
+                value=entry["display"][:100],
                 description=desc_text,
             ))
         view = _BoardTechniqueSelect(self.guild_id, self.channel_id, cur.name, options)
@@ -1949,7 +1949,7 @@ class CombatBoardView(views_base.PersistentView):
             is_active = k_name.lower() == active
             options.append(discord.SelectOption(
                 label=k_name[:100],
-                value=k_name,
+                value=k_name[:100],
                 description="Currently active" if is_active else "Activate",
                 default=is_active,
             ))
@@ -1995,7 +1995,7 @@ class CombatBoardView(views_base.PersistentView):
             is_active = k_name.lower() in active_lower
             options.append(discord.SelectOption(
                 label=k_name[:100],
-                value=k_name,
+                value=k_name[:100],
                 description="Active (select to deactivate)" if is_active else "Activate",
                 default=is_active,
             ))
@@ -2103,7 +2103,7 @@ class CombatBoardView(views_base.PersistentView):
             slot_info = _slot_display(c, elem)
             label = spell_name[:100]
             desc = f"{s['element']} M{s['mastery']} TN {tn} | {slot_info}"[:100]
-            options.append(discord.SelectOption(label=label, value=spell_name, description=desc))
+            options.append(discord.SelectOption(label=label, value=spell_name[:100], description=desc))
         view = _BoardSpellSelect(self.guild_id, self.channel_id, cur.name, interaction.user.id, options)
         await interaction.response.send_message(
             f"Select a spell for **{cur.name}** to cast:", view=view, ephemeral=True,
@@ -5749,6 +5749,7 @@ class GrappleBoardView(views_base.PersistentView):
             await interaction.response.send_message("DM only.", ephemeral=True)
             return
         if not self.claim():
+            await interaction.response.send_message("Already handled.", ephemeral=True)
             return
         await interaction.response.defer()
         await self._end_grapple(interaction, "DM ended")
@@ -5796,7 +5797,7 @@ async def grapple_start(
 class _GrappleSetupView(discord.ui.View):
     def __init__(self, combatant_names: list[str]) -> None:
         super().__init__(timeout=120)
-        opts = [discord.SelectOption(label=n, value=n) for n in combatant_names[:25]]
+        opts = [discord.SelectOption(label=n[:100], value=n[:100]) for n in combatant_names[:25]]
         self.ctrl_select = discord.ui.Select(
             placeholder="Controller (has grapple control)",
             options=list(opts), row=0,
@@ -7537,7 +7538,7 @@ async def duel_start(
 class _DuelSetupView(discord.ui.View):
     def __init__(self, character_names: list[str]) -> None:
         super().__init__(timeout=120)
-        opts = [discord.SelectOption(label=n, value=n) for n in character_names[:25]]
+        opts = [discord.SelectOption(label=n[:100], value=n[:100]) for n in character_names[:25]]
         self.a_select = discord.ui.Select(
             placeholder="First duelist",
             options=list(opts), row=0,
@@ -8488,6 +8489,7 @@ class MassBattleBoardView(views_base.PersistentView):
             await interaction.response.send_message("DM only.", ephemeral=True)
             return
         if not self.claim():
+            await interaction.response.send_message("Already handled.", ephemeral=True)
             return
         self._disable()
         await interaction.response.edit_message(view=self)
