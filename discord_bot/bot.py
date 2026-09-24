@@ -1795,7 +1795,16 @@ class _ChargenResumeView(views_base.PersistentView):
                 content="No character creation in progress. Start one with `/sheet create`.", view=self,
             )
             return
-        state = json.loads(raw)
+        try:
+            state = json.loads(raw)
+        except (ValueError, TypeError):
+            store.delete_creation_channel(self.guild_id, self.user_id)
+            self._disable()
+            await interaction.response.edit_message(
+                content="Character creation data was corrupted. Please start over with `/sheet create`.",
+                view=self,
+            )
+            return
         self._disable()
         if state.get("submitted"):
             await interaction.response.edit_message(
@@ -3564,12 +3573,14 @@ class _FullCharacterApprovalView(_DisableableView):
         embed.set_footer(text=f"Approved by {interaction.user.display_name}")
         await interaction.followup.send(embed=embed)
 
-        lobby = client.get_channel(self.lobby_channel_id)
-        if lobby:
-            await lobby.send(
-                f"{member.mention}, your character **{state['name']}** has been approved! "
-                f"Your full character sheet is ready. Welcome to Rokugan!"
-            )
+        if member:
+            try:
+                await member.send(
+                    f"Your character **{state['name']}** has been approved! "
+                    f"Your full character sheet is ready. Welcome to Rokugan!"
+                )
+            except discord.Forbidden:
+                pass
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.danger)
     async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
