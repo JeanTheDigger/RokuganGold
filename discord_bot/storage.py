@@ -523,6 +523,23 @@ class Store:
             ).fetchone()
         return self._row_to_record(row) if row else None
 
+    def search_names(self, guild_id: str, query: str = "", limit: int = 25) -> list[str]:
+        """Return character names (all owners) matching a case-insensitive substring."""
+        with self._lock:
+            if query:
+                rows = self._conn.execute(
+                    "SELECT name FROM characters WHERE guild_id = ? "
+                    "AND name LIKE ? COLLATE NOCASE ORDER BY name COLLATE NOCASE LIMIT ?",
+                    (guild_id, f"%{query}%", limit),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT name FROM characters WHERE guild_id = ? "
+                    "ORDER BY name COLLATE NOCASE LIMIT ?",
+                    (guild_id, limit),
+                ).fetchall()
+        return [r["name"] for r in rows]
+
     def list_by_owner(self, guild_id: str, owner_id: str) -> list[CharacterRecord]:
         with self._lock:
             rows = self._conn.execute(

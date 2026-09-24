@@ -637,6 +637,14 @@ class DamageView(views_base.PersistentView):
             _d.store.save_creature(cre_rec, note="attack damage")
             _d.tally(self.channel_id, self.attacker_name, "dealt", applied["final_damage"])
             _d.tally(self.channel_id, self.target_name, "taken", applied["final_damage"])
+            cre_decl_cond_line = ""
+            if cre_decl_on_hit_condition and applied["final_damage"] > 0 and not applied["is_dead"]:
+                enc_dc = _d.encounters.get(self.channel_id)
+                def_cb = enc_dc.find(self.target_name) if enc_dc else None
+                if def_cb and cre_decl_on_hit_condition in encounter.VALID_CONDITIONS:
+                    def_cb.set_condition(cre_decl_on_hit_condition, 0, enc_dc.round if enc_dc else 0)
+                    _d.save_encounter(str(interaction.guild_id), enc_dc)
+                    cre_decl_cond_line = f"\n- **{cre_decl_on_hit_condition.title()}** inflicted by technique"
             if applied["is_dead"]:
                 _d.tally(self.channel_id, self.attacker_name, "kills")
                 await _d.on_death(str(interaction.guild_id), cre_rec.creature.name, None, None)
@@ -668,7 +676,7 @@ class DamageView(views_base.PersistentView):
                 f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}\n"
                 f"{_d.format_dice(dmg['dice'])}{feint_line}{kata_line}{cre_cs_line}{mat_line}\n"
                 f"Raw **{raw}** − reduction {applied['reduction']} = "
-                f"**{applied['final_damage']}** wounds{special_line}{break_line}"
+                f"**{applied['final_damage']}** wounds{special_line}{break_line}{cre_decl_cond_line}"
             )
             if len(dmg_text) > 1024:
                 dmg_text = dmg_text[:1021] + "..."
@@ -2615,6 +2623,7 @@ class _BoardVoidSwapSelect(discord.ui.View):
         old_t = cb_t.effective_initiative
         cb_s.initiative, cb_t.initiative = cb_t.initiative, cb_s.initiative
         cb_s.void_initiative_boost, cb_t.void_initiative_boost = cb_t.void_initiative_boost, cb_s.void_initiative_boost
+        cb_s.center_init_boost, cb_t.center_init_boost = cb_t.center_init_boost, cb_s.center_init_boost
         cur_before = enc.current() if enc.started else None
         enc._sort()
         if cur_before is not None:
@@ -5337,6 +5346,7 @@ async def combat_void_swap(interaction: discord.Interaction, spender: str, targe
     old_t = cb_t.effective_initiative
     cb_s.initiative, cb_t.initiative = cb_t.initiative, cb_s.initiative
     cb_s.void_initiative_boost, cb_t.void_initiative_boost = cb_t.void_initiative_boost, cb_s.void_initiative_boost
+    cb_s.center_init_boost, cb_t.center_init_boost = cb_t.center_init_boost, cb_s.center_init_boost
     cur_before = enc.current() if enc.started else None
     enc._sort()
     if cur_before is not None:
@@ -6469,7 +6479,7 @@ async def duel_assess(
             f"Void Ring: **{opponent.void_ring}**",
             f"Reflexes: **{opponent.reflexes}**",
             f"Iaijutsu Skill: **{opponent_iaijutsu}**",
-            f"Iaijutsu Emphases: **{'Assessment, Focus' if opponent_iaijutsu >= 1 else 'none listed'}**",
+            f"Iaijutsu Emphases: **{', '.join(opponent.emphases.get('Iaijutsu', [])) or 'none'}**",
             f"Void Points: **{opponent.current_void_points}**",
             f"Wound Level: **{stats.wound_level_name(opponent)}**",
         ]
@@ -7036,7 +7046,7 @@ class DuelBoardView(views_base.PersistentView):
                 f"Void Ring: **{opponent.void_ring}**",
                 f"Reflexes: **{opponent.reflexes}**",
                 f"Iaijutsu Skill: **{opponent_iaijutsu}**",
-                f"Iaijutsu Emphases: **{'Assessment, Focus' if opponent_iaijutsu >= 1 else 'none listed'}**",
+                f"Iaijutsu Emphases: **{', '.join(opponent.emphases.get('Iaijutsu', [])) or 'none'}**",
                 f"Void Points: **{opponent.current_void_points}**",
                 f"Wound Level: **{stats.wound_level_name(opponent)}**",
             ]

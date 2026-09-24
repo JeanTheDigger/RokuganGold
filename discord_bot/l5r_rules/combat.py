@@ -535,7 +535,7 @@ def resolve_damage(
     weapon = get_weapon_profile(weapon_name)
     rolled = weapon.get("rolled", 2)
     kept = weapon.get("kept", 1)
-    if weapon.get("strength_adds", True) and weapon.get("melee", True):
+    if weapon.get("strength_adds", True):
         rolled += attacker.strength
     rolled += increased_damage  # Increased Damage maneuver: +1k0 per raise
     rolled += extra_rolled       # bonus damage dice (no TN cost)

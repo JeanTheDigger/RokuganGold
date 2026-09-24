@@ -1211,27 +1211,20 @@ async def _npc_autocomplete(
 async def _any_character_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
-    """Autocomplete across all PCs and NPCs in the guild."""
+    """Autocomplete across all PCs and NPCs in the guild (including dead/inactive)."""
     if interaction.guild_id is None:
         return []
     guild = str(interaction.guild_id)
-    cur = current.lower().strip()
-    names: list[str] = []
-    for _, rec in store.list_active_pcs(guild):
-        if cur in rec.character.name.lower():
-            names.append(rec.character.name)
-    for rec in store.list_by_owner(guild, NPC_OWNER):
-        if cur in rec.character.name.lower():
-            names.append(rec.character.name)
-    return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
+    names = store.search_names(guild, current.strip(), limit=25)
+    return [app_commands.Choice(name=n, value=n) for n in names]
 
 def _find_any_character(guild: str, name: str) -> storage.CharacterRecord | None:
     rec = store.get_by_name(guild, NPC_OWNER, name)
     if rec is not None:
         return rec
-    for _, pc_rec in store.list_active_pcs(guild):
-        if pc_rec.character.name.lower() == name.lower():
-            return pc_rec
+    rec = store.get_by_name_guild(guild, name)
+    if rec is not None:
+        return rec
     return None
 
 async def _creature_template_autocomplete(
