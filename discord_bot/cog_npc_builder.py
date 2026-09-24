@@ -293,7 +293,7 @@ class _SaveView(discord.ui.View):
             child.disabled = True
         self.stop()
         if rec is not None:
-            lines.append(f"View it with `/npc view name:{char.name}`; tweak with `/npc-edit`.")
+            lines.append(f"View it with `/npc view name:{char.name}`; tweak with `/edit`.")
         await interaction.response.edit_message(content="\n".join(lines), embed=None, view=self)
 
     @discord.ui.button(label="Save NPC", style=discord.ButtonStyle.success)

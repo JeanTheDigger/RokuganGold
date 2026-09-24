@@ -437,7 +437,7 @@ async def armor_list(interaction: discord.Interaction) -> None:
             line += " · heavy"
         lines.append(line)
     await interaction.response.send_message(
-        f"**Armor** ({len(combat.ARMOR_CATALOG)} types · equip with `/stat armor` or `/inventory` (staff)):\n" + "\n".join(lines), ephemeral=True
+        f"**Armor** ({len(combat.ARMOR_CATALOG)} types · equip with `/edit equip` or `/inventory` (staff)):\n" + "\n".join(lines), ephemeral=True
     )
 
 
@@ -906,7 +906,7 @@ async def ancestors_check(
             found.append(f"**{adv}**: {ANCESTOR_EFFECTS[key]}")
     if not found:
         await interaction.response.send_message(
-            f"**{c.name}** has no Ancestor advantages recorded. Use `/stat advantage` to add one.",
+            f"**{c.name}** has no Ancestor advantages recorded. Use `/edit feature category:Advantage` to add one.",
             ephemeral=True,
         )
         return

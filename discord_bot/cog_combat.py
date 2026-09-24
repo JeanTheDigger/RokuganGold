@@ -8578,7 +8578,7 @@ async def battle_damage(
     embed.add_field(name="Damage", value=f"**{result['damage']}** ({result['rolled']}k{result['kept']})", inline=True)
     if result["dice"]:
         embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
-    embed.set_footer(text="Apply with /sheet wound or /npc wound, subtracting armor Reduction.")
+    embed.set_footer(text="Apply with /edit wound, subtracting armor Reduction.")
     await interaction.response.send_message(embed=embed)
 
 
@@ -8681,7 +8681,7 @@ async def battle_table(
     if result["wound_roll"]:
         embed.add_field(name="Wound Dice", value=_d.format_dice(result["wound_roll"])[:1024], inline=False)
 
-    embed.set_footer(text="Apply wounds with /sheet wound or /npc wound, subtracting armor Reduction.")
+    embed.set_footer(text="Apply wounds with /edit wound, subtracting armor Reduction.")
     await interaction.response.send_message(embed=embed)
 
 

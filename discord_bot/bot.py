@@ -30,6 +30,7 @@ from discord.ext import tasks
 import encounter
 import cog_checks
 import cog_combat
+import cog_edit
 import cog_hub
 import cog_inventory
 import cog_letters
@@ -1361,28 +1362,6 @@ async def _skill_autocomplete(
     ]
     return out[:25]
 
-def _apply_numeric_field(c: Character, field: str, value: float) -> None:
-    """Set one numeric sheet field with clamping. Shared by /stat set and /npc-edit set."""
-    if field in ("honor", "glory", "status", "infamy"):
-        setattr(c, field, max(0.0, min(10.0, float(value))))
-    elif field == "taint":
-        c.taint = max(0.0, float(value))
-    elif field == "koku":
-        c.koku = float(value)
-    elif field == "age":
-        c.age = max(0, int(value))
-    elif field == "school_rank":
-        c.school_rank = max(1, min(10, int(value)))
-    elif field == "void_points_max":
-        c.max_void_points = max(0, int(value))
-        c.current_void_points = min(c.current_void_points, taint.void_point_cap(c))
-    elif field == "void_points_current":
-        c.current_void_points = max(0, min(int(value), taint.void_point_cap(c)))
-    elif field == "armor_tn_bonus":
-        c.armor_tn_bonus = max(0, int(value))
-    elif field == "armor_reduction":
-        c.armor_reduction = max(0, int(value))
-
 def _check_insight_rank_advance(c: Character) -> str:
     result = stats.check_insight_rank_advance(c)
     if result is None:
@@ -1403,19 +1382,9 @@ sheet_kata_grp = app_commands.Group(name="kata", description="Record and activat
 sheet_kiho_grp = app_commands.Group(name="kiho", description="Record and activate Kiho.", parent=sheet)
 sheet_tattoo_grp = app_commands.Group(name="tattoo", description="Manage Togashi tattoos.", parent=sheet)
 sheet_data = app_commands.Group(name="data", description="Export / import character sheets.", parent=sheet)
-stat_group = app_commands.Group(name="stat", description="Staff edits to a character sheet: Traits, skills, armor, qualities, advantages.")
 xp_group = app_commands.Group(name="xp", description="Grant and spend Experience to advance characters.")
 
 _SCHOOL_CHOICES = [app_commands.Choice(name=s, value=s) for s in enums.SCHOOL_TYPES]
-_TRAIT_CHOICES = [
-    app_commands.Choice(name=("Void" if t == "void" else t.capitalize()), value=t)
-    for t in enums.TRAITS
-]
-_SET_FIELDS = [
-    "honor", "glory", "status", "infamy", "taint", "koku", "age", "school_rank",
-    "void_points_current", "void_points_max", "armor_tn_bonus", "armor_reduction",
-]
-_SET_CHOICES = [app_commands.Choice(name=f, value=f) for f in _SET_FIELDS]
 
 @sheet.command(name="create", description="Create a new character - opens a private wizard channel.")
 async def sheet_create(interaction: discord.Interaction) -> None:
@@ -4042,219 +4011,6 @@ def _paginate_embeds(
         embeds.append(embed)
     return embeds
 
-@stat_group.command(name="trait", description="Set a Trait (or Void) on the active character. [Fortune]")
-@app_commands.describe(
-    trait="Which Trait to set.", value="New value (0-10).",
-    member="Target player [Fortune]. Omit for your own active character.",
-)
-@app_commands.choices(trait=_TRAIT_CHOICES)
-async def sheet_trait(
-    interaction: discord.Interaction,
-    trait: app_commands.Choice[str],
-    value: app_commands.Range[int, 0, 10],
-    member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    rec.character.set_trait(trait.value, value)
-    if trait.value == "void":
-        rec.character.max_void_points = rec.character.void_ring
-        rec.character.current_void_points = min(rec.character.current_void_points, taint.void_point_cap(rec.character))
-    rank_msg = _check_insight_rank_advance(rec.character)
-    changed = store.save(rec, note="stat trait")
-    await _audit_stat(interaction, rec, "stat trait", changed)
-    label = "Void" if trait.value == "void" else trait.value.capitalize()
-    await interaction.response.send_message(
-        f"Set **{label}** to **{value}** on **{rec.character.name}**.{rank_msg}", embed=build_sheet_embed(rec)
-    )
-
-@stat_group.command(name="skill", description="Set skill ranks. Single: Skill='Kenjutsu' rank=3. Bulk: Skill='Kenjutsu 3, Courtier 2'. [Fortune]")
-@app_commands.describe(
-    skill="Skill name, or bulk list: 'Kenjutsu 3, Courtier 2, Etiquette 1'.",
-    rank="Rank 0-10 (0 removes). Omit when using bulk format.",
-    member="Target player [Fortune]. Omit for your own active character.",
-)
-async def sheet_skill(
-    interaction: discord.Interaction,
-    skill: app_commands.Range[str, 1, 200],
-    rank: app_commands.Range[int, 0, 10] | None = None,
-    member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    if rank is not None:
-        skill_name = skill.strip().title()
-        if rank == 0:
-            rec.character.skills.pop(skill_name, None)
-            msg = f"Removed **{skill_name}** from **{rec.character.name}**."
-        else:
-            rec.character.skills[skill_name] = rank
-            msg = f"Set **{skill_name}** to rank **{rank}** on **{rec.character.name}**."
-    else:
-        parts = [p.strip() for p in skill.split(",") if p.strip()]
-        changes = []
-        for p in parts:
-            m = re.match(r"^(.+?)\s+(\d{1,2})$", p.strip())
-            if not m:
-                await interaction.response.send_message(
-                    f"Could not parse **{p}**. Use format: `Kenjutsu 3, Courtier 2`.", ephemeral=True
-                )
-                return
-            sname = m.group(1).strip().title()
-            srank = int(m.group(2))
-            if srank > 10:
-                await interaction.response.send_message(f"Rank for **{sname}** exceeds 10.", ephemeral=True)
-                return
-            if srank == 0:
-                rec.character.skills.pop(sname, None)
-                changes.append(f"removed **{sname}**")
-            else:
-                rec.character.skills[sname] = srank
-                changes.append(f"**{sname}** {srank}")
-        msg = f"Set on **{rec.character.name}**: {', '.join(changes)}."
-    msg += _check_insight_rank_advance(rec.character)
-    changed = store.save(rec, note="stat skill")
-    await _audit_stat(interaction, rec, "stat skill", changed)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
-@stat_group.command(name="set", description="Set a numeric field (honor, glory, void points, armor, etc.). [Fortune]")
-@app_commands.describe(
-    field="Which field to set.", value="New value.",
-    member="Target player [Fortune]. Omit for your own active character.",
-)
-@app_commands.choices(field=_SET_CHOICES)
-async def sheet_set(
-    interaction: discord.Interaction,
-    field: app_commands.Choice[str],
-    value: float,
-    member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    _apply_numeric_field(rec.character, field.value, value)
-    changed = store.save(rec, note="stat set")
-    await _audit_stat(interaction, rec, "stat set", changed)
-    await interaction.response.send_message(
-        f"Updated **{field.value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
-    )
-
-@stat_group.command(name="identity", description="Set clan, family and/or school on a sheet; a catalog family adds its +1 Trait. [Fortune]")
-@app_commands.describe(
-    clan="Clan name (free text).",
-    family="Family name; a catalog match also applies its +1 Trait unless apply_bonus is false.",
-    school="School name (catalog match preferred; free text allowed).",
-    apply_bonus="Apply the catalog family's +1 Trait (default true). Ignored when the family is unchanged.",
-    member="Target player [Fortune]. Omit for your own active character.",
-)
-async def sheet_identity(
-    interaction: discord.Interaction,
-    clan: str | None = None,
-    family: str | None = None,
-    school: str | None = None,
-    apply_bonus: bool = True,
-    member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    changes: list[str] = []
-    if clan is not None:
-        c.clan = clan.strip()
-        changes.append(f"Clan **{c.clan or '(none)'}**")
-    if family is not None:
-        fam = families.get(family.strip())
-        new_name = fam["name"] if fam else family.strip()
-        if new_name.lower() != (c.family or "").lower():
-            if fam and apply_bonus:
-                changes.append(f"Family **{fam['name']}** ({families.apply_to_character(c, fam)})")
-                if not c.clan:
-                    c.clan = fam["clan"]
-            else:
-                c.family = new_name
-                changes.append(f"Family **{new_name or '(none)'}**" + (" (no bonus applied)" if fam else " (not in the catalog: No bonus)"))
-        else:
-            changes.append(f"Family already **{c.family}** (unchanged, no bonus re-applied)")
-    if school is not None:
-        sch = schools.get(school.strip())
-        c.school = sch["name"] if sch else school.strip()
-        changes.append(f"School **{c.school or '(none)'}**" + ("" if sch or not c.school else " (not in the catalog)"))
-    if not changes:
-        await interaction.response.send_message("Give at least one of `clan:`, `family:` or `school:`.", ephemeral=True)
-        return
-    changed = store.save(rec, note="stat identity")
-    await _audit_stat(interaction, rec, "stat identity", changed)
-    await interaction.response.send_message(
-        f"Updated **{c.name}**: " + "; ".join(changes) + ".", embed=build_sheet_embed(rec)
-    )
-
-@stat_group.command(name="armor", description="Equip armor (sets Armor TN bonus & Reduction), or 'none' to remove. [Fortune]")
-@app_commands.describe(armor="Armor type (bogu/ashigaru/tatami/light/heavy/tetsu_do/riding, or 'none').", member="Target player [Fortune]")
-@app_commands.autocomplete(armor=_armor_autocomplete)
-async def sheet_armor(
-    interaction: discord.Interaction,
-    armor: str,
-    member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    a = armor.lower().strip()
-    if a in ("none", "", "remove"):
-        c.armor_name = ""
-        c.owned_armor = ""
-        c.armor_tn_bonus = 0
-        c.armor_reduction = 0
-        msg = f"Removed armor from **{c.name}**."
-    else:
-        spec = combat.get_armor(a)
-        if spec is None:
-            await interaction.response.send_message(
-                f"Unknown armor **{armor}**. Options: {', '.join(combat.ARMOR_CATALOG)}.", ephemeral=True
-            )
-            return
-        c.armor_name = a
-        c.owned_armor = a
-        c.armor_tn_bonus = spec["tn_bonus"]
-        c.armor_reduction = spec["reduction"]
-        heavy = " (heavy)" if spec["is_heavy"] else ""
-        cost_note = f" · {spec['cost']} koku" if spec.get("cost") else ""
-        msg = f"**{c.name}** equips **{a}**{heavy}: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}{cost_note}."
-        if spec.get("special"):
-            msg += f"\n{spec['special']}"
-    changed = store.save(rec, note="stat armor")
-    await _audit_stat(interaction, rec, "stat armor", changed)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
 _QUALITY_CHOICES = [
     app_commands.Choice(name=q.title(), value=q) for q in sorted(combat.WEAPON_QUALITIES)
 ]
@@ -4264,186 +4020,6 @@ async def _quality_autocomplete(
 ) -> list[app_commands.Choice[str]]:
     low = current.lower()
     return [c for c in _QUALITY_CHOICES if low in c.value][:25]
-
-@stat_group.command(name="quality", description="Set extraordinary weapon qualities on the equipped weapon. [Fortune]")
-@app_commands.describe(
-    qualities="Comma-separated qualities: Balanced, radiant, signature, swift, true, unbreakable.",
-    clear="Remove all weapon qualities.",
-    member="Target player [Fortune]",
-)
-@app_commands.autocomplete(qualities=_quality_autocomplete)
-async def sheet_quality(
-    interaction: discord.Interaction,
-    qualities: str | None = None,
-    clear: bool = False,
-    member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    if clear:
-        c.weapon_qualities = []
-        changed = store.save(rec, note="stat quality")
-        await _audit_stat(interaction, rec, "stat quality", changed)
-        await interaction.response.send_message(
-            f"Cleared all weapon qualities from **{c.name}**.", embed=build_sheet_embed(rec)
-        )
-        return
-    if not qualities:
-        current = ", ".join(c.weapon_qualities) if c.weapon_qualities else "none"
-        await interaction.response.send_message(
-            f"**{c.name}** weapon qualities: {current}\n"
-            f"Valid: {', '.join(sorted(combat.WEAPON_QUALITIES))}",
-            ephemeral=True,
-        )
-        return
-    parsed = [q.strip().lower() for q in qualities.split(",") if q.strip()]
-    invalid = [q for q in parsed if q not in combat.WEAPON_QUALITIES]
-    if invalid:
-        await interaction.response.send_message(
-            f"Unknown qualities: {', '.join(invalid)}. Valid: {', '.join(sorted(combat.WEAPON_QUALITIES))}.",
-            ephemeral=True,
-        )
-        return
-    c.weapon_qualities = sorted(set(parsed))
-    changed = store.save(rec, note="stat quality")
-    await _audit_stat(interaction, rec, "stat quality", changed)
-    q_list = ", ".join(c.weapon_qualities)
-    wpn = c.equipped_weapon or "(no weapon equipped)"
-    await interaction.response.send_message(
-        f"**{c.name}** weapon qualities set: **{q_list}** (on {wpn}).", embed=build_sheet_embed(rec)
-    )
-
-@stat_group.command(name="advantage", description="Record (or remove) an Advantage on your sheet (free: No XP). [Fortune]")
-@app_commands.describe(
-    name="Advantage name. For parameterised advantages, include the parameter: 'Weakness: Willpower', 'Seven Fortunes' Blessing: Daikoku'.",
-    remove="Remove it instead.",
-    member="Target player [Fortune]",
-)
-@app_commands.autocomplete(name=_advantage_autocomplete)
-async def sheet_advantage(
-    interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    adv, canonical = _parse_advdis_name(name, "advantage")
-    c = rec.character
-    if remove:
-        c.advantages = [x for x in c.advantages if x.lower() != canonical.lower()]
-        msg = f"Removed advantage **{canonical}** from **{c.name}**."
-    else:
-        if canonical.lower() not in [x.lower() for x in c.advantages]:
-            c.advantages.append(canonical)
-        msg = f"**{c.name}** gains the advantage **{canonical}**."
-        base = adv["name"] if adv else name.strip().split(":")[0].strip()
-        param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(base)
-        if param_hint and ":" not in name:
-            msg += f"\n*Hint: This advantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
-    changed = store.save(rec, note="stat advantage")
-    await _audit_stat(interaction, rec, "stat advantage", changed)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
-@stat_group.command(name="disadvantage", description="Record (or remove) a Disadvantage on your sheet (grants XP: DM /xp grant). [Fortune]")
-@app_commands.describe(
-    name="Disadvantage name. For parameterised disadvantages, include the parameter: 'Weakness: Willpower', 'Doubt: Kenjutsu'.",
-    remove="Remove it instead.",
-    member="Target player [Fortune]",
-)
-@app_commands.autocomplete(name=_disadvantage_autocomplete)
-async def sheet_disadvantage(
-    interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    dis, canonical = _parse_advdis_name(name, "disadvantage")
-    c = rec.character
-    if remove:
-        c.disadvantages = [x for x in c.disadvantages if x.lower() != canonical.lower()]
-        msg = f"Removed disadvantage **{canonical}** from **{c.name}**."
-    else:
-        if canonical.lower() not in [x.lower() for x in c.disadvantages]:
-            c.disadvantages.append(canonical)
-        grant = f" (grants {dis['points']} XP: A DM applies it with `/xp grant`)" if dis and dis["points"] else ""
-        msg = f"**{c.name}** takes the disadvantage **{canonical}**{grant}."
-        base = dis["name"] if dis else name.strip().split(":")[0].strip()
-        param_hint = advantage_effects.PARAMETERISED_DISADVANTAGES.get(base)
-        if param_hint and ":" not in name:
-            msg += f"\n*Hint: This disadvantage can be parameterised. Use `{canonical}: <{param_hint}>` to record the chosen option.*"
-    changed = store.save(rec, note="stat disadvantage")
-    await _audit_stat(interaction, rec, "stat disadvantage", changed)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
-@sheet_kata_grp.command(name="learn", description="Record (or remove) a Kata on your sheet (free: No XP; use /xp kata to buy). [Fortune]")
-@app_commands.describe(name="Kata name.", remove="Remove it instead.", member="Target player [Fortune]")
-@app_commands.autocomplete(name=_kata_autocomplete)
-async def sheet_kata(
-    interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    k = kata.get(name)
-    canonical = k["name"] if k else name.strip()
-    c = rec.character
-    if remove:
-        c.katas = [x for x in c.katas if x.lower() != canonical.lower()]
-        msg = f"Removed Kata **{canonical}** from **{c.name}**."
-    else:
-        if canonical.lower() not in [x.lower() for x in c.katas]:
-            c.katas.append(canonical)
-        msg = f"**{c.name}** learns the Kata **{canonical}**."
-    store.save(rec)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
-@sheet_kiho_grp.command(name="learn", description="Record (or remove) a Kiho on your sheet (free: No XP; use /xp kiho to buy). [Fortune]")
-@app_commands.describe(name="Kiho name.", remove="Remove it instead.", member="Target player [Fortune]")
-@app_commands.autocomplete(name=_kiho_autocomplete)
-async def sheet_kiho(
-    interaction: discord.Interaction, name: str, remove: bool = False, member: discord.Member | None = None
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    k = kiho.get(name)
-    canonical = k["name"] if k else name.strip()
-    c = rec.character
-    if remove:
-        c.kiho = [x for x in c.kiho if x.lower() != canonical.lower()]
-        msg = f"Removed Kiho **{canonical}** from **{c.name}**."
-    else:
-        if canonical.lower() not in [x.lower() for x in c.kiho]:
-            c.kiho.append(canonical)
-        msg = f"**{c.name}** learns the Kiho **{canonical}**."
-    store.save(rec)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
 
 def _activate_kata(c: Character, name: str | None) -> tuple[bool, str]:
     """Set (or drop) the active Kata. Returns (changed, message)."""
@@ -4455,8 +4031,8 @@ def _activate_kata(c: Character, name: str | None) -> tuple[bool, str]:
     k = kata.get(name)
     canonical = k["name"] if k else name.strip()
     if canonical.lower() not in [x.lower() for x in c.katas]:
-        return False, (f"**{c.name}** hasn't learned the Kata **{canonical}**: Add it with `/sheet kata learn` "
-                       f"or buy it with `/xp kata`.")
+        return False, (f"**{c.name}** hasn't learned the Kata **{canonical}**: Add it with "
+                       f"`/edit feature category:Kata entry:{canonical}` or buy it with `/xp kata`.")
     c.active_kata = canonical
     note = "" if kata_effects.is_auto(canonical) else " *(its effect is DM-adjudicated: Shown as a reminder on attacks.)*"
     return True, f"**{c.name}** assumes the Kata **{canonical}**.{note}"
@@ -4469,8 +4045,8 @@ def _activate_kiho(c: Character, name: str, off: bool = False) -> tuple[bool, st
         c.active_kiho = [x for x in c.active_kiho if x.lower() != canonical.lower()]
         return True, f"**{c.name}** ends the Kiho **{canonical}**."
     if canonical.lower() not in [x.lower() for x in c.kiho]:
-        return False, (f"**{c.name}** hasn't learned the Kiho **{canonical}**: Add it with `/sheet kiho learn` "
-                       f"or buy it with `/xp kiho`.")
+        return False, (f"**{c.name}** hasn't learned the Kiho **{canonical}**: Add it with "
+                       f"`/edit feature category:Kiho entry:{canonical}` or buy it with `/xp kiho`.")
     ktype = (h["type"] if h else "").strip().lower()
     replaced = ""
     if ktype in ("internal", "kharmic", "mystical"):
@@ -4544,70 +4120,6 @@ async def sheet_kiho_activate(
 # /sheet tattoo - Togashi tattoo management (s57.25)
 # ---------------------------------------------------------------------------
 
-@sheet_tattoo_grp.command(name="add", description="Grant a Togashi tattoo ability to a character. [Fortune]")
-@app_commands.describe(name="Tattoo name (e.g. bamboo, crab, mountain).", member="Target player [Fortune]")
-@app_commands.autocomplete(name=_tattoo_autocomplete)
-async def sheet_tattoo_add(
-    interaction: discord.Interaction, name: str, member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    from l5r_rules import tattoo_catalog
-    t = tattoo_catalog.get_tattoo(name)
-    key = name.lower().strip()
-    label = t["name"] if t else key.title()
-    c = rec.character
-    if key in [x.lower() for x in c.tattoos]:
-        await interaction.response.send_message(
-            f"**{c.name}** already has the **{label}** tattoo.", ephemeral=True
-        )
-        return
-    c.tattoos.append(label if t else key)
-    store.save(rec)
-    effect = f"\n> {t['effect']}" if t else ""
-    await interaction.response.send_message(
-        f"**{c.name}** receives the **{label}** tattoo.{effect}",
-        embed=build_sheet_embed(rec),
-    )
-
-
-@sheet_tattoo_grp.command(name="remove", description="Remove a tattoo from a character. [Fortune]")
-@app_commands.describe(name="Tattoo to remove.", member="Target player [Fortune]")
-@app_commands.autocomplete(name=_tattoo_autocomplete)
-async def sheet_tattoo_remove(
-    interaction: discord.Interaction, name: str, member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    key = name.lower().strip()
-    before = len(c.tattoos)
-    c.tattoos = [x for x in c.tattoos if x.lower() != key]
-    if len(c.tattoos) == before:
-        await interaction.response.send_message(
-            f"**{c.name}** doesn't have a **{name}** tattoo.", ephemeral=True
-        )
-        return
-    if (c.active_tattoo or "").lower() == key:
-        c.active_tattoo = ""
-    store.save(rec)
-    await interaction.response.send_message(
-        f"Removed **{name}** tattoo from **{c.name}**.", embed=build_sheet_embed(rec)
-    )
-
-
 @sheet_tattoo_grp.command(name="activate", description="Set the active tattoo (only one at a time, except Mantis/Ocean passive).")
 @app_commands.describe(
     name="Tattoo to activate.",
@@ -4654,7 +4166,7 @@ async def sheet_tattoo_activate(
     key = name.lower().strip()
     if key not in [x.lower() for x in c.tattoos]:
         await interaction.response.send_message(
-            f"**{c.name}** doesn't have a **{name}** tattoo. Grant it with `/sheet tattoo add`.",
+            f"**{c.name}** doesn't have a **{name}** tattoo. Grant it with `/edit feature category:Tattoo entry:{name}`.",
             ephemeral=True,
         )
         return
@@ -4706,79 +4218,11 @@ async def sheet_tattoo_activate(
     )
 
 
-@sheet.command(name="wound", description="Apply wounds to the active character (raw, no armor reduction here). [Fortune]")
-@app_commands.describe(
-    amount="Wounds to apply.",
-    member="Target player [Fortune]. Omit for your own active character.",
-)
-async def sheet_wound(
-    interaction: discord.Interaction,
-    amount: app_commands.Range[int, 1, 1000],
-    member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    if await _refuse_if_dead(interaction, c):
-        return
-    old = stats.wound_level_name(c)
-    c.wounds_taken += amount
-    store.save(rec, note="wound")
-    new = stats.wound_level_name(c)
-    crossed = f"  ({old} → **{new}**)" if new != old else ""
-    dead = ""
-    if stats.is_dead(c):
-        death_notes = await _on_death(str(interaction.guild_id), c.name, rec.owner_id, rec.id)
-        dead = "  **DEAD**" + "".join(f"\n- {n}" for n in death_notes)
-    await interaction.response.send_message(
-        f"**{c.name}** takes **{amount}** wounds → {c.wounds_taken} total{crossed}{dead}",
-        embed=build_sheet_embed(rec),
-    )
-
-@sheet.command(name="heal", description="Heal wounds on the active character. [Fortune]")
-@app_commands.describe(
-    amount="Wounds to heal.",
-    member="Target player [Fortune]. Omit for your own active character.",
-)
-async def sheet_heal(
-    interaction: discord.Interaction,
-    amount: app_commands.Range[int, 1, 1000],
-    member: discord.Member | None = None,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    rec, err = await _resolve_active_for_edit(interaction, member)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    if stats.is_dead(c):
-        await interaction.response.send_message(f"**{c.name}** is dead. PC death is permanent.", ephemeral=True)
-        return
-    old = stats.wound_level_name(c)
-    c.wounds_taken = max(0, c.wounds_taken - amount)
-    store.save(rec, note="heal")
-    new = stats.wound_level_name(c)
-    crossed = f"  ({old} → **{new}**)" if new != old else ""
-    await interaction.response.send_message(
-        f"**{c.name}** heals **{amount}** wounds → {c.wounds_taken} total{crossed}",
-        embed=build_sheet_embed(rec),
-    )
-
 # ===========================================================================
 # /dm group
 # ===========================================================================
 dm = app_commands.Group(name="dm", description="DM tools: Requires the Fortune role (or Kami for admin commands).")
 npc_group = app_commands.Group(name="npc", description="Generate, view, and manage NPC characters.")
-npc_edit_group = app_commands.Group(name="npc-edit", description="Edit NPC stats: Traits, skills, items, spells, and gear.")
 creature_group = app_commands.Group(name="creature", description="Spawn and run bestiary creatures.")
 room_group = app_commands.Group(name="room", description="Create private play rooms and invite people.")
 category_group = app_commands.Group(name="category", description="Organise NPCs and creatures into named groups.")
@@ -4795,7 +4239,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/dm setdate", "Set the Rokugani calendar date (year/month/day)"),
         ("/dm roles", "Show Fortune and Kami role holders"),
         ("/dm influence", "Track Influence Points (court scene)"),
-        ("/dm mount", "Toggle mounted state on a character (outside combat)"),
+        ("/edit mount", "Toggle mounted state on a character (outside combat)"),
         ("/room create", "Create a private play room (thread, optional description)"),
         ("/room describe", "Set or update the pinned room description"),
         ("/room invite / kick", "Add or remove room members"),
@@ -4807,18 +4251,25 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/npc view", "View an NPC's full stat block"),
         ("/npc list", "List all NPCs on this server"),
         ("/sheet activate", "Act as an NPC: attacks, checks, spells use it"),
-        ("/npc-edit trait / skill / set", "Edit Traits, Skills, or numeric fields"),
-        ("/npc-edit wound / heal", "Apply or heal wounds"),
-        ("/npc-edit item", "Add/remove inventory items"),
-        ("/npc-edit spell", "Add/remove known spells"),
-        ("/npc-edit equip", "Set weapon, off-hand, armor name"),
-        ("/npc-edit feature", "Add/remove advantage, technique, kata, etc."),
-        ("/npc-edit affinity", "Set shugenja affinity/deficiency"),
-        ("/npc notes", "Set or clear NPC notes"),
         ("/npc clone", "Clone an NPC with a new name"),
-        ("/npc rename / delete", "Rename or remove an NPC"),
+        ("/npc delete", "Remove an NPC"),
         ("/npc place / dismiss", "Place or remove an NPC in a room"),
         ("/npc say", "Speak as an NPC (webhook - appears as their name)"),
+    ]),
+    ("", "Edit (PC or NPC)", "Unified staff edits for any character. [Fortune]", [
+        ("/edit trait", "Set a Trait (or Void Ring) value"),
+        ("/edit skill", "Set skill ranks (single or bulk)"),
+        ("/edit field", "Set numeric fields (honor, glory, void points, etc.)"),
+        ("/edit identity", "Set clan, family, school"),
+        ("/edit equip", "Set weapon, off-hand, armor"),
+        ("/edit feature", "Add/remove advantage, technique, kata, kiho, weapon, quality, emphasis, tattoo, spell"),
+        ("/edit elements", "Set affinity/deficiency element"),
+        ("/edit wound / heal", "Apply or heal wounds"),
+        ("/edit activate", "Activate/deactivate Kata, Kiho, or Tattoo"),
+        ("/edit rename / notes", "Rename a character or set notes"),
+        ("/edit mount", "Toggle mounted state (outside combat)"),
+        ("/edit item", "Add/remove inventory items"),
+        ("/edit spell", "Add/remove known spells"),
     ]),
     ("", "Creatures", "Bestiary creature management.", [
         ("/creature catalog", "Search bestiary templates (compact)"),
@@ -5143,63 +4594,6 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         await cog_seasons.on_day_advanced(interaction.guild, old_cal, new_cal)
     if interaction.guild and new_cal:
         await cog_weather.on_day_advanced(interaction.guild, new_cal)
-
-
-@dm.command(name="mount", description="Toggle mounted state on a character (outside combat). [Fortune]")
-@app_commands.describe(
-    member="Target player.",
-    dismount="Dismount instead of mounting.",
-)
-async def dm_mount(
-    interaction: discord.Interaction,
-    member: discord.Member,
-    dismount: bool = False,
-) -> None:
-    if not await _require_guild(interaction):
-        return
-    if not await _require_dm_role(interaction):
-        return
-    guild = str(interaction.guild_id)
-    rec = store.get_active(guild, str(member.id))
-    if rec is None:
-        await interaction.response.send_message(
-            f"{member.display_name} has no active character.", ephemeral=True,
-        )
-        return
-    c = rec.character
-    if await _refuse_if_dead(interaction, c):
-        return
-    mounting = not dismount
-    if c.is_mounted == mounting:
-        state = "already mounted" if mounting else "already dismounted"
-        await interaction.response.send_message(
-            f"**{c.name}** is {state}.", ephemeral=True,
-        )
-        return
-    c.is_mounted = mounting
-    prof = combat.get_armor(c.armor_name) if c.armor_name else None
-    armor_note = ""
-    if prof and prof.get("tn_bonus_mounted"):
-        if mounting:
-            c.armor_tn_bonus = prof["tn_bonus_mounted"]
-        else:
-            c.armor_tn_bonus = prof["tn_bonus"]
-        armor_note = f" Armor TN bonus → +{c.armor_tn_bonus}."
-    store.save(rec, note="mount" if mounting else "dismount")
-    if mounting:
-        embed = discord.Embed(
-            title=f"{c.name} mounts up",
-            color=discord.Color.dark_gold(),
-            description=f"Riding armor skill penalty removed while mounted.{armor_note}",
-        )
-    else:
-        embed = discord.Embed(
-            title=f"{c.name} dismounts",
-            color=discord.Color.greyple(),
-            description=armor_note.strip() if armor_note else "Mounted condition cleared.",
-        )
-    embed.set_footer(text=f"Set by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
 
 
 def _format_rokugani_date(year: int, month: int, day: int) -> str:
@@ -5968,7 +5362,7 @@ async def void_status_shortcut(
 
 _HELP_BLURBS: dict[str, str] = {
     "sheet": "Your character sheet: Create, view, Kata, Kiho, tattoos, export/import, learn techniques. One character per player; staff use activate to act as NPCs.",
-    "stat": "Staff sheet edits: Traits, skills, identity, numeric fields, armor, qualities, advantages/disadvantages. Players use /inventory for gear and /xp to advance.",
+    "edit": "Staff sheet edits for any character (PC or NPC): Traits, skills, identity, fields, equip, features, elements, wounds, healing, activate, rename, notes, mount, items, spells. [Fortune]",
     "inventory": "Your gear and purse in one panel: Wield, weapons, items, koku.",
     "xp": "Spend Experience: /xp spend opens a guided menu; or use /xp trait, /xp skill, etc. directly.",
     "roll": "Roll & Keep dice, with optional TN, Raises and Emphasis.",
@@ -5988,7 +5382,6 @@ _HELP_BLURBS: dict[str, str] = {
     "location": "In-character areas and location channels.",
     "date": "The current Rokugani calendar date.",
     "npc": "Stored NPCs: Generate, list, view, clone, place in rooms, speak as them. [Fortune]",
-    "npc-edit": "Edit NPC stats and gear [Fortune].",
     "creature": "Bestiary creatures: Browse catalog, spawn, create custom, wound, heal, attack. [Fortune]",
     "category": "Group NPCs and creatures for bulk actions [Fortune].",
     "dm": "Fortune and Kami tools: Wizard menu, party overview, new day, damage, heal, taint, treat, undo, revive, craft, influence, announce, pending approvals, channel config.",
@@ -6005,12 +5398,12 @@ _HELP_BLURBS: dict[str, str] = {
 }
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Getting started", ["help", "whoami", "players", "compare", "date"]),
-    ("Your character", ["sheet", "inventory", "xp", "void", "letter", "rumor", "stat"]),
+    ("Your character", ["sheet", "inventory", "xp", "void", "letter", "rumor"]),
     ("Dice and checks", ["roll", "dice", "check", "macro", "history"]),
     ("Fights and magic", ["combat", "fight", "engage", "grapple", "duel", "spell"]),
     ("Places", ["room", "location"]),
     ("Rules reference", ["ref"]),
-    ("Staff [Fortune]", ["npc", "npc-edit", "creature", "category", "weather", "dm"]),
+    ("Staff [Fortune]", ["npc", "edit", "creature", "category", "weather", "dm"]),
     ("Admin [Kami]", ["setup", "sync", "ping"]),
 ]
 _HELP_ORDER: list[str] = [name for _, names in _HELP_SECTIONS for name in names]
@@ -6278,145 +5671,6 @@ def _resolve_npc(
         return None, f"No NPC named **{name}**."
     return rec, None
 
-@npc_edit_group.command(name="trait", description="Set a Trait (or Void) on an NPC. [Fortune]")
-@app_commands.describe(name="NPC name.", trait="Which Trait.", value="New value (0-10).")
-@app_commands.choices(trait=_TRAIT_CHOICES)
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_trait(
-    interaction: discord.Interaction,
-    name: str,
-    trait: app_commands.Choice[str],
-    value: app_commands.Range[int, 0, 10],
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    rec.character.set_trait(trait.value, value)
-    if trait.value == "void":
-        rec.character.max_void_points = rec.character.void_ring
-        rec.character.current_void_points = min(rec.character.current_void_points, taint.void_point_cap(rec.character))
-    store.save(rec)
-    label = "Void" if trait.value == "void" else trait.value.capitalize()
-    await interaction.response.send_message(
-        f"Set **{label}** to **{value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
-    )
-
-@npc_edit_group.command(name="skill", description="Set a skill rank on an NPC (0 removes it). [Fortune]")
-@app_commands.describe(name="NPC name.", skill="Skill name.", rank="Rank 0-10 (0 removes).")
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_skill(
-    interaction: discord.Interaction,
-    name: str,
-    skill: app_commands.Range[str, 1, 40],
-    rank: app_commands.Range[int, 0, 10],
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    skill_name = skill.strip().title()
-    if rank == 0:
-        rec.character.skills.pop(skill_name, None)
-        msg = f"Removed **{skill_name}** from **{rec.character.name}**."
-    else:
-        rec.character.skills[skill_name] = rank
-        msg = f"Set **{skill_name}** to rank **{rank}** on **{rec.character.name}**."
-    store.save(rec)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
-@npc_edit_group.command(name="set", description="Set a numeric field on an NPC (honor, armor, void points, etc.). [Fortune]")
-@app_commands.describe(name="NPC name.", field="Which field.", value="New value.")
-@app_commands.choices(field=_SET_CHOICES)
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_set(
-    interaction: discord.Interaction,
-    name: str,
-    field: app_commands.Choice[str],
-    value: float,
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    _apply_numeric_field(rec.character, field.value, value)
-    store.save(rec)
-    await interaction.response.send_message(
-        f"Updated **{field.value}** on **{rec.character.name}**.", embed=build_sheet_embed(rec)
-    )
-
-@npc_edit_group.command(name="wound", description="Apply wounds to an NPC. [Fortune]")
-@app_commands.describe(name="NPC name.", amount="Wounds to apply.")
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_wound(
-    interaction: discord.Interaction, name: str, amount: app_commands.Range[int, 1, 1000]
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    if await _refuse_if_dead(interaction, c):
-        return
-    old = stats.wound_level_name(c)
-    c.wounds_taken += amount
-    store.save(rec, note="wound")
-    new = stats.wound_level_name(c)
-    crossed = f"  ({old} → **{new}**)" if new != old else ""
-    dead = ""
-    if stats.is_dead(c):
-        death_notes = await _on_death(str(interaction.guild_id), c.name, rec.owner_id, rec.id)
-        dead = "  **DEAD**" + "".join(f"\n- {n}" for n in death_notes)
-    await interaction.response.send_message(
-        f"**{c.name}** takes **{amount}** wounds → {c.wounds_taken} total{crossed}{dead}",
-        embed=build_sheet_embed(rec),
-    )
-
-@npc_edit_group.command(name="heal", description="Heal wounds on an NPC. [Fortune]")
-@app_commands.describe(name="NPC name.", amount="Wounds to heal.")
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_heal(
-    interaction: discord.Interaction, name: str, amount: app_commands.Range[int, 1, 1000]
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    if await _refuse_if_dead(interaction, c):
-        return
-    old = stats.wound_level_name(c)
-    c.wounds_taken = max(0, c.wounds_taken - amount)
-    store.save(rec, note="heal")
-    new = stats.wound_level_name(c)
-    crossed = f"  ({old} → **{new}**)" if new != old else ""
-    await interaction.response.send_message(
-        f"**{c.name}** heals **{amount}** wounds → {c.wounds_taken} total{crossed}",
-        embed=build_sheet_embed(rec),
-    )
-
-@npc_group.command(name="rename", description="Rename an NPC. [Fortune]")
-@app_commands.describe(name="Current NPC name.", new_name="New name.")
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_rename(
-    interaction: discord.Interaction, name: str, new_name: app_commands.Range[str, 1, 64]
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    if store.get_by_name(str(interaction.guild_id), NPC_OWNER, new_name) is not None:
-        await interaction.response.send_message(
-            f"An NPC named **{new_name}** already exists.", ephemeral=True
-        )
-        return
-    old_name = rec.character.name
-    rec.character.name = new_name
-    store.save(rec)
-    await interaction.response.send_message(
-        f"Renamed **{old_name}** → **{new_name}**.", embed=build_sheet_embed(rec)
-    )
-
 # -- NPC room placement & speech -------------------------------------------
 
 async def _get_npc_webhook(channel: discord.TextChannel) -> discord.Webhook:
@@ -6533,84 +5787,6 @@ async def npc_say(interaction: discord.Interaction, name: str, message: app_comm
     except discord.HTTPException as exc:
         await interaction.response.send_message(f"Webhook failed: {exc}", ephemeral=True)
 
-# --- NPC inventory, spells, notes, clone -----------------------------------
-
-@npc_edit_group.command(name="item", description="Add or remove items from an NPC's inventory. [Fortune]")
-@app_commands.describe(
-    name="NPC name.", item="Item name.",
-    quantity="How many (default 1).", remove="Remove instead of adding.",
-)
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_item(
-    interaction: discord.Interaction, name: str, item: str,
-    quantity: app_commands.Range[int, 1, 9999] = 1, remove: bool = False,
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    ok, msg = _modify_inventory(c.inventory, c.name, item.strip(), quantity, remove)
-    if not ok:
-        await interaction.response.send_message(msg, ephemeral=True)
-        return
-    store.save(rec)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
-@npc_edit_group.command(name="spell", description="Add or remove a spell from an NPC's known spell list. [Fortune]")
-@app_commands.describe(
-    name="NPC name.", spell="Spell name to add or remove.", remove="Remove instead of adding.",
-)
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_spell(
-    interaction: discord.Interaction, name: str, spell: str, remove: bool = False,
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    spell_name = spell.strip()
-    if remove:
-        match = next((s for s in c.spells_known if s.lower() == spell_name.lower()), None)
-        if match is None:
-            await interaction.response.send_message(
-                f"**{c.name}** doesn't know **{spell_name}**.", ephemeral=True,
-            )
-            return
-        c.spells_known.remove(match)
-        msg = f"Removed spell **{match}** from **{c.name}**."
-    else:
-        if any(s.lower() == spell_name.lower() for s in c.spells_known):
-            await interaction.response.send_message(
-                f"**{c.name}** already knows **{spell_name}**.", ephemeral=True,
-            )
-            return
-        c.spells_known.append(spell_name)
-        msg = f"Added spell **{spell_name}** to **{c.name}**."
-    store.save(rec)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
-@npc_group.command(name="notes", description="Set or clear notes on an NPC. [Fortune]")
-@app_commands.describe(
-    name="NPC name.", text="Notes text (omit or leave empty to clear).",
-)
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_notes(
-    interaction: discord.Interaction, name: str, text: str = "",
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    rec.character.notes = text.strip()
-    store.save(rec)
-    if rec.character.notes:
-        msg = f"Notes set on **{rec.character.name}**: *{rec.character.notes}*"
-    else:
-        msg = f"Notes cleared on **{rec.character.name}**."
-    await interaction.response.send_message(msg, ephemeral=True)
-
 @npc_group.command(name="clone", description="Clone an NPC with a new name. [Fortune]")
 @app_commands.describe(name="NPC to clone.", new_name="Name for the clone.")
 @app_commands.autocomplete(name=_npc_autocomplete)
@@ -6634,182 +5810,6 @@ async def npc_clone(
     await interaction.response.send_message(
         f"Cloned **{rec.character.name}** → **{clone.name}**.",
         embed=build_sheet_embed(new_rec),
-    )
-
-@npc_edit_group.command(name="equip", description="Set an NPC's equipped weapon and/or armor name. [Fortune]")
-@app_commands.describe(
-    name="NPC name.",
-    weapon="Equipped weapon name (empty to clear).",
-    off_hand="Off-hand weapon (empty to clear).",
-    armor="Armor name (empty to clear).",
-)
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_equip(
-    interaction: discord.Interaction, name: str,
-    weapon: str | None = None, off_hand: str | None = None, armor: str | None = None,
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    changes: list[str] = []
-    if weapon is not None:
-        c.equipped_weapon = weapon.strip()
-        changes.append(f"Weapon: **{c.equipped_weapon or '(none)'}**")
-    if off_hand is not None:
-        c.off_hand_weapon = off_hand.strip()
-        changes.append(f"Off-hand: **{c.off_hand_weapon or '(none)'}**")
-    if armor is not None:
-        a = armor.lower().strip()
-        if a in ("none", "", "remove"):
-            c.armor_name = ""
-            c.owned_armor = ""
-            c.armor_tn_bonus = 0
-            c.armor_reduction = 0
-            changes.append("Armor: **(none)**")
-        else:
-            spec = combat.get_armor(a)
-            if spec is not None:
-                c.armor_name = a
-                c.owned_armor = a
-                c.armor_tn_bonus = spec["tn_bonus"]
-                c.armor_reduction = spec["reduction"]
-                changes.append(f"Armor: **{a}** (ATN+{spec['tn_bonus']}, Red {spec['reduction']})")
-            else:
-                c.armor_name = a
-                c.owned_armor = a
-                changes.append(f"Armor: **{a}** (custom - set ATN/Reduction manually)")
-    if not changes:
-        await interaction.response.send_message(
-            "Provide at least one of `weapon:`, `off_hand:`, or `armor:`.", ephemeral=True,
-        )
-        return
-    store.save(rec)
-    await interaction.response.send_message(
-        f"**{c.name}** equipment updated:\n" + "\n".join(changes),
-        embed=build_sheet_embed(rec),
-    )
-
-_FEATURE_FIELDS = [
-    app_commands.Choice(name="Advantage", value="advantages"),
-    app_commands.Choice(name="Disadvantage", value="disadvantages"),
-    app_commands.Choice(name="Technique", value="techniques"),
-    app_commands.Choice(name="Kata", value="katas"),
-    app_commands.Choice(name="Kiho", value="kiho"),
-    app_commands.Choice(name="Weapon (owned)", value="weapons"),
-    app_commands.Choice(name="Weapon Quality", value="weapon_qualities"),
-    app_commands.Choice(name="Emphasis", value="_emphasis"),
-]
-
-@npc_edit_group.command(name="feature", description="Add or remove an advantage, technique, kata, kiho, weapon, quality, or emphasis. [Fortune]")
-@app_commands.describe(
-    name="NPC name.", field="Which feature list to modify.",
-    entry="Name to add or remove.", remove="Remove instead of adding.",
-    skill="Skill name (required for Emphasis only).",
-)
-@app_commands.choices(field=_FEATURE_FIELDS)
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_feature(
-    interaction: discord.Interaction, name: str,
-    field: app_commands.Choice[str], entry: str,
-    remove: bool = False, skill: str | None = None,
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    entry_name = entry.strip()
-    if field.value == "_emphasis":
-        if not skill:
-            await interaction.response.send_message(
-                "Emphasis requires the `skill:` parameter (e.g. skill: Kenjutsu).", ephemeral=True,
-            )
-            return
-        skill_name = skill.strip()
-        if remove:
-            emph_list = c.emphases.get(skill_name, [])
-            match = next((e for e in emph_list if e.lower() == entry_name.lower()), None)
-            if match is None:
-                await interaction.response.send_message(
-                    f"**{c.name}** has no emphasis **{entry_name}** under {skill_name}.", ephemeral=True,
-                )
-                return
-            emph_list.remove(match)
-            if not emph_list:
-                del c.emphases[skill_name]
-            msg = f"Removed emphasis **{match}** ({skill_name}) from **{c.name}**."
-        else:
-            emph_list = c.emphases.setdefault(skill_name, [])
-            if any(e.lower() == entry_name.lower() for e in emph_list):
-                await interaction.response.send_message(
-                    f"**{c.name}** already has emphasis **{entry_name}** under {skill_name}.", ephemeral=True,
-                )
-                return
-            emph_list.append(entry_name)
-            msg = f"Added emphasis **{entry_name}** ({skill_name}) to **{c.name}**."
-    else:
-        lst: list = getattr(c, field.value)
-        if remove:
-            match = next((x for x in lst if x.lower() == entry_name.lower()), None)
-            if match is None:
-                await interaction.response.send_message(
-                    f"**{c.name}** doesn't have {field.name} **{entry_name}**.", ephemeral=True,
-                )
-                return
-            lst.remove(match)
-            msg = f"Removed {field.name} **{match}** from **{c.name}**."
-        else:
-            if any(x.lower() == entry_name.lower() for x in lst):
-                await interaction.response.send_message(
-                    f"**{c.name}** already has {field.name} **{entry_name}**.", ephemeral=True,
-                )
-                return
-            lst.append(entry_name)
-            msg = f"Added {field.name} **{entry_name}** to **{c.name}**."
-    store.save(rec)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
-
-_ELEMENT_CHOICES = [
-    app_commands.Choice(name=e, value=e)
-    for e in ("Air", "Earth", "Fire", "Water", "Void", "(clear)")
-]
-
-@npc_edit_group.command(name="affinity", description="Set an NPC's affinity and/or deficiency element. [Fortune]")
-@app_commands.describe(
-    name="NPC name.",
-    affinity_element="Affinity element (choose '(clear)' to remove).",
-    deficiency_element="Deficiency element (choose '(clear)' to remove).",
-)
-@app_commands.choices(affinity_element=_ELEMENT_CHOICES, deficiency_element=_ELEMENT_CHOICES)
-@app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_affinity(
-    interaction: discord.Interaction, name: str,
-    affinity_element: app_commands.Choice[str] | None = None,
-    deficiency_element: app_commands.Choice[str] | None = None,
-) -> None:
-    rec, err = _resolve_npc(interaction, name)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    changes: list[str] = []
-    if affinity_element is not None:
-        c.affinity_element = "" if affinity_element.value == "(clear)" else affinity_element.value.lower()
-        changes.append(f"Affinity: **{c.affinity_element or '(none)'}**")
-    if deficiency_element is not None:
-        c.deficiency_element = "" if deficiency_element.value == "(clear)" else deficiency_element.value.lower()
-        changes.append(f"Deficiency: **{c.deficiency_element or '(none)'}**")
-    if not changes:
-        await interaction.response.send_message(
-            "Provide at least one of `affinity_element:` or `deficiency_element:`.", ephemeral=True,
-        )
-        return
-    store.save(rec)
-    await interaction.response.send_message(
-        f"**{c.name}** element affinity updated:\n" + "\n".join(changes),
-        ephemeral=True,
     )
 
 # ===========================================================================
@@ -10206,7 +9206,7 @@ async def school_learn(
     if s is None:
         await interaction.response.send_message(
             f"No school named **{lookup or '(unset)'}**. Set one with `school_name:` "
-            f"(or `/stat set` isn't for this: Pick from `/ref school search`).",
+            f"(or `/edit field` isn't for this: Pick from `/ref school search`).",
             ephemeral=True,
         )
         return
@@ -13110,12 +12110,34 @@ cog_weather.init(
     is_dm=_is_dm,
 )
 
+cog_edit.init(
+    store=store,
+    npc_owner=NPC_OWNER,
+    require_guild=_require_guild,
+    require_dm_role=_require_dm_role,
+    resolve_active=_resolve_active_for_edit,
+    refuse_if_dead=_refuse_if_dead,
+    on_death=_on_death,
+    audit_stat=_audit_stat,
+    build_sheet_embed=build_sheet_embed,
+    check_insight=_check_insight_rank_advance,
+    parse_advdis_name=_parse_advdis_name,
+    npc_autocomplete=_npc_autocomplete,
+    armor_autocomplete=_armor_autocomplete,
+    advantage_autocomplete=_advantage_autocomplete,
+    disadvantage_autocomplete=_disadvantage_autocomplete,
+    kata_autocomplete=_kata_autocomplete,
+    kiho_autocomplete=_kiho_autocomplete,
+    tattoo_autocomplete=_tattoo_autocomplete,
+    quality_autocomplete=_quality_autocomplete,
+    modify_inventory=_modify_inventory,
+)
+
 client.tree.add_command(sheet)
-client.tree.add_command(stat_group)
+client.tree.add_command(cog_edit.edit_group)
 client.tree.add_command(xp_group)
 client.tree.add_command(dm)
 client.tree.add_command(npc_group)
-client.tree.add_command(npc_edit_group)
 client.tree.add_command(creature_group)
 client.tree.add_command(room_group)
 client.tree.add_command(category_group)

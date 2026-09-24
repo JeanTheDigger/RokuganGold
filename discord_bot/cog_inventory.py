@@ -244,7 +244,7 @@ class InventoryPanel(discord.ui.View):
             if c.owned_armor and not c.armor_name:
                 opts.append(discord.SelectOption(label=f"Put on: {_armor_label(c.owned_armor)}"[:100], value="on"))
             if not opts:
-                self.status = "You don't own any armor. Staff can assign armor with `/stat armor`."
+                self.status = "You don't own any armor. Staff can assign armor with `/edit equip`."
                 self.action = ""
             else:
                 self.add_item(_Pick("Armor...", opts, self._on_wear_armor, 3))
