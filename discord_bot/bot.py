@@ -4093,7 +4093,7 @@ async def sheet_kata_activate(
         await interaction.response.send_message(msg, ephemeral=True)
         return
     store.save(rec)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec), ephemeral=True)
 
 @sheet_kiho_grp.command(name="activate", description="Activate/deactivate a Kiho (one Internal/Kharmic/Mystical; Martial stacks).")
 @app_commands.describe(
@@ -4118,7 +4118,7 @@ async def sheet_kiho_activate(
         await interaction.response.send_message(msg, ephemeral=True)
         return
     store.save(rec)
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec), ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -4160,7 +4160,8 @@ async def sheet_tattoo_activate(
         c.lion_tattoo_skill = ""
         store.save(rec)
         await interaction.response.send_message(
-            f"**{c.name}** deactivates the **{old}** tattoo.", embed=build_sheet_embed(rec)
+            f"**{c.name}** deactivates the **{old}** tattoo.", embed=build_sheet_embed(rec),
+            ephemeral=True,
         )
         return
     if not name:
@@ -4219,7 +4220,7 @@ async def sheet_tattoo_activate(
         extra = f"\n> Skill: **{skill.strip().title()} +{c.school_rank}** ranks (locked for duration)"
     await interaction.response.send_message(
         f"**{c.name}** activates the **{label}** tattoo.{effect}{extra}",
-        embed=build_sheet_embed(rec),
+        embed=build_sheet_embed(rec), ephemeral=True,
     )
 
 
@@ -7868,7 +7869,7 @@ async def _buy_named(interaction, member, name, mastery_level, attr, label, note
     await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
         f"**{c.name}** learns the {label} **{name}** (ML {mastery_level}) for **{cost}** XP.{note}\n"
-        f"XP left {c.xp:g}", embed=build_sheet_embed(rec))
+        f"XP left {c.xp:g}", embed=build_sheet_embed(rec), ephemeral=True)
 
 @xp_group.command(name="grant", description="Grant (or correct) a player's Experience. [Fortune]")
 @app_commands.describe(member="The player to grant XP to.", amount="XP amount (negative to correct).", reason="Optional note.")
@@ -7961,7 +7962,8 @@ async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[
     await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
         f"**{c.name}** raises **{label}** to rank **{new_rank}** for **{cost}** XP.\n"
-        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}", embed=build_sheet_embed(rec))
+        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}",
+        embed=build_sheet_embed(rec), ephemeral=True)
 
 @xp_group.command(name="skill", description="Spend XP to raise or learn a Skill (RAW: New rank x1).")
 @app_commands.describe(skill="Skill name.", member="Advance another player's character [Fortune]")
@@ -7996,7 +7998,8 @@ async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[s
     await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
         f"**{c.name}** raises **{skill_name}** to rank **{new_rank}** for **{cost}** XP.\n"
-        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}", embed=build_sheet_embed(rec))
+        f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}",
+        embed=build_sheet_embed(rec), ephemeral=True)
 
 @xp_group.command(name="emphasis", description="Spend 2 XP to add a Skill Emphasis (at most half the Skill rank, rounded up).")
 @app_commands.describe(skill="The skill to add an Emphasis to.", emphasis="The Emphasis (e.g. Katana).", member="Advance another player's character [Fortune]")
@@ -8029,7 +8032,7 @@ async def xp_emphasis(interaction: discord.Interaction, skill: app_commands.Rang
     await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
         f"**{c.name}** gains **{skill_name} (Emphasis: {emph})** for **{cost}** XP. XP left {c.xp:g}",
-        embed=build_sheet_embed(rec))
+        embed=build_sheet_embed(rec), ephemeral=True)
 
 def _kata_school_ok(c: Character, schools_str: str) -> tuple[bool, str]:
     """Check if character qualifies for a kata's school requirement."""
@@ -8248,7 +8251,7 @@ async def xp_advantage(
     param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(adv["name"])
     if param_hint and ":" not in input_name:
         msg += f"\n*Hint: Use `{adv['name']}: <{param_hint}>` to record the chosen option.*"
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec), ephemeral=True)
 
 @xp_group.command(name="remove_disadvantage", description="Buy off a Disadvantage with XP (cost = 2x its point value).")
 @app_commands.describe(
@@ -9245,7 +9248,7 @@ async def school_learn(
         msg = f"**{c.name}** learns from **{s['name']}** (up to Rank {c.school_rank}): " + ", ".join(added)
     else:
         msg = f"**{c.name}** already knows all **{s['name']}** techniques up to Rank {c.school_rank}."
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec))
+    await interaction.response.send_message(msg, embed=build_sheet_embed(rec), ephemeral=True)
 
 # ===========================================================================
 # /spell group: spells & elements (GDD s32–s37)
@@ -10580,7 +10583,7 @@ async def sheet_import(
     embed = build_sheet_embed(rec)
     await interaction.response.send_message(
         f"Imported **{char.name}** and set as your active character.",
-        embed=embed,
+        embed=embed, ephemeral=True,
     )
 
 # ===========================================================================
