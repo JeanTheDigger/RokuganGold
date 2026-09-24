@@ -118,7 +118,7 @@ def generate(
     # 4. Age from the Rank's range; koku = 1d10 x Rank (savings term only).
     age_lo, age_hi = RANK_AGE[rank]
     c.age = dice.rand_int_range(age_lo, age_hi)
-    c.koku = float(dice.roll_d10() * rank)
+    c.koku = dice.roll_d10() * rank
 
     # 5. Skills: caller-supplied school-skill names distributed per Rank. One
     #    becomes the specialty. No skill names are invented here.

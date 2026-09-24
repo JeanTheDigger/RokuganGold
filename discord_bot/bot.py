@@ -46,7 +46,7 @@ from l5r_rules import (
     families, heritage, kata, kata_effects, kiho, kiho_effects, mass_battle, npc_gen,
     schools, skill_mastery, spells, stats, taint, technique_effects,
 )
-from l5r_rules.character import Character
+from l5r_rules.character import Character, format_purse
 from l5r_rules.dice import DiceEngine, DiceResult
 
 # NPCs are stored as characters owned by this reserved per-guild pseudo-user, so
@@ -634,8 +634,8 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         extras.append("**Disadvantages:** " + ", ".join(c.disadvantages))
     if c.taint > 0:
         extras.append(f"**Taint:** {c.taint:g}")
-    if c.koku:
-        extras.append(f"**Koku:** {c.koku:g}")
+    if c.koku or c.bu or c.zeni:
+        extras.append(f"**Purse:** {format_purse(c)}")
     if c.inventory:
         inv_parts = []
         for iname, qty in sorted(c.inventory.items()):
@@ -4909,7 +4909,7 @@ def _undo_diff(entity_type: str, old: dict, new: dict) -> list[str]:
         watched = [
             ("taint", "Taint"), ("current_void_points", "Void Points"), ("xp", "XP"),
             ("honor", "Honor"), ("glory", "Glory"), ("status", "Status"), ("infamy", "Infamy"),
-            ("koku", "koku"), ("name", "name"),
+            ("koku", "koku"), ("bu", "bu"), ("zeni", "zeni"), ("name", "name"),
         ]
         skip = {"wounds_taken"}
     else:
@@ -5363,7 +5363,7 @@ async def void_status_shortcut(
 _HELP_BLURBS: dict[str, str] = {
     "sheet": "Your character sheet: Create, view, Kata, Kiho, tattoos, export/import, learn techniques. One character per player; staff use activate to act as NPCs.",
     "edit": "Staff sheet edits for any character (PC or NPC): Traits, skills, identity, fields, equip, features, elements, wounds, healing, activate, rename, notes, mount, items, spells. [Fortune]",
-    "inventory": "Your gear and purse in one panel: Wield, weapons, items, koku.",
+    "inventory": "Your gear and purse in one panel: Wield, weapons, items, koku/bu/zeni.",
     "xp": "Spend Experience: /xp spend opens a guided menu; or use /xp trait, /xp skill, etc. directly.",
     "roll": "Roll & Keep dice, with optional TN, Raises and Emphasis.",
     "dice": "Quick dice shorthand: 5k3, 7k2+5.",

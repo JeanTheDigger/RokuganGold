@@ -1425,7 +1425,7 @@ def apply_heritage(char: Character, result: dict) -> list[str]:
         char.infamy += grants["infamy"]
         applied.append(f"Infamy {grants['infamy']:+.1f}")
     if "koku" in grants:
-        char.koku += grants["koku"]
+        char.koku += int(grants["koku"])
         applied.append(f"{grants['koku']:+g} koku")
     if "advantages" in grants:
         for adv in grants["advantages"]:

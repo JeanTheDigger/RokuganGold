@@ -147,7 +147,8 @@ _TRAIT_CHOICES = [
 ]
 
 _SET_FIELDS = [
-    "honor", "glory", "status", "infamy", "taint", "koku", "age", "school_rank",
+    "honor", "glory", "status", "infamy", "taint", "koku", "bu", "zeni",
+    "age", "school_rank",
     "void_points_current", "void_points_max", "armor_tn_bonus", "armor_reduction",
 ]
 _SET_CHOICES = [app_commands.Choice(name=f, value=f) for f in _SET_FIELDS]
@@ -187,7 +188,11 @@ def _apply_numeric_field(c: Character, field: str, value: float) -> None:
     elif field == "taint":
         c.taint = max(0.0, float(value))
     elif field == "koku":
-        c.koku = float(value)
+        c.koku = max(0, int(value))
+    elif field == "bu":
+        c.bu = max(0, int(value))
+    elif field == "zeni":
+        c.zeni = max(0, int(value))
     elif field == "age":
         c.age = max(0, int(value))
     elif field == "school_rank":

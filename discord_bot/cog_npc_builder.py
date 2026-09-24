@@ -79,7 +79,7 @@ def new_state(user_id: int, guild_id: int, name: str, notes: str = "") -> dict:
         "skills": {},          # skill -> rank (explicit; school skills come from the school)
         "advantages": [], "disadvantages": [],
         "weapon": "", "off_hand": "", "armor": "",
-        "honor": None, "glory": None, "status": None, "koku": None,
+        "honor": None, "glory": None, "status": None, "koku": None, "bu": None, "zeni": None,
         "step": 0, "pending_trait": "", "skill_category": "", "adv_category": "", "disadv_category": "",
         "weapon_group": "",
     }
@@ -96,7 +96,8 @@ def state_from_record(rec: storage.CharacterRecord, user_id: int, guild_id: int)
         "skills": dict(c.skills), "emphases": {k: list(v) for k, v in c.emphases.items()},
         "advantages": list(c.advantages), "disadvantages": list(c.disadvantages),
         "weapon": c.equipped_weapon, "off_hand": c.off_hand_weapon, "armor": c.armor_name or "none",
-        "honor": c.honor, "glory": c.glory, "status": c.status, "koku": c.koku,
+        "honor": c.honor, "glory": c.glory, "status": c.status,
+        "koku": c.koku, "bu": c.bu, "zeni": c.zeni,
         "spells": list(c.spells_known), "school_type": c.school_type,
     })
     return state
@@ -184,9 +185,12 @@ def materialize(state: dict) -> Character:
             c.armor_reduction = spec["reduction"]
     elif armor == "none":
         c.armor_name, c.armor_tn_bonus, c.armor_reduction = "", 0, 0
-    for field in ("honor", "glory", "status", "koku"):
+    for field in ("honor", "glory", "status"):
         if state.get(field) is not None:
             setattr(c, field, float(state[field]))
+    for field in ("koku", "bu", "zeni"):
+        if state.get(field) is not None:
+            setattr(c, field, int(state[field]))
     for spell_name in state.get("spells", []):
         if spell_name not in c.spells_known:
             c.spells_known.append(spell_name)
@@ -347,25 +351,30 @@ class _Pick(discord.ui.Select):
         await self._handler(interaction, self.values[0])
 
 
-class _NumbersModal(discord.ui.Modal, title="Honor, Glory, Status, Koku"):
+class _NumbersModal(discord.ui.Modal, title="Honor, Glory, Status, Purse"):
     honor = discord.ui.TextInput(label="Honor (0-10, e.g. 4.5)", required=False, max_length=5)
     glory = discord.ui.TextInput(label="Glory (0-10)", required=False, max_length=5)
     status = discord.ui.TextInput(label="Status (0-10)", required=False, max_length=5)
-    koku = discord.ui.TextInput(label="Koku", required=False, max_length=8)
+    purse = discord.ui.TextInput(label="Purse (koku bu zeni, e.g. 5 2 3)", required=False, max_length=20)
     notes = discord.ui.TextInput(label="Notes", required=False, max_length=1000, style=discord.TextStyle.paragraph)
 
     def __init__(self, wizard: "NpcWizard") -> None:
         super().__init__()
         self.wizard = wizard
         st = wizard.state
-        for field in ("honor", "glory", "status", "koku"):
+        for field in ("honor", "glory", "status"):
             if st.get(field) is not None:
                 getattr(self, field).default = str(st[field])
+        k = st.get("koku") or 0
+        b = st.get("bu") or 0
+        z = st.get("zeni") or 0
+        if k or b or z:
+            self.purse.default = f"{k} {b} {z}"
         self.notes.default = st.get("notes", "") or ""
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         errors = []
-        for field, lo, hi in (("honor", 0, 10), ("glory", 0, 10), ("status", 0, 10), ("koku", 0, 1_000_000)):
+        for field, lo, hi in (("honor", 0, 10), ("glory", 0, 10), ("status", 0, 10)):
             raw = (getattr(self, field).value or "").strip()
             if not raw:
                 self.wizard.state[field] = None
@@ -379,6 +388,25 @@ class _NumbersModal(discord.ui.Modal, title="Honor, Glory, Status, Koku"):
                 errors.append(f"{field}: Must be between {lo} and {hi}")
                 continue
             self.wizard.state[field] = val
+        purse_raw = (self.purse.value or "").strip()
+        if not purse_raw:
+            self.wizard.state["koku"] = None
+            self.wizard.state["bu"] = None
+            self.wizard.state["zeni"] = None
+        else:
+            parts = purse_raw.split()
+            try:
+                pk = int(parts[0]) if len(parts) >= 1 else 0
+                pb = int(parts[1]) if len(parts) >= 2 else 0
+                pz = int(parts[2]) if len(parts) >= 3 else 0
+                if pk < 0 or pb < 0 or pz < 0:
+                    raise ValueError
+            except (ValueError, IndexError):
+                errors.append("Purse: Enter up to 3 whole numbers (koku bu zeni), e.g. 5 2 3")
+            else:
+                self.wizard.state["koku"] = pk
+                self.wizard.state["bu"] = pb
+                self.wizard.state["zeni"] = pz
         self.wizard.state["notes"] = (self.notes.value or "").strip()
         if errors:
             await interaction.response.send_message("Not applied:\n• " + "\n• ".join(errors), ephemeral=True)
@@ -451,7 +479,7 @@ class NpcWizard(discord.ui.View):
             "skills": "Pick a category, a skill, then its rank (0 removes). Lore, Craft, Artisan, Perform and Games take a specialty.",
             "advantages": "Pick a category, then an advantage to add; pick it again to remove it.",
             "disadvantages": "Pick a category, then a disadvantage to add; pick it again to remove it.",
-            "gear": "Weapon in hand, off-hand, armor. The Numbers button sets Honor, Glory, Status, Koku and notes.",
+            "gear": "Weapon in hand, off-hand, armor. The Numbers button sets Honor, Glory, Status, Purse and notes.",
             "review": "Check the sheet, then save it as an NPC, as a reusable template, or both.",
         }
         return f"{line}\n{hints.get(key, '')}"
@@ -542,7 +570,7 @@ class NpcWizard(discord.ui.View):
                 for k, a in combat.ARMOR_CATALOG.items()
             ]
             self.add_item(_Pick("Armor...", armor_opts, self._on_armor, 3))
-            numbers = discord.ui.Button(label="Numbers: Honor, Glory, Status, Koku, notes", style=discord.ButtonStyle.secondary, row=4)
+            numbers = discord.ui.Button(label="Numbers: Honor, Glory, Status, Purse, notes", style=discord.ButtonStyle.secondary, row=4)
             numbers.callback = self._on_numbers
             self.add_item(numbers)
         if key != "gear":
@@ -756,7 +784,7 @@ def parse_keyed(text: str) -> dict[str, str]:
 
 _GEAR_KEYS = {"weapon", "off", "off_hand", "offhand", "armor", "adv", "advantages", "advantage",
               "disadv", "disadvantages", "disadvantage", "spells", "spell"}
-_DETAIL_KEYS = {"clan", "family", "school", "rank", "type", "honor", "glory", "status", "koku", "notes"}
+_DETAIL_KEYS = {"clan", "family", "school", "rank", "type", "honor", "glory", "status", "koku", "bu", "zeni", "notes"}
 
 
 def form_to_state(user_id: int, guild_id: int, name: str, traits_text: str, skills_text: str,
@@ -767,7 +795,7 @@ def form_to_state(user_id: int, guild_id: int, name: str, traits_text: str, skil
     details = parse_keyed(details_text)
     for k in details:
         if k not in _DETAIL_KEYS:
-            raise ParseError(f"Unknown detail '{k}'. Use clan, family, school, rank, type, honor, glory, status, koku, notes.")
+            raise ParseError(f"Unknown detail '{k}'. Use clan, family, school, rank, type, honor, glory, status, koku, bu, zeni, notes.")
     if details.get("clan"):
         state["clan"] = details["clan"].strip().title()
     if details.get("family"):
@@ -791,7 +819,7 @@ def form_to_state(user_id: int, guild_id: int, name: str, traits_text: str, skil
             raise ParseError("rank must be 1-5.")
     if details.get("type"):
         state["school_type"] = details["type"].strip().capitalize()
-    for field, lo, hi in (("honor", 0, 10), ("glory", 0, 10), ("status", 0, 10), ("koku", 0, 1_000_000)):
+    for field, lo, hi in (("honor", 0, 10), ("glory", 0, 10), ("status", 0, 10)):
         if details.get(field):
             try:
                 val = float(details[field])
@@ -799,6 +827,15 @@ def form_to_state(user_id: int, guild_id: int, name: str, traits_text: str, skil
                 raise ParseError(f"{field} must be a number.")
             if not lo <= val <= hi:
                 raise ParseError(f"{field} must be between {lo} and {hi}.")
+            state[field] = val
+    for field in ("koku", "bu", "zeni"):
+        if details.get(field):
+            try:
+                val = int(details[field])
+            except ValueError:
+                raise ParseError(f"{field} must be a whole number.")
+            if val < 0:
+                raise ParseError(f"{field} must be 0 or more.")
             state[field] = val
     if details.get("notes"):
         state["notes"] = details["notes"]

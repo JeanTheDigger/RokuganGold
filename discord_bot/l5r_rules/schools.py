@@ -405,7 +405,12 @@ def apply_outfit(character, outfit: str) -> list[str]:
         low = item.lower()
         m_koku = re.match(r"(\d+(?:\.\d+)?)\s+koku", low)
         if m_koku:
-            character.koku += float(m_koku.group(1))
+            raw_koku = float(m_koku.group(1))
+            whole = int(raw_koku)
+            frac_zeni = round((raw_koku - whole) * 50)
+            character.koku += whole
+            character.bu += frac_zeni // 10
+            character.zeni += frac_zeni % 10
             applied.append(item)
             continue
         if low == "daisho":

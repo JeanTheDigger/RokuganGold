@@ -114,8 +114,10 @@ class Character:
     # -- Inventory: {item_name: quantity}. Quantity 0 means not carried. --
     inventory: dict[str, int] = field(default_factory=dict)
 
-    # -- Money --
-    koku: float = 0.0
+    # -- Money (1 koku = 5 bu = 50 zeni; 1 bu = 10 zeni) --
+    koku: int = 0
+    bu: int = 0
+    zeni: int = 0
 
     # -- Experience: spendable XP (DM-granted) and lifetime total spent --
     xp: float = 0.0
@@ -144,11 +146,16 @@ class Character:
     def to_dict(self) -> dict:
         return asdict(self)
 
+    @property
+    def total_zeni(self) -> int:
+        return self.koku * 50 + self.bu * 10 + self.zeni
+
     @classmethod
     def from_dict(cls, data: dict) -> "Character":
         # Tolerate missing/extra keys so sheets stay forward-compatible as the
         # model grows in later phases.  Coerce null values to their field
         # defaults so callers never hit AttributeError on None.
+        _migrate_koku(data)
         field_defaults: dict = {}
         for f in fields(cls):
             if f.default is not MISSING:
@@ -165,3 +172,30 @@ class Character:
                 v = d() if callable(d) else d
             cleaned[k] = v
         return cls(**cleaned)
+
+
+def _migrate_koku(data: dict) -> None:
+    """Convert legacy float koku to the three-denomination system."""
+    if "bu" in data or "zeni" in data:
+        return
+    raw = data.get("koku")
+    if raw is None or raw == 0:
+        data["koku"] = 0
+        return
+    total_zeni = round(float(raw) * 50)
+    data["koku"] = total_zeni // 50
+    remainder = total_zeni % 50
+    data["bu"] = remainder // 10
+    data["zeni"] = remainder % 10
+
+
+def format_purse(c: Character) -> str:
+    """Format the character's purse as a compact string."""
+    parts: list[str] = []
+    if c.koku:
+        parts.append(f"{c.koku} koku")
+    if c.bu:
+        parts.append(f"{c.bu} bu")
+    if c.zeni:
+        parts.append(f"{c.zeni} zeni")
+    return ", ".join(parts) if parts else "0 koku"

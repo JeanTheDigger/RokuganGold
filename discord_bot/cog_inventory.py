@@ -19,6 +19,7 @@ from discord import app_commands
 
 import storage
 from l5r_rules import combat
+from l5r_rules.character import format_purse
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ def build_inventory_embed(rec: storage.CharacterRecord) -> discord.Embed:
     else:
         armor = "none"
     embed.add_field(name="Armor", value=armor, inline=True)
-    embed.add_field(name="Koku", value=f"{c.koku:g}", inline=True)
+    embed.add_field(name="Purse", value=format_purse(c), inline=True)
     weapons = "\n".join(f"• {_weapon_label(w)}" for w in c.weapons) if c.weapons else "none"
     embed.add_field(name=f"Weapons owned ({len(c.weapons)})", value=weapons[:1024], inline=False)
     items = "\n".join(f"• {n} × {q}" for n, q in sorted(c.inventory.items())) if c.inventory else "none"
@@ -118,8 +119,10 @@ class _ItemModal(discord.ui.Modal, title="Add an item"):
         await self.panel.commit(interaction, msg)
 
 
-class _KokuModal(discord.ui.Modal, title="Koku: Add or Spend"):
-    amount = discord.ui.TextInput(label="Amount (negative spends)", placeholder="5 or -2.5", max_length=10)
+class _KokuModal(discord.ui.Modal, title="Purse: Add or Spend"):
+    koku_input = discord.ui.TextInput(label="Koku (negative spends)", placeholder="5 or -2", required=False, max_length=8)
+    bu_input = discord.ui.TextInput(label="Bu (negative spends)", placeholder="3 or -1", required=False, max_length=8)
+    zeni_input = discord.ui.TextInput(label="Zeni (negative spends)", placeholder="10 or -5", required=False, max_length=8)
     reason = discord.ui.TextInput(label="Reason (optional)", required=False, max_length=100)
 
     def __init__(self, panel: "InventoryPanel") -> None:
@@ -127,26 +130,53 @@ class _KokuModal(discord.ui.Modal, title="Koku: Add or Spend"):
         self.panel = panel
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        try:
-            amount = float(self.amount.value.strip())
-        except ValueError:
-            await interaction.response.send_message("Amount must be a number, e.g. 5 or -2.5.", ephemeral=True)
-            return
-        if not math.isfinite(amount):
-            await interaction.response.send_message("Amount must be a finite number.", ephemeral=True)
+        dk = db = dz = 0
+        for raw, label, target in (
+            (self.koku_input.value, "Koku", "dk"),
+            (self.bu_input.value, "Bu", "db"),
+            (self.zeni_input.value, "Zeni", "dz"),
+        ):
+            txt = (raw or "").strip()
+            if not txt:
+                continue
+            try:
+                val = int(txt)
+            except ValueError:
+                await interaction.response.send_message(f"{label} must be a whole number.", ephemeral=True)
+                return
+            if target == "dk":
+                dk = val
+            elif target == "db":
+                db = val
+            else:
+                dz = val
+        if dk == 0 and db == 0 and dz == 0:
+            await interaction.response.send_message("Enter at least one amount.", ephemeral=True)
             return
         if self.panel.reload() is None:
             await interaction.response.send_message("That character no longer exists.", ephemeral=True)
             return
         c = self.panel.rec.character
-        if amount < 0 and c.koku + amount < 0:
+        delta_zeni = dk * 50 + db * 10 + dz
+        if delta_zeni < 0 and c.total_zeni + delta_zeni < 0:
             await interaction.response.send_message(
-                f"**{c.name}** only has **{c.koku:g}** koku (tried to spend {abs(amount):g}).", ephemeral=True)
+                f"**{c.name}** only has **{format_purse(c)}** (not enough).", ephemeral=True)
             return
-        c.koku = round(c.koku + amount, 2)
-        label = f"Received **{amount:g}** koku" if amount >= 0 else f"Spent **{abs(amount):g}** koku"
+        total = c.total_zeni + delta_zeni
+        c.koku = total // 50
+        remainder = total % 50
+        c.bu = remainder // 10
+        c.zeni = remainder % 10
+        parts: list[str] = []
+        if dk:
+            parts.append(f"{'Received' if dk > 0 else 'Spent'} **{abs(dk)}** koku")
+        if db:
+            parts.append(f"{'received' if db > 0 else 'spent'} **{abs(db)}** bu")
+        if dz:
+            parts.append(f"{'received' if dz > 0 else 'spent'} **{abs(dz)}** zeni")
+        label = ", ".join(parts)
         why = f" ({self.reason.value.strip()})" if (self.reason.value or "").strip() else ""
-        await self.panel.commit(interaction, f"{label}{why}. Balance: **{c.koku:g}** koku.")
+        await self.panel.commit(interaction, f"{label}{why}. Balance: **{format_purse(c)}**.")
 
 
 class _Pick(discord.ui.Select):
@@ -168,7 +198,7 @@ class InventoryPanel(discord.ui.View):
         ("remove_item", "Remove items", False),
         ("wear_armor", "Put on / take off armor", False),
         ("add_item", "Add an item (staff)", True),
-        ("koku", "Koku: Add or spend (staff)", True),
+        ("koku", "Purse: Add or spend koku/bu/zeni (staff)", True),
         ("armor", "Assign armor (staff)", True),
         ("qualities", "Weapon qualities (staff)", True),
     ]
@@ -308,7 +338,7 @@ class InventoryPanel(discord.ui.View):
         action = values[0] if values else ""
         staff_only = {v for v, _, s in self.ACTIONS if s}
         if (action in staff_only or action.startswith("add:")) and not self.staff:
-            self.status = f"Adding items, koku, assigning armor, and qualities are managed by **{_d.role_fortune}**."
+            self.status = f"Adding items, purse, assigning armor, and qualities are managed by **{_d.role_fortune}**."
             await self.render(interaction)
             return
         if action == "add_item":
@@ -432,7 +462,7 @@ class InventoryPanel(discord.ui.View):
                                                 embed=build_inventory_embed(self.rec), view=None)
 
 
-@app_commands.command(name="inventory", description="Your gear and purse in one panel: Wield, weapons, items, koku (staff: Any character or NPC).")
+@app_commands.command(name="inventory", description="Your gear and purse in one panel: Wield, weapons, items, koku/bu/zeni (staff: Any character or NPC).")
 @app_commands.describe(member="Another player's character [Fortune].", npc="An NPC's inventory [Fortune].")
 async def inventory(interaction: discord.Interaction, member: discord.Member | None = None, npc: str | None = None) -> None:
     if not await _d.require_guild(interaction):
