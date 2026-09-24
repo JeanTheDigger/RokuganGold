@@ -38,6 +38,7 @@ import cog_letters
 import cog_npc_builder
 import cog_rumor
 import cog_seasons
+import cog_trade
 import cog_weather
 import ref_commands
 import storage
@@ -12181,12 +12182,21 @@ cog_give.init(
     combat_log=_combat_log,
 )
 
+cog_trade.init(
+    store=store,
+    require_guild=_require_guild,
+    combat_log=_combat_log,
+)
+cog_trade.trade.autocomplete("item")(cog_trade._inventory_autocomplete)
+
 client.tree.add_command(sheet)
 client.tree.add_command(cog_edit.edit_group)
 client.tree.add_command(cog_give.givekoku)
 client.tree.add_command(cog_give.givebu)
 client.tree.add_command(cog_give.givezeni)
 client.tree.add_command(cog_give.stipend_group)
+client.tree.add_command(cog_trade.pay)
+client.tree.add_command(cog_trade.trade)
 client.tree.add_command(xp_group)
 client.tree.add_command(dm)
 client.tree.add_command(npc_group)
