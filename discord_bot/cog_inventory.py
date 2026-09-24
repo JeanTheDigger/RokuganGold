@@ -310,7 +310,7 @@ class InventoryPanel(discord.ui.View):
                 await self.render(interaction)
                 return
         c.equipped_weapon = new_weapon
-        if c.off_hand_weapon == c.equipped_weapon:
+        if c.off_hand_weapon.lower() == c.equipped_weapon.lower():
             c.off_hand_weapon = ""
         await self.commit(interaction, f"**{c.name}** wields **{c.equipped_weapon.replace('_', ' ')}**.", "wield")
 
@@ -328,7 +328,7 @@ class InventoryPanel(discord.ui.View):
             self.status = "Arrows go in the main hand with a bow in the off hand, not the other way around."
             await self.render(interaction)
             return
-        c.off_hand_weapon = "" if off == c.equipped_weapon else off
+        c.off_hand_weapon = "" if off.lower() == c.equipped_weapon.lower() else off
         if _is_arrow(c.equipped_weapon or "") and not _is_bow(c.off_hand_weapon or ""):
             c.equipped_weapon = ""
         msg = f"Off hand: **{c.off_hand_weapon.replace('_', ' ') or 'nothing'}**." if off != c.equipped_weapon else "That weapon is already in the main hand."
@@ -397,7 +397,9 @@ class InventoryPanel(discord.ui.View):
             return
         removed = []
         for n in values:
-            key = next((k for k in c.inventory if k == n or k[:100] == n), None)
+            key = next((k for k in c.inventory if k == n), None)
+            if key is None:
+                key = next((k for k in c.inventory if k[:100] == n), None)
             if key is not None:
                 del c.inventory[key]
                 removed.append(key)

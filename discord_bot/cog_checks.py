@@ -170,7 +170,7 @@ def _fear(interaction: discord.Interaction, c, adv_r: int, adv_notes: list[str])
     """Apply a tracked failed-Fear penalty (GDD s46: -Xk0 to all rolls) to a check's rolled dice."""
     fr = _d.fear_penalty(interaction.channel_id, c.name)
     if fr:
-        return max(0, adv_r - fr), adv_notes + [f"Fear: -{fr}k0 (failed Fear check)"]
+        return adv_r - fr, adv_notes + [f"Fear: -{fr}k0 (failed Fear check)"]
     return adv_r, adv_notes
 
 
@@ -955,8 +955,8 @@ async def check_cooperative(
         c, spend_void, skill_name=skill, sk=sk, void_unskilled=void_unskilled,
     )
     result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=helper_rolled + adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
-    result["rolled"] = tv + sk + helper_rolled + adv_r + void_r
-    result["kept"] = tv + adv_k + void_k
+    result["rolled"] = max(1, tv + sk + helper_rolled + adv_r + void_r)
+    result["kept"] = max(1, tv + adv_k + void_k)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "Cooperative Check"
     if reason:
