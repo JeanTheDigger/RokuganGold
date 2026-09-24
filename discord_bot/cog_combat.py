@@ -5753,6 +5753,7 @@ class GrappleBoardView(views_base.PersistentView):
             return
         await interaction.response.defer()
         await self._end_grapple(interaction, "DM ended")
+        await interaction.followup.send("Grapple ended.", ephemeral=True)
 
 
 @combat_grapple.command(name="start", description="Start a grapple with interactive board (after successful initiation).")
@@ -8439,6 +8440,7 @@ class MassBattleBoardView(views_base.PersistentView):
         await interaction.response.defer()
         self._persist_args = self._updated_args()
         await self._repost(interaction.channel)
+        await interaction.followup.send("Done.", ephemeral=True, delete_after=1)
 
     @discord.ui.button(label="A -1", style=discord.ButtonStyle.secondary, row=1)
     async def bonus_a_down(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -8449,6 +8451,7 @@ class MassBattleBoardView(views_base.PersistentView):
         await interaction.response.defer()
         self._persist_args = self._updated_args()
         await self._repost(interaction.channel)
+        await interaction.followup.send("Done.", ephemeral=True, delete_after=1)
 
     @discord.ui.button(label="B +1", style=discord.ButtonStyle.secondary, row=1)
     async def bonus_b_up(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -8459,6 +8462,7 @@ class MassBattleBoardView(views_base.PersistentView):
         await interaction.response.defer()
         self._persist_args = self._updated_args()
         await self._repost(interaction.channel)
+        await interaction.followup.send("Done.", ephemeral=True, delete_after=1)
 
     @discord.ui.button(label="B -1", style=discord.ButtonStyle.secondary, row=1)
     async def bonus_b_down(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -8469,6 +8473,7 @@ class MassBattleBoardView(views_base.PersistentView):
         await interaction.response.defer()
         self._persist_args = self._updated_args()
         await self._repost(interaction.channel)
+        await interaction.followup.send("Done.", ephemeral=True, delete_after=1)
 
     # --- Row 2: Round control ---
 
@@ -8482,6 +8487,7 @@ class MassBattleBoardView(views_base.PersistentView):
         await interaction.response.defer()
         self._persist_args = self._updated_args()
         await self._repost(interaction.channel)
+        await interaction.followup.send("Done.", ephemeral=True, delete_after=1)
 
     @discord.ui.button(label="End Battle", style=discord.ButtonStyle.danger, row=2)
     async def end_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
