@@ -11,6 +11,7 @@ import discord
 from discord import app_commands
 
 import storage as _storage_mod
+from l5r_rules import stats as _stats
 from l5r_rules.character import Character, format_purse
 
 
@@ -305,6 +306,8 @@ async def pay_monthly_stipends(guild_id: str) -> list[str]:
     lines: list[str] = []
     for _owner_id, rec in active:
         c = rec.character
+        if _stats.is_dead(c):
+            continue
         clan = c.clan.strip().title()
         if clan not in stipends:
             continue
