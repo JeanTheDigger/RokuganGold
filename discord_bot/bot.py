@@ -879,7 +879,8 @@ async def sync_commands(interaction: discord.Interaction) -> None:
         too_big = "; ".join(f"/{n} is {c} chars (limit {COMMAND_TEXT_LIMIT})" for n, c in oversized)
         await interaction.followup.send(
             "Sync **failed**: Discord kept the previous command definitions.\n"
-            f"```\n{error[:1500]}\n```" + (f"\nOversized: {too_big}" if too_big else "")
+            f"```\n{error[:1500]}\n```" + (f"\nOversized: {too_big}" if too_big else ""),
+            ephemeral=True,
         )
         return
     await interaction.followup.send(f"Synced **{count}** commands to this server (global duplicates cleared).", ephemeral=True)
@@ -4657,7 +4658,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
                 description=stip_desc,
                 color=0xC4A747,
             )
-            await interaction.followup.send(embed=stipend_embed)
+            await interaction.followup.send(embed=stipend_embed, ephemeral=True)
 
 
 def _format_rokugani_date(year: int, month: int, day: int) -> str:
