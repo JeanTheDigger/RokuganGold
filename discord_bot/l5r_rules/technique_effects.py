@@ -274,6 +274,7 @@ def attacker_damage(
     attacker_stance: str = "",
     atk_init: int | None = None, def_init: int | None = None,
     defender: Character | None = None,
+    defender_stance: str = "attack",
 ) -> tuple[int, int, int, list[str]]:
     """(extra_rolled, extra_kept, flat_bonus, notes) for the damage roll."""
     known = _known(attacker)
@@ -346,7 +347,7 @@ def attacker_damage(
             rolled += 1; kept += 1; notes.append("The Strength of One Man +1k1 damage (higher Insight Rank)")
     if "weaken the resistance" in known and defender is not None:
         has_armor_red = getattr(defender, "armor_reduction", 0) > 0
-        tech_red_val, _ = defender_reduction_bonus(defender)
+        tech_red_val, _ = defender_reduction_bonus(defender, defender_stance)
         if not has_armor_red and tech_red_val <= 0:
             rolled += 1; notes.append("Weaken the Resistance +1k0 damage (opponent has no armor/technique Reduction)")
     if "hold the passes" in known and not weapon_profile.get("melee", True):
@@ -367,6 +368,7 @@ def attacker_damage(
 def attacker_reduction_ignored(
     attacker: Character, weapon_profile: dict, weapon_name: str = "",
     defender: Character | None = None,
+    defender_stance: str = "attack",
 ) -> tuple[int, list[str]]:
     """Amount of the target's Reduction ignored by the attacker's Techniques."""
     known = _known(attacker)
@@ -387,7 +389,7 @@ def attacker_reduction_ignored(
         ignore = _IGNORE_ALL; notes.append("One Blade, Both Hands ignores armor Reduction (tanto, off-hand empty)")
     if "weaken the resistance" in known and defender is not None:
         armor_red = getattr(defender, "armor_reduction", 0)
-        tech_red_val, _ = defender_reduction_bonus(defender)
+        tech_red_val, _ = defender_reduction_bonus(defender, defender_stance)
         total = armor_red + tech_red_val
         if total > 0:
             ignore += total; notes.append(f"Weaken the Resistance ignores {total} Reduction (armor {armor_red} + technique {tech_red_val})")

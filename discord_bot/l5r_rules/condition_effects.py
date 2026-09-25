@@ -46,7 +46,7 @@ def attacker_attack_dice(
         flat -= 5
         notes.append("Fatigued +5 TN (applied as -5 flat)")
 
-    if "mounted" in attacker_conditions:
+    if "mounted" in attacker_conditions and is_melee:
         rolled += 1
         notes.append("Mounted +1k0 attack (vs unmounted/lower)")
 

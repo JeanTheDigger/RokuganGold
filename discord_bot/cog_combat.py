@@ -501,6 +501,7 @@ class DamageView(views_base.PersistentView):
             extra_rolled += bg_roll
             t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(
                 attacker, wp, self.weapon, self.attacker_stance, self.atk_init, self.def_init,
+                defender_stance=self.defender_stance,
             )
             extra_rolled += t_roll
             if bg_note:
@@ -538,7 +539,7 @@ class DamageView(views_base.PersistentView):
             elif self.void_damage:
                 t_dmg_notes.append("Katana: No Void Points for +1k1 damage")
             ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
-            t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon)
+            t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon, defender_stance=self.defender_stance)
             ignore += t_ignore
             enc = _d.encounters.get(self.channel_id)
             enc_round = enc.round if enc else None
@@ -781,7 +782,7 @@ class DamageView(views_base.PersistentView):
         extra_rolled += bg_roll
         t_roll, t_kept, t_flat, t_dmg_notes = technique_effects.attacker_damage(
             attacker, wp, self.weapon, self.attacker_stance, self.atk_init, self.def_init,
-            defender=target,
+            defender=target, defender_stance=self.defender_stance,
         )
         extra_rolled += t_roll
         if bg_note:
@@ -819,7 +820,7 @@ class DamageView(views_base.PersistentView):
         elif self.void_damage:
             t_dmg_notes.append("Katana: No Void Points for +1k1 damage")
         ignore, sos_note = kata_effects.attacker_reduction_ignored(attacker, wp)
-        t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon, defender=target)
+        t_ignore, t_ign_notes = technique_effects.attacker_reduction_ignored(attacker, wp, self.weapon, defender=target, defender_stance=self.defender_stance)
         ignore += t_ignore
         enc = _d.encounters.get(self.channel_id)
         enc_round = enc.round if enc else None
