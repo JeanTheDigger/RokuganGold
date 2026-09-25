@@ -264,11 +264,16 @@ def parse_skills(skills: str) -> tuple[list[tuple[str, int, str | None]], list[s
 
 def _infer_type(school: dict) -> str | None:
     for kw in school.get("keywords", []):
-        t = _SCHOOL_TYPES.get(kw.lower())
-        if t:
-            return t
+        for part in kw.replace(",", "/").split("/"):
+            t = _SCHOOL_TYPES.get(part.strip().lower())
+            if t:
+                return t
     if school.get("affinity"):
         return "Shugenja"
+    name = school.get("name", "")
+    for label in ("Courtier", "Artisan", "Monk"):
+        if label in name:
+            return label
     return None
 
 
