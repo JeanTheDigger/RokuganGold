@@ -1578,7 +1578,7 @@ async def _show_school_select(interaction: discord.Interaction, state: dict, sch
     if not basic_schools:
         await interaction.response.edit_message(
             content=f"No basic schools found for **{school_clan}**. Pick **Different School** and choose another clan's school.",
-            embed=_active_embed(state), view=interaction.message.view,
+            embed=_active_embed(state),
         )
         return
     view = _WizardView(state)
@@ -3334,6 +3334,13 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
     if state.get("submitted"):
         await interaction.response.send_message(
             _SUBMITTED_TEXT.format(name=state.get("name", "your character")), ephemeral=True,
+        )
+        return
+    spent, remaining = _calc_chargen_xp(state)
+    if remaining < 0:
+        await interaction.response.send_message(
+            f"You are **{-remaining} XP** over budget. Remove purchases or add disadvantages before submitting.",
+            ephemeral=True,
         )
         return
     approval_ch_id = store.get_approval_channel(guild_id)

@@ -237,7 +237,11 @@ def parse_skills(skills: str) -> tuple[list[tuple[str, int, str | None]], list[s
         if not p:
             continue
         low = p.lower()
-        if low.startswith("any") or "any one" in low or low.startswith("choose") or low.startswith("one ") or re.search(r"\((?:pick|choose)\b", low):
+        if low.startswith("any") or "any one" in low or low.startswith("choose") or low.startswith("one "):
+            wildcards.append(p)
+            continue
+        paren_pick = re.search(r"\((?:pick|choose)\b", low)
+        if paren_pick and "emphasis" not in low[paren_pick.start():]:
             wildcards.append(p)
             continue
         rank = 1
@@ -252,7 +256,7 @@ def parse_skills(skills: str) -> tuple[list[tuple[str, int, str | None]], list[s
             if "/" in inner:
                 wildcards.append(p)
                 continue
-            if re.search(r"\b(?:may|replace|after|instead|see |era)\b", inner, re.I):
+            if re.search(r"\b(?:may|replace|after|instead|see |era|pick|choose)\b", inner, re.I):
                 p = re.sub(r"\s*\([^)]+\)", "", p).strip()
             else:
                 emph = inner
