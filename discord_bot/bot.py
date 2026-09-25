@@ -1088,7 +1088,8 @@ async def roll(
     embed.set_footer(text=footer)
 
     log_total = outcome["total"] if tn is not None else total
-    _log_roll(interaction.channel_id, interaction.user.display_name, title, log_total)
+    if not secret:
+        _log_roll(interaction.channel_id, interaction.user.display_name, title, log_total)
     await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 _DICE_RE = re.compile(
@@ -1156,7 +1157,8 @@ async def dice_quick(
             total_str += f"  (dice {result.total} {'+' if bonus >= 0 else '−'} {abs(bonus)})"
         embed.add_field(name="Total", value=total_str, inline=False)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    _log_roll(interaction.channel_id, interaction.user.display_name, title, outcome["total"] if tn else total)
+    if not secret:
+        _log_roll(interaction.channel_id, interaction.user.display_name, title, outcome["total"] if tn else total)
     await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 async def _weapon_autocomplete(
@@ -1482,10 +1484,16 @@ async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dic
         roll_btn = discord.ui.Button(label="Roll Heritage", style=discord.ButtonStyle.primary)
         skip_btn = discord.ui.Button(label="Skip", style=discord.ButtonStyle.secondary)
 
+        _roll_claimed = False
         async def on_roll(btn_inter: discord.Interaction) -> None:
+            nonlocal _roll_claimed
             if btn_inter.user.id != int(state["user_id"]):
                 await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
                 return
+            if _roll_claimed:
+                await btn_inter.response.send_message("Heritage already rolled.", ephemeral=True)
+                return
+            _roll_claimed = True
             result = heritage.roll_heritage(clan)
             heritage_text = f"{result['name']}: {result['effect']}"
             notes = result.get("notes", [])
@@ -2063,6 +2071,8 @@ def _build_base_char(state: dict) -> Character:
             char.clan = state["clan"]  # a Fox studying at a school filed under Mantis is still a Fox
     for pick in state.get("wildcard_picks", []):
         sk = pick["skill"]
+        if sk == "(auto-skipped)":
+            continue
         rk = pick["rank"]
         char.skills[sk] = max(char.skills.get(sk, 0), rk)
     return char
@@ -3409,10 +3419,20 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
         lobby_channel_id=int(state.get("channel_id", interaction.channel_id)),
     )
     _cg_lock_after_submit(state)   # before posting: a second click cannot race the first
-    await view.persist(await approval_ch.send(
-        content=f"{_dm_ping(approval_ch.guild)}New character submission awaiting review.",
-        embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
-    ))
+    try:
+        await view.persist(await approval_ch.send(
+            content=f"{_dm_ping(approval_ch.guild)}New character submission awaiting review.",
+            embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+        ))
+    except discord.HTTPException:
+        state["submitted"] = False
+        state.pop("submitted_at", None)
+        _cg_save(state)
+        await interaction.response.send_message(
+            "Failed to send the submission to the approval channel. Please try again.",
+            ephemeral=True,
+        )
+        return
 
     await interaction.response.edit_message(
         content=_SUBMITTED_TEXT.format(name=state["name"]),
@@ -9907,9 +9927,13 @@ async def taint_command(
     if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
-    if add is not None and not _is_dm(interaction):
-        await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to modify Taint.", ephemeral=True)
-        return
+    if not _is_dm(interaction):
+        if add is not None:
+            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to modify Taint.", ephemeral=True)
+            return
+        if name or member or is_npc:
+            await interaction.response.send_message(f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to view another character's Taint.", ephemeral=True)
+            return
     if is_npc and name:
         rec = store.get_by_name(guild, NPC_OWNER, name)
     elif member is not None:
@@ -10520,7 +10544,8 @@ async def dm_treat(
                 embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
             ))
             await interaction.response.send_message(
-                f"Treatment on **{pc.name}** succeeded - healing approval routed to the DM channel.{owner_ping}"
+                f"Treatment on **{pc.name}** succeeded - healing approval routed to the DM channel.{owner_ping}",
+                ephemeral=True,
             )
         else:
             await interaction.response.send_message(
@@ -10531,10 +10556,10 @@ async def dm_treat(
     elif success:
         if pc.wounds_taken <= 0:
             embed.add_field(name="Note", value=f"**{pc.name}** has no wounds to heal.", inline=False)
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
     else:
         embed.set_footer(text="L5R 4e: A failed Medicine check cannot be re-attempted on the same patient until the next day.")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ---------------------------------------------------------------------------
 # Phase 47: Character Import/Export
@@ -10723,7 +10748,8 @@ async def macro_roll(interaction: discord.Interaction, name: str, secret: bool =
         inline=False,
     )
     embed.set_footer(text=f"Total: {total}")
-    _log_roll(interaction.channel_id, interaction.user.display_name, title, total)
+    if not secret:
+        _log_roll(interaction.channel_id, interaction.user.display_name, title, total)
     await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 @macro_group.command(name="delete", description="Delete a saved macro.")
@@ -10762,6 +10788,12 @@ async def compare_characters(
     member_b: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
+        return
+    if not _is_dm(interaction) and (member_a or member_b):
+        await interaction.response.send_message(
+            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to compare another player's character.",
+            ephemeral=True,
+        )
         return
     guild = str(interaction.guild_id)
     owner_a = str(member_a.id) if member_a else str(interaction.user.id)

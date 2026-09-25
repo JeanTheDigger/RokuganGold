@@ -7722,6 +7722,9 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
             if rec is None:
                 not_found.append(f"NPC {ename}")
                 continue
+            if stats.is_dead(rec.character):
+                not_found.append(f"{rec.character.name} (dead)")
+                continue
             if _find_encounter_channel(rec.character.name, interaction.channel_id) is not None:
                 skipped_elsewhere.append(rec.character.name)
                 continue
@@ -7747,6 +7750,9 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
             rec_c = _d.store.get_creature_by_name(guild, ename)
             if rec_c is None:
                 not_found.append(f"Creature {ename}")
+                continue
+            if creature.creature_is_dead(rec_c.creature):
+                not_found.append(f"{rec_c.creature.name} (slain)")
                 continue
             if _find_encounter_channel(rec_c.creature.name, interaction.channel_id) is not None:
                 skipped_elsewhere.append(rec_c.creature.name)
@@ -7803,6 +7809,9 @@ async def combat_room(interaction: discord.Interaction) -> None:
         char_rec = _d.store.get_active(guild, uid)
         if char_rec is None:
             skipped.append(f"<@{uid}>")
+            continue
+        if stats.is_dead(char_rec.character):
+            skipped.append(f"{char_rec.character.name} (dead)")
             continue
         if _find_encounter_channel(char_rec.character.name, interaction.channel_id) is not None:
             skipped_elsewhere.append(char_rec.character.name)
