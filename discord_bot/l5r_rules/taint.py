@@ -91,10 +91,19 @@ def check_threshold_crossing(old_taint: float, new_taint: float, character: Char
             "description": taint_description(new_rank),
             "is_lost": new_rank >= 5,
         }
-        if new_rank >= 3:
-            result["mutation"] = mutation_roll()
-        if new_rank >= 4:
-            result["madness"] = madness_roll()
+        mutations = []
+        madnesses = []
+        for rank in range(old_rank + 1, new_rank + 1):
+            if rank >= 3:
+                mutations.append(mutation_roll())
+            if rank >= 4:
+                madnesses.append(madness_roll())
+        if mutations:
+            result["mutations"] = mutations
+            result["mutation"] = mutations[0]
+        if madnesses:
+            result["madnesses"] = madnesses
+            result["madness"] = madnesses[0]
         return result
     return None
 

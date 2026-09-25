@@ -143,7 +143,9 @@ class CharacterHub(discord.ui.View):
 
     # -- handlers ------------------------------------------------------------
     async def _on_sheet(self, interaction: discord.Interaction) -> None:
-        self.reload()
+        if self.reload() is None:
+            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
+            return
         await interaction.response.send_message(embed=_d.build_sheet_embed(self.rec), ephemeral=True)
 
     async def _on_inventory(self, interaction: discord.Interaction) -> None:

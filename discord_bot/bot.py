@@ -4581,10 +4581,10 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
                                 f"Taint {tr['old_taint']:g} → **{tr['new_taint']:g}**")
                         if tr["crossing"]:
                             line += f" - **Rank {tr['crossing']['new_rank']}**: {tr['crossing']['description']}"
-                            if "mutation" in tr["crossing"]:
-                                line += f" Mutation: {tr['crossing']['mutation']}."
-                            if "madness" in tr["crossing"]:
-                                line += f" Madness: {tr['crossing']['madness']}."
+                            for m in tr["crossing"].get("mutations", []):
+                                line += f" Mutation: {m}."
+                            for m in tr["crossing"].get("madnesses", []):
+                                line += f" Madness: {m}."
                         parts.append(line)
                 else:
                     parts.append(f"Taint roll in {interval - c.taint_days_since_roll} day(s)")
@@ -9934,10 +9934,12 @@ async def taint_command(
         embed.add_field(name="Earth Ring", value=str(stats.earth_ring(c)), inline=True)
         if crossing:
             embed.add_field(name="Rank Crossed!", value=crossing["description"], inline=False)
-            if "mutation" in crossing:
-                embed.add_field(name="Mutation", value=crossing["mutation"], inline=False)
-            if "madness" in crossing:
-                embed.add_field(name="Madness", value=crossing["madness"], inline=False)
+            for i, m in enumerate(crossing.get("mutations", []), 1):
+                label = "Mutation" if len(crossing.get("mutations", [])) == 1 else f"Mutation {i}"
+                embed.add_field(name=label, value=m, inline=False)
+            for i, m in enumerate(crossing.get("madnesses", []), 1):
+                label = "Madness" if len(crossing.get("madnesses", [])) == 1 else f"Madness {i}"
+                embed.add_field(name=label, value=m, inline=False)
             if crossing["is_lost"]:
                 embed.add_field(name="LOST TO THE TAINT", value="Character becomes an NPC.", inline=False)
         await interaction.response.send_message(embed=embed, ephemeral=True)

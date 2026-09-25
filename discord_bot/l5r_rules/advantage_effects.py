@@ -419,12 +419,12 @@ def skill_check_modifiers(
         notes.append("Fukurokujin's Curse -5 (Lore TN +5)")
 
     # Seven Fortunes' Blessing: Jurojin - +2k0 resist poison/disease
-    if sk in ("poison_resist", "medicine") and _has_adv_containing(character, "jurojin") and _has_adv_containing(character, "seven fortunes"):
+    if sk == "poison_resist" and _has_adv_containing(character, "jurojin") and _has_adv_containing(character, "seven fortunes"):
         rolled += 2
         notes.append("Jurojin's Blessing +2k0 (resist poison/disease)")
 
     # Seven Fortunes' Curse: Jurojin - -2k0 resist poison/disease
-    if sk in ("poison_resist", "medicine") and _has_disadv_containing(character, "jurojin") and _has_disadv_containing(character, "seven fortunes"):
+    if sk == "poison_resist" and _has_disadv_containing(character, "jurojin") and _has_disadv_containing(character, "seven fortunes"):
         rolled -= 2
         notes.append("Jurojin's Curse -2k0 (resist poison/disease)")
 

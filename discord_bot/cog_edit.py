@@ -588,9 +588,13 @@ async def edit_feature(
                     ephemeral=True,
                 )
                 return
-            if key not in [q.lower() for q in c.weapon_qualities]:
-                c.weapon_qualities.append(key)
-                c.weapon_qualities.sort()
+            if key in [q.lower() for q in c.weapon_qualities]:
+                await interaction.response.send_message(
+                    f"**{c.name}** already has weapon quality **{key}**.", ephemeral=True,
+                )
+                return
+            c.weapon_qualities.append(key)
+            c.weapon_qualities.sort()
             msg = f"Added weapon quality **{key}** to **{c.name}**."
     elif category.value in ("advantages", "disadvantages"):
         kind = "advantage" if category.value == "advantages" else "disadvantage"
@@ -606,8 +610,12 @@ async def edit_feature(
             msg = f"Removed {kind} **{canonical}** from **{c.name}**."
         else:
             lst: list = getattr(c, category.value)
-            if canonical.lower() not in [x.lower() for x in lst]:
-                lst.append(canonical)
+            if canonical.lower() in [x.lower() for x in lst]:
+                await interaction.response.send_message(
+                    f"**{c.name}** already has {kind} **{canonical}**.", ephemeral=True,
+                )
+                return
+            lst.append(canonical)
             msg = f"**{c.name}** {'gains' if kind == 'advantage' else 'takes'} the {kind} **{canonical}**."
             base = adv["name"] if adv else entry_name.split(":")[0].strip()
             lookup = (advantage_effects.PARAMETERISED_ADVANTAGES if kind == "advantage"
@@ -797,6 +805,8 @@ async def edit_activate(
     npc: str | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
+        return
+    if not await _d.require_dm_role(interaction):
         return
     rec, err = await _resolve_target(interaction, member, npc)
     if err:
