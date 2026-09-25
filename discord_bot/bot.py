@@ -4639,7 +4639,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
     else:
         footer += " · Set the date with /dm setdate"
     embed.set_footer(text=footer)
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
     if date_str:
         await _update_date_display(guild, date_str, reason="A new day dawns in Rokugan.")
     if interaction.guild and old_cal and new_cal:
