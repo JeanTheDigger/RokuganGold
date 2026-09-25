@@ -157,7 +157,7 @@ def _detect_special(cloud: str, precip: str, wind: str, temp: str) -> str | None
         return "Blizzard"
     if precip in ("moderate", "heavy") and wind in ("strong", "gale") and temp in ("warm", "scorching"):
         return "Thunderstorm"
-    if precip == "heavy" and wind in ("strong", "gale") and is_cold:
+    if precip == "moderate" and wind in ("strong", "gale") and is_cold:
         return "Ice Storm"
     if cloud in ("overcast", "mostly_cloudy") and precip == "none" and wind == "calm" and is_cold:
         return "Frost"
