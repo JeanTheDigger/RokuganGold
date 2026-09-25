@@ -15,7 +15,7 @@ import discord
 from discord import app_commands
 
 from l5r_rules import (
-    advantages, combat, creature, enums, families,
+    advantage_effects, advantages, combat, creature, enums, families,
     heritage, kata, kiho, schools, spells, stats,
     tattoo_catalog,
 )
@@ -771,7 +771,10 @@ async def atn_breakdown(interaction: discord.Interaction, target: str | None = N
         f"Base (Reflexes {c.reflexes} × 5 + 5) = **{base}**",
         f"Armor: {armor_name} (+{armor_bonus} TN, Reduction {reduction})",
     ]
-    total = base + armor_bonus
+    adv_mod, adv_notes = advantage_effects.defender_armor_tn_mod(c)
+    if adv_mod:
+        lines.append(f"Advantage/Disadvantage: {adv_mod:+d} ({', '.join(adv_notes)})")
+    total = base + armor_bonus + adv_mod
     enc = _d.encounters.get(interaction.channel_id)
     cb = None
     if enc:
@@ -937,8 +940,12 @@ async def dual_wield_info(
         return
     guild = str(interaction.guild_id)
     if is_npc and name:
+        if not await _d.require_dm_role(interaction):
+            return
         rec = _d.store.get_by_name(guild, _d.NPC_OWNER, name)
     elif member is not None:
+        if member.id != interaction.user.id and not await _d.require_dm_role(interaction):
+            return
         rec = _d.store.get_active(guild, str(member.id))
     else:
         rec = _d.store.get_active(guild, str(interaction.user.id))

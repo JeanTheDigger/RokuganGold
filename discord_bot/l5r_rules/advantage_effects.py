@@ -175,6 +175,14 @@ def attacker_attack_dice(
         if taint_rank > 0:
             flat += taint_rank
             notes.append(f"Touch of Jigoku +{taint_rank} attack (Taint Rank)")
+
+    weak_param = _get_disadv_param(attacker, "Weakness")
+    if weak_param:
+        atk_trait = weapon_profile.get("trait", "agility" if is_melee else "reflexes")
+        if weak_param.lower() == atk_trait.lower():
+            rolled -= 1; kept -= 1
+            notes.append(f"Weakness -1k1 ({weak_param}: Trait treated as 1 lower)")
+
     return rolled, kept, flat, notes
 
 
@@ -256,6 +264,9 @@ def strength_of_honor(character: Character, resisting: str) -> tuple[int, int, l
         return 0, 0, []
     notes: list[str] = []
     rolled = flat = 0
+    if _has_disadv_containing(character, "failure of bushido") and _has_disadv_containing(character, "honor"):
+        notes.append("Failure of Bushido (Honor): Cannot add Honor Rank to resist rolls")
+        return 0, 0, notes
     if _has_adv(character, "Student of Shourido"):
         flat = 5
         notes.append("Student of Shourido +5 (instead of Honor Rank)")
@@ -375,16 +386,13 @@ def skill_check_modifiers(
     if sk.startswith("lore") and _has_adv_containing(character, "fukurokujin") and _has_adv_containing(character, "seven fortunes"):
         param = _get_adv_param(character, "Seven Fortunes' Blessing")
         if param and "fukurokujin" in param.lower():
-            # Check if a specific Lore is parameterised: "Fukurokujin (Lore: Heraldry)"
-            lore_param = param.lower()
             if "(" in param:
                 inner = param[param.index("(") + 1:].rstrip(")").strip().lower()
                 if inner == sk or inner in sk:
                     rolled += 1; kept += 1
                     notes.append(f"Fukurokujin's Blessing +1k1 ({skill_name})")
             else:
-                rolled += 1; kept += 1
-                notes.append(f"Fukurokujin's Blessing +1k1 ({skill_name})")
+                notes.append("Fukurokujin's Blessing: No specific Lore parameterised (DM: Set via /edit advantage)")
 
     # --- Disadvantages ---
 
@@ -434,6 +442,12 @@ def skill_check_modifiers(
         rolled -= 1
         kept -= 1
         notes.append(f"Weakness -1k1 ({weak_param}: Trait treated as 1 lower)")
+
+    # Doubt: mandatory Raise that does nothing on rolls with the named skill (+5 TN)
+    doubt_param = _get_disadv_param(character, "Doubt")
+    if doubt_param and doubt_param.lower() == sk:
+        flat -= 5
+        notes.append(f"Doubt -5 ({doubt_param}: Must call 1 Raise that does nothing)")
 
     # --- Skill Mastery Abilities (L5R 4e RAW) ---
     _sr = character.skills.get(skill_name, 0)
