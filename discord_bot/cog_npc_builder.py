@@ -1040,9 +1040,11 @@ async def template_spawn(interaction: discord.Interaction, template: str,
     await interaction.response.send_message(text, embed=_d.build_sheet_embed(made[0]), ephemeral=True)
 
 
-@template_group.command(name="list", description="List the NPC templates on this server.")
+@template_group.command(name="list", description="List the NPC templates on this server. [Fortune]")
 async def template_list(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
+        return
+    if not await _d.require_dm_role(interaction):
         return
     rows = _d.store.list_npc_templates(str(interaction.guild_id))
     if not rows:
@@ -1057,11 +1059,13 @@ async def template_list(interaction: discord.Interaction) -> None:
     await interaction.response.send_message("**NPC templates:**\n" + "\n".join(lines[:50]), ephemeral=True)
 
 
-@template_group.command(name="view", description="Show a template's sheet.")
+@template_group.command(name="view", description="Show a template's sheet. [Fortune]")
 @app_commands.describe(template="Template name.")
 @app_commands.autocomplete(template=_template_autocomplete)
 async def template_view(interaction: discord.Interaction, template: str) -> None:
     if not await _d.require_guild(interaction):
+        return
+    if not await _d.require_dm_role(interaction):
         return
     row = _d.store.get_npc_template(str(interaction.guild_id), template)
     if row is None:
