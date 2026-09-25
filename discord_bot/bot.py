@@ -6118,6 +6118,11 @@ class CreatureAttackView(_DisableableView):
             who = "creature" if cre_rec is None else "target"
             await interaction.followup.send(f"The {who} no longer exists.", ephemeral=True)
             return
+        if stats.is_dead(target_rec.character):
+            self._disable()
+            await interaction.response.edit_message(view=self)
+            await interaction.followup.send(f"**{target_rec.character.name}** is already dead.", ephemeral=True)
+            return
         dmg = creature.creature_damage(cre_rec.creature, engine)
         applied = combat.apply_damage(target_rec.character, dmg["raw"], target_rec.character.armor_reduction)
         store.save(target_rec, note="creature attack damage")
@@ -6976,6 +6981,11 @@ async def creature_attack_cmd(
     cre_rec = store.get_creature_by_name(guild, creature_name)
     if cre_rec is None:
         await interaction.response.send_message(f"No creature named **{creature_name}**.", ephemeral=True)
+        return
+    if target is not None and target_npc:
+        await interaction.response.send_message(
+            "Pick either `target:` or `target_npc:`, not both.", ephemeral=True,
+        )
         return
     if target_npc:
         target_rec = store.get_by_name(guild, NPC_OWNER, target_npc)
@@ -9276,7 +9286,7 @@ async def school_learn(
     if await _refuse_if_dead(interaction, rec.character):
         return
     c = rec.character
-    if school_name and c.school and school_name.strip().lower() != c.school.strip().lower():
+    if school_name and (not c.school or school_name.strip().lower() != c.school.strip().lower()):
         if not await _require_dm_role(interaction):
             return
     lookup = school_name or c.school
@@ -9294,6 +9304,8 @@ async def school_learn(
             f"**{s['name']}** grants no ranked techniques at School Rank {c.school_rank}.", ephemeral=True
         )
         return
+    if not c.school:
+        c.school = s["name"]
     added = []
     for t in entitled:
         label = f"{s['name']}: {t['name']}"
@@ -9404,7 +9416,14 @@ async def spell_view(interaction: discord.Interaction, name: str) -> None:
     attacker_npc="Cast as a stored NPC [Fortune]",
     member="Cast as another player's character [Fortune]",
     target="Combatant the spell is aimed at: Enables Request-condition buttons for Dazed, Prone, etc.",
+    cast_element="Required for Universal spells (Commune, Sense, Summon, Command): Which Ring to use.",
 )
+@app_commands.choices(cast_element=[
+    app_commands.Choice(name="Air", value="air"),
+    app_commands.Choice(name="Earth", value="earth"),
+    app_commands.Choice(name="Fire", value="fire"),
+    app_commands.Choice(name="Water", value="water"),
+])
 @app_commands.autocomplete(name=_spell_autocomplete, target=cog_combat._combatant_autocomplete, attacker_npc=_npc_autocomplete)
 async def spell_cast(
     interaction: discord.Interaction,
@@ -9415,6 +9434,7 @@ async def spell_cast(
     conceal: bool = False,
     attacker_npc: str | None = None,
     member: discord.Member | None = None,
+    cast_element: app_commands.Choice[str] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -9455,6 +9475,15 @@ async def spell_cast(
         )
         return
     element = s["element"].lower()
+    if element == "all":
+        if cast_element is None:
+            await interaction.response.send_message(
+                f"**{s['name']}** is a Universal spell. Use the `cast_element:` parameter "
+                f"to choose which Ring (Air, Earth, Fire, or Water) to cast it with.",
+                ephemeral=True,
+            )
+            return
+        element = cast_element.value
     ring_val = stats.ring_value(caster, element)
     affinity = caster.affinity_element.lower() == element if caster.affinity_element else False
     deficiency = caster.deficiency_element.lower() == element if caster.deficiency_element else False
@@ -9730,13 +9759,21 @@ async def spell_interrupt(
     spend_void="Spend a Void Point for +1k1 on the casting roll.",
     attacker_npc="Importune as a stored NPC [Fortune]",
     member="Importune as another player's character [Fortune]",
+    cast_element="Required for Universal spells (Commune, Sense, Summon, Command): Which Ring to use.",
 )
+@app_commands.choices(cast_element=[
+    app_commands.Choice(name="Air", value="air"),
+    app_commands.Choice(name="Earth", value="earth"),
+    app_commands.Choice(name="Fire", value="fire"),
+    app_commands.Choice(name="Water", value="water"),
+])
 @app_commands.autocomplete(name=_spell_autocomplete, attacker_npc=_npc_autocomplete)
 async def spell_importune(
     interaction: discord.Interaction,
     name: str,
     raises: int = 0,
     spend_void: bool = False,
+    cast_element: app_commands.Choice[str] | None = None,
     attacker_npc: str | None = None,
     member: discord.Member | None = None,
 ) -> None:
@@ -9777,6 +9814,15 @@ async def spell_importune(
         )
         return
     element = s["element"].lower()
+    if element == "all":
+        if cast_element is None:
+            await interaction.response.send_message(
+                f"**{s['name']}** is a Universal spell. Use the `cast_element:` parameter "
+                f"to choose which Ring (Air, Earth, Fire, or Water) to cast it with.",
+                ephemeral=True,
+            )
+            return
+        element = cast_element.value
     ring_val = stats.ring_value(caster, element)
     ml = s["mastery"]
     affinity = caster.affinity_element.lower() == element if caster.affinity_element else False
@@ -9949,7 +9995,7 @@ async def taint_command(
     c = rec.character
     if add is not None:
         old_taint = c.taint
-        c.taint = max(0.0, c.taint + add * 0.1)
+        c.taint = max(0.0, round(c.taint + add * 0.1, 1))
         store.save(rec, note="Taint change")
         crossing = taint.check_threshold_crossing(old_taint, c.taint, c)
         embed = discord.Embed(title=f"Taint: {c.name}", color=discord.Color.dark_purple())
@@ -10631,6 +10677,13 @@ async def sheet_import(
     if not isinstance(data, dict):
         await interaction.response.send_message("JSON must be an object (dictionary).", ephemeral=True)
         return
+    existing_chars = store.list_by_owner(guild, owner)
+    if existing_chars:
+        await interaction.response.send_message(
+            "You already have a character. Delete the existing one before importing.",
+            ephemeral=True,
+        )
+        return
     if "name" not in data or not data["name"]:
         await interaction.response.send_message("JSON must include a `name` field.", ephemeral=True)
         return
@@ -10789,12 +10842,14 @@ async def compare_characters(
 ) -> None:
     if not await _require_guild(interaction):
         return
-    if not _is_dm(interaction) and (member_a or member_b):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to compare another player's character.",
-            ephemeral=True,
-        )
-        return
+    if not _is_dm(interaction):
+        user_id = interaction.user.id
+        if (member_a and member_a.id != user_id) or (member_b and member_b.id != user_id):
+            await interaction.response.send_message(
+                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to compare another player's character.",
+                ephemeral=True,
+            )
+            return
     guild = str(interaction.guild_id)
     owner_a = str(member_a.id) if member_a else str(interaction.user.id)
     owner_b = str(member_b.id) if member_b else str(interaction.user.id)
@@ -11745,17 +11800,21 @@ async def _setup_server_inner(
     dmg_ch_disc = discord.utils.get(dm_cat.text_channels, name="damage-approvals")
     if dmg_ch_disc:
         store.set_damage_approval_channel(str(guild.id), str(dmg_ch_disc.id))
+    xp_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
+        everyone: discord.PermissionOverwrite(view_channel=False),
+        bot_member: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
+        kami_role: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+    }
+    for r in dm_roles:
+        if r != kami_role:
+            xp_overwrites[r] = discord.PermissionOverwrite(view_channel=False)
     if "xp-log" not in existing_names:
-        xp_overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
-            everyone: discord.PermissionOverwrite(view_channel=False),
-            bot_member: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_channels=True),
-            kami_role: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
-        }
-        for r in dm_roles:
-            if r != kami_role:
-                xp_overwrites[r] = discord.PermissionOverwrite(view_channel=False)
         await dm_cat.create_text_channel("xp-log", overwrites=xp_overwrites, reason="Server setup: Kami-only XP log")
         created_items.append("#xp-log (Kami only: XP grants and spends)")
+    else:
+        xp_ch_existing = discord.utils.get(dm_cat.text_channels, name="xp-log")
+        if xp_ch_existing:
+            await xp_ch_existing.edit(overwrites=xp_overwrites, reason="Server setup: fix xp-log permissions (Kami only)")
     xp_ch_disc = discord.utils.get(dm_cat.text_channels, name="xp-log")
     if xp_ch_disc:
         store.set_xp_log_channel(str(guild.id), str(xp_ch_disc.id))

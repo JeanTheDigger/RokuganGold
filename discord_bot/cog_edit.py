@@ -187,6 +187,7 @@ def _apply_numeric_field(c: Character, field: str, value: float) -> None:
         setattr(c, field, max(0.0, min(10.0, float(value))))
     elif field == "taint":
         c.taint = max(0.0, float(value))
+        c.current_void_points = min(c.current_void_points, taint.void_point_cap(c))
     elif field == "koku":
         c.koku = max(0, int(value))
     elif field == "bu":
@@ -490,6 +491,8 @@ async def edit_equip(
             else:
                 c.armor_name = a
                 c.owned_armor = a
+                c.armor_tn_bonus = 0
+                c.armor_reduction = 0
                 changes.append(f"Armor: **{a}** (custom: Set ATN/Reduction with `/edit field`)")
     if not changes:
         await interaction.response.send_message(
@@ -966,16 +969,17 @@ async def edit_rename(
         return
     guild = str(interaction.guild_id)
     owner = rec.owner_id
-    if _d.store.get_by_name(guild, owner, new_name) is not None:
+    clean_name = new_name.strip()
+    if _d.store.get_by_name(guild, owner, clean_name) is not None:
         await interaction.response.send_message(
-            f"A character named **{new_name}** already exists for that owner.", ephemeral=True,
+            f"A character named **{clean_name}** already exists for that owner.", ephemeral=True,
         )
         return
     old_name = rec.character.name
-    rec.character.name = new_name.strip()
+    rec.character.name = clean_name
     _d.store.save(rec)
     await interaction.response.send_message(
-        f"Renamed **{old_name}** → **{new_name}**.", embed=_d.build_sheet_embed(rec),
+        f"Renamed **{old_name}** → **{clean_name}**.", embed=_d.build_sheet_embed(rec),
         ephemeral=True,
     )
 
