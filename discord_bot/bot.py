@@ -6104,12 +6104,14 @@ class CreatureAttackView(_DisableableView):
 
     KIND = "creature_attack"
 
-    def __init__(self, creature_id: int, target_char_id: int, creature_name: str, target_name: str) -> None:
+    def __init__(self, creature_id: int, target_char_id: int, creature_name: str, target_name: str,
+                 source_channel_id: int = 0) -> None:
         super().__init__(timeout=1800)
         self.creature_id = creature_id
         self.target_char_id = target_char_id
         self.creature_name = creature_name
         self.target_name = target_name
+        self.source_channel_id = source_channel_id
 
     @discord.ui.button(label="Apply Creature Damage", style=discord.ButtonStyle.danger)
     async def apply(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -6135,11 +6137,12 @@ class CreatureAttackView(_DisableableView):
         applied = combat.apply_damage(target_rec.character, dmg["raw"], target_rec.character.armor_reduction)
         store.save(target_rec, note="creature attack damage")
         c = target_rec.character
-        _tally(interaction.channel_id, self.creature_name, "attacks"); _tally(interaction.channel_id, self.creature_name, "hits")
-        _tally(interaction.channel_id, self.creature_name, "dealt", applied["final_damage"])
-        _tally(interaction.channel_id, c.name, "taken", applied["final_damage"])
+        fight_ch_id = self.source_channel_id or interaction.channel_id
+        _tally(fight_ch_id, self.creature_name, "attacks"); _tally(fight_ch_id, self.creature_name, "hits")
+        _tally(fight_ch_id, self.creature_name, "dealt", applied["final_damage"])
+        _tally(fight_ch_id, c.name, "taken", applied["final_damage"])
         if applied["is_dead"]:
-            _tally(interaction.channel_id, self.creature_name, "kills")
+            _tally(fight_ch_id, self.creature_name, "kills")
         death_line = ""
         if applied["is_dead"]:
             notes = await _on_death(str(interaction.guild_id), c.name, target_rec.owner_id, target_rec.id)
@@ -6171,7 +6174,13 @@ class CreatureAttackView(_DisableableView):
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(embed=embed)
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(embed=embed)
+            await interaction.followup.send(f"Resolved in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(embed=embed)
         dead_tag = " DEAD" if applied["is_dead"] else ""
         await _combat_log(
             str(interaction.guild_id),
@@ -6188,9 +6197,14 @@ class CreatureAttackView(_DisableableView):
             return
         self._disable()
         await interaction.response.edit_message(view=self)
-        await interaction.followup.send(
-            f"{interaction.user.display_name} ruled no damage from {self.creature_name}."
-        )
+        msg = f"{interaction.user.display_name} ruled no damage from {self.creature_name}."
+        if self.source_channel_id:
+            src = client.get_channel(self.source_channel_id)
+            if src:
+                await src.send(msg)
+            await interaction.followup.send(f"Resolved in <#{self.source_channel_id}>.")
+        else:
+            await interaction.followup.send(msg)
 
 class SpellDamageView(_DisableableView):
     """DM-approval gate for spell damage: shows the rolled damage and lets
@@ -7057,6 +7071,9 @@ async def creature_attack_cmd(
         tn = combat.armor_tn(tgt, d_stance, tn_mod + cond_def_mod)
         if d_stance != "attack":
             tn_notes.append(f"{d_stance.replace('_', ' ').title()} stance")
+    approval_ch = await _require_approval_channel(interaction, guild)
+    if approval_ch is None:
+        return
     outcome = creature.creature_attack(cr, tn, engine, raises)
     hit = outcome["success"]
     t_name = target_rec.character.name
@@ -7078,12 +7095,17 @@ async def creature_attack_cmd(
     if tn_notes:
         embed.add_field(name="Defender Armor TN modifiers", value=" · ".join(tn_notes)[:1024], inline=False)
     if hit:
-        view = CreatureAttackView(cre_rec.id, target_rec.id, cr.name, t_name)
+        view = CreatureAttackView(cre_rec.id, target_rec.id, cr.name, t_name, source_channel_id=interaction.channel_id)
         await interaction.response.send_message(
+            content=f"**{cr.name}** hit **{t_name}** - damage approval pending in the DM channel.",
+            embed=embed,
+        )
+        embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
+        embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
+        await view.persist(await approval_ch.send(
             content=f"{_dm_ping(interaction.guild)}A DM can apply the creature's damage below.",
             embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
-        )
-        await view.persist(await interaction.original_response())
+        ))
         await _combat_log(guild, f"Creature Attack: {cr.name} → {t_name} HIT (roll {outcome['total']} vs TN {outcome['tn']})")
     else:
         await interaction.response.send_message(embed=embed)

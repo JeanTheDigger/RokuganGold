@@ -63,6 +63,35 @@ class _Deps:
 _d = _Deps()
 _PING_MENTIONS = discord.AllowedMentions(roles=True, users=True, everyone=False)
 
+_NO_APPROVAL_TEXT = (
+    "No approval channel is configured, so the damage card cannot be posted privately. "
+    "A Kami must set one with `/dm damage_channel` or `/dm approval_channel` (or run `/setup server`)."
+)
+
+
+async def _require_approval_channel(interaction: discord.Interaction, guild: str):
+    """The damage approval channel, or an ephemeral refusal and None if none is configured."""
+    ch_id = _d.store.get_damage_approval_channel(guild) or _d.store.get_approval_channel(guild)
+    channel = _d.bot_client.get_channel(int(ch_id)) if ch_id else None
+    if channel is None:
+        if interaction.response.is_done():
+            await interaction.followup.send(_NO_APPROVAL_TEXT, ephemeral=True)
+        else:
+            await interaction.response.send_message(_NO_APPROVAL_TEXT, ephemeral=True)
+    return channel
+
+
+async def _post_damage_card(
+    approval_ch, guild_obj: discord.Guild | None, requester: discord.abc.User,
+    room_id: int, prompt: str, embed: discord.Embed, view,
+) -> None:
+    """Post a DM approval card to the approval channel, tagged with who asked and from which room."""
+    embed.add_field(name="Requested by", value=requester.mention, inline=True)
+    embed.add_field(name="Room", value=f"<#{room_id}>", inline=True)
+    await view.persist(await approval_ch.send(
+        content=f"{_d.dm_ping(guild_obj)}{prompt}", embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+    ))
+
 
 def init(
     *,
@@ -1176,27 +1205,36 @@ class DamageView(views_base.PersistentView):
         if notes:
             detail += "\n" + " · ".join(notes)
         embed2.add_field(name="Attack Roll", value=detail, inline=False)
+        fight_ch_id = self.source_channel_id or interaction.channel_id
         if hit:
+            approval_ch = await _require_approval_channel(interaction, str(interaction.guild_id))
+            if approval_ch is None:
+                return
             view2 = DamageView(
                 attacker_rec.id, target_rec.id, self.weapon, 0,
                 self.attacker_name, self.target_name,
                 maneuver="none", attack_margin=outcome["margin"],
                 defender_stance=self.defender_stance,
                 channel_id=self.channel_id,
-                source_channel_id=self.source_channel_id,
+                source_channel_id=fight_ch_id,
                 weapon_material=self.weapon_material,
                 attacker_stance=self.attacker_stance,
                 atk_init=self.atk_init, def_init=self.def_init,
             )
-            await view2.persist(await interaction.followup.send(
-                content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the 2nd attack's damage below.",
-                allowed_mentions=_PING_MENTIONS,
-                embed=embed2, view=view2,
-            ))
+            pending = f"**{self.attacker_name}** hit **{self.target_name}** with the 2nd strike - damage approval pending in the DM channel."
+            fight_ch = _d.bot_client.get_channel(fight_ch_id)
+            if fight_ch_id != interaction.channel_id and fight_ch is not None:
+                await fight_ch.send(content=pending, embed=embed2)
+            else:
+                await interaction.followup.send(content=pending, embed=embed2)
+            await _post_damage_card(
+                approval_ch, interaction.guild, interaction.user, fight_ch_id,
+                "A DM can authorize the 2nd attack's damage below.", embed2, view2,
+            )
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
             _d.tally(self.channel_id, self.attacker_name, "attacks"); _d.tally(self.channel_id, self.attacker_name, "hits")
         else:
-            await interaction.followup.send(embed=embed2)
+            await self._post_result(interaction, embed2)
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) MISS")
             _d.tally(self.channel_id, self.attacker_name, "attacks")
 
@@ -1291,27 +1329,36 @@ class DamageView(views_base.PersistentView):
         if notes:
             detail += "\n" + " · ".join(notes)
         embed2.add_field(name="Attack Roll", value=detail, inline=False)
+        fight_ch_id = self.source_channel_id or interaction.channel_id
         if hit:
+            approval_ch = await _require_approval_channel(interaction, str(interaction.guild_id))
+            if approval_ch is None:
+                return
             view2 = DamageView(
                 attacker_rec.id, None, self.weapon, 0,
                 self.attacker_name, self.target_name,
                 maneuver="none", attack_margin=outcome["margin"],
                 target_creature_id=cre_rec.id,
                 channel_id=self.channel_id,
-                source_channel_id=self.source_channel_id,
+                source_channel_id=fight_ch_id,
                 weapon_material=self.weapon_material,
                 attacker_stance=self.attacker_stance,
                 atk_init=self.atk_init, def_init=self.def_init,
             )
-            await view2.persist(await interaction.followup.send(
-                content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the 2nd attack's damage below.",
-                allowed_mentions=_PING_MENTIONS,
-                embed=embed2, view=view2,
-            ))
+            pending = f"**{self.attacker_name}** hit **{self.target_name}** with the 2nd strike - damage approval pending in the DM channel."
+            fight_ch = _d.bot_client.get_channel(fight_ch_id)
+            if fight_ch_id != interaction.channel_id and fight_ch is not None:
+                await fight_ch.send(content=pending, embed=embed2)
+            else:
+                await interaction.followup.send(content=pending, embed=embed2)
+            await _post_damage_card(
+                approval_ch, interaction.guild, interaction.user, fight_ch_id,
+                "A DM can authorize the 2nd attack's damage below.", embed2, view2,
+            )
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
             _d.tally(self.channel_id, self.attacker_name, "attacks"); _d.tally(self.channel_id, self.attacker_name, "hits")
         else:
-            await interaction.followup.send(embed=embed2)
+            await self._post_result(interaction, embed2)
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) MISS")
             _d.tally(self.channel_id, self.attacker_name, "attacks")
 
@@ -3176,6 +3223,9 @@ async def _execute_attack(
             await interaction.response.send_message(content=content, ephemeral=ephemeral, **kwargs)
             response_used = True
             return await interaction.original_response()
+    approval_ch = await _require_approval_channel(interaction, str(interaction.guild_id))
+    if approval_ch is None:
+        return
     # Early encounter/combatant lookup for action economy enforcement.
     enc = _d.encounters.get(interaction.channel_id)
     atk_combatant = enc.find(attacker_rec.character.name) if enc else None
@@ -3736,9 +3786,7 @@ async def _execute_attack(
 
     cs_raises = raises if man == "called_shot" else 0
     if hit:
-        approval_ch_id = _d.store.get_damage_approval_channel(guild) or _d.store.get_approval_channel(guild)
-        approval_ch = _d.bot_client.get_channel(int(approval_ch_id)) if approval_ch_id else None
-        src_ch_id = interaction.channel_id if approval_ch else 0
+        src_ch_id = interaction.channel_id
         if target_creature_rec is not None:
             view = DamageView(
                 attacker_rec.id, None, weapon, increased_damage, a_name, t_name,
@@ -3764,17 +3812,11 @@ async def _execute_attack(
         }.get(man, "A DM can authorize the damage below.")
         target_owner_id = target_rec.owner_id if target_rec is not None else None
         owner_ping = f" <@{target_owner_id}>" if target_owner_id and target_owner_id != _d.NPC_OWNER else ""
-        if approval_ch:
-            await _reply(
-                content=f"**{a_name}** hit **{t_name}** - damage approval pending in the DM channel.{owner_ping}",
-                embed=embed,
-            )
-            embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
-            embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-            await view.persist(await approval_ch.send(content=f"{_d.dm_ping(interaction.guild)}{prompt}", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
-        else:
-            msg = await _reply(content=f"{_d.dm_ping(interaction.guild)}{prompt}{owner_ping}", embed=embed, view=view, allowed_mentions=_PING_MENTIONS)
-            await view.persist(msg)
+        await _reply(
+            content=f"**{a_name}** hit **{t_name}** - damage approval pending in the DM channel.{owner_ping}",
+            embed=embed,
+        )
+        await _post_damage_card(approval_ch, interaction.guild, interaction.user, interaction.channel_id, prompt, embed, view)
         await _d.combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) HIT (roll {outcome['roll']} vs TN {outcome['target_tn']})")
         _d.tally(interaction.channel_id, a_name, "attacks"); _d.tally(interaction.channel_id, a_name, "hits")
     else:
@@ -5577,6 +5619,9 @@ class GrappleBoardView(views_base.PersistentView):
         if atk_rec is None or def_rec is None:
             await interaction.response.send_message("Character sheets missing.", ephemeral=True)
             return
+        approval_ch = await _require_approval_channel(interaction, self.guild_id)
+        if approval_ch is None:
+            return
         cb_ctrl.actions_used = 2
         _d.save_encounter(self.guild_id, enc)
         embed = discord.Embed(
@@ -5590,12 +5635,16 @@ class GrappleBoardView(views_base.PersistentView):
             maneuver="none", attack_margin=0,
             defender_stance="attack",
             channel_id=interaction.channel_id,
+            source_channel_id=interaction.channel_id,
         )
         await interaction.response.send_message(
-            content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the damage below.",
-            embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+            content=f"**{cb_ctrl.name}** strikes **{cb_def.name}** - damage approval pending in the DM channel.",
+            embed=embed,
         )
-        await view.persist(await interaction.original_response())
+        await _post_damage_card(
+            approval_ch, interaction.guild, interaction.user, interaction.channel_id,
+            "A DM can authorize the damage below.", embed, view,
+        )
 
     @discord.ui.button(label="Throw", style=discord.ButtonStyle.danger, row=1)
     async def throw_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -6162,6 +6211,9 @@ async def grapple_hit(
     if def_rec is None:
         await interaction.response.send_message(f"No character sheet for **{target}**.", ephemeral=True)
         return
+    approval_ch = await _require_approval_channel(interaction, guild)
+    if approval_ch is None:
+        return
     atk_cb.actions_used = 2
     _d.save_encounter(guild, enc)
     embed = discord.Embed(
@@ -6175,12 +6227,16 @@ async def grapple_hit(
         maneuver="none", attack_margin=0,
         defender_stance="attack",
         channel_id=interaction.channel_id,
+        source_channel_id=interaction.channel_id,
     )
     await interaction.response.send_message(
-        content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the damage below.",
-        embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+        content=f"**{atk_cb.name}** strikes **{def_cb.name}** - damage approval pending in the DM channel.",
+        embed=embed,
     )
-    await view.persist(await interaction.original_response())
+    await _post_damage_card(
+        approval_ch, interaction.guild, interaction.user, interaction.channel_id,
+        "A DM can authorize the damage below.", embed, view,
+    )
 
 
 @combat_grapple.command(name="throw", description="Grapple Throw: Target becomes Prone and leaves the grapple.")
@@ -6740,6 +6796,9 @@ async def duel_strike(
         return
     guild = str(interaction.guild_id)
     ch = interaction.channel_id
+    approval_ch = await _require_approval_channel(interaction, guild)
+    if approval_ch is None:
+        return
     rec_a = _d.resolve_duelist(guild, ch, attacker, attacker_npc, attacker_member)
     rec_t = _d.resolve_duelist(guild, ch, target, target_npc, target_member)
     if rec_a is None:
@@ -6810,6 +6869,7 @@ async def duel_strike(
             maneuver="none",
             attack_margin=result["margin"],
             channel_id=interaction.channel_id,
+            source_channel_id=interaction.channel_id,
             duel_strike_reduction=duel_red,
         )
     else:
@@ -6817,10 +6877,13 @@ async def duel_strike(
 
     if view is not None:
         await interaction.response.send_message(
-            content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the strike's damage below.",
-            embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+            content=f"**{atk.name}** hits **{tgt.name}** - damage approval pending in the DM channel.",
+            embed=embed,
         )
-        await view.persist(await interaction.original_response())
+        await _post_damage_card(
+            approval_ch, interaction.guild, interaction.user, interaction.channel_id,
+            "A DM can authorize the strike's damage below.", embed, view,
+        )
     else:
         await interaction.response.send_message(embed=embed)
     tag = "HIT" if hit else "MISS"
@@ -7285,6 +7348,9 @@ class DuelBoardView(views_base.PersistentView):
         tgt = tgt_rec.character
         if await _d.refuse_if_cannot_act(interaction, atk):
             return
+        approval_ch = await _require_approval_channel(interaction, self.guild_id)
+        if approval_ch is None:
+            return
         wp = stats.wound_penalty(atk)
         enc = _d.encounters.get(self.channel_id)
         atk_enc = enc.find(atk.name) if enc else None
@@ -7350,6 +7416,7 @@ class DuelBoardView(views_base.PersistentView):
                 maneuver="none",
                 attack_margin=result["margin"],
                 channel_id=self.channel_id,
+                source_channel_id=self.channel_id,
                 duel_strike_reduction=duel_red,
             )
         else:
@@ -7363,10 +7430,13 @@ class DuelBoardView(views_base.PersistentView):
 
         if view is not None:
             await interaction.response.send_message(
-                content=f"{_d.dm_ping(interaction.guild)}A DM can authorize the strike's damage below.",
-                embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+                content=f"**{atk.name}** hits **{tgt.name}** - damage approval pending in the DM channel.",
+                embed=embed,
             )
-            await view.persist(await interaction.original_response())
+            await _post_damage_card(
+                approval_ch, interaction.guild, interaction.user, self.channel_id,
+                "A DM can authorize the strike's damage below.", embed, view,
+            )
         else:
             await interaction.response.send_message(embed=embed)
 
@@ -7383,6 +7453,9 @@ class DuelBoardView(views_base.PersistentView):
     async def _resolve_kharmic(self, interaction, rec_a, rec_b) -> None:
         ca, cb_char = rec_a.character, rec_b.character
         if await _d.refuse_if_cannot_act(interaction, ca) or await _d.refuse_if_cannot_act(interaction, cb_char):
+            return
+        approval_ch = await _require_approval_channel(interaction, self.guild_id)
+        if approval_ch is None:
             return
 
         results = []
@@ -7438,6 +7511,7 @@ class DuelBoardView(views_base.PersistentView):
                     maneuver="none",
                     attack_margin=result["margin"],
                     channel_id=self.channel_id,
+                    source_channel_id=self.channel_id,
                     duel_strike_reduction=duel_red,
                 )
                 damage_views.append((atk.name, tgt.name, dv))
@@ -7465,15 +7539,18 @@ class DuelBoardView(views_base.PersistentView):
         self._persist_args = self._updated_args()
         self._sync_buttons()
 
-        await interaction.response.send_message(embed=embed)
+        pending = "Damage approval pending in the DM channel." if damage_views else ""
+        await interaction.response.send_message(content=pending or None, embed=embed)
         ch = _d.bot_client.get_channel(self.channel_id)
         for atk_name, tgt_name, dv in damage_views:
-            if ch:
-                dv_msg = await ch.send(
-                    content=f"{_d.dm_ping(interaction.guild)}Authorize damage: **{atk_name}** → **{tgt_name}**",
-                    view=dv, allowed_mentions=_PING_MENTIONS,
-                )
-                await dv.persist(dv_msg)
+            card = discord.Embed(
+                title=f"Kharmic Strike damage: {atk_name} → {tgt_name}",
+                color=discord.Color.dark_red(),
+            )
+            await _post_damage_card(
+                approval_ch, interaction.guild, interaction.user, self.channel_id,
+                f"Authorize damage: **{atk_name}** → **{tgt_name}**", card, dv,
+            )
         if ch:
             await self._repost(ch)
 
