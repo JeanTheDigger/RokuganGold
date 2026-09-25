@@ -3682,13 +3682,15 @@ async def sheet_wizard(  # legacy in-channel wizard, no longer registered as a c
         embed=_wizard_embed(state), view=view,
     )
 
-@sheet.command(name="view", description="View a character sheet (yours or another player's).")
-@app_commands.describe(member="Whose active character to view. Omit for your own.")
+@sheet.command(name="view", description="View your character sheet. Staff may view another player's.")
+@app_commands.describe(member="Whose active character to view (Fortune or Kami only). Omit for your own.")
 async def sheet_view(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
     if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
     if member is not None and member.id != interaction.user.id:
+        if not await _require_dm_role(interaction):
+            return
         rec = store.get_active(guild, str(member.id))
         if rec is None:
             await interaction.response.send_message(
