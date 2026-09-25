@@ -61,9 +61,9 @@ BATTLE_TABLE: list[list[tuple[int, int, str | None]]] = [
 
 # Column mapping: Winning reads leftward (safer), Losing reads rightward.
 COLUMN_MAP: dict[str, dict[str, int]] = {
-    "winning":   {"reserves": 1, "disengaged": 2, "engaged": 3, "heavily_engaged": 4},
-    "stalemate": {"reserves": 2, "disengaged": 3, "engaged": 4, "heavily_engaged": 5},
-    "losing":    {"reserves": 3, "disengaged": 4, "engaged": 5, "heavily_engaged": 6},
+    "winning":   {"reserves": 1, "disengaged": 2, "engaged": 3, "heavily_engaged": 4, "heroic": 5},
+    "stalemate": {"reserves": 2, "disengaged": 3, "engaged": 4, "heavily_engaged": 5, "heroic": 6},
+    "losing":    {"reserves": 3, "disengaged": 4, "engaged": 5, "heavily_engaged": 6, "heroic": 6},
 }
 
 ARMY_STATUS_NAMES: dict[str, str] = {
@@ -77,6 +77,7 @@ ENGAGEMENT_NAMES: dict[str, str] = {
     "disengaged": "Disengaged",
     "engaged": "Engaged",
     "heavily_engaged": "Heavily Engaged",
+    "heroic": "Heroic Opportunity",
 }
 
 

@@ -576,7 +576,7 @@ def apply_damage(target: Character, raw_damage: int, reduction: int | None = Non
 
 # Maneuver raise costs (individual_combat.gd MANEUVER_RAISES). Only the ones the
 # bot resolves are listed; each is a called Raise on the attack (raises the TN).
-MANEUVER_RAISES = {"feint": 2, "disarm": 3, "knockdown": 2, "extra_attack": 5}
+MANEUVER_RAISES = {"feint": 2, "disarm": 3, "knockdown": 2, "knockdown_quad": 4, "extra_attack": 5}
 
 CALLED_SHOT_PARTS = {
     1: "specific limb",

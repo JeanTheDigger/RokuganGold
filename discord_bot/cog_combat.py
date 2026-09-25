@@ -3903,16 +3903,18 @@ def _join_record(guild: str, channel_id: int, owner_id: str, rec: _storage_mod.C
     result = combat.roll_initiative(rec.character, _d.engine, idr, idk)
     swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
     tech_init, tech_init_notes = technique_effects.initiative_bonus(rec.character)
-    init_total = result.total + swift_bonus + tech_init
+    wp = stats.wound_penalty(rec.character)
+    init_total = result.total + swift_bonus + tech_init + wp
     swift_detail = f" +5 Swift" if swift_bonus else ""
     tech_init_detail = "".join(f" +{n}" for n in tech_init_notes)
     dice_detail = "".join(f" [{n}]" for n in idn)
+    wp_detail = f" {wp} wounds" if wp else ""
     enc = _get_or_create(channel_id)
     enc.remove(rec.character.name)  # re-join re-rolls
     enc.add(encounter.Combatant(
         name=rec.character.name,
         initiative=init_total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}",
+        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}{wp_detail}",
         owner_id=owner_id,
         is_npc=False,
         reflexes=rec.character.reflexes,
@@ -4661,16 +4663,18 @@ async def combat_npc(interaction: discord.Interaction, name: str) -> None:
     result = combat.roll_initiative(rec.character, _d.engine, idr, idk)
     swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
     tech_init, tech_init_notes = technique_effects.initiative_bonus(rec.character)
-    init_total = result.total + swift_bonus + tech_init
+    wp = stats.wound_penalty(rec.character)
+    init_total = result.total + swift_bonus + tech_init + wp
     swift_detail = f" +5 Swift" if swift_bonus else ""
     tech_init_detail = "".join(f" +{n}" for n in tech_init_notes)
     dice_detail = "".join(f" [{n}]" for n in idn)
+    wp_detail = f" {wp} wounds" if wp else ""
     enc = _get_or_create(interaction.channel_id)
     enc.remove(rec.character.name)
     enc.add(encounter.Combatant(
         name=rec.character.name,
         initiative=init_total,
-        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}",
+        initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}{wp_detail}",
         owner_id=None,
         is_npc=True,
         reflexes=rec.character.reflexes,
@@ -7732,15 +7736,17 @@ async def combat_category(interaction: discord.Interaction, category: str) -> No
             result = combat.roll_initiative(rec.character, _d.engine, idr, idk)
             swift_bonus = 5 if "swift" in rec.character.weapon_qualities else 0
             ti, tin = technique_effects.initiative_bonus(rec.character)
-            init_total = result.total + swift_bonus + ti
+            wp = stats.wound_penalty(rec.character)
+            init_total = result.total + swift_bonus + ti + wp
             swift_detail = f" +5 Swift" if swift_bonus else ""
             tech_init_detail = "".join(f" +{n}" for n in tin)
             dice_detail = "".join(f" [{n}]" for n in idn)
+            wp_detail = f" {wp} wounds" if wp else ""
             enc.remove(rec.character.name)
             enc.add(encounter.Combatant(
                 name=rec.character.name,
                 initiative=init_total,
-                initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}",
+                initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}{wp_detail}",
                 owner_id=None,
                 is_npc=True,
                 reflexes=rec.character.reflexes,
@@ -7820,15 +7826,17 @@ async def combat_room(interaction: discord.Interaction) -> None:
         result = combat.roll_initiative(char_rec.character, _d.engine, idr, idk)
         swift_bonus = 5 if "swift" in char_rec.character.weapon_qualities else 0
         ti, tin = technique_effects.initiative_bonus(char_rec.character)
-        init_total = result.total + swift_bonus + ti
+        wp = stats.wound_penalty(char_rec.character)
+        init_total = result.total + swift_bonus + ti + wp
         swift_detail = f" +5 Swift" if swift_bonus else ""
         tech_init_detail = "".join(f" +{n}" for n in tin)
         dice_detail = "".join(f" [{n}]" for n in idn)
+        wp_detail = f" {wp} wounds" if wp else ""
         enc.remove(char_rec.character.name)
         enc.add(encounter.Combatant(
             name=char_rec.character.name,
             initiative=init_total,
-            initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}",
+            initiative_detail=f"kept {result.kept_dice} = {result.total}{swift_detail}{tech_init_detail}{dice_detail}{wp_detail}",
             owner_id=uid,
             is_npc=False,
             reflexes=char_rec.character.reflexes,

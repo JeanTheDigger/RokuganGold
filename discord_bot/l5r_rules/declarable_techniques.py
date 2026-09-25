@@ -99,7 +99,7 @@ _add("Wrath of the Earth Dragon",
      cost=1, duration="round",
      desc="VP: Attacks this Round ignore all Reduction of nonhuman opponents.",
      effects={"reduction_ignore": 999},
-     manual=False)
+     manual=True)
 
 _add("Courage of the Thunder Dragon",
      cost=1, duration="attack",
