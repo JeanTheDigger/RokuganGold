@@ -6398,6 +6398,9 @@ class DmDamageView(_DisableableView):
     async def void_reduce(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
             return
+        if self._claimed:
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
         if self.void_reduced:
             await interaction.response.send_message("Already Void-reduced once.", ephemeral=True)
             return
