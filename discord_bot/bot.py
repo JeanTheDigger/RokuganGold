@@ -339,6 +339,18 @@ async def _require_dm_role(interaction: discord.Interaction) -> bool:
     )
     return False
 
+async def _require_approval_channel(interaction: discord.Interaction, guild: str) -> discord.abc.Messageable | None:
+    """The damage/healing approval channel, or an ephemeral refusal and None if none is configured."""
+    ch_id = store.get_damage_approval_channel(guild) or store.get_approval_channel(guild)
+    channel = client.get_channel(int(ch_id)) if ch_id else None
+    if channel is None:
+        await interaction.response.send_message(
+            "No approval channel is configured, so this request cannot be posted privately. "
+            "A Kami must set one with `/dm damage_channel` or `/dm approval_channel` (or run `/setup server`).",
+            ephemeral=True,
+        )
+    return channel
+
 async def _require_encounter(interaction: discord.Interaction) -> encounter.Encounter | None:
     """Return the channel's encounter, or send an error and return None."""
     enc = encounters.get(interaction.channel_id)
@@ -4829,29 +4841,22 @@ async def dm_damage(
         ),
         inline=False,
     )
-    approval_ch_id = store.get_damage_approval_channel(guild) or store.get_approval_channel(guild)
-    approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
-    src_ch_id = interaction.channel_id if approval_ch else 0
+    approval_ch = await _require_approval_channel(interaction, guild)
+    if approval_ch is None:
+        return
     view = DmDamageView(
         target_id=rec.id, target_name=c.name,
         amount=amount, reason=reason,
-        source_channel_id=src_ch_id,
+        source_channel_id=interaction.channel_id,
     )
     owner_ping = f" <@{rec.owner_id}>" if rec.owner_id != NPC_OWNER else ""
-    if approval_ch:
-        embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
-        embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-        await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the damage below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
-        await interaction.response.send_message(
-            f"Pending damage on **{c.name}** - approval routed to the DM channel.{owner_ping}",
-            ephemeral=True,
-        )
-    else:
-        await interaction.response.send_message(
-            content=f"{_dm_ping(interaction.guild)}A DM can authorize the damage below.{owner_ping}",
-            embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
-        )
-        await view.persist(await interaction.original_response())
+    embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
+    embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
+    await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the damage below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
+    await interaction.response.send_message(
+        f"Pending damage on **{c.name}** - approval routed to the DM channel.{owner_ping}",
+        ephemeral=True,
+    )
 
 @dm.command(name="heal", description="Heal wounds on a character (shows DM-approval buttons). [Fortune]")
 @app_commands.describe(
@@ -4896,29 +4901,22 @@ async def dm_heal(
         ),
         inline=False,
     )
-    approval_ch_id = store.get_damage_approval_channel(guild) or store.get_approval_channel(guild)
-    approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
-    src_ch_id = interaction.channel_id if approval_ch else 0
+    approval_ch = await _require_approval_channel(interaction, guild)
+    if approval_ch is None:
+        return
     view = DmHealView(
         target_id=rec.id, target_name=c.name,
         amount=amount, reason=reason,
-        source_channel_id=src_ch_id,
+        source_channel_id=interaction.channel_id,
     )
     owner_ping = f" <@{rec.owner_id}>" if rec.owner_id != NPC_OWNER else ""
-    if approval_ch:
-        embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
-        embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-        await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the healing below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
-        await interaction.response.send_message(
-            f"Pending healing on **{c.name}** - approval routed to the DM channel.{owner_ping}",
-            ephemeral=True,
-        )
-    else:
-        await interaction.response.send_message(
-            content=f"{_dm_ping(interaction.guild)}A DM can authorize the healing below.{owner_ping}",
-            embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
-        )
-        await view.persist(await interaction.original_response())
+    embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
+    embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
+    await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the healing below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
+    await interaction.response.send_message(
+        f"Pending healing on **{c.name}** - approval routed to the DM channel.{owner_ping}",
+        ephemeral=True,
+    )
 
 # ===========================================================================
 # /grapple group: grappling subsystem (s40)
@@ -10196,30 +10194,23 @@ async def spell_damage(
                 value=f"Reduction {red} · Current: **{wl}** ({rec.character.wounds_taken} wounds)",
                 inline=False,
             )
-            approval_ch_id = store.get_damage_approval_channel(guild) or store.get_approval_channel(guild)
-            approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
-            src_ch_id = interaction.channel_id if approval_ch else 0
+            approval_ch = await _require_approval_channel(interaction, guild)
+            if approval_ch is None:
+                return
             view = SpellDamageView(
                 target_id=rec.id, target_name=rec.character.name,
                 raw_damage=total, dice_text=_format_dice(result),
                 reason=reason, rolled=rolled, kept=kept, bonus=bonus,
-                source_channel_id=src_ch_id, caster_name=(caster or "").strip(),
+                source_channel_id=interaction.channel_id, caster_name=(caster or "").strip(),
             )
             owner_ping = f" <@{rec.owner_id}>" if rec.owner_id != NPC_OWNER else ""
-            if approval_ch:
-                embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
-                embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-                await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the spell damage below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
-                await interaction.response.send_message(
-                    f"Spell damage on **{rec.character.name}** - approval routed to the DM channel.{owner_ping}",
-                    ephemeral=True,
-                )
-            else:
-                await interaction.response.send_message(
-                    content=f"{_dm_ping(interaction.guild)}A DM can authorize the spell damage below.{owner_ping}",
-                    embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
-                )
-                await view.persist(await interaction.original_response())
+            embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
+            embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
+            await view.persist(await approval_ch.send(content=f"{_dm_ping(interaction.guild)}A DM can authorize the spell damage below.", embed=embed, view=view, allowed_mentions=_PING_MENTIONS))
+            await interaction.response.send_message(
+                f"Spell damage on **{rec.character.name}** - approval routed to the DM channel.{owner_ping}",
+                ephemeral=True,
+            )
         else:
             embed.set_footer(text=f"Target '{target}' not found: Use exact character name.")
             await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -10583,32 +10574,25 @@ async def dm_treat(
             value=f"**{effective_heal}** wounds to heal {heal_note}",
             inline=False,
         )
-        approval_ch_id = store.get_damage_approval_channel(guild) or store.get_approval_channel(guild)
-        approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
-        src_ch_id = interaction.channel_id if approval_ch else 0
+        approval_ch = await _require_approval_channel(interaction, guild)
+        if approval_ch is None:
+            return
         view = MedicineTreatView(
             healer_name=hc.name, target_id=patient_rec.id, target_name=pc.name,
             wounds_healed=effective_heal, treatment_type=treat_label, roll_result=result,
-            source_channel_id=src_ch_id,
+            source_channel_id=interaction.channel_id,
         )
         owner_ping = f" <@{patient_rec.owner_id}>" if patient_rec.owner_id != NPC_OWNER else ""
-        if approval_ch:
-            embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
-            embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
-            await view.persist(await approval_ch.send(
-                content=f"{_dm_ping(interaction.guild)}Treatment succeeded. A DM can authorize the healing below.",
-                embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
-            ))
-            await interaction.response.send_message(
-                f"Treatment on **{pc.name}** succeeded - healing approval routed to the DM channel.{owner_ping}",
-                ephemeral=True,
-            )
-        else:
-            await interaction.response.send_message(
-                content=f"{_dm_ping(interaction.guild)}Treatment succeeded. A DM can authorize the healing below.{owner_ping}",
-                embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
-            )
-            await view.persist(await interaction.original_response())
+        embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
+        embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
+        await view.persist(await approval_ch.send(
+            content=f"{_dm_ping(interaction.guild)}Treatment succeeded. A DM can authorize the healing below.",
+            embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
+        ))
+        await interaction.response.send_message(
+            f"Treatment on **{pc.name}** succeeded - healing approval routed to the DM channel.{owner_ping}",
+            ephemeral=True,
+        )
     elif success:
         if pc.wounds_taken <= 0:
             embed.add_field(name="Note", value=f"**{pc.name}** has no wounds to heal.", inline=False)
