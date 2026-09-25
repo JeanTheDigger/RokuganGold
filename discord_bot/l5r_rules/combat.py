@@ -945,10 +945,10 @@ def resolve_skill_check(
     Explodes only if skilled (skill > 0). extra_rolled/extra_kept add dice
     from advantages without inflating both rolled and kept. `emphasis`
     rerolls 1s once (s04.5 / s24.0)."""
-    rolled = trait + skill + extra_rolled
-    kept = trait + extra_kept
+    rolled = max(1, trait + skill + extra_rolled)
+    kept = max(1, trait + extra_kept)
     explodes = skill > 0
-    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes, emphasis)
+    result = dice_engine.roll_and_keep(rolled, kept, explodes, emphasis)
     total = result.total + bonus
     return {
         "success": total >= tn,
@@ -977,10 +977,10 @@ def resolve_medicine_check(
 ) -> dict:
     """Medicine/Intelligence check vs a TN. Used for treating poison, disease,
     wounds, etc. Explodes only if skilled."""
-    rolled = intelligence + medicine_skill + extra_rolled
-    kept = intelligence + extra_kept
+    rolled = max(1, intelligence + medicine_skill + extra_rolled)
+    kept = max(1, intelligence + extra_kept)
     explodes = medicine_skill > 0
-    result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept), explodes, emphasis)
+    result = dice_engine.roll_and_keep(rolled, kept, explodes, emphasis)
     total = result.total + bonus
     return {
         "success": total >= tn,

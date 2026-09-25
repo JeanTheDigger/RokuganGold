@@ -934,7 +934,12 @@ async def check_cooperative(
         htv = stats.trait_value(hc, trait.value)
         hsk = hc.skills.get(skill, 0)
         hwp = stats.wound_penalty(hc)
-        hresult = combat.resolve_skill_check(htv, hsk, helper_tn, _d.engine, bonus=hwp)
+        h_adv_r, h_adv_k, h_adv_f, _ = advantage_effects.skill_check_modifiers(hc, skill, trait.value)
+        h_taint_r, _ = taint.social_roll_penalty(hc, skill)
+        h_fear = _d.fear_penalty(interaction.channel_id, hc.name)
+        h_extra_r = h_adv_r + h_taint_r - h_fear
+        h_emph = bool(hc.emphases.get(skill)) if hasattr(hc, "emphases") else False
+        hresult = combat.resolve_skill_check(htv, hsk, helper_tn, _d.engine, bonus=hwp + h_adv_f, extra_rolled=h_extra_r, extra_kept=h_adv_k, emphasis=h_emph)
         mark = "[+]" if hresult["success"] else "[-]"
         helper_lines.append(
             f"{mark} **{hc.name}** rolled **{hresult['total']}** vs TN {helper_tn} "

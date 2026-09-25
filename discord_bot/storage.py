@@ -527,10 +527,11 @@ class Store:
         """Return character names (all owners) matching a case-insensitive substring."""
         with self._lock:
             if query:
+                escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
                 rows = self._conn.execute(
                     "SELECT name FROM characters WHERE guild_id = ? "
-                    "AND name LIKE ? COLLATE NOCASE ORDER BY name COLLATE NOCASE LIMIT ?",
-                    (guild_id, f"%{query}%", limit),
+                    "AND name LIKE ? ESCAPE '\\' COLLATE NOCASE ORDER BY name COLLATE NOCASE LIMIT ?",
+                    (guild_id, f"%{escaped}%", limit),
                 ).fetchall()
             else:
                 rows = self._conn.execute(
@@ -856,6 +857,7 @@ class Store:
         """Inside the caller's lock/transaction: store the row's current data as
         an undo snapshot if the new payload differs, then trim old snapshots.
         Returns True if a snapshot was taken (the data changed)."""
+        assert table in ("characters", "creatures"), f"invalid snapshot table: {table}"
         row = self._conn.execute(
             f"SELECT name, data FROM {table} WHERE id = ?", (entity_id,)
         ).fetchone()
@@ -1567,9 +1569,6 @@ class Store:
 
     def delete_rumor(self, guild_id: str, rumor_id: int) -> None:
         with self._lock, self._conn:
-            self._conn.execute(
-                "DELETE FROM rumor_filters WHERE rumor_id = ?", (rumor_id,),
-            )
             self._conn.execute(
                 "DELETE FROM rumors WHERE guild_id = ? AND id = ?",
                 (guild_id, rumor_id),

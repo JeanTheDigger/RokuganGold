@@ -290,19 +290,19 @@ class Encounter:
         self.combatants.append(combatant)
         self._sort()
         if current is not None:
-            self.turn_index = self.combatants.index(current)
+            self.turn_index = next(i for i, c in enumerate(self.combatants) if c is current)
 
     def remove(self, name: str) -> bool:
-        before = len(self.combatants)
         lowered = name.lower()
+        idx = next((i for i, c in enumerate(self.combatants) if c.name.lower() == lowered), -1)
+        if idx == -1:
+            return False
         # Preserve the current actor across a removal.
         current = self.current()
-        self.combatants = [c for c in self.combatants if c.name.lower() != lowered]
-        if len(self.combatants) == before:
-            return False
+        self.combatants.pop(idx)
         if current is not None and current.name.lower() != lowered:
             # Re-point turn_index at the same actor after the list shrank.
-            self.turn_index = self.combatants.index(current)
+            self.turn_index = next(i for i, c in enumerate(self.combatants) if c is current)
         elif self.combatants:
             if self.started and self.turn_index >= len(self.combatants):
                 # The removed actor was last in the order: their turn ending

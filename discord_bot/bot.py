@@ -5605,7 +5605,7 @@ async def npc_generate(
     if not await _require_dm_role(interaction):
         return
 
-    school_skills = [s for s in skills.split(",")] if skills else None
+    school_skills = [s.strip() for s in skills.split(",")] if skills else None
     resolved_type = school_type.value if school_type else "Bushi"
     # A catalog school fills in the concrete skills, honor, clan, and type. The
     # Benefit is NOT re-applied here: the s22.4 ring bands already reflect it.
@@ -10714,7 +10714,7 @@ async def macro_roll(interaction: discord.Interaction, name: str, secret: bool =
     embed = discord.Embed(title=title, color=discord.Color.teal())
     embed.add_field(
         name=f"{m.rolled}k{m.kept}{mod_str}",
-        value=(_format_dice(result) + (f"\n+{m.modifier} modifier = **{total}**" if m.modifier else ""))[:1024],
+        value=(_format_dice(result) + (f"\n{mod_str} modifier = **{total}**" if m.modifier else ""))[:1024],
         inline=False,
     )
     embed.set_footer(text=f"Total: {total}")

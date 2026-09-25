@@ -409,7 +409,7 @@ async def weapon_view(interaction: discord.Interaction, name: str) -> None:
     if w is None:
         await interaction.response.send_message(f"No weapon named **{name}**. See `/ref weapon list`.", ephemeral=True)
         return
-    dr = f"{w['rolled']}k{w['kept']}" + (" + Strength" if w.get("strength_adds") and w.get("melee") else "")
+    dr = f"{w['rolled']}k{w['kept']}" + (" + Strength" if w.get("strength_adds") else "")
     embed = discord.Embed(title=f"{name.lower().strip()}", color=discord.Color.dark_grey())
     embed.add_field(name="Damage (DR)", value=dr, inline=True)
     embed.add_field(name="Skill", value=w["skill"], inline=True)
@@ -787,9 +787,7 @@ async def atn_breakdown(interaction: discord.Interaction, target: str | None = N
             lines.append(f"Defense Stance: +{def_bonus} (Air {stats.ring_value(c, 'air')} + Defense {c.skills.get('Defense', 0)})")
             total += def_bonus
         elif cb.stance == "center":
-            void_bonus = c.void_ring
-            lines.append(f"Center Stance: +{void_bonus} (Void Ring)")
-            total += void_bonus
+            lines.append("Center Stance: No ATN change (forfeit actions, +1k1+Void next round)")
         elif stance_mod != 0:
             stance_label = cb.stance.replace("_", " ").title()
             lines.append(f"{stance_label} Stance: {stance_mod:+d}")

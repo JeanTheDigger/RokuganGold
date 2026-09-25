@@ -553,6 +553,7 @@ class DamageView(views_base.PersistentView):
                 t_dmg_notes.append(fe_note)
             cre_decl_dmg_explode = False
             cre_decl_reduction_ignore = 0
+            cre_decl_target_red_penalty = 0
             cre_decl_on_hit_condition = ""
             atk_cb_cre = enc.find(attacker.name) if enc else None
             if atk_cb_cre and atk_cb_cre.declared_techniques:
@@ -573,11 +574,13 @@ class DamageView(views_base.PersistentView):
                         cre_decl_dmg_explode = True
                     if efx.get("reduction_ignore"):
                         cre_decl_reduction_ignore += efx["reduction_ignore"]
+                    if efx.get("target_reduction_penalty"):
+                        cre_decl_target_red_penalty += efx["target_reduction_penalty"]
                     if efx.get("on_hit_condition"):
                         cre_decl_on_hit_condition = efx["on_hit_condition"]
                     d_parts: list[str] = []
                     for k in ("dmg_rolled", "dmg_kept", "dmg_flat", "dmg_explode",
-                               "reduction_ignore", "on_hit_condition"):
+                               "reduction_ignore", "target_reduction_penalty", "on_hit_condition"):
                         if efx.get(k):
                             d_parts.append(f"{k}={efx[k]}")
                     if d_parts:
@@ -623,7 +626,7 @@ class DamageView(views_base.PersistentView):
                     true_note = f"True: Reduction −{true_sub} (wielder Strength {attacker.strength})"
                     cre_base_red = max(0, cre_base_red - attacker.strength)
             kata_line = "".join(f"\n- {n}" for n in (waves_note, sos_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, *t_dmg_notes) if n)
-            reduction = max(0, cre_base_red - ignore - tsu_ignore - cre_decl_reduction_ignore)
+            reduction = max(0, cre_base_red - ignore - tsu_ignore - cre_decl_reduction_ignore - cre_decl_target_red_penalty)
             radiant = combat.has_weapon_quality(attacker, self.weapon, "radiant")
             bypasses = radiant or self.weapon_material in ("jade", "crystal", "obsidian", "nemuranai")
             applied = creature.apply_damage_to_creature(cre_rec.creature, raw, reduction, bypasses_invuln=bypasses)
