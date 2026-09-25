@@ -1029,6 +1029,7 @@ def _delete_encounter(channel_id: int) -> None:
     emphasis="Emphasis: Reroll any initial 1 once (default off).",
     unskilled="Unskilled roll: Dice do NOT explode (default off).",
     reason="Optional label shown with the roll (e.g. 'Kenjutsu attack').",
+    secret="Hide the result from others (default: Yes).",
 )
 async def roll(
     interaction: discord.Interaction,
@@ -1040,6 +1041,7 @@ async def roll(
     emphasis: bool = False,
     unskilled: bool = False,
     reason: str | None = None,
+    secret: bool = True,
 ) -> None:
     explodes = not unskilled
     title = "Roll & Keep" + (f": {reason}" if reason else "")
@@ -1087,7 +1089,7 @@ async def roll(
 
     log_total = outcome["total"] if tn is not None else total
     _log_roll(interaction.channel_id, interaction.user.display_name, title, log_total)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 _DICE_RE = re.compile(
     r"^(\d{1,3})\s*k\s*(\d{1,3})"
@@ -1104,12 +1106,14 @@ _DICE_RE = re.compile(
     expression="Dice expression like 5k3, 7k2+5, 4k2-3.",
     tn="Optional Target Number to test against.",
     reason="Optional label shown with the roll.",
+    secret="Hide the result from others (default: Yes).",
 )
 async def dice_quick(
     interaction: discord.Interaction,
     expression: str,
     tn: app_commands.Range[int, 1, 200] | None = None,
     reason: str | None = None,
+    secret: bool = True,
 ) -> None:
     m = _DICE_RE.match(expression.strip())
     if not m:
@@ -1153,7 +1157,7 @@ async def dice_quick(
         embed.add_field(name="Total", value=total_str, inline=False)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
     _log_roll(interaction.channel_id, interaction.user.display_name, title, outcome["total"] if tn else total)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 async def _weapon_autocomplete(
     interaction: discord.Interaction, current: str
@@ -10511,8 +10515,7 @@ async def dm_treat(
                 embed=embed, view=view, allowed_mentions=_PING_MENTIONS,
             ))
             await interaction.response.send_message(
-                f"Treatment on **{pc.name}** succeeded - healing approval routed to the DM channel.{owner_ping}",
-                ephemeral=True,
+                f"Treatment on **{pc.name}** succeeded - healing approval routed to the DM channel.{owner_ping}"
             )
         else:
             await interaction.response.send_message(
@@ -10523,10 +10526,10 @@ async def dm_treat(
     elif success:
         if pc.wounds_taken <= 0:
             embed.add_field(name="Note", value=f"**{pc.name}** has no wounds to heal.", inline=False)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed)
     else:
         embed.set_footer(text="L5R 4e: A failed Medicine check cannot be re-attempted on the same patient until the next day.")
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed)
 
 # ---------------------------------------------------------------------------
 # Phase 47: Character Import/Export
@@ -10693,9 +10696,9 @@ async def macro_list(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @macro_group.command(name="roll", description="Roll a saved macro.")
-@app_commands.describe(name="Which macro to roll.")
+@app_commands.describe(name="Which macro to roll.", secret="Hide the result from others (default: Yes).")
 @app_commands.autocomplete(name=_macro_autocomplete)
-async def macro_roll(interaction: discord.Interaction, name: str) -> None:
+async def macro_roll(interaction: discord.Interaction, name: str, secret: bool = True) -> None:
     if not await _require_guild(interaction):
         return
     m = store.get_macro(str(interaction.guild_id), str(interaction.user.id), name)
@@ -10716,7 +10719,7 @@ async def macro_roll(interaction: discord.Interaction, name: str) -> None:
     )
     embed.set_footer(text=f"Total: {total}")
     _log_roll(interaction.channel_id, interaction.user.display_name, title, total)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 @macro_group.command(name="delete", description="Delete a saved macro.")
 @app_commands.describe(name="Which macro to delete.")
