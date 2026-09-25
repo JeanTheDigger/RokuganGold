@@ -9518,7 +9518,7 @@ async def spell_cast(
         stealth_rank = caster.skills.get("Stealth", 0)
         conceal_rolled = caster.agility + stealth_rank
         conceal_kept = caster.agility
-        conceal_result = engine.roll_and_keep(max(1, conceal_rolled), max(1, conceal_kept))
+        conceal_result = engine.roll_and_keep(max(1, conceal_rolled), max(1, conceal_kept), explodes=(stealth_rank > 0))
         conceal_total = conceal_result.total + wound_pen
         embed.add_field(
             name="Concealed Casting",
@@ -9780,7 +9780,7 @@ async def spell_importune(
     imp_rolled = ring_val + spellcraft_rank - fear_r
     imp_kept = ring_val
     imp_tn = 15 + 5 * ml
-    imp_result = engine.roll_and_keep(max(1, imp_rolled), max(1, imp_kept), emphasis=has_importune)
+    imp_result = engine.roll_and_keep(max(1, imp_rolled), max(1, imp_kept), explodes=(spellcraft_rank > 0), emphasis=has_importune)
     imp_total = imp_result.total + wound_pen
     imp_success = imp_total >= imp_tn
     embed = discord.Embed(
