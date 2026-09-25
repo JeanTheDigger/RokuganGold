@@ -3103,6 +3103,36 @@ async def attack(
         )
         return
 
+    # Room-lock: if attacker or target is in a room, fight must happen there.
+    ch_str = str(interaction.channel_id)
+    if not _d.is_dm(interaction):
+        atk_room = _d.store.find_room_for_member(guild, str(interaction.user.id))
+        if atk_room is not None and atk_room.thread_id != ch_str:
+            await interaction.response.send_message(
+                f"Your character is in room **{atk_room.name}** (<#{atk_room.thread_id}>). "
+                f"Use combat commands there.",
+                ephemeral=True,
+            )
+            return
+    if target_rec is not None and target_rec.owner_id != _d.NPC_OWNER:
+        tgt_room = _d.store.find_room_for_member(guild, target_rec.owner_id)
+        if tgt_room is not None and tgt_room.thread_id != ch_str:
+            await interaction.response.send_message(
+                f"**{target_rec.character.name}** is in room **{tgt_room.name}** (<#{tgt_room.thread_id}>). "
+                f"Use combat commands there.",
+                ephemeral=True,
+            )
+            return
+    if target_rec is not None and target_rec.owner_id == _d.NPC_OWNER:
+        npc_room = _d.store.find_room_for_npc(guild, target_rec.character.name)
+        if npc_room is not None and npc_room.thread_id != ch_str:
+            await interaction.response.send_message(
+                f"**{target_rec.character.name}** is in room **{npc_room.name}** (<#{npc_room.thread_id}>). "
+                f"Use combat commands there.",
+                ephemeral=True,
+            )
+            return
+
     a_stance_explicit = attacker_stance.value if attacker_stance else None
     d_stance_explicit = defender_stance.value if defender_stance else None
     man = maneuver.value if maneuver else "none"

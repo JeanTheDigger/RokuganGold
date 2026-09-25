@@ -775,6 +775,28 @@ class Store:
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM room_npcs WHERE room_id = ?", (room_id,))
 
+    def find_room_for_member(self, guild_id: str, user_id: str) -> RoomRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT r.* FROM rooms r "
+                "JOIN room_members rm ON rm.room_id = r.id "
+                "WHERE r.guild_id = ? AND rm.user_id = ? AND r.closed = 0 "
+                "LIMIT 1",
+                (guild_id, user_id),
+            ).fetchone()
+        return self._row_to_room(row) if row else None
+
+    def find_room_for_npc(self, guild_id: str, npc_name: str) -> RoomRecord | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT r.* FROM rooms r "
+                "JOIN room_npcs rn ON rn.room_id = r.id "
+                "WHERE r.guild_id = ? AND rn.npc_name = ? AND r.closed = 0 "
+                "LIMIT 1",
+                (guild_id, npc_name),
+            ).fetchone()
+        return self._row_to_room(row) if row else None
+
     # -- creatures -------------------------------------------------------------
     def _row_to_creature(self, row: sqlite3.Row) -> CreatureRecord:
         return CreatureRecord(
