@@ -220,7 +220,8 @@ async def _send_recipient_ac(
         return []
     guild_id = str(interaction.guild_id)
     cur = current.lower().strip()
-    names = [n for n in _all_character_names(guild_id) if cur in n.lower()]
+    pool = _all_character_names(guild_id) if _d.is_dm(interaction) else _pc_names(guild_id)
+    names = [n for n in pool if cur in n.lower()]
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
 

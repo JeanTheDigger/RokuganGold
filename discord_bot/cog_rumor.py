@@ -150,7 +150,7 @@ async def _school_type_autocomplete(
 async def _character_autocomplete(
     interaction: discord.Interaction, current: str,
 ) -> list[app_commands.Choice[str]]:
-    if interaction.guild_id is None or _d.store is None:
+    if interaction.guild_id is None or _d.store is None or not _d.is_dm(interaction):
         return []
     cur = current.lower().strip()
     guild_id = str(interaction.guild_id)
