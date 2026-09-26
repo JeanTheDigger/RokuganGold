@@ -107,7 +107,7 @@ _SOCIAL_SKILLS = [
     app_commands.Choice(name="Intimidation (Willpower)", value="Intimidation"),
     app_commands.Choice(name="Temptation (Awareness)", value="Temptation"),
     app_commands.Choice(name="Sincerity (Awareness)", value="Sincerity"),
-    app_commands.Choice(name="Perform (Awareness)", value="Perform"),
+    app_commands.Choice(name="Perform (Awareness by default; varies, use trait to override)", value="Perform"),
 ]
 
 _SOCIAL_TRAIT_MAP: dict[str, str] = {
@@ -1263,8 +1263,9 @@ async def investigate_check(
     void_unskilled="Void Point: Treat Skill 0 as Rank 1.",
     emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label (e.g. 'convincing the magistrate').",
+    trait="Override the governing Trait (s24: Perform varies; instruments and Dance use Agility).",
 )
-@app_commands.choices(skill=_SOCIAL_SKILLS)
+@app_commands.choices(skill=_SOCIAL_SKILLS, trait=_CONTEST_TRAITS)
 async def social_check(
     interaction: discord.Interaction,
     skill: app_commands.Choice[str],
@@ -1277,6 +1278,7 @@ async def social_check(
     void_unskilled: bool = False,
     emphasis: str | None = None,
     reason: str | None = None,
+    trait: app_commands.Choice[str] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -1290,7 +1292,7 @@ async def social_check(
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
         return
-    trait_attr = _SOCIAL_TRAIT_MAP[skill.value]
+    trait_attr = trait.value if trait else _SOCIAL_TRAIT_MAP[skill.value]
     tv = stats.trait_value(c, trait_attr)
     sk = c.skills.get(skill.value, 0)
     wp = stats.wound_penalty(c)
@@ -1326,7 +1328,7 @@ async def social_check(
 
 @check.command(
     name="craft",
-    description="Artisan or Craft skill / Intelligence check vs a TN.",
+    description="Artisan or Craft skill check vs a TN. Artisan uses Awareness, Craft uses Intelligence unless overridden.",
 )
 @app_commands.describe(
     name="Character (default: Yours; others or NPCs need Fortune).",
@@ -1339,7 +1341,9 @@ async def social_check(
     void_unskilled="Void Point: Treat Skill 0 as Rank 1.",
     emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label (e.g. 'forging a katana').",
+    trait="Override the governing Trait (s24: Artisan is Awareness; Craft varies).",
 )
+@app_commands.choices(trait=_CONTEST_TRAITS)
 async def craft_check(
     interaction: discord.Interaction,
     skill: str,
@@ -1352,6 +1356,7 @@ async def craft_check(
     void_unskilled: bool = False,
     emphasis: str | None = None,
     reason: str | None = None,
+    trait: app_commands.Choice[str] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -1367,7 +1372,14 @@ async def craft_check(
         return
     sk = c.skills.get(skill, 0)
     wp = stats.wound_penalty(c)
-    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, "intelligence")
+    if trait is not None:
+        trait_attr = trait.value
+    elif skill.strip().lower().startswith("artisan"):
+        trait_attr = "awareness"
+    else:
+        trait_attr = "intelligence"
+    trait_label = "Void" if trait_attr == "void" else trait_attr.capitalize()
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait_attr)
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     emph, emph_err = _emphasis_for(c, skill, emphasis)
     if emph_err:
@@ -1378,7 +1390,7 @@ async def craft_check(
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=skill, sk=sk, void_unskilled=void_unskilled,
     )
-    result = combat.resolve_skill_check(c.intelligence, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
+    result = combat.resolve_skill_check(stats.trait_value(c, trait_attr), sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
     if void_spent:
         _d.store.save(rec)
         _d.tally(interaction.channel_id, c.name, "void")
@@ -1386,7 +1398,7 @@ async def craft_check(
     title = "Craft Check"
     if reason:
         title += f": {reason}"
-    embed = _build_check_embed(title, c.name, skill_label, "Intelligence", result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
+    embed = _build_check_embed(title, c.name, skill_label, trait_label, result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
