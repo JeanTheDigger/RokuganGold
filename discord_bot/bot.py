@@ -1220,7 +1220,7 @@ async def _own_character_autocomplete(
 async def _npc_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
-    if interaction.guild_id is None:
+    if interaction.guild_id is None or not _is_dm(interaction):
         return []
     cur = current.lower().strip()
     recs = store.list_by_owner(str(interaction.guild_id), NPC_OWNER)
@@ -1264,6 +1264,10 @@ async def _creature_instance_autocomplete(
     cur = current.lower().strip()
     recs = store.list_creatures(str(interaction.guild_id))
     names = [r.creature.name for r in recs if cur in r.creature.name.lower()]
+    if not _is_dm(interaction):
+        enc = encounters.get(interaction.channel_id)
+        present = {c.name.lower() for c in enc.combatants} if enc else set()
+        names = [n for n in names if n.lower() in present]
     return [app_commands.Choice(name=n, value=n) for n in sorted(names)[:25]]
 
 async def _school_autocomplete(
@@ -7113,7 +7117,7 @@ _ENTITY_TYPE_CHOICES = [
 async def _category_autocomplete(
     interaction: discord.Interaction, current: str,
 ) -> list[app_commands.Choice[str]]:
-    if interaction.guild_id is None:
+    if interaction.guild_id is None or not _is_dm(interaction):
         return []
     cats = store.list_categories(str(interaction.guild_id))
     cur = current.lower().strip()

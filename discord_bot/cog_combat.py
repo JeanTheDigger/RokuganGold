@@ -232,7 +232,7 @@ async def _duelist_autocomplete(
     enc = _d.encounters.get(interaction.channel_id)
     if enc and enc.combatants:
         names.extend(c.name for c in enc.combatants)
-    if interaction.guild_id:
+    if interaction.guild_id and _d.is_dm(interaction):
         guild_id = str(interaction.guild_id)
         for rec in _d.store.list_by_owner(guild_id, _d.NPC_OWNER):
             if rec.character.name not in names:
