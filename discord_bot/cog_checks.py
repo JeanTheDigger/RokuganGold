@@ -473,7 +473,7 @@ async def contest(
 )
 async def fear_check(
     interaction: discord.Interaction,
-    fear_rank: app_commands.Range[int, 1, 10],
+    fear_rank: app_commands.Range[int, 1, 10] | None = None,
     name: str | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
@@ -488,19 +488,22 @@ async def fear_check(
     if rec is None:
         return
     c = rec.character
-    if await _d.refuse_if_cannot_act(interaction, c):
-        return
-    if tattoo_effects.is_fear_immune(c):
-        await interaction.response.send_message(
-            f"**{c.name}** is immune to Fear (Mantis Tattoo). No roll needed.",
-            ephemeral=True,
-        )
-        return
     if clear:
         cleared = _d.set_fear_penalty(guild, interaction.channel_id, c.name, 0)
         await interaction.response.send_message(
             f"Fear penalty cleared for **{c.name}**." if cleared
             else f"**{c.name}** is not in this channel's encounter; nothing to clear.",
+            ephemeral=True,
+        )
+        return
+    if fear_rank is None:
+        await interaction.response.send_message("Give a `fear_rank:` to roll, or `clear:true` to clear.", ephemeral=True)
+        return
+    if await _d.refuse_if_cannot_act(interaction, c):
+        return
+    if tattoo_effects.is_fear_immune(c):
+        await interaction.response.send_message(
+            f"**{c.name}** is immune to Fear (Mantis Tattoo). No roll needed.",
             ephemeral=True,
         )
         return
@@ -1077,6 +1080,8 @@ async def stealth_check(
         void_line=void_line,
         footer=f"Rolled by {interaction.user.display_name}",
     )
+    if not secret:
+        _d.log_roll(interaction.channel_id, c.name, f"Stealth/Agility vs TN {tn}", result["total"])
     await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 
@@ -1143,7 +1148,7 @@ async def investigate_check(
     if void_spent:
         _d.store.save(rec)
         _d.tally(interaction.channel_id, c.name, "void")
-    has_emphasis = emp_name and emp_name in c.emphases.get("Investigation", [])
+    has_emphasis = bool(inv_emph)
     skill_label = f"Investigation {sk}" if sk > 0 else "Investigation (unskilled)"
     if emp_name:
         skill_label += f" [{emp_name}]"
@@ -1154,12 +1159,14 @@ async def investigate_check(
         title += f": {reason}"
     roller = f"Rolled by {interaction.user.display_name}"
     if has_emphasis:
-        footer = f"Has {emp_name} emphasis: Reroll 1s once (DM adjudicates). {roller}"
+        footer = f"Emphasis ({inv_emph}): 1s rerolled once. {roller}"
     elif emp_name:
         footer = f"No {emp_name} emphasis on sheet. {roller}"
     else:
         footer = roller
     embed = _build_check_embed(title, c.name, skill_label, "Perception", result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=footer)
+    if not secret:
+        _d.log_roll(interaction.channel_id, c.name, f"Investigation/Perception vs TN {tn}", result["total"])
     await interaction.response.send_message(embed=embed, ephemeral=secret)
 
 
@@ -1436,8 +1443,10 @@ async def horsemanship_check(
     if void_spent:
         _d.store.save(rec)
         _d.tally(interaction.channel_id, c.name, "void")
+    h_label = f"Horsemanship {skill_rank}" if skill_rank > 0 else "Horsemanship (unskilled)"
+    h_title = "Horsemanship Check" + (f": {reason}" if reason else "")
     embed = _build_check_embed(
-        reason or "Horsemanship Check", c.name, "Horsemanship", "Agility", result, wp, bonus,
+        h_title, c.name, h_label, "Agility", result, wp, bonus,
         success_text="Maneuver succeeds!", fail_text="The rider falters!",
         adv_notes=adv_notes, void_line=void_line,
         footer=f"Rolled by {interaction.user.display_name}",
