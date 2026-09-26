@@ -1203,6 +1203,8 @@ class DamageView(views_base.PersistentView):
         detail = (f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}\n"
                   f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
                   f": {'**HIT**' if hit else 'miss'}")
+        public2 = discord.Embed(title=embed2.title, color=embed2.color)
+        public2.add_field(name="Attack Roll", value=detail, inline=False)
         if notes:
             detail += "\n" + " · ".join(notes)
         embed2.add_field(name="Attack Roll", value=detail, inline=False)
@@ -1225,9 +1227,9 @@ class DamageView(views_base.PersistentView):
             pending = f"**{self.attacker_name}** hit **{self.target_name}** with the 2nd strike - damage approval pending in the DM channel."
             fight_ch = _d.bot_client.get_channel(fight_ch_id)
             if fight_ch_id != interaction.channel_id and fight_ch is not None:
-                await fight_ch.send(content=pending, embed=embed2)
+                await fight_ch.send(content=pending, embed=public2)
             else:
-                await interaction.followup.send(content=pending, embed=embed2)
+                await interaction.followup.send(content=pending, embed=public2)
             await _post_damage_card(
                 approval_ch, interaction.guild, interaction.user, fight_ch_id,
                 "A DM can authorize the 2nd attack's damage below.", embed2, view2,
@@ -1235,7 +1237,8 @@ class DamageView(views_base.PersistentView):
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
             _d.tally(self.channel_id, self.attacker_name, "attacks"); _d.tally(self.channel_id, self.attacker_name, "hits")
         else:
-            await self._post_result(interaction, embed2)
+            await self._post_result(interaction, public2)
+            await interaction.followup.send(embed=embed2, ephemeral=True)
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) MISS")
             _d.tally(self.channel_id, self.attacker_name, "attacks")
 
@@ -1327,6 +1330,8 @@ class DamageView(views_base.PersistentView):
         detail = (f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}\n"
                   f"Roll **{outcome['roll']}** vs TN **{outcome['target_tn']}**"
                   f": {'**HIT**' if hit else 'miss'}")
+        public2 = discord.Embed(title=embed2.title, color=embed2.color)
+        public2.add_field(name="Attack Roll", value=detail, inline=False)
         if notes:
             detail += "\n" + " · ".join(notes)
         embed2.add_field(name="Attack Roll", value=detail, inline=False)
@@ -1349,9 +1354,9 @@ class DamageView(views_base.PersistentView):
             pending = f"**{self.attacker_name}** hit **{self.target_name}** with the 2nd strike - damage approval pending in the DM channel."
             fight_ch = _d.bot_client.get_channel(fight_ch_id)
             if fight_ch_id != interaction.channel_id and fight_ch is not None:
-                await fight_ch.send(content=pending, embed=embed2)
+                await fight_ch.send(content=pending, embed=public2)
             else:
-                await interaction.followup.send(content=pending, embed=embed2)
+                await interaction.followup.send(content=pending, embed=public2)
             await _post_damage_card(
                 approval_ch, interaction.guild, interaction.user, fight_ch_id,
                 "A DM can authorize the 2nd attack's damage below.", embed2, view2,
@@ -1359,7 +1364,8 @@ class DamageView(views_base.PersistentView):
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) HIT")
             _d.tally(self.channel_id, self.attacker_name, "attacks"); _d.tally(self.channel_id, self.attacker_name, "hits")
         else:
-            await self._post_result(interaction, embed2)
+            await self._post_result(interaction, public2)
+            await interaction.followup.send(embed=embed2, ephemeral=True)
             await _d.combat_log(str(interaction.guild_id), f"Extra Attack: {self.attacker_name} → {self.target_name} ({self.weapon}) MISS")
             _d.tally(self.channel_id, self.attacker_name, "attacks")
 
@@ -3729,18 +3735,18 @@ async def _execute_attack(
         title=f"{a_name} attacks {t_name}",
         color=discord.Color.green() if hit else discord.Color.greyple(),
     )
-    atk_desc = (
-        f"{outcome['skill_name']} {outcome['skill_rank']} / "
-        f"{outcome['trait_name'].capitalize()} with **{weapon.replace('_', ' ').title()}**"
-    )
+    public_desc = f"**{weapon.replace('_', ' ').title()}**"
     if mat != "normal":
-        atk_desc += f"  ·  {mat.title()}"
+        public_desc += f"  ·  {mat.title()}"
     if a_stance != "attack":
         auto_tag = " *(enc)*" if (not a_stance_explicit and atk_combatant) else ""
-        atk_desc += f"  ·  {a_stance.replace('_', ' ').title()}{auto_tag}"
+        public_desc += f"  ·  {a_stance.replace('_', ' ').title()}{auto_tag}"
     if man != "none":
-        atk_desc += f"  ·  Maneuver: {man.title()}"
-    atk_desc += void_line
+        public_desc += f"  ·  Maneuver: {man.title()}"
+    atk_desc = (
+        f"{outcome['skill_name']} {outcome['skill_rank']} / "
+        f"{outcome['trait_name'].capitalize()} with {public_desc}{void_line}"
+    )
     embed.add_field(name="Attacker", value=atk_desc[:1024], inline=False)
     embed.add_field(name="Attack roll", value=_d.format_dice(outcome["dice"])[:1024], inline=False)
 
@@ -3751,13 +3757,13 @@ async def _execute_attack(
         auto_tag = " *(enc)*" if (not d_stance_explicit and def_combatant) else ""
         tn_note += f"  ·  {d_stance.replace('_', ' ').title()}{auto_tag}"
     verdict = "**HIT**" if hit else "**MISS**"
-    embed.add_field(
-        name="Result",
-        value=f"Total **{outcome['roll']}** vs {tn_note}: {verdict} (margin {outcome['margin']:+d})",
-        inline=False,
-    )
+    result_value = f"Total **{outcome['roll']}** vs {tn_note}: {verdict} (margin {outcome['margin']:+d})"
+    embed.add_field(name="Result", value=result_value, inline=False)
     if outcome["unskilled"]:
         embed.set_footer(text=f"Unskilled in {outcome['skill_name']}: Dice did not explode.")
+    public_embed = discord.Embed(title=embed.title, color=embed.color)
+    public_embed.add_field(name="Attacker", value=public_desc[:1024], inline=False)
+    public_embed.add_field(name="Result", value=result_value, inline=False)
 
     if kata_notes:
         embed.add_field(name="Combat effects (auto-applied)", value=" · ".join(kata_notes)[:1024], inline=False)
@@ -3814,13 +3820,15 @@ async def _execute_attack(
         owner_ping = f" <@{target_owner_id}>" if target_owner_id and target_owner_id != _d.NPC_OWNER else ""
         await _reply(
             content=f"**{a_name}** hit **{t_name}** - damage approval pending in the DM channel.{owner_ping}",
-            embed=embed,
+            embed=public_embed,
         )
+        await _reply(embed=embed, ephemeral=True)
         await _post_damage_card(approval_ch, interaction.guild, interaction.user, interaction.channel_id, prompt, embed, view)
         await _d.combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) HIT (roll {outcome['roll']} vs TN {outcome['target_tn']})")
         _d.tally(interaction.channel_id, a_name, "attacks"); _d.tally(interaction.channel_id, a_name, "hits")
     else:
-        await _reply(embed=embed)
+        await _reply(embed=public_embed)
+        await _reply(embed=embed, ephemeral=True)
         await _d.combat_log(guild, f"Attack: {a_name} → {t_name} ({weapon}) MISS (roll {outcome['roll']} vs TN {outcome['target_tn']})")
         _d.tally(interaction.channel_id, a_name, "attacks")
 
