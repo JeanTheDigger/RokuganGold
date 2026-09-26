@@ -515,7 +515,7 @@ async def edit_equip(
 
 @edit_group.command(
     name="feature",
-    description="Add or remove an advantage, disadvantage, technique, kata, kiho, weapon, quality, emphasis, tattoo, or spell. [Fortune]",
+    description="Add or remove a sheet feature: Advantage, technique, kata, kiho, weapon, emphasis, spell. [Fortune]",
 )
 @app_commands.describe(
     category="Which feature list to modify.",

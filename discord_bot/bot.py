@@ -180,6 +180,34 @@ def _oversized_commands(tree: app_commands.CommandTree) -> list[tuple[str, int]]
             out.append((cmd.name, chars))
     return out
 
+
+def _registration_problems(tree: app_commands.CommandTree) -> list[str]:
+    """Every field Discord would reject in the registration payload (Invalid Form Body).
+    discord.py truncates option descriptions itself, but not command or subcommand
+    descriptions, and one bad field fails the whole sync."""
+    problems: list[str] = []
+
+    def walk(path: str, opt: dict) -> None:
+        desc = opt.get("description", "")
+        if not 1 <= len(desc) <= 100:
+            problems.append(f"{path} description is {len(desc)} chars (limit 100)")
+        if len(opt.get("choices", [])) > 25:
+            problems.append(f"{path} has {len(opt['choices'])} choices (limit 25)")
+        for ch in opt.get("choices", []):
+            if not 1 <= len(str(ch.get("name", ""))) <= 100:
+                problems.append(f"{path} choice name over 100 chars")
+        subs = opt.get("options", [])
+        if len(subs) > 25:
+            problems.append(f"{path} has {len(subs)} options (limit 25)")
+        for sub in subs:
+            walk(f"{path} {sub['name']}", sub)
+
+    for cmd in tree.get_commands():
+        walk(f"/{cmd.name}", cmd.to_dict(tree))
+    for name, chars in _oversized_commands(tree):
+        problems.append(f"/{name} registration is {chars} chars (limit {COMMAND_TEXT_LIMIT})")
+    return problems
+
 def _tree_payload_hash(tree: app_commands.CommandTree, guild: discord.abc.Snowflake) -> str:
     """Stable fingerprint of every command definition the bot would register for *guild*.
     Before the first sync the definitions are global; after it they live as guild
@@ -205,8 +233,8 @@ async def _sync_tree(
         count = len(tree.get_commands(guild=guild)) or len(tree.get_commands())
         log.info("Command definitions unchanged for guild %s: Sync skipped (%d commands)", guild_id, count)
         return count, ""
-    for name, chars in _oversized_commands(tree):
-        log.error("/%s registration is %d chars (limit %d): Discord will reject the sync", name, chars, COMMAND_TEXT_LIMIT)
+    for problem in _registration_problems(tree):
+        log.error("Registration problem, Discord will reject the sync: %s", problem)
     try:
         tree.copy_global_to(guild=guild)
         synced = await tree.sync(guild=guild)
@@ -1028,13 +1056,13 @@ async def sync_commands(interaction: discord.Interaction) -> None:
         )
         return
     await interaction.response.defer(ephemeral=True)
-    oversized = _oversized_commands(client.tree)
+    problems = _registration_problems(client.tree)
     count, error = await _sync_tree(client.tree, discord.Object(id=interaction.guild_id), force=True)
     if error:
-        too_big = "; ".join(f"/{n} is {c} chars (limit {COMMAND_TEXT_LIMIT})" for n, c in oversized)
+        found = "\n".join(f"• {p}" for p in problems)
         await interaction.followup.send(
             "Sync **failed**: Discord kept the previous command definitions.\n"
-            f"```\n{error[:1500]}\n```" + (f"\nOversized: {too_big}" if too_big else ""),
+            f"```\n{error[:1200]}\n```" + (f"\nProblems found in the payload:\n{found}" if found else ""),
             ephemeral=True,
         )
         return

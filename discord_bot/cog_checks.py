@@ -580,7 +580,7 @@ async def fear_check(
 
 @check.command(
     name="honor",
-    description="Honor Roll (s46): Re-roll a failed roll at the same TN with Honor Rank k Honor Rank. Once per session.",
+    description="Honor Roll (s46): Re-roll a failed roll at the same TN with Honor Rank k Honor Rank. Once a session.",
 )
 @app_commands.describe(
     name="Character (default: Yours; others or NPCs need Fortune).",
@@ -819,7 +819,7 @@ async def medicine_check(
     void_unskilled="Void Point: Treat Skill 0 as Rank 1.",
     emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label shown with the roll.",
-    secret="True: Only you see the result. False: The total, TN and outcome are posted here; the full breakdown stays private to you.",
+    secret="True: Only you see it. False: Total, TN and outcome are public; the breakdown stays private to you.",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
 async def skill_check_cmd(
@@ -888,7 +888,7 @@ async def skill_check_cmd(
 
 @check.command(
     name="cooperative",
-    description="Cooperative roll (s41). Low: One roll plus helpers' Skill Ranks. High: All roll, best Rank aids the rest. [Fortune]",
+    description="Cooperative roll (s41): Low adds helper Skill Ranks; High, the best helper aids the rest. [Fortune]",
 )
 @app_commands.describe(
     name="Primary character making the check.",
@@ -1115,7 +1115,7 @@ async def check_cooperative(
     void_unskilled="Void Point: Treat Stealth 0 as Rank 1.",
     emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label (e.g. 'sneaking past the guards').",
-    secret="True: Only you see the result. False: The total, TN and outcome are posted here; the full breakdown stays private to you.",
+    secret="True: Only you see it. False: Total, TN and outcome are public; the breakdown stays private to you.",
 )
 async def stealth_check(
     interaction: discord.Interaction,
@@ -1197,7 +1197,7 @@ async def stealth_check(
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Void Point: Treat Investigation 0 as Rank 1.",
     reason="Label (e.g. 'searching the crime scene').",
-    secret="True: Only you see the result. False: The total, TN and outcome are posted here; the full breakdown stays private to you.",
+    secret="True: Only you see it. False: Total, TN and outcome are public; the breakdown stays private to you.",
 )
 @app_commands.choices(emphasis=_INVESTIGATION_EMPHASIS)
 async def investigate_check(
@@ -1351,7 +1351,7 @@ async def social_check(
 
 @check.command(
     name="craft",
-    description="Artisan or Craft skill check vs a TN. Artisan uses Awareness, Craft uses Intelligence unless overridden.",
+    description="Artisan or Craft check vs a TN. Artisan uses Awareness, Craft uses Intelligence unless overridden.",
 )
 @app_commands.describe(
     name="Character (default: Yours; others or NPCs need Fortune).",
