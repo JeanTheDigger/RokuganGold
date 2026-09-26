@@ -338,12 +338,12 @@ check = app_commands.Group(name="check", description="Skill, trait, contested an
 @app_commands.choices(trait_a=_CONTEST_TRAITS, trait_b=_CONTEST_TRAITS)
 async def contest(
     interaction: discord.Interaction,
-    name_a: str,
+    name_a: app_commands.Range[str, 1, 80],
     trait_a: app_commands.Choice[str],
-    skill_a: str,
-    name_b: str,
+    skill_a: app_commands.Range[str, 1, 80],
+    name_b: app_commands.Range[str, 1, 80],
     trait_b: app_commands.Choice[str],
-    skill_b: str,
+    skill_b: app_commands.Range[str, 1, 80],
     a_member: discord.Member | None = None,
     b_member: discord.Member | None = None,
     a_is_npc: bool = False,
@@ -354,7 +354,7 @@ async def contest(
     void_b: bool = False,
     void_unskilled_a: bool = False,
     void_unskilled_b: bool = False,
-    reason: str | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -488,7 +488,7 @@ async def contest(
 async def fear_check(
     interaction: discord.Interaction,
     fear_rank: app_commands.Range[int, 1, 10] | None = None,
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
@@ -592,7 +592,7 @@ async def fear_check(
 async def honor_roll(
     interaction: discord.Interaction,
     tn: app_commands.Range[int, 1, 100],
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
@@ -655,12 +655,12 @@ async def honor_roll(
 async def poison_resist(
     interaction: discord.Interaction,
     strength: app_commands.Range[int, 1, 10],
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
-    poison_name: str | None = None,
+    poison_name: app_commands.Range[str, 1, 200] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -731,14 +731,14 @@ async def poison_resist(
 async def medicine_check(
     interaction: discord.Interaction,
     tn: app_commands.Range[int, 1, 100],
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
-    emphasis: str | None = None,
-    reason: str | None = None,
+    emphasis: app_commands.Range[str, 1, 80] | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -825,16 +825,16 @@ async def medicine_check(
 async def skill_check_cmd(
     interaction: discord.Interaction,
     trait: app_commands.Choice[str],
-    skill: str,
+    skill: app_commands.Range[str, 1, 80],
     tn: app_commands.Range[int, 1, 200],
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
-    emphasis: str | None = None,
-    reason: str | None = None,
+    emphasis: app_commands.Range[str, 1, 80] | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
     secret: bool = True,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -914,19 +914,19 @@ async def skill_check_cmd(
 )
 async def check_cooperative(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     trait: app_commands.Choice[str],
-    skill: str,
+    skill: app_commands.Range[str, 1, 80],
     tn: app_commands.Range[int, 1, 200],
-    helpers: str,
+    helpers: app_commands.Range[str, 1, 500],
     mode: app_commands.Choice[str],
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
-    emphasis: str | None = None,
-    reason: str | None = None,
+    emphasis: app_commands.Range[str, 1, 80] | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -1120,14 +1120,14 @@ async def check_cooperative(
 async def stealth_check(
     interaction: discord.Interaction,
     tn: app_commands.Range[int, 1, 200],
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
-    emphasis: str | None = None,
-    reason: str | None = None,
+    emphasis: app_commands.Range[str, 1, 80] | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
     secret: bool = True,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -1203,14 +1203,14 @@ async def stealth_check(
 async def investigate_check(
     interaction: discord.Interaction,
     tn: app_commands.Range[int, 1, 200],
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     emphasis: app_commands.Choice[str] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
-    reason: str | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
     secret: bool = True,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -1293,14 +1293,14 @@ async def social_check(
     interaction: discord.Interaction,
     skill: app_commands.Choice[str],
     tn: app_commands.Range[int, 1, 200],
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
-    emphasis: str | None = None,
-    reason: str | None = None,
+    emphasis: app_commands.Range[str, 1, 80] | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
     trait: app_commands.Choice[str] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -1369,16 +1369,16 @@ async def social_check(
 @app_commands.choices(trait=_CONTEST_TRAITS)
 async def craft_check(
     interaction: discord.Interaction,
-    skill: str,
+    skill: app_commands.Range[str, 1, 80],
     tn: app_commands.Range[int, 1, 200],
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
-    emphasis: str | None = None,
-    reason: str | None = None,
+    emphasis: app_commands.Range[str, 1, 80] | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
     trait: app_commands.Choice[str] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -1447,16 +1447,16 @@ async def craft_check(
 )
 async def lore_check(
     interaction: discord.Interaction,
-    specialty: str,
+    specialty: app_commands.Range[str, 1, 100],
     tn: app_commands.Range[int, 1, 200],
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
-    emphasis: str | None = None,
-    reason: str | None = None,
+    emphasis: app_commands.Range[str, 1, 80] | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -1514,14 +1514,14 @@ async def lore_check(
 async def horsemanship_check(
     interaction: discord.Interaction,
     tn: app_commands.Range[int, 1, 200],
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
-    emphasis: str | None = None,
-    reason: str = "",
+    emphasis: app_commands.Range[str, 1, 80] | None = None,
+    reason: app_commands.Range[str, 1, 200] = "",
 ) -> None:
     if not await _d.require_guild(interaction):
         return

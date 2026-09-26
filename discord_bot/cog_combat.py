@@ -3161,10 +3161,10 @@ combat_battle = app_commands.Group(name="battle", description="Mass Battle syste
 async def attack(
     interaction: discord.Interaction,
     target: discord.Member | None = None,
-    target_npc: str | None = None,
-    target_creature: str | None = None,
-    attacker_npc: str | None = None,
-    weapon: str | None = None,
+    target_npc: app_commands.Range[str, 1, 80] | None = None,
+    target_creature: app_commands.Range[str, 1, 80] | None = None,
+    attacker_npc: app_commands.Range[str, 1, 80] | None = None,
+    weapon: app_commands.Range[str, 1, 80] | None = None,
     raises: app_commands.Range[int, 0, 10] = 0,
     increased_damage: app_commands.Range[int, 0, 10] = 0,
     maneuver: app_commands.Choice[str] | None = None,
@@ -4610,7 +4610,7 @@ async def combat_board(interaction: discord.Interaction) -> None:
 @combat_group.command(name="remove", description="Remove a combatant from initiative. [Fortune]")
 @app_commands.describe(name="The combatant name to remove.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_remove(interaction: discord.Interaction, name: str) -> None:
+async def combat_remove(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
@@ -4806,7 +4806,7 @@ async def combat_summary(interaction: discord.Interaction) -> None:
 
 @combat_group.command(name="npc", description="Add a stored NPC to initiative (rolls its initiative). [Fortune]")
 @app_commands.describe(name="The NPC to add.")
-async def combat_npc(interaction: discord.Interaction, name: str) -> None:
+async def combat_npc(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
@@ -4873,7 +4873,7 @@ def _expiry_notes(enc: encounter.Encounter) -> list[str]:
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_condition_set(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     condition: app_commands.Choice[str],
     rounds: app_commands.Range[int, 1, 20] | None = None,
 ) -> None:
@@ -4912,7 +4912,7 @@ async def combat_condition_set(
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_condition_clear(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     condition: app_commands.Choice[str],
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -4942,7 +4942,7 @@ async def combat_condition_clear(
 @combat_condition.command(name="list", description="Show a combatant's active conditions.")
 @app_commands.describe(name="The combatant to check.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_conditions(interaction: discord.Interaction, name: str) -> None:
+async def combat_conditions(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     enc = await _d.require_encounter(interaction)
@@ -5105,7 +5105,7 @@ async def post_condition_request(
 @app_commands.autocomplete(target=_combatant_autocomplete)
 async def fight_condition(
     interaction: discord.Interaction,
-    target: str,
+    target: app_commands.Range[str, 1, 80],
     condition: app_commands.Choice[str],
     rounds: app_commands.Range[int, 1, 20] | None = None,
     source: app_commands.Range[str, 0, 100] | None = None,
@@ -5238,7 +5238,7 @@ async def fight_status(interaction: discord.Interaction, member: discord.Member 
     ward="The combatant being protected.",
 )
 @app_commands.autocomplete(guarder=_combatant_autocomplete, ward=_combatant_autocomplete)
-async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str) -> None:
+async def combat_guard(interaction: discord.Interaction, guarder: app_commands.Range[str, 1, 80], ward: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     enc = await _d.require_encounter(interaction)
@@ -5307,7 +5307,7 @@ async def combat_guard(interaction: discord.Interaction, guarder: str, ward: str
 @app_commands.autocomplete(combatant=_combatant_autocomplete)
 async def combat_full_defense(
     interaction: discord.Interaction,
-    combatant: str,
+    combatant: app_commands.Range[str, 1, 80],
     reflexes: app_commands.Range[int, 1, 10] | None = None,
     defense_skill: app_commands.Range[int, 0, 10] | None = None,
 ) -> None:
@@ -5388,7 +5388,7 @@ async def combat_full_defense(
 @combat_void.command(name="armor", description="Spend a Void Point for +10 Armor TN for one Round (beginning of Round).")
 @app_commands.describe(combatant="The combatant spending the Void Point.")
 @app_commands.autocomplete(combatant=_combatant_autocomplete)
-async def combat_void_armor(interaction: discord.Interaction, combatant: str) -> None:
+async def combat_void_armor(interaction: discord.Interaction, combatant: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     enc = await _d.require_encounter(interaction)
@@ -5441,7 +5441,7 @@ async def combat_void_armor(interaction: discord.Interaction, combatant: str) ->
 @combat_void.command(name="initiative", description="Spend a Void Point for +10 Initiative for the remainder of the skirmish.")
 @app_commands.describe(combatant="The combatant spending the Void Point.")
 @app_commands.autocomplete(combatant=_combatant_autocomplete)
-async def combat_void_initiative(interaction: discord.Interaction, combatant: str) -> None:
+async def combat_void_initiative(interaction: discord.Interaction, combatant: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     enc = await _d.require_encounter(interaction)
@@ -5504,7 +5504,7 @@ async def combat_void_initiative(interaction: discord.Interaction, combatant: st
     target="The willing target to swap Initiative with.",
 )
 @app_commands.autocomplete(spender=_combatant_autocomplete, target=_combatant_autocomplete)
-async def combat_void_swap(interaction: discord.Interaction, spender: str, target: str) -> None:
+async def combat_void_swap(interaction: discord.Interaction, spender: app_commands.Range[str, 1, 80], target: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     enc = await _d.require_encounter(interaction)
@@ -5983,8 +5983,8 @@ class GrappleBoardView(views_base.PersistentView):
 @app_commands.autocomplete(controller=_combatant_autocomplete, defender=_combatant_autocomplete)
 async def grapple_start(
     interaction: discord.Interaction,
-    controller: str,
-    defender: str,
+    controller: app_commands.Range[str, 1, 80],
+    defender: app_commands.Range[str, 1, 80],
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -6056,8 +6056,8 @@ class _GrappleSetupView(discord.ui.View):
 @app_commands.autocomplete(controller=_combatant_autocomplete, defender=_combatant_autocomplete)
 async def grapple_shortcut(
     interaction: discord.Interaction,
-    controller: str | None = None,
-    defender: str | None = None,
+    controller: app_commands.Range[str, 1, 80] | None = None,
+    defender: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if controller and defender:
         await grapple_start.callback(interaction, controller, defender)
@@ -6087,8 +6087,8 @@ async def grapple_shortcut(
 @app_commands.autocomplete(attacker=_combatant_autocomplete, target=_combatant_autocomplete)
 async def grapple_initiate(
     interaction: discord.Interaction,
-    attacker: str,
-    target: str,
+    attacker: app_commands.Range[str, 1, 80],
+    target: app_commands.Range[str, 1, 80],
     bonus_tn: int = 0,
     defender_stance: app_commands.Choice[str] | None = None,
 ) -> None:
@@ -6219,8 +6219,8 @@ async def grapple_initiate(
 @app_commands.autocomplete(combatant_a=_combatant_autocomplete, combatant_b=_combatant_autocomplete)
 async def grapple_control(
     interaction: discord.Interaction,
-    combatant_a: str,
-    combatant_b: str,
+    combatant_a: app_commands.Range[str, 1, 80],
+    combatant_b: app_commands.Range[str, 1, 80],
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -6295,8 +6295,8 @@ async def grapple_control(
 @app_commands.autocomplete(attacker=_combatant_autocomplete, target=_combatant_autocomplete)
 async def grapple_hit(
     interaction: discord.Interaction,
-    attacker: str,
-    target: str,
+    attacker: app_commands.Range[str, 1, 80],
+    target: app_commands.Range[str, 1, 80],
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -6368,8 +6368,8 @@ async def grapple_hit(
 @app_commands.autocomplete(thrower=_combatant_autocomplete, target=_combatant_autocomplete)
 async def grapple_throw(
     interaction: discord.Interaction,
-    thrower: str,
-    target: str,
+    thrower: app_commands.Range[str, 1, 80],
+    target: app_commands.Range[str, 1, 80],
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -6424,8 +6424,8 @@ async def grapple_throw(
 @app_commands.autocomplete(controller=_combatant_autocomplete, target=_combatant_autocomplete)
 async def grapple_pin(
     interaction: discord.Interaction,
-    controller: str,
-    target: str,
+    controller: app_commands.Range[str, 1, 80],
+    target: app_commands.Range[str, 1, 80],
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -6478,8 +6478,8 @@ async def grapple_pin(
 @app_commands.autocomplete(combatant=_combatant_autocomplete, opponent=_combatant_autocomplete)
 async def grapple_break(
     interaction: discord.Interaction,
-    combatant: str,
-    opponent: str | None = None,
+    combatant: app_commands.Range[str, 1, 80],
+    opponent: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -6633,8 +6633,8 @@ async def _deliver_assessment(
 @app_commands.autocomplete(duelist_a=_duelist_autocomplete, duelist_b=_duelist_autocomplete)
 async def duel_assess(
     interaction: discord.Interaction,
-    duelist_a: str,
-    duelist_b: str,
+    duelist_a: app_commands.Range[str, 1, 80],
+    duelist_b: app_commands.Range[str, 1, 80],
     a_is_npc: bool = False,
     b_is_npc: bool = False,
     a_member: discord.Member | None = None,
@@ -6789,8 +6789,8 @@ async def duel_assess(
 @app_commands.autocomplete(duelist_a=_duelist_autocomplete, duelist_b=_duelist_autocomplete)
 async def duel_focus(
     interaction: discord.Interaction,
-    duelist_a: str,
-    duelist_b: str,
+    duelist_a: app_commands.Range[str, 1, 80],
+    duelist_b: app_commands.Range[str, 1, 80],
     a_focus_bonus: bool = False,
     b_focus_bonus: bool = False,
     a_is_npc: bool = False,
@@ -6937,9 +6937,9 @@ async def duel_focus(
 @app_commands.autocomplete(attacker=_duelist_autocomplete, target=_duelist_autocomplete)
 async def duel_strike(
     interaction: discord.Interaction,
-    attacker: str,
-    target: str,
-    weapon: str = "katana",
+    attacker: app_commands.Range[str, 1, 80],
+    target: app_commands.Range[str, 1, 80],
+    weapon: app_commands.Range[str, 1, 80] = "katana",
     free_raises: int = 0,
     bonus_tn: int = 0,
     attacker_npc: bool = False,
@@ -7790,8 +7790,8 @@ class DuelBoardView(views_base.PersistentView):
 )
 async def duel_start(
     interaction: discord.Interaction,
-    duelist_a: str,
-    duelist_b: str,
+    duelist_a: app_commands.Range[str, 1, 80],
+    duelist_b: app_commands.Range[str, 1, 80],
     a_is_npc: bool = False,
     b_is_npc: bool = False,
     a_member: discord.Member | None = None,
@@ -7878,8 +7878,8 @@ class _DuelSetupView(discord.ui.View):
 @app_commands.autocomplete(duelist_a=_duelist_autocomplete, duelist_b=_duelist_autocomplete)
 async def duel_shortcut(
     interaction: discord.Interaction,
-    duelist_a: str | None = None,
-    duelist_b: str | None = None,
+    duelist_a: app_commands.Range[str, 1, 80] | None = None,
+    duelist_b: app_commands.Range[str, 1, 80] | None = None,
     a_is_npc: bool = False,
     b_is_npc: bool = False,
     a_member: discord.Member | None = None,
@@ -7907,7 +7907,7 @@ async def duel_shortcut(
 
 @combat_group.command(name="creature", description="Add a spawned creature to initiative (rolls its initiative). [Fortune]")
 @app_commands.describe(name="The creature to add.")
-async def combat_creature(interaction: discord.Interaction, name: str) -> None:
+async def combat_creature(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
@@ -7949,7 +7949,7 @@ async def combat_creature(interaction: discord.Interaction, name: str) -> None:
     description="Add all NPCs and creatures in a category to initiative. [Fortune]",
 )
 @app_commands.describe(category="Which category to add.")
-async def combat_category(interaction: discord.Interaction, category: str) -> None:
+async def combat_category(interaction: discord.Interaction, category: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
@@ -8132,7 +8132,7 @@ _STANCE_CHOICES = [
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_stance(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     stance: app_commands.Choice[str],
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -8197,7 +8197,7 @@ async def combat_stance(
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_init(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     value: app_commands.Range[int, -100, 200],
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -8231,7 +8231,7 @@ async def combat_init(
 @combat_turn.command(name="hold", description="Mark a combatant as holding their action. [Fortune]")
 @app_commands.describe(name="Combatant name.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_hold(interaction: discord.Interaction, name: str) -> None:
+async def combat_hold(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
@@ -8317,7 +8317,7 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_delay(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     new_initiative: app_commands.Range[int, -100, 200] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -8416,7 +8416,7 @@ async def combat_delay(
 @combat_turn.command(name="act", description="A held/delayed combatant takes their action now. [Fortune]")
 @app_commands.describe(name="Combatant name.")
 @app_commands.autocomplete(name=_combatant_autocomplete)
-async def combat_act(interaction: discord.Interaction, name: str) -> None:
+async def combat_act(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
@@ -8453,7 +8453,7 @@ async def combat_act(interaction: discord.Interaction, name: str) -> None:
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_turn_done(
     interaction: discord.Interaction,
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -8816,7 +8816,7 @@ class MassBattleBoardView(views_base.PersistentView):
 @app_commands.autocomplete(name=_duelist_autocomplete)
 async def battle_roll(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     tn: app_commands.Range[int, 5, 100],
     member: discord.Member | None = None,
     is_npc: bool = False,
@@ -8918,7 +8918,7 @@ async def battle_damage(
 )
 async def battle_table(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     army_status: app_commands.Choice[str],
     engagement: app_commands.Choice[str],
     member: discord.Member | None = None,
@@ -9010,8 +9010,8 @@ async def battle_table(
 @app_commands.autocomplete(general_a=_duelist_autocomplete, general_b=_duelist_autocomplete)
 async def battle_status(
     interaction: discord.Interaction,
-    general_a: str,
-    general_b: str,
+    general_a: app_commands.Range[str, 1, 80],
+    general_b: app_commands.Range[str, 1, 80],
     a_is_npc: bool = False,
     b_is_npc: bool = False,
     a_member: discord.Member | None = None,
@@ -9094,14 +9094,14 @@ async def battle_status(
 )
 async def battle_start(
     interaction: discord.Interaction,
-    general_a: str,
-    general_b: str,
+    general_a: app_commands.Range[str, 1, 80],
+    general_b: app_commands.Range[str, 1, 80],
     a_is_npc: bool = False,
     b_is_npc: bool = False,
     a_member: discord.Member | None = None,
     b_member: discord.Member | None = None,
-    side_a_label: str = "Side A",
-    side_b_label: str = "Side B",
+    side_a_label: app_commands.Range[str, 1, 100] = "Side A",
+    side_b_label: app_commands.Range[str, 1, 100] = "Side B",
     bonus_a: int = 0,
     bonus_b: int = 0,
 ) -> None:
@@ -9174,7 +9174,7 @@ def _sync_mount_to_sheet(guild: str, cb, mounting: bool) -> str:
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_mount(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     dismount: bool = False,
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -9238,7 +9238,7 @@ async def combat_mount(
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_action(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     action_type: app_commands.Choice[str],
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -9311,7 +9311,7 @@ async def combat_action(
 @app_commands.autocomplete(name=_combatant_autocomplete)
 async def combat_cover(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     bonus: app_commands.Range[int, -30, 30],
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -9346,7 +9346,7 @@ async def combat_cover(
 @app_commands.describe(text="Environment description (leave blank to clear).")
 async def combat_notes(
     interaction: discord.Interaction,
-    text: str = "",
+    text: app_commands.Range[str, 1, 900] = "",
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -9382,8 +9382,8 @@ async def combat_notes(
 async def combat_env_damage(
     interaction: discord.Interaction,
     amount: app_commands.Range[int, 1, 500],
-    targets: str,
-    reason: str = "",
+    targets: app_commands.Range[str, 1, 500],
+    reason: app_commands.Range[str, 1, 200] = "",
     ignore_reduction: bool = False,
 ) -> None:
     if not await _d.require_guild(interaction):

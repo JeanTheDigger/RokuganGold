@@ -189,14 +189,14 @@ async def _character_autocomplete(
 ])
 async def rumor_post(
     interaction: discord.Interaction,
-    title: str,
-    content: str,
+    title: app_commands.Range[str, 1, 200],
+    content: app_commands.Range[str, 1, 1500],
     tier: app_commands.Choice[str],
-    clan: str | None = None,
-    family: str | None = None,
-    school: str | None = None,
-    school_type: str | None = None,
-    character: str | None = None,
+    clan: app_commands.Range[str, 1, 80] | None = None,
+    family: app_commands.Range[str, 1, 80] | None = None,
+    school: app_commands.Range[str, 1, 80] | None = None,
+    school_type: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -291,8 +291,8 @@ rumor_post.autocomplete("character")(_character_autocomplete)
 ])
 async def rumor_public(
     interaction: discord.Interaction,
-    title: str,
-    content: str,
+    title: app_commands.Range[str, 1, 200],
+    content: app_commands.Range[str, 1, 1500],
     tier: app_commands.Choice[str],
 ) -> None:
     if not await _d.require_guild(interaction):
@@ -369,14 +369,14 @@ async def rumor_public(
 ])
 async def rumor_broadcast(
     interaction: discord.Interaction,
-    title: str,
-    content: str,
+    title: app_commands.Range[str, 1, 200],
+    content: app_commands.Range[str, 1, 1500],
     tier: app_commands.Choice[str],
-    clan: str | None = None,
-    family: str | None = None,
-    school: str | None = None,
-    school_type: str | None = None,
-    character: str | None = None,
+    clan: app_commands.Range[str, 1, 80] | None = None,
+    family: app_commands.Range[str, 1, 80] | None = None,
+    school: app_commands.Range[str, 1, 80] | None = None,
+    school_type: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return

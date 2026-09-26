@@ -114,8 +114,8 @@ def _is_npc(guild_id: str, name: str) -> bool:
 )
 async def letter_send(
     interaction: discord.Interaction,
-    recipient: str,
-    message: str,
+    recipient: app_commands.Range[str, 1, 80],
+    message: app_commands.Range[str, 1, 1500],
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -240,9 +240,9 @@ async def _send_recipient_ac(
 )
 async def letter_sendas(
     interaction: discord.Interaction,
-    sender_name: str,
-    recipient: str,
-    message: str,
+    sender_name: app_commands.Range[str, 1, 80],
+    recipient: app_commands.Range[str, 1, 80],
+    message: app_commands.Range[str, 1, 1500],
 ) -> None:
     if not await _d.require_guild(interaction):
         return

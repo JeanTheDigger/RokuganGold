@@ -235,7 +235,7 @@ async def edit_trait(
     trait: app_commands.Choice[str],
     value: app_commands.Range[int, 0, 10],
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -278,7 +278,7 @@ async def edit_skill(
     skill: app_commands.Range[str, 1, 200],
     rank: app_commands.Range[int, 0, 10] | None = None,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -344,7 +344,7 @@ async def edit_field(
     field: app_commands.Choice[str],
     value: float,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -379,12 +379,12 @@ async def edit_field(
 )
 async def edit_identity(
     interaction: discord.Interaction,
-    clan: str | None = None,
-    family: str | None = None,
-    school: str | None = None,
+    clan: app_commands.Range[str, 1, 80] | None = None,
+    family: app_commands.Range[str, 1, 80] | None = None,
+    school: app_commands.Range[str, 1, 80] | None = None,
     apply_bonus: bool = True,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -447,11 +447,11 @@ async def edit_identity(
 )
 async def edit_equip(
     interaction: discord.Interaction,
-    weapon: str | None = None,
-    off_hand: str | None = None,
-    armor: str | None = None,
+    weapon: app_commands.Range[str, 1, 80] | None = None,
+    off_hand: app_commands.Range[str, 1, 80] | None = None,
+    armor: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -528,11 +528,11 @@ async def edit_equip(
 async def edit_feature(
     interaction: discord.Interaction,
     category: app_commands.Choice[str],
-    entry: str,
+    entry: app_commands.Range[str, 1, 80],
     remove: bool = False,
-    skill: str | None = None,
+    skill: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -670,7 +670,7 @@ async def edit_elements(
     affinity_element: app_commands.Choice[str] | None = None,
     deficiency_element: app_commands.Choice[str] | None = None,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -713,7 +713,7 @@ async def edit_wound(
     interaction: discord.Interaction,
     amount: app_commands.Range[int, 1, 1000],
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -752,7 +752,7 @@ async def edit_heal(
     interaction: discord.Interaction,
     amount: app_commands.Range[int, 1, 1000],
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -803,12 +803,12 @@ async def edit_heal(
 async def edit_activate(
     interaction: discord.Interaction,
     kind: app_commands.Choice[str],
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     off: bool = False,
     bear_choice: app_commands.Choice[str] | None = None,
-    lion_skill: str | None = None,
+    lion_skill: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -960,7 +960,7 @@ async def edit_rename(
     interaction: discord.Interaction,
     new_name: app_commands.Range[str, 1, 64],
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -999,9 +999,9 @@ async def edit_rename(
 )
 async def edit_notes(
     interaction: discord.Interaction,
-    text: str = "",
+    text: app_commands.Range[str, 1, 900] = "",
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -1031,7 +1031,7 @@ async def edit_mount(
     interaction: discord.Interaction,
     dismount: bool = False,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -1086,11 +1086,11 @@ async def edit_mount(
 )
 async def edit_item(
     interaction: discord.Interaction,
-    item: str,
+    item: app_commands.Range[str, 1, 80],
     quantity: app_commands.Range[int, 1, 9999] = 1,
     remove: bool = False,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -1119,10 +1119,10 @@ async def edit_item(
 )
 async def edit_spell(
     interaction: discord.Interaction,
-    spell: str,
+    spell: app_commands.Range[str, 1, 80],
     remove: bool = False,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return

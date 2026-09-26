@@ -150,7 +150,7 @@ async def givekoku(
     interaction: discord.Interaction,
     amount: int,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     await _give(interaction, "koku", amount, member, npc)
 
@@ -165,7 +165,7 @@ async def givebu(
     interaction: discord.Interaction,
     amount: int,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     await _give(interaction, "bu", amount, member, npc)
 
@@ -180,7 +180,7 @@ async def givezeni(
     interaction: discord.Interaction,
     amount: int,
     member: discord.Member | None = None,
-    npc: str | None = None,
+    npc: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     await _give(interaction, "zeni", amount, member, npc)
 
@@ -201,7 +201,7 @@ stipend_group = app_commands.Group(name="stipend", description="Monthly clan sti
 )
 async def stipend_set(
     interaction: discord.Interaction,
-    clan: str,
+    clan: app_commands.Range[str, 1, 80],
     koku: app_commands.Range[int, 0, 9999] = 0,
     bu: app_commands.Range[int, 0, 9999] = 0,
     zeni: app_commands.Range[int, 0, 9999] = 0,
@@ -257,7 +257,7 @@ async def stipend_view(interaction: discord.Interaction) -> None:
 @app_commands.describe(clan="Clan name to remove the stipend for")
 async def stipend_clear(
     interaction: discord.Interaction,
-    clan: str,
+    clan: app_commands.Range[str, 1, 80],
 ) -> None:
     if not await _d.require_guild(interaction):
         return

@@ -271,7 +271,7 @@ RANGE_INCREMENTS: list[tuple[str, str]] = [
 )
 async def lookup(
     interaction: discord.Interaction,
-    query: str,
+    query: app_commands.Range[str, 1, 100],
 ) -> None:
     q = query.lower().strip()
     if len(q) < 2:
@@ -332,7 +332,7 @@ async def lookup(
 
 @ref_school.command(name="list", description="List schools (optionally by clan).")
 @app_commands.describe(clan="Filter by clan (Crab, Crane, …). Omit for a summary.")
-async def school_list(interaction: discord.Interaction, clan: str | None = None) -> None:
+async def school_list(interaction: discord.Interaction, clan: app_commands.Range[str, 1, 80] | None = None) -> None:
     if clan:
         matches = schools.by_clan(clan)
         if not matches:
@@ -361,7 +361,7 @@ async def school_list(interaction: discord.Interaction, clan: str | None = None)
 
 @ref_school.command(name="search", description="Search schools by name or clan.")
 @app_commands.describe(query="Name or clan fragment.")
-async def school_search(interaction: discord.Interaction, query: str) -> None:
+async def school_search(interaction: discord.Interaction, query: app_commands.Range[str, 1, 100]) -> None:
     matches = schools.search(query)
     if not matches:
         await interaction.response.send_message(f"No schools match `{query}`.", ephemeral=True)
@@ -377,7 +377,7 @@ async def school_search(interaction: discord.Interaction, query: str) -> None:
 
 @ref_school.command(name="view", description="Show a school's benefit, skills, outfit, and techniques.")
 @app_commands.describe(name="The school to view.")
-async def school_view(interaction: discord.Interaction, name: str) -> None:
+async def school_view(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     s = schools.get(name)
     if s is None:
         await interaction.response.send_message(
@@ -404,7 +404,7 @@ async def weapon_list(interaction: discord.Interaction) -> None:
 
 @ref_weapon.command(name="view", description="Show a weapon's details.")
 @app_commands.describe(name="Weapon name.")
-async def weapon_view(interaction: discord.Interaction, name: str) -> None:
+async def weapon_view(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     w = combat.WEAPON_CATALOG.get(name.lower().strip())
     if w is None:
         await interaction.response.send_message(f"No weapon named **{name}**. See `/ref weapon list`.", ephemeral=True)
@@ -443,7 +443,7 @@ async def armor_list(interaction: discord.Interaction) -> None:
 
 @ref_armor.command(name="view", description="Show detailed info for one armor type.")
 @app_commands.describe(name="Armor name.")
-async def armor_view(interaction: discord.Interaction, name: str) -> None:
+async def armor_view(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     key = name.lower().strip()
     s = combat.ARMOR_CATALOG.get(key)
     if s is None:
@@ -456,7 +456,7 @@ async def armor_view(interaction: discord.Interaction, name: str) -> None:
 
 @ref_armor.command(name="search", description="Search armor by name substring.")
 @app_commands.describe(query="Part of the armor name to search for.")
-async def armor_search(interaction: discord.Interaction, query: str) -> None:
+async def armor_search(interaction: discord.Interaction, query: app_commands.Range[str, 1, 100]) -> None:
     q = query.lower().strip()
     matches = [(a, s) for a, s in combat.ARMOR_CATALOG.items() if q in a]
     if not matches:
@@ -510,7 +510,7 @@ async def advantage_list(interaction: discord.Interaction, kind: app_commands.Ch
 
 @ref_advantage.command(name="search", description="Search Advantages & Disadvantages by name or category.")
 @app_commands.describe(query="Name or category fragment.")
-async def advantage_search(interaction: discord.Interaction, query: str) -> None:
+async def advantage_search(interaction: discord.Interaction, query: app_commands.Range[str, 1, 100]) -> None:
     matches = advantages.search(query)
     if not matches:
         await interaction.response.send_message(f"No entries match `{query}`.", ephemeral=True)
@@ -529,7 +529,7 @@ async def advantage_search(interaction: discord.Interaction, query: str) -> None
 
 @ref_advantage.command(name="view", description="Show an Advantage or Disadvantage in full.")
 @app_commands.describe(name="The entry to view.")
-async def advantage_view(interaction: discord.Interaction, name: str) -> None:
+async def advantage_view(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     r = advantages.get(name)
     if r is None:
         await interaction.response.send_message(f"No entry named **{name}**. Try `/ref advantage search`.", ephemeral=True)
@@ -543,7 +543,7 @@ async def advantage_view(interaction: discord.Interaction, name: str) -> None:
 
 @ref_kata.command(name="list", description="List Kata by element (or a summary).")
 @app_commands.describe(element="Air, Earth, Fire, Water, Void. Omit for a summary.")
-async def kata_list(interaction: discord.Interaction, element: str | None = None) -> None:
+async def kata_list(interaction: discord.Interaction, element: app_commands.Range[str, 1, 80] | None = None) -> None:
     if not element:
         counts = Counter(k["element"] for k in kata.ALL)
         summary = " · ".join(f"{el} {n}" for el, n in sorted(counts.items()))
@@ -568,7 +568,7 @@ async def kata_list(interaction: discord.Interaction, element: str | None = None
 
 @ref_kata.command(name="search", description="Search Kata by name or element.")
 @app_commands.describe(query="Name or element fragment.")
-async def kata_search(interaction: discord.Interaction, query: str) -> None:
+async def kata_search(interaction: discord.Interaction, query: app_commands.Range[str, 1, 100]) -> None:
     matches = kata.search(query)
     if not matches:
         await interaction.response.send_message(f"No Kata match `{query}`.", ephemeral=True)
@@ -580,7 +580,7 @@ async def kata_search(interaction: discord.Interaction, query: str) -> None:
 
 @ref_kata.command(name="view", description="Show a Kata's element, mastery, schools, and effect.")
 @app_commands.describe(name="The Kata to view.")
-async def kata_view(interaction: discord.Interaction, name: str) -> None:
+async def kata_view(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     k = kata.get(name)
     if k is None:
         await interaction.response.send_message(
@@ -596,7 +596,7 @@ async def kata_view(interaction: discord.Interaction, name: str) -> None:
 
 @ref_kiho.command(name="list", description="List Kiho by element (or a summary).")
 @app_commands.describe(element="Air, Earth, Fire, Water, Void. Omit for a summary.")
-async def kiho_list(interaction: discord.Interaction, element: str | None = None) -> None:
+async def kiho_list(interaction: discord.Interaction, element: app_commands.Range[str, 1, 80] | None = None) -> None:
     if not element:
         counts = Counter(k["element"] for k in kiho.ALL)
         summary = " · ".join(f"{el} {n}" for el, n in sorted(counts.items()))
@@ -621,7 +621,7 @@ async def kiho_list(interaction: discord.Interaction, element: str | None = None
 
 @ref_kiho.command(name="search", description="Search Kiho by name, element, or type.")
 @app_commands.describe(query="Name, element, or type fragment.")
-async def kiho_search(interaction: discord.Interaction, query: str) -> None:
+async def kiho_search(interaction: discord.Interaction, query: app_commands.Range[str, 1, 100]) -> None:
     matches = kiho.search(query)
     if not matches:
         await interaction.response.send_message(f"No Kiho match `{query}`.", ephemeral=True)
@@ -633,7 +633,7 @@ async def kiho_search(interaction: discord.Interaction, query: str) -> None:
 
 @ref_kiho.command(name="view", description="Show a Kiho's element, mastery, type, and effect.")
 @app_commands.describe(name="The Kiho to view.")
-async def kiho_view(interaction: discord.Interaction, name: str) -> None:
+async def kiho_view(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     k = kiho.get(name)
     if k is None:
         await interaction.response.send_message(
@@ -649,7 +649,7 @@ async def kiho_view(interaction: discord.Interaction, name: str) -> None:
 
 @ref_heritage.command(name="roll", description="Roll on a clan's Heritage Table (1d10). [Fortune]")
 @app_commands.describe(clan="Clan name (Great Clan, Minor Clan, Ronin, or Brotherhood).")
-async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
+async def heritage_roll(interaction: discord.Interaction, clan: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
@@ -681,7 +681,7 @@ async def heritage_roll(interaction: discord.Interaction, clan: str) -> None:
 
 @ref_heritage.command(name="table", description="Show a clan's full Heritage Table.")
 @app_commands.describe(clan="Clan name.")
-async def heritage_table(interaction: discord.Interaction, clan: str) -> None:
+async def heritage_table(interaction: discord.Interaction, clan: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     desc = heritage.format_table(clan)
@@ -701,7 +701,7 @@ async def heritage_table(interaction: discord.Interaction, clan: str) -> None:
 )
 async def encumbrance_check(
     interaction: discord.Interaction,
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
 ) -> None:
@@ -746,7 +746,7 @@ async def encumbrance_check(
 @app_commands.describe(
     target="Character name (Fortune: Omit to see your own).",
 )
-async def atn_breakdown(interaction: discord.Interaction, target: str | None = None) -> None:
+async def atn_breakdown(interaction: discord.Interaction, target: app_commands.Range[str, 1, 80] | None = None) -> None:
     if not await _d.require_guild(interaction):
         return
     guild = str(interaction.guild_id)
@@ -831,7 +831,7 @@ async def atn_breakdown(interaction: discord.Interaction, target: str | None = N
 
 @ref_family.command(name="list", description="List families by clan.")
 @app_commands.describe(clan="Filter by clan (optional).")
-async def family_list(interaction: discord.Interaction, clan: str | None = None) -> None:
+async def family_list(interaction: discord.Interaction, clan: app_commands.Range[str, 1, 80] | None = None) -> None:
     if not await _d.require_guild(interaction):
         return
     if clan:
@@ -853,7 +853,7 @@ async def family_list(interaction: discord.Interaction, clan: str | None = None)
 
 @ref_family.command(name="search", description="Search families by name or clan.")
 @app_commands.describe(query="Name or clan to search for.")
-async def family_search(interaction: discord.Interaction, query: str) -> None:
+async def family_search(interaction: discord.Interaction, query: app_commands.Range[str, 1, 100]) -> None:
     if not await _d.require_guild(interaction):
         return
     results = families.search(query)
@@ -877,7 +877,7 @@ async def family_search(interaction: discord.Interaction, query: str) -> None:
 )
 async def ancestors_check(
     interaction: discord.Interaction,
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
 ) -> None:
@@ -932,7 +932,7 @@ async def ancestors_check(
 )
 async def dual_wield_info(
     interaction: discord.Interaction,
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
 ) -> None:
@@ -1112,7 +1112,7 @@ async def tattoo_list(interaction: discord.Interaction) -> None:
 
 @ref_tattoo.command(name="view", description="View a specific tattoo ability's effect.")
 @app_commands.describe(name="Tattoo name (e.g. bamboo, crane, dragon).")
-async def tattoo_view(interaction: discord.Interaction, name: str) -> None:
+async def tattoo_view(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     t = tattoo_catalog.get_tattoo(name)
     if t is None:
         await interaction.response.send_message(
@@ -1136,7 +1136,7 @@ async def tattoo_view(interaction: discord.Interaction, name: str) -> None:
 
 @ref_tattoo.command(name="search", description="Search tattoos by keyword.")
 @app_commands.describe(query="Keyword to search (name or effect text).")
-async def tattoo_search(interaction: discord.Interaction, query: str) -> None:
+async def tattoo_search(interaction: discord.Interaction, query: app_commands.Range[str, 1, 100]) -> None:
     q = query.lower()
     matches = [
         t for t in tattoo_catalog.TATTOO_CATALOG.values()
@@ -1145,5 +1145,6 @@ async def tattoo_search(interaction: discord.Interaction, query: str) -> None:
     if not matches:
         await interaction.response.send_message(f"No tattoos match `{query}`.", ephemeral=True)
         return
-    lines = [f"• **{t['name']}**: {t['effect'][:80]}..." for t in matches]
-    await interaction.response.send_message("" + "\n".join(lines), ephemeral=True)
+    lines = [f"• **{t['name']}**: {t['effect'][:80]}..." for t in matches[:15]]
+    extra = f"\n…and {len(matches) - 15} more. Narrow the search." if len(matches) > 15 else ""
+    await interaction.response.send_message("\n".join(lines) + extra, ephemeral=True)

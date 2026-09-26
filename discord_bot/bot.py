@@ -1173,7 +1173,7 @@ async def roll(
     bonus: app_commands.Range[int, -100, 100] = 0,
     emphasis: bool = False,
     unskilled: bool = False,
-    reason: str | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
     secret: bool = True,
 ) -> None:
     explodes = not unskilled
@@ -1244,9 +1244,9 @@ _DICE_RE = re.compile(
 )
 async def dice_quick(
     interaction: discord.Interaction,
-    expression: str,
+    expression: app_commands.Range[str, 1, 100],
     tn: app_commands.Range[int, 1, 200] | None = None,
-    reason: str | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
     secret: bool = True,
 ) -> None:
     m = _DICE_RE.match(expression.strip())
@@ -3928,7 +3928,7 @@ async def sheet_list(interaction: discord.Interaction, member: discord.Member | 
 @app_commands.describe(name="Character name.", member="Owner of the character [Fortune]")
 @app_commands.autocomplete(name=_own_character_autocomplete)
 async def sheet_delete(
-    interaction: discord.Interaction, name: str, member: discord.Member | None = None
+    interaction: discord.Interaction, name: app_commands.Range[str, 1, 80], member: discord.Member | None = None
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -3978,7 +3978,8 @@ class _DeleteConfirmView(discord.ui.View):
         role_notes: list[str] = []
         if _drop_from_encounters(str(interaction.guild_id), char.name, owner_id):
             role_notes.append("Removed from initiative.")
-        if guild is not None:
+        # A Lost character converted to a staff NPC has owner "npc": No member to clean up.
+        if guild is not None and str(owner_id).isdigit():
             member = guild.get_member(int(owner_id))
             if member is None:
                 try:
@@ -4042,7 +4043,7 @@ class _DeleteConfirmView(discord.ui.View):
 @sheet.command(name="owner", description="Show who owns a character (PC owner or NPC). [Fortune]")
 @app_commands.describe(name="Character name.")
 @app_commands.autocomplete(name=_any_character_autocomplete)
-async def sheet_owner(interaction: discord.Interaction, name: str) -> None:
+async def sheet_owner(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -4257,7 +4258,7 @@ def _activate_kiho(c: Character, name: str, off: bool = False) -> tuple[bool, st
 )
 @app_commands.autocomplete(name=_kata_autocomplete)
 async def sheet_kata_activate(
-    interaction: discord.Interaction, name: str | None = None, member: discord.Member | None = None
+    interaction: discord.Interaction, name: app_commands.Range[str, 1, 80] | None = None, member: discord.Member | None = None
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -4282,7 +4283,7 @@ async def sheet_kata_activate(
 )
 @app_commands.autocomplete(name=_kiho_autocomplete)
 async def sheet_kiho_activate(
-    interaction: discord.Interaction, name: str, off: bool = False, member: discord.Member | None = None
+    interaction: discord.Interaction, name: app_commands.Range[str, 1, 80], off: bool = False, member: discord.Member | None = None
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -4318,9 +4319,9 @@ async def sheet_kiho_activate(
 ])
 @app_commands.autocomplete(name=_tattoo_autocomplete)
 async def sheet_tattoo_activate(
-    interaction: discord.Interaction, name: str | None = None, off: bool = False,
+    interaction: discord.Interaction, name: app_commands.Range[str, 1, 80] | None = None, off: bool = False,
     choice: app_commands.Choice[str] | None = None,
-    skill: str | None = None,
+    skill: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
@@ -4944,9 +4945,9 @@ def _modify_inventory(
 @app_commands.autocomplete(target=_any_character_autocomplete)
 async def dm_damage(
     interaction: discord.Interaction,
-    target: str,
+    target: app_commands.Range[str, 1, 80],
     amount: app_commands.Range[int, 1, 9999],
-    reason: str = "",
+    reason: app_commands.Range[str, 1, 200] = "",
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -4998,9 +4999,9 @@ async def dm_damage(
 @app_commands.autocomplete(target=_any_character_autocomplete)
 async def dm_heal(
     interaction: discord.Interaction,
-    target: str,
+    target: app_commands.Range[str, 1, 80],
     amount: app_commands.Range[int, 1, 9999],
-    reason: str = "",
+    reason: app_commands.Range[str, 1, 200] = "",
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -5062,7 +5063,7 @@ async def dm_heal(
 @app_commands.autocomplete(target=_any_character_autocomplete)
 async def dm_revive(
     interaction: discord.Interaction,
-    target: str,
+    target: app_commands.Range[str, 1, 80],
     reason: app_commands.Range[str, 5, 200],
     wounds: app_commands.Range[int, 0, 9999] | None = None,
 ) -> None:
@@ -5131,7 +5132,7 @@ def _undo_diff(entity_type: str, old: dict, new: dict) -> list[str]:
 @app_commands.autocomplete(target=_any_character_autocomplete)
 async def dm_undo(
     interaction: discord.Interaction,
-    target: str | None = None,
+    target: app_commands.Range[str, 1, 80] | None = None,
     preview: bool = False,
 ) -> None:
     if not await _require_guild(interaction):
@@ -5293,9 +5294,9 @@ def _resolve_duelist(
 @app_commands.autocomplete(npc_name=_npc_autocomplete)
 async def void_spend(
     interaction: discord.Interaction,
-    reason: str,
+    reason: app_commands.Range[str, 1, 200],
     member: discord.Member | None = None,
-    npc_name: str | None = None,
+    npc_name: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -5356,7 +5357,7 @@ async def void_refresh(
     interaction: discord.Interaction,
     mode: app_commands.Choice[str],
     member: discord.Member | None = None,
-    npc_name: str | None = None,
+    npc_name: app_commands.Range[str, 1, 80] | None = None,
     tn: app_commands.Range[int, 1, 100] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
@@ -5461,7 +5462,7 @@ async def void_refresh(
 async def void_status(
     interaction: discord.Interaction,
     member: discord.Member | None = None,
-    npc_name: str | None = None,
+    npc_name: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -5511,9 +5512,9 @@ void_group = app_commands.Group(name="void", description="Void Point management:
 @app_commands.autocomplete(npc_name=_npc_autocomplete)
 async def void_spend_shortcut(
     interaction: discord.Interaction,
-    reason: str,
+    reason: app_commands.Range[str, 1, 200],
     member: discord.Member | None = None,
-    npc_name: str | None = None,
+    npc_name: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     await void_spend.callback(interaction, reason, member, npc_name)
 
@@ -5534,7 +5535,7 @@ async def void_refresh_shortcut(
     interaction: discord.Interaction,
     mode: app_commands.Choice[str],
     member: discord.Member | None = None,
-    npc_name: str | None = None,
+    npc_name: app_commands.Range[str, 1, 80] | None = None,
     tn: app_commands.Range[int, 1, 100] | None = None,
 ) -> None:
     await void_refresh.callback(interaction, mode, member, npc_name, tn)
@@ -5549,7 +5550,7 @@ async def void_refresh_shortcut(
 async def void_status_shortcut(
     interaction: discord.Interaction,
     member: discord.Member | None = None,
-    npc_name: str | None = None,
+    npc_name: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     await void_status.callback(interaction, member, npc_name)
 
@@ -5672,7 +5673,7 @@ async def _help_category_autocomplete(interaction: discord.Interaction, current:
 @app_commands.autocomplete(category=_help_category_autocomplete)
 async def help_command(
     interaction: discord.Interaction,
-    category: str | None = None,
+    category: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     top = _help_top()
     if category:
@@ -5752,11 +5753,11 @@ async def npc_generate(
     interaction: discord.Interaction,
     name: app_commands.Range[str, 1, 64],
     insight_rank: app_commands.Range[int, 1, 5],
-    clan: str | None = None,
-    family: str | None = None,
-    school: str | None = None,
+    clan: app_commands.Range[str, 1, 80] | None = None,
+    family: app_commands.Range[str, 1, 80] | None = None,
+    school: app_commands.Range[str, 1, 80] | None = None,
     school_type: app_commands.Choice[str] | None = None,
-    skills: str | None = None,
+    skills: app_commands.Range[str, 1, 500] | None = None,
     base_honor: app_commands.Range[float, 0.0, 10.0] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
@@ -5807,7 +5808,7 @@ async def npc_generate(
 @npc_group.command(name="view", description="View a stored NPC's full stat block. [Fortune]")
 @app_commands.describe(name="The NPC to view.")
 @app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_view(interaction: discord.Interaction, name: str) -> None:
+async def npc_view(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -5849,7 +5850,7 @@ async def npc_list(interaction: discord.Interaction) -> None:
 @npc_group.command(name="delete", description="Delete a stored NPC. [Fortune]")
 @app_commands.describe(name="The NPC to delete.")
 @app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_delete(interaction: discord.Interaction, name: str) -> None:
+async def npc_delete(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -5909,7 +5910,7 @@ async def _room_npc_autocomplete(
 @npc_group.command(name="place", description="Place an NPC in this room (run inside a room thread). [Fortune]")
 @app_commands.describe(name="NPC to place in the room.")
 @app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_place(interaction: discord.Interaction, name: str) -> None:
+async def npc_place(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     rec, err = _resolve_npc(interaction, name)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
@@ -5932,7 +5933,7 @@ async def npc_place(interaction: discord.Interaction, name: str) -> None:
 @npc_group.command(name="dismiss", description="Remove an NPC from this room. [Fortune]")
 @app_commands.describe(name="NPC to remove from the room.")
 @app_commands.autocomplete(name=_room_npc_autocomplete)
-async def npc_dismiss(interaction: discord.Interaction, name: str) -> None:
+async def npc_dismiss(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -5961,7 +5962,7 @@ async def npc_dismiss(interaction: discord.Interaction, name: str) -> None:
 @npc_group.command(name="say", description="Speak as an NPC (posts as their name via webhook). [Fortune]")
 @app_commands.describe(name="Which NPC speaks.", message="What they say.")
 @app_commands.autocomplete(name=_npc_autocomplete)
-async def npc_say(interaction: discord.Interaction, name: str, message: app_commands.Range[str, 1, 2000]) -> None:
+async def npc_say(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80], message: app_commands.Range[str, 1, 2000]) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -5999,7 +6000,7 @@ async def npc_say(interaction: discord.Interaction, name: str, message: app_comm
 @app_commands.describe(name="NPC to clone.", new_name="Name for the clone.")
 @app_commands.autocomplete(name=_npc_autocomplete)
 async def npc_clone(
-    interaction: discord.Interaction, name: str, new_name: app_commands.Range[str, 1, 64],
+    interaction: discord.Interaction, name: app_commands.Range[str, 1, 80], new_name: app_commands.Range[str, 1, 64],
 ) -> None:
     rec, err = _resolve_npc(interaction, name)
     if err:
@@ -6743,7 +6744,7 @@ def _resolve_creature(
 
 @creature_group.command(name="catalog", description="Search the bestiary templates. [Fortune]")
 @app_commands.describe(search="Filter by name, id, or tag (e.g. 'oni', 'goblin', 'wolf'). Omit for a summary.")
-async def creature_catalog(interaction: discord.Interaction, search: str | None = None) -> None:
+async def creature_catalog(interaction: discord.Interaction, search: app_commands.Range[str, 1, 100] | None = None) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -6785,7 +6786,7 @@ async def creature_catalog(interaction: discord.Interaction, search: str | None 
 
 @creature_group.command(name="search", description="Search bestiary templates with detailed output. [Fortune]")
 @app_commands.describe(query="Search by name, id, or tag (e.g. 'oni', 'bear', 'spirit').")
-async def creature_search(interaction: discord.Interaction, query: str) -> None:
+async def creature_search(interaction: discord.Interaction, query: app_commands.Range[str, 1, 100]) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -6841,7 +6842,7 @@ async def creature_search(interaction: discord.Interaction, query: str) -> None:
 @creature_group.command(name="info", description="View the full stat block of a bestiary template (without spawning). [Fortune]")
 @app_commands.describe(template="Which creature template to look up.")
 @app_commands.autocomplete(template=_creature_template_autocomplete)
-async def creature_info(interaction: discord.Interaction, template: str) -> None:
+async def creature_info(interaction: discord.Interaction, template: app_commands.Range[str, 1, 80]) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -6857,7 +6858,7 @@ async def creature_info(interaction: discord.Interaction, template: str) -> None
 @creature_group.command(name="compare", description="Compare two bestiary templates side-by-side. [Fortune]")
 @app_commands.describe(template_a="First creature template.", template_b="Second creature template.")
 @app_commands.autocomplete(template_a=_creature_template_autocomplete, template_b=_creature_template_autocomplete)
-async def creature_compare(interaction: discord.Interaction, template_a: str, template_b: str) -> None:
+async def creature_compare(interaction: discord.Interaction, template_a: app_commands.Range[str, 1, 80], template_b: app_commands.Range[str, 1, 80]) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -6886,7 +6887,7 @@ async def creature_compare(interaction: discord.Interaction, template_a: str, te
     randomize="Slightly randomize stats from the base template.",
 )
 @app_commands.autocomplete(template=_creature_template_autocomplete)
-async def creature_spawn(interaction: discord.Interaction, template: str, name: str | None = None, randomize: bool = False) -> None:
+async def creature_spawn(interaction: discord.Interaction, template: app_commands.Range[str, 1, 80], name: app_commands.Range[str, 1, 80] | None = None, randomize: bool = False) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -6940,7 +6941,7 @@ async def creature_spawn(interaction: discord.Interaction, template: str, name: 
 )
 async def creature_create(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     earth: int,
     attack_rolled: int,
     attack_kept: int,
@@ -6950,11 +6951,11 @@ async def creature_create(
     air: int | None = None,
     fire: int | None = None,
     water: int | None = None,
-    attack_name: str = "Attack",
+    attack_name: app_commands.Range[str, 1, 80] = "Attack",
     reduction: int = 0,
     wounds_dead: int = 0,
     fear: int = 0,
-    tags: str = "",
+    tags: app_commands.Range[str, 1, 500] = "",
     initiative_rolled: int | None = None,
     initiative_kept: int | None = None,
 ) -> None:
@@ -7045,7 +7046,7 @@ async def creature_list(interaction: discord.Interaction) -> None:
 @creature_group.command(name="view", description="View a spawned creature's full stat block. [Fortune]")
 @app_commands.describe(name="The creature to view.")
 @app_commands.autocomplete(name=_creature_instance_autocomplete)
-async def creature_view(interaction: discord.Interaction, name: str) -> None:
+async def creature_view(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     rec, err = _resolve_creature(interaction, name)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
@@ -7055,7 +7056,7 @@ async def creature_view(interaction: discord.Interaction, name: str) -> None:
 @creature_group.command(name="delete", description="Remove a spawned creature. [Fortune]")
 @app_commands.describe(name="The creature to remove.")
 @app_commands.autocomplete(name=_creature_instance_autocomplete)
-async def creature_delete(interaction: discord.Interaction, name: str) -> None:
+async def creature_delete(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     rec, err = _resolve_creature(interaction, name)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
@@ -7071,7 +7072,7 @@ async def creature_delete(interaction: discord.Interaction, name: str) -> None:
 @app_commands.describe(name="The creature.", amount="Wounds to apply.")
 @app_commands.autocomplete(name=_creature_instance_autocomplete)
 async def creature_wound(
-    interaction: discord.Interaction, name: str, amount: app_commands.Range[int, 1, 1000]
+    interaction: discord.Interaction, name: app_commands.Range[str, 1, 80], amount: app_commands.Range[int, 1, 1000]
 ) -> None:
     rec, err = _resolve_creature(interaction, name)
     if err:
@@ -7094,7 +7095,7 @@ async def creature_wound(
 @app_commands.describe(name="The creature.", amount="Wounds to heal.")
 @app_commands.autocomplete(name=_creature_instance_autocomplete)
 async def creature_heal(
-    interaction: discord.Interaction, name: str, amount: app_commands.Range[int, 1, 1000]
+    interaction: discord.Interaction, name: app_commands.Range[str, 1, 80], amount: app_commands.Range[int, 1, 1000]
 ) -> None:
     rec, err = _resolve_creature(interaction, name)
     if err:
@@ -7119,9 +7120,9 @@ async def creature_heal(
 @app_commands.autocomplete(creature_name=_creature_instance_autocomplete, target_npc=_npc_autocomplete)
 async def creature_attack_cmd(
     interaction: discord.Interaction,
-    creature_name: str,
+    creature_name: app_commands.Range[str, 1, 80],
     target: discord.Member | None = None,
-    target_npc: str | None = None,
+    target_npc: app_commands.Range[str, 1, 80] | None = None,
     raises: app_commands.Range[int, 0, 10] = 0,
     bonus_tn: app_commands.Range[int, -50, 50] = 0,
 ) -> None:
@@ -7291,7 +7292,7 @@ async def category_create(interaction: discord.Interaction, name: app_commands.R
 @category_group.command(name="delete", description="Delete a category (members are NOT deleted). [Fortune]")
 @app_commands.describe(name="Category to delete.")
 @app_commands.autocomplete(name=_category_autocomplete)
-async def category_delete(interaction: discord.Interaction, name: str) -> None:
+async def category_delete(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -7307,7 +7308,7 @@ async def category_delete(interaction: discord.Interaction, name: str) -> None:
 @app_commands.describe(name="Current category name.", new_name="New name.")
 @app_commands.autocomplete(name=_category_autocomplete)
 async def category_rename(
-    interaction: discord.Interaction, name: str, new_name: app_commands.Range[str, 1, 64],
+    interaction: discord.Interaction, name: app_commands.Range[str, 1, 80], new_name: app_commands.Range[str, 1, 64],
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -7337,7 +7338,7 @@ async def category_rename(
 @app_commands.autocomplete(category=_category_autocomplete)
 async def category_add(
     interaction: discord.Interaction,
-    category: str,
+    category: app_commands.Range[str, 1, 80],
     kind: app_commands.Choice[str],
     name: app_commands.Range[str, 1, 64],
 ) -> None:
@@ -7379,7 +7380,7 @@ async def category_add(
 @app_commands.autocomplete(category=_category_autocomplete)
 async def category_remove(
     interaction: discord.Interaction,
-    category: str,
+    category: app_commands.Range[str, 1, 80],
     kind: app_commands.Choice[str],
     name: app_commands.Range[str, 1, 64],
 ) -> None:
@@ -7422,7 +7423,7 @@ async def category_list(interaction: discord.Interaction) -> None:
 @category_group.command(name="view", description="View all members of a category. [Fortune]")
 @app_commands.describe(category="Which category to view.")
 @app_commands.autocomplete(category=_category_autocomplete)
-async def category_view(interaction: discord.Interaction, category: str) -> None:
+async def category_view(interaction: discord.Interaction, category: app_commands.Range[str, 1, 80]) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -7456,9 +7457,9 @@ async def category_view(interaction: discord.Interaction, category: str) -> None
 @app_commands.autocomplete(category=_category_autocomplete)
 async def category_bulk_add(
     interaction: discord.Interaction,
-    category: str,
+    category: app_commands.Range[str, 1, 80],
     kind: app_commands.Choice[str],
-    names: str,
+    names: app_commands.Range[str, 1, 500],
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -7511,9 +7512,9 @@ async def category_bulk_add(
 @app_commands.autocomplete(category=_category_autocomplete)
 async def category_bulk_remove(
     interaction: discord.Interaction,
-    category: str,
+    category: app_commands.Range[str, 1, 80],
     kind: app_commands.Choice[str],
-    names: str,
+    names: app_commands.Range[str, 1, 500],
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -7550,7 +7551,7 @@ async def category_bulk_remove(
     randomize="Slightly randomize stats for each spawned creature.",
 )
 @app_commands.autocomplete(category=_category_autocomplete)
-async def category_spawn(interaction: discord.Interaction, category: str, randomize: bool = False) -> None:
+async def category_spawn(interaction: discord.Interaction, category: app_commands.Range[str, 1, 80], randomize: bool = False) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -7746,7 +7747,7 @@ async def location_area_create(
 @app_commands.describe(name="Area to delete.")
 @app_commands.autocomplete(name=_location_area_autocomplete)
 async def location_area_delete(
-    interaction: discord.Interaction, name: str,
+    interaction: discord.Interaction, name: app_commands.Range[str, 1, 80],
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -7877,7 +7878,7 @@ async def location_area_fix_permissions(interaction: discord.Interaction) -> Non
 @app_commands.autocomplete(area=_location_area_autocomplete)
 async def location_create(
     interaction: discord.Interaction,
-    area: str,
+    area: app_commands.Range[str, 1, 80],
     name: app_commands.Range[str, 1, 90],
     description: app_commands.Range[str, 1, 4000] | None = None,
     private: bool = False,
@@ -8006,7 +8007,7 @@ async def location_describe(
 @app_commands.autocomplete(area=_location_area_autocomplete)
 async def location_list(
     interaction: discord.Interaction,
-    area: str | None = None,
+    area: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -8107,7 +8108,7 @@ async def _buy_named(interaction, member, name, mastery_level, attr, label, note
 
 @xp_group.command(name="grant", description="Grant (or correct) a player's Experience. [Fortune]")
 @app_commands.describe(member="The player to grant XP to.", amount="XP amount (negative to correct).", reason="Optional note.")
-async def xp_grant(interaction: discord.Interaction, member: discord.Member, amount: app_commands.Range[float, -100000.0, 100000.0], reason: str | None = None) -> None:
+async def xp_grant(interaction: discord.Interaction, member: discord.Member, amount: app_commands.Range[float, -100000.0, 100000.0], reason: app_commands.Range[str, 1, 200] | None = None) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
@@ -8434,7 +8435,7 @@ async def xp_spell(
 @app_commands.autocomplete(name=_advantage_autocomplete)
 async def xp_advantage(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     points: app_commands.Range[int, 1, 20] | None = None,
     member: discord.Member | None = None,
 ) -> None:
@@ -8496,7 +8497,7 @@ async def xp_advantage(
 @app_commands.autocomplete(name=_disadvantage_autocomplete)
 async def xp_remove_disadvantage(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     points: app_commands.Range[int, 1, 20] | None = None,
     member: discord.Member | None = None,
 ) -> None:
@@ -9442,7 +9443,7 @@ async def xp_spend(interaction: discord.Interaction) -> None:
 @app_commands.autocomplete(school_name=_school_autocomplete)
 async def school_learn(
     interaction: discord.Interaction,
-    school_name: str | None = None,
+    school_name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
@@ -9521,7 +9522,7 @@ def build_spell_embed(s: dict) -> discord.Embed:
 
 @spell_group.command(name="list", description="List spells by element (or a summary).")
 @app_commands.describe(element="Air, Earth, Fire, Water, Void, All. Omit for a summary.")
-async def spell_list(interaction: discord.Interaction, element: str | None = None) -> None:
+async def spell_list(interaction: discord.Interaction, element: app_commands.Range[str, 1, 80] | None = None) -> None:
     if not element:
         from collections import Counter
         counts = Counter(s["element"] for s in spells.ALL)
@@ -9550,7 +9551,7 @@ async def spell_list(interaction: discord.Interaction, element: str | None = Non
 
 @spell_group.command(name="search", description="Search spells by name, element, or keyword.")
 @app_commands.describe(query="Name, element, or keyword fragment.")
-async def spell_search(interaction: discord.Interaction, query: str) -> None:
+async def spell_search(interaction: discord.Interaction, query: app_commands.Range[str, 1, 100]) -> None:
     matches = spells.search(query)
     if not matches:
         await interaction.response.send_message(f"No spells match `{query}`.", ephemeral=True)
@@ -9566,7 +9567,7 @@ async def spell_search(interaction: discord.Interaction, query: str) -> None:
 @spell_group.command(name="view", description="Show a spell's element, mastery, range, and effect.")
 @app_commands.describe(name="The spell to view.")
 @app_commands.autocomplete(name=_spell_autocomplete)
-async def spell_view(interaction: discord.Interaction, name: str) -> None:
+async def spell_view(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     s = spells.get(name)
     if s is None:
         await interaction.response.send_message(
@@ -9595,12 +9596,12 @@ async def spell_view(interaction: discord.Interaction, name: str) -> None:
 @app_commands.autocomplete(name=_spell_autocomplete, target=cog_combat._combatant_autocomplete, attacker_npc=_npc_autocomplete)
 async def spell_cast(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     raises: int = 0,
     spend_void: bool = False,
-    target: str | None = None,
+    target: app_commands.Range[str, 1, 80] | None = None,
     conceal: bool = False,
-    attacker_npc: str | None = None,
+    attacker_npc: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
     cast_element: app_commands.Choice[str] | None = None,
 ) -> None:
@@ -9790,7 +9791,7 @@ async def spell_cast(
 @app_commands.autocomplete(target=_any_character_autocomplete)
 async def spell_resist(
     interaction: discord.Interaction,
-    target: str,
+    target: app_commands.Range[str, 1, 80],
     tn: int,
     spend_void: bool = False,
 ) -> None:
@@ -9863,8 +9864,8 @@ async def spell_resist(
 @app_commands.autocomplete(caster=_any_character_autocomplete, element=_element_autocomplete)
 async def spell_interrupt(
     interaction: discord.Interaction,
-    caster: str,
-    element: str,
+    caster: app_commands.Range[str, 1, 80],
+    element: app_commands.Range[str, 1, 80],
     damage: int = 0,
     void_bonus: bool = False,
 ) -> None:
@@ -9938,11 +9939,11 @@ async def spell_interrupt(
 @app_commands.autocomplete(name=_spell_autocomplete, attacker_npc=_npc_autocomplete)
 async def spell_importune(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     raises: int = 0,
     spend_void: bool = False,
     cast_element: app_commands.Choice[str] | None = None,
-    attacker_npc: str | None = None,
+    attacker_npc: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
 ) -> None:
     if not await _require_guild(interaction):
@@ -10133,7 +10134,7 @@ async def spell_importune(
 @app_commands.autocomplete(name=_any_character_autocomplete)
 async def taint_command(
     interaction: discord.Interaction,
-    name: str | None = None,
+    name: app_commands.Range[str, 1, 80] | None = None,
     add: float | None = None,
     member: discord.Member | None = None,
     is_npc: bool = False,
@@ -10228,15 +10229,15 @@ async def taint_command(
 @app_commands.autocomplete(skill=_skill_autocomplete)
 async def craft_extended(
     interaction: discord.Interaction,
-    name: str,
-    skill: str,
+    name: app_commands.Range[str, 1, 80],
+    skill: app_commands.Range[str, 1, 80],
     tn: app_commands.Range[int, 1, 1000],
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: int = 0,
     spend_void: bool = False,
     void_unskilled: bool = False,
-    reason: str = "",
+    reason: app_commands.Range[str, 1, 200] = "",
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -10331,9 +10332,9 @@ async def spell_damage(
     rolled: app_commands.Range[int, 1, 30],
     kept: app_commands.Range[int, 1, 15],
     bonus: int = 0,
-    target: str | None = None,
-    reason: str = "",
-    caster: str | None = None,
+    target: app_commands.Range[str, 1, 80] | None = None,
+    reason: app_commands.Range[str, 1, 200] = "",
+    caster: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -10396,9 +10397,9 @@ async def spell_damage(
 @app_commands.autocomplete(name=_any_character_autocomplete)
 async def influence_track(
     interaction: discord.Interaction,
-    name: str,
+    name: app_commands.Range[str, 1, 80],
     change: int,
-    reason: str = "",
+    reason: app_commands.Range[str, 1, 200] = "",
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -10674,8 +10675,8 @@ async def dm_clear_damage_channel(interaction: discord.Interaction) -> None:
 ])
 async def dm_treat(
     interaction: discord.Interaction,
-    healer: str,
-    patient: str,
+    healer: app_commands.Range[str, 1, 80],
+    patient: app_commands.Range[str, 1, 80],
     treatment: app_commands.Choice[str],
     wounds_healed: app_commands.Range[int, 0, 999] | None = None,
     tn_override: app_commands.Range[int, 1, 100] | None = None,
@@ -10899,7 +10900,7 @@ async def macro_save(
     rolled: app_commands.Range[int, 1, 20],
     kept: app_commands.Range[int, 1, 20],
     modifier: int = 0,
-    label: str = "",
+    label: app_commands.Range[str, 1, 200] = "",
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -10940,7 +10941,7 @@ async def macro_list(interaction: discord.Interaction) -> None:
 @macro_group.command(name="roll", description="Roll a saved macro.")
 @app_commands.describe(name="Which macro to roll.", secret="Hide the result from others (default: Yes).")
 @app_commands.autocomplete(name=_macro_autocomplete)
-async def macro_roll(interaction: discord.Interaction, name: str, secret: bool = True) -> None:
+async def macro_roll(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80], secret: bool = True) -> None:
     if not await _require_guild(interaction):
         return
     m = store.get_macro(str(interaction.guild_id), str(interaction.user.id), name)
@@ -10967,7 +10968,7 @@ async def macro_roll(interaction: discord.Interaction, name: str, secret: bool =
 @macro_group.command(name="delete", description="Delete a saved macro.")
 @app_commands.describe(name="Which macro to delete.")
 @app_commands.autocomplete(name=_macro_autocomplete)
-async def macro_delete(interaction: discord.Interaction, name: str) -> None:
+async def macro_delete(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _require_guild(interaction):
         return
     deleted = store.delete_macro(str(interaction.guild_id), str(interaction.user.id), name)
@@ -10994,8 +10995,8 @@ client.tree.add_command(macro_group)
 @app_commands.autocomplete(name_a=_any_character_autocomplete, name_b=_any_character_autocomplete)
 async def compare_characters(
     interaction: discord.Interaction,
-    name_a: str,
-    name_b: str,
+    name_a: app_commands.Range[str, 1, 80],
+    name_b: app_commands.Range[str, 1, 80],
     member_a: discord.Member | None = None,
     member_b: discord.Member | None = None,
 ) -> None:

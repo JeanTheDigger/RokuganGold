@@ -960,7 +960,7 @@ async def npc_form(interaction: discord.Interaction) -> None:
 
 @app_commands.command(name="edit", description="Reopen a stored NPC in the step-by-step builder and change any stat. [Fortune]")
 @app_commands.describe(name="The NPC to edit.")
-async def npc_edit(interaction: discord.Interaction, name: str) -> None:
+async def npc_edit(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
@@ -980,7 +980,7 @@ template_group = app_commands.Group(name="template", description="Reusable NPC t
 
 @template_group.command(name="save", description="Save an existing NPC as a reusable template. [Fortune]")
 @app_commands.describe(name="The NPC to copy.", template="Template name (defaults to the NPC's name).")
-async def template_save(interaction: discord.Interaction, name: str, template: app_commands.Range[str, 1, 64] | None = None) -> None:
+async def template_save(interaction: discord.Interaction, name: app_commands.Range[str, 1, 80], template: app_commands.Range[str, 1, 64] | None = None) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
@@ -1003,7 +1003,7 @@ async def template_save(interaction: discord.Interaction, name: str, template: a
 @app_commands.describe(template="Template to spawn from.", name="NPC name (defaults to the template name).",
                        count="How many (2+ are numbered: 'Bandit 1', 'Bandit 2').")
 @app_commands.autocomplete(template=_template_autocomplete)
-async def template_spawn(interaction: discord.Interaction, template: str,
+async def template_spawn(interaction: discord.Interaction, template: app_commands.Range[str, 1, 80],
                          name: app_commands.Range[str, 1, 60] | None = None,
                          count: app_commands.Range[int, 1, MAX_SPAWN] = 1) -> None:
     if not await _d.require_guild(interaction):
@@ -1062,7 +1062,7 @@ async def template_list(interaction: discord.Interaction) -> None:
 @template_group.command(name="view", description="Show a template's sheet. [Fortune]")
 @app_commands.describe(template="Template name.")
 @app_commands.autocomplete(template=_template_autocomplete)
-async def template_view(interaction: discord.Interaction, template: str) -> None:
+async def template_view(interaction: discord.Interaction, template: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
@@ -1079,7 +1079,7 @@ async def template_view(interaction: discord.Interaction, template: str) -> None
 @template_group.command(name="delete", description="Delete an NPC template (spawned NPCs are unaffected). [Fortune]")
 @app_commands.describe(template="Template name.")
 @app_commands.autocomplete(template=_template_autocomplete)
-async def template_delete(interaction: discord.Interaction, template: str) -> None:
+async def template_delete(interaction: discord.Interaction, template: app_commands.Range[str, 1, 80]) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):

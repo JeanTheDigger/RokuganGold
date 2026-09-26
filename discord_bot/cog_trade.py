@@ -150,7 +150,7 @@ async def pay(
 async def trade(
     interaction: discord.Interaction,
     member: discord.Member,
-    item: str,
+    item: app_commands.Range[str, 1, 80],
     quantity: app_commands.Range[int, 1, 9999] = 1,
 ) -> None:
     if not await _d.require_guild(interaction):

@@ -466,7 +466,7 @@ class InventoryPanel(discord.ui.View):
 
 @app_commands.command(name="inventory", description="Your gear and purse in one panel: Wield, weapons, items, koku/bu/zeni (staff: Any character or NPC).")
 @app_commands.describe(member="Another player's character [Fortune].", npc="An NPC's inventory [Fortune].")
-async def inventory(interaction: discord.Interaction, member: discord.Member | None = None, npc: str | None = None) -> None:
+async def inventory(interaction: discord.Interaction, member: discord.Member | None = None, npc: app_commands.Range[str, 1, 80] | None = None) -> None:
     if not await _d.require_guild(interaction):
         return
     staff = _d.is_dm(interaction)
