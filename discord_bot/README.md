@@ -17,7 +17,7 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 
 | Command | What it does |
 |---|---|
-| `/help` | Categorized command reference: 13 categories, expandable. Shows a compact overview or drill into one category. Ephemeral (only you see it). |
+| `/help` | The manual, private to you: a **Topic** menu with walkthroughs (Getting started, Your character, Dice and checks, Gear and money, Fighting, Duels and grapples, Magic, Advancement, Letters, rumors and rooms, Rules reference; staff also get Server and channels, Players and approvals, NPCs and creatures) and a **Command group** menu listing every command in a group. Players never see staff-only commands. `/help category:` jumps to a topic or group. |
 | `/whoami` | Your character hub, ephemeral: the quick status card (rings, wounds, VP, honor, movement, wielded weapon, active Kata, combat conditions) with buttons for the full sheet, the inventory panel, spending or resting Void, fight status and JSON export, plus menus to set the active Kata, Kiho (s38 exclusivity enforced) and tattoo. |
 | `/portrait set` · `show` · `clear` | A picture for your character. `set` takes an uploaded PNG, JPEG, GIF or WebP (up to 8 MB, the bot keeps a copy under `portraits/` so it never expires) or a direct image link. It then appears as a thumbnail on `/whoami` and `/sheet view`. `show` posts it in the channel for everyone, with the character's name, clan and family; players can show any active player character, staff any character. Staff may set or clear another character's with `character:`. |
 | `/ref search` | Unified search across **all** catalogs (spells, schools, kata, kiho, advantages, weapons, creatures). Find anything without knowing which command to use. Ephemeral. |

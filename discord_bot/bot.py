@@ -29,6 +29,7 @@ from discord import app_commands
 from discord.ext import tasks
 
 import encounter
+import help_pages
 import cog_checks
 import cog_combat
 import cog_edit
@@ -5626,8 +5627,8 @@ async def void_status_shortcut(
 
 _HELP_BLURBS: dict[str, str] = {
     "sheet": "Your character sheet: Create, view, Kata, Kiho, tattoos, export/import, learn techniques. One character per player; staff use activate to act as NPCs.",
-    "edit": "Staff sheet edits for any character (PC or NPC): Traits, skills, identity, fields, equip, features, elements, wounds, healing, activate, rename, notes, mount, items, spells. [Fortune]",
-    "inventory": "Your gear and purse in one panel: Wield, weapons, items, koku/bu/zeni.",
+    "edit": "Staff sheet edits for any character (PC or NPC): Traits, skills, identity, fields, equip, features, elements, wounds, healing, activate, rename, notes, mount, spells. [Fortune]",
+    "inventory": "Your gear and purse in one panel: Wield or lower weapons, pick arrows, drop, remove items, armor on or off.",
     "xp": "Spend Experience: /xp spend opens a guided menu; or use /xp trait, /xp skill, etc. directly.",
     "roll": "Roll & Keep dice, with optional TN, Raises and Emphasis.",
     "dice": "Quick dice shorthand: 5k3, 7k2+5.",
@@ -5662,7 +5663,7 @@ _HELP_BLURBS: dict[str, str] = {
     "setup": "Server setup [Kami].",
     "sync": "Re-sync slash commands [Kami].",
     "ping": "Is the bot alive?",
-    "help": "This overview.",
+    "help": "This manual: Topics with walkthroughs, and every command by group.",
 }
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Getting started", ["help", "whoami", "players", "compare", "date"]),
@@ -5727,74 +5728,19 @@ def _help_top() -> list[app_commands.Command | app_commands.Group]:
     return ordered + [cmds[n] for n in sorted(cmds)]
 
 async def _help_category_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
-    cur = (current or "").lower().lstrip("/")
-    return [app_commands.Choice(name=f"/{c.name}", value=c.name) for c in _help_top() if cur in c.name][:25]
+    return await help_pages.autocomplete(interaction, current)
 
 @client.tree.command(
     name="help",
-    description="All bot commands by group, always current. Pick a group to see every command in it.",
+    description="The manual: Pick a topic for a walkthrough, or a command group for every command in it.",
 )
-@app_commands.describe(category="A command group, e.g. combat (omit for the overview).")
+@app_commands.describe(category="A topic (e.g. fighting) or a command group (e.g. combat). Omit for the overview.")
 @app_commands.autocomplete(category=_help_category_autocomplete)
 async def help_command(
     interaction: discord.Interaction,
     category: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
-    top = _help_top()
-    if category:
-        key = category.strip().lstrip("/").lower()
-        cmd = next((c for c in top if c.name == key), None)
-        if cmd is None:
-            names = ", ".join(f"`/{c.name}`" for c in top)
-            await interaction.response.send_message(
-                f"No command group called **{category}**. Groups: {names}.", ephemeral=True
-            )
-            return
-        leaves = _help_leaves(cmd)
-        lines = _help_page_lines(cmd)
-        blurb = _HELP_BLURBS.get(cmd.name, "")
-        embeds: list[discord.Embed] = []
-        chunk: list[str] = []
-        size = len(blurb) + 2
-        for line in lines:
-            if size + len(line) + 1 > 3900 and chunk:
-                embeds.append(discord.Embed(description="\n".join(chunk), color=discord.Color.gold()))
-                chunk, size = [], 0
-            chunk.append(line); size += len(line) + 1
-        embeds.append(discord.Embed(description="\n".join(chunk).strip(), color=discord.Color.gold()))
-        embeds[0].title = f"Rokugan Bot: /{cmd.name} ({len(leaves)} command{'s' if len(leaves) != 1 else ''})"
-        if blurb:
-            embeds[0].description = blurb + "\n\n" + (embeds[0].description or "")
-        # One embed per message: Discord caps a single message at 6000 characters across embeds.
-        await interaction.response.send_message(embed=embeds[0], ephemeral=True)
-        for extra in embeds[1:]:
-            await interaction.followup.send(embed=extra, ephemeral=True)
-        return
-    # Overview: sections of one line per group in the body (an embed holds at
-    # most 25 fields, and there are more groups than that).
-    by_name = {c.name: c for c in top}
-    listed: set[str] = set()
-    parts: list[str] = []
-    for section, names in _HELP_SECTIONS + [("Other", [n for n in by_name if n not in _HELP_ORDER])]:
-        entries = []
-        for name in names:
-            cmd = by_name.get(name)
-            if cmd is None:
-                continue
-            listed.add(name)
-            n = len(_help_leaves(cmd))
-            label = f"**/{cmd.name}**" + (f" ({n})" if n > 1 else "")
-            entries.append(f"{label}: {_help_desc(_HELP_BLURBS.get(cmd.name, cmd.description))}")
-        if entries:
-            parts.append(f"__**{section}**__\n" + "\n".join(entries))
-    body = (
-        _HELP_START
-        + "\n\nUse `/help category:` to list every command in a group. All game math is L5R 4th Edition.\n\n"
-        + "\n\n".join(parts)
-    )
-    embed = discord.Embed(title="Rokugan Bot: Command Reference", description=body[:4096], color=discord.Color.gold())
-    embed.set_footer(text="Tip: /help category:combat")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await help_pages.run(interaction, category)
 
 
 # ===========================================================================
@@ -12581,6 +12527,13 @@ client.tree.add_command(cog_letters.letter)
 client.tree.add_command(cog_weather.weather)
 client.tree.add_command(setup_group)
 _HELP_COMMANDS.extend(client.tree.get_commands())
+help_pages.init(
+    is_dm=_is_dm,
+    help_top=_help_top,
+    help_page_lines=_help_page_lines,
+    help_leaves=_help_leaves,
+    blurbs=_HELP_BLURBS,
+)
 
 def main() -> None:
     if not TOKEN:
