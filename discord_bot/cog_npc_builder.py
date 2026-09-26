@@ -336,7 +336,10 @@ STEPS: list[tuple[str, str]] = [
 
 
 def _opt(label: str, value: str | None = None, description: str | None = None, default: bool = False) -> discord.SelectOption:
-    return discord.SelectOption(label=label[:100], value=(value if value is not None else label)[:100],
+    # Discord rejects an empty option value, so a "none" choice carries a sentinel
+    # that _Pick.callback turns back into "".
+    raw = value if value is not None else label
+    return discord.SelectOption(label=label[:100], value=(raw or "__none__")[:100],
                                 description=(description or None) and description[:100], default=default)
 
 
@@ -348,7 +351,8 @@ class _Pick(discord.ui.Select):
         self._handler = handler
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await self._handler(interaction, self.values[0])
+        value = self.values[0] if self.values else ""
+        await self._handler(interaction, "" if value == "__none__" else value)
 
 
 class _NumbersModal(discord.ui.Modal, title="Honor, Glory, Status, Purse"):

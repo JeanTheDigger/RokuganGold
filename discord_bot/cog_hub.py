@@ -80,7 +80,9 @@ class _Pick(discord.ui.Select):
         self._handler = handler
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await self._handler(interaction, self.values[0])
+        value = self.values[0] if self.values else ""
+        # Discord rejects empty option values, so "none" options carry a sentinel.
+        await self._handler(interaction, "" if value == "__none__" else value)
 
 
 class CharacterHub(discord.ui.View):
@@ -125,7 +127,7 @@ class CharacterHub(discord.ui.View):
             self.add_item(b)
         row = 1
         if c.katas:
-            opts = [discord.SelectOption(label="(drop the active Kata)", value="", default=not c.active_kata)] + [
+            opts = [discord.SelectOption(label="(drop the active Kata)", value="__none__", default=not c.active_kata)] + [
                 discord.SelectOption(label=k[:100], value=k[:100], default=k == c.active_kata) for k in c.katas]
             self.add_item(_Pick("Active Kata...", opts, self._on_kata, row)); row += 1
         if c.kiho:
@@ -133,7 +135,7 @@ class CharacterHub(discord.ui.View):
                                          description="active: Pick to end" if k in c.active_kiho else None) for k in c.kiho]
             self.add_item(_Pick("Kiho: Pick to activate, pick again to end...", opts, self._on_kiho, row)); row += 1
         if c.tattoos:
-            opts = [discord.SelectOption(label="(deactivate tattoo)", value="", default=not c.active_tattoo)] + [
+            opts = [discord.SelectOption(label="(deactivate tattoo)", value="__none__", default=not c.active_tattoo)] + [
                 discord.SelectOption(label=t[:100], value=t[:100], default=t.lower() == (c.active_tattoo or "").lower()) for t in c.tattoos]
             self.add_item(_Pick("Active tattoo...", opts, self._on_tattoo, row)); row += 1
         for label, cb in (("Export JSON", self._on_export), ("Refresh", self._on_refresh), ("Done", self._on_done)):

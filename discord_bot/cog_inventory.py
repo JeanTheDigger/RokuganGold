@@ -153,7 +153,7 @@ class InventoryPanel(discord.ui.View):
         c = self.rec.character
         owned = [w for w in c.weapons]
         wielded = combat.normalise_weapon_key(c.equipped_weapon or "")
-        hand_opts = [discord.SelectOption(label="unarmed", value="", default=not c.equipped_weapon)] + [
+        hand_opts = [discord.SelectOption(label="unarmed", value="__none__", default=not c.equipped_weapon)] + [
             discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w.lower() == (c.equipped_weapon or "").lower()) for w in owned
         ]
         # Arrows come from the quiver (inventory counts), one entry per type with arrows left.
@@ -164,7 +164,7 @@ class InventoryPanel(discord.ui.View):
                 label=f"{_weapon_label(key)} ×{qty}"[:100], value=key, default=key == wielded,
             ))
         self.add_item(_Pick("Main hand...", hand_opts[:25], self._on_main, 0))
-        off_opts = [discord.SelectOption(label="(no off-hand)", value="", default=not c.off_hand_weapon)] + [
+        off_opts = [discord.SelectOption(label="(no off-hand)", value="__none__", default=not c.off_hand_weapon)] + [
             discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w.lower() == (c.off_hand_weapon or "").lower()) for w in owned
         ]
         self.add_item(_Pick("Off hand...", off_opts, self._on_off, 1))
@@ -202,6 +202,8 @@ class InventoryPanel(discord.ui.View):
             return
         c = self.rec.character
         new_weapon = values[0].lower() if values else ""
+        if new_weapon == "__none__":
+            new_weapon = ""
         if not new_weapon:
             c.equipped_weapon = ""
             c.off_hand_weapon = ""
@@ -233,6 +235,8 @@ class InventoryPanel(discord.ui.View):
             return
         c = self.rec.character
         off = values[0].lower() if values else ""
+        if off == "__none__":
+            off = ""
         if off and not c.equipped_weapon:
             self.status = "Wield a main-hand weapon first."
             await self.render(interaction)
