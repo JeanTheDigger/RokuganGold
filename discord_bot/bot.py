@@ -344,11 +344,14 @@ async def _require_approval_channel(interaction: discord.Interaction, guild: str
     ch_id = store.get_damage_approval_channel(guild) or store.get_approval_channel(guild)
     channel = client.get_channel(int(ch_id)) if ch_id else None
     if channel is None:
-        await interaction.response.send_message(
+        text = (
             "No approval channel is configured, so this request cannot be posted privately. "
-            "A Kami must set one with `/dm damage_channel` or `/dm approval_channel` (or run `/setup server`).",
-            ephemeral=True,
+            "A Kami must set one with `/dm damage_channel` or `/dm approval_channel` (or run `/setup server`)."
         )
+        if interaction.response.is_done():
+            await interaction.followup.send(text, ephemeral=True)
+        else:
+            await interaction.response.send_message(text, ephemeral=True)
     return channel
 
 async def _require_encounter(interaction: discord.Interaction) -> encounter.Encounter | None:
@@ -584,7 +587,7 @@ def _drop_from_encounters(guild_id: str, name: str, owner_id: str | None) -> boo
         staff_owned = owner_id in (None, NPC_OWNER)
         if staff_owned and cb.owner_id:
             continue
-        if not staff_owned and cb.owner_id not in (None, owner_id):
+        if not staff_owned and cb.owner_id != owner_id:
             continue
         enc.remove(name)
         _save_encounter(guild_id, enc)
@@ -7221,12 +7224,19 @@ async def creature_attack_cmd(
     )
     if tn_notes:
         embed.add_field(name="Defender Armor TN modifiers", value=" · ".join(tn_notes)[:1024], inline=False)
+    public = discord.Embed(title=embed.title, color=embed.colour)
+    public.add_field(
+        name="Result",
+        value=f"Total **{outcome['total']}** vs Armor TN **{outcome['tn']}**: {verdict} (margin {outcome['margin']:+d})",
+        inline=False,
+    )
     if hit:
         view = CreatureAttackView(cre_rec.id, target_rec.id, cr.name, t_name, source_channel_id=interaction.channel_id)
         await interaction.response.send_message(
             content=f"**{cr.name}** hit **{t_name}** - damage approval pending in the DM channel.",
-            embed=embed,
+            embed=public,
         )
+        await interaction.followup.send(embed=embed, ephemeral=True)
         embed.add_field(name="Requested by", value=interaction.user.mention, inline=True)
         embed.add_field(name="Room", value=f"<#{interaction.channel_id}>", inline=True)
         await view.persist(await approval_ch.send(
@@ -7235,7 +7245,8 @@ async def creature_attack_cmd(
         ))
         await _combat_log(guild, f"Creature Attack: {cr.name} → {t_name} HIT (roll {outcome['total']} vs TN {outcome['tn']})")
     else:
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=public)
+        await interaction.followup.send(embed=embed, ephemeral=True)
         await _combat_log(guild, f"Creature Attack: {cr.name} → {t_name} MISS (roll {outcome['total']} vs TN {outcome['tn']})")
 
 # ===========================================================================

@@ -95,7 +95,7 @@ async def _post_damage_card(
     ))
 
 
-_POOL_RE = re.compile(r"\(?\b\d+k\d+\b[^→=\n]*\)?\s*(?:→|=)\s*")
+_POOL_RE = re.compile(r"\(?\*{0,2}\b\d+k\d+\b\*{0,2}[^→=\n]*\)?\s*(?:→|=)\s*")
 _POOL_PAREN_LINE_RE = re.compile(r"\n\(\d+k\d+[^)\n]*\)")
 _NOTES_LINE_RE = re.compile(r"\n\([^\n]*\)(?=\n|$)")
 _PRIVATE_FIELD_SUFFIXES = ("Dice", "Attack roll", "Modifiers")
@@ -1164,6 +1164,9 @@ class DamageView(views_base.PersistentView):
         tattoos, kiho, advantages, conditions, armor penalty, weapon quality)
         to both attacker and defender. Skips one-shot/rate-limited effects
         (center stance, void spend, striking as fire, strength in arms)."""
+        approval_ch = await _require_approval_channel(interaction, str(interaction.guild_id))
+        if approval_ch is None:
+            return
         attacker = attacker_rec.character
         target = target_rec.character
         wp = combat.get_weapon_profile(self.weapon)
@@ -1303,9 +1306,6 @@ class DamageView(views_base.PersistentView):
         embed2.add_field(name="Attack Roll", value=detail, inline=False)
         fight_ch_id = self.source_channel_id or interaction.channel_id
         if hit:
-            approval_ch = await _require_approval_channel(interaction, str(interaction.guild_id))
-            if approval_ch is None:
-                return
             view2 = DamageView(
                 attacker_rec.id, target_rec.id, self.weapon, 0,
                 self.attacker_name, self.target_name,
@@ -1342,6 +1342,9 @@ class DamageView(views_base.PersistentView):
         cre_rec: _storage_mod.CreatureRecord,
     ) -> None:
         """Roll the free second attack against a creature (Extra Attack, s40)."""
+        approval_ch = await _require_approval_channel(interaction, str(interaction.guild_id))
+        if approval_ch is None:
+            return
         attacker = attacker_rec.character
         wp = combat.get_weapon_profile(self.weapon)
         enc2 = _d.encounters.get(self.channel_id)
@@ -1430,9 +1433,6 @@ class DamageView(views_base.PersistentView):
         embed2.add_field(name="Attack Roll", value=detail, inline=False)
         fight_ch_id = self.source_channel_id or interaction.channel_id
         if hit:
-            approval_ch = await _require_approval_channel(interaction, str(interaction.guild_id))
-            if approval_ch is None:
-                return
             view2 = DamageView(
                 attacker_rec.id, None, self.weapon, 0,
                 self.attacker_name, self.target_name,
@@ -6602,6 +6602,8 @@ async def _deliver_assessment(
             await staff_ch.send(content=f"NPC **{assessor}** assessed in <#{interaction.channel_id}>.", embed=reveal)
         elif _d.is_dm(interaction):
             await interaction.followup.send(embed=reveal, ephemeral=True)
+        else:
+            await _d.combat_log(guild, f"Duel Assess (NPC {assessor}): " + text.replace("\n", " "))
         return
     if assessor_rec.owner_id == str(interaction.user.id):
         await interaction.followup.send(embed=reveal, ephemeral=True)

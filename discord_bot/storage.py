@@ -1306,11 +1306,12 @@ class Store:
     def rename_references(self, guild_id: str, old_name: str, new_name: str, entity_type: str | None) -> None:
         """Follow a character rename into room placements and category membership."""
         with self._lock, self._conn:
-            self._conn.execute(
-                "UPDATE OR IGNORE room_npcs SET npc_name = ? WHERE npc_name = ? COLLATE NOCASE "
-                "AND room_id IN (SELECT id FROM rooms WHERE guild_id = ?)",
-                (new_name, old_name, guild_id),
-            )
+            if entity_type == "npc":
+                self._conn.execute(
+                    "UPDATE OR IGNORE room_npcs SET npc_name = ? WHERE npc_name = ? COLLATE NOCASE "
+                    "AND room_id IN (SELECT id FROM rooms WHERE guild_id = ?)",
+                    (new_name, old_name, guild_id),
+                )
             if entity_type:
                 self._conn.execute(
                     "UPDATE OR IGNORE category_members SET entity_name = ? WHERE entity_name = ? COLLATE NOCASE "

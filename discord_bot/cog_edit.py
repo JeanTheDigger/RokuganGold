@@ -981,9 +981,10 @@ async def edit_rename(
     old_name = rec.character.name
     rec.character.name = clean_name
     _d.store.save(rec)
+    await interaction.response.defer(ephemeral=True)
     notes = await _d.on_rename(guild, rec, old_name)
     tail = f" ({'; '.join(notes)})" if notes else ""
-    await interaction.response.send_message(
+    await interaction.followup.send(
         f"Renamed **{old_name}** → **{clean_name}**.{tail}", embed=_d.build_sheet_embed(rec),
         ephemeral=True,
     )
