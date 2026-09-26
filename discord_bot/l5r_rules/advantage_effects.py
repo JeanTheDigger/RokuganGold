@@ -397,14 +397,14 @@ def skill_check_modifiers(
     # --- Disadvantages ---
 
     # Antisocial: -1k0 Social (2 pts) or -1k1 (4 pts / "Major")
-    if sk in _SOCIAL_SKILLS:
-        if _has_disadv(character, "Antisocial (Major)") or _has_disadv_containing(character, "antisocial (major)"):
+    if sk in _SOCIAL_SKILLS and _has_disadv_containing(character, "antisocial"):
+        param = (_get_disadv_param(character, "Antisocial") or "").lower()
+        if "major" in param or param.startswith("4"):
             rolled -= 1; kept -= 1
             notes.append("Antisocial (Major) -1k1 (Social)")
-        elif _has_disadv(character, "Antisocial") or _has_disadv_containing(character, "antisocial"):
-            if not _has_disadv_containing(character, "antisocial (major)"):
-                rolled -= 1
-                notes.append("Antisocial -1k0 (Social)")
+        else:
+            rolled -= 1
+            notes.append("Antisocial -1k0 (Social)")
 
     # Bad Eyesight: -1k1 to Perception-based skill checks (non-combat)
     if _has_disadv(character, "Bad Eyesight") and tr == "perception":
