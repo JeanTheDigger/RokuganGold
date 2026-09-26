@@ -168,7 +168,8 @@ def _give_candidates(guild_id: str) -> list[tuple[str, str]]:
     """(label, value) for everything /give can hand out."""
     out: list[tuple[str, str]] = []
     for k, w in _combat.WEAPON_CATALOG.items():
-        out.append((f"{k.replace('_', ' ')} · weapon · {w['skill']} DR {w['rolled']}k{w['kept']}", f"weapon:{k}"))
+        kind = "arrows (quantity = count)" if _combat.is_arrow(k) else "weapon"
+        out.append((f"{k.replace('_', ' ')} · {kind} · {w['skill']} DR {w['rolled']}k{w['kept']}", f"weapon:{k}"))
     for k, a in _combat.ARMOR_CATALOG.items():
         out.append((f"{k.replace('_', ' ')} · armor · TN +{a['tn_bonus']}, Reduction {a['reduction']}", f"armor:{k}"))
     for m in _MONEY:
@@ -229,6 +230,12 @@ async def _take_what_ac(interaction: discord.Interaction, current: str) -> list[
 def _apply_give(c: Character, kind: str, key: str, qty: int) -> tuple[bool, str, str]:
     """Mutate the character. Returns (ok, what was given or why not, staff-only note)."""
     if kind == "weapon":
+        if _combat.is_arrow(key):
+            name = _combat.arrow_inventory_key(c, key) or _combat.weapon_display(key)
+            ok, msg = _d.modify_inventory(c.inventory, c.name, name, qty, False)
+            if not ok:
+                return False, msg, ""
+            return True, f"{qty} × {_combat.weapon_display(key)} (arrows, now {c.inventory.get(name, 0)} in the quiver)", ""
         if key in [w.lower() for w in c.weapons]:
             return False, f"**{c.name}** already owns a {key.replace('_', ' ')}. Each catalog weapon is owned once.", ""
         c.weapons.append(key)
@@ -250,6 +257,14 @@ def _apply_give(c: Character, kind: str, key: str, qty: int) -> tuple[bool, str,
 
 def _apply_take(c: Character, kind: str, key: str, qty: int) -> tuple[bool, str, str]:
     if kind == "weapon":
+        if _combat.is_arrow(key):
+            name = _combat.arrow_inventory_key(c, key)
+            if name is None:
+                return False, f"**{c.name}** has no {_combat.weapon_display(key)}s in the quiver.", ""
+            ok, msg = _d.modify_inventory(c.inventory, c.name, name, qty, True)
+            if not ok:
+                return False, msg, ""
+            return True, f"{qty} × {_combat.weapon_display(key)} (arrows, {c.inventory.get(name, 0)} left)", ""
         if key not in [w.lower() for w in c.weapons]:
             return False, f"**{c.name}** does not own a {key.replace('_', ' ')}.", ""
         c.weapons = [w for w in c.weapons if w.lower() != key]

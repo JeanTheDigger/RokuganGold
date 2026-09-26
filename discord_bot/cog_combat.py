@@ -1182,6 +1182,12 @@ class DamageView(views_base.PersistentView):
         target = target_rec.character
         wp = combat.get_weapon_profile(self.weapon)
         is_melee = wp.get("melee", True)
+        if combat.is_arrow(self.weapon) and combat.arrow_count(attacker, self.weapon) == 0:
+            await interaction.followup.send(
+                f"No 2nd strike: **{attacker.name}** has no {combat.weapon_display(self.weapon)}s left.",
+                ephemeral=True,
+            )
+            return
         enc = _d.encounters.get(self.channel_id)
         atk_combatant = enc.find(attacker.name) if enc else None
         def_combatant = enc.find(target.name) if enc else None
@@ -1222,7 +1228,7 @@ class DamageView(views_base.PersistentView):
             if def_combatant and def_combatant.guarding:
                 guard_mod2 -= 5
         dw_def_bonus2 = 0
-        if target.equipped_weapon and target.off_hand_weapon:
+        if combat.is_dual_wielding(target):
             dw_def_bonus2 = stats.insight_rank(target)
         arrow_tn_adj2, _ = combat.arrow_armor_tn_mod(self.weapon, target.armor_tn_bonus)
         tn_extras = cond_def_mod + guard_mod2 + fd_bonus2 + void_tn_bonus2 + cover_mod2 + arrow_tn_adj2 + dw_def_bonus2
@@ -1303,6 +1309,11 @@ class DamageView(views_base.PersistentView):
             emphasis=bool(combat.weapon_emphasis(attacker, self.weapon)),
         )
         hit = outcome["hit"]
+        if combat.is_arrow(self.weapon):
+            arrows_left = combat.consume_arrow(attacker, self.weapon)
+            if arrows_left is not None:
+                _d.store.save(attacker_rec)
+                notes.append(f"Ammunition: {arrows_left} {combat.weapon_display(self.weapon)}s left")
         embed2 = discord.Embed(
             title="Extra Attack: 2nd Strike",
             color=discord.Color.green() if hit else discord.Color.light_grey(),
@@ -1358,6 +1369,12 @@ class DamageView(views_base.PersistentView):
             return
         attacker = attacker_rec.character
         wp = combat.get_weapon_profile(self.weapon)
+        if combat.is_arrow(self.weapon) and combat.arrow_count(attacker, self.weapon) == 0:
+            await interaction.followup.send(
+                f"No 2nd strike: **{attacker.name}** has no {combat.weapon_display(self.weapon)}s left.",
+                ephemeral=True,
+            )
+            return
         enc2 = _d.encounters.get(self.channel_id)
         atk_combatant = enc2.find(attacker.name) if enc2 else None
         dc2 = enc2.find(cre_rec.creature.name) if enc2 else None
@@ -1430,6 +1447,11 @@ class DamageView(views_base.PersistentView):
             emphasis=bool(combat.weapon_emphasis(attacker, self.weapon)),
         )
         hit = outcome["hit"]
+        if combat.is_arrow(self.weapon):
+            arrows_left = combat.consume_arrow(attacker, self.weapon)
+            if arrows_left is not None:
+                _d.store.save(attacker_rec)
+                notes.append(f"Ammunition: {arrows_left} {combat.weapon_display(self.weapon)}s left")
         embed2 = discord.Embed(
             title="Extra Attack: 2nd Strike",
             color=discord.Color.green() if hit else discord.Color.light_grey(),
@@ -3163,6 +3185,7 @@ combat_battle = app_commands.Group(name="battle", description="Mass Battle syste
     bonus_tn="Situational +/- to the target's Armor TN (DM discretion).",
     weapon_material="Weapon material (jade/crystal/obsidian bypass Invulnerability; nemuranai too).",
     off_hand="Attack with your off-hand weapon instead of main hand (applies off-hand penalty).",
+    point_blank="Ranged weapon fired at a target within melee reach: −10 to the roll (s04.5).",
 )
 @app_commands.choices(
     attacker_stance=_ATTACKER_STANCES, defender_stance=_DEFENDER_STANCES, maneuver=_MANEUVER_CHOICES,
@@ -3186,6 +3209,7 @@ async def attack(
     bonus_tn: app_commands.Range[int, -50, 50] = 0,
     weapon_material: app_commands.Choice[str] | None = None,
     off_hand: bool = False,
+    point_blank: bool = False,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -3318,6 +3342,7 @@ async def attack(
         interaction, guild, attacker_rec, target_rec, target_creature_rec,
         weapon, raises, increased_damage, man, spend_void, void_damage,
         a_stance_explicit, d_stance_explicit, bonus_tn, mat, off_hand,
+        point_blank=point_blank,
     )
 
 
@@ -3338,6 +3363,7 @@ async def _execute_attack(
     bonus_tn: int,
     mat: str,
     off_hand: bool,
+    point_blank: bool = False,
     response_used: bool = False,
 ) -> None:
     async def _reply(content: str = "", *, ephemeral: bool = False, **kwargs):
@@ -3369,6 +3395,15 @@ async def _execute_attack(
     if atk_combatant is not None and atk_combatant.actions_used >= (2 if decl_simple else 1):
         await _reply(
             _actions_spent_msg(atk_combatant, enc),
+            ephemeral=True,
+        )
+        return
+
+    # Ammunition (s39): An arrow type with a tracked quiver needs at least one arrow.
+    if combat.is_arrow(weapon) and combat.arrow_count(attacker_rec.character, weapon) == 0:
+        await _reply(
+            f"**{attacker_rec.character.name}** has no {combat.weapon_display(weapon)}s left. "
+            f"Wield another arrow type from `/inventory`, or ask staff to `/give` more.",
             ephemeral=True,
         )
         return
@@ -3632,7 +3667,7 @@ async def _execute_attack(
         else:
             atk_flat += off_pen
             kata_notes.append(f"Off-hand penalty ({off_size}): {off_pen}")
-    elif attacker.off_hand_weapon:
+    elif combat.is_dual_wielding(attacker):
         if tech_oh_dom:
             kata_notes.extend(tech_oh_notes)
         else:
@@ -3649,6 +3684,15 @@ async def _execute_attack(
     if combat.has_weapon_quality(attacker, weapon, "balanced"):
         bonus_rolled += 1
         kata_notes.append("Balanced: +1k0 attack")
+
+    # Point blank (GDD s04.5, LOCKED): A ranged attack against an opponent within
+    # melee range takes −10 on the attack roll total.
+    if point_blank:
+        if atk_weapon_profile.get("melee", True):
+            kata_notes.append("Point blank ignored: melee weapon")
+        else:
+            atk_flat -= 10
+            kata_notes.append("Point blank: −10 (ranged attack within melee range, s04.5)")
 
     # Defender condition modifiers (Prone -10 Armor TN vs melee).
     # Kept separate from def_kata_bonus so it applies even when an override fires.
@@ -3711,7 +3755,7 @@ async def _execute_attack(
     dw_def_bonus = 0
     if target_creature_rec is None and target_rec is not None:
         def_char = target_rec.character
-        if def_char.equipped_weapon and def_char.off_hand_weapon:
+        if combat.is_dual_wielding(def_char):
             dw_def_bonus = stats.insight_rank(def_char)
             if dw_def_bonus:
                 kata_notes.append(f"Dual-wield defense: +{dw_def_bonus} Armor TN (Insight Rank)")
@@ -3908,6 +3952,18 @@ async def _execute_attack(
         atk_combatant.actions_used = min(2, atk_combatant.actions_used + 1) if decl_simple else 2
     if enc and atk_combatant is not None:
         _d.save_encounter(guild, enc)
+
+    # Ammunition (s39): The shot is fired whether it hits or not.
+    if combat.is_arrow(weapon):
+        arrows_left = combat.consume_arrow(attacker_rec.character, weapon)
+        if arrows_left is not None:
+            _d.store.save(attacker_rec)
+            empty = " Quiver empty: Wield another arrow type or ask staff for more." if arrows_left == 0 else ""
+            embed.add_field(
+                name="Ammunition",
+                value=f"{combat.weapon_display(weapon)}: **{arrows_left}** left.{empty}",
+                inline=False,
+            )
 
     cs_raises = raises if man == "called_shot" else 0
     if hit:

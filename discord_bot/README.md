@@ -412,7 +412,7 @@ now come from the full catalogs: Ashigaru +3/1, Tatami +4/1, Light +5/3, Heavy
 
 | Command | What it does |
 |---|---|
-| `/fight attack` | Your active character attacks another player's. Rolls **to hit**: `(Agility + weapon skill) keep Agility` (Reflexes for bows) vs the target's **Armor TN** (`Reflexes×5 + 5 + armor`), minus your wound penalty, with raises and stances. |
+| `/fight attack` | Your active character attacks another player's. Rolls **to hit**: `(Agility + weapon skill) keep Agility` (Reflexes for bows) vs the target's **Armor TN** (`Reflexes×5 + 5 + armor`), minus your wound penalty, with raises and stances. `point_blank:true` applies the s04.5 −10 for a ranged attack against an opponent within melee reach. Shooting an arrow type spends one arrow from the quiver, hit or miss; an empty quiver refuses the shot. |
 
 On a **hit**, the message shows **DM-only buttons**:
 
@@ -659,6 +659,15 @@ PC-vs-creature damage paths.
 **Arrow & blowgun specials** (GDD s39): select the arrow type as your weapon in
 `/fight attack` to apply its special effect. Arrow entries in the weapon catalog use
 Kyujutsu/Reflexes like bows.
+
+**Ammunition.** Arrows are counted. Staff hand them out with `/give what:willow_leaf_arrow quantity:20`
+and they land in the character's inventory as a quiver entry per arrow type. The `/inventory`
+main-hand menu lists each arrow type with its count; picking one moves the wielded bow to the
+off hand (or equips the first bow owned). Every shot, including an Extra Attack second strike,
+spends one arrow and the private breakdown shows how many remain. A sheet that lists an arrow
+type among its weapons from before counting existed is untracked and never runs out. A bow in
+the off hand with arrows wielded is not dual wielding: no dominant-hand penalty, no dual-wield
+Armor TN bonus.
 
 | Weapon | DR | Armor TN Effect | Other |
 |---|---|---|---|

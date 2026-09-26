@@ -332,8 +332,91 @@ def resolve_spell_casting(
     }
 
 
+def normalise_weapon_key(weapon_name: str) -> str:
+    """Catalog key form: Lower case, spaces as underscores ("willow leaf arrow" -> "willow_leaf_arrow")."""
+    return weapon_name.lower().strip().replace(" ", "_")
+
+
+def weapon_display(weapon_name: str) -> str:
+    return normalise_weapon_key(weapon_name).replace("_", " ")
+
+
 def get_weapon_profile(weapon_name: str) -> dict:
-    return WEAPON_CATALOG.get(weapon_name.lower().strip(), DEFAULT_WEAPON)
+    return WEAPON_CATALOG.get(normalise_weapon_key(weapon_name), DEFAULT_WEAPON)
+
+
+# --- Arrows as ammunition (s39) ---------------------------------------------
+# An arrow type is "wielded" as the weapon (its DR is the damage) with a bow in
+# the other hand. The quiver is the character's inventory: One entry per arrow
+# type, keyed by its display name, counting arrows. Each ranged attack with an
+# arrow spends one. An arrow type with no inventory entry is untracked (legacy
+# sheets that list the arrow among their weapons) and is never depleted.
+
+def is_arrow(weapon_name: str) -> bool:
+    key = normalise_weapon_key(weapon_name)
+    return key.endswith("_arrow") and key in WEAPON_CATALOG
+
+
+def is_bow(weapon_name: str) -> bool:
+    key = normalise_weapon_key(weapon_name)
+    spec = WEAPON_CATALOG.get(key)
+    return spec is not None and spec.get("skill") == "Kyujutsu" and not key.endswith("_arrow")
+
+
+def arrow_inventory_key(character: Character, weapon_name: str) -> str | None:
+    """The inventory entry holding this arrow type, or None when untracked."""
+    key = normalise_weapon_key(weapon_name)
+    for name in character.inventory:
+        if normalise_weapon_key(name) == key:
+            return name
+    return None
+
+
+def arrow_count(character: Character, weapon_name: str) -> int | None:
+    """Arrows of this type in the quiver. None only for a legacy sheet that lists
+    the arrow type among its weapons without a quiver entry (untracked); an arrow
+    type with no quiver entry and no legacy listing counts as 0."""
+    name = arrow_inventory_key(character, weapon_name)
+    if name is not None:
+        return character.inventory.get(name, 0)
+    key = normalise_weapon_key(weapon_name)
+    if key in [normalise_weapon_key(w) for w in character.weapons]:
+        return None
+    return 0
+
+
+def is_dual_wielding(character: Character) -> bool:
+    """Two weapons in hand (s40 dual-wield rules apply). A bow held in the off hand
+    while arrows are wielded is how a bow is shot, not dual wielding."""
+    main = normalise_weapon_key(character.equipped_weapon or "")
+    off = normalise_weapon_key(character.off_hand_weapon or "")
+    if not main or not off:
+        return False
+    if is_arrow(main) and is_bow(off):
+        return False
+    return True
+
+
+def consume_arrow(character: Character, weapon_name: str) -> int | None:
+    """Spend one arrow. Returns arrows left, or None when the type is untracked."""
+    name = arrow_inventory_key(character, weapon_name)
+    if name is None:
+        return None
+    left = max(0, character.inventory.get(name, 0) - 1)
+    if left == 0:
+        del character.inventory[name]
+    else:
+        character.inventory[name] = left
+    return left
+
+
+def quiver(character: Character) -> list[tuple[str, int]]:
+    """(catalog key, count) for every tracked arrow type with arrows left."""
+    out: list[tuple[str, int]] = []
+    for name, qty in character.inventory.items():
+        if qty > 0 and is_arrow(name):
+            out.append((normalise_weapon_key(name), qty))
+    return out
 
 
 def max_raises(character: Character) -> int:

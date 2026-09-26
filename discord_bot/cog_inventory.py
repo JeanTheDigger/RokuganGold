@@ -152,10 +152,18 @@ class InventoryPanel(discord.ui.View):
         self.clear_items()
         c = self.rec.character
         owned = [w for w in c.weapons]
+        wielded = combat.normalise_weapon_key(c.equipped_weapon or "")
         hand_opts = [discord.SelectOption(label="unarmed", value="", default=not c.equipped_weapon)] + [
             discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w.lower() == (c.equipped_weapon or "").lower()) for w in owned
         ]
-        self.add_item(_Pick("Main hand...", hand_opts, self._on_main, 0))
+        # Arrows come from the quiver (inventory counts), one entry per type with arrows left.
+        for key, qty in combat.quiver(c):
+            if key in [combat.normalise_weapon_key(w) for w in owned]:
+                continue
+            hand_opts.append(discord.SelectOption(
+                label=f"{_weapon_label(key)} ×{qty}"[:100], value=key, default=key == wielded,
+            ))
+        self.add_item(_Pick("Main hand...", hand_opts[:25], self._on_main, 0))
         off_opts = [discord.SelectOption(label="(no off-hand)", value="", default=not c.off_hand_weapon)] + [
             discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w.lower() == (c.off_hand_weapon or "").lower()) for w in owned
         ]
@@ -202,13 +210,22 @@ class InventoryPanel(discord.ui.View):
         if _is_arrow(new_weapon):
             has_bow = _is_bow(c.off_hand_weapon) if c.off_hand_weapon else False
             if not has_bow:
-                self.status = "Arrows must be used with a bow. Equip a bow first (main or off hand)."
-                await self.render(interaction)
-                return
+                # Picking arrows: The bow goes to the off hand on its own, from the
+                # main hand if one is wielded there, else the first bow owned.
+                bows = [w for w in c.weapons if _is_bow(w)]
+                if c.equipped_weapon and _is_bow(c.equipped_weapon):
+                    c.off_hand_weapon = c.equipped_weapon
+                elif bows:
+                    c.off_hand_weapon = bows[0]
+                else:
+                    self.status = "Arrows need a bow. You own none: Staff hand one out with `/give`."
+                    await self.render(interaction)
+                    return
         c.equipped_weapon = new_weapon
         if c.off_hand_weapon.lower() == c.equipped_weapon.lower():
             c.off_hand_weapon = ""
-        await self.commit(interaction, f"**{c.name}** wields **{c.equipped_weapon.replace('_', ' ')}**.", "wield")
+        with_bow = f" with the **{c.off_hand_weapon.replace('_', ' ')}**" if _is_arrow(new_weapon) else ""
+        await self.commit(interaction, f"**{c.name}** wields **{c.equipped_weapon.replace('_', ' ')}**{with_bow}.", "wield")
 
     async def _on_off(self, interaction: discord.Interaction, values: list[str]) -> None:
         if self.reload() is None:
