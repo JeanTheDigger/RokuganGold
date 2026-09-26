@@ -868,23 +868,30 @@ async def skill_check_cmd(
 
 @check.command(
     name="cooperative",
-    description="Cooperative check: Helpers roll at TN+5, each success gives primary +1k0 (cap Void). [Fortune]",
+    description="Cooperative roll (s41). Low: One roll plus helpers' Skill Ranks. High: All roll, best Rank aids the rest. [Fortune]",
 )
 @app_commands.describe(
     name="Primary character making the check.",
     trait="Trait for the roll (kept dice).",
     skill="Skill name (e.g. 'Athletics').",
-    tn="Target Number for the primary check.",
-    helpers="Helper names, comma-separated.",
+    tn="Target Number for the check.",
+    helpers="Other participants, comma-separated.",
+    mode="Low-consequence: The primary rolls once. High-consequence: Everyone rolls.",
     member="Another player's character [Fortune]",
     is_npc="Primary character is an NPC.",
     bonus="Flat bonus to the primary roll.",
     spend_void="Spend a Void Point for +1k1 on the primary roll.",
-    void_unskilled="Void Point: Treat Skill 0 as Rank 1.",
-    emphasis="Emphasis on the sheet: Rerolls 1s once.",
+    void_unskilled="Void Point: Treat Skill 0 as Rank 1 (primary only).",
+    emphasis="Emphasis for the roll: Rerolls 1s once for each participant who has it.",
     reason="Label shown with the roll.",
 )
-@app_commands.choices(trait=_CONTEST_TRAITS)
+@app_commands.choices(
+    trait=_CONTEST_TRAITS,
+    mode=[
+        app_commands.Choice(name="Low-consequence: One roll, helpers add their Skill Ranks", value="low"),
+        app_commands.Choice(name="High-consequence: Everyone rolls, best Rank aids the rest", value="high"),
+    ],
+)
 async def check_cooperative(
     interaction: discord.Interaction,
     name: str,
@@ -892,6 +899,7 @@ async def check_cooperative(
     skill: str,
     tn: app_commands.Range[int, 1, 200],
     helpers: str,
+    mode: app_commands.Choice[str],
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: app_commands.Range[int, -50, 50] = 0,
@@ -915,90 +923,153 @@ async def check_cooperative(
     if spend_void and void_unskilled:
         await interaction.response.send_message("Cannot use both spend_void (+1k1) and void_unskilled (Skill 0→1) on the same roll.", ephemeral=True)
         return
-    tv = stats.trait_value(c, trait.value)
-    sk = c.skills.get(skill, 0)
-    wp = stats.wound_penalty(c)
-    max_helpers = c.void_ring
-    helper_names = [h.strip() for h in helpers.split(",") if h.strip()]
-    if not helper_names:
-        await interaction.response.send_message("Provide at least one helper name.", ephemeral=True)
-        return
-    helper_tn = tn + 5
-    helper_lines: list[str] = []
-    successes = 0
-    for hname in helper_names:
-        hrec = _d.resolve_duelist(guild, interaction.channel_id, hname, False, None)
-        if hrec is None:
-            hrec = _d.store.get_by_name(guild, _d.NPC_OWNER, hname)
-        if hrec is None:
-            helper_lines.append(f"**{hname}**: Not found")
-            continue
-        hc = hrec.character
-        htv = stats.trait_value(hc, trait.value)
-        hsk = hc.skills.get(skill, 0)
-        hwp = stats.wound_penalty(hc)
-        h_adv_r, h_adv_k, h_adv_f, _ = advantage_effects.skill_check_modifiers(hc, skill, trait.value)
-        h_taint_r, _ = taint.social_roll_penalty(hc, skill)
-        h_fear = _d.fear_penalty(interaction.channel_id, hc.name)
-        h_extra_r = h_adv_r + h_taint_r - h_fear
-        h_emph = bool(hc.emphases.get(skill)) if hasattr(hc, "emphases") else False
-        hresult = combat.resolve_skill_check(htv, hsk, helper_tn, _d.engine, bonus=hwp + h_adv_f, extra_rolled=h_extra_r, extra_kept=h_adv_k, emphasis=h_emph)
-        mark = "[+]" if hresult["success"] else "[-]"
-        helper_lines.append(
-            f"{mark} **{hc.name}** rolled **{hresult['total']}** vs TN {helper_tn} "
-            f"({hresult['rolled']}k{hresult['kept']})"
-        )
-        if hresult["success"]:
-            successes += 1
-    applied = min(successes, max_helpers)
-    helper_rolled = applied
-    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
-    adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     emph, emph_err = _emphasis_for(c, skill, emphasis)
     if emph_err:
         await interaction.response.send_message(emph_err, ephemeral=True)
         return
-    if emph:
-        adv_notes = adv_notes + [f"Emphasis ({emph}): 1s rerolled once"]
+    helper_names = [h.strip() for h in helpers.split(",") if h.strip()]
+    if not helper_names:
+        await interaction.response.send_message("Provide at least one helper name.", ephemeral=True)
+        return
+    helper_recs = []
+    missing: list[str] = []
+    unable: list[str] = []
+    for hname in helper_names:
+        hrec = _d.resolve_duelist(guild, interaction.channel_id, hname, False, None) or _d.store.get_by_name_guild(guild, hname)
+        if hrec is None:
+            missing.append(hname)
+            continue
+        hc = hrec.character
+        if hc.name.lower() == c.name.lower():
+            continue
+        if stats.is_dead(hc) or stats.wound_level_name(hc) == "Out":
+            unable.append(hc.name)
+            continue
+        helper_recs.append(hrec)
+    if not helper_recs:
+        detail = ""
+        if missing:
+            detail += f" Not found: {', '.join(missing)}."
+        if unable:
+            detail += f" Cannot act: {', '.join(unable)}."
+        await interaction.response.send_message(f"No able helpers.{detail}", ephemeral=True)
+        return
+
+    def _modifiers(ch):
+        """(extra_rolled, extra_kept, flat, notes, emphasis_name) for one participant."""
+        adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(ch, skill, trait.value)
+        tp_r, tp_n = taint.social_roll_penalty(ch, skill)
+        adv_r += tp_r
+        adv_notes = adv_notes + tp_n
+        adv_r, adv_notes = _fear(interaction, ch, adv_r, adv_notes)
+        e = combat.emphasis_match(ch, skill, emphasis) if emphasis else None
+        if e:
+            adv_notes = adv_notes + [f"Emphasis ({e}): 1s rerolled once"]
+        return adv_r, adv_k, adv_f, adv_notes, e
+
+    sk = c.skills.get(skill, 0)
+    wp = stats.wound_penalty(c)
+    tv = stats.trait_value(c, trait.value)
+    adv_r, adv_k, adv_f, adv_notes, _ = _modifiers(c)
     void_r, void_k, void_spent, void_line, sk = _try_spend_void(
         c, spend_void, skill_name=skill, sk=sk, void_unskilled=void_unskilled,
     )
-    result = combat.resolve_skill_check(tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f, extra_rolled=helper_rolled + adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph))
-    result["rolled"] = max(1, tv + sk + helper_rolled + adv_r + void_r)
-    result["kept"] = max(1, tv + adv_k + void_k)
     skill_label = f"{skill} {sk}" if sk > 0 else f"{skill} (unskilled)"
     title = "Cooperative Check"
     if reason:
         title += f": {reason}"
-    embed = discord.Embed(
-        title=f"{title}: {c.name}",
-        color=discord.Color.green() if result["success"] else discord.Color.red(),
-    )
-    embed.add_field(
-        name="Helpers",
-        value="\n".join(helper_lines) + f"\n**{applied}** of {len(helper_names)} succeeded "
-              f"(cap {max_helpers} = Void Ring)",
-        inline=False,
-    )
-    wp_str = f" {wp}" if wp else ""
-    bonus_str = f" {bonus:+d}" if bonus else ""
-    coop_str = f" +{helper_rolled}k0 assist" if helper_rolled else ""
-    roll_text = (
-        f"{skill_label}/{trait.name} ({result['rolled']}k{result['kept']}"
-        f"{wp_str}{bonus_str}{coop_str}) vs TN **{tn}**"
-    )
-    if void_line:
-        roll_text += f"\n{void_line}"
-    embed.add_field(name="Primary Roll", value=roll_text, inline=False)
-    embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
-    verdict = "**Success!**" if result["success"] else "**Failure.**"
-    embed.add_field(
-        name="Result",
-        value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
-        inline=False,
-    )
-    if adv_notes:
-        embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
+    notes_extra = []
+    if missing:
+        notes_extra.append(f"Not found: {', '.join(missing)}")
+    if unable:
+        notes_extra.append(f"Cannot act: {', '.join(unable)}")
+
+    if mode.value == "low":
+        coop_bonus = sum(h.character.skills.get(skill, 0) for h in helper_recs)
+        result = combat.resolve_skill_check(
+            tv, sk, tn, _d.engine, bonus=bonus + wp + adv_f + coop_bonus,
+            extra_rolled=adv_r + void_r, extra_kept=adv_k + void_k, emphasis=bool(emph),
+        )
+        embed = discord.Embed(
+            title=f"{title}: {c.name}",
+            color=discord.Color.green() if result["success"] else discord.Color.red(),
+        )
+        helper_lines = [f"**{h.character.name}**: {skill} {h.character.skills.get(skill, 0)}" for h in helper_recs]
+        helper_lines.append(f"Combined Skill Ranks: **+{coop_bonus}** to the total (s41 low-consequence)")
+        embed.add_field(name="Helpers", value="\n".join(helper_lines + notes_extra)[:1024], inline=False)
+        wp_str = f" {wp}" if wp else ""
+        bonus_str = f" {bonus:+d}" if bonus else ""
+        roll_text = (
+            f"{skill_label}/{trait.name} ({result['rolled']}k{result['kept']}"
+            f"{wp_str}{bonus_str} +{coop_bonus} cooperation) vs TN **{tn}**"
+        )
+        if void_line:
+            roll_text += f"\n{void_line}"
+        embed.add_field(name="Primary Roll", value=roll_text[:1024], inline=False)
+        embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
+        verdict = "**Success!**" if result["success"] else "**Failure.**"
+        embed.add_field(
+            name="Result",
+            value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
+            inline=False,
+        )
+        if adv_notes:
+            embed.add_field(name="Advantages/Disadvantages", value="\n".join(adv_notes)[:1024], inline=False)
+    else:
+        ranked = [(c.skills.get(skill, 0), c.name)] + [(h.character.skills.get(skill, 0), h.character.name) for h in helper_recs]
+        grant, grantor = max(ranked, key=lambda x: x[0])
+        lines: list[str] = []
+        successes = 0
+        primary_result = None
+        for prec in [rec] + helper_recs:
+            pc = prec.character
+            is_primary = prec is rec
+            is_grantor = pc.name == grantor
+            aid = 0 if is_grantor else grant
+            if is_primary:
+                p_r, p_k, p_f, p_notes, p_e = adv_r, adv_k, adv_f, adv_notes, emph
+                p_sk, p_wp, p_tv = sk, wp, tv
+                extra_r, extra_k, flat = p_r + void_r, p_k + void_k, bonus + p_wp + p_f + aid
+            else:
+                p_r, p_k, p_f, p_notes, p_e = _modifiers(pc)
+                p_sk, p_wp, p_tv = pc.skills.get(skill, 0), stats.wound_penalty(pc), stats.trait_value(pc, trait.value)
+                extra_r, extra_k, flat = p_r, p_k, p_wp + p_f + aid
+            r = combat.resolve_skill_check(
+                p_tv, p_sk, tn, _d.engine, bonus=flat,
+                extra_rolled=extra_r, extra_kept=extra_k, emphasis=bool(p_e),
+            )
+            if r["success"]:
+                successes += 1
+            if is_primary:
+                primary_result = r
+            mark = "[+]" if r["success"] else "[-]"
+            aid_str = f" +{aid} from {grantor}" if aid else (" (grants their Rank)" if is_grantor else "")
+            tag = " (primary)" if is_primary else ""
+            lines.append(
+                f"{mark} **{pc.name}**{tag} {skill} {p_sk}: **{r['total']}** vs TN {tn} "
+                f"({r['rolled']}k{r['kept']}{aid_str})"
+            )
+            if p_notes:
+                lines.append("   " + " · ".join(p_notes))
+        embed = discord.Embed(
+            title=f"{title}: {c.name} and {len(helper_recs)} helper(s)",
+            color=discord.Color.green() if primary_result and primary_result["success"] else discord.Color.red(),
+        )
+        embed.add_field(
+            name="Rolls",
+            value=(f"**{grantor}** has the highest {skill} Rank ({grant}) and grants +{grant} to every other roll (s41 high-consequence).\n"
+                   + "\n".join(lines + notes_extra))[:1024],
+            inline=False,
+        )
+        if void_line:
+            embed.add_field(name="Primary Void", value=void_line[:1024], inline=False)
+        if primary_result is not None:
+            embed.add_field(name="Primary Dice", value=_d.format_dice(primary_result["dice"])[:1024], inline=False)
+        embed.add_field(
+            name="Result",
+            value=f"**{successes}** of {1 + len(helper_recs)} participants succeeded vs TN {tn}.",
+            inline=False,
+        )
     if void_spent:
         _d.store.save(rec)
         _d.tally(interaction.channel_id, c.name, "void")
