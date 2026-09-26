@@ -4742,9 +4742,14 @@ async def combat_summary(interaction: discord.Interaction) -> None:
             delayed = ", DELAYED" if cb.delayed else ""
             stance_label = cb.stance.replace("_", " ").title()
             acts_left = 2 - cb.actions_used
+            init_line = f"Init: **{cb.effective_initiative}**" + (f" ({cb.initiative_detail})" if cb.initiative_detail else "")
+            init_note = skill_mastery.initiative_reminder(c, combat.get_weapon_profile(c.equipped_weapon or "katana"))
+            if init_note:
+                init_line += f"\n{init_note}"
             value = (
                 f"Wounds: {c.wounds_taken}/{cap} **{lvl}**{pen_str}\n"
                 f"ATN: **{tn}** · {vp} · Stance: **{stance_label}** · Acts: {acts_left}\n"
+                f"{init_line}\n"
                 f"Conditions: {conds}{fd}{v_atn}{v_init}{c_bonus}{c_init}{guard}{cover}{held}{delayed}"
             )
         else:
