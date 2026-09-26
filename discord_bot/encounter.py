@@ -356,10 +356,16 @@ class Encounter:
             return None
         if not self.started:
             # Opening the fight: the top of the order acts first, so do not
-            # step past them.
+            # step past them. Anything done before initiative began (a grapple
+            # or strike while the order was still forming) is not a Round 1
+            # action, so every combatant starts the Round with a full budget.
             self.started = True
             if not self.started_at:
                 self.started_at = time.time()
+            for c in self.combatants:
+                c.actions_used = 0
+                c.used_this_turn.clear()
+                c.used_this_round.clear()
             self.turn_index = 0
             self._begin_turn(self.current())
             return self.current()

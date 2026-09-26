@@ -170,6 +170,17 @@ def _declared_defense(cb) -> dict:
     return out
 
 
+def _actions_spent_msg(cb, enc) -> str:
+    """Why an actor cannot act now: Budget spent, and when it comes back."""
+    cur = enc.current() if enc is not None and enc.started else None
+    msg = f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
+    if cur is not None and cur is not cb:
+        msg += f"It is **{cur.name}**'s turn; {cb.name}'s actions refresh when their own turn begins. "
+    else:
+        msg += "They refresh at the start of their next turn. "
+    return msg + "Staff can override with `/fight action action_type:Reset`."
+
+
 def _declared_simple_attack(cb) -> bool:
     """True if a declared technique lets this combatant attack as a Simple Action."""
     if cb is None:
@@ -3357,8 +3368,7 @@ async def _execute_attack(
     decl_simple = _declared_simple_attack(atk_combatant)
     if atk_combatant is not None and atk_combatant.actions_used >= (2 if decl_simple else 1):
         await _reply(
-            f"**{atk_combatant.name}** has already used actions this turn ({atk_combatant.actions_used}/2). "
-            f"Use `/fight action action_type:Reset` to override.",
+            _actions_spent_msg(atk_combatant, enc),
             ephemeral=True,
         )
         return
@@ -5335,8 +5345,7 @@ async def combat_full_defense(
         return
     if cb.actions_used > 0:
         await interaction.response.send_message(
-            f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-            f"Use `/fight action action_type:Reset` to override.",
+            _actions_spent_msg(cb, enc),
             ephemeral=True,
         )
         return
@@ -5731,8 +5740,7 @@ class GrappleBoardView(views_base.PersistentView):
             return
         if cb_ctrl.actions_used > 0:
             await interaction.response.send_message(
-                f"**{cb_ctrl.name}** has already used actions this turn ({cb_ctrl.actions_used}/2). "
-                f"Use `/fight action action_type:Reset` to override.", ephemeral=True,
+                _actions_spent_msg(cb_ctrl, enc), ephemeral=True,
             )
             return
         atk_rec = _d.resolve_combatant_record(self.guild_id, cb_ctrl)
@@ -5784,8 +5792,7 @@ class GrappleBoardView(views_base.PersistentView):
             return
         if cb_ctrl.actions_used > 0:
             await interaction.response.send_message(
-                f"**{cb_ctrl.name}** has already used actions this turn ({cb_ctrl.actions_used}/2). "
-                f"Use `/fight action action_type:Reset` to override.", ephemeral=True,
+                _actions_spent_msg(cb_ctrl, enc), ephemeral=True,
             )
             return
         cb_ctrl.conditions.discard("grappled")
@@ -5830,8 +5837,7 @@ class GrappleBoardView(views_base.PersistentView):
             return
         if cb_ctrl.actions_used > 0:
             await interaction.response.send_message(
-                f"**{cb_ctrl.name}** has already used actions this turn ({cb_ctrl.actions_used}/2). "
-                f"Use `/fight action action_type:Reset` to override.", ephemeral=True,
+                _actions_spent_msg(cb_ctrl, enc), ephemeral=True,
             )
             return
         cb_def.conditions.add("pinned")
@@ -5868,8 +5874,7 @@ class GrappleBoardView(views_base.PersistentView):
             return
         if cb_ctrl.actions_used >= 2:
             await interaction.response.send_message(
-                f"**{cb_ctrl.name}** has already used actions this turn ({cb_ctrl.actions_used}/2). "
-                f"Use `/fight action action_type:Reset` to override.", ephemeral=True,
+                _actions_spent_msg(cb_ctrl, enc), ephemeral=True,
             )
             return
         cb_ctrl.conditions.discard("grappled")
@@ -5905,8 +5910,7 @@ class GrappleBoardView(views_base.PersistentView):
             return
         if cb_def.actions_used > 0:
             await interaction.response.send_message(
-                f"**{cb_def.name}** has already used actions this turn ({cb_def.actions_used}/2). "
-                f"Use `/fight action action_type:Reset` to override.", ephemeral=True,
+                _actions_spent_msg(cb_def, enc), ephemeral=True,
             )
             return
         rec_def = _d.resolve_combatant_record(self.guild_id, cb_def)
@@ -6152,8 +6156,7 @@ async def grapple_initiate(
         tn += cond_def_mod + extra_tn
     if atk_cb.actions_used > 0:
         await interaction.response.send_message(
-            f"**{atk_cb.name}** has already used actions this turn ({atk_cb.actions_used}/2). "
-            f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
+            _actions_spent_msg(atk_cb, enc), ephemeral=True)
         return
     ar, af, _ = condition_effects.contested_roll_modifier(atk_cb.conditions)
     ar -= atk_cb.fear_penalty
@@ -6334,8 +6337,7 @@ async def grapple_hit(
         return
     if atk_cb.actions_used > 0:
         await interaction.response.send_message(
-            f"**{atk_cb.name}** has already used actions this turn ({atk_cb.actions_used}/2). "
-            f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
+            _actions_spent_msg(atk_cb, enc), ephemeral=True)
         return
     guild = str(interaction.guild_id)
     atk_rec = _d.resolve_combatant_record(guild, atk_cb)
@@ -6407,8 +6409,7 @@ async def grapple_throw(
         return
     if thrower_cb.actions_used > 0:
         await interaction.response.send_message(
-            f"**{thrower_cb.name}** has already used actions this turn ({thrower_cb.actions_used}/2). "
-            f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
+            _actions_spent_msg(thrower_cb, enc), ephemeral=True)
         return
     thrower_cb.conditions.discard("grappled")
     target_cb.conditions.discard("grappled")
@@ -6463,8 +6464,7 @@ async def grapple_pin(
         return
     if ctrl_cb.actions_used > 0:
         await interaction.response.send_message(
-            f"**{ctrl_cb.name}** has already used actions this turn ({ctrl_cb.actions_used}/2). "
-            f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
+            _actions_spent_msg(ctrl_cb, enc), ephemeral=True)
         return
     tgt_cb.conditions.add("pinned")
     ctrl_cb.actions_used = 2
@@ -6516,8 +6516,7 @@ async def grapple_break(
     if opponent is None:
         if cb.actions_used >= 2:
             await interaction.response.send_message(
-                f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-                f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
+                _actions_spent_msg(cb, enc), ephemeral=True)
             return
         cb.conditions.discard("grappled")
         cb.conditions.discard("pinned")
@@ -6542,8 +6541,7 @@ async def grapple_break(
         return
     if cb.actions_used > 0:
         await interaction.response.send_message(
-            f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
-            f"Use `/fight action action_type:Reset` to override.", ephemeral=True)
+            _actions_spent_msg(cb, enc), ephemeral=True)
         return
     rec_cb = _d.resolve_combatant_record(guild, cb)
     rec_opp = _d.resolve_combatant_record(guild, opp_cb)
