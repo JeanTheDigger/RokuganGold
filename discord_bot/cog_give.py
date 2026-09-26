@@ -37,6 +37,8 @@ class _Deps:
     is_dm: object
     modify_inventory: object
     CAT_PLAYER_SUPPORT: str
+    find_any_character: object
+    any_character_autocomplete: object
 
 _d = _Deps()
 
@@ -56,6 +58,8 @@ def init(
     is_dm,
     modify_inventory,
     cat_player_support: str,
+    find_any_character,
+    any_character_autocomplete,
 ) -> None:
     _d.store = store
     _d.NPC_OWNER = npc_owner
@@ -70,9 +74,11 @@ def init(
     _d.is_dm = is_dm
     _d.modify_inventory = modify_inventory
     _d.CAT_PLAYER_SUPPORT = cat_player_support
+    _d.find_any_character = find_any_character
+    _d.any_character_autocomplete = any_character_autocomplete
 
-    give.autocomplete("npc")(_d.npc_autocomplete)
-    take.autocomplete("npc")(_d.npc_autocomplete)
+    give.autocomplete("character")(any_character_autocomplete)
+    take.autocomplete("character")(any_character_autocomplete)
     give.autocomplete("what")(_give_what_ac)
     take.autocomplete("what")(_take_what_ac)
 
@@ -84,16 +90,19 @@ def init(
 async def _resolve_target(
     interaction: discord.Interaction,
     member: discord.Member | None,
-    npc: str | None,
+    character: str | None,
 ) -> tuple[_storage_mod.CharacterRecord | None, str | None]:
-    if member is not None and npc is not None:
-        return None, "Provide `member:` or `npc:`, not both."
-    if npc is not None:
+    """The target sheet: A character name (player character or NPC), a member's
+    active character, or the invoker's own. Names work from any channel; Discord
+    only offers members who can see the current channel in a member picker."""
+    if member is not None and character is not None:
+        return None, "Provide `member:` or `character:`, not both."
+    if character is not None:
         if interaction.guild_id is None:
             return None, "Please use this in a server channel."
-        rec = _d.store.get_by_name(str(interaction.guild_id), _d.NPC_OWNER, npc)
+        rec = _d.find_any_character(str(interaction.guild_id), character.strip())
         if rec is None:
-            return None, f"No NPC named **{npc}**."
+            return None, f"No character named **{character}**."
         return rec, None
     return await _d.resolve_active(interaction, member)
 
@@ -206,10 +215,10 @@ async def _take_what_ac(interaction: discord.Interaction, current: str) -> list[
         return []
     ns = interaction.namespace
     guild = str(interaction.guild_id)
-    npc = getattr(ns, "npc", None)
+    character = getattr(ns, "character", None)
     member = getattr(ns, "member", None)
-    if npc:
-        rec = _d.store.get_by_name(guild, _d.NPC_OWNER, npc)
+    if character:
+        rec = _d.find_any_character(guild, str(character).strip())
     else:
         rec = _d.store.get_active(guild, str(member.id if member is not None else interaction.user.id))
     if rec is None:
@@ -289,13 +298,13 @@ async def _notify_player(interaction: discord.Interaction, rec: _storage_mod.Cha
 
 async def _transfer(
     interaction: discord.Interaction, giving: bool, what: str, quantity: int,
-    member: discord.Member | None, npc: str | None, reason: str | None,
+    member: discord.Member | None, character: str | None, reason: str | None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -330,8 +339,8 @@ async def _transfer(
 @app_commands.describe(
     what="A weapon or armor from the catalog, koku, bu or zeni, or any item name.",
     quantity="How many (default 1). For money, the amount.",
-    member="Target player (default: You).",
-    npc="Target NPC instead of a player.",
+    member="Target player, if they can see this channel (default: You).",
+    character="Target by character name, player or NPC. Works from any channel.",
     reason="Shown to the player and kept in the audit log.",
 )
 async def give(
@@ -339,18 +348,18 @@ async def give(
     what: app_commands.Range[str, 1, 80],
     quantity: app_commands.Range[int, 1, 9999] = 1,
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
     reason: app_commands.Range[str, 1, 200] | None = None,
 ) -> None:
-    await _transfer(interaction, True, what, quantity, member, npc, reason)
+    await _transfer(interaction, True, what, quantity, member, character, reason)
 
 
 @app_commands.command(name="take", description="Take a weapon, armor, money or item away from a character. [Fortune]")
 @app_commands.describe(
     what="Something the character holds: Pick from the list.",
     quantity="How many (default 1). For money, the amount.",
-    member="Target player (default: You).",
-    npc="Target NPC instead of a player.",
+    member="Target player, if they can see this channel (default: You).",
+    character="Target by character name, player or NPC. Works from any channel.",
     reason="Shown to the player and kept in the audit log.",
 )
 async def take(
@@ -358,10 +367,10 @@ async def take(
     what: app_commands.Range[str, 1, 80],
     quantity: app_commands.Range[int, 1, 9999] = 1,
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
     reason: app_commands.Range[str, 1, 200] | None = None,
 ) -> None:
-    await _transfer(interaction, False, what, quantity, member, npc, reason)
+    await _transfer(interaction, False, what, quantity, member, character, reason)
 
 
 # ---------------------------------------------------------------------------

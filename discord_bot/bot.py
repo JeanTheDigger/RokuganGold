@@ -12514,6 +12514,8 @@ cog_give.init(
     is_dm=_is_dm,
     modify_inventory=_modify_inventory,
     cat_player_support=CAT_PLAYER_SUPPORT,
+    find_any_character=_find_any_character,
+    any_character_autocomplete=_any_character_autocomplete,
 )
 
 cog_trade.init(
