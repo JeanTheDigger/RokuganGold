@@ -879,11 +879,11 @@ def resolve_honor_roll(
     dice_engine: DiceEngine,
     bonus: int = 0,
 ) -> dict:
-    """Honor Roll: roll Honor Rank dice, keep 1, vs a TN.
-    Dice explode as on any Trait Roll (L5R 4e: only Unskilled Skill rolls
-    forgo exploding dice)."""
+    """The Honor Roll (GDD s46, optional rule): re-roll a failed Skill, Trait,
+    Ring or Spell Casting roll at the same TN using Honor Rank as both rolled
+    and kept dice (Rank 6 rolls 6k6). Dice explode as on any Trait Roll."""
     rolled = max(1, honor_rank)
-    result = dice_engine.roll_and_keep(rolled, 1)
+    result = dice_engine.roll_and_keep(rolled, rolled)
     total = result.total + bonus
     return {
         "success": total >= tn,
@@ -892,7 +892,7 @@ def resolve_honor_roll(
         "margin": total - tn,
         "dice": result,
         "rolled": rolled,
-        "kept": 1,
+        "kept": rolled,
     }
 
 

@@ -566,11 +566,11 @@ async def fear_check(
 
 @check.command(
     name="honor",
-    description="Honor Roll: Roll Honor Rank dice, keep 1, vs a TN.",
+    description="Honor Roll (s46): Re-roll a failed roll at the same TN with Honor Rank k Honor Rank. Once per session.",
 )
 @app_commands.describe(
     name="Character (default: Yours; others or NPCs need Fortune).",
-    tn="Target Number to resist.",
+    tn="The TN of the roll that just failed.",
     member="Another player's character [Fortune]",
     is_npc="The name is an NPC.",
     bonus="Flat bonus.",
@@ -608,13 +608,16 @@ async def honor_roll(
         inline=False,
     )
     embed.add_field(name="Dice", value=_d.format_dice(result["dice"])[:1024], inline=False)
-    verdict = "**Honor holds!**" if success else "**Honor wavers.**"
+    verdict = "**Success: The re-rolled action succeeds.**" if success else (
+        "**Failure: The action fails and the character loses a full Rank (10 points) of Honor.** "
+        "Staff apply the Honor loss."
+    )
     embed.add_field(
         name="Result",
         value=f"**{result['total']}** vs TN {tn}: {verdict} (margin {result['margin']:+d})",
         inline=False,
     )
-    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
+    embed.set_footer(text=f"Once per session (s46). Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
