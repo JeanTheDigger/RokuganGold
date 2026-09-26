@@ -60,6 +60,7 @@ class _Deps:
     category_autocomplete: object
     activate_kata: object
     activate_kiho: object
+    inventory_callback: object
 
 
 _d = _Deps()
@@ -234,6 +235,7 @@ def init(
     category_autocomplete,
     activate_kata,
     activate_kiho,
+    inventory_callback,
 ) -> None:
     _d.store = store
     _d.engine = engine
@@ -264,6 +266,7 @@ def init(
     _d.category_autocomplete = category_autocomplete
     _d.activate_kata = activate_kata
     _d.activate_kiho = activate_kiho
+    _d.inventory_callback = inventory_callback
 
     # Wire autocompletes programmatically (injected functions can't be used in decorators)
     attack.autocomplete("attacker_npc")(npc_autocomplete)
@@ -2298,6 +2301,12 @@ class CombatBoardView(views_base.PersistentView):
         await interaction.response.send_message(
             f"Select a spell for **{cur.name}** to cast:", view=view, ephemeral=True,
         )
+
+    @discord.ui.button(label="Gear", style=discord.ButtonStyle.secondary, row=4)
+    async def gear_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        """Open the clicker's own inventory panel: Wield, swap or lower weapons, pick
+        arrows, put armor on or off. Private to the clicker; no action cost is charged."""
+        await _d.inventory_callback(interaction)
 
 
 class _BoardAttackTargetSelect(discord.ui.View):

@@ -12380,6 +12380,7 @@ cog_combat.init(
     category_autocomplete=_category_autocomplete,
     activate_kata=_activate_kata,
     activate_kiho=_activate_kiho,
+    inventory_callback=cog_inventory.inventory.callback,
 )
 
 cog_inventory.init(
