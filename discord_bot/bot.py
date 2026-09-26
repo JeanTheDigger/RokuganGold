@@ -4505,7 +4505,6 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/edit activate", "Activate/deactivate Kata, Kiho, or Tattoo"),
         ("/edit rename / notes", "Rename a character or set notes"),
         ("/edit mount", "Toggle mounted state (outside combat)"),
-        ("/edit item", "Add/remove inventory items"),
         ("/edit spell", "Add/remove known spells"),
     ]),
     ("", "Creatures", "Bestiary creature management.", [
@@ -5643,9 +5642,8 @@ _HELP_BLURBS: dict[str, str] = {
     "grapple": "Shortcut to start or manage a grapple. [Fortune]",
     "duel": "Shortcut to start an Iaijutsu duel. [Fortune]",
     "ref": "Weapons, armor, schools, families, kata, kiho, advantages, tattoos, heritage, travel, encumbrance, dual-wield, called shot, modifiers.",
-    "givekoku": "Give or take koku from a character. [Fortune]",
-    "givebu": "Give or take bu from a character. [Fortune]",
-    "givezeni": "Give or take zeni from a character. [Fortune]",
+    "give": "Hand a character a catalog weapon, armor, money or any item; the player is told. [Fortune]",
+    "take": "Take a weapon, armor, money or item away from a character; the player is told. [Fortune]",
     "stipend": "Configure monthly clan stipends, paid on IC month change. [Kami]",
     "setup": "Server setup [Kami].",
     "sync": "Re-sync slash commands [Kami].",
@@ -5659,7 +5657,7 @@ _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Fights and magic", ["combat", "fight", "engage", "grapple", "duel", "spell"]),
     ("Places", ["room", "location"]),
     ("Rules reference", ["ref"]),
-    ("Staff [Fortune]", ["npc", "edit", "givekoku", "givebu", "givezeni", "stipend", "creature", "category", "weather", "dm"]),
+    ("Staff [Fortune]", ["npc", "edit", "give", "take", "stipend", "creature", "category", "weather", "dm"]),
     ("Admin [Kami]", ["setup", "sync", "ping"]),
 ]
 _HELP_ORDER: list[str] = [name for _, names in _HELP_SECTIONS for name in names]
@@ -12392,7 +12390,6 @@ cog_inventory.init(
     is_dm=_is_dm,
     resolve_active_for_edit=_resolve_active_for_edit,
     audit_stat=_audit_stat,
-    modify_inventory=_modify_inventory,
     npc_autocomplete=_npc_autocomplete,
     role_fortune=ROLE_FORTUNE,
     role_kami=ROLE_KAMI,
@@ -12501,7 +12498,6 @@ cog_edit.init(
     kiho_autocomplete=_kiho_autocomplete,
     tattoo_autocomplete=_tattoo_autocomplete,
     quality_autocomplete=_quality_autocomplete,
-    modify_inventory=_modify_inventory,
 )
 
 cog_give.init(
@@ -12515,6 +12511,9 @@ cog_give.init(
     audit_stat=_audit_stat,
     npc_autocomplete=_npc_autocomplete,
     combat_log=_combat_log,
+    is_dm=_is_dm,
+    modify_inventory=_modify_inventory,
+    cat_player_support=CAT_PLAYER_SUPPORT,
 )
 
 cog_trade.init(
@@ -12526,9 +12525,8 @@ cog_trade.trade.autocomplete("item")(cog_trade._inventory_autocomplete)
 
 client.tree.add_command(sheet)
 client.tree.add_command(cog_edit.edit_group)
-client.tree.add_command(cog_give.givekoku)
-client.tree.add_command(cog_give.givebu)
-client.tree.add_command(cog_give.givezeni)
+client.tree.add_command(cog_give.give)
+client.tree.add_command(cog_give.take)
 client.tree.add_command(cog_give.stipend_group)
 client.tree.add_command(cog_trade.pay)
 client.tree.add_command(cog_trade.trade)

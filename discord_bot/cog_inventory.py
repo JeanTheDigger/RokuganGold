@@ -34,7 +34,6 @@ class _Deps:
     is_dm: Callable[[discord.Interaction], bool]
     resolve_active_for_edit: Callable[..., Awaitable[tuple[storage.CharacterRecord | None, str | None]]]
     audit_stat: Callable[..., Awaitable[None]]
-    modify_inventory: Callable[..., tuple[bool, str]]
     npc_autocomplete: Callable[..., Awaitable[list[app_commands.Choice[str]]]]
     role_fortune: str
     role_kami: str
@@ -91,94 +90,6 @@ def build_inventory_embed(rec: storage.CharacterRecord) -> discord.Embed:
     return embed
 
 
-class _ItemModal(discord.ui.Modal, title="Add an item"):
-    name = discord.ui.TextInput(label="Item", placeholder="e.g. Travel rations", max_length=60)
-    quantity = discord.ui.TextInput(label="Quantity", default="1", max_length=4)
-
-    def __init__(self, panel: "InventoryPanel") -> None:
-        super().__init__()
-        self.panel = panel
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        try:
-            qty = int(self.quantity.value.strip() or "1")
-        except ValueError:
-            await interaction.response.send_message("Quantity must be a whole number.", ephemeral=True)
-            return
-        if not 1 <= qty <= 9999:
-            await interaction.response.send_message("Quantity must be 1-9999.", ephemeral=True)
-            return
-        if self.panel.reload() is None:
-            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
-            return
-        c = self.panel.rec.character
-        ok, msg = _d.modify_inventory(c.inventory, c.name, self.name.value.strip(), qty, False)
-        if not ok:
-            await interaction.response.send_message(msg, ephemeral=True)
-            return
-        await self.panel.commit(interaction, msg)
-
-
-class _KokuModal(discord.ui.Modal, title="Purse: Add or Spend"):
-    koku_input = discord.ui.TextInput(label="Koku (negative spends)", placeholder="5 or -2", required=False, max_length=8)
-    bu_input = discord.ui.TextInput(label="Bu (negative spends)", placeholder="3 or -1", required=False, max_length=8)
-    zeni_input = discord.ui.TextInput(label="Zeni (negative spends)", placeholder="10 or -5", required=False, max_length=8)
-    reason = discord.ui.TextInput(label="Reason (optional)", required=False, max_length=100)
-
-    def __init__(self, panel: "InventoryPanel") -> None:
-        super().__init__()
-        self.panel = panel
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        dk = db = dz = 0
-        for raw, label, target in (
-            (self.koku_input.value, "Koku", "dk"),
-            (self.bu_input.value, "Bu", "db"),
-            (self.zeni_input.value, "Zeni", "dz"),
-        ):
-            txt = (raw or "").strip()
-            if not txt:
-                continue
-            try:
-                val = int(txt)
-            except ValueError:
-                await interaction.response.send_message(f"{label} must be a whole number.", ephemeral=True)
-                return
-            if target == "dk":
-                dk = val
-            elif target == "db":
-                db = val
-            else:
-                dz = val
-        if dk == 0 and db == 0 and dz == 0:
-            await interaction.response.send_message("Enter at least one amount.", ephemeral=True)
-            return
-        if self.panel.reload() is None:
-            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
-            return
-        c = self.panel.rec.character
-        delta_zeni = dk * 50 + db * 10 + dz
-        if delta_zeni < 0 and c.total_zeni + delta_zeni < 0:
-            await interaction.response.send_message(
-                f"**{c.name}** only has **{format_purse(c)}** (not enough).", ephemeral=True)
-            return
-        total = c.total_zeni + delta_zeni
-        c.koku = total // 50
-        remainder = total % 50
-        c.bu = remainder // 10
-        c.zeni = remainder % 10
-        parts: list[str] = []
-        if dk:
-            parts.append(f"{'Received' if dk > 0 else 'Spent'} **{abs(dk)}** koku")
-        if db:
-            parts.append(f"{'received' if db > 0 else 'spent'} **{abs(db)}** bu")
-        if dz:
-            parts.append(f"{'received' if dz > 0 else 'spent'} **{abs(dz)}** zeni")
-        label = ", ".join(parts)
-        why = f" ({self.reason.value.strip()})" if (self.reason.value or "").strip() else ""
-        await self.panel.commit(interaction, f"{label}{why}. Balance: **{format_purse(c)}**.")
-
-
 class _Pick(discord.ui.Select):
     def __init__(self, placeholder: str, options: list[discord.SelectOption], handler, row: int,
                  max_values: int = 1) -> None:
@@ -197,9 +108,6 @@ class InventoryPanel(discord.ui.View):
         ("drop", "Drop a weapon (remove from owned)", False),
         ("remove_item", "Remove items", False),
         ("wear_armor", "Put on / take off armor", False),
-        ("add_item", "Add an item (staff)", True),
-        ("koku", "Purse: Add or spend koku/bu/zeni (staff)", True),
-        ("armor", "Assign armor (staff)", True),
         ("qualities", "Weapon qualities (staff)", True),
     ]
 
@@ -252,17 +160,10 @@ class InventoryPanel(discord.ui.View):
             discord.SelectOption(label=_weapon_label(w)[:100], value=w, default=w.lower() == (c.off_hand_weapon or "").lower()) for w in owned
         ]
         self.add_item(_Pick("Off hand...", off_opts, self._on_off, 1))
-        groups = sorted({w["skill"] for w in combat.WEAPON_CATALOG.values()})
         action_opts = [discord.SelectOption(label=label, value=value, default=value == self.action)
                        for value, label, staff_only in self.ACTIONS if self.staff or not staff_only]
-        if self.staff:
-            action_opts += [discord.SelectOption(label=f"Add weapon: {g}", value=f"add:{g}", default=self.action == f"add:{g}") for g in groups]
         self.add_item(_Pick("Action...", action_opts, self._on_action, 2))
-        if self.action.startswith("add:"):
-            group = self.action[4:]
-            opts = [discord.SelectOption(label=_weapon_label(k)[:100], value=k) for k, w in combat.WEAPON_CATALOG.items() if w["skill"] == group]
-            self.add_item(_Pick(f"{group} weapon to add...", opts, self._on_add_weapon, 3))
-        elif self.action == "drop" and owned:
+        if self.action == "drop" and owned:
             self.add_item(_Pick("Weapon to drop...", [discord.SelectOption(label=_weapon_label(w)[:100], value=w) for w in owned], self._on_drop, 3))
         elif self.action == "remove_item" and c.inventory:
             opts = [discord.SelectOption(label=f"{n} × {q}"[:100], value=n[:100]) for n, q in sorted(c.inventory.items())]
@@ -274,15 +175,10 @@ class InventoryPanel(discord.ui.View):
             if c.owned_armor and not c.armor_name:
                 opts.append(discord.SelectOption(label=f"Put on: {_armor_label(c.owned_armor)}"[:100], value="on"))
             if not opts:
-                self.status = "You don't own any armor. Staff can assign armor with `/edit equip`."
+                self.status = "You don't own any armor. Staff hand it out with `/give`."
                 self.action = ""
             else:
                 self.add_item(_Pick("Armor...", opts, self._on_wear_armor, 3))
-        elif self.action == "armor":
-            opts = [discord.SelectOption(label="none", value="none", default=not c.armor_name)] + [
-                discord.SelectOption(label=k.replace("_", " "), value=k, description=f"Armor TN +{a['tn_bonus']}, Reduction {a['reduction']}",
-                                     default=k == c.armor_name) for k, a in combat.ARMOR_CATALOG.items()]
-            self.add_item(_Pick("Assign armor...", opts, self._on_armor, 3))
         elif self.action == "qualities":
             quals = sorted(combat.WEAPON_QUALITIES)
             opts = [discord.SelectOption(label=q.title(), value=q, default=q in c.weapon_qualities) for q in quals]
@@ -337,15 +233,9 @@ class InventoryPanel(discord.ui.View):
     async def _on_action(self, interaction: discord.Interaction, values: list[str]) -> None:
         action = values[0] if values else ""
         staff_only = {v for v, _, s in self.ACTIONS if s}
-        if (action in staff_only or action.startswith("add:")) and not self.staff:
-            self.status = f"Adding items, purse, assigning armor, and qualities are managed by **{_d.role_fortune}**."
+        if action in staff_only and not self.staff:
+            self.status = f"Weapon qualities are managed by **{_d.role_fortune}**. New gear and money come through `/give`."
             await self.render(interaction)
-            return
-        if action == "add_item":
-            await interaction.response.send_modal(_ItemModal(self))
-            return
-        if action == "koku":
-            await interaction.response.send_modal(_KokuModal(self))
             return
         self.action = action
         c = self.rec.character
@@ -358,20 +248,6 @@ class InventoryPanel(discord.ui.View):
         else:
             self.status = ""
         await self.render(interaction)
-
-    async def _on_add_weapon(self, interaction: discord.Interaction, values: list[str]) -> None:
-        if self.reload() is None:
-            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
-            return
-        c = self.rec.character
-        w = values[0].lower()
-        if w in [x.lower() for x in c.weapons]:
-            self.status = f"**{c.name}** already owns a {w}."
-            await self.render(interaction)
-            return
-        c.weapons.append(w)
-        spec = combat.WEAPON_CATALOG[w]
-        await self.commit(interaction, f"Added **{w}** (DR {spec['rolled']}k{spec['kept']}, {spec['skill']}).", "equip")
 
     async def _on_drop(self, interaction: discord.Interaction, values: list[str]) -> None:
         if self.reload() is None:
@@ -429,27 +305,6 @@ class InventoryPanel(discord.ui.View):
             self.action = ""
             await self.render(interaction)
 
-    async def _on_armor(self, interaction: discord.Interaction, values: list[str]) -> None:
-        if self.reload() is None:
-            await interaction.response.send_message("That character no longer exists.", ephemeral=True)
-            return
-        c = self.rec.character
-        a = values[0]
-        if a == "none":
-            c.armor_name, c.armor_tn_bonus, c.armor_reduction = "", 0, 0
-            c.owned_armor = ""
-            await self.commit(interaction, f"Removed armor from **{c.name}**.", "armor")
-            return
-        spec = combat.get_armor(a)
-        if spec is None:
-            self.status = f"Unknown armor {a}."
-            await self.render(interaction)
-            return
-        c.owned_armor = a
-        c.armor_name, c.armor_tn_bonus, c.armor_reduction = a, spec["tn_bonus"], spec["reduction"]
-        note = f"\n{spec['special']}" if spec.get("special") else ""
-        await self.commit(interaction, f"**{c.name}** wears **{a.replace('_', ' ')}**: Armor TN +{spec['tn_bonus']}, Reduction {spec['reduction']}.{note}", "armor")
-
     async def _on_qualities(self, interaction: discord.Interaction, values: list[str]) -> None:
         if self.reload() is None:
             await interaction.response.send_message("That character no longer exists.", ephemeral=True)
@@ -464,7 +319,7 @@ class InventoryPanel(discord.ui.View):
                                                 embed=build_inventory_embed(self.rec), view=None)
 
 
-@app_commands.command(name="inventory", description="Your gear and purse in one panel: Wield, weapons, items, koku/bu/zeni (staff: Any character or NPC).")
+@app_commands.command(name="inventory", description="Your gear and purse: Wield, drop, armor on or off, remove items (staff: Any character or NPC).")
 @app_commands.describe(member="Another player's character [Fortune].", npc="An NPC's inventory [Fortune].")
 async def inventory(interaction: discord.Interaction, member: discord.Member | None = None, npc: app_commands.Range[str, 1, 80] | None = None) -> None:
     if not await _d.require_guild(interaction):
@@ -498,11 +353,11 @@ async def inventory(interaction: discord.Interaction, member: discord.Member | N
 
 
 def init(*, tree: app_commands.CommandTree, store, npc_owner: str, require_guild, is_dm, resolve_active_for_edit,
-         audit_stat, modify_inventory, npc_autocomplete, role_fortune: str, role_kami: str) -> None:
+         audit_stat, npc_autocomplete, role_fortune: str, role_kami: str) -> None:
     global _d
     _d = _Deps(store=store, npc_owner=npc_owner, require_guild=require_guild, is_dm=is_dm,
                resolve_active_for_edit=resolve_active_for_edit, audit_stat=audit_stat,
-               modify_inventory=modify_inventory, npc_autocomplete=npc_autocomplete,
+               npc_autocomplete=npc_autocomplete,
                role_fortune=role_fortune, role_kami=role_kami)
     inventory.autocomplete("npc")(npc_autocomplete)
     tree.add_command(inventory)

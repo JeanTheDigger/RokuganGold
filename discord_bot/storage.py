@@ -528,6 +528,22 @@ class Store:
             ).fetchone()
         return self._row_to_record(row) if row else None
 
+    def list_inventory_item_names(self, guild_id: str) -> list[str]:
+        """Distinct plain-item names carried by any character on this server (case-insensitive)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT data FROM characters WHERE guild_id = ?", (guild_id,)
+            ).fetchall()
+        seen: dict[str, str] = {}
+        for r in rows:
+            try:
+                inv = json.loads(r["data"]).get("inventory") or {}
+            except (ValueError, AttributeError):
+                continue
+            for name in inv:
+                seen.setdefault(str(name).lower(), str(name))
+        return sorted(seen.values(), key=str.lower)
+
     def search_names(self, guild_id: str, query: str = "", limit: int = 25) -> list[str]:
         """Return character names (all owners) matching a case-insensitive substring."""
         with self._lock:

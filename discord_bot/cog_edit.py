@@ -46,7 +46,6 @@ class _Deps:
     kiho_autocomplete: object
     tattoo_autocomplete: object
     quality_autocomplete: object
-    modify_inventory: object
 
 _d = _Deps()
 
@@ -73,7 +72,6 @@ def init(
     kiho_autocomplete,
     tattoo_autocomplete,
     quality_autocomplete,
-    modify_inventory,
 ) -> None:
     _d.store = store
     _d.NPC_OWNER = npc_owner
@@ -95,7 +93,6 @@ def init(
     _d.kiho_autocomplete = kiho_autocomplete
     _d.tattoo_autocomplete = tattoo_autocomplete
     _d.quality_autocomplete = quality_autocomplete
-    _d.modify_inventory = modify_inventory
 
     edit_trait.autocomplete("npc")(_d.npc_autocomplete)
     edit_skill.autocomplete("npc")(_d.npc_autocomplete)
@@ -111,7 +108,6 @@ def init(
     edit_rename.autocomplete("npc")(_d.npc_autocomplete)
     edit_notes.autocomplete("npc")(_d.npc_autocomplete)
     edit_mount.autocomplete("npc")(_d.npc_autocomplete)
-    edit_item.autocomplete("npc")(_d.npc_autocomplete)
     edit_spell.autocomplete("npc")(_d.npc_autocomplete)
 
 
@@ -1073,40 +1069,6 @@ async def edit_mount(
         )
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-# -- /edit item --------------------------------------------------------------
-
-@edit_group.command(name="item", description="Add or remove items from a character's inventory. [Fortune]")
-@app_commands.describe(
-    item="Item name.",
-    quantity="How many (default 1).",
-    remove="Remove instead of adding.",
-    member="Target player.", npc="NPC name.",
-)
-async def edit_item(
-    interaction: discord.Interaction,
-    item: app_commands.Range[str, 1, 80],
-    quantity: app_commands.Range[int, 1, 9999] = 1,
-    remove: bool = False,
-    member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
-) -> None:
-    if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
-        return
-    rec, err = await _resolve_target(interaction, member, npc)
-    if err:
-        await interaction.response.send_message(err, ephemeral=True)
-        return
-    c = rec.character
-    ok, msg = _d.modify_inventory(c.inventory, c.name, item.strip(), quantity, remove)
-    if not ok:
-        await interaction.response.send_message(msg, ephemeral=True)
-        return
-    _d.store.save(rec)
-    await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec), ephemeral=True)
 
 
 # -- /edit spell -------------------------------------------------------------
