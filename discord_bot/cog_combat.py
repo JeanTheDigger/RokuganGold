@@ -1684,10 +1684,8 @@ class CombatBoardView(views_base.PersistentView):
         if expiry:
             desc_parts.extend(expiry)
         if next_cb.center_bonus_available:
-            rec = _d.resolve_combatant_record(guild, next_cb)
-            vr = rec.character.void_ring if rec else "?"
             desc_parts.append(
-                f"**Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. "
+                "**Center Stance bonus active**: +1k1 + Void Ring on one roll this turn. "
                 "+10 Initiative this Round."
             )
         reminders = condition_effects.condition_reminders(next_cb.conditions)
@@ -4511,10 +4509,8 @@ async def combat_next(interaction: discord.Interaction) -> None:
     if expiry:
         desc_parts.extend(expiry)
     if current.center_bonus_available:
-        rec = _d.resolve_combatant_record(guild, current)
-        vr = rec.character.void_ring if rec else "?"
         desc_parts.append(
-            f"**Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. "
+            "**Center Stance bonus active**: +1k1 + Void Ring on one roll this turn. "
             "+10 Initiative this Round."
         )
     reminders = condition_effects.condition_reminders(current.conditions)
@@ -8241,10 +8237,8 @@ async def combat_hold(interaction: discord.Interaction, name: str) -> None:
         desc_parts: list[str] = [f"It is now **{next_cb.name}**'s turn."]
         desc_parts.extend(_expiry_notes(enc))
         if next_cb.center_bonus_available:
-            rec = _d.resolve_combatant_record(guild, next_cb)
-            vr = rec.character.void_ring if rec else "?"
             desc_parts.append(
-                f"**Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. "
+                "**Center Stance bonus active**: +1k1 + Void Ring on one roll this turn. "
                 "+10 Initiative this Round."
             )
         reminders = condition_effects.condition_reminders(next_cb.conditions)
@@ -8338,10 +8332,8 @@ async def combat_delay(
         delay_desc: list[str] = [f"It is now **{next_cb.name}**'s turn."]
         delay_desc.extend(_expiry_notes(enc))
         if next_cb.center_bonus_available:
-            rec = _d.resolve_combatant_record(guild, next_cb)
-            vr = rec.character.void_ring if rec else "?"
             delay_desc.append(
-                f"**Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. "
+                "**Center Stance bonus active**: +1k1 + Void Ring on one roll this turn. "
                 "+10 Initiative this Round."
             )
         reminders = condition_effects.condition_reminders(next_cb.conditions)
@@ -8472,10 +8464,8 @@ async def combat_turn_done(
     if expiry:
         desc_parts.extend(expiry)
     if next_cb.center_bonus_available:
-        rec = _d.resolve_combatant_record(guild, next_cb)
-        vr = rec.character.void_ring if rec else "?"
         desc_parts.append(
-            f"**Center Stance bonus active**: +1k1 + {vr} (Void Ring) on one roll this turn. "
+            "**Center Stance bonus active**: +1k1 + Void Ring on one roll this turn. "
             "+10 Initiative this Round."
         )
     reminders = condition_effects.condition_reminders(next_cb.conditions)
