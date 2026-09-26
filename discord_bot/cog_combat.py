@@ -9305,7 +9305,7 @@ async def combat_env_damage(
             results.append(
                 f"**{cb.name}**: {amount} raw − {reduction} red = "
                 f"**{applied['final_damage']}** wounds → "
-                f"**{applied['new_wound_level']}** ({rec.character.wounds_taken}){dead_tag}"
+                f"**{applied['new_wound_level']}**{dead_tag}"
             )
             await _d.combat_log(
                 guild,
