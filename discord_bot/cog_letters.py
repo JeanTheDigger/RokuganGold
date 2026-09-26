@@ -312,8 +312,8 @@ async def letter_sendas(
 async def _sendas_recipient_ac(
     interaction: discord.Interaction, current: str,
 ) -> list[app_commands.Choice[str]]:
-    if interaction.guild_id is None:
-        return []
+    if interaction.guild_id is None or not _d.is_dm(interaction):
+        return []  # Staff command: Players get no roster of NPC or creature names.
     guild_id = str(interaction.guild_id)
     cur = current.lower().strip()
     names = [n for n in _all_character_names(guild_id) if cur in n.lower()]
