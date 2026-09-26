@@ -1230,8 +1230,8 @@ async def _npc_autocomplete(
 async def _any_character_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
-    """Autocomplete across all PCs and NPCs in the guild (including dead/inactive)."""
-    if interaction.guild_id is None:
+    """Autocomplete across all PCs and NPCs in the guild (including dead/inactive). Staff only."""
+    if interaction.guild_id is None or not _is_dm(interaction):
         return []
     guild = str(interaction.guild_id)
     names = store.search_names(guild, current.strip(), limit=25)
@@ -3917,11 +3917,13 @@ class _DeleteConfirmView(discord.ui.View):
         pass
 
 
-@sheet.command(name="owner", description="Show who owns a character (PC owner or NPC).")
+@sheet.command(name="owner", description="Show who owns a character (PC owner or NPC). [Fortune]")
 @app_commands.describe(name="Character name.")
 @app_commands.autocomplete(name=_any_character_autocomplete)
 async def sheet_owner(interaction: discord.Interaction, name: str) -> None:
     if not await _require_guild(interaction):
+        return
+    if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     rec = store.get_by_name_guild(guild, name)
