@@ -151,6 +151,35 @@ def _accumulate_declared_damage(acc: dict, tkey: str, tentry: dict) -> None:
         acc["notes"].append(f"{tentry.get('display', tkey)}: {', '.join(d_parts)}")
 
 
+def _declared_defense(cb) -> dict:
+    """Defensive effects of a combatant's declared techniques: Armor TN and Reduction bonuses."""
+    out: dict = {"atn": 0, "red": 0, "atn_notes": [], "red_notes": []}
+    if cb is None:
+        return out
+    for tkey, tentry in cb.declared_techniques.items():
+        if tentry.get("manual"):
+            continue
+        efx = tentry.get("effects", {})
+        name = tentry.get("display", tkey)
+        if efx.get("atn_bonus"):
+            out["atn"] += efx["atn_bonus"]
+            out["atn_notes"].append(f"Target {name}: +{efx['atn_bonus']} Armor TN")
+        if efx.get("reduction_bonus"):
+            out["red"] += efx["reduction_bonus"]
+            out["red_notes"].append(f"Target {name}: +{efx['reduction_bonus']} Reduction")
+    return out
+
+
+def _declared_simple_attack(cb) -> bool:
+    """True if a declared technique lets this combatant attack as a Simple Action."""
+    if cb is None:
+        return False
+    return any(
+        not e.get("manual") and e.get("effects", {}).get("simple_action_attack")
+        for e in cb.declared_techniques.values()
+    )
+
+
 async def _send_public_and_private(
     interaction: discord.Interaction, detail: discord.Embed, *, content: str | None = None,
 ) -> None:
@@ -964,6 +993,7 @@ class DamageView(views_base.PersistentView):
             raw += fb
             if uncap_note:
                 feint_line += f"\n- {uncap_note}"
+        decl_def = _declared_defense(enc.find(target.name) if enc else None)
         crab_bonus, crab_note = kata_effects.defender_reduction_bonus(target, self.defender_stance)
         tech_red, tech_red_notes = technique_effects.defender_reduction_bonus(target, self.defender_stance)
         kiho_red, kiho_red_notes = kiho_effects.defender_reduction_bonus(target)
@@ -991,9 +1021,9 @@ class DamageView(views_base.PersistentView):
                 base_red = max(0, base_red - attacker.strength)
         duel_red_note = f"Warrior of Earth +{self.duel_strike_reduction} Reduction (duel Strike)" if self.duel_strike_reduction else ""
         kata_line = "".join(
-            f"\n- {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, duel_red_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes, *tat_red_notes) if n
+            f"\n- {n}" for n in (waves_note, sos_note, crab_note, scorp_note, tsu_note, bokken_note, bohiya_note, firearm_red_note, true_note, duel_red_note, *t_dmg_notes, *tech_red_notes, *kiho_red_notes, *tat_red_notes, *decl_def["red_notes"]) if n
         )
-        reduction = max(0, base_red - ignore - tsu_ignore - decl_reduction_ignore - decl_target_red_penalty + crab_bonus + tech_red + kiho_red + tat_red + self.duel_strike_reduction)
+        reduction = max(0, base_red - ignore - tsu_ignore - decl_reduction_ignore - decl_target_red_penalty + crab_bonus + tech_red + kiho_red + tat_red + decl_def["red"] + self.duel_strike_reduction)
         if wp.get("ignore_all_reduction"):
             reduction = 0
         applied = combat.apply_damage(target, raw, reduction)
@@ -1189,6 +1219,9 @@ class DamageView(views_base.PersistentView):
             notes.extend(cond_tn_notes)
         else:
             tn = combat.armor_tn(target, d_stance, def_bonus + tn_extras)
+        decl_def = _declared_defense(def_combatant)
+        tn += decl_def["atn"]
+        notes.extend(decl_def["atn_notes"])
 
         # --- Attacker modifiers ---
         bonus_rolled = bonus_kept = atk_flat = 0
@@ -3319,8 +3352,10 @@ async def _execute_attack(
             await _reply(f"**{atk_combatant.name}** cannot attack: {block_reason}", ephemeral=True)
             return
 
-    # Action economy (s40): attack is a Complex Action - requires full action budget.
-    if atk_combatant is not None and atk_combatant.actions_used > 0:
+    # Action economy (s40): attack is a Complex Action - requires full action budget,
+    # unless a declared technique makes attacks Simple Actions.
+    decl_simple = _declared_simple_attack(atk_combatant)
+    if atk_combatant is not None and atk_combatant.actions_used >= (2 if decl_simple else 1):
         await _reply(
             f"**{atk_combatant.name}** has already used actions this turn ({atk_combatant.actions_used}/2). "
             f"Use `/fight action action_type:Reset` to override.",
@@ -3750,11 +3785,6 @@ async def _execute_attack(
             if efx.get("ignore_wound_penalties"):
                 decl_ignore_wound = True
                 parts.append("ignore wound penalties")
-            if efx.get("atn_bonus"):
-                tn += efx["atn_bonus"]
-                parts.append(f"+{efx['atn_bonus']} ATN")
-            if efx.get("reduction_bonus"):
-                parts.append(f"+{efx['reduction_bonus']} Reduction")
             if efx.get("ignore_target_stance_atn"):
                 decl_ignore_stance_atn = True
                 parts.append("ignore target stance ATN")
@@ -3776,6 +3806,14 @@ async def _execute_attack(
         if stance_atn_adj:
             tn += stance_atn_adj
             kata_notes.append(f"Target stance ATN ignored (technique): {stance_atn_adj:+d}")
+
+    if def_combatant is not None:
+        decl_def = _declared_defense(def_combatant)
+        if decl_def["atn"]:
+            tn += decl_def["atn"]
+            kata_notes.extend(decl_def["atn_notes"])
+    if decl_simple:
+        kata_notes.append("Simple Action attack (declared technique)")
 
     # Center Stance bonus (s40): +1k1 + Void Ring on one roll, from centering last Round.
     center_line = ""
@@ -3857,7 +3895,7 @@ async def _execute_attack(
         )
 
     if atk_combatant is not None:
-        atk_combatant.actions_used = 2
+        atk_combatant.actions_used = min(2, atk_combatant.actions_used + 1) if decl_simple else 2
     if enc and atk_combatant is not None:
         _d.save_encounter(guild, enc)
 
