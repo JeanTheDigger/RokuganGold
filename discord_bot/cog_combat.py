@@ -95,6 +95,44 @@ async def _post_damage_card(
     ))
 
 
+_POOL_RE = re.compile(r"\(?\b\d+k\d+\b[^→=\n]*\)?\s*(?:→|=)\s*")
+_POOL_PAREN_LINE_RE = re.compile(r"\n\(\d+k\d+[^)\n]*\)")
+_NOTES_LINE_RE = re.compile(r"\n\([^\n]*\)(?=\n|$)")
+_PRIVATE_FIELD_SUFFIXES = ("Dice", "Attack roll", "Modifiers")
+
+
+def _strip_pool_text(text: str) -> str:
+    text = _POOL_PAREN_LINE_RE.sub("", text)
+    text = _NOTES_LINE_RE.sub("", text)
+    return _POOL_RE.sub("", text)
+
+
+def _public_copy(embed: discord.Embed) -> discord.Embed:
+    """A copy of a roll embed with dice pools, individual dice and modifier notes removed."""
+    public = discord.Embed(title=embed.title, color=embed.colour)
+    if embed.description:
+        public.description = _strip_pool_text(embed.description)
+    for field in embed.fields:
+        if field.name.endswith(_PRIVATE_FIELD_SUFFIXES):
+            continue
+        public.add_field(name=field.name, value=_strip_pool_text(field.value), inline=field.inline)
+    if embed.footer and embed.footer.text:
+        public.set_footer(text=embed.footer.text)
+    return public
+
+
+async def _send_public_and_private(
+    interaction: discord.Interaction, detail: discord.Embed, *, content: str | None = None,
+) -> None:
+    """Post the public copy of a roll embed to the channel, then the full breakdown ephemeral to the invoker."""
+    public = _public_copy(detail)
+    if interaction.response.is_done():
+        await interaction.followup.send(content=content, embed=public)
+    else:
+        await interaction.response.send_message(content=content, embed=public)
+    await interaction.followup.send(embed=detail, ephemeral=True)
+
+
 def init(
     *,
     store: _storage_mod.Store,
@@ -427,6 +465,11 @@ class DamageView(views_base.PersistentView):
         else:
             await interaction.followup.send(content=text or None, embed=embed)
 
+    async def _post_split_result(self, interaction: discord.Interaction, public: discord.Embed, detail: discord.Embed) -> None:
+        """Public result to the fight channel, full breakdown ephemeral to whoever authorized it."""
+        await self._post_result(interaction, public)
+        await interaction.followup.send(embed=detail, ephemeral=True)
+
     async def _offer_void_reduce(self, guild_id: str, target_rec: _storage_mod.CharacterRecord, applied: dict) -> None:
         """Post a Void wound reduction button to the combat channel for the target player."""
         if applied["is_dead"] or applied["final_damage"] <= 0:
@@ -724,12 +767,24 @@ class DamageView(views_base.PersistentView):
                 status = f"{self.target_name}: **{applied['new_wound_level']}** ({cr.wounds_taken}/{cr.wounds_dead})"
             if applied["is_dead"]:
                 status += "  **SLAIN**"
+            public_status = status
             status += heal_line
             embed.add_field(name="Result", value=status, inline=False)
             embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
+            public = discord.Embed(title=embed.title, color=embed.colour)
+            public.add_field(
+                name="Damage",
+                value=(
+                    f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}{mat_line}\n"
+                    f"Raw **{raw}** − reduction {applied['reduction']} = **{applied['final_damage']}** wounds{break_line}"
+                )[:1024],
+                inline=False,
+            )
+            public.add_field(name="Result", value=public_status, inline=False)
+            public.set_footer(text=f"Authorized by {interaction.user.display_name}")
             self._disable()
             await interaction.response.edit_message(view=self)
-            await self._post_result(interaction, embed)
+            await self._post_split_result(interaction, public, embed)
             dead_tag = " SLAIN" if applied["is_dead"] else ""
             await _d.combat_log(
                 str(interaction.guild_id),
@@ -1035,9 +1090,21 @@ class DamageView(views_base.PersistentView):
         embed.add_field(name="Damage", value=dmg_text, inline=False)
         embed.add_field(name="Result", value=self._wound_status(target_rec, applied) + heal_line + phoenix_line + knockdown_line, inline=False)
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
+        public = discord.Embed(title=embed.title, color=embed.colour)
+        public.add_field(
+            name="Damage",
+            value=(
+                f"{self.attacker_name} → **{self.target_name}** with {self.weapon.replace('_', ' ').title()}{called_shot_line}\n"
+                f"Raw **{raw}** − reduction {applied['reduction']}{armor_label} = "
+                f"**{applied['final_damage']}** wounds{break_line}"
+            )[:1024],
+            inline=False,
+        )
+        public.add_field(name="Result", value=self._wound_status(target_rec, applied) + knockdown_line, inline=False)
+        public.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
         await interaction.response.edit_message(view=self)
-        await self._post_result(interaction, embed)
+        await self._post_split_result(interaction, public, embed)
         dead_tag = " DEAD" if applied["is_dead"] else ""
         man_tag = f" ({self.maneuver})" if self.maneuver not in ("none", "called_shot") else ""
         cs_tag = ""
@@ -2416,7 +2483,13 @@ class _BoardTechniqueSelect(discord.ui.View):
         await interaction.response.edit_message(content=msg, view=None)
         ch = _d.bot_client.get_channel(self.channel_id)
         if ch:
-            announce = f"**{cb.name}** activates **{tech_name}**{cost_note}"
+            if cost == "slot":
+                announce_cost = " (spell slot consumed)"
+            elif isinstance(cost, int) and cost > 0:
+                announce_cost = f" ({cost} VP spent)"
+            else:
+                announce_cost = ""
+            announce = f"**{cb.name}** activates **{tech_name}**{announce_cost}"
             if entry.get("manual"):
                 announce += " (Fortune adjudicates)"
             try:
@@ -2543,10 +2616,21 @@ class _BoardSpellSelect(discord.ui.View):
                 effect_text = s["effect"][:1024]
                 embed.add_field(name="Effect", value=effect_text, inline=False)
         embed.set_footer(text=f"Cast by {interaction.user.display_name} | Use /spell cast for raises, Void, and concealment")
+        public = discord.Embed(title=embed.title, color=embed.colour)
+        public.add_field(
+            name="Spell Casting Roll",
+            value=f"Roll **{result['total']}** vs TN **{result['tn']}**: {'**SUCCESS**' if success else '**FAILED**'}",
+            inline=False,
+        )
+        for field in embed.fields:
+            if field.name in ("Spell", "Effect"):
+                public.add_field(name=field.name, value=field.value, inline=field.inline)
+        public.set_footer(text=f"Cast by {interaction.user.display_name}")
         await interaction.response.edit_message(
             content=f"**{c.name}** {'casts' if success else 'fails to cast'} **{s['name']}**.",
             view=None,
         )
+        await interaction.followup.send(embed=embed, ephemeral=True)
         ch = _d.bot_client.get_channel(self.channel_id)
         conds = spell_conditions(s.get("effect", "")) if success else []
         if ch is not None:
@@ -2558,17 +2642,17 @@ class _BoardSpellSelect(discord.ui.View):
                         self.caster_user_id, s["name"], conds, targets,
                     )
                     try:
-                        await ch.send(embed=embed, view=target_view)
+                        await ch.send(embed=public, view=target_view)
                     except discord.HTTPException:
-                        await ch.send(embed=embed)
+                        await ch.send(embed=public)
                 else:
                     try:
-                        await ch.send(embed=embed)
+                        await ch.send(embed=public)
                     except discord.HTTPException:
                         pass
             else:
                 try:
-                    await ch.send(embed=embed)
+                    await ch.send(embed=public)
                 except discord.HTTPException:
                     pass
         tag = "SUCCESS" if success else "FAILED"
@@ -5262,7 +5346,7 @@ async def combat_full_defense(
         ),
     )
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await _send_public_and_private(interaction, embed)
     await _d.combat_log(str(interaction.guild_id), f"Full Defense: {cb.name} (+{result['bonus']} Armor TN)")
     await _refresh_board(enc, guild)
 
@@ -5594,7 +5678,7 @@ class GrappleBoardView(views_base.PersistentView):
         )
         embed.add_field(name="Control", value=control_text, inline=False)
         embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-        await interaction.response.send_message(embed=embed)
+        await _send_public_and_private(interaction, embed)
         self._persist_args = self._updated_args()
         await self._repost(interaction.channel)
 
@@ -5844,7 +5928,7 @@ class GrappleBoardView(views_base.PersistentView):
             )
         _d.save_encounter(self.guild_id, enc)
         embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-        await interaction.response.send_message(embed=embed)
+        await _send_public_and_private(interaction, embed)
         if defender_wins:
             await self._end_grapple(interaction, "defender break")
 
@@ -6092,7 +6176,7 @@ async def grapple_initiate(
     atk_cb.actions_used = 2
     _d.save_encounter(guild, enc)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await _send_public_and_private(interaction, embed)
     tag = "GRAPPLED" if grappled else ("RESISTED" if hit else "MISS")
     await _d.combat_log(guild, f"Grapple: {atk_cb.name} → {def_cb.name} {tag}")
 
@@ -6169,7 +6253,7 @@ async def grapple_control(
     else:
         embed.add_field(name="Control", value=f"**{winner}**", inline=False)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await _send_public_and_private(interaction, embed)
     await _d.combat_log(guild, f"Grapple Control: {winner} wins")
 
 
@@ -6465,7 +6549,7 @@ async def grapple_break(
         )
     _d.save_encounter(guild, enc)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await _send_public_and_private(interaction, embed)
     tag = "FREE" if defender_wins else "HELD"
     await _d.combat_log(guild, f"Grapple Break: {cb.name} vs {opp_cb.name} → {tag}")
 
@@ -6651,7 +6735,7 @@ async def duel_assess(
     if focus_bonus:
         embed.add_field(name="Focus Bonus", value=focus_bonus.strip(), inline=False)
     embed.set_footer(text="Either duelist may concede after Assessment. Otherwise: /duel focus")
-    await interaction.response.send_message(embed=embed)
+    await _send_public_and_private(interaction, embed)
     for assessor_rec, opponent, res in ((rec_a, cb_char, res_a), (rec_b, ca, res_b)):
         text = _reveal_text(res, opponent)
         if text is not None:
@@ -6798,7 +6882,7 @@ async def duel_focus(
         )
     embed.add_field(name="Result", value=outcome, inline=False)
     embed.set_footer(text="Proceed to: /duel strike")
-    await interaction.response.send_message(embed=embed)
+    await _send_public_and_private(interaction, embed)
     if fs == "kharmic":
         await _d.combat_log(str(interaction.guild_id), f"Duel Focus: {ca.name} vs {cb_char.name}: Kharmic Strike")
     else:
@@ -6921,16 +7005,16 @@ async def duel_strike(
         embed.set_footer(text="The strike misses.")
 
     if view is not None:
-        await interaction.response.send_message(
+        await _send_public_and_private(
+            interaction, embed,
             content=f"**{atk.name}** hits **{tgt.name}** - damage approval pending in the DM channel.",
-            embed=embed,
         )
         await _post_damage_card(
             approval_ch, interaction.guild, interaction.user, interaction.channel_id,
             "A DM can authorize the strike's damage below.", embed, view,
         )
     else:
-        await interaction.response.send_message(embed=embed)
+        await _send_public_and_private(interaction, embed)
     tag = "HIT" if hit else "MISS"
     await _d.combat_log(guild, f"Duel Strike: {atk.name} → {tgt.name} ({weapon}) {tag} (roll {result['total']} vs TN {result['tn']})")
 
@@ -7237,7 +7321,7 @@ class DuelBoardView(views_base.PersistentView):
         self.phase = "focus"
         self._persist_args = self._updated_args()
         self._sync_buttons()
-        await interaction.response.send_message(embed=embed)
+        await _send_public_and_private(interaction, embed)
         for assessor_rec, opponent, res in ((rec_a, cb_char, res_a), (rec_b, ca, res_b)):
             text = _reveal_text(res, opponent)
             if text is not None:
@@ -7359,7 +7443,7 @@ class DuelBoardView(views_base.PersistentView):
         self.phase = "strike"
         self._persist_args = self._updated_args()
         self._sync_buttons()
-        await interaction.response.send_message(embed=embed)
+        await _send_public_and_private(interaction, embed)
         if fs == "kharmic":
             await _d.combat_log(self.guild_id, f"Duel Focus: {ca.name} vs {cb_char.name}: Kharmic Strike")
         else:
@@ -7483,16 +7567,16 @@ class DuelBoardView(views_base.PersistentView):
         self._sync_buttons()
 
         if view is not None:
-            await interaction.response.send_message(
+            await _send_public_and_private(
+                interaction, embed,
                 content=f"**{atk.name}** hits **{tgt.name}** - damage approval pending in the DM channel.",
-                embed=embed,
             )
             await _post_damage_card(
                 approval_ch, interaction.guild, interaction.user, self.channel_id,
                 "A DM can authorize the strike's damage below.", embed, view,
             )
         else:
-            await interaction.response.send_message(embed=embed)
+            await _send_public_and_private(interaction, embed)
 
         tag = "HIT" if hit else "MISS"
         await _d.combat_log(
@@ -7594,7 +7678,7 @@ class DuelBoardView(views_base.PersistentView):
         self._sync_buttons()
 
         pending = "Damage approval pending in the DM channel." if damage_views else ""
-        await interaction.response.send_message(content=pending or None, embed=embed)
+        await _send_public_and_private(interaction, embed, content=pending or None)
         ch = _d.bot_client.get_channel(self.channel_id)
         for atk_name, tgt_name, dv in damage_views:
             card = discord.Embed(
@@ -8618,7 +8702,7 @@ class MassBattleBoardView(views_base.PersistentView):
         dice_b = _d.format_dice(result["dice_b"])[:1024]
         embed.add_field(name=f"{ca.name} Dice", value=dice_a, inline=True)
         embed.add_field(name=f"{cb.name} Dice", value=dice_b, inline=True)
-        await interaction.response.send_message(embed=embed)
+        await _send_public_and_private(interaction, embed)
         self._persist_args = self._updated_args()
         await self._repost(interaction.channel)
 
@@ -8746,7 +8830,7 @@ async def battle_roll(
     dice_str = _d.format_dice(result["dice"])
     embed.add_field(name="Dice", value=dice_str[:1024], inline=False)
     embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
-    await interaction.response.send_message(embed=embed)
+    await _send_public_and_private(interaction, embed)
 
 
 @combat_battle.command(name="damage", description="Roll incidental damage from a mass battle round. [Fortune]")
@@ -8966,7 +9050,7 @@ async def battle_status(
     embed.add_field(name=f"{cb.name} Dice", value=dice_b, inline=True)
 
     embed.set_footer(text="Use the resulting status with /combat battle table for individual PCs.")
-    await interaction.response.send_message(embed=embed)
+    await _send_public_and_private(interaction, embed)
 
 
 @combat_battle.command(name="start", description="Start a mass battle with interactive board. [Fortune]")
