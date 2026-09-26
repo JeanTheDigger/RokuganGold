@@ -3851,7 +3851,7 @@ async def _execute_attack(
         auto_tag = " *(enc)*" if (not a_stance_explicit and atk_combatant) else ""
         public_desc += f"  ·  {a_stance.replace('_', ' ').title()}{auto_tag}"
     if man != "none":
-        public_desc += f"  ·  Maneuver: {man.title()}"
+        public_desc += f"  ·  Maneuver: {man.replace('_', ' ').title()}"
     atk_desc = (
         f"{outcome['skill_name']} {outcome['skill_rank']} / "
         f"{outcome['trait_name'].capitalize()} with {public_desc}{void_line}"
