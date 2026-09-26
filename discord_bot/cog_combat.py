@@ -335,7 +335,7 @@ class _VoidWoundReduceView(discord.ui.View):
         await interaction.response.edit_message(
             content=(
                 f"**{c.name}** spent a Void Point: **-{void_saved}** wounds "
-                f"({c.wounds_taken} wounds, **{new_level}**, {c.current_void_points}/{taint.void_point_cap(c)} VP)"
+                f"(**{new_level}**, {c.current_void_points}/{taint.void_point_cap(c)} VP)"
             ),
             view=self,
         )
@@ -456,12 +456,9 @@ class DamageView(views_base.PersistentView):
     def _wound_status(self, target_rec: _storage_mod.CharacterRecord, applied: dict) -> str:
         c = target_rec.character
         if applied["level_changed"]:
-            status = (
-                f"{self.target_name}: {applied['old_wound_level']} → "
-                f"**{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
-            )
+            status = f"{self.target_name}: {applied['old_wound_level']} → **{applied['new_wound_level']}**"
         else:
-            status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+            status = f"{self.target_name}: **{applied['new_wound_level']}**"
         if applied["is_dead"]:
             status += "  **DEAD**"
         return status
@@ -670,7 +667,7 @@ class DamageView(views_base.PersistentView):
                 if heal_amt:
                     attacker.wounds_taken = max(0, attacker.wounds_taken - heal_amt)
                     _d.store.save(attacker_rec, note="post-kill heal")
-                    heal_line = f"\n- {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
+                    heal_line = f"\n- {heal_notes[0]}"
             _d.store.save_creature(cre_rec, note="attack damage")
             _d.tally(self.channel_id, self.attacker_name, "dealt", applied["final_damage"])
             _d.tally(self.channel_id, self.target_name, "taken", applied["final_damage"])
@@ -958,7 +955,7 @@ class DamageView(views_base.PersistentView):
             if heal_amt:
                 attacker.wounds_taken = max(0, attacker.wounds_taken - heal_amt)
                 _d.store.save(attacker_rec, note="post-kill heal")
-                heal_line = f"\n- {heal_notes[0]} ({attacker.wounds_taken} wounds remaining)"
+                heal_line = f"\n- {heal_notes[0]}"
         phoenix_line = ""
         if applied["new_wound_level"] in ("Down", "Out", "Dead"):
             phx = tattoo_effects.phoenix_heal_reminder(target)

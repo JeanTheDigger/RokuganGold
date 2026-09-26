@@ -6162,12 +6162,9 @@ class CreatureAttackView(_DisableableView):
             inline=False,
         )
         if applied["level_changed"]:
-            status = (
-                f"{self.target_name}: {applied['old_wound_level']} → "
-                f"**{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
-            )
+            status = f"{self.target_name}: {applied['old_wound_level']} → **{applied['new_wound_level']}**"
         else:
-            status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+            status = f"{self.target_name}: **{applied['new_wound_level']}**"
         if applied["is_dead"]:
             status += "  **DEAD**" + death_line
         embed.add_field(name="Result", value=status, inline=False)
@@ -6335,12 +6332,9 @@ class SpellDamageView(_DisableableView):
             inline=False,
         )
         if applied["level_changed"]:
-            status = (
-                f"{self.target_name}: {applied['old_wound_level']} → "
-                f"**{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
-            )
+            status = f"{self.target_name}: {applied['old_wound_level']} → **{applied['new_wound_level']}**"
         else:
-            status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+            status = f"{self.target_name}: **{applied['new_wound_level']}**"
         if applied["is_dead"]:
             status += "  **DEAD**" + death_line
         embed.add_field(name="Result", value=status, inline=False)
@@ -6414,12 +6408,9 @@ class DmDamageView(_DisableableView):
             inline=False,
         )
         if applied["level_changed"]:
-            status = (
-                f"{self.target_name}: {applied['old_wound_level']} → "
-                f"**{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
-            )
+            status = f"{self.target_name}: {applied['old_wound_level']} → **{applied['new_wound_level']}**"
         else:
-            status = f"{self.target_name}: **{applied['new_wound_level']}** ({c.wounds_taken} wounds)"
+            status = f"{self.target_name}: **{applied['new_wound_level']}**"
         if applied["is_dead"]:
             status += "  **DEAD**" + death_line
         embed.add_field(name="Result", value=status, inline=False)
@@ -6557,14 +6548,14 @@ class DmHealView(_DisableableView):
             value=(
                 f"→ **{self.target_name}**"
                 f"{f' ({self.reason})' if self.reason else ''}\n"
-                f"**{healed}** wounds healed ({c.wounds_taken} remaining)"
+                f"**{healed}** wounds healed"
             ),
             inline=False,
         )
         if old_level != new_level:
             status = f"{self.target_name}: {old_level} → **{new_level}**"
         else:
-            status = f"{self.target_name}: **{new_level}** ({c.wounds_taken} wounds)"
+            status = f"{self.target_name}: **{new_level}**"
         embed.add_field(name="Result", value=status, inline=False)
         embed.set_footer(text=f"Authorized by {interaction.user.display_name}")
         self._disable()
@@ -10321,7 +10312,7 @@ class MedicineTreatView(_DisableableView):
             name="Result",
             value=(
                 f"**{self.healer_name}** treats **{self.target_name}** ({self.treatment_type})\n"
-                f"Healed **{self.wounds_healed}** wounds → {c.wounds_taken} remaining{crossed}"
+                f"Healed **{self.wounds_healed}** wounds{crossed}"
             ),
             inline=False,
         )
