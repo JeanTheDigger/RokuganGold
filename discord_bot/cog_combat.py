@@ -121,6 +121,36 @@ def _public_copy(embed: discord.Embed) -> discord.Embed:
     return public
 
 
+_DECLARED_DAMAGE_KEYS = ("dmg_rolled", "dmg_kept", "dmg_flat", "dmg_explode",
+                         "reduction_ignore", "target_reduction_penalty", "on_hit_condition")
+
+
+def _new_declared_damage() -> dict:
+    return {"dmg_rolled": 0, "dmg_kept": 0, "dmg_flat": 0, "dmg_explode": False,
+            "reduction_ignore": 0, "target_reduction_penalty": 0, "on_hit_condition": "", "notes": []}
+
+
+def _accumulate_declared_damage(acc: dict, tkey: str, tentry: dict) -> None:
+    """Fold one declared technique's damage-side effects into *acc* (JSON-serializable)."""
+    if tentry.get("manual"):
+        return
+    efx = tentry.get("effects", {})
+    if not efx:
+        return
+    acc["dmg_rolled"] += efx.get("dmg_rolled", 0)
+    acc["dmg_kept"] += efx.get("dmg_kept", 0)
+    acc["dmg_flat"] += efx.get("dmg_flat", 0)
+    if efx.get("dmg_explode"):
+        acc["dmg_explode"] = True
+    acc["reduction_ignore"] += efx.get("reduction_ignore", 0)
+    acc["target_reduction_penalty"] += efx.get("target_reduction_penalty", 0)
+    if efx.get("on_hit_condition"):
+        acc["on_hit_condition"] = efx["on_hit_condition"]
+    d_parts = [f"{k}={efx[k]}" for k in _DECLARED_DAMAGE_KEYS if efx.get(k)]
+    if d_parts:
+        acc["notes"].append(f"{tentry.get('display', tkey)}: {', '.join(d_parts)}")
+
+
 async def _send_public_and_private(
     interaction: discord.Interaction, detail: discord.Embed, *, content: str | None = None,
 ) -> None:
@@ -430,8 +460,10 @@ class DamageView(views_base.PersistentView):
         atk_init: int | None = None,
         def_init: int | None = None,
         duel_strike_reduction: int = 0,
+        decl_effects: dict | None = None,
     ) -> None:
         super().__init__()
+        self.decl_effects = decl_effects
         self.attacker_id = attacker_id
         self.target_id = target_id
         self.target_creature_id = target_creature_id
@@ -464,6 +496,19 @@ class DamageView(views_base.PersistentView):
             await interaction.followup.send(f"Resolved in <#{self.source_channel_id}>.")
         else:
             await interaction.followup.send(content=text or None, embed=embed)
+
+    def _declared_damage(self, enc, attacker: Character) -> dict:
+        """Declared-technique damage effects: the snapshot taken at attack time when present, else the live list."""
+        acc = _new_declared_damage()
+        if self.decl_effects is not None:
+            acc.update(self.decl_effects)
+            acc["notes"] = list(acc.get("notes") or [])
+            return acc
+        atk_cb = enc.find(attacker.name) if enc else None
+        if atk_cb and atk_cb.declared_techniques:
+            for tkey, tentry in list(atk_cb.declared_techniques.items()):
+                _accumulate_declared_damage(acc, tkey, tentry)
+        return acc
 
     async def _post_split_result(self, interaction: discord.Interaction, public: discord.Embed, detail: discord.Embed) -> None:
         """Public result to the fight channel, full breakdown ephemeral to whoever authorized it."""
@@ -625,41 +670,15 @@ class DamageView(views_base.PersistentView):
                 t_dmg_notes.append(e9_note)
             if fe_note:
                 t_dmg_notes.append(fe_note)
-            cre_decl_dmg_explode = False
-            cre_decl_reduction_ignore = 0
-            cre_decl_target_red_penalty = 0
-            cre_decl_on_hit_condition = ""
-            atk_cb_cre = enc.find(attacker.name) if enc else None
-            if atk_cb_cre and atk_cb_cre.declared_techniques:
-                for tkey, tentry in list(atk_cb_cre.declared_techniques.items()):
-                    if tentry.get("manual"):
-                        continue
-                    efx = tentry.get("effects", {})
-                    if not efx:
-                        continue
-                    t_display = tentry.get("display", tkey)
-                    if efx.get("dmg_rolled"):
-                        extra_rolled += efx["dmg_rolled"]
-                    if efx.get("dmg_kept"):
-                        t_kept += efx["dmg_kept"]
-                    if efx.get("dmg_flat"):
-                        t_flat += efx["dmg_flat"]
-                    if efx.get("dmg_explode"):
-                        cre_decl_dmg_explode = True
-                    if efx.get("reduction_ignore"):
-                        cre_decl_reduction_ignore += efx["reduction_ignore"]
-                    if efx.get("target_reduction_penalty"):
-                        cre_decl_target_red_penalty += efx["target_reduction_penalty"]
-                    if efx.get("on_hit_condition"):
-                        cre_decl_on_hit_condition = efx["on_hit_condition"]
-                    d_parts: list[str] = []
-                    for k in ("dmg_rolled", "dmg_kept", "dmg_flat", "dmg_explode",
-                               "reduction_ignore", "target_reduction_penalty", "on_hit_condition"):
-                        if efx.get(k):
-                            d_parts.append(f"{k}={efx[k]}")
-                    if d_parts:
-                        t_dmg_notes.append(f"{t_display}: {', '.join(d_parts)}")
-            if cre_decl_dmg_explode:
+            decl = self._declared_damage(enc, attacker)
+            extra_rolled += decl["dmg_rolled"]
+            t_kept += decl["dmg_kept"]
+            t_flat += decl["dmg_flat"]
+            t_dmg_notes.extend(decl["notes"])
+            cre_decl_reduction_ignore = decl["reduction_ignore"]
+            cre_decl_target_red_penalty = decl["target_reduction_penalty"]
+            cre_decl_on_hit_condition = decl["on_hit_condition"]
+            if decl["dmg_explode"]:
                 force_explode = True
             dmg = combat.resolve_damage(
                 attacker, self.weapon, _d.engine, self.increased_damage,
@@ -918,41 +937,15 @@ class DamageView(views_base.PersistentView):
             t_dmg_notes.append(e9_note)
         if fe_note:
             t_dmg_notes.append(fe_note)
-        decl_dmg_explode = False
-        decl_reduction_ignore = 0
-        decl_target_red_penalty = 0
-        decl_on_hit_condition = ""
-        atk_cb = enc.find(attacker.name) if enc else None
-        if atk_cb and atk_cb.declared_techniques:
-            for tkey, tentry in list(atk_cb.declared_techniques.items()):
-                if tentry.get("manual"):
-                    continue
-                efx = tentry.get("effects", {})
-                if not efx:
-                    continue
-                t_display = tentry.get("display", tkey)
-                if efx.get("dmg_rolled"):
-                    extra_rolled += efx["dmg_rolled"]
-                if efx.get("dmg_kept"):
-                    t_kept += efx["dmg_kept"]
-                if efx.get("dmg_flat"):
-                    t_flat += efx["dmg_flat"]
-                if efx.get("dmg_explode"):
-                    decl_dmg_explode = True
-                if efx.get("reduction_ignore"):
-                    decl_reduction_ignore += efx["reduction_ignore"]
-                if efx.get("target_reduction_penalty"):
-                    decl_target_red_penalty += efx["target_reduction_penalty"]
-                if efx.get("on_hit_condition"):
-                    decl_on_hit_condition = efx["on_hit_condition"]
-                d_parts: list[str] = []
-                for k in ("dmg_rolled", "dmg_kept", "dmg_flat", "dmg_explode",
-                           "reduction_ignore", "target_reduction_penalty", "on_hit_condition"):
-                    if efx.get(k):
-                        d_parts.append(f"{k}={efx[k]}")
-                if d_parts:
-                    t_dmg_notes.append(f"{t_display}: {', '.join(d_parts)}")
-        if decl_dmg_explode:
+        decl = self._declared_damage(enc, attacker)
+        extra_rolled += decl["dmg_rolled"]
+        t_kept += decl["dmg_kept"]
+        t_flat += decl["dmg_flat"]
+        t_dmg_notes.extend(decl["notes"])
+        decl_reduction_ignore = decl["reduction_ignore"]
+        decl_target_red_penalty = decl["target_reduction_penalty"]
+        decl_on_hit_condition = decl["on_hit_condition"]
+        if decl["dmg_explode"]:
             force_explode = True
         dmg = combat.resolve_damage(
             attacker, self.weapon, _d.engine, self.increased_damage,
@@ -3718,10 +3711,8 @@ async def _execute_attack(
     # Declared technique effects: auto-apply bonuses from techniques the player
     # activated via the combat board Techniques button.
     decl_ignore_wound = False
-    decl_reduction_ignore = 0
-    decl_target_red_penalty = 0
-    decl_on_hit_condition = ""
     decl_ignore_stance_atn = False
+    decl_snapshot = _new_declared_damage()
     if atk_combatant and atk_combatant.declared_techniques:
         for tkey, tentry in list(atk_combatant.declared_techniques.items()):
             if tentry.get("manual"):
@@ -3730,6 +3721,7 @@ async def _execute_attack(
             if not efx:
                 continue
             t_display = tentry.get("display", tkey)
+            _accumulate_declared_damage(decl_snapshot, tkey, tentry)
             parts: list[str] = []
             if efx.get("atk_rolled"):
                 bonus_rolled += efx["atk_rolled"]
@@ -3749,14 +3741,11 @@ async def _execute_attack(
             if efx.get("dmg_explode"):
                 parts.append("dmg dice explode")
             if efx.get("reduction_ignore"):
-                decl_reduction_ignore += efx["reduction_ignore"]
                 val = efx["reduction_ignore"]
                 parts.append("ignore all Reduction" if val >= 999 else f"ignore {val} Reduction")
             if efx.get("target_reduction_penalty"):
-                decl_target_red_penalty += efx["target_reduction_penalty"]
                 parts.append(f"target Reduction -{efx['target_reduction_penalty']}")
             if efx.get("on_hit_condition"):
-                decl_on_hit_condition = efx["on_hit_condition"]
                 parts.append(f"inflict {efx['on_hit_condition']}")
             if efx.get("ignore_wound_penalties"):
                 decl_ignore_wound = True
@@ -3884,6 +3873,7 @@ async def _execute_attack(
                 source_channel_id=src_ch_id, weapon_material=mat,
                 void_damage=void_damage,
                 attacker_stance=a_stance, atk_init=atk_init, def_init=def_init,
+                decl_effects=decl_snapshot,
             )
         else:
             view = DamageView(
@@ -3893,6 +3883,7 @@ async def _execute_attack(
                 source_channel_id=src_ch_id, weapon_material=mat,
                 void_damage=void_damage,
                 attacker_stance=a_stance, atk_init=atk_init, def_init=def_init,
+                decl_effects=decl_snapshot,
             )
         prompt = {
             "disarm": "A DM can resolve the disarm below.",
