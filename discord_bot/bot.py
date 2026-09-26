@@ -532,6 +532,25 @@ async def _on_lost(guild_id: str, rec: storage.CharacterRecord) -> list[str]:
     await _combat_log(guild_id, f"LOST: {old_name} (Taint Rank 5) → NPC {c.name}")
     return notes
 
+def _drop_from_encounters(guild_id: str, name: str, owner_id: str | None) -> bool:
+    """Remove a deleted character, NPC or creature from every initiative tracker in the guild."""
+    dropped = False
+    for enc in list(encounters.values()):
+        if store.encounter_guild(str(enc.channel_id)) != guild_id:
+            continue
+        cb = enc.find(name)
+        if cb is None:
+            continue
+        staff_owned = owner_id in (None, NPC_OWNER)
+        if staff_owned and cb.owner_id:
+            continue
+        if not staff_owned and cb.owner_id not in (None, owner_id):
+            continue
+        enc.remove(name)
+        _save_encounter(guild_id, enc)
+        dropped = True
+    return dropped
+
 async def _resolve_active(
     interaction: discord.Interaction, member: discord.Member | None
 ) -> storage.CharacterRecord | None:
@@ -3914,6 +3933,8 @@ class _DeleteConfirmView(discord.ui.View):
         self.stop()
 
         role_notes: list[str] = []
+        if _drop_from_encounters(str(interaction.guild_id), char.name, owner_id):
+            role_notes.append("Removed from initiative.")
         if guild is not None:
             member = guild.get_member(int(owner_id))
             if member is None:
@@ -5795,7 +5816,11 @@ async def npc_delete(interaction: discord.Interaction, name: str) -> None:
         await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
         return
     store.delete(rec.id)
-    await interaction.response.send_message(f"Deleted NPC **{rec.character.name}**.", ephemeral=True)
+    dropped = _drop_from_encounters(str(interaction.guild_id), rec.character.name, NPC_OWNER)
+    await interaction.response.send_message(
+        f"Deleted NPC **{rec.character.name}**." + (" Removed from initiative." if dropped else ""),
+        ephemeral=True,
+    )
 
 def _resolve_npc(
     interaction: discord.Interaction, name: str
@@ -6993,7 +7018,11 @@ async def creature_delete(interaction: discord.Interaction, name: str) -> None:
         await interaction.response.send_message(err, ephemeral=True)
         return
     store.delete_creature(rec.id)
-    await interaction.response.send_message(f"Removed creature **{rec.creature.name}**.", ephemeral=True)
+    dropped = _drop_from_encounters(str(interaction.guild_id), rec.creature.name, None)
+    await interaction.response.send_message(
+        f"Removed creature **{rec.creature.name}**." + (" Removed from initiative." if dropped else ""),
+        ephemeral=True,
+    )
 
 @creature_group.command(name="wound", description="Apply wounds to a creature directly (no reduction). [Fortune]")
 @app_commands.describe(name="The creature.", amount="Wounds to apply.")
