@@ -532,6 +532,46 @@ async def _on_lost(guild_id: str, rec: storage.CharacterRecord) -> list[str]:
     await _combat_log(guild_id, f"LOST: {old_name} (Taint Rank 5) → NPC {c.name}")
     return notes
 
+async def _on_rename(guild_id: str, rec: storage.CharacterRecord, old_name: str) -> list[str]:
+    """Follow a character rename into live state: initiative trackers, the support
+    channel slug, room placements and category membership. History keeps the old name."""
+    notes: list[str] = []
+    new_name = rec.character.name
+    is_npc = rec.owner_id == NPC_OWNER
+    for enc in list(encounters.values()):
+        if store.encounter_guild(str(enc.channel_id)) != guild_id:
+            continue
+        cb = enc.find(old_name)
+        if cb is None:
+            continue
+        if is_npc and cb.owner_id:
+            continue
+        if not is_npc and cb.owner_id not in (None, rec.owner_id):
+            continue
+        cb.name = new_name
+        if old_name in enc.tally:
+            enc.tally[new_name] = enc.tally.pop(old_name)
+        _save_encounter(guild_id, enc)
+        if "initiative updated" not in notes:
+            notes.append("initiative updated")
+    store.rename_references(guild_id, old_name, new_name, "npc" if is_npc else None)
+    if not is_npc:
+        guild = client.get_guild(int(guild_id))
+        support_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT) if guild else None
+        old_slug = old_name.lower().replace(" ", "-")
+        support = discord.utils.get(support_cat.text_channels, name=old_slug) if support_cat else None
+        if support is not None:
+            try:
+                await support.edit(
+                    name=new_name.lower().replace(" ", "-"),
+                    topic=f"Private channel for {new_name} - speak with Staff here.",
+                    reason=f"Character renamed: {old_name} → {new_name}",
+                )
+                notes.append("support channel renamed")
+            except discord.HTTPException:
+                notes.append("support channel could not be renamed (permissions)")
+    return notes
+
 def _drop_from_encounters(guild_id: str, name: str, owner_id: str | None) -> bool:
     """Remove a deleted character, NPC or creature from every initiative tracker in the guild."""
     dropped = False
@@ -12383,6 +12423,7 @@ cog_edit.init(
     resolve_active=_resolve_active_for_edit,
     refuse_if_dead=_refuse_if_dead,
     on_death=_on_death,
+    on_rename=_on_rename,
     audit_stat=_audit_stat,
     build_sheet_embed=build_sheet_embed,
     check_insight=_check_insight_rank_advance,

@@ -33,6 +33,7 @@ class _Deps:
     resolve_active: object
     refuse_if_dead: object
     on_death: object
+    on_rename: object
     audit_stat: object
     build_sheet_embed: object
     check_insight: object
@@ -59,6 +60,7 @@ def init(
     resolve_active,
     refuse_if_dead,
     on_death,
+    on_rename,
     audit_stat,
     build_sheet_embed,
     check_insight,
@@ -80,6 +82,7 @@ def init(
     _d.resolve_active = resolve_active
     _d.refuse_if_dead = refuse_if_dead
     _d.on_death = on_death
+    _d.on_rename = on_rename
     _d.audit_stat = audit_stat
     _d.build_sheet_embed = build_sheet_embed
     _d.check_insight = check_insight
@@ -978,8 +981,10 @@ async def edit_rename(
     old_name = rec.character.name
     rec.character.name = clean_name
     _d.store.save(rec)
+    notes = await _d.on_rename(guild, rec, old_name)
+    tail = f" ({'; '.join(notes)})" if notes else ""
     await interaction.response.send_message(
-        f"Renamed **{old_name}** → **{clean_name}**.", embed=_d.build_sheet_embed(rec),
+        f"Renamed **{old_name}** → **{clean_name}**.{tail}", embed=_d.build_sheet_embed(rec),
         ephemeral=True,
     )
 
