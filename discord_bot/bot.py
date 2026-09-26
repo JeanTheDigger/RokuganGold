@@ -37,10 +37,12 @@ import cog_hub
 import cog_inventory
 import cog_letters
 import cog_npc_builder
+import cog_portrait
 import cog_rumor
 import cog_seasons
 import cog_trade
 import cog_weather
+import portraits
 import ref_commands
 import storage
 import views_base
@@ -706,6 +708,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         color=_wound_color(record),
     )
 
+    portraits.apply(embed, record)
     subtitle_bits = [b for b in (c.clan, c.family, c.school) if b]
     school_line = f"{c.school_type} School" + (f" (Rank {c.school_rank})" if c.school_rank else "")
     header = " · ".join(subtitle_bits) if subtitle_bits else " "
@@ -3900,7 +3903,7 @@ async def sheet_view(interaction: discord.Interaction, member: discord.Member | 
                 "You have no active character. Use `/sheet create` first.", ephemeral=True
             )
             return
-    await interaction.response.send_message(embed=build_sheet_embed(rec), ephemeral=True)
+    await interaction.response.send_message(embed=build_sheet_embed(rec), ephemeral=True, **portraits.send_kwargs(rec))
 
 async def _activate_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     """Staff only: their own characters plus every stored NPC."""
@@ -4032,6 +4035,7 @@ class _DeleteConfirmView(discord.ui.View):
         guild = interaction.guild
         owner_id = self._record.owner_id
         char = self._record.character
+        portraits.remove_file(self._record)
         store.delete(self._record.id)
         self.stop()
 
@@ -5646,6 +5650,7 @@ _HELP_BLURBS: dict[str, str] = {
     "category": "Group NPCs and creatures for bulk actions [Fortune].",
     "dm": "Fortune and Kami tools: Wizard menu, party overview, new day, damage, heal, taint, treat, undo, revive, craft, influence, announce, pending approvals, channel config.",
     "void": "Void Point management: Spend, refresh, status.",
+    "portrait": "A picture for your character: Set from an upload or a link, show it to the channel, clear it.",
     "rumor": "In-world rumors and notices: Post targeted or public rumors [Fortune]; list and view.",
     "weather": "Current weather and seasonal forecast; staff can set weather manually.",
     "grapple": "Shortcut to start or manage a grapple. [Fortune]",
@@ -5661,7 +5666,7 @@ _HELP_BLURBS: dict[str, str] = {
 }
 _HELP_SECTIONS: list[tuple[str, list[str]]] = [
     ("Getting started", ["help", "whoami", "players", "compare", "date"]),
-    ("Your character", ["sheet", "inventory", "xp", "void", "letter", "rumor"]),
+    ("Your character", ["sheet", "inventory", "portrait", "xp", "void", "letter", "rumor"]),
     ("Dice and checks", ["roll", "dice", "check", "macro", "history"]),
     ("Fights and magic", ["combat", "fight", "engage", "grapple", "duel", "spell"]),
     ("Places", ["room", "location"]),
@@ -5919,6 +5924,7 @@ async def npc_delete(interaction: discord.Interaction, name: app_commands.Range[
     if rec is None:
         await interaction.response.send_message(f"No NPC named **{name}**.", ephemeral=True)
         return
+    portraits.remove_file(rec)
     store.delete(rec.id)
     dropped = _drop_from_encounters(str(interaction.guild_id), rec.character.name, NPC_OWNER)
     await interaction.response.send_message(
@@ -12528,6 +12534,17 @@ cog_give.init(
     any_character_autocomplete=_any_character_autocomplete,
 )
 
+cog_portrait.init(
+    store=store,
+    npc_owner=NPC_OWNER,
+    require_guild=_require_guild,
+    is_dm=_is_dm,
+    resolve_active=_resolve_active_for_edit,
+    find_any_character=_find_any_character,
+    any_character_autocomplete=_any_character_autocomplete,
+    audit_stat=_audit_stat,
+)
+
 cog_trade.init(
     store=store,
     require_guild=_require_guild,
@@ -12543,6 +12560,7 @@ client.tree.add_command(cog_give.stipend_group)
 client.tree.add_command(cog_trade.pay)
 client.tree.add_command(cog_trade.trade)
 client.tree.add_command(xp_group)
+client.tree.add_command(cog_portrait.portrait_group)
 client.tree.add_command(dm)
 client.tree.add_command(npc_group)
 client.tree.add_command(creature_group)

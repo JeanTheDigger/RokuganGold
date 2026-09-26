@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable
 import discord
 from discord import app_commands
 
+import portraits
 import storage
 from l5r_rules import stats, taint, tattoo_catalog
 
@@ -39,7 +40,9 @@ _d: _Deps = None  # type: ignore[assignment]
 
 def hub_embed(interaction: discord.Interaction, rec: storage.CharacterRecord) -> discord.Embed:
     lines = _d.whoami_lines(interaction, rec)
-    return discord.Embed(description="\n".join(lines)[:4096], color=discord.Color.gold())
+    embed = discord.Embed(description="\n".join(lines)[:4096], color=discord.Color.gold())
+    portraits.apply(embed, rec)
+    return embed
 
 
 class _VoidReasonModal(discord.ui.Modal, title="Spend a Void Point"):
@@ -265,7 +268,7 @@ async def whoami(interaction: discord.Interaction) -> None:
         await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
         return
     hub = CharacterHub(rec, interaction.user.id)
-    await interaction.response.send_message(embed=hub_embed(interaction, rec), view=hub, ephemeral=True)
+    await interaction.response.send_message(embed=hub_embed(interaction, rec), view=hub, ephemeral=True, **portraits.send_kwargs(rec))
 
 
 def init(*, tree: app_commands.CommandTree, store, require_guild, build_sheet_embed, whoami_lines, activate_kata,

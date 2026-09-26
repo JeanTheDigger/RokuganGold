@@ -11,3 +11,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Character portrait uploads (kept next to the database; back them up with it).
+portraits/

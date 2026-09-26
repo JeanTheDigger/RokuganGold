@@ -125,6 +125,7 @@ class Character:
 
     # -- Free-form DM/player notes (bot convenience, not a game mechanic) --
     notes: str = ""
+    portrait: str = ""  # "https://..." or "file:<name>" under PORTRAIT_DIR (see portraits.py)
 
     # -- Heritage roll result text (includes Fortune notes for DM adjudication) --
     heritage_result: str = ""
