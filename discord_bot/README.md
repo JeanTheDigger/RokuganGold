@@ -1089,6 +1089,31 @@ The bot now belongs to your server, but it's offline until you run it (Step 2).
 
 ---
 
+## Adding the bot to a second server
+
+The same bot process can serve several servers. Every sheet, encounter, room,
+setting and staff role is stored per server, so nothing crosses over.
+
+1. Invite it: reuse the OAuth2 URL from Step 1 (scopes `bot` and
+   `applications.commands`, same permissions) and pick the new server.
+2. Make sure `DISCORD_GUILD_ID` is **blank** in the bot's `.env`. When it is set,
+   commands are registered on that one server only and the new server gets none
+   (the log says so on join). With it blank the bot registers commands on every
+   server it is in, including one that invites it while running, and skips the
+   registration on later restarts when nothing changed.
+3. Restart the bot if you changed `.env`.
+4. On the new server, as an administrator, run `/setup server` to create the
+   Kami, Fortune and Approved roles and the channel layout, then
+   `/dm approval_channel`, `/dm damage_channel`, `/dm log_channel`,
+   `/dm xp_log_channel` and `/dm date_channel` as needed. Give yourself the
+   Kami role.
+
+If the second server should be a completely separate world with its own
+database, run a second copy of the bot instead: a second Discord application
+and token, its own folder, `.env` and `DB_PATH`, and its own systemd service.
+
+---
+
 ## Step 2: Run it (locally first, to make sure it works)
 
 You can do this on your own computer before ever touching a server. You need

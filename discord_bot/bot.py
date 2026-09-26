@@ -257,6 +257,15 @@ class RokuganBot(discord.Client):
         if GUILD_ID:
             await _sync_tree(self.tree, discord.Object(id=int(GUILD_ID)))
 
+    async def on_guild_join(self, guild: discord.Guild) -> None:
+        """A server invited the bot while it was running: Register the commands there
+        at once. With DISCORD_GUILD_ID set the bot serves that one server only."""
+        if GUILD_ID:
+            log.warning("Joined guild %s (%s) but DISCORD_GUILD_ID pins commands to %s: No commands there.",
+                        guild.name, guild.id, GUILD_ID)
+            return
+        await _sync_tree(self.tree, guild)
+
     async def on_ready(self) -> None:
         self.tree.on_error = _on_app_command_error
         self.add_view(_ChargenButtonView())
