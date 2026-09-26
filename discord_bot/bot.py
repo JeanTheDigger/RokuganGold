@@ -1805,7 +1805,7 @@ async def _show_confirmation(interaction: discord.Interaction, state: dict) -> N
         if state.get("different_school"):
             bits.append("**Different School** advantage recorded")
         if state.get("heritage_result"):
-            bits.append(f"Heritage: {state['heritage_result'][:80]}")
+            bits.append(f"Heritage: {state['heritage_result'][:600]}")
         summary = ", ".join(bits) + "." if bits else ""
         await btn_inter.response.edit_message(
             content=f"Created **{state['name']}** and set as active. {summary}\n"
@@ -2254,7 +2254,7 @@ def _chargen_embed(state: dict) -> discord.Embed:
         bonus = f" (+1 {fam['bonus_trait'].capitalize()})" if fam else ""
         lines.append(f"**Family:** {state['family_name']}{bonus}")
     if state.get("heritage_result"):
-        lines.append(f"**Heritage:** {state['heritage_result'][:80]}")
+        lines.append(f"**Heritage:** {state['heritage_result'][:600]}")
     if state.get("different_school"):
         lines.append("**Different School** (5 XP)")
     if state.get("school_name"):
@@ -3267,7 +3267,7 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
             if sel_inter.user.id != int(state["user_id"]):
                 await sel_inter.response.send_message("This isn't your wizard.", ephemeral=True)
                 return
-            el = sel_inter.values[0]
+            el = el_select.values[0]
             cnt = remaining.get(el, 0)
             v2 = _ChargenView(state)
             v2.add_item(_SpellSelect(state, el, cnt))
@@ -3334,7 +3334,7 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
         lines.append(f"**Family:** {char.family}")
     lines.append(f"**School:** {char.school} ({char.school_type})")
     if state.get("heritage_result"):
-        lines.append(f"**Heritage:** {state['heritage_result'][:80]}")
+        lines.append(f"**Heritage:** {state['heritage_result'][:600]}")
     if state.get("concept"):
         lines.append(f"**Concept:** {state['concept'][:200]}")
     embed.description = "\n".join(lines)
