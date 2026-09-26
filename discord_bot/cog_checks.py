@@ -7,6 +7,8 @@ log_roll, resolve_duelist) are injected via init().
 
 from __future__ import annotations
 
+import re
+
 import discord
 from discord import app_commands
 
@@ -285,6 +287,18 @@ def _build_check_embed(
     if footer:
         embed.set_footer(text=footer)
     return embed
+
+
+def _public_check_embed(detail: discord.Embed, footer: str) -> discord.Embed:
+    """Public copy of a check: Total, TN and outcome only. No pool, dice, ranks, margin or modifier notes."""
+    public = discord.Embed(title=detail.title, color=detail.colour)
+    for field in detail.fields:
+        if field.name == "Result":
+            public.add_field(name="Result", value=re.sub(r" \(margin [^)]*\)", "", field.value), inline=False)
+            break
+    if footer:
+        public.set_footer(text=footer)
+    return public
 
 
 # ---------------------------------------------------------------------------
@@ -805,7 +819,7 @@ async def medicine_check(
     void_unskilled="Void Point: Treat Skill 0 as Rank 1.",
     emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label shown with the roll.",
-    secret="Only you see the result.",
+    secret="True: Only you see the result. False: The total, TN and outcome are posted here; the full breakdown stays private to you.",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
 async def skill_check_cmd(
@@ -860,9 +874,12 @@ async def skill_check_cmd(
     if reason:
         title += f": {reason}"
     embed = _build_check_embed(title, c.name, skill_label, trait.name, result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
-    if not secret:
-        _d.log_roll(interaction.channel_id, c.name, f"{skill}/{trait.name} vs TN {tn}", result["total"])
-    await interaction.response.send_message(embed=embed, ephemeral=secret)
+    if secret:
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+    _d.log_roll(interaction.channel_id, c.name, f"{skill}/{trait.name} vs TN {tn}", result["total"])
+    await interaction.response.send_message(embed=_public_check_embed(embed, f"Rolled by {interaction.user.display_name}"))
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1098,7 +1115,7 @@ async def check_cooperative(
     void_unskilled="Void Point: Treat Stealth 0 as Rank 1.",
     emphasis="Emphasis on the sheet: Rerolls 1s once.",
     reason="Label (e.g. 'sneaking past the guards').",
-    secret="Only you see the result.",
+    secret="True: Only you see the result. False: The total, TN and outcome are posted here; the full breakdown stays private to you.",
 )
 async def stealth_check(
     interaction: discord.Interaction,
@@ -1154,9 +1171,12 @@ async def stealth_check(
         void_line=void_line,
         footer=f"Rolled by {interaction.user.display_name}",
     )
-    if not secret:
-        _d.log_roll(interaction.channel_id, c.name, f"Stealth/Agility vs TN {tn}", result["total"])
-    await interaction.response.send_message(embed=embed, ephemeral=secret)
+    if secret:
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+    _d.log_roll(interaction.channel_id, c.name, f"Stealth/Agility vs TN {tn}", result["total"])
+    await interaction.response.send_message(embed=_public_check_embed(embed, f"Rolled by {interaction.user.display_name}"))
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1177,7 +1197,7 @@ async def stealth_check(
     spend_void="Spend a Void Point for +1k1.",
     void_unskilled="Void Point: Treat Investigation 0 as Rank 1.",
     reason="Label (e.g. 'searching the crime scene').",
-    secret="Only you see the result.",
+    secret="True: Only you see the result. False: The total, TN and outcome are posted here; the full breakdown stays private to you.",
 )
 @app_commands.choices(emphasis=_INVESTIGATION_EMPHASIS)
 async def investigate_check(
@@ -1239,9 +1259,12 @@ async def investigate_check(
     else:
         footer = roller
     embed = _build_check_embed(title, c.name, skill_label, "Perception", result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=footer)
-    if not secret:
-        _d.log_roll(interaction.channel_id, c.name, f"Investigation/Perception vs TN {tn}", result["total"])
-    await interaction.response.send_message(embed=embed, ephemeral=secret)
+    if secret:
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+    _d.log_roll(interaction.channel_id, c.name, f"Investigation/Perception vs TN {tn}", result["total"])
+    await interaction.response.send_message(embed=_public_check_embed(embed, f"Rolled by {interaction.user.display_name}"))
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 # ---------------------------------------------------------------------------
