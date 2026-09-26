@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 import datetime
+import hashlib
 import json
 import logging
 import math
@@ -179,10 +180,31 @@ def _oversized_commands(tree: app_commands.CommandTree) -> list[tuple[str, int]]
             out.append((cmd.name, chars))
     return out
 
-async def _sync_tree(tree: app_commands.CommandTree, guild: discord.abc.Snowflake) -> tuple[int, str]:
+def _tree_payload_hash(tree: app_commands.CommandTree, guild: discord.abc.Snowflake) -> str:
+    """Stable fingerprint of every command definition the bot would register for *guild*.
+    Before the first sync the definitions are global; after it they live as guild
+    copies (the globals are cleared), so both sets are merged by name."""
+    defs = {c.name: c.to_dict(tree) for c in tree.get_commands()}
+    defs.update({c.name: c.to_dict(tree) for c in tree.get_commands(guild=guild)})
+    payload = json.dumps([defs[n] for n in sorted(defs)], sort_keys=True)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+async def _sync_tree(
+    tree: app_commands.CommandTree, guild: discord.abc.Snowflake, *, force: bool = False,
+) -> tuple[int, str]:
     """Register the tree with one guild and clear global copies. Returns (count, error).
     A failed sync leaves Discord serving the previous definitions, so the error is
-    always logged and returned instead of raised."""
+    always logged and returned instead of raised.
+    Discord counts command registrations against a daily per-guild quota, so a
+    startup sync is skipped when the definitions have not changed since the last
+    successful one. /sync passes force=True to register regardless."""
+    guild_id = str(getattr(guild, "id", "?"))
+    payload_hash = _tree_payload_hash(tree, guild)
+    if not force and store.get_sync_hash(guild_id) == payload_hash:
+        count = len(tree.get_commands(guild=guild)) or len(tree.get_commands())
+        log.info("Command definitions unchanged for guild %s: Sync skipped (%d commands)", guild_id, count)
+        return count, ""
     for name, chars in _oversized_commands(tree):
         log.error("/%s registration is %d chars (limit %d): Discord will reject the sync", name, chars, COMMAND_TEXT_LIMIT)
     try:
@@ -192,9 +214,10 @@ async def _sync_tree(tree: app_commands.CommandTree, guild: discord.abc.Snowflak
         await tree.sync()
     except discord.HTTPException as e:
         detail = getattr(e, "text", "") or str(e)
-        log.error("Command sync to guild %s FAILED: %s", getattr(guild, "id", "?"), detail)
+        log.error("Command sync to guild %s FAILED: %s", guild_id, detail)
         return 0, detail
-    log.info("Synced %d commands to guild %s", len(synced), getattr(guild, "id", "?"))
+    store.set_sync_hash(guild_id, payload_hash)
+    log.info("Synced %d commands to guild %s", len(synced), guild_id)
     return len(synced), ""
 
 class RokuganBot(discord.Client):
@@ -1006,7 +1029,7 @@ async def sync_commands(interaction: discord.Interaction) -> None:
         return
     await interaction.response.defer(ephemeral=True)
     oversized = _oversized_commands(client.tree)
-    count, error = await _sync_tree(client.tree, discord.Object(id=interaction.guild_id))
+    count, error = await _sync_tree(client.tree, discord.Object(id=interaction.guild_id), force=True)
     if error:
         too_big = "; ".join(f"/{n} is {c} chars (limit {COMMAND_TEXT_LIMIT})" for n, c in oversized)
         await interaction.followup.send(
@@ -4711,6 +4734,8 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
     if not active:
         await interaction.response.send_message("No active PCs on this server.", ephemeral=True)
         return
+    # Many sheets, plus Taint crossings that post notices: Answer within Discord's deadline first.
+    await interaction.response.defer(ephemeral=True)
     lines = []
     for owner_id, rec in active:
         c = rec.character
@@ -4786,7 +4811,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
     else:
         footer += " · Set the date with /dm setdate"
     embed.set_footer(text=footer)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
     if date_str:
         await _update_date_display(guild, date_str, reason="A new day dawns in Rokugan.")
     if interaction.guild and old_cal and new_cal:
@@ -6052,7 +6077,7 @@ async def room_create(
             "Create a room from a normal text channel (not inside a thread or DM).", ephemeral=True
         )
         return
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     try:
         thread = await interaction.channel.create_thread(
             name=name, type=discord.ChannelType.private_thread, invitable=False
@@ -7681,7 +7706,7 @@ async def location_area_create(
         overwrites[m] = discord.PermissionOverwrite(
             view_channel=True, send_messages=True, read_message_history=True,
         )
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     try:
         category = await guild.create_category(clean_name, overwrites=overwrites, reason=f"Location area by {interaction.user}")
     except discord.Forbidden:
@@ -7931,7 +7956,7 @@ async def location_create(
             ch_overwrites[m] = discord.PermissionOverwrite(
                 view_channel=True, send_messages=True, read_message_history=True,
             )
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     try:
         channel = await cat_ch.create_text_channel(
             clean_name, overwrites=ch_overwrites or {}, reason=f"Location by {interaction.user}",

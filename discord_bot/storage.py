@@ -314,6 +314,11 @@ CREATE TABLE IF NOT EXISTS approval_channels (
     channel_id TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS command_sync_state (
+    guild_id     TEXT NOT NULL PRIMARY KEY,
+    payload_hash TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS damage_approval_channels (
     guild_id   TEXT NOT NULL PRIMARY KEY,
     channel_id TEXT NOT NULL
@@ -1056,6 +1061,23 @@ class Store:
         with self._lock, self._conn:
             self._conn.execute(
                 "DELETE FROM approval_channels WHERE guild_id = ?", (guild_id,)
+            )
+
+    # -- command sync state ------------------------------------------------------
+    def get_sync_hash(self, guild_id: str) -> str | None:
+        """Hash of the command definitions last synced to this guild, or None."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT payload_hash FROM command_sync_state WHERE guild_id = ?", (guild_id,)
+            ).fetchone()
+        return row["payload_hash"] if row else None
+
+    def set_sync_hash(self, guild_id: str, payload_hash: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "INSERT INTO command_sync_state (guild_id, payload_hash) VALUES (?, ?) "
+                "ON CONFLICT(guild_id) DO UPDATE SET payload_hash = excluded.payload_hash",
+                (guild_id, payload_hash),
             )
 
     # -- DM damage approval channel --------------------------------------------
