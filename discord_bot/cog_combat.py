@@ -14,6 +14,7 @@ import discord
 from discord import app_commands
 
 import encounter
+import helpers
 import storage as _storage_mod
 import views_base
 from l5r_rules import (
@@ -36,6 +37,7 @@ class _Deps:
     NPC_OWNER: str
     ROLE_FORTUNE: str
     ROLE_KAMI: str
+    CAT_PLAYER_SUPPORT: str
     bot_client: discord.Client
     is_dm: object
     refuse_if_dead: object
@@ -101,6 +103,7 @@ def init(
     npc_owner: str,
     role_fortune: str,
     role_kami: str,
+    cat_player_support: str,
     bot_client: discord.Client,
     is_dm,
     refuse_if_dead,
@@ -130,6 +133,7 @@ def init(
     _d.NPC_OWNER = npc_owner
     _d.ROLE_FORTUNE = role_fortune
     _d.ROLE_KAMI = role_kami
+    _d.CAT_PLAYER_SUPPORT = cat_player_support
     _d.bot_client = bot_client
     _d.is_dm = is_dm
     _d.refuse_if_dead = refuse_if_dead
@@ -6468,6 +6472,36 @@ async def grapple_break(
 
 
 
+async def _deliver_assessment(
+    interaction: discord.Interaction, guild: str, assessor_rec: _storage_mod.CharacterRecord, text: str,
+) -> None:
+    """Send what a duelist learned in Assessment to that duelist's player only."""
+    assessor = assessor_rec.character.name
+    reveal = discord.Embed(title=f"{assessor}: Assessment", description=text, color=discord.Color.gold())
+    if assessor_rec.owner_id == _d.NPC_OWNER:
+        ch_id = _d.store.get_damage_approval_channel(guild) or _d.store.get_approval_channel(guild)
+        staff_ch = _d.bot_client.get_channel(int(ch_id)) if ch_id else None
+        if staff_ch is not None:
+            await staff_ch.send(content=f"NPC **{assessor}** assessed in <#{interaction.channel_id}>.", embed=reveal)
+        elif _d.is_dm(interaction):
+            await interaction.followup.send(embed=reveal, ephemeral=True)
+        return
+    if assessor_rec.owner_id == str(interaction.user.id):
+        await interaction.followup.send(embed=reveal, ephemeral=True)
+        return
+    support = await helpers.find_support_channel(interaction.guild, assessor, _d.CAT_PLAYER_SUPPORT)
+    if support is not None:
+        await support.send(
+            content=f"<@{assessor_rec.owner_id}> Your duel assessment in <#{interaction.channel_id}>:",
+            embed=reveal,
+        )
+    else:
+        await interaction.followup.send(
+            f"Could not deliver **{assessor}**'s assessment privately: No support channel found.",
+            ephemeral=True,
+        )
+
+
 @combat_duel.command(name="assess", description="Assessment stage: Both duelists roll Iaijutsu(Assessment)/Awareness.")
 @app_commands.describe(
     duelist_a="First duelist (combatant name or character).",
@@ -6563,11 +6597,10 @@ async def duel_assess(
 
     embed = discord.Embed(title=f"Iaijutsu Duel: Assessment", color=discord.Color.gold())
 
-    def _reveal_text(res, opponent):
+    def _reveal_text(res, opponent) -> str | None:
         if not res["success"]:
-            return "Failed: No information learned."
+            return None
         reveals = res["reveals"]
-        opponent_ir = stats.insight_rank(opponent)
         opponent_iaijutsu = opponent.skills.get("Iaijutsu", 0)
         available = [
             f"Void Ring: **{opponent.void_ring}**",
@@ -6578,7 +6611,12 @@ async def duel_assess(
             f"Wound Level: **{stats.wound_level_name(opponent)}**",
         ]
         chosen = available[: reveals]
-        return "Learned " + str(reveals) + ":\n" + "\n".join(chosen)
+        return f"Learned {reveals} about **{opponent.name}**:\n" + "\n".join(chosen)
+
+    def _public_line(res) -> str:
+        if res["success"]:
+            return "Succeeded: What was learned has been sent privately."
+        return "Failed: No information learned."
 
     def _duel_notes(wp, tech_notes):
         parts = []
@@ -6593,7 +6631,7 @@ async def duel_assess(
             f"{res_a['rolled']}k{res_a['kept']} → **{res_a['total']}** vs TN **{res_a['tn']}**"
             f": {'**SUCCESS**' if res_a['success'] else '**FAILED**'}"
             + _duel_notes(wp_a, tech_notes_a)
-            + "\n" + _reveal_text(res_a, cb_char)
+            + "\n" + _public_line(res_a)
         ),
         inline=False,
     )
@@ -6603,7 +6641,7 @@ async def duel_assess(
             f"{res_b['rolled']}k{res_b['kept']} → **{res_b['total']}** vs TN **{res_b['tn']}**"
             f": {'**SUCCESS**' if res_b['success'] else '**FAILED**'}"
             + _duel_notes(wp_b, tech_notes_b)
-            + "\n" + _reveal_text(res_b, ca)
+            + "\n" + _public_line(res_b)
         ),
         inline=False,
     )
@@ -6611,6 +6649,10 @@ async def duel_assess(
         embed.add_field(name="Focus Bonus", value=focus_bonus.strip(), inline=False)
     embed.set_footer(text="Either duelist may concede after Assessment. Otherwise: /duel focus")
     await interaction.response.send_message(embed=embed)
+    for assessor_rec, opponent, res in ((rec_a, cb_char, res_a), (rec_b, ca, res_b)):
+        text = _reveal_text(res, opponent)
+        if text is not None:
+            await _deliver_assessment(interaction, guild, assessor_rec, text)
     await _d.combat_log(str(interaction.guild_id), f"Duel Assess: {ca.name} vs {cb_char.name}")
 
 
@@ -7138,9 +7180,9 @@ class DuelBoardView(views_base.PersistentView):
 
         embed = discord.Embed(title="Iaijutsu Duel: Assessment", color=discord.Color.gold())
 
-        def _reveal_text(res, opponent):
+        def _reveal_text(res, opponent) -> str | None:
             if not res["success"]:
-                return "Failed: No information learned."
+                return None
             reveals = res["reveals"]
             opponent_iaijutsu = opponent.skills.get("Iaijutsu", 0)
             available = [
@@ -7151,7 +7193,12 @@ class DuelBoardView(views_base.PersistentView):
                 f"Void Points: **{opponent.current_void_points}**",
                 f"Wound Level: **{stats.wound_level_name(opponent)}**",
             ]
-            return "Learned " + str(reveals) + ":\n" + "\n".join(available[:reveals])
+            return f"Learned {reveals} about **{opponent.name}**:\n" + "\n".join(available[:reveals])
+
+        def _public_line(res) -> str:
+            if res["success"]:
+                return "Succeeded: What was learned has been sent privately."
+            return "Failed: No information learned."
 
         def _duel_notes(wp, tech_notes):
             parts = []
@@ -7166,7 +7213,7 @@ class DuelBoardView(views_base.PersistentView):
                 f"{res_a['rolled']}k{res_a['kept']} → **{res_a['total']}** vs TN **{res_a['tn']}**"
                 f": {'**SUCCESS**' if res_a['success'] else '**FAILED**'}"
                 + _duel_notes(wp_a, tech_notes_a)
-                + "\n" + _reveal_text(res_a, cb_char)
+                + "\n" + _public_line(res_a)
             ),
             inline=False,
         )
@@ -7176,7 +7223,7 @@ class DuelBoardView(views_base.PersistentView):
                 f"{res_b['rolled']}k{res_b['kept']} → **{res_b['total']}** vs TN **{res_b['tn']}**"
                 f": {'**SUCCESS**' if res_b['success'] else '**FAILED**'}"
                 + _duel_notes(wp_b, tech_notes_b)
-                + "\n" + _reveal_text(res_b, ca)
+                + "\n" + _public_line(res_b)
             ),
             inline=False,
         )
@@ -7188,6 +7235,10 @@ class DuelBoardView(views_base.PersistentView):
         self._persist_args = self._updated_args()
         self._sync_buttons()
         await interaction.response.send_message(embed=embed)
+        for assessor_rec, opponent, res in ((rec_a, cb_char, res_a), (rec_b, ca, res_b)):
+            text = _reveal_text(res, opponent)
+            if text is not None:
+                await _deliver_assessment(interaction, self.guild_id, assessor_rec, text)
         await _d.combat_log(self.guild_id, f"Duel Assess: {ca.name} vs {cb_char.name}")
         ch = _d.bot_client.get_channel(self.channel_id)
         if ch:

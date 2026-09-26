@@ -12162,6 +12162,7 @@ cog_combat.init(
     npc_owner=NPC_OWNER,
     role_fortune=ROLE_FORTUNE,
     role_kami=ROLE_KAMI,
+    cat_player_support=CAT_PLAYER_SUPPORT,
     bot_client=client,
     is_dm=_is_dm,
     refuse_if_dead=_refuse_if_dead,
