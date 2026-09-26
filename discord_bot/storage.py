@@ -563,6 +563,14 @@ class Store:
             )
         return changed
 
+    def set_owner(self, character_id: int, owner_id: str) -> None:
+        """Move a character to another owner (e.g. a Lost PC into the NPC pool)."""
+        with self._lock, self._conn:
+            self._conn.execute(
+                "UPDATE characters SET owner_id = ?, updated_at = ? WHERE id = ?",
+                (owner_id, time.time(), character_id),
+            )
+
     def delete(self, character_id: int) -> None:
         with self._lock, self._conn:
             # active_characters FK CASCADE handles cleanup automatically

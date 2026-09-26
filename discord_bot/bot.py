@@ -474,6 +474,64 @@ async def _on_death(guild_id: str, name: str, owner_id: str | None, record_id: i
     await _combat_log(guild_id, f"DEATH: {name}" + (f" ({'; '.join(notes)})" if notes else ""))
     return notes
 
+async def _on_lost(guild_id: str, rec: storage.CharacterRecord) -> list[str]:
+    """s42: a PC that reaches Taint Rank 5 is Lost and becomes a staff-controlled NPC.
+    Returns note lines for the announcement."""
+    notes: list[str] = []
+    if rec.owner_id == NPC_OWNER:
+        return notes
+    c = rec.character
+    player_id = rec.owner_id
+    old_name = c.name
+    if store.get_by_name(guild_id, NPC_OWNER, c.name) is not None:
+        c.name = f"{c.name} (Lost)"
+        notes.append(f"renamed **{c.name}** (an NPC already had that name)")
+    store.save(rec, note="lost to the Taint")
+    store.set_owner(rec.id, NPC_OWNER)
+    rec.owner_id = NPC_OWNER
+    active = store.get_active(guild_id, player_id)
+    if active is not None and active.id == rec.id:
+        store.clear_active(guild_id, player_id, rec.id)
+    for enc in list(encounters.values()):
+        if store.encounter_guild(str(enc.channel_id)) != guild_id:
+            continue
+        cb = enc.find(old_name)
+        if cb is None or cb.owner_id not in (None, player_id):
+            continue
+        cb.name = c.name
+        cb.owner_id = None
+        cb.is_npc = True
+        _save_encounter(guild_id, enc)
+        if "staff-controlled in initiative" not in notes:
+            notes.append("staff-controlled in initiative")
+    notes.append("now a staff-controlled NPC; no longer the player's active character")
+    guild = client.get_guild(int(guild_id))
+    if guild is not None:
+        text = (
+            f"<@{player_id}> **{old_name}** has been claimed by the Shadowlands (Taint Rank 5). "
+            f"The character is now under staff control."
+        )
+        support_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT)
+        support = discord.utils.get(support_cat.text_channels, name=old_name.lower().replace(" ", "-")) if support_cat else None
+        if support is not None:
+            try:
+                await support.send(text)
+            except discord.HTTPException:
+                pass
+        approval_ch_id = store.get_approval_channel(guild_id)
+        approval_ch = client.get_channel(int(approval_ch_id)) if approval_ch_id else None
+        if approval_ch is not None:
+            try:
+                await approval_ch.send(
+                    f"{_dm_ping(guild)}**{old_name}** (<@{player_id}>) is Lost to the Taint: "
+                    f"now the NPC **{c.name}**.",
+                    allowed_mentions=_PING_MENTIONS,
+                )
+            except discord.HTTPException:
+                pass
+    await _combat_log(guild_id, f"LOST: {old_name} (Taint Rank 5) → NPC {c.name}")
+    return notes
+
 async def _resolve_active(
     interaction: discord.Interaction, member: discord.Member | None
 ) -> storage.CharacterRecord | None:
@@ -4633,6 +4691,9 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
                                 line += f" Mutation: {m}."
                             for m in tr["crossing"].get("madnesses", []):
                                 line += f" Madness: {m}."
+                            if tr["crossing"].get("is_lost"):
+                                lost_notes = await _on_lost(guild, rec)
+                                line += " **LOST**: " + "; ".join(lost_notes)
                         parts.append(line)
                 else:
                     parts.append(f"Taint roll in {interval - c.taint_days_since_roll} day(s)")
@@ -10038,7 +10099,12 @@ async def taint_command(
                 label = "Madness" if len(crossing.get("madnesses", [])) == 1 else f"Madness {i}"
                 embed.add_field(name=label, value=m, inline=False)
             if crossing["is_lost"]:
-                embed.add_field(name="LOST TO THE TAINT", value="Character becomes an NPC.", inline=False)
+                lost_notes = await _on_lost(guild, rec)
+                embed.add_field(
+                    name="LOST TO THE TAINT",
+                    value="; ".join(lost_notes) or "Already a staff-controlled NPC.",
+                    inline=False,
+                )
         await interaction.response.send_message(embed=embed, ephemeral=True)
     else:
         rank = taint.taint_rank(c)
