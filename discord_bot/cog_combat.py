@@ -6003,7 +6003,21 @@ async def grapple_start(
         await interaction.response.send_message("You can only start a grapple involving your own character.", ephemeral=True)
         return
     guild = str(interaction.guild_id)
+    # A board means the grapple is established: Both are Grappled from here on
+    # (Armor TN 5 + armor, no stances, no large weapons) even when the board is
+    # opened directly instead of through /engage grapple initiate.
+    newly = [cb for cb in (cb_ctrl, cb_def) if "grappled" not in cb.conditions]
+    for cb in newly:
+        cb.conditions.add("grappled")
+    if newly:
+        _d.save_encounter(guild, enc)
     embed = _build_grapple_embed(cb_ctrl.name, cb_def.name)
+    if newly:
+        embed.add_field(
+            name="Grappled",
+            value=" and ".join(f"**{cb.name}**" for cb in newly) + " now carry the Grappled condition.",
+            inline=False,
+        )
     view = GrappleBoardView(
         guild_id=guild, channel_id=interaction.channel_id,
         ctrl_name=cb_ctrl.name, def_name=cb_def.name,
