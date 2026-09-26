@@ -6303,7 +6303,7 @@ class SpellDamageView(_DisableableView):
                     applied["new_wound_level"] = stats.wound_level_name(rec.character)
                     applied["is_dead"] = stats.is_dead(rec.character)
                     applied["level_changed"] = applied["old_wound_level"] != applied["new_wound_level"]
-                    void_line = f"\nVoid Point: **−{void_saved}** wounds ({rec.character.current_void_points} VP left)"
+                    void_line = f"\nVoid Point: **−{void_saved}** wounds"
                 else:
                     void_line = "\nNo Void Points available: Full damage applied"
         store.save(rec, note="spell damage")

@@ -335,7 +335,7 @@ class _VoidWoundReduceView(discord.ui.View):
         await interaction.response.edit_message(
             content=(
                 f"**{c.name}** spent a Void Point: **-{void_saved}** wounds "
-                f"(**{new_level}**, {c.current_void_points}/{taint.void_point_cap(c)} VP)"
+                f"(**{new_level}**)"
             ),
             view=self,
         )
@@ -564,7 +564,7 @@ class DamageView(views_base.PersistentView):
                 _d.tally(self.channel_id, attacker.name, "void")
                 extra_rolled += 1
                 t_kept += 1
-                t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
+                t_dmg_notes.append("Katana: Void +1k1 damage")
                 _d.store.save(attacker_rec, note="Void Point spent (katana damage)")
             elif self.void_damage:
                 t_dmg_notes.append("Katana: No Void Points for +1k1 damage")
@@ -845,7 +845,7 @@ class DamageView(views_base.PersistentView):
             _d.tally(self.channel_id, attacker.name, "void")
             extra_rolled += 1
             t_kept += 1
-            t_dmg_notes.append(f"Katana: Void +1k1 damage ({attacker.current_void_points} VP left)")
+            t_dmg_notes.append("Katana: Void +1k1 damage")
             _d.store.save(attacker_rec, note="Void Point spent (katana damage)")
         elif self.void_damage:
             t_dmg_notes.append("Katana: No Void Points for +1k1 damage")
@@ -1832,7 +1832,7 @@ class CombatBoardView(views_base.PersistentView):
                 color=discord.Color.purple(),
                 description=(
                     f"**+10 Armor TN** for this Round\n"
-                    f"Armor TN bonus: +{cb.void_armor_tn_bonus} | VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
+                    f"Armor TN bonus: +{cb.void_armor_tn_bonus}\n"
                     f"Clears at the start of the next Round."
                 ),
             )
@@ -1901,7 +1901,7 @@ class CombatBoardView(views_base.PersistentView):
                 color=discord.Color.purple(),
                 description=(
                     f"**+10 Initiative** for the skirmish\n"
-                    f"Effective initiative: **{cb.effective_initiative}** | VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
+                    f"Effective initiative: **{cb.effective_initiative}**\n"
                     f"Persists until the encounter ends."
                 ),
             )
@@ -2699,7 +2699,6 @@ class _BoardVoidSwapSelect(discord.ui.View):
                     f"**{cb_s.name}** exchanges Initiative with **{cb_t.name}**\n"
                     f"{cb_s.name}: {old_s} → **{cb_s.effective_initiative}** | "
                     f"{cb_t.name}: {old_t} → **{cb_t.effective_initiative}**\n"
-                    f"VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
                     f"Persists until the encounter ends."
                 ),
             )
@@ -3320,7 +3319,7 @@ async def _execute_attack(
             _d.tally(interaction.channel_id, c.name, "void")
             bonus_rolled = bonus_kept = 1
             _d.store.save(attacker_rec)
-            void_line = f" · Void +1k1 ({c.current_void_points} VP left)"
+            void_line = " · Void +1k1"
         else:
             void_line = " · No Void Points to spend"
 
@@ -5308,7 +5307,7 @@ async def combat_void_armor(interaction: discord.Interaction, combatant: str) ->
         color=discord.Color.purple(),
         description=(
             f"**+10 Armor TN** for this Round\n"
-            f"Armor TN bonus: +{cb.void_armor_tn_bonus} · VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
+            f"Armor TN bonus: +{cb.void_armor_tn_bonus}\n"
             f"Clears at the start of the next Round."
         ),
     )
@@ -5365,7 +5364,7 @@ async def combat_void_initiative(interaction: discord.Interaction, combatant: st
         color=discord.Color.purple(),
         description=(
             f"**+10 Initiative** for the skirmish\n"
-            f"Effective initiative: **{cb.effective_initiative}** · VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
+            f"Effective initiative: **{cb.effective_initiative}**\n"
             f"Persists until the encounter ends."
         ),
     )
@@ -5441,7 +5440,6 @@ async def combat_void_swap(interaction: discord.Interaction, spender: str, targe
             f"**{cb_s.name}** exchanges Initiative with **{cb_t.name}**\n"
             f"{cb_s.name}: {old_s} → **{cb_s.effective_initiative}** · "
             f"{cb_t.name}: {old_t} → **{cb_t.effective_initiative}**\n"
-            f"VP remaining: {c.current_void_points}/{taint.void_point_cap(c)}\n"
             f"Persists for the remainder of the skirmish."
         ),
     )
