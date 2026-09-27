@@ -171,9 +171,35 @@ def _declared_defense(cb) -> dict:
     return out
 
 
+def _stance_change_refusal(cb, enc) -> str | None:
+    """GDD s04.5 (LOCKED): After Round 1 a Stance is chosen at the beginning of the
+    Turn. Once the combatant has acted this Turn the stance is locked; changing it
+    after an attack (a Full Attack strike followed by Center, say) is refused."""
+    if enc is None or not enc.started:
+        return None
+    if cb.actions_used > 0:
+        return (f"**{cb.name}** has already acted this turn ({cb.actions_used}/2 actions). A Stance is chosen at "
+                f"the beginning of your Turn (s04.5), so it is locked until your next Turn.")
+    return None
+
+
+def _enter_stance(cb, stance_val: str, enc) -> None:
+    """Set the stance. Center Stance forfeits all Actions this Turn (s04.5), so the
+    action budget is spent at once; the +10 Initiative and +1k1+Void come next Round."""
+    cb.stance = stance_val
+    if stance_val == "center":
+        cb.center_bonus_available = False
+        cb.center_init_boost = 0
+        if enc is not None and enc.started:
+            cb.actions_used = 2
+
+
 def _actions_spent_msg(cb, enc) -> str:
     """Why an actor cannot act now: Budget spent, and when it comes back."""
     cur = enc.current() if enc is not None and enc.started else None
+    if cb.stance == "center":
+        return (f"**{cb.name}** is in Center Stance, which forfeits all Actions this Turn (s04.5). "
+                f"The +10 Initiative and +1k1 + Void Ring bonus come next Round.")
     msg = f"**{cb.name}** has already used actions this turn ({cb.actions_used}/2). "
     if cur is not None and cur is not cb:
         msg += f"It is **{cur.name}**'s turn; {cb.name}'s actions refresh when their own turn begins. "
@@ -2408,16 +2434,19 @@ class _BoardStanceSelect(discord.ui.View):
                 content=f"**{cb.name}** cannot use that stance: {block_reason}", view=None,
             )
             return
-        cb.stance = stance_val
-        if stance_val == "center":
-            cb.center_bonus_available = False
-            cb.center_init_boost = 0
+        locked = _stance_change_refusal(cb, enc)
+        if locked:
+            await interaction.response.edit_message(content=locked, view=None)
+            return
+        _enter_stance(cb, stance_val, enc)
         _d.save_encounter(self.guild_id, enc)
         label = stance_val.replace("_", " ").title()
         effects = combat.stance_effects(stance_val)
         msg = f"**{cb.name}**: {label} Stance"
         if effects:
             msg += f"\n{effects}"
+        if stance_val == "center" and enc.started:
+            msg += "\nAll Actions this Turn are forfeited. Next Round: +10 Initiative and +1k1 + Void Ring on one roll."
         await interaction.response.edit_message(content=msg, view=None)
         await _d.combat_log(self.guild_id, f"Stance: {cb.name} >> {label}")
         await _refresh_board(enc, self.guild_id)
@@ -8240,10 +8269,11 @@ async def combat_stance(
     if blocked:
         await interaction.response.send_message(f"**{cb.name}** cannot use that stance: {block_reason}", ephemeral=True)
         return
-    cb.stance = stance.value
-    if stance.value == "center":
-        cb.center_bonus_available = False
-        cb.center_init_boost = 0
+    locked = _stance_change_refusal(cb, enc)
+    if locked:
+        await interaction.response.send_message(locked, ephemeral=True)
+        return
+    _enter_stance(cb, stance.value, enc)
     _d.save_encounter(str(interaction.guild_id), enc)
     label = stance.name
     effects = combat.stance_effects(stance.value)
@@ -8260,6 +8290,8 @@ async def combat_stance(
     )
     if effects:
         embed.description = effects
+    if stance.value == "center" and enc.started:
+        embed.description = (embed.description or "") + "\nAll Actions this Turn are forfeited. Next Round: +10 Initiative and +1k1 + Void Ring on one roll."
     embed.set_footer(text=f"Set by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed)
     await _d.combat_log(str(interaction.guild_id), f"Stance: {cb.name} → {label}")
