@@ -257,6 +257,20 @@ class RokuganBot(discord.Client):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
 
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
+        # A click on a menu no view owns any more (the bot restarted, or the menu
+        # timed out) would otherwise sit unanswered until Discord shows
+        # "didn't respond in time". Answer it instead.
+        if interaction.type is not discord.InteractionType.component or interaction.guild_id is None:
+            return
+        try:
+            if _component_has_handler(self, interaction):
+                return
+        except Exception:  # never let the fallback itself break a live click
+            log.exception("orphan check failed")
+            return
+        await _handle_orphan_component(interaction)
+
     async def setup_hook(self) -> None:
         if GUILD_ID:
             await _sync_tree(self.tree, discord.Object(id=int(GUILD_ID)))
@@ -310,6 +324,51 @@ _COMPONENT_ERROR_TEXT = (
     "Something went wrong with that control. The error has been logged; "
     "try again, or tell a DM what you pressed."
 )
+
+_ORPHAN_MENU_TEXT = (
+    "That menu is no longer live: The bot restarted or the menu timed out. "
+    "Run the command again for a fresh one."
+)
+
+
+def _component_has_handler(bot_client: discord.Client, interaction: discord.Interaction) -> bool:
+    """Mirror discord.py's component dispatch: True if a view or dynamic item owns
+    this click (by message id, then the persistent views registered without one)."""
+    data = interaction.data or {}
+    custom_id = data.get("custom_id")
+    ctype = data.get("component_type")
+    if custom_id is None or ctype is None:
+        return True
+    vs = bot_client._connection._view_store
+    if any(p.fullmatch(str(custom_id)) for p in vs._dynamic_items):
+        return True
+    key = (int(ctype), str(custom_id))
+    mid = interaction.message.id if interaction.message is not None else None
+    if mid is not None and key in vs._views.get(mid, {}):
+        return True
+    return key in vs._views.get(None, {})
+
+
+async def _handle_orphan_component(interaction: discord.Interaction) -> None:
+    """A click nobody handles. A stale character-creation step is re-rendered on the
+    same message from the saved wizard state; anything else gets a short notice."""
+    guild_id, user_id = str(interaction.guild_id), str(interaction.user.id)
+    try:
+        if store.get_creation_channel(guild_id, user_id) == str(interaction.channel_id):
+            raw = store.get_creation_state(guild_id, user_id)
+            state = json.loads(raw) if raw else None
+            if isinstance(state, dict) and not state.get("submitted"):
+                log.info("Reviving stale wizard step for %s in %s", user_id, interaction.channel_id)
+                await _cg_resume(interaction, state)
+                return
+    except Exception:
+        log.exception("wizard revive failed")
+    try:
+        if not interaction.response.is_done():
+            await interaction.response.send_message(_ORPHAN_MENU_TEXT, ephemeral=True)
+    except discord.HTTPException:
+        pass
+
 
 async def _send_component_error(interaction: discord.Interaction) -> None:
     try:
