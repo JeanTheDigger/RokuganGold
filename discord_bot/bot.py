@@ -1641,18 +1641,63 @@ def _mastery_ceiling_text(c: Character, element: str, school_rank: int | None = 
     return f"Their ceiling in {element.title()} is Mastery {eff} (School Rank {rank}{shift})."
 
 
-def _check_insight_rank_advance(c: Character) -> str:
+def _grant_school_techniques(c: Character, school: dict) -> list[str]:
+    """Put every technique the school grants up to c.school_rank on the sheet.
+    Returns the labels added (s48: the technique comes with the rank)."""
+    added: list[str] = []
+    for t in schools.techniques_up_to(school["name"], c.school_rank):
+        label = f"{school['name']}: {t['name']}"
+        if not any(label.lower() == x.lower() or t["name"].lower() == x.lower() for x in c.techniques):
+            c.techniques.append(label)
+            added.append(f"R{t['rank']} {t['name']}")
+    return added
+
+
+def _check_insight_rank_advance(c: Character, picker_follows: bool = False) -> str:
+    """Advance School Rank with Insight (s48). The new technique goes straight onto the
+    sheet; a shugenja is told to choose three new spells (owner decision 2026-09-27:
+    no dojo or Sensei visit, the grant comes with the rank)."""
     result = stats.check_insight_rank_advance(c)
     if result is None:
         return ""
     old, new_rank = result
-    what = ("three new spells" if "shugenja" in c.school_type.lower()
-            else f"your Rank {new_rank} technique")
-    return (
-        f"\n**School Rank {old} → {new_rank}!** "
-        f"(Insight {stats.insight(c)}). "
-        f"Use `/sheet learn` at your dojo or with your Sensei to learn {what}."
-    )
+    msg = f"\n**School Rank {old} → {new_rank}!** (Insight {stats.insight(c)})."
+    school = schools.get(c.school) if c.school else None
+    if school is not None:
+        added = _grant_school_techniques(c, school)
+        if added:
+            msg += " New technique: " + ", ".join(added) + "."
+    if "shugenja" in c.school_type.lower() or (school is not None and school.get("affinity")):
+        rank, owed = stats.pending_rank_spells(c)
+        if owed:
+            # Several ranks at once (staff edits) owe three picks per rank.
+            total = owed + 3 * max(0, c.school_rank - rank)
+            msg += (f" Choose {total} new spell{'s' if total > 1 else ''}: "
+                    + ("The spell picker follows below." if picker_follows else "`/sheet learn` opens the picker.")
+                    + (" `/sheet learn` reopens it any time." if picker_follows else ""))
+    elif school is None:
+        msg += " Set your school with `/sheet learn school_name:` to record its technique."
+    return msg
+
+
+async def _offer_rank_spells(interaction: discord.Interaction, rec: storage.CharacterRecord, rank_msg: str) -> None:
+    """After a reply that announced a rank-up: Send the rank-up spell picker as an
+    ephemeral follow-up when the character has spells to choose (s48). Silent when
+    no rank changed in this call, so pending picks do not nag on every spend."""
+    if not rank_msg:
+        return
+    c = rec.character
+    rank, owed = stats.pending_rank_spells(c)
+    if not owed:
+        return
+    view = _RankSpellView(rec.id, interaction.user.id)
+    if not view.children:
+        return
+    try:
+        await interaction.followup.send(view._content(c), view=view, ephemeral=True)
+    except discord.HTTPException:
+        pass
+
 
 # ===========================================================================
 # /sheet group
@@ -8393,13 +8438,14 @@ async def xp_trait(interaction: discord.Interaction, trait: app_commands.Choice[
     advancement.apply_trait_raise(c, trait.value)
     c.xp -= cost
     c.xp_spent += cost
-    rank_msg = _check_insight_rank_advance(c)
+    rank_msg = _check_insight_rank_advance(c, picker_follows=True)
     changed = store.save(rec, note="xp spend")
     await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
         f"**{c.name}** raises **{label}** to rank **{new_rank}** for **{cost}** XP.\n"
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}",
         embed=build_sheet_embed(rec), ephemeral=True)
+    await _offer_rank_spells(interaction, rec, rank_msg)
 
 @xp_group.command(name="skill", description="Spend XP to raise or learn a Skill (RAW: New rank x1).")
 @app_commands.describe(skill="Skill name.", member="Advance another player's character [Fortune]")
@@ -8429,13 +8475,14 @@ async def xp_skill(interaction: discord.Interaction, skill: app_commands.Range[s
     advancement.apply_skill_raise(c, skill_name)
     c.xp -= cost
     c.xp_spent += cost
-    rank_msg = _check_insight_rank_advance(c)
+    rank_msg = _check_insight_rank_advance(c, picker_follows=True)
     changed = store.save(rec, note="xp spend")
     await _xp_spend_log(interaction, rec, changed)
     await interaction.response.send_message(
         f"**{c.name}** raises **{skill_name}** to rank **{new_rank}** for **{cost}** XP.\n"
         f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) - XP left {c.xp:g}{rank_msg}",
         embed=build_sheet_embed(rec), ephemeral=True)
+    await _offer_rank_spells(interaction, rec, rank_msg)
 
 @xp_group.command(name="emphasis", description="Spend 2 XP to add a Skill Emphasis (at most half the Skill rank, rounded up).")
 @app_commands.describe(skill="The skill to add an Emphasis to.", emphasis="The Emphasis (e.g. Katana).", member="Advance another player's character [Fortune]")
@@ -9073,13 +9120,14 @@ class _XpTraitPick(discord.ui.View):
         advancement.apply_trait_raise(c, trait)
         c.xp -= cost
         c.xp_spent += cost
-        rank_msg = _check_insight_rank_advance(c)
+        rank_msg = _check_insight_rank_advance(c, picker_follows=True)
         changed = store.save(rec, note="xp spend")
         await _xp_spend_log(interaction, rec, changed)
         await interaction.response.edit_message(
             content=f"**{c.name}** raises **{label}** to rank **{new_rank}** for **{cost}** XP.\n"
             f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) -- XP left {c.xp:g}{rank_msg}",
             view=None)
+        await _offer_rank_spells(interaction, rec, rank_msg)
 
 
 class _XpSkillPick(discord.ui.View):
@@ -9124,13 +9172,14 @@ class _XpSkillPick(discord.ui.View):
         advancement.apply_skill_raise(c, skill_name)
         c.xp -= cost
         c.xp_spent += cost
-        rank_msg = _check_insight_rank_advance(c)
+        rank_msg = _check_insight_rank_advance(c, picker_follows=True)
         changed = store.save(rec, note="xp spend")
         await _xp_spend_log(interaction, rec, changed)
         await interaction.response.edit_message(
             content=f"**{c.name}** raises **{skill_name}** to rank **{new_rank}** for **{cost}** XP.\n"
             f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) -- XP left {c.xp:g}{rank_msg}",
             view=None)
+        await _offer_rank_spells(interaction, rec, rank_msg)
 
 
 class _XpNewSkillModal(discord.ui.Modal, title="Learn a new Skill"):
@@ -9163,13 +9212,14 @@ class _XpNewSkillModal(discord.ui.Modal, title="Learn a new Skill"):
         advancement.apply_skill_raise(c, skill_name)
         c.xp -= cost
         c.xp_spent += cost
-        rank_msg = _check_insight_rank_advance(c)
+        rank_msg = _check_insight_rank_advance(c, picker_follows=True)
         changed = store.save(rec, note="xp spend")
         await _xp_spend_log(interaction, rec, changed)
         await interaction.response.send_message(
             f"**{c.name}** learns **{skill_name}** at rank **{new_rank}** for **{cost}** XP.\n"
             f"Insight {stats.insight(c)} (Rank {stats.insight_rank(c)}) -- XP left {c.xp:g}{rank_msg}",
             ephemeral=True)
+        await _offer_rank_spells(interaction, rec, rank_msg)
 
 
 class _XpEmphasisSkillPick(discord.ui.View):
@@ -9627,7 +9677,7 @@ async def xp_spend(interaction: discord.Interaction) -> None:
 # /school group: schools & techniques (GDD s29)
 # ===========================================================================
 
-@sheet.command(name="learn", description="Learn what your school grants up to your School Rank: Techniques, or rank-up spells for shugenja.")
+@sheet.command(name="learn", description="Claim what your School Rank grants: Techniques, or the rank-up spell picker for shugenja.")
 @app_commands.describe(
     school_name="School to learn from (defaults to your sheet's school). Different school requires Fortune.",
     member="Do this for another player [Fortune]",
@@ -9671,12 +9721,7 @@ async def school_learn(
         return
     if not c.school:
         c.school = s["name"]
-    added = []
-    for t in entitled:
-        label = f"{s['name']}: {t['name']}"
-        if not any(label.lower() == x.lower() or t["name"].lower() == x.lower() for x in c.techniques):
-            c.techniques.append(label)
-            added.append(f"R{t['rank']} {t['name']}")
+    added = _grant_school_techniques(c, s)
     store.save(rec)
     if added:
         msg = f"**{c.name}** learns from **{s['name']}** (up to Rank {c.school_rank}): " + ", ".join(added)
@@ -9686,7 +9731,7 @@ async def school_learn(
         msg = f"**{c.name}** advances with **{s['name']}**."
     if owed:
         # s48: a shugenja gains three new spells per new School Rank, each within the
-        # Mastery ceiling of that rank, through the dojo or a Sensei.
+        # Mastery ceiling of that rank. They come with the rank (owner decision 2026-09-27).
         msg += (f"\n**Rank {rank} spells:** Choose {owed} new spell{'s' if owed > 1 else ''} "
                 f"within the Mastery ceiling of School Rank {rank} (s48).")
         await interaction.response.send_message(

@@ -117,9 +117,10 @@ cap at rank 5, Skills at 10. RAW raises **Traits** (not Rings), so a Ring only r
 once *both* its Traits do; **Insight** (`Σrings×10 + skill ranks`) and **Insight Rank**
 (150 → Rank 2, then +25/rank) recompute automatically.
 
-Kata/Kiho/spell prerequisites (school/ring gating) are DM-adjudicated: the bot
-handles the XP economy and records what was bought. Learning a new Rank
-*Technique* on advancement is roleplay (a dojo/Sensei visit).
+Kata/Kiho prerequisites (school/ring gating) are DM-adjudicated: the bot
+handles the XP economy and records what was bought. A new Rank *Technique*
+lands on the sheet the moment Insight carries the School Rank up; a shugenja
+gets the rank-up spell picker instead (three spells within the new ceiling).
 
 **Kata & Kiho** (all of **GDD s30** and **s38**, transcribed verbatim)
 
@@ -296,7 +297,7 @@ Every school **and path** and its techniques are in the bot: **347 entries**
 | `/ref school list` | Overall summary (basic/advanced/alternate + per-clan counts), or `clan:` for that clan's entries grouped by category. |
 | `/ref school search` | Find schools/paths by name or clan (each tagged basic / adv / path). |
 | `/ref school view` | An entry's Benefit, Skills, Honor, Outfit, Affinity, Prerequisites, and every Technique (Rank + name + full effect text). |
-| `/sheet learn` | Record the techniques your school grants **up to your School Rank** onto your sheet (RAW: techniques come free with rank at a dojo). Uses your sheet's school, or pass `school_name:`. For a shugenja it also opens the **rank-up spell picker**: three new spells per new School Rank, each within that rank's Mastery ceiling (s48). Picks save one at a time, so the flow can be resumed. Staff can reset the counter with `/edit field spell_ranks_learned`. |
+| `/sheet learn` | Claim what your School Rank grants. Techniques land automatically at rank-up; this records any that are missing (uses your sheet's school, or pass `school_name:`). For a shugenja it reopens the **rank-up spell picker** (it also opens by itself when the rank arrives): three new spells per new School Rank, each within that rank's Mastery ceiling (s48). Picks save one at a time, so the flow can be resumed. Staff can reset the counter with `/edit field spell_ranks_learned`. |
 
 Only **Basic Schools** appear in `/sheet create` and `/npc generate` autocomplete
 (you start as a Basic School; Advanced Schools and Alternate Paths are transitions
