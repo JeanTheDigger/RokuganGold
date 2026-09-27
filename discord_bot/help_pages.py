@@ -87,7 +87,7 @@ TOPICS: list[Topic] = [
         staff=(
             "\n\n__Staff__\n`/edit` covers every field on any sheet: `trait`, `skill`, `field`, `identity`, `equip`, "
             "`feature`, `elements`, `wound`, `heal`, `activate`, `rename`, `notes`, `mount`, `spell`. `/sheet view "
-            "member:` and `/sheet list member:` look at a player's sheets; `/sheet owner` reassigns one; `/sheet "
+            "member:` and `/sheet list member:` look at a player's sheets. Every staff command that targets a sheet also takes `character:` (any name, from any channel), and the player is told in their support channel whenever staff change their sheet, grant XP, apply damage or healing, or change Taint; `/sheet owner` reassigns one; `/sheet "
             "delete` removes one (roles, nickname and initiative are cleaned up). `/dm taint` adjusts Shadowlands "
             "Taint; at Rank 5 the character becomes a staff NPC."
         ),

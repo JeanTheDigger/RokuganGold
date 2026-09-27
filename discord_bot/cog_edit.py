@@ -39,6 +39,8 @@ class _Deps:
     check_insight: object
     parse_advdis_name: object
     npc_autocomplete: object
+    find_any_character: object
+    any_character_autocomplete: object
     armor_autocomplete: object
     advantage_autocomplete: object
     disadvantage_autocomplete: object
@@ -65,6 +67,8 @@ def init(
     check_insight,
     parse_advdis_name,
     npc_autocomplete,
+    find_any_character,
+    any_character_autocomplete,
     armor_autocomplete,
     advantage_autocomplete,
     disadvantage_autocomplete,
@@ -86,6 +90,8 @@ def init(
     _d.check_insight = check_insight
     _d.parse_advdis_name = parse_advdis_name
     _d.npc_autocomplete = npc_autocomplete
+    _d.find_any_character = find_any_character
+    _d.any_character_autocomplete = any_character_autocomplete
     _d.armor_autocomplete = armor_autocomplete
     _d.advantage_autocomplete = advantage_autocomplete
     _d.disadvantage_autocomplete = disadvantage_autocomplete
@@ -94,21 +100,21 @@ def init(
     _d.tattoo_autocomplete = tattoo_autocomplete
     _d.quality_autocomplete = quality_autocomplete
 
-    edit_trait.autocomplete("npc")(_d.npc_autocomplete)
-    edit_skill.autocomplete("npc")(_d.npc_autocomplete)
-    edit_field.autocomplete("npc")(_d.npc_autocomplete)
-    edit_identity.autocomplete("npc")(_d.npc_autocomplete)
-    edit_equip.autocomplete("npc")(_d.npc_autocomplete)
+    edit_trait.autocomplete("character")(_d.any_character_autocomplete)
+    edit_skill.autocomplete("character")(_d.any_character_autocomplete)
+    edit_field.autocomplete("character")(_d.any_character_autocomplete)
+    edit_identity.autocomplete("character")(_d.any_character_autocomplete)
+    edit_equip.autocomplete("character")(_d.any_character_autocomplete)
     edit_equip.autocomplete("armor")(_d.armor_autocomplete)
-    edit_feature.autocomplete("npc")(_d.npc_autocomplete)
-    edit_elements.autocomplete("npc")(_d.npc_autocomplete)
-    edit_wound.autocomplete("npc")(_d.npc_autocomplete)
-    edit_heal.autocomplete("npc")(_d.npc_autocomplete)
-    edit_activate.autocomplete("npc")(_d.npc_autocomplete)
-    edit_rename.autocomplete("npc")(_d.npc_autocomplete)
-    edit_notes.autocomplete("npc")(_d.npc_autocomplete)
-    edit_mount.autocomplete("npc")(_d.npc_autocomplete)
-    edit_spell.autocomplete("npc")(_d.npc_autocomplete)
+    edit_feature.autocomplete("character")(_d.any_character_autocomplete)
+    edit_elements.autocomplete("character")(_d.any_character_autocomplete)
+    edit_wound.autocomplete("character")(_d.any_character_autocomplete)
+    edit_heal.autocomplete("character")(_d.any_character_autocomplete)
+    edit_activate.autocomplete("character")(_d.any_character_autocomplete)
+    edit_rename.autocomplete("character")(_d.any_character_autocomplete)
+    edit_notes.autocomplete("character")(_d.any_character_autocomplete)
+    edit_mount.autocomplete("character")(_d.any_character_autocomplete)
+    edit_spell.autocomplete("character")(_d.any_character_autocomplete)
 
 
 # ---------------------------------------------------------------------------
@@ -118,16 +124,18 @@ def init(
 async def _resolve_target(
     interaction: discord.Interaction,
     member: discord.Member | None,
-    npc: str | None,
+    character: str | None,
 ) -> tuple[_storage_mod.CharacterRecord | None, str | None]:
-    if member is not None and npc is not None:
-        return None, "Provide `member:` or `npc:`, not both."
-    if npc is not None:
+    """`character:` names any sheet, player or NPC, from any channel; `member:` is
+    the member's active character; neither means the invoker's own."""
+    if member is not None and character is not None:
+        return None, "Provide `member:` or `character:`, not both."
+    if character is not None:
         if interaction.guild_id is None:
             return None, "Please use this in a server channel."
-        rec = _d.store.get_by_name(str(interaction.guild_id), _d.NPC_OWNER, npc)
+        rec = _d.find_any_character(str(interaction.guild_id), character.strip())
         if rec is None:
-            return None, f"No NPC named **{npc}**."
+            return None, f"No character named **{character}**."
         return rec, None
     return await _d.resolve_active(interaction, member)
 
@@ -223,7 +231,7 @@ edit_group = app_commands.Group(
 @edit_group.command(name="trait", description="Set a Trait (or Void Ring) value. [Fortune]")
 @app_commands.describe(
     trait="Which Trait.", value="New value (0-10).",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 @app_commands.choices(trait=_TRAIT_CHOICES)
 async def edit_trait(
@@ -231,13 +239,13 @@ async def edit_trait(
     trait: app_commands.Choice[str],
     value: app_commands.Range[int, 0, 10],
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -267,20 +275,20 @@ async def edit_trait(
 @app_commands.describe(
     skill="Skill name, or bulk list: 'Kenjutsu 3, Courtier 2, Etiquette 1'.",
     rank="Rank 0-10 (0 removes). Omit when using bulk format.",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 async def edit_skill(
     interaction: discord.Interaction,
     skill: app_commands.Range[str, 1, 200],
     rank: app_commands.Range[int, 0, 10] | None = None,
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -332,7 +340,7 @@ async def edit_skill(
 )
 @app_commands.describe(
     field="Which field to set.", value="New value.",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 @app_commands.choices(field=_SET_CHOICES)
 async def edit_field(
@@ -340,13 +348,13 @@ async def edit_field(
     field: app_commands.Choice[str],
     value: float,
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -371,7 +379,7 @@ async def edit_field(
     family="Family name; a catalog match also applies its +1 Trait unless apply_bonus is false.",
     school="School name (catalog match preferred; free text allowed).",
     apply_bonus="Apply the catalog family's +1 Trait (default true). Ignored when the family is unchanged.",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 async def edit_identity(
     interaction: discord.Interaction,
@@ -380,13 +388,13 @@ async def edit_identity(
     school: app_commands.Range[str, 1, 80] | None = None,
     apply_bonus: bool = True,
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -439,7 +447,7 @@ async def edit_identity(
     weapon="Equipped weapon name (empty to clear).",
     off_hand="Off-hand weapon (empty to clear).",
     armor="Armor type (bogu/ashigaru/light/heavy/etc., or 'none' to remove).",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 async def edit_equip(
     interaction: discord.Interaction,
@@ -447,13 +455,13 @@ async def edit_equip(
     off_hand: app_commands.Range[str, 1, 80] | None = None,
     armor: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -518,7 +526,7 @@ async def edit_equip(
     entry="Name to add or remove.",
     remove="Remove instead of adding.",
     skill="Skill name (required for Emphasis only).",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 @app_commands.choices(category=_FEATURE_FIELDS)
 async def edit_feature(
@@ -528,13 +536,13 @@ async def edit_feature(
     remove: bool = False,
     skill: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -658,7 +666,7 @@ async def edit_feature(
 @app_commands.describe(
     affinity_element="Affinity element (choose '(clear)' to remove).",
     deficiency_element="Deficiency element (choose '(clear)' to remove).",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 @app_commands.choices(affinity_element=_ELEMENT_CHOICES, deficiency_element=_ELEMENT_CHOICES)
 async def edit_elements(
@@ -666,13 +674,13 @@ async def edit_elements(
     affinity_element: app_commands.Choice[str] | None = None,
     deficiency_element: app_commands.Choice[str] | None = None,
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -703,19 +711,19 @@ async def edit_elements(
 @edit_group.command(name="wound", description="Apply wounds to a character (raw, no armor reduction). [Fortune]")
 @app_commands.describe(
     amount="Wounds to apply.",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 async def edit_wound(
     interaction: discord.Interaction,
     amount: app_commands.Range[int, 1, 1000],
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -724,7 +732,8 @@ async def edit_wound(
         return
     old = stats.wound_level_name(c)
     c.wounds_taken += amount
-    _d.store.save(rec, note="wound")
+    changed = _d.store.save(rec, note="wound")
+    await _d.audit_stat(interaction, rec, "edit wound", changed)
     new = stats.wound_level_name(c)
     crossed = f"  ({old} → **{new}**)" if new != old else ""
     dead = ""
@@ -742,19 +751,19 @@ async def edit_wound(
 @edit_group.command(name="heal", description="Heal wounds on a character. [Fortune]")
 @app_commands.describe(
     amount="Wounds to heal.",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 async def edit_heal(
     interaction: discord.Interaction,
     amount: app_commands.Range[int, 1, 1000],
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -766,7 +775,8 @@ async def edit_heal(
         return
     old = stats.wound_level_name(c)
     c.wounds_taken = max(0, c.wounds_taken - amount)
-    _d.store.save(rec, note="heal")
+    changed = _d.store.save(rec, note="heal")
+    await _d.audit_stat(interaction, rec, "edit heal", changed)
     new = stats.wound_level_name(c)
     crossed = f"  ({old} → **{new}**)" if new != old else ""
     await interaction.response.send_message(
@@ -787,7 +797,7 @@ async def edit_heal(
     off="Deactivate instead.",
     bear_choice="Bear Tattoo only: 'stamina' or 'strength'.",
     lion_skill="Lion Tattoo only: Bugei skill to boost by +SR ranks.",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 @app_commands.choices(
     kind=_ACTIVATE_TYPES,
@@ -804,13 +814,13 @@ async def edit_activate(
     bear_choice: app_commands.Choice[str] | None = None,
     lion_skill: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -941,7 +951,8 @@ async def edit_activate(
                 extra = f"\n> Skill: **{lion_skill.strip().title()} +{c.school_rank}** ranks (locked for duration)"
             msg = f"**{c.name}** activates the **{label}** tattoo.{effect}{extra}"
 
-    _d.store.save(rec)
+    changed = _d.store.save(rec)
+    await _d.audit_stat(interaction, rec, "edit activate", changed)
     await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec), ephemeral=True)
 
 
@@ -950,19 +961,19 @@ async def edit_activate(
 @edit_group.command(name="rename", description="Rename a character (PC or NPC). [Fortune]")
 @app_commands.describe(
     new_name="New character name.",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 async def edit_rename(
     interaction: discord.Interaction,
     new_name: app_commands.Range[str, 1, 64],
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -976,7 +987,8 @@ async def edit_rename(
         return
     old_name = rec.character.name
     rec.character.name = clean_name
-    _d.store.save(rec)
+    changed = _d.store.save(rec)
+    await _d.audit_stat(interaction, rec, "edit rename", changed)
     await interaction.response.defer(ephemeral=True)
     notes = await _d.on_rename(guild, rec, old_name)
     tail = f" ({'; '.join(notes)})" if notes else ""
@@ -991,24 +1003,25 @@ async def edit_rename(
 @edit_group.command(name="notes", description="Set freeform notes on a character (omit text to clear). [Fortune]")
 @app_commands.describe(
     text="Notes text (omit or leave empty to clear).",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 async def edit_notes(
     interaction: discord.Interaction,
     text: app_commands.Range[str, 1, 900] = "",
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
     rec.character.notes = text.strip()
-    _d.store.save(rec)
+    changed = _d.store.save(rec)
+    await _d.audit_stat(interaction, rec, "edit notes", changed)
     if rec.character.notes:
         msg = f"Notes set on **{rec.character.name}**: *{rec.character.notes}*"
     else:
@@ -1021,19 +1034,19 @@ async def edit_notes(
 @edit_group.command(name="mount", description="Toggle mounted state on a character (outside combat). [Fortune]")
 @app_commands.describe(
     dismount="Dismount instead of mounting.",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 async def edit_mount(
     interaction: discord.Interaction,
     dismount: bool = False,
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -1054,7 +1067,8 @@ async def edit_mount(
         else:
             c.armor_tn_bonus = prof["tn_bonus"]
         armor_note = f" Armor TN bonus → +{c.armor_tn_bonus}."
-    _d.store.save(rec, note="mount" if mounting else "dismount")
+    changed = _d.store.save(rec, note="mount" if mounting else "dismount")
+    await _d.audit_stat(interaction, rec, "edit mount", changed)
     if mounting:
         embed = discord.Embed(
             title=f"{c.name} mounts up",
@@ -1077,20 +1091,20 @@ async def edit_mount(
 @app_commands.describe(
     spell="Spell name to add or remove.",
     remove="Remove instead of adding.",
-    member="Target player.", npc="NPC name.",
+    member="Target player.", character="Any character by name, player or NPC. Works from any channel.",
 )
 async def edit_spell(
     interaction: discord.Interaction,
     spell: app_commands.Range[str, 1, 80],
     remove: bool = False,
     member: discord.Member | None = None,
-    npc: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
     if not await _d.require_dm_role(interaction):
         return
-    rec, err = await _resolve_target(interaction, member, npc)
+    rec, err = await _resolve_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -1113,5 +1127,6 @@ async def edit_spell(
             return
         c.spells_known.append(spell_name)
         msg = f"Added spell **{spell_name}** to **{c.name}**."
-    _d.store.save(rec)
+    changed = _d.store.save(rec)
+    await _d.audit_stat(interaction, rec, "edit spell", changed)
     await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec), ephemeral=True)

@@ -35,6 +35,8 @@ class _Deps:
     resolve_active_for_edit: Callable[..., Awaitable[tuple[storage.CharacterRecord | None, str | None]]]
     audit_stat: Callable[..., Awaitable[None]]
     npc_autocomplete: Callable[..., Awaitable[list[app_commands.Choice[str]]]]
+    find_any_character: Callable[..., Any]
+    any_character_autocomplete: Callable[..., Awaitable[list[app_commands.Choice[str]]]]
     role_fortune: str
     role_kami: str
 
@@ -341,19 +343,26 @@ class InventoryPanel(discord.ui.View):
 
 
 @app_commands.command(name="inventory", description="Your gear and purse: Wield, drop, armor on or off, remove items (staff: Any character or NPC).")
-@app_commands.describe(member="Another player's character [Fortune].", npc="An NPC's inventory [Fortune].")
-async def inventory(interaction: discord.Interaction, member: discord.Member | None = None, npc: app_commands.Range[str, 1, 80] | None = None) -> None:
+@app_commands.describe(
+    member="Another player's character [Fortune].",
+    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
+)
+async def inventory(
+    interaction: discord.Interaction,
+    member: discord.Member | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
+) -> None:
     if not await _d.require_guild(interaction):
         return
     staff = _d.is_dm(interaction)
-    if npc:
+    if character:
         if not staff:
             await interaction.response.send_message(
-                f"You need the **{_d.role_fortune}** (or **{_d.role_kami}**) role to open an NPC's inventory.", ephemeral=True)
+                f"You need the **{_d.role_fortune}** (or **{_d.role_kami}**) role to open another character's inventory.", ephemeral=True)
             return
-        rec = _d.store.get_by_name(str(interaction.guild_id), _d.npc_owner, npc)
+        rec = _d.find_any_character(str(interaction.guild_id), character.strip())
         if rec is None:
-            await interaction.response.send_message(f"No NPC named **{npc}**.", ephemeral=True)
+            await interaction.response.send_message(f"No character named **{character}**.", ephemeral=True)
             return
     else:
         rec, err = await _d.resolve_active_for_edit(interaction, member)
@@ -374,11 +383,13 @@ async def inventory(interaction: discord.Interaction, member: discord.Member | N
 
 
 def init(*, tree: app_commands.CommandTree, store, npc_owner: str, require_guild, is_dm, resolve_active_for_edit,
-         audit_stat, npc_autocomplete, role_fortune: str, role_kami: str) -> None:
+         audit_stat, npc_autocomplete, role_fortune: str, role_kami: str,
+         find_any_character, any_character_autocomplete) -> None:
     global _d
     _d = _Deps(store=store, npc_owner=npc_owner, require_guild=require_guild, is_dm=is_dm,
                resolve_active_for_edit=resolve_active_for_edit, audit_stat=audit_stat,
                npc_autocomplete=npc_autocomplete,
-               role_fortune=role_fortune, role_kami=role_kami)
-    inventory.autocomplete("npc")(npc_autocomplete)
+               role_fortune=role_fortune, role_kami=role_kami,
+               find_any_character=find_any_character, any_character_autocomplete=any_character_autocomplete)
+    inventory.autocomplete("character")(any_character_autocomplete)
     tree.add_command(inventory)

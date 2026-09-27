@@ -30,6 +30,7 @@ from discord.ext import tasks
 
 import encounter
 import help_pages
+import helpers
 import cog_checks
 import cog_combat
 import cog_edit
@@ -489,10 +490,45 @@ def _sheet_diff(old: dict, new: dict) -> list[str]:
             out.append(f"{key} {a} → {b}")
     return out
 
+async def _resolve_edit_target(
+    interaction: discord.Interaction, member: discord.Member | None, character: str | None,
+) -> tuple[storage.CharacterRecord | None, str | None]:
+    """(record, error). `character:` names any sheet, player or NPC, and needs a staff
+    role; it works from any channel, unlike Discord's member picker, which only
+    offers people who can see the channel. Otherwise a member's active character
+    (staff only, when it is not your own) or the invoker's own."""
+    if character:
+        if member is not None:
+            return None, "Provide `member:` or `character:`, not both."
+        if not _is_dm(interaction):
+            return None, f"Only **{ROLE_FORTUNE}** or **{ROLE_KAMI}** can target a character by name."
+        rec = _find_any_character(str(interaction.guild_id), character.strip())
+        if rec is None:
+            return None, f"No character named **{character}**."
+        return rec, None
+    return await _resolve_active_for_edit(interaction, member)
+
+
+async def _notify_player(guild: discord.Guild | None, rec: storage.CharacterRecord, text: str) -> bool:
+    """Post a line in a player character's support channel. NPCs get nothing."""
+    if guild is None or rec.owner_id == NPC_OWNER:
+        return False
+    channel = await helpers.find_support_channel(guild, rec.character.name, CAT_PLAYER_SUPPORT)
+    if channel is None:
+        return False
+    try:
+        await channel.send(text[:2000], allowed_mentions=discord.AllowedMentions.none())
+    except (discord.Forbidden, discord.HTTPException):
+        return False
+    return True
+
+
 async def _audit_stat(interaction: discord.Interaction, rec: storage.CharacterRecord, what: str,
                       changed: bool = True) -> None:
     """One combat-log line per sheet edit: who edited whose sheet and what changed.
-    `changed` is Store.save()'s return value: The undo snapshot it just took is the before-state."""
+    `changed` is Store.save()'s return value: The undo snapshot it just took is the before-state.
+    A player whose sheet was changed by someone else is told in their support channel;
+    give and take carry their own notice."""
     guild = str(interaction.guild_id)
     changes: list[str] = []
     if changed:
@@ -502,6 +538,12 @@ async def _audit_stat(interaction: discord.Interaction, rec: storage.CharacterRe
     who = interaction.user.display_name + ("" if rec.owner_id == str(interaction.user.id) else " (staff)")
     detail = "; ".join(changes)[:600] if changes else "no change"
     await _combat_log(guild, f"EDIT: {who} · {rec.character.name} · {what} · {detail}")
+    if changes and rec.owner_id != str(interaction.user.id) and not what.startswith(("give ", "take ")):
+        readable = "; ".join(c.replace("_", " ").capitalize() for c in changes)[:900]
+        await _notify_player(
+            interaction.guild, rec,
+            f"**{interaction.user.display_name}** changed **{rec.character.name}**'s sheet ({what}): {readable}",
+        )
 
 def _tally(channel_id: int | None, name: str, key: str, amount: int = 1) -> None:
     """Add to the fight tally of this channel's encounter (no-op if none / unknown name)."""
@@ -3882,20 +3924,24 @@ async def sheet_wizard(  # legacy in-channel wizard, no longer registered as a c
         embed=_wizard_embed(state), view=view,
     )
 
-@sheet.command(name="view", description="View your character sheet. Staff may view another player's.")
-@app_commands.describe(member="Whose active character to view (Fortune or Kami only). Omit for your own.")
-async def sheet_view(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
+@sheet.command(name="view", description="View your character sheet. Staff may view any character's.")
+@app_commands.describe(
+    member="Whose active character to view (Fortune or Kami only). Omit for your own.",
+    character="Any character by name, player or NPC (Fortune or Kami only). Works from any channel.",
+)
+@app_commands.autocomplete(character=_any_character_autocomplete)
+async def sheet_view(
+    interaction: discord.Interaction,
+    member: discord.Member | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
+) -> None:
     if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
-    if member is not None and member.id != interaction.user.id:
-        if not await _require_dm_role(interaction):
-            return
-        rec = store.get_active(guild, str(member.id))
-        if rec is None:
-            await interaction.response.send_message(
-                f"{member.display_name} has no active character.", ephemeral=True
-            )
+    if character or (member is not None and member.id != interaction.user.id):
+        rec, err = await _resolve_edit_target(interaction, member, character)
+        if err:
+            await interaction.response.send_message(err, ephemeral=True)
             return
     else:
         rec = store.get_active(guild, str(interaction.user.id))
@@ -3956,25 +4002,42 @@ async def sheet_activate(interaction: discord.Interaction, name: app_commands.Ra
         await interaction.response.send_message(f"**{rec.character.name}** is now your active character.", ephemeral=True)
 
 @sheet.command(name="list", description="List your characters (or a player's, if you are a DM).")
-@app_commands.describe(member="Whose characters to list [Fortune]. Omit for your own.")
-async def sheet_list(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
+@app_commands.describe(
+    member="Whose characters to list [Fortune]. Omit for your own.",
+    character="A character by name: Lists every sheet its player owns [Fortune]. Works from any channel.",
+)
+@app_commands.autocomplete(character=_any_character_autocomplete)
+async def sheet_list(
+    interaction: discord.Interaction,
+    member: discord.Member | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
+) -> None:
     if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
-    target = member or interaction.user
-    if member is not None and member.id != interaction.user.id and not _is_dm(interaction):
-        await interaction.response.send_message(
-            f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to list another player's characters.", ephemeral=True
-        )
-        return
+    if character:
+        rec, err = await _resolve_edit_target(interaction, member, character)
+        if err:
+            await interaction.response.send_message(err, ephemeral=True)
+            return
+        owner_id = rec.owner_id
+        label = "the staff NPC roster" if owner_id == NPC_OWNER else f"the player of {rec.character.name}"
+    else:
+        target = member or interaction.user
+        if member is not None and member.id != interaction.user.id and not _is_dm(interaction):
+            await interaction.response.send_message(
+                f"You need the **{ROLE_FORTUNE}** (or **{ROLE_KAMI}**) role to list another player's characters.", ephemeral=True
+            )
+            return
+        owner_id = str(target.id)
+        label = target.display_name
 
-    records = store.list_by_owner(guild, str(target.id))
-    active = store.get_active(guild, str(target.id))
+    records = store.list_by_owner(guild, owner_id)
+    active = store.get_active(guild, owner_id)
     active_id = active.id if active else None
     if not records:
         await interaction.response.send_message(
-            f"{'You have' if target.id == interaction.user.id else target.display_name + ' has'} "
-            f"no characters yet.",
+            f"{'You have' if owner_id == str(interaction.user.id) else label + ' has'} no characters yet.",
             ephemeral=True,
         )
         return
@@ -3984,7 +4047,7 @@ async def sheet_list(interaction: discord.Interaction, member: discord.Member | 
         for r in records
     ]
     await interaction.response.send_message(
-        f"Characters for {target.display_name}:\n" + "\n".join(lines), ephemeral=True
+        f"Characters for {label}:\n" + "\n".join(lines[:60]), ephemeral=True
     )
 
 
@@ -5355,24 +5418,24 @@ def _resolve_duelist(
 @app_commands.describe(
     reason="What the VP is for (e.g. '+1k1 on Investigation check').",
     member="Player spending VP (uses their active character). Omit = yourself.",
-    npc_name="NPC name [Fortune]",
+    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
 )
-@app_commands.autocomplete(npc_name=_npc_autocomplete)
+@app_commands.autocomplete(character=_any_character_autocomplete)
 async def void_spend(
     interaction: discord.Interaction,
     reason: app_commands.Range[str, 1, 200],
     member: discord.Member | None = None,
-    npc_name: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
-    if npc_name:
+    if character:
         if not await _require_dm_role(interaction):
             return
-        rec = store.get_by_name(guild, NPC_OWNER, npc_name)
+        rec = _find_any_character(guild, character)
         if rec is None:
-            await interaction.response.send_message(f"No NPC named **{npc_name}**.", ephemeral=True)
+            await interaction.response.send_message(f"No character named **{character}**.", ephemeral=True)
             return
     elif member is not None:
         if not _is_dm(interaction) and member.id != interaction.user.id:
@@ -5411,30 +5474,30 @@ async def void_spend(
 @app_commands.describe(
     mode="How VP are being refreshed.",
     member="Player refreshing (uses their active character). Omit = yourself.",
-    npc_name="NPC name [Fortune]",
+    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
     tn="Meditation TN (only for meditation mode; default 20).",
 )
 @app_commands.choices(mode=[
     app_commands.Choice(name="Rest (full refresh)", value="rest"),
     app_commands.Choice(name="Meditation (roll Meditation/Void, recover 1 on success)", value="meditation"),
 ])
-@app_commands.autocomplete(npc_name=_npc_autocomplete)
+@app_commands.autocomplete(character=_any_character_autocomplete)
 async def void_refresh(
     interaction: discord.Interaction,
     mode: app_commands.Choice[str],
     member: discord.Member | None = None,
-    npc_name: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
     tn: app_commands.Range[int, 1, 100] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
-    if npc_name:
+    if character:
         if not await _require_dm_role(interaction):
             return
-        rec = store.get_by_name(guild, NPC_OWNER, npc_name)
+        rec = _find_any_character(guild, character)
         if rec is None:
-            await interaction.response.send_message(f"No NPC named **{npc_name}**.", ephemeral=True)
+            await interaction.response.send_message(f"No character named **{character}**.", ephemeral=True)
             return
     elif member is not None:
         if not _is_dm(interaction) and member.id != interaction.user.id:
@@ -5453,7 +5516,7 @@ async def void_refresh(
     vp_cap = taint.void_point_cap(c)
     cap_note = f" (Taint Rank {taint.taint_rank(c)}: Max VP -1)" if vp_cap < c.max_void_points else ""
     if mode.value == "rest":
-        if not npc_name and (member is None or member.id == interaction.user.id):
+        if not character and (member is None or member.id == interaction.user.id):
             if not await _require_dm_role(interaction):
                 return
         old = c.current_void_points
@@ -5522,23 +5585,23 @@ async def void_refresh(
 @sheet_void.command(name="status", description="Show current Void Points for a character.")
 @app_commands.describe(
     member="Player to check (uses their active character). Omit = yourself.",
-    npc_name="NPC name [Fortune]",
+    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
 )
-@app_commands.autocomplete(npc_name=_npc_autocomplete)
+@app_commands.autocomplete(character=_any_character_autocomplete)
 async def void_status(
     interaction: discord.Interaction,
     member: discord.Member | None = None,
-    npc_name: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
-    if npc_name:
+    if character:
         if not await _require_dm_role(interaction):
             return
-        rec = store.get_by_name(guild, NPC_OWNER, npc_name)
+        rec = _find_any_character(guild, character)
         if rec is None:
-            await interaction.response.send_message(f"No NPC named **{npc_name}**.", ephemeral=True)
+            await interaction.response.send_message(f"No character named **{character}**.", ephemeral=True)
             return
     elif member is not None:
         rec = store.get_active(guild, str(member.id))
@@ -5573,52 +5636,52 @@ void_group = app_commands.Group(name="void", description="Void Point management:
 @app_commands.describe(
     reason="What the VP is for (e.g. '+1k1 on Investigation check').",
     member="Player spending VP (uses their active character). Omit = yourself.",
-    npc_name="NPC name [Fortune]",
+    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
 )
-@app_commands.autocomplete(npc_name=_npc_autocomplete)
+@app_commands.autocomplete(character=_any_character_autocomplete)
 async def void_spend_shortcut(
     interaction: discord.Interaction,
     reason: app_commands.Range[str, 1, 200],
     member: discord.Member | None = None,
-    npc_name: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
-    await void_spend.callback(interaction, reason, member, npc_name)
+    await void_spend.callback(interaction, reason, member, character)
 
 
 @void_group.command(name="refresh", description="Refresh Void Points (rest = full, or Meditation/Void check for 1).")
 @app_commands.describe(
     mode="How VP are being refreshed.",
     member="Player refreshing (uses their active character). Omit = yourself.",
-    npc_name="NPC name [Fortune]",
+    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
     tn="Meditation TN (only for meditation mode; default 20).",
 )
 @app_commands.choices(mode=[
     app_commands.Choice(name="Rest (full refresh)", value="rest"),
     app_commands.Choice(name="Meditation (roll Meditation/Void, recover 1 on success)", value="meditation"),
 ])
-@app_commands.autocomplete(npc_name=_npc_autocomplete)
+@app_commands.autocomplete(character=_any_character_autocomplete)
 async def void_refresh_shortcut(
     interaction: discord.Interaction,
     mode: app_commands.Choice[str],
     member: discord.Member | None = None,
-    npc_name: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
     tn: app_commands.Range[int, 1, 100] | None = None,
 ) -> None:
-    await void_refresh.callback(interaction, mode, member, npc_name, tn)
+    await void_refresh.callback(interaction, mode, member, character, tn)
 
 
 @void_group.command(name="status", description="Show current Void Points for a character.")
 @app_commands.describe(
     member="Player to check (uses their active character). Omit = yourself.",
-    npc_name="NPC name [Fortune]",
+    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
 )
-@app_commands.autocomplete(npc_name=_npc_autocomplete)
+@app_commands.autocomplete(character=_any_character_autocomplete)
 async def void_status_shortcut(
     interaction: discord.Interaction,
     member: discord.Member | None = None,
-    npc_name: app_commands.Range[str, 1, 80] | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
-    await void_status.callback(interaction, member, npc_name)
+    await void_status.callback(interaction, member, character)
 
 
 # ===========================================================================
@@ -6535,6 +6598,12 @@ class DmDamageView(_DisableableView):
             return
         applied = combat.apply_damage(rec.character, self.amount, rec.character.armor_reduction)
         store.save(rec, note="DM damage")
+        await _notify_player(
+            interaction.guild, rec,
+            f"**{interaction.user.display_name}** applied **{applied['final_damage']}** wounds to "
+            f"**{rec.character.name}**" + (f" ({self.reason})" if getattr(self, "reason", "") else "")
+            + f". Wounds: **{rec.character.wounds_taken}**, {stats.wound_level_name(rec.character)}.",
+        )
         _tally(self.source_channel_id or interaction.channel_id, rec.character.name, "taken", applied["final_damage"])
         c = rec.character
         death_line = ""
@@ -6686,6 +6755,11 @@ class DmHealView(_DisableableView):
         healed = old_wounds - c.wounds_taken
         new_level = stats.wound_level_name(c)
         store.save(rec, note="DM heal")
+        await _notify_player(
+            interaction.guild, rec,
+            f"**{interaction.user.display_name}** healed **{healed}** wounds on **{c.name}**"
+            + (f" ({self.reason})" if getattr(self, "reason", "") else "") + f". Wounds: **{c.wounds_taken}**, {new_level}.",
+        )
         _tally(self.source_channel_id or interaction.channel_id, c.name, "healed", healed)
         embed = discord.Embed(
             title="Healing Applied",
@@ -8119,16 +8193,36 @@ async def _buy_named(interaction, member, name, mastery_level, attr, label, note
         f"XP left {c.xp:g}", embed=build_sheet_embed(rec), ephemeral=True)
 
 @xp_group.command(name="grant", description="Grant (or correct) a player's Experience. [Fortune]")
-@app_commands.describe(member="The player to grant XP to.", amount="XP amount (negative to correct).", reason="Optional note.")
-async def xp_grant(interaction: discord.Interaction, member: discord.Member, amount: app_commands.Range[float, -100000.0, 100000.0], reason: app_commands.Range[str, 1, 200] | None = None) -> None:
+@app_commands.describe(
+    amount="XP amount (negative to correct).",
+    member="The player to grant XP to (their active character).",
+    character="Or the character by name. Works from any channel.",
+    reason="Optional note, shown to the player.",
+)
+@app_commands.autocomplete(character=_any_character_autocomplete)
+async def xp_grant(
+    interaction: discord.Interaction,
+    amount: app_commands.Range[float, -100000.0, 100000.0],
+    member: discord.Member | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
+    reason: app_commands.Range[str, 1, 200] | None = None,
+) -> None:
     if not await _require_guild(interaction):
         return
     if not await _require_dm_role(interaction):
         return
-    rec = store.get_active(str(interaction.guild_id), str(member.id))
-    if rec is None:
-        await interaction.response.send_message(f"{member.display_name} has no active character.", ephemeral=True)
+    if member is None and not character:
+        await interaction.response.send_message("Give `member:` or `character:`.", ephemeral=True)
         return
+    rec, err = await _resolve_edit_target(interaction, member, character)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
+        return
+    if rec.owner_id == NPC_OWNER:
+        await interaction.response.send_message(f"**{rec.character.name}** is an NPC; XP is for player characters.", ephemeral=True)
+        return
+    owner_mention = member.mention if member is not None else f"<@{rec.owner_id}>"
+    owner_label = member.display_name if member is not None else f"owner {rec.owner_id}"
     before = rec.character.xp
     rec.character.xp = max(0.0, rec.character.xp + float(amount))
     store.save(rec, note="xp grant")
@@ -8137,15 +8231,21 @@ async def xp_grant(interaction: discord.Interaction, member: discord.Member, amo
         title=f"XP {'Grant' if amount >= 0 else 'Correction'}: {rec.character.name}",
         color=discord.Color.gold() if amount >= 0 else discord.Color.orange(),
         description=(
-            f"{member.mention} {'gains' if amount >= 0 else 'loses'} **{abs(amount):g}** XP\n"
+            f"{owner_mention} {'gains' if amount >= 0 else 'loses'} **{abs(amount):g}** XP\n"
             f"Available: **{rec.character.xp:g}**{note}"
         ),
     )
     embed.set_footer(text=f"Granted by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
+    await _notify_player(
+        interaction.guild, rec,
+        f"**{interaction.user.display_name}** {'granted' if amount >= 0 else 'removed'} **{abs(amount):g} XP**"
+        f"{' to' if amount >= 0 else ' from'} **{rec.character.name}**" + (f": {reason}" if reason else ".")
+        + f" Available: **{rec.character.xp:g}**. Spend it here with `/xp spend`.",
+    )
     logged = await _xp_log(
         str(interaction.guild_id),
-        f"XP GRANT: {interaction.user.display_name} → {rec.character.name} ({member.display_name}) "
+        f"XP GRANT: {interaction.user.display_name} → {rec.character.name} ({owner_label}) "
         f"{'+' if amount >= 0 else ''}{amount:g} · {before:g} → {rec.character.xp:g}" + (f" · {reason}" if reason else ""),
     )
     if not logged:
@@ -8155,12 +8255,25 @@ async def xp_grant(interaction: discord.Interaction, member: discord.Member, amo
         )
 
 @xp_group.command(name="balance", description="Show a character's available Experience.")
-@app_commands.describe(member="Whose XP to show [Fortune]. Omit for your own.")
-async def xp_balance(interaction: discord.Interaction, member: discord.Member | None = None) -> None:
+@app_commands.describe(
+    member="Whose XP to show [Fortune]. Omit for your own.",
+    character="Or a character by name [Fortune]. Works from any channel.",
+)
+@app_commands.autocomplete(character=_any_character_autocomplete)
+async def xp_balance(
+    interaction: discord.Interaction,
+    member: discord.Member | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
+) -> None:
     if not await _require_guild(interaction):
         return
     guild = str(interaction.guild_id)
-    if member is not None and member.id != interaction.user.id:
+    if character:
+        rec, err = await _resolve_edit_target(interaction, member, character)
+        if err:
+            await interaction.response.send_message(err, ephemeral=True)
+            return
+    elif member is not None and member.id != interaction.user.id:
         if not await _require_dm_role(interaction):
             return
         rec = store.get_active(guild, str(member.id))
@@ -9451,16 +9564,18 @@ async def xp_spend(interaction: discord.Interaction) -> None:
 @app_commands.describe(
     school_name="School to learn from (defaults to your sheet's school). Different school requires Fortune.",
     member="Do this for another player [Fortune]",
+    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
 )
-@app_commands.autocomplete(school_name=_school_autocomplete)
+@app_commands.autocomplete(character=_any_character_autocomplete, school_name=_school_autocomplete)
 async def school_learn(
     interaction: discord.Interaction,
     school_name: app_commands.Range[str, 1, 80] | None = None,
     member: discord.Member | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
-    rec, err = await _resolve_active_for_edit(interaction, member)
+    rec, err = await _resolve_edit_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -10178,6 +10293,11 @@ async def taint_command(
         old_taint = c.taint
         c.taint = max(0.0, round(c.taint + add * 0.1, 1))
         store.save(rec, note="Taint change")
+        await _notify_player(
+            interaction.guild, rec,
+            f"**{interaction.user.display_name}** changed **{c.name}**'s Shadowlands Taint: "
+            f"{old_taint:g} → **{c.taint:g}** (Rank {taint.taint_rank(c)}).",
+        )
         crossing = taint.check_threshold_crossing(old_taint, c.taint, c)
         embed = discord.Embed(title=f"Taint: {c.name}", color=discord.Color.dark_purple())
         embed.add_field(name="Taint", value=f"{old_taint:g} → **{c.taint:g}**", inline=True)
@@ -10469,6 +10589,11 @@ class MedicineTreatView(_DisableableView):
         old_wounds = c.wounds_taken
         c.wounds_taken = max(0, c.wounds_taken - self.wounds_healed)
         store.save(rec, note="Medicine treatment")
+        await _notify_player(
+            interaction.guild, rec,
+            f"**{c.name}** was treated: **{old_wounds - c.wounds_taken}** wounds healed. "
+            f"Wounds: **{c.wounds_taken}**, {stats.wound_level_name(c)}.",
+        )
         _tally(self.source_channel_id or interaction.channel_id, c.name, "healed", old_wounds - c.wounds_taken)
         new_level = stats.wound_level_name(c)
         embed = discord.Embed(title="Treatment Applied", color=discord.Color.green())
@@ -10786,14 +10911,17 @@ async def dm_treat(
 @sheet_data.command(name="export", description="Export your active character sheet as JSON (for backup or sharing).")
 @app_commands.describe(
     member="Export another player's character [Fortune]",
+    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
 )
+@app_commands.autocomplete(character=_any_character_autocomplete)
 async def sheet_export(
     interaction: discord.Interaction,
     member: discord.Member | None = None,
+    character: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _require_guild(interaction):
         return
-    rec, err = await _resolve_active_for_edit(interaction, member)
+    rec, err = await _resolve_edit_target(interaction, member, character)
     if err:
         await interaction.response.send_message(err, ephemeral=True)
         return
@@ -12355,6 +12483,8 @@ cog_inventory.init(
     npc_autocomplete=_npc_autocomplete,
     role_fortune=ROLE_FORTUNE,
     role_kami=ROLE_KAMI,
+    find_any_character=_find_any_character,
+    any_character_autocomplete=_any_character_autocomplete,
 )
 
 cog_hub.init(
@@ -12460,6 +12590,8 @@ cog_edit.init(
     kiho_autocomplete=_kiho_autocomplete,
     tattoo_autocomplete=_tattoo_autocomplete,
     quality_autocomplete=_quality_autocomplete,
+    find_any_character=_find_any_character,
+    any_character_autocomplete=_any_character_autocomplete,
 )
 
 cog_give.init(
