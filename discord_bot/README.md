@@ -465,7 +465,7 @@ it lands, the DM authorizes the outcome."*
 |---|---|
 | `/combat start` | Begin a fresh encounter in this channel. |
 | `/combat setup` | Anyone sets up an **encounter roster**: pick the players from a member menu, and the bot posts a roster with **Join** / **Decline** / **Force (staff)** / **Begin** buttons. Invited players accept or decline for themselves; Fortune/Kami can force everyone pending or declined in; the organizer or staff press Begin to roll initiative for all who are in (late Joins roll in at once). While a roster is open, `/combat join` only works for rostered players (staff can still add anyone). The buttons survive a bot restart. |
-| `/combat roster add` / `remove` / `close` | Organizer or staff manage an open roster: invite another player (pinged; they still press Join), uninvite someone not yet in initiative (staff-forced players only by staff), or close a roster that has not begun (once begun, only `/combat end` by staff). |
+| `/combat roster add` / `remove` / `close` | Organizer or staff manage an open roster: invite another player (pinged; they still press Join), uninvite someone not yet in initiative (staff-forced players only by staff), or close a roster that has not begun (once begun, `/combat end`: staff, or a participant of a PC-only fight). |
 | `/fight status` | Your compact combat card (ephemeral): wounds and level with the roll penalty, Void, weapon, Armor TN with stance/Full Defense/Void/cover, initiative, stance, actions used, conditions, Fear, hold/delay. DMs can view another player's with `member:`. |
 | *(automatic)* Stale-turn nudge | Once per turn, if the current actor has not ended their turn after **10 minutes**, the bot pings them in the fight channel with the commands to move on. Constant `STALE_TURN_MINUTES` in `bot.py`. |
 | `/combat recap` / summary on `/combat end` | Fight tally kept on the encounter (survives restarts): per participant hits/attacks, damage dealt and taken (counted when a DM approves it), healing, kills, Void spent, and wound level at join → now. `/combat end` posts the final summary with rounds, elapsed time, the fallen, and callouts for most damage dealt, most taken, and most accurate (3+ attacks); one compact line per participant also goes to the combat log. `/dm undo` rolls back sheets, not the tally. |
@@ -478,7 +478,7 @@ it lands, the DM authorizes the outcome."*
 | `/combat add` | Add an NPC/monster by `name`, `reflexes`, `insight_rank` (rolls its initiative). DM only. |
 | `/combat next` | Advance to the next combatant; wraps and bumps the round. |
 | `/combat status` | Show the current order and whose turn it is. |
-| `/combat remove` / `/combat end` | Drop a combatant / end the encounter. |
+| `/combat remove` / `/combat end` | Drop a combatant / end the encounter. Staff can end any fight. A player can end a fight that holds only player characters (no NPC or creature) when they started it or are in it, from the command or the board's **End Combat** button; the summary posts as usual. |
 | `/combat condition set` | Apply a condition to a combatant (DM only). 8 choices: Blinded, Dazed, Entangled, Fatigued, Grappled, Mounted, Prone, Stunned. |
 | `/combat condition clear` | Remove a condition from a combatant (DM only). |
 | `/combat condition list` | Show a combatant's active conditions and their DM-adjudicated effects. |

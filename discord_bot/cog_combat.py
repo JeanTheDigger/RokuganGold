@@ -1817,14 +1817,13 @@ class CombatBoardView(views_base.PersistentView):
 
     @discord.ui.button(label="End Combat", style=discord.ButtonStyle.danger, row=0)
     async def end_combat_btn(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not _d.is_dm(interaction):
-            await interaction.response.send_message(
-                f"Only **{_d.ROLE_FORTUNE}** or **{_d.ROLE_KAMI}** can end combat.", ephemeral=True,
-            )
-            return
         enc = self._get_enc()
         if enc is None:
             await interaction.response.send_message("No active encounter.", ephemeral=True)
+            return
+        ok, why = _may_end_encounter(interaction, enc)
+        if not ok:
+            await interaction.response.send_message(why, ephemeral=True)
             return
         guild = self.guild_id
         embed, logs = _render_summary(enc, guild, final=True)
@@ -4101,6 +4100,21 @@ def _render_encounter(enc: encounter.Encounter, guild_id: str = "") -> str:
     if len(result) > 1700:
         result = result[:1700] + "\n*(truncated)*"
     return result
+def _may_end_encounter(interaction: discord.Interaction, enc: encounter.Encounter) -> tuple[bool, str]:
+    """Who may end a fight. Staff always. A player may end a fight that holds only
+    player characters (no NPC or creature) when they started it or are in it
+    (owner decision 2026-09-27: players run their own PC-only fights)."""
+    if _d.is_dm(interaction):
+        return True, ""
+    if any(cb.is_npc for cb in enc.combatants):
+        return False, (f"An NPC is in this fight, so only **{_d.ROLE_FORTUNE}** or **{_d.ROLE_KAMI}** "
+                       f"can end it.")
+    uid = str(interaction.user.id)
+    if enc.organizer_id == uid or any(cb.owner_id == uid for cb in enc.combatants):
+        return True, ""
+    return False, "Only someone in this fight (or the one who started it) can end it."
+
+
 @combat_group.command(name="start", description="Start a fresh initiative tracker in this channel.")
 async def combat_start(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
@@ -4112,6 +4126,7 @@ async def combat_start(interaction: discord.Interaction) -> None:
         )
         return
     enc = encounter.Encounter(channel_id=interaction.channel_id)
+    enc.organizer_id = str(interaction.user.id)
     _d.encounters[interaction.channel_id] = enc
     guild = str(interaction.guild_id)
     _d.save_encounter(guild, enc)
@@ -4567,7 +4582,7 @@ async def combat_roster_close(interaction: discord.Interaction) -> None:
         return
     if (enc.roster_begun or enc.combatants or enc.started) and not _d.is_dm(interaction):
         await interaction.response.send_message(
-            "This encounter has begun; only staff can end it (`/combat end`).", ephemeral=True,
+            "This encounter has begun; end it with `/combat end` (a participant may, if no NPC is in it).", ephemeral=True,
         )
         return
     await _close_roster_message(enc, str(interaction.guild_id))
@@ -4839,16 +4854,18 @@ async def combat_recap(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(embed=embed)
 
 
-@combat_group.command(name="end", description="End the encounter in this channel and post the fight summary. [Fortune]")
+@combat_group.command(name="end", description="End the encounter here and post the summary. Players may end a PC-only fight they are in.")
 async def combat_end(interaction: discord.Interaction) -> None:
     if not await _d.require_guild(interaction):
-        return
-    if not await _d.require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
     enc = _d.encounters.get(interaction.channel_id)
     if enc is None:
         await interaction.response.send_message("No encounter here. Start one with `/combat start`.", ephemeral=True)
+        return
+    ok, why = _may_end_encounter(interaction, enc)
+    if not ok:
+        await interaction.response.send_message(why, ephemeral=True)
         return
     embed, logs = _render_summary(enc, guild, final=True)
     await _close_roster_message(enc, guild, "Encounter ended.")
