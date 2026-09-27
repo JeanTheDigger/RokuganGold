@@ -153,6 +153,54 @@ def void_bonus_max(c: Character) -> int:
     return c.void_ring
 
 
+SPELL_CAST_ELEMENTS = ("air", "earth", "fire", "water")
+
+
+def effective_school_rank(c: Character, element: str, school_rank: int | None = None) -> int:
+    """School Rank as it applies to spells of one element (s31): +1 in the Affinity
+    element, -1 in the Deficiency element (0 = cannot cast that element)."""
+    rank = c.school_rank if school_rank is None else school_rank
+    el = element.lower()
+    if c.affinity_element and c.affinity_element.lower() == el:
+        rank += 1
+    if c.deficiency_element and c.deficiency_element.lower() == el:
+        rank -= 1
+    return rank
+
+
+def spell_mastery_ceiling(c: Character, spell_element: str, school_rank: int | None = None) -> int:
+    """Highest Mastery Level the character may learn or cast in a spell's element
+    (s48: the Rank sets the ceiling; s31: Affinity/Deficiency shift it by one).
+    Universal spells use the best of the four castable elements."""
+    el = spell_element.lower()
+    if el in SPELL_CAST_ELEMENTS or el == "void":
+        return effective_school_rank(c, el, school_rank)
+    return max(effective_school_rank(c, e, school_rank) for e in SPELL_CAST_ELEMENTS)
+
+
+def knows_spell(c: Character, name: str) -> bool:
+    key = name.strip().lower()
+    return any(s.lower() == key for s in c.spells_known)
+
+
+def is_memorised(c: Character, name: str) -> bool:
+    key = name.strip().lower()
+    return any(s.lower() == key for s in c.spells_memorised)
+
+
+def spell_source_note(c: Character, name: str) -> str:
+    """How the caster reads the prayer (s31): from memory or from the scroll."""
+    return "Memorised" if is_memorised(c, name) else "Read from scroll"
+
+
+def pending_rank_spells(c: Character) -> tuple[int, int]:
+    """(rank being learned, picks still owed) for a shugenja whose School Rank is
+    above the last rank whose three spells were taken (s48); (0, 0) if none."""
+    if c.school_rank <= c.spell_ranks_learned:
+        return 0, 0
+    return c.spell_ranks_learned + 1, max(0, 3 - c.rank_spell_picks)
+
+
 def trait_value(c: Character, name: str) -> int:
     """Return a trait value by name, including Void."""
     if name.lower() == "void":

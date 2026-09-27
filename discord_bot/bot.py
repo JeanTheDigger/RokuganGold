@@ -867,7 +867,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         extras.append("**Emphases:** " + ", ".join(
             f"{sk} ({', '.join(em)})" for sk, em in sorted(c.emphases.items()) if em))
     if c.spells_known:
-        extras.append("**Spells:** " + ", ".join(c.spells_known))
+        extras.append("**Spells:** " + _spell_list_text(c))
     if c.advantages:
         extras.append("**Advantages:** " + ", ".join(c.advantages))
     if c.disadvantages:
@@ -1533,6 +1533,21 @@ async def _spell_autocomplete(
     return out[:25]
 
 _SPELL_ELEMENTS = ["air", "earth", "fire", "water", "void"]
+
+async def _known_spell_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    """Spells on the user's own sheet that are not memorised yet (staff see the catalog too)."""
+    cur = current.lower()
+    rec = store.get_active(str(interaction.guild_id), str(interaction.user.id)) if interaction.guild_id else None
+    out: list[app_commands.Choice[str]] = []
+    if rec is not None:
+        c = rec.character
+        for n in c.spells_known:
+            if cur in n.lower() and not stats.is_memorised(c, n):
+                out.append(app_commands.Choice(name=n[:100], value=n[:100]))
+    if not out and _is_dm(interaction):
+        return await _spell_autocomplete(interaction, current)
+    return out[:25]
+
 async def _element_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
@@ -1606,15 +1621,37 @@ async def _skill_autocomplete(
     ]
     return out[:25]
 
+def _spell_list_text(c: Character) -> str:
+    """Known spells, marking the memorised ones (s31: cast without a scroll)."""
+    return ", ".join(f"{n} (memorised)" if stats.is_memorised(c, n) else n for n in c.spells_known)
+
+
+def _mastery_ceiling_text(c: Character, element: str, school_rank: int | None = None) -> str:
+    """Explain a character's Mastery ceiling in one element (s31/s48)."""
+    rank = c.school_rank if school_rank is None else school_rank
+    eff = stats.spell_mastery_ceiling(c, element, school_rank)
+    el = element.lower()
+    shift = ""
+    if c.affinity_element and c.affinity_element.lower() == el:
+        shift = " +1 Affinity"
+    elif c.deficiency_element and c.deficiency_element.lower() == el:
+        shift = " -1 Deficiency"
+    if eff <= 0:
+        return f"{element.title()} is their Deficiency and School Rank {rank} makes it uncastable."
+    return f"Their ceiling in {element.title()} is Mastery {eff} (School Rank {rank}{shift})."
+
+
 def _check_insight_rank_advance(c: Character) -> str:
     result = stats.check_insight_rank_advance(c)
     if result is None:
         return ""
     old, new_rank = result
+    what = ("three new spells" if "shugenja" in c.school_type.lower()
+            else f"your Rank {new_rank} technique")
     return (
         f"\n**School Rank {old} → {new_rank}!** "
         f"(Insight {stats.insight(c)}). "
-        f"Use `/sheet learn` to learn your Rank {new_rank} technique."
+        f"Use `/sheet learn` at your dojo or with your Sensei to learn {what}."
     )
 
 # ===========================================================================
@@ -3509,7 +3546,7 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
         embed.add_field(name="Disadvantages", value=", ".join(char.disadvantages)[:1024], inline=False)
 
     if char.spells_known:
-        embed.add_field(name="Spells", value=", ".join(char.spells_known)[:1024], inline=False)
+        embed.add_field(name="Spells", value=_spell_list_text(char)[:1024], inline=False)
 
     embed.add_field(name="Honor", value=f"{char.honor:.1f}", inline=True)
     embed.add_field(name="Insight", value=str(stats.insight(char)), inline=True)
@@ -3679,7 +3716,7 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
     if char.disadvantages:
         embed.add_field(name="Disadvantages", value=", ".join(char.disadvantages)[:1024], inline=False)
     if char.spells_known:
-        embed.add_field(name="Spells", value=", ".join(char.spells_known)[:1024], inline=False)
+        embed.add_field(name="Spells", value=_spell_list_text(char)[:1024], inline=False)
 
     embed.add_field(name="Honor", value=f"{char.honor:.1f}", inline=True)
     embed.add_field(name="Insight", value=str(stats.insight(char)), inline=True)
@@ -4621,7 +4658,7 @@ _DM_WIZARD_CATS: list[tuple[str, str, str, list[tuple[str, str]]]] = [
         ("/edit activate", "Activate/deactivate Kata, Kiho, or Tattoo"),
         ("/edit rename / notes", "Rename a character or set notes"),
         ("/edit mount", "Toggle mounted state (outside combat)"),
-        ("/edit spell", "Add/remove known spells"),
+        ("/edit spell", "Add/remove known spells (warns if above the character's rank)"),
     ]),
     ("", "Creatures", "Bestiary creature management.", [
         ("/creature catalog", "Search bestiary templates (compact)"),
@@ -8555,13 +8592,72 @@ async def xp_kiho(
     note = " *(shugenja: 2x cost)*" if shugenja else (" *(non-Brotherhood monk: 1.5x cost)*" if non_brotherhood else "")
     await _buy_named(interaction, member, canonical, ml, "kiho", "kiho", note=note, cost=cost)
 
-@xp_group.command(name="spell", description="Memorise a spell so no scroll is needed (cost = 1 x Mastery Level).")
+def _memorise_check(c: Character, name: str, ml: int | None) -> tuple[str | None, str, int]:
+    """Validate memorising a spell (s31). Returns (error, canonical name, mastery level)."""
+    if "shugenja" not in c.school_type.lower():
+        return (f"**{c.name}** is a {c.school_type}, not a Shugenja. Only Shugenja can memorise spells.",
+                name, ml or 1)
+    match = next((k for k in c.spells_known if k.lower() == name.strip().lower()), None)
+    if match is None:
+        return (f"**{c.name}** does not know **{name.strip()}**. `/xp spell` memorises a spell already on "
+                f"the sheet so it can be cast without its scroll. New spells come from rank advancement "
+                f"(`/sheet learn`) or from staff (`/edit spell`).", name, ml or 1)
+    entry = spells.get(match)
+    if ml is None:
+        ml = entry["mastery"] if entry else None
+    if ml is None:
+        return (f"**{match}** isn't in the catalog: Give its `mastery_level:` too.", match, 1)
+    if stats.is_memorised(c, match):
+        return f"**{c.name}** has already memorised **{match}**.", match, ml
+    if entry is not None:
+        ceiling = stats.spell_mastery_ceiling(c, entry["element"])
+        if ml > ceiling:
+            el = entry["element"].lower()
+            why = (_mastery_ceiling_text(c, el) if el in stats.SPELL_CAST_ELEMENTS + ("void",)
+                   else f"Their ceiling for a Universal spell is Mastery {ceiling}.")
+            return f"**{c.name}** cannot memorise **{match}** (Mastery {ml}) yet: {why}", match, ml
+    return None, match, ml
+
+
+async def _memorise_spell(interaction: discord.Interaction, rec: storage.CharacterRecord,
+                          name: str, ml: int | None, *, edit: bool = False) -> None:
+    """Spend XP to memorise a known spell (s31: cost = Mastery Level, cast without a scroll)."""
+    c = rec.character
+    send = interaction.response.edit_message if edit else interaction.response.send_message
+    kw = {"view": None} if edit else {"ephemeral": True}
+    if await _refuse_if_dead(interaction, c):
+        return
+    if not await _require_xp_channel(interaction, c.name):
+        return
+    err, canonical, ml = _memorise_check(c, name, ml)
+    if err:
+        await send(content=err, **kw)
+        return
+    cost = advancement.misc_cost(ml)
+    if c.xp < cost:
+        await send(content=(f"Not enough XP: Memorising **{canonical}** (Mastery Level {ml}) costs **{cost}**, "
+                            f"but **{c.name}** has {c.xp:g}."), **kw)
+        return
+    c.spells_memorised.append(canonical)
+    c.xp -= cost
+    c.xp_spent += cost
+    changed = store.save(rec, note="xp spend")
+    await _xp_spend_log(interaction, rec, changed)
+    text = (f"**{c.name}** memorises **{canonical}** (ML {ml}) for **{cost}** XP and no longer needs "
+            f"its scroll to cast it.\nXP left {c.xp:g}")
+    if edit:
+        await interaction.response.edit_message(content=text, view=None)
+    else:
+        await interaction.response.send_message(text, embed=build_sheet_embed(rec), ephemeral=True)
+
+
+@xp_group.command(name="spell", description="Memorise a spell you know so no scroll is needed (cost = 1 x Mastery Level).")
 @app_commands.describe(
-    name="Spell name (catalog match auto-fills the Mastery Level).",
+    name="A spell on your sheet (catalog match auto-fills the Mastery Level).",
     mastery_level="Its Mastery Level (optional if the spell is in the catalog).",
     member="Advance another player's character [Fortune]",
 )
-@app_commands.autocomplete(name=_spell_autocomplete)
+@app_commands.autocomplete(name=_known_spell_autocomplete)
 async def xp_spell(
     interaction: discord.Interaction,
     name: app_commands.Range[str, 1, 60],
@@ -8570,25 +8666,11 @@ async def xp_spell(
 ) -> None:
     if not await _require_guild(interaction):
         return
-    spell = spells.get(name)
-    ml = mastery_level if mastery_level is not None else (spell["mastery"] if spell else None)
-    if ml is None:
-        await interaction.response.send_message(
-            f"**{name}** isn't in the catalog: Give its `mastery_level:` too.", ephemeral=True
-        )
+    rec, err = await _resolve_active_for_edit(interaction, member)
+    if err:
+        await interaction.response.send_message(err, ephemeral=True)
         return
-    if not _is_dm(interaction):
-        rec, err = await _resolve_active_for_edit(interaction, member)
-        if err:
-            await interaction.response.send_message(err, ephemeral=True)
-            return
-        if "shugenja" not in rec.character.school_type.lower():
-            await interaction.response.send_message(
-                f"**{rec.character.name}** is a {rec.character.school_type}, not a Shugenja. "
-                f"Only Shugenja can memorise spells.", ephemeral=True)
-            return
-    canonical = spell["name"] if spell else name.strip()
-    await _buy_named(interaction, member, canonical, ml, "spells_known", "spell")
+    await _memorise_spell(interaction, rec, name, mastery_level)
 
 @xp_group.command(name="advantage", description="Buy an Advantage with XP (cost = its point value).")
 @app_commands.describe(
@@ -8907,19 +8989,36 @@ class _XpCategorySelect(discord.ui.View):
     async def _show_spell_elements(self, interaction: discord.Interaction, c: Character, avail: float) -> None:
         if "shugenja" not in c.school_type.lower():
             await interaction.response.edit_message(
-                content=f"**{c.name}** is a {c.school_type}, not a Shugenja. Only Shugenja can memorize spells.", view=None)
+                content=f"**{c.name}** is a {c.school_type}, not a Shugenja. Only Shugenja can memorise spells.", view=None)
             return
-        opts = [
-            discord.SelectOption(label="Air", value="air"),
-            discord.SelectOption(label="Earth", value="earth"),
-            discord.SelectOption(label="Fire", value="fire"),
-            discord.SelectOption(label="Water", value="water"),
-            discord.SelectOption(label="Void", value="void"),
-            discord.SelectOption(label="All elements", value="all"),
-        ]
-        view = _XpSpellElementPick(self.guild_id, self.user_id, opts)
+        opts: list[discord.SelectOption] = []
+        for n in sorted(c.spells_known):
+            if stats.is_memorised(c, n):
+                continue
+            entry = spells.get(n)
+            ml = entry["mastery"] if entry else 1
+            cost = advancement.misc_cost(ml)
+            if entry is not None and ml > stats.spell_mastery_ceiling(c, entry["element"]):
+                state = "Above your rank"
+            else:
+                state = "Can afford" if c.xp >= cost else "Not enough XP"
+            elem = entry["element"] if entry else "?"
+            opts.append(discord.SelectOption(
+                label=f"{n} (ML {ml}, {cost} XP)"[:100], value=n[:100],
+                description=f"{elem} | {state}"[:100],
+            ))
+        if not opts:
+            await interaction.response.edit_message(
+                content=(f"**{c.name}** has no spell left to memorise: Every spell on the sheet is memorised, "
+                         f"or the sheet has none. New spells come from `/sheet learn` at rank-up or from staff."),
+                view=None)
+            return
+        pages = [opts[i:i+25] for i in range(0, len(opts), 25)]
+        view = _XpSpellPick(self.guild_id, self.user_id, pages, 0)
+        pg = f" (page 1/{len(pages)})" if len(pages) > 1 else ""
         await interaction.response.edit_message(
-            content=f"**{c.name}** -- Filter spells by element ({avail:g} XP available):", view=view)
+            content=f"**{c.name}** -- Pick a known spell to memorise ({avail:g} XP available, {len(opts)} not yet memorised){pg}:",
+            view=view)
 
     async def _show_advantage_categories(self, interaction: discord.Interaction, c: Character, avail: float) -> None:
         opts = [
@@ -9324,55 +9423,6 @@ class _XpKihoPick(discord.ui.View):
             view=None)
 
 
-class _XpSpellElementPick(discord.ui.View):
-    def __init__(self, guild_id: str, user_id: int, options: list[discord.SelectOption]) -> None:
-        super().__init__(timeout=60)
-        self.guild_id = guild_id
-        self.user_id = user_id
-        sel = discord.ui.Select(placeholder="Filter by element...", options=options, row=0)
-        sel.callback = self._pick
-        self.add_item(sel)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
-            return False
-        return True
-
-    async def _pick(self, interaction: discord.Interaction) -> None:
-        element = interaction.data["values"][0]
-        rec = store.get_active(self.guild_id, str(self.user_id))
-        if rec is None:
-            await interaction.response.edit_message(content="No active character found.", view=None)
-            return
-        c = rec.character
-        from l5r_rules import spells_catalog
-        known_lower = {s.lower() for s in c.spells_known}
-        entries = spells_catalog.SPELLS_DATA if element == "all" else spells.by_element(element)
-        opts: list[discord.SelectOption] = []
-        for entry in sorted(entries, key=lambda e: (e["mastery"], e["name"])):
-            if entry["name"].lower() in known_lower:
-                continue
-            ml = entry["mastery"]
-            cost = advancement.misc_cost(ml)
-            can = c.xp >= cost
-            opts.append(discord.SelectOption(
-                label=f"{entry['name']} (ML {ml}, {cost} XP)"[:100],
-                value=entry["name"][:100],
-                description=f"{entry['element']} | {'Can afford' if can else 'Not enough XP'}",
-            ))
-        if not opts:
-            await interaction.response.edit_message(
-                content="No spells available for that element (you may already know them all).", view=None)
-            return
-        pages = [opts[i:i+25] for i in range(0, len(opts), 25)]
-        view = _XpSpellPick(self.guild_id, self.user_id, pages, 0)
-        total = sum(len(p) for p in pages)
-        pg = f" (page 1/{len(pages)})" if len(pages) > 1 else ""
-        await interaction.response.edit_message(
-            content=f"**{c.name}** -- Pick a Spell to memorize ({c.xp:g} XP available, {total} available){pg}:", view=view)
-
-
 class _XpSpellPick(discord.ui.View):
     def __init__(self, guild_id: str, user_id: int, pages: list[list[discord.SelectOption]], page: int) -> None:
         super().__init__(timeout=60)
@@ -9417,29 +9467,7 @@ class _XpSpellPick(discord.ui.View):
         if rec is None:
             await interaction.response.edit_message(content="No active character found.", view=None)
             return
-        c = rec.character
-        if stats.is_dead(c):
-            await interaction.response.edit_message(content=f"**{c.name}** is dead. PC death is permanent.", view=None)
-            return
-        spell_entry = spells.get(name)
-        ml = spell_entry["mastery"] if spell_entry else 1
-        cost = advancement.misc_cost(ml)
-        if any(s.lower() == name.lower() for s in c.spells_known):
-            await interaction.response.edit_message(content=f"**{c.name}** already knows **{name}**.", view=None)
-            return
-        if c.xp < cost:
-            await interaction.response.edit_message(
-                content=f"Not enough XP: **{name}** (ML {ml}) costs **{cost}**, but **{c.name}** has {c.xp:g}.",
-                view=None)
-            return
-        c.spells_known.append(spell_entry["name"] if spell_entry else name)
-        c.xp -= cost
-        c.xp_spent += cost
-        changed = store.save(rec, note="xp spend")
-        await _xp_spend_log(interaction, rec, changed)
-        await interaction.response.edit_message(
-            content=f"**{c.name}** memorizes the spell **{name}** (ML {ml}) for **{cost}** XP. XP left {c.xp:g}",
-            view=None)
+        await _memorise_spell(interaction, rec, name, None, edit=True)
 
 
 class _XpAdvCategoryPick(discord.ui.View):
@@ -9599,7 +9627,7 @@ async def xp_spend(interaction: discord.Interaction) -> None:
 # /school group: schools & techniques (GDD s29)
 # ===========================================================================
 
-@sheet.command(name="learn", description="Record the techniques your school grants up to your School Rank.")
+@sheet.command(name="learn", description="Learn what your school grants up to your School Rank: Techniques, or rank-up spells for shugenja.")
 @app_commands.describe(
     school_name="School to learn from (defaults to your sheet's school). Different school requires Fortune.",
     member="Do this for another player [Fortune]",
@@ -9634,7 +9662,9 @@ async def school_learn(
         )
         return
     entitled = schools.techniques_up_to(s["name"], c.school_rank)
-    if not entitled:
+    is_shugenja = "shugenja" in c.school_type.lower() or bool(s.get("affinity"))
+    rank, owed = stats.pending_rank_spells(c) if is_shugenja else (0, 0)
+    if not entitled and not owed:
         await interaction.response.send_message(
             f"**{s['name']}** grants no ranked techniques at School Rank {c.school_rank}.", ephemeral=True
         )
@@ -9650,9 +9680,176 @@ async def school_learn(
     store.save(rec)
     if added:
         msg = f"**{c.name}** learns from **{s['name']}** (up to Rank {c.school_rank}): " + ", ".join(added)
-    else:
+    elif entitled:
         msg = f"**{c.name}** already knows all **{s['name']}** techniques up to Rank {c.school_rank}."
+    else:
+        msg = f"**{c.name}** advances with **{s['name']}**."
+    if owed:
+        # s48: a shugenja gains three new spells per new School Rank, each within the
+        # Mastery ceiling of that rank, through the dojo or a Sensei.
+        msg += (f"\n**Rank {rank} spells:** Choose {owed} new spell{'s' if owed > 1 else ''} "
+                f"within the Mastery ceiling of School Rank {rank} (s48).")
+        await interaction.response.send_message(
+            msg, view=_RankSpellView(rec.id, interaction.user.id), ephemeral=True)
+        return
     await interaction.response.send_message(msg, embed=build_sheet_embed(rec), ephemeral=True)
+
+
+_RANK_SPELL_ELEMENTS = ("Air", "Earth", "Fire", "Water", "Void", "Universal")
+
+
+def _rank_spell_pool(element: str) -> list[dict]:
+    if element == "Universal":
+        return [sp for sp in spells.ALL if sp["element"].lower() not in stats.SPELL_CAST_ELEMENTS + ("void",)]
+    return spells.by_element(element)
+
+
+class _RankSpellView(discord.ui.View):
+    """Rank-up spell picks for a shugenja (s48): three new spells per new School Rank,
+    each of a Mastery Level accessible at the rank being learned. One pick per
+    interaction; every pick is saved at once, so the flow can be resumed with
+    `/sheet learn`."""
+
+    def __init__(self, rec_id: int, user_id: int, element: str | None = None, page: int = 0) -> None:
+        super().__init__(timeout=600)
+        self.rec_id = rec_id
+        self.user_id = user_id
+        self.element = element
+        self.page = page
+        rec = store.get_by_id(rec_id)
+        c = rec.character if rec else None
+        rank, owed = stats.pending_rank_spells(c) if c else (0, 0)
+        if c is None or not owed:
+            return
+        if element is None:
+            opts: list[discord.SelectOption] = []
+            for el in _RANK_SPELL_ELEMENTS:
+                key = "All" if el == "Universal" else el
+                ceiling = stats.spell_mastery_ceiling(c, key, rank)
+                if ceiling <= 0:
+                    opts.append(discord.SelectOption(
+                        label=f"{el} (uncastable: Deficiency)", value=el, description="No spells can be taken here."))
+                    continue
+                pool = [sp for sp in _rank_spell_pool(el)
+                        if sp["mastery"] <= ceiling and not stats.knows_spell(c, sp["name"])]
+                opts.append(discord.SelectOption(
+                    label=f"{el} (up to Mastery {ceiling})"[:100], value=el,
+                    description=f"{len(pool)} spell{'s' if len(pool) != 1 else ''} available"[:100]))
+            sel = discord.ui.Select(placeholder=f"Pick an element ({owed} spell{'s' if owed > 1 else ''} left)...",
+                                    options=opts, row=0)
+            sel.callback = self._pick_element
+            self.add_item(sel)
+            return
+        key = "All" if element == "Universal" else element
+        ceiling = stats.spell_mastery_ceiling(c, key, rank)
+        pool = sorted(
+            (sp for sp in _rank_spell_pool(element)
+             if sp["mastery"] <= ceiling and not stats.knows_spell(c, sp["name"])),
+            key=lambda sp: (sp["mastery"], sp["name"]))
+        pages = [pool[i:i + 25] for i in range(0, len(pool), 25)] or [[]]
+        self.page = max(0, min(page, len(pages) - 1))
+        options = [discord.SelectOption(
+            label=f"{sp['name']} (M{sp['mastery']})"[:100], value=sp["name"][:100],
+            description=f"{sp['element']} | TN {combat.spell_casting_tn(sp['mastery'])} | {sp['range']}"[:100],
+        ) for sp in pages[self.page]]
+        if not options:
+            options = [discord.SelectOption(label="(none available)", value="__none__")]
+        sel = discord.ui.Select(
+            placeholder=f"{element} spells up to Mastery {ceiling} ({owed} left)..."[:150], options=options, row=0)
+        sel.callback = self._pick_spell
+        self.add_item(sel)
+        if len(pages) > 1:
+            if self.page > 0:
+                b = discord.ui.Button(label="Previous", style=discord.ButtonStyle.secondary, row=1)
+                b.callback = self._prev
+                self.add_item(b)
+            if self.page < len(pages) - 1:
+                b = discord.ui.Button(label="Next", style=discord.ButtonStyle.secondary, row=1)
+                b.callback = self._next
+                self.add_item(b)
+        back = discord.ui.Button(label="Back to Elements", style=discord.ButtonStyle.secondary, row=2)
+        back.callback = self._back
+        self.add_item(back)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("This menu is not for you.", ephemeral=True)
+            return False
+        return True
+
+    def _content(self, c: Character) -> str:
+        rank, owed = stats.pending_rank_spells(c)
+        where = f" · {self.element}" if self.element else ""
+        return (f"**{c.name}** · Rank {rank} spells{where}: Choose {owed} new "
+                f"spell{'s' if owed > 1 else ''} (s48).")
+
+    async def _pick_element(self, interaction: discord.Interaction) -> None:
+        el = interaction.data["values"][0]
+        rec = store.get_by_id(self.rec_id)
+        if rec is None:
+            await interaction.response.edit_message(content="Character not found.", view=None)
+            return
+        view = _RankSpellView(self.rec_id, self.user_id, el, 0)
+        await interaction.response.edit_message(content=view._content(rec.character), view=view)
+
+    async def _back(self, interaction: discord.Interaction) -> None:
+        rec = store.get_by_id(self.rec_id)
+        if rec is None:
+            await interaction.response.edit_message(content="Character not found.", view=None)
+            return
+        view = _RankSpellView(self.rec_id, self.user_id)
+        await interaction.response.edit_message(content=view._content(rec.character), view=view)
+
+    async def _prev(self, interaction: discord.Interaction) -> None:
+        view = _RankSpellView(self.rec_id, self.user_id, self.element, self.page - 1)
+        await interaction.response.edit_message(view=view)
+
+    async def _next(self, interaction: discord.Interaction) -> None:
+        view = _RankSpellView(self.rec_id, self.user_id, self.element, self.page + 1)
+        await interaction.response.edit_message(view=view)
+
+    async def _pick_spell(self, interaction: discord.Interaction) -> None:
+        name = interaction.data["values"][0]
+        rec = store.get_by_id(self.rec_id)
+        if rec is None or name == "__none__":
+            await interaction.response.edit_message(content="Nothing to pick here.", view=None)
+            return
+        c = rec.character
+        rank, owed = stats.pending_rank_spells(c)
+        sp = spells.get(name)
+        if not owed or sp is None:
+            await interaction.response.edit_message(
+                content=f"**{c.name}** has no rank-up spells pending.", embed=build_sheet_embed(rec), view=None)
+            return
+        if stats.knows_spell(c, sp["name"]):
+            await interaction.response.edit_message(
+                content=f"**{c.name}** already knows **{sp['name']}**.",
+                view=_RankSpellView(self.rec_id, self.user_id, self.element, self.page))
+            return
+        if sp["mastery"] > stats.spell_mastery_ceiling(c, sp["element"], rank):
+            await interaction.response.edit_message(
+                content=f"**{sp['name']}** (Mastery {sp['mastery']}) is above the Rank {rank} ceiling.",
+                view=_RankSpellView(self.rec_id, self.user_id, self.element, self.page))
+            return
+        c.spells_known.append(sp["name"])
+        c.rank_spell_picks += 1
+        if c.rank_spell_picks >= 3:
+            c.spell_ranks_learned += 1
+            c.rank_spell_picks = 0
+        store.save(rec, note="rank-up spell")
+        who = interaction.user.display_name + ("" if rec.owner_id == str(interaction.user.id) else " (staff)")
+        await _xp_log(str(interaction.guild_id),
+                      f"RANK-UP SPELL: {who} · {c.name} · Rank {rank} · {sp['name']} (M{sp['mastery']})")
+        rank2, owed2 = stats.pending_rank_spells(c)
+        if not owed2:
+            await interaction.response.edit_message(
+                content=(f"**{c.name}** learns **{sp['name']}** (M{sp['mastery']}). "
+                         f"All Rank {rank} spells are on the sheet."),
+                embed=build_sheet_embed(rec), view=None)
+            return
+        view = _RankSpellView(self.rec_id, self.user_id)
+        await interaction.response.edit_message(
+            content=f"**{c.name}** learns **{sp['name']}** (M{sp['mastery']}).\n" + view._content(c), view=view)
 
 # ===========================================================================
 # /spell group: spells & elements (GDD s32–s37)
@@ -9819,6 +10016,20 @@ async def spell_cast(
             )
             return
         element = cast_element.value
+    if not attacker_npc and not stats.knows_spell(caster, s["name"]):
+        await interaction.response.send_message(
+            f"**{caster.name}** does not know **{s['name']}**. Spells come from rank advancement "
+            f"(`/sheet learn`) or from staff (`/edit spell`). To cast an unknown spell, ask the kami "
+            f"with `/spell importune`.", ephemeral=True,
+        )
+        return
+    ceiling = stats.spell_mastery_ceiling(caster, element)
+    if s["mastery"] > ceiling and not caster.is_npc:
+        await interaction.response.send_message(
+            f"**{caster.name}** cannot cast **{s['name']}** (Mastery {s['mastery']}): "
+            f"{_mastery_ceiling_text(caster, element)}", ephemeral=True,
+        )
+        return
     ring_val = stats.ring_value(caster, element)
     affinity = caster.affinity_element.lower() == element if caster.affinity_element else False
     deficiency = caster.deficiency_element.lower() == element if caster.deficiency_element else False
@@ -9877,7 +10088,7 @@ async def spell_cast(
         title=f"{caster.name} casts {s['name']}",
         color=discord.Color.gold() if success else discord.Color.red(),
     )
-    notes = []
+    notes = [stats.spell_source_note(caster, s["name"])]
     if affinity:
         notes.append(f"Affinity ({element.title()}): Effective rank {result['effective_rank']}")
     if deficiency:

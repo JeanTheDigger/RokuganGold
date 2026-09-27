@@ -57,6 +57,12 @@ class Character:
     katas: list[str] = field(default_factory=list)
     kiho: list[str] = field(default_factory=list)
     spells_known: list[str] = field(default_factory=list)
+    # -- Spells memorised with XP (s31: cast without a scroll). Subset of spells_known. --
+    spells_memorised: list[str] = field(default_factory=list)
+    # -- Rank-up spells (s48): highest School Rank whose three new spells have been
+    #    taken (chargen covers Rank 1), and picks already taken toward the next rank. --
+    spell_ranks_learned: int = 1
+    rank_spell_picks: int = 0
     affinity_element: str = ""
     deficiency_element: str = ""
 

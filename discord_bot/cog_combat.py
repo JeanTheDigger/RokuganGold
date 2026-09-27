@@ -1665,13 +1665,28 @@ def _build_castable_spells(c: Character) -> list[tuple[str, dict, str]]:
             slot = c.spell_slots.get(elem, 0)
             if slot <= 0 and c.void_spell_bonus <= 0:
                 continue
-        affinity = c.affinity_element.lower() == elem if c.affinity_element else False
-        deficiency = c.deficiency_element.lower() == elem if c.deficiency_element else False
-        effective = c.school_rank + (1 if affinity else 0) + (-1 if deficiency else 0)
+        effective = stats.effective_school_rank(c, elem)
         if effective <= 0:
+            continue
+        # PCs are bound by the Mastery ceiling (s48); NPC stat blocks are staff's call.
+        if s["mastery"] > effective and not c.is_npc:
             continue
         result.append((s["name"], s, elem))
     return result
+
+
+def _uncastable_spells(c: Character) -> list[str]:
+    """Known spells above the caster's Mastery ceiling (s31/s48), for the board's hint."""
+    out: list[str] = []
+    if c.is_npc:
+        return []
+    for name in c.spells_known:
+        s = spells.get(name)
+        if s is None:
+            continue
+        if s["mastery"] > stats.spell_mastery_ceiling(c, s["element"]):
+            out.append(f"{s['name']} (M{s['mastery']})")
+    return out
 
 
 def _slot_display(c: Character, element: str) -> str:
@@ -2310,8 +2325,12 @@ class CombatBoardView(views_base.PersistentView):
             return
         castable = _build_castable_spells(c)
         if not castable:
+            above = _uncastable_spells(c)
+            hint = (f"\nAbove their Mastery ceiling (School Rank {c.school_rank}): {', '.join(above)}."
+                    if above else "")
             await interaction.response.send_message(
-                f"**{c.name}** has no castable spells (no slots remaining or deficiency blocks all).\n"
+                f"**{c.name}** has no castable spells (no slots remaining, deficiency blocks the element, "
+                f"or the spell is above their rank).{hint}\n"
                 f"A DM must call `/dm new_day` to refresh spell slots.",
                 ephemeral=True,
             )
@@ -2655,6 +2674,13 @@ class _BoardSpellSelect(discord.ui.View):
                 return
         affinity = c.affinity_element.lower() == element if c.affinity_element else False
         deficiency = c.deficiency_element.lower() == element if c.deficiency_element else False
+        if s["mastery"] > stats.spell_mastery_ceiling(c, element) and not c.is_npc:
+            await interaction.response.edit_message(
+                content=(f"**{c.name}** cannot cast **{s['name']}** (Mastery {s['mastery']}): "
+                         f"Above their ceiling in {element.title()} at School Rank {c.school_rank}."),
+                view=None,
+            )
+            return
         fear_r = cb.fear_penalty
         wound_pen = stats.wound_penalty(c)
         ring_val = stats.ring_value(c, element)
@@ -2680,7 +2706,7 @@ class _BoardSpellSelect(discord.ui.View):
             title=f"{'SUCCESS' if success else 'FAILED'}: {c.name} casts {s['name']}",
             color=discord.Color.gold() if success else discord.Color.red(),
         )
-        notes: list[str] = []
+        notes: list[str] = [stats.spell_source_note(c, s["name"])]
         if affinity:
             notes.append(f"Affinity ({element.title()}): Effective rank {result['effective_rank']}")
         if deficiency:

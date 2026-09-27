@@ -105,7 +105,7 @@ follows automatically.
 | `/xp trait` | Raise a Trait or Void. Cost = **new rank × 4** (Void **× 6**). |
 | `/xp skill` | Raise or learn a Skill. Cost = **new rank × 1**. |
 | `/xp emphasis` | Add a Skill Emphasis. **Flat 2 XP**, max **⌈rank ÷ 2⌉** per skill. |
-| `/xp kata` · `/xp kiho` · `/xp spell` | Learn a Kata / Kiho / memorise a Spell. Cost = **1 × Mastery Level**: the name autocompletes and the ML is **auto-filled** from the catalog. `/xp kiho` also takes `non_brotherhood:` (1.5 × ML, rounded up, per s38a). |
+| `/xp kata` · `/xp kiho` · `/xp spell` | Learn a Kata / Kiho / memorise a Spell. Cost = **1 × Mastery Level**: the name autocompletes and the ML is **auto-filled** from the catalog. `/xp kiho` also takes `non_brotherhood:` (1.5 × ML, rounded up, per s38a). `/xp spell` only memorises a spell **already on the sheet** (s31: cast without its scroll); it never grants a new spell. |
 | `/xp advantage` | Buy an Advantage with XP (cost = its point value). |
 | `/xp remove_disadvantage` | Buy off a Disadvantage with XP. Cost = **2 × point value** (L5R 4e RAW). |
 | `/xp costs` | The RAW cost reference. |
@@ -296,7 +296,7 @@ Every school **and path** and its techniques are in the bot: **347 entries**
 | `/ref school list` | Overall summary (basic/advanced/alternate + per-clan counts), or `clan:` for that clan's entries grouped by category. |
 | `/ref school search` | Find schools/paths by name or clan (each tagged basic / adv / path). |
 | `/ref school view` | An entry's Benefit, Skills, Honor, Outfit, Affinity, Prerequisites, and every Technique (Rank + name + full effect text). |
-| `/sheet learn` | Record the techniques your school grants **up to your School Rank** onto your sheet (RAW: techniques come free with rank at a dojo). Uses your sheet's school, or pass `school_name:`. |
+| `/sheet learn` | Record the techniques your school grants **up to your School Rank** onto your sheet (RAW: techniques come free with rank at a dojo). Uses your sheet's school, or pass `school_name:`. For a shugenja it also opens the **rank-up spell picker**: three new spells per new School Rank, each within that rank's Mastery ceiling (s48). Picks save one at a time, so the flow can be resumed. Staff can reset the counter with `/edit field spell_ranks_learned`. |
 
 Only **Basic Schools** appear in `/sheet create` and `/npc generate` autocomplete
 (you start as a Basic School; Advanced Schools and Alternate Paths are transitions
@@ -390,8 +390,15 @@ raises, and full effect text.
 | `/spell view` | A spell's element, Mastery, range/area/duration, raises, and effect. |
 | `/spell cast` | Cast a spell: rolls **(Ring + School Rank) keep Ring** vs TN **5 + (5 × Mastery Level)**. Affinity +1 / Deficiency −1 effective rank. Supports Void Point (+1k1), Called Raises (+5 TN each, reduce casting time), wound penalty. **Spell slots** (Ring + School Rank per element per day) are consumed on cast: whether the roll succeeds or fails. Refresh slots with `/dm new_day`. DMs can cast for NPCs or other players. |
 
-`/xp spell` (memorise a spell) autocompletes real spell names and **auto-fills the
+`/xp spell` (memorise a spell) autocompletes the spells on your sheet and **auto-fills the
 Mastery Level**: so the RAW cost (1 × Mastery Level) is computed for you.
+
+**Spell access (s31, s48).** New spells come only from character creation, rank advancement
+(`/sheet learn`) or staff (`/edit spell`, which warns when the spell is above the character's
+rank). A shugenja may learn and cast spells up to Mastery Level = School Rank, +1 in the
+Affinity element, −1 in the Deficiency element. `/spell cast` and the combat board refuse
+spells that are not on the sheet or are above that ceiling. Cast cards say whether the spell
+was **memorised** or **read from scroll**.
 
 **Equipment** (weapons & armor, verbatim from the game data)
 

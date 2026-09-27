@@ -78,7 +78,8 @@ TOPICS: list[Topic] = [
             "**Kata, Kiho, tattoos.** Activate from `/whoami` or with `/sheet kata activate`, `/sheet kiho activate` "
             "and `/sheet tattoo activate`. Only one Kata at a time; the rules on exclusivity are enforced.\n"
             "**Techniques.** When your School Rank rises, `/sheet learn` records the techniques your school grants. "
-            "In a fight, the board's **Techniques** button declares the ones that need declaring.\n"
+            "In a fight, the board's **Techniques** button declares the ones that need declaring. Shugenja get "
+            "three new spells per rank there instead, each within the rank's Mastery ceiling.\n"
             "**Portrait.** `/portrait set image:` with an upload, or `url:` with a link. It appears on your card and "
             "sheet, and `/portrait show` posts it in the channel for everyone.\n"
             "**What you cannot change.** Traits, skills, honor, glory and the like are edited by staff only. You "
@@ -213,7 +214,10 @@ TOPICS: list[Topic] = [
         groups=["spell"],
         body=(
             "**Finding spells.** `/spell list element:`, `/spell search`, `/spell view name:` for the full text. "
-            "Spells you know are on your sheet; `/xp spell` memorises one so no scroll is needed.\n"
+            "Spells you know are on your sheet. You only gain new ones at rank-up (`/sheet learn`, three per "
+            "rank) or from staff. `/xp spell` memorises a spell already on your sheet so no scroll is needed.\n"
+            "**Mastery ceiling.** You can learn and cast spells up to your School Rank, one higher in your "
+            "Affinity element and one lower in your Deficiency. Anything above that waits on your next rank.\n"
             "**Casting.** `/spell cast name:` rolls Ring + School Rank against the spell's TN and spends a slot of "
             "that element. Options: `raises:` for the spell's raise effects, `spend_void:` for +1k1, `target:` to "
             "aim it at a combatant (unlocks buttons to request conditions like Dazed), `conceal:` to hide the "
@@ -242,7 +246,7 @@ TOPICS: list[Topic] = [
             "bought off at double.\n"
             "**Ranking up.** Insight is Rings×10 plus skill ranks. At 150, 175, 200, 225, 250 your School Rank "
             "rises and the reply tells you. Run `/sheet learn` to add the technique your school grants at the new "
-            "rank.\n"
+            "rank, or, as a shugenja, to pick your three new spells.\n"
             "**Not modelled yet.** Alternate paths, advanced schools and a second school are handled by staff by "
             "hand for now."
         ),

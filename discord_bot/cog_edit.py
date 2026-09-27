@@ -16,7 +16,7 @@ from discord import app_commands
 import storage as _storage_mod
 from l5r_rules import (
     advantage_effects, advantages, combat, enums, families, kata, kiho,
-    schools, stats, taint,
+    schools, spells, stats, taint,
 )
 from l5r_rules.character import Character
 
@@ -155,7 +155,7 @@ _TRAIT_CHOICES = [
 
 _SET_FIELDS = [
     "honor", "glory", "status", "infamy", "taint", "koku", "bu", "zeni",
-    "age", "school_rank",
+    "age", "school_rank", "spell_ranks_learned",
     "void_points_current", "void_points_max", "armor_tn_bonus", "armor_reduction",
 ]
 _SET_CHOICES = [app_commands.Choice(name=f, value=f) for f in _SET_FIELDS]
@@ -205,6 +205,10 @@ def _apply_numeric_field(c: Character, field: str, value: float) -> None:
         c.age = max(0, int(value))
     elif field == "school_rank":
         c.school_rank = max(1, min(10, int(value)))
+    elif field == "spell_ranks_learned":
+        # Highest School Rank whose three rank-up spells (s48) are already on the sheet.
+        c.spell_ranks_learned = max(0, min(10, int(value)))
+        c.rank_spell_picks = 0
     elif field == "void_points_max":
         c.max_void_points = max(0, int(value))
         c.current_void_points = min(c.current_void_points, taint.void_point_cap(c))
@@ -644,6 +648,8 @@ async def edit_feature(
                 )
                 return
             lst.remove(match)
+            if category.value == "spells_known":
+                c.spells_memorised = [m for m in c.spells_memorised if m.lower() != match.lower()]
             msg = f"Removed {category.name} **{match}** from **{c.name}**."
         else:
             if any(x.lower() == entry_name.lower() for x in lst):
@@ -654,6 +660,8 @@ async def edit_feature(
                 return
             lst.append(entry_name)
             msg = f"Added {category.name} **{entry_name}** to **{c.name}**."
+            if category.value == "spells_known":
+                msg += _spell_ceiling_warning(c, entry_name)
 
     changed = _d.store.save(rec, note=f"edit feature ({category.name})")
     await _d.audit_stat(interaction, rec, f"edit feature ({category.name})", changed)
@@ -1087,6 +1095,19 @@ async def edit_mount(
 
 # -- /edit spell -------------------------------------------------------------
 
+def _spell_ceiling_warning(c, spell_name: str) -> str:
+    """Staff may hand out any scroll; warn when the character cannot cast it yet (s31/s48)."""
+    entry = spells.get(spell_name)
+    if entry is None:
+        return "\n*Not in the spell catalog: The bot cannot check its Mastery Level.*"
+    ceiling = stats.spell_mastery_ceiling(c, entry["element"])
+    if entry["mastery"] > ceiling:
+        return (f"\n*Note: **{entry['name']}** is Mastery {entry['mastery']}, above **{c.name}**'s ceiling of "
+                f"{ceiling} in {entry['element']} at School Rank {c.school_rank}. They hold the scroll but "
+                f"cannot cast it until their rank allows.*")
+    return ""
+
+
 @edit_group.command(name="spell", description="Add or remove a spell from a character's known spell list (free, no XP). [Fortune]")
 @app_commands.describe(
     spell="Spell name to add or remove.",
@@ -1118,6 +1139,7 @@ async def edit_spell(
             )
             return
         c.spells_known.remove(match)
+        c.spells_memorised = [m for m in c.spells_memorised if m.lower() != match.lower()]
         msg = f"Removed spell **{match}** from **{c.name}**."
     else:
         if any(s.lower() == spell_name.lower() for s in c.spells_known):
@@ -1125,8 +1147,11 @@ async def edit_spell(
                 f"**{c.name}** already knows **{spell_name}**.", ephemeral=True,
             )
             return
+        entry = spells.get(spell_name)
+        if entry is not None:
+            spell_name = entry["name"]
         c.spells_known.append(spell_name)
-        msg = f"Added spell **{spell_name}** to **{c.name}**."
+        msg = f"Added spell **{spell_name}** to **{c.name}**." + _spell_ceiling_warning(c, spell_name)
     changed = _d.store.save(rec)
     await _d.audit_stat(interaction, rec, "edit spell", changed)
     await interaction.response.send_message(msg, embed=_d.build_sheet_embed(rec), ephemeral=True)
