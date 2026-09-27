@@ -2257,6 +2257,23 @@ def _wildcard_cat_groups(eligible: list[str]) -> dict[str, list[str]]:
     return groups
 
 
+_ELEMENT_NAMES = ("Air", "Earth", "Fire", "Water", "Void")
+
+
+def _school_elements(school: dict | None) -> tuple[str, str]:
+    """(affinity, deficiency) a shugenja school fixes, as element names, or "" when
+    the school lets the player choose (Isawa) or is not a shugenja school."""
+    if not school:
+        return "", ""
+    head = (school.get("affinity") or "").split("|", 1)[0].strip()
+    m = re.match(r"^(Air|Earth|Fire|Water|Void)\s*/\s*(Air|Earth|Fire|Water|Void|None)", head, re.IGNORECASE)
+    if not m:
+        return "", ""
+    aff = m.group(1).capitalize()
+    deff = m.group(2).capitalize()
+    return aff, ("" if deff == "None" else deff)
+
+
 def _parse_spell_allotment(school: dict) -> dict[str, int] | None:
     """Parse starting spell allotment from a shugenja school.
 
@@ -2445,6 +2462,13 @@ def _materialize_character(state: dict) -> Character:
             for base_spell in ("Sense", "Commune", "Summon"):
                 if base_spell not in char.spells_known:
                     char.spells_known.insert(0, base_spell)
+        # The school's Affinity and Deficiency go on the sheet so casting rolls
+        # apply them (s31). Schools that let the player choose are set by staff.
+        aff_el, def_el = _school_elements(sch)
+        if aff_el and not char.affinity_element:
+            char.affinity_element = aff_el
+        if def_el and not char.deficiency_element:
+            char.deficiency_element = def_el
 
     heritage_grants = state.get("heritage_grants", {})
     if heritage_grants:
@@ -3302,13 +3326,22 @@ async def _chargen_emphasis_pick(interaction: discord.Interaction, state: dict) 
 
 
 # --- Step 9: Spells (shugenja only) ---
+def _chargen_max_mastery(state: dict, element: str) -> int:
+    """Highest Mastery Level a new Rank 1 shugenja may take in this element: 1, or 2
+    for the school's Affinity element (s31: Cast as if School Rank is 1 higher)."""
+    sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+    aff_el, _ = _school_elements(sch)
+    return 2 if aff_el and aff_el.lower() == element.lower() else 1
+
+
 class _SpellSelect(discord.ui.Select):
-    def __init__(self, state: dict, element: str, remaining: int):
+    def __init__(self, state: dict, element: str, remaining: int, mastery: int = 1):
         self.state = state
         self.element = element
+        self.mastery = mastery
         chosen_names = set(state.get("chosen_spells", []))
         available = [s for s in spells.by_element(element)
-                     if s["mastery"] == 1 and s["name"] not in chosen_names]
+                     if s["mastery"] == mastery and s["name"] not in chosen_names]
         available.sort(key=lambda s: s["name"])
         options = []
         for s in available[:25]:
@@ -3319,8 +3352,9 @@ class _SpellSelect(discord.ui.Select):
             ))
         if not options:
             options = [discord.SelectOption(label="(none available)", value="__none__")]
+        tag = " (Affinity)" if mastery >= 2 else ""
         super().__init__(
-            placeholder=f"{element} spells ({remaining} left to pick)...",
+            placeholder=f"{element} Mastery {mastery}{tag} spells ({remaining} left)..."[:150],
             options=options,
         )
 
@@ -3361,7 +3395,8 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
     elements_with_slots = [(el, cnt) for el, cnt in remaining.items() if cnt > 0]
     if len(elements_with_slots) == 1:
         el, cnt = elements_with_slots[0]
-        view.add_item(_SpellSelect(state, el, cnt))
+        for ml in range(1, _chargen_max_mastery(state, el) + 1):
+            view.add_item(_SpellSelect(state, el, cnt, ml))
     else:
         el_select = discord.ui.Select(
             placeholder="Pick an element...",
@@ -3376,7 +3411,9 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
             el = el_select.values[0]
             cnt = remaining.get(el, 0)
             v2 = _ChargenView(state)
-            v2.add_item(_SpellSelect(state, el, cnt))
+            max_ml = _chargen_max_mastery(state, el)
+            for ml in range(1, max_ml + 1):
+                v2.add_item(_SpellSelect(state, el, cnt, ml))
             back_btn = discord.ui.Button(label="Back to Elements", style=discord.ButtonStyle.secondary, row=2)
 
             async def on_back(btn_inter: discord.Interaction) -> None:
@@ -3387,8 +3424,10 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
 
             back_btn.callback = on_back
             v2.add_item(back_btn)
+            hint = (f"Pick a Mastery 1 spell, or a Mastery 2 spell: {el} is your Affinity (s31)."
+                    if max_ml >= 2 else "Pick a Mastery 1 spell.")
             await sel_inter.response.edit_message(
-                content=f"**Step 9/10 - Spells ({el})** · Pick a Mastery 1 spell.",
+                content=f"**Step 9/10 - Spells ({el})** · {hint}",
                 embed=_chargen_embed(state), view=v2,
             )
 
