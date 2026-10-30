@@ -1,6 +1,6 @@
-# Aon2 Discord Bot
+# Aion 2 Discord Bot
 
-A Discord bot for the Aon2 faction's Discord server.
+A Discord bot for a faction's Discord server in **Aion 2** (NCSoft's MMO).
 
 > **This folder is a completely separate project.** It shares no code with the
 > Godot / GDScript game in this repository, and none with the Rokugan L5R bot
