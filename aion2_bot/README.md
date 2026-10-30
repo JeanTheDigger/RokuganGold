@@ -17,7 +17,7 @@ countdown and a Faction Commander election for every siege.
 | Category | Who sees it | Channels |
 |---|---|---|
 | **Welcome** | everyone, including people with no role | `#rules` (one message the Head Admin edits), `#how-it-works` (the bot's guide, same as `/help`), `#arrivals` (read-only: the bot posts "**Name** entered the server."), `#chat` (anyone can talk), `#commander-applications` and `#member-applications` (read-only, each holds an apply button) |
-| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#announcements` (Head Admin news; only the bot posts), `#general`, `#questions`, `#memes`, `#screenshots`; `#siege-timer`, `#faction-commander` and `#siege-alerts` (only the bot posts); 🔊 **War Room** (everyone approved listens, only the Faction Commander speaks); 🔊 **Voice 1–5** (open voice chat for everyone approved) |
+| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#announcements` (Head Admin news; only the bot posts), `#general`, `#questions`, `#memes`, `#screenshots`; `#siege-timer`, `#faction-commander` and `#siege-alerts` (only the bot posts); **War Room** (voice; everyone approved listens, only the Faction Commander speaks); **Voice 1–5** (voice; open voice chat for everyone approved) |
 | **Faction Command** (*draft names*) | the current Faction Commander and Head Admin | `#fc-head-admin` (Faction Commander ↔ Head Admin), `#faction-leaders` (also every Legion Commander), `#step-down` (the step-down button) |
 | **Legions** | Head Admin; each Legion's channel is also open to that Legion | one private channel per approved Legion, made automatically |
 | **Tickets** | Head Admin and Officers; each ticket is also open to the people in it | one private channel per open application, made automatically |
@@ -102,7 +102,7 @@ changes hands automatically with each siege and each step-down.
 - The **Faction Command** category: `#fc-head-admin`, a private room with the
   Head Admin; `#faction-leaders`, where the Faction Commander talks with every
   Legion Commander; and `#step-down`. History is kept between terms.
-- 🔊 **War Room**: a voice channel every approved person can
+- **War Room**: a voice channel every approved person can
   join, where only the Faction Commander can speak (with Priority Speaker) and
   type in the channel's text chat. Everyone else listens and reads. (Discord lets anyone with Administrator speak anywhere.)
 - **Step down**: the Faction Commander clicks the button in `#step-down` and
@@ -117,10 +117,10 @@ which also shows the current siege, its election and any skipped sieges:
 
 | Button | What it does |
 |---|---|
-| 👑 **Appoint commander** | Pick any approved person as Faction Commander for the current or next siege. An open vote is cancelled and whoever held the role is replaced. Appointed ahead of time, they get the role when the term begins (30 min before the siege). |
-| 🚫 **Remove commander** | Takes the role from the current Faction Commander. The runner-up takes over, exactly like a step-down. |
-| ⏭️ **Skip / un-skip a siege** | Pick one of the next 4 sieges. A skipped siege has no vote, no reminders and no Faction Commander, and the countdown says so. Its open vote is cancelled and its role taken back. Pick it again to un-skip. |
-| 🗳️ **Cancel vote** | Only while a vote is open: **Restart fresh** (every vote wiped, same applicants, same closing time) or **End with no commander**. |
+| **Appoint commander** | Pick any approved person as Faction Commander for the current or next siege. An open vote is cancelled and whoever held the role is replaced. Appointed ahead of time, they get the role when the term begins (30 min before the siege). |
+| **Remove commander** | Takes the role from the current Faction Commander. The runner-up takes over, exactly like a step-down. |
+| **Skip / un-skip a siege** | Pick one of the next 4 sieges. A skipped siege has no vote, no reminders and no Faction Commander, and the countdown says so. Its open vote is cancelled and its role taken back. Pick it again to un-skip. |
+| **Cancel vote** | Only while a vote is open: **Restart fresh** (every vote wiped, same applicants, same closing time) or **End with no commander**. |
 
 **`#siege-alerts`** pings the opt-in **Siege Alerts** role. People turn it on or
 off with the button at the top of the channel. Each siege it posts:
@@ -150,11 +150,11 @@ The panel in `#admin-tools` (Head Admin only):
 
 | Button | What it does |
 |---|---|
-| 📜 **Edit rules** | Opens the current rules in a text box. Saving replaces the one rules message in `#rules`. |
-| 📣 **Post announcement** | Title and message, then a preview: post to `#announcements` **with a ping** (Legion Commander + Legion Member roles) or **without**, or cancel. |
-| 🛡️ **Create a Legion** | Pick the commander, then name and color. The Legion is made at once (role, channel, panel), with no ticket. |
-| ➕ **Add a member** | Pick a Legion and a person: they join it at once, with no ticket. Not for someone already in a Legion or with an application waiting. |
-| ⏳ **Lift a cooldown** | Lets someone who was denied apply again before the 24 hours are up. |
+| **Edit rules** | Opens the current rules in a text box. Saving replaces the one rules message in `#rules`. |
+| **Post announcement** | Title and message, then a preview: post to `#announcements` **with a ping** (Legion Commander + Legion Member roles) or **without**, or cancel. |
+| **Create a Legion** | Pick the commander, then name and color. The Legion is made at once (role, channel, panel), with no ticket. |
+| **Add a member** | Pick a Legion and a person: they join it at once, with no ticket. Not for someone already in a Legion or with an application waiting. |
+| **Lift a cooldown** | Lets someone who was denied apply again before the 24 hours are up. |
 
 ## Managing Legions
 
@@ -164,11 +164,11 @@ Admin**, who first picks the Legion. The commander or the Head Admin can:
 
 | Button | What it does |
 |---|---|
-| 🚪 **Remove a member** | Pick a member and confirm. They lose the Legion role, their approval (Legion Member role) and Siege Alerts, and get a DM. They can apply again. Picking the **commander** disbands the Legion (with a warning first). |
-| 👑 **Transfer command** | Pick a member of the Legion and confirm. They become commander. The old commander stays on as a regular member. The new commander is added to the Legion's open member tickets, since they must approve them. |
-| ✏️ **Rename** | Type the new name. The Legion's role and channel are renamed too. The name must not belong to another Legion. |
-| 🎨 **Change color** | Type Red, Green, Blue (0–255) and a brightness (0–100%). The Legion's role takes that color, so its members' names show in it. Leave it blank to remove the color. |
-| 🏴 **Disband** | Confirm. Everyone in it loses the Legion role and their approval, its pending member applications are denied, and its channel's transcript goes to `#bot-log` before the channel and role are deleted. |
+| **Remove a member** | Pick a member and confirm. They lose the Legion role, their approval (Legion Member role) and Siege Alerts, and get a DM. They can apply again. Picking the **commander** disbands the Legion (with a warning first). |
+| **Transfer command** | Pick a member of the Legion and confirm. They become commander. The old commander stays on as a regular member. The new commander is added to the Legion's open member tickets, since they must approve them. |
+| **Rename** | Type the new name. The Legion's role and channel are renamed too. The name must not belong to another Legion. |
+| **Change color** | Type Red, Green, Blue (0–255) and a brightness (0–100%). The Legion's role takes that color, so its members' names show in it. Leave it blank to remove the color. |
+| **Disband** | Confirm. Everyone in it loses the Legion role and their approval, its pending member applications are denied, and its channel's transcript goes to `#bot-log` before the channel and role are deleted. |
 
 Automatic:
 - A member who **leaves the server** is removed from their Legion and must apply

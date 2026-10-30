@@ -32,7 +32,7 @@ RULES_KEY = "msg:rules"
 RULES_TEXT_KEY = "rules_text"
 
 PANEL_TEXT = (
-    "## 🧰 Head Admin tools\n"
+    "## Head Admin tools\n"
     "Only the Head Admin can use these buttons.\n"
     "• **Edit rules**: replace the rules shown in #rules.\n"
     "• **Post announcement**: write, preview, then post in #announcements (with or without a ping).\n"
@@ -88,7 +88,7 @@ async def ensure_panel(guild: discord.Guild, store: Store) -> list[str]:
 
 def rules_embed(guild: discord.Guild, store: Store) -> discord.Embed:
     text = store.get_config(guild.id, RULES_TEXT_KEY) or "_The Head Admin hasn't written the rules yet._"
-    return discord.Embed(title=f"📜 {guild.name}: rules", description=text, colour=discord.Colour.gold())
+    return discord.Embed(title=f"{guild.name}: rules", description=text, colour=discord.Colour.gold())
 
 
 async def ensure_rules(guild: discord.Guild, store: Store) -> list[str]:
@@ -171,7 +171,7 @@ class RulesModal(discord.ui.Modal, title="Server rules"):
         await ensure_rules(guild, store)
         where = _channel(guild, store, layout.RULES)
         await _reply(interaction, f"Rules updated{f' in {where.mention}' if where else ''}.")
-        await applications.bot_log(guild, store, f"📜 {interaction.user.mention} updated the rules.")
+        await applications.bot_log(guild, store, f"{interaction.user.mention} updated the rules.")
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
         await applications._form_failed(interaction, error)
@@ -219,7 +219,7 @@ class AnnouncementConfirm(SafeView):
             allowed = discord.AllowedMentions(roles=pinged)
         message = await channel.send(content, embed=self.embed, allowed_mentions=allowed)
         await interaction.response.edit_message(content=f"Posted: {message.jump_url}", embed=None, view=None)
-        await applications.bot_log(guild, store, f"📣 {interaction.user.mention} posted an announcement: "
+        await applications.bot_log(guild, store, f"{interaction.user.mention} posted an announcement: "
                                                  f"{message.jump_url}")
 
     @discord.ui.button(label="Post and ping everyone approved", style=discord.ButtonStyle.primary)
@@ -289,8 +289,8 @@ class CreateLegionModal(discord.ui.Modal, title="Create a Legion"):
             return
         legion, channel = made
         near = colors.close_to(color, store.legion_colors(guild.id, exclude_id=legion.id))
-        warn = f"\n⚠️ The color is very close to: {', '.join(near)}." if near else ""
-        text = (f"🛡️ The Head Admin created the Legion **{legion.name}** ({colors.describe(color)}) "
+        warn = f"\nWarning: the color is very close to: {', '.join(near)}." if near else ""
+        text = (f"The Head Admin created the Legion **{legion.name}** ({colors.describe(color)}) "
                 f"with {commander.mention} as commander: {channel.mention}.")
         await applications.bot_log(guild, store, text)
         await applications.dm(commander, f"**{guild.name}**: the Head Admin made you commander of the new "
@@ -318,5 +318,5 @@ class CooldownPicker(SafeView):
             return
         store.set_config(guild.id, f"cooldown_lift:{user_id}", dt.datetime.now(dt.timezone.utc).isoformat())
         await _reply(interaction, f"Done: <@{user_id}> can apply again now.")
-        await applications.bot_log(guild, store, f"⏳ {interaction.user.mention} lifted <@{user_id}>'s "
+        await applications.bot_log(guild, store, f"{interaction.user.mention} lifted <@{user_id}>'s "
                                                  "application cooldown.")

@@ -28,7 +28,7 @@ def embeds(guild: discord.Guild, store: Store) -> list[discord.Embed]:
     term_h = int(schedule.COMMANDER_TERM.total_seconds() // 3600)
     close_m = int(schedule.POLL_CLOSES_BEFORE.total_seconds() // 60)
     sections = [
-        ("👋 Getting in", (
+        ("Getting in", (
             f"Read {c(layout.RULES, 'rules')} first.\n\n"
             f"**Legion commanders:** apply in {c(layout.COMMANDER_APPLY, 'commander-applications')} with "
             "your character, your Legion's name and (optionally) its color. A private ticket opens "
@@ -37,14 +37,14 @@ def embeds(guild: discord.Guild, store: Store) -> list[discord.Embed]:
             "your Legion. Your commander **and** the Head Admin both confirm you.\n\n"
             "One application at a time. If you're denied, you can apply again after 24 hours."
         )),
-        ("⚔️ Sieges", (
+        ("Sieges", (
             f"Artifact Sieges run **{days} at 9 PM Eastern**. "
             f"{c(layout.SIEGE_TIMER, 'siege-timer')} counts down to the next one, in your own time "
             f"zone too. Want a ping before each siege? Turn on alerts in "
             f"{c(layout.SIEGE_ALERTS, 'siege-alerts')}: 1 h, 30 min and 15 min before, at the "
             "start, and when the Faction Commander vote opens and is about to close."
         )),
-        ("👑 Faction Commander", (
+        ("Faction Commander", (
             "Each siege has one shot caller, elected by the faction in "
             f"{c(layout.ELECTION, 'faction-commander')}.\n"
             f"• **Apply** any time after the previous siege's commander term ends, until voting opens.\n"
@@ -56,14 +56,14 @@ def embeds(guild: discord.Guild, store: Store) -> list[discord.Embed]:
             "**War Room** voice channel, where only the Faction Commander speaks.\n"
             "• Can't make it? **Step down** and the runner-up takes over."
         )),
-        ("🛡️ Legions", (
+        ("Legions", (
             "Each Legion has its own role, color and private channel. Its commander manages it from "
             "the panel in that channel: remove a member, hand over command, rename, change the "
             "color, or disband. If the commander leaves the server, the Legion is disbanded; a "
             "member who leaves must apply again.\n\n"
             "`/legion list` shows every approved Legion."
         )),
-        ("🧭 Staff", (
+        ("Staff", (
             "The **Head Admin** runs the server: approvals, Legions, sieges and announcements in "
             f"{c(layout.ANNOUNCEMENTS, 'announcements')}. **Officers** help with tickets but "
             "don't approve. Questions? Ask in the chat."

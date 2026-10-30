@@ -114,17 +114,17 @@ def timer_text(guild: discord.Guild, store: Store, now: dt.datetime) -> str:
     nxt, skipped = next_running_siege(guild, store, now)
     lines: list[str] = []
     for s in skipped:
-        lines.append(f"⏭️ The {schedule.fmt_local(s)} siege is **skipped**.")
+        lines.append(f"The {schedule.fmt_local(s)} siege is **skipped**.")
     if skipped:
         lines.append("")
     underway = schedule.siege_underway(now)
     if underway is not None and not store.is_skipped(guild.id, underway):
         e = store.election_for(guild.id, underway)
         cmdr = f"<@{e.winner_id}>" if e and e.winner_id and e.status == "decided" else "none"
-        lines += [f"🔥 **Siege underway** since {schedule.tag(underway, 't')}. "
+        lines += [f"**Siege underway** since {schedule.tag(underway, 't')}. "
                   f"Faction Commander: {cmdr}.", ""]
     lines += [
-        "## ⚔️ Next Artifact Siege",
+        "## Next Artifact Siege",
         f"**{schedule.fmt_local(nxt)}**",
         f"Your time: {schedule.tag(nxt, 'F')}",
         f"Starts in **{schedule.humanize(nxt - now)}**",
@@ -143,28 +143,28 @@ def _election_line(guild: discord.Guild, store: Store, siege: dt.datetime, now: 
     room = where.mention if where else "the Faction Commander channel"
     e = store.election_for(guild.id, siege)
     if now < schedule.applications_open(siege):
-        return (f"🗳️ Faction Commander applications for this siege open "
+        return (f"Faction Commander applications for this siege open "
                 f"{schedule.tag(schedule.applications_open(siege), 'R')} in {room}.")
     if now < schedule.poll_opens(siege):
         n = len(store.candidates(e.id)) if e else 0
-        return (f"🗳️ Faction Commander applications are open in {room} ({n} so far); "
+        return (f"Faction Commander applications are open in {room} ({n} so far); "
                 f"voting starts {schedule.tag(schedule.poll_opens(siege), 'R')}.")
     if e is not None and e.status == "polling":
-        return f"🗳️ Vote for the Faction Commander in {room}; voting ends {schedule.tag(schedule.poll_closes(siege), 'R')}."
+        return f"Vote for the Faction Commander in {room}; voting ends {schedule.tag(schedule.poll_closes(siege), 'R')}."
     if e is not None and e.winner_id and e.status == "decided":
-        return f"👑 Faction Commander: <@{e.winner_id}>."
+        return f"Faction Commander: <@{e.winner_id}>."
     if e is not None and (e.outcome in ("no_applicants", "no_votes", "cancelled", "skipped")
                           or (e.status == "decided" and not e.winner_id)):
         return "No Faction Commander for this siege."
-    return "🗳️ Counting the Faction Commander votes…"
+    return "Counting the Faction Commander votes…"
 
 
 def panel_text(guild: discord.Guild, store: Store, now: dt.datetime) -> str:
     target = schedule.application_target(now)
     opens = schedule.applications_open(target)
-    head = f"## 👑 Faction Commander: siege of {schedule.fmt_local(target)}"
+    head = f"## Faction Commander: siege of {schedule.fmt_local(target)}"
     if store.is_skipped(guild.id, target):
-        return f"{head}\n⏭️ The Head Admin has **skipped** this siege, so there is no vote for it."
+        return f"{head}\nThe Head Admin has **skipped** this siege, so there is no vote for it."
     if now < opens:
         return (f"{head}\nApplications open {schedule.tag(opens, 'R')} ({schedule.tag(opens, 'f')}), "
                 "when the current Faction Commander's term ends.")
@@ -347,7 +347,7 @@ def _poll_text(guild: discord.Guild, store: Store, e: Election, votes_cast: int)
     names = store.candidates(e.id)
     listing = "\n".join(f"• <@{uid}>" for uid in names)
     closes = schedule.poll_closes(e.siege)
-    return (f"## 🗳️ Vote: Faction Commander for {schedule.fmt_local(e.siege)}\n"
+    return (f"## Vote: Faction Commander for {schedule.fmt_local(e.siege)}\n"
             f"Pick one name below. **One vote each, and it's final.** You may vote for yourself.\n"
             f"Voting ends {schedule.tag(closes, 'R')} ({schedule.tag(closes, 'f')}); counts are "
             "shown when it ends.\n\n"
@@ -470,13 +470,13 @@ async def hand_over(guild: discord.Guild, store: Store, e: Election, why: str) -
         if role is not None and schedule.now_utc() >= schedule.poll_closes(e.siege):
             await nxt_member.add_roles(role, reason="Runner-up becomes Faction Commander")
         store.update_election(e.id, winner_id=nxt_member.id)
-        text = (f"🏳️ {why}. **{nxt_member.mention} is now the Faction Commander** as runner-up, "
+        text = (f"{why}. **{nxt_member.mention} is now the Faction Commander** as runner-up, "
                 f"until {schedule.tag(schedule.term_ends(e.siege), 't')}.")
     else:
         # The term stays open with nobody holding it, so its end (and the
         # "applications are open" notice) still happens at the usual time.
         store.update_election(e.id, outcome="stepped_down", winner_id=None)
-        text = (f"🏳️ {why}, and there is no runner-up left, so there is no Faction Commander "
+        text = (f"{why}, and there is no runner-up left, so there is no Faction Commander "
                 "for the rest of this siege.")
     room = _channel(guild, store, layout.ELECTION)
     if room is not None:
@@ -528,14 +528,14 @@ async def _close_poll(guild: discord.Guild, store: Store, e: Election, now: dt.d
             tie_note = (" after a tie between " + ", ".join(f"<@{u}>" for u in tied)
                         + ", broken at random")
 
-    header = f"## 🗳️ Results: Faction Commander for {schedule.fmt_local(e.siege)}"
+    header = f"## Results: Faction Commander for {schedule.fmt_local(e.siege)}"
     if winner_id is None and counts:
         verdict = ("Everyone who received votes has left the server or lost their approval, so there "
                    "will be no Faction Commander for this siege.")
     elif winner_id is None:
         verdict = "Nobody voted, so there will be no Faction Commander for this siege."
     else:
-        verdict = (f"👑 **<@{winner_id}> is the Faction Commander**{tie_note}. The role lasts until "
+        verdict = (f"**<@{winner_id}> is the Faction Commander**{tie_note}. The role lasts until "
                    f"{schedule.tag(schedule.term_ends(e.siege), 't')}.")
     if room is not None and e.poll_message_id is not None:
         try:
@@ -558,12 +558,12 @@ async def _close_poll(guild: discord.Guild, store: Store, e: Election, now: dt.d
     if now >= schedule.term_ends(e.siege):
         note = " (The siege is already over, so the role wasn't given.)"
     elif role is None:
-        note = f" ⚠️ The **{layout.FACTION_COMMANDER_ROLE}** role is missing; run `/setup server`."
+        note = f" Warning: the **{layout.FACTION_COMMANDER_ROLE}** role is missing; run `/setup server`."
     elif member is not None:
         try:
             await member.add_roles(role, reason=f"Won the Faction Commander vote for {e.siege_start}")
         except discord.HTTPException:
-            note = " ⚠️ The bot couldn't give the role; check that its role is above Faction Commander."
+            note = " Warning: the bot couldn't give the role; check that its role is above Faction Commander."
     if room is not None:
         await room.send(f"{verdict}{note}", allowed_mentions=discord.AllowedMentions(users=True))
     await _log(guild, store, f"Election for {schedule.fmt_local(e.siege)}: <@{winner_id}> won{tie_note}.{note}")
@@ -597,7 +597,7 @@ async def cancel_poll(guild: discord.Guild, store: Store, e: Election, why: str)
     if room is not None and e.poll_message_id is not None:
         try:
             await room.get_partial_message(e.poll_message_id).edit(
-                content=f"## 🗳️ Vote cancelled: Faction Commander for {schedule.fmt_local(e.siege)}\n{why}",
+                content=f"## Vote cancelled: Faction Commander for {schedule.fmt_local(e.siege)}\n{why}",
                 view=None, allowed_mentions=discord.AllowedMentions.none(),
             )
         except discord.HTTPException:

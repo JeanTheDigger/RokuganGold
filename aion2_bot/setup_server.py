@@ -174,9 +174,9 @@ async def build_layout(
             category = await guild.create_category(
                 cat.name, overwrites=overwrites_for(cat.access, guild, r), reason=REASON,
             )
-            created.append(f"📁 {cat.name}")
+            created.append(f"category {cat.name}")
         else:
-            existing.append(f"📁 {category.name}")
+            existing.append(f"category {category.name}")
         assert isinstance(category, discord.CategoryChannel)
         if cat.purpose is not None:
             store.set_config(guild.id, cat.purpose, category.id)
@@ -194,7 +194,7 @@ async def _build_channels(
     existing: list[str],
 ) -> None:
     for ch in cat.channels:
-        label = f"#{ch.name}" if ch.kind == "text" else f"🔊 {ch.name}"
+        label = f"#{ch.name}" if ch.kind == "text" else f"{ch.name} (voice)"
         found = _remembered(guild, store, ch.purpose, discord.TextChannel) or _find_channel(category, ch)
         if found is None:
             # A channel with its own access gets its own overwrites; otherwise it is
@@ -385,5 +385,5 @@ async def setup_server(interaction: discord.Interaction) -> None:
     log.info("Setup in %s by %s: created %d, existing %d", guild.id, member.id, len(created), len(existing))
     await interaction.followup.send(_summary(created, existing, notes), ephemeral=True)
     await applications.bot_log(
-        guild, store, f"🛠️ {member.mention} ran `/setup server`: {len(created)} item(s) created.",
+        guild, store, f"{member.mention} ran `/setup server`: {len(created)} item(s) created.",
     )

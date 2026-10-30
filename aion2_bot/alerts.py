@@ -31,7 +31,7 @@ GRACE = dt.timedelta(minutes=5)
 VOTE_CLOSING_WARNING = dt.timedelta(hours=2)
 
 PANEL_TEXT = (
-    "## 🔔 Siege alerts\n"
+    "## Siege alerts\n"
     "Want a ping before every Artifact Siege? Click the button to turn the "
     f"**{layout.SIEGE_ALERTS_ROLE}** role on or off.\n\n"
     "You'll be pinged here 1 hour, 30 minutes and 15 minutes before each siege and when "
@@ -65,10 +65,10 @@ class AlertsPanel(SafeView):
         try:
             if role in member.roles:
                 await member.remove_roles(role, reason="Turned siege alerts off")
-                text = "🔕 Siege alerts are **off**. You won't be pinged for sieges."
+                text = "Siege alerts are **off**. You won't be pinged for sieges."
             else:
                 await member.add_roles(role, reason="Turned siege alerts on")
-                text = "🔔 Siege alerts are **on**. You'll be pinged before every siege."
+                text = "Siege alerts are **on**. You'll be pinged before every siege."
         except discord.HTTPException:
             text = ("The bot couldn't change your role. Ask the Head Admin to check that the bot's "
                     f"role is above **{layout.SIEGE_ALERTS_ROLE}**.")
@@ -113,18 +113,18 @@ def _due(guild: discord.Guild, store: Store, siege: dt.datetime) -> list[tuple[s
                  if polling else f" {cmdr}")
     return [
         ("vote_open", schedule.poll_opens(siege),
-         f"🗳️ Voting for the Faction Commander of the {schedule.fmt_local(siege)} siege is open in "
+         f"Voting for the Faction Commander of the {schedule.fmt_local(siege)} siege is open in "
          f"{where}, until {schedule.tag(closes, 'f')}." if polling else None),
         ("vote_closing", closes - VOTE_CLOSING_WARNING,
-         f"🗳️ **2 hours left** to vote for the Faction Commander in {where} "
+         f"**2 hours left** to vote for the Faction Commander in {where} "
          f"(ends {schedule.tag(closes, 't')})." if polling else None),
         ("1h", siege - dt.timedelta(hours=1),
-         f"⚔️ The Artifact Siege starts in **1 hour** ({schedule.tag(siege, 't')}).{last_call}"),
+         f"The Artifact Siege starts in **1 hour** ({schedule.tag(siege, 't')}).{last_call}"),
         ("30m", siege - dt.timedelta(minutes=30),
-         f"⚔️ The Artifact Siege starts in **30 minutes** ({schedule.tag(siege, 't')}). {cmdr}"),
+         f"The Artifact Siege starts in **30 minutes** ({schedule.tag(siege, 't')}). {cmdr}"),
         ("15m", siege - dt.timedelta(minutes=15),
-         f"⚔️ The Artifact Siege starts in **15 minutes** ({schedule.tag(siege, 't')}). {cmdr}"),
-        ("start", siege, f"🔥 **The Artifact Siege has begun!** {cmdr}"),
+         f"The Artifact Siege starts in **15 minutes** ({schedule.tag(siege, 't')}). {cmdr}"),
+        ("start", siege, f"**The Artifact Siege has begun!** {cmdr}"),
     ]
 
 

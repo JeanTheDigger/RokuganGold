@@ -95,8 +95,8 @@ def _current(guild: discord.Guild, store: Store, now: dt.datetime) -> tuple[dt.d
 def control_text(guild: discord.Guild, store: Store, now: dt.datetime) -> str:
     s, e = _current(guild, store, now)
     skipped = store.is_skipped(guild.id, s)
-    lines = ["## 🛠️ Siege control", "Only the Head Admin can use these buttons.", ""]
-    lines.append(f"**Current / next siege:** {schedule.fmt_local(s)}" + (" ⏭️ **skipped**" if skipped else ""))
+    lines = ["## Siege control", "Only the Head Admin can use these buttons.", ""]
+    lines.append(f"**Current / next siege:** {schedule.fmt_local(s)}" + (" (**skipped**)" if skipped else ""))
     if e is None:
         lines.append("**Election:** no applications yet")
     else:
@@ -227,7 +227,7 @@ async def appoint(guild: discord.Guild, store: Store, target: discord.Member) ->
     when = (f"until {schedule.tag(schedule.term_ends(s), 't')}" if gets_now else
             f"from {schedule.tag(schedule.poll_closes(s), 'f')} to {schedule.tag(schedule.term_ends(s), 't')}")
     replaced = f", replacing <@{previous.id}>" if previous is not None else ""
-    await _announce(guild, store, f"👑 The Head Admin appointed **{target.mention}** Faction Commander for the "
+    await _announce(guild, store, f"The Head Admin appointed **{target.mention}** Faction Commander for the "
                                   f"{schedule.fmt_local(s)} siege{replaced}, {when}.", ping=target)
     await _after(guild, store)
     return f"Done: {target.mention} is Faction Commander for the {schedule.fmt_local(s)} siege."
@@ -294,7 +294,7 @@ class SkipPicker(SafeView):
             content=f"The {schedule.fmt_local(s)} siege is now **{'skipped' if now_skipped else 'back on'}**.{note}",
             view=None,
         )
-        await _announce(guild, store, f"⏭️ The Head Admin {'skipped' if now_skipped else 'un-skipped'} the "
+        await _announce(guild, store, f"The Head Admin {'skipped' if now_skipped else 'un-skipped'} the "
                                       f"{schedule.fmt_local(s)} siege.")
         await _after(guild, store)
 
@@ -348,6 +348,6 @@ class CancelVoteChoice(SafeView):
             await siege.cancel_poll(guild, store, e, "Ended by the Head Admin: no Faction Commander for "
                                                      "this siege.")
             store.update_election(e.id, status="finished", outcome="cancelled")
-        await _announce(guild, store, f"🗳️ The Head Admin ended the vote for the {schedule.fmt_local(e.siege)} "
+        await _announce(guild, store, f"The Head Admin ended the vote for the {schedule.fmt_local(e.siege)} "
                                       "siege: no Faction Commander for it.")
         await _after(guild, store)

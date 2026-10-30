@@ -100,7 +100,7 @@ async def remove_member(guild: discord.Guild, store: Store, legion: Legion, user
         return await disband(guild, store, legion, f"{why}; that was its commander")
     store.remove_membership(guild.id, user_id)
     await _strip_approval(guild, store, user_id, legion, f"Removed from Legion {legion.name}")
-    text = f"🚪 <@{user_id}> was removed from **{legion.name}** ({why})."
+    text = f"<@{user_id}> was removed from **{legion.name}** ({why})."
     await _legion_channel_say(guild, legion, text)
     await applications.bot_log(guild, store, text)
     member = guild.get_member(user_id)
@@ -134,7 +134,7 @@ async def add_member(guild: discord.Guild, store: Store, legion: Legion, user_id
             if r is not None]
     await member.add_roles(*give, reason=f"Added to Legion {legion.name} by the Head Admin")
     store.add_member(guild.id, user_id, legion.id)
-    text = f"➕ <@{user_id}> was added to **{legion.name}** by the Head Admin."
+    text = f"<@{user_id}> was added to **{legion.name}** by the Head Admin."
     await _legion_channel_say(guild, legion, f"Welcome to **{legion.name}**, <@{user_id}>.")
     await applications.bot_log(guild, store, text)
     await applications.dm(member, f"**{guild.name}**: the Head Admin added you to the Legion **{legion.name}**.")
@@ -182,7 +182,7 @@ async def transfer(guild: discord.Guild, store: Store, legion: Legion, new_id: i
     updated = store.get_legion(legion.id)
     if updated is not None:
         await ensure_legion_panel(guild, store, updated)
-    text = f"👑 Command of **{legion.name}** passed from <@{old_id}> to <@{new_id}> ({why})."
+    text = f"Command of **{legion.name}** passed from <@{old_id}> to <@{new_id}> ({why})."
     await _legion_channel_say(guild, legion, text)
     await applications.bot_log(guild, store, text)
     return text
@@ -198,13 +198,13 @@ async def set_color(guild: discord.Guild, store: Store, legion: Legion, color: i
     updated = store.get_legion(legion.id)
     if updated is not None:
         await ensure_legion_panel(guild, store, updated)
-    text = (f"🎨 **{legion.name}** no longer has a color ({why})." if color is None else
-            f"🎨 **{legion.name}**'s color is now {colors.describe(color)} ({why}).")
+    text = (f"**{legion.name}** no longer has a color ({why})." if color is None else
+            f"**{legion.name}**'s color is now {colors.describe(color)} ({why}).")
     await _legion_channel_say(guild, legion, text)
     await applications.bot_log(guild, store, text)
     near = colors.close_to(color, store.legion_colors(guild.id, exclude_id=legion.id))
     if near:
-        text += f"\n⚠️ That's very close to the color of: {', '.join(near)}. Members may be hard to tell apart."
+        text += f"\nWarning: that's very close to the color of: {', '.join(near)}. Members may be hard to tell apart."
     return text
 
 
@@ -229,7 +229,7 @@ async def rename(guild: discord.Guild, store: Store, legion: Legion, new_name: s
     updated = store.get_legion(legion.id)
     if updated is not None:
         await ensure_legion_panel(guild, store, updated)
-    text = f"✏️ **{legion.name}** is now called **{clean}** ({why})."
+    text = f"**{legion.name}** is now called **{clean}** ({why})."
     await _legion_channel_say(guild, legion, text)
     await applications.bot_log(guild, store, text)
     return text
@@ -245,9 +245,9 @@ async def disband(guild: discord.Guild, store: Store, legion: Legion, why: str) 
         applicant = guild.get_member(app.applicant_id)
         await applications._after_decision(guild, store, app, [applicant] if applicant else [])
         await applications._announce(guild, store, app, applicant,
-                                     f"❌ The Legion **{legion.name}** was disbanded, so this application closed.")
+                                     f"The Legion **{legion.name}** was disbanded, so this application closed.")
     channel = guild.get_channel(legion.channel_id or 0)
-    text = (f"🏴 The Legion **{legion.name}** was disbanded ({why}). {len(members)} member(s) lost "
+    text = (f"The Legion **{legion.name}** was disbanded ({why}). {len(members)} member(s) lost "
             "their approval.")
     if isinstance(channel, discord.TextChannel):
         try:
@@ -306,7 +306,7 @@ ACTIONS = {
 
 
 def legion_panel_text(legion: Legion) -> str:
-    return (f"## 🛡️ {legion.name}: Legion management\n"
+    return (f"## {legion.name}: Legion management\n"
             f"Commander: <@{legion.commander_id}>\n"
             f"Color: {colors.describe(legion.color)}\n"
             "The commander (or the Head Admin) can remove members, hand over command, rename, "
@@ -356,7 +356,7 @@ async def ensure_legion_panel(guild: discord.Guild, store: Store, legion: Legion
 
 def control_text(guild: discord.Guild, store: Store) -> str:
     n = len(store.list_legions(guild.id))
-    return ("## 🛡️ Legion control\n"
+    return ("## Legion control\n"
             f"{n} approved Legion(s). Pick an action, then the Legion. Commanders also have these "
             "buttons in their own Legion's channel.")
 

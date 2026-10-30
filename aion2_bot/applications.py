@@ -431,7 +431,7 @@ async def _open_ticket(
     await reply(interaction, f"Your application is open: {channel.mention}. "
                              "You'll be told there when a decision is made.")
     target = f"**{legion_name}**" if kind == "commander" else f"**{legion.name if legion else '?'}**"
-    await bot_log(guild, store, f"📝 {applicant.mention} applied as {kind} of {target}: {channel.mention}")
+    await bot_log(guild, store, f"{applicant.mention} applied as {kind} of {target}: {channel.mention}")
 
 
 # --- the ticket message -------------------------------------------------------
@@ -451,31 +451,31 @@ def ticket_embed(store: Store, app: Application) -> discord.Embed:
     embed.add_field(name="Legion", value=legion_text)
     if app.kind == "commander":
         near = colors.close_to(app.legion_color, store.legion_colors(app.guild_id))
-        warn = f"\n⚠️ Very close to: {', '.join(near)}" if near else ""
+        warn = f"\nWarning: very close to: {', '.join(near)}" if near else ""
         embed.add_field(name="Legion color", value=colors.describe(app.legion_color) + warn, inline=False)
     if app.about:
         embed.add_field(name="About", value=app.about[:1024], inline=False)
 
     if app.status == "pending":
         if app.kind == "commander":
-            status = "⏳ Waiting for the Head Admin."
+            status = "Waiting for the Head Admin."
             others = store.pending_commander_claims(app.guild_id, app.legion_name or "", app.id)
             if others:
-                status += ("\n⚠️ Another pending application also claims to lead this Legion: "
+                status += ("\nWarning: another pending application also claims to lead this Legion: "
                            + ", ".join(f"<@{o.applicant_id}>" for o in others))
         else:
             legion = store.get_legion(app.legion_id or 0)
-            cmdr = (f"✅ <@{app.commander_approved_by}>" if app.commander_approved_by
-                    else f"⏳ waiting for <@{legion.commander_id}>" if legion else "⏳ waiting")
-            admin = f"✅ <@{app.admin_approved_by}>" if app.admin_approved_by else "⏳ waiting"
+            cmdr = (f"approved by <@{app.commander_approved_by}>" if app.commander_approved_by
+                    else f"waiting for <@{legion.commander_id}>" if legion else "waiting")
+            admin = f"approved by <@{app.admin_approved_by}>" if app.admin_approved_by else "waiting"
             status = f"Commander: {cmdr}\nHead Admin: {admin}\nBoth must approve; either may deny."
     elif app.status == "approved" and app.kind == "member":
-        status = (f"✅ Approved by the commander (<@{app.commander_approved_by}>) "
+        status = (f"Approved by the commander (<@{app.commander_approved_by}>) "
                   f"and the Head Admin (<@{app.admin_approved_by}>).")
     elif app.status == "approved":
-        status = f"✅ Approved by <@{app.decided_by}>."
+        status = f"Approved by <@{app.decided_by}>."
     else:
-        status = f"❌ Denied by <@{app.decided_by}>." + (f"\nReason: {app.reason}" if app.reason else "")
+        status = f"Denied by <@{app.decided_by}>." + (f"\nReason: {app.reason}" if app.reason else "")
     embed.add_field(name="Status", value=status, inline=False)
     embed.set_footer(text=f"Application #{app.id}")
     return embed
@@ -603,7 +603,7 @@ async def _approve(interaction: discord.Interaction, app_id: int) -> None:
                 side = "the Head Admin" if "admin_approved_by" in updates else "the commander"
                 waiting = "the commander" if app.commander_approved_by is None else "the Head Admin"
                 await interaction.followup.send(
-                    f"✅ {actor.mention} approved as {side}. Waiting for {waiting}.",
+                    f"{actor.mention} approved as {side}. Waiting for {waiting}.",
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
                 return
@@ -631,7 +631,7 @@ async def _finalize_commander(
     app = store.decide(app.id, "approved", actor.id)
     await _after_decision(guild, store, app, [applicant])
     await _announce(guild, store, app, applicant,
-                    f"✅ Approved as commander of **{name}** by {actor.mention}. Your Legion is approved: "
+                    f"Approved as commander of **{name}** by {actor.mention}. Your Legion is approved: "
                     f"members can now apply to it, and your Legion channel is {channel.mention}.")
     return None
 
@@ -725,7 +725,7 @@ async def remind_tick(guild: discord.Guild, store: Store, now: dt.datetime) -> N
         days = waited.days
         try:
             await channel.send(
-                f"⏰ This application has been waiting {days} day{'s' if days != 1 else ''}. "
+                f"This application has been waiting {days} day{'s' if days != 1 else ''}. "
                 f"Still needed: {', '.join(needed)}.",
                 allowed_mentions=discord.AllowedMentions(users=True, roles=True),
             )
@@ -755,9 +755,9 @@ async def _finalize_member(
     app = store.update_application(app.id, **updates)
     app = store.decide(app.id, "approved", actor.id)
     await _after_decision(guild, store, app, [applicant])
-    note = "" if legion_role else f"\n⚠️ The **{roles.legion_role_name(legion.name)}** role is missing, so it wasn't given."
+    note = "" if legion_role else f"\nWarning: the **{roles.legion_role_name(legion.name)}** role is missing, so it wasn't given."
     await _announce(guild, store, app, applicant,
-                    f"✅ Approved as a member of **{legion.name}** (commander and Head Admin both agreed).{note}")
+                    f"Approved as a member of **{legion.name}** (commander and Head Admin both agreed).{note}")
     legion_channel = guild.get_channel(legion.channel_id or 0)
     if isinstance(legion_channel, discord.TextChannel):
         await legion_channel.send(f"Welcome to **{legion.name}**, {applicant.mention}.")
@@ -798,7 +798,7 @@ class DenyModal(discord.ui.Modal, title="Deny application"):
             applicant = await get_member(guild, app.applicant_id)
             await _after_decision(guild, store, app, [applicant] if applicant else [])
         why = f" Reason: {app.reason}" if app.reason else ""
-        await _announce(guild, store, app, applicant, f"❌ Denied by {actor.mention}.{why}")
+        await _announce(guild, store, app, applicant, f"Denied by {actor.mention}.{why}")
 
 
 def _may_decide(store: Store, app: Application, actor: discord.Member) -> bool:
@@ -894,7 +894,7 @@ async def _close(interaction: discord.Interaction, app_id: int) -> None:
         return
     await interaction.response.send_message("Saving the transcript and closing this ticket…")
     transcript = await transcript_file(channel, f"application-{app.id}.txt")
-    await bot_log(guild, store, f"🔒 {actor.mention} closed the ticket for application #{app.id}.",
+    await bot_log(guild, store, f"{actor.mention} closed the ticket for application #{app.id}.",
                   file=transcript, embed=ticket_embed(store, app))
     store.mark_closed(app.id)
     await channel.delete(reason=f"Ticket for application #{app.id} closed by {actor}")
