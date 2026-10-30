@@ -82,6 +82,13 @@ CREATE TABLE IF NOT EXISTS votes (
     voted_at     TEXT    NOT NULL,
     PRIMARY KEY (election_id, voter_id)       -- one vote per person, final
 );
+-- Faction Commanders who stepped down; they can't get the role back that siege.
+CREATE TABLE IF NOT EXISTS stepdowns (
+    election_id INTEGER NOT NULL REFERENCES elections (id),
+    user_id     INTEGER NOT NULL,
+    at          TEXT    NOT NULL,
+    PRIMARY KEY (election_id, user_id)
+);
 -- Siege reminders already sent, so each goes out once.
 CREATE TABLE IF NOT EXISTS alerts_sent (
     guild_id    INTEGER NOT NULL,
@@ -385,6 +392,17 @@ class Store:
             "SELECT candidate_id FROM votes WHERE election_id = ? AND voter_id = ?", (election_id, voter_id)
         ).fetchone()
         return int(row["candidate_id"]) if row else None
+
+    def add_stepdown(self, election_id: int, user_id: int) -> None:
+        with self.db:
+            self.db.execute(
+                "INSERT OR IGNORE INTO stepdowns (election_id, user_id, at) VALUES (?, ?, ?)",
+                (election_id, user_id, _now()),
+            )
+
+    def stepped_down(self, election_id: int) -> set[int]:
+        rows = self.db.execute("SELECT user_id FROM stepdowns WHERE election_id = ?", (election_id,)).fetchall()
+        return {int(r["user_id"]) for r in rows}
 
     def mark_alert(self, guild_id: int, siege: datetime.datetime, kind: str) -> bool:
         """Record a reminder as sent. False if it already was."""

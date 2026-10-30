@@ -26,7 +26,10 @@ import applications
 import layout
 import roles
 import siege
-from layout import ADMIN, APPROVED, APPROVED_BOT_ONLY, PUBLIC, READ_ONLY, Category, Channel
+from layout import (
+    ADMIN, APPROVED, APPROVED_BOT_ONLY, COMMAND_VOICE, FACTION_COMMAND, FACTION_COMMAND_BOT_ONLY,
+    FACTION_LEADERS, PUBLIC, READ_ONLY, Category, Channel,
+)
 from storage import Store
 
 log = logging.getLogger("aion2_bot.setup")
@@ -83,6 +86,35 @@ def overwrites_for(access: str, guild: discord.Guild, r: ServerRoles) -> Overwri
             r.commander: read,
             r.member: read,
             r.head_admin: read,
+            bot: roles.bot_overwrite(),
+        }
+    if access in (FACTION_COMMAND, FACTION_COMMAND_BOT_ONLY, FACTION_LEADERS):
+        # Whoever holds the Faction Commander role sees these, so access moves
+        # with the role (runner-up, next siege) without touching the channels.
+        posts = access != FACTION_COMMAND_BOT_ONLY
+        seen = discord.PermissionOverwrite(
+            view_channel=True, read_message_history=True, send_messages=posts,
+        )
+        ow: Overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            r.faction_commander: seen,
+            r.head_admin: seen,
+            bot: roles.bot_overwrite(),
+        }
+        if access == FACTION_LEADERS:
+            ow[r.commander] = seen
+        return ow
+    if access == COMMAND_VOICE:
+        # Everyone approved may join and listen; only the Faction Commander speaks.
+        listen = discord.PermissionOverwrite(view_channel=True, connect=True, speak=False)
+        return {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            r.commander: listen,
+            r.member: listen,
+            r.head_admin: discord.PermissionOverwrite(view_channel=True, connect=True),
+            r.faction_commander: discord.PermissionOverwrite(
+                view_channel=True, connect=True, speak=True, priority_speaker=True,
+            ),
             bot: roles.bot_overwrite(),
         }
     if access == ADMIN:
@@ -221,6 +253,7 @@ def _missing_bot_permissions(guild: discord.Guild) -> list[str]:
         ("Send Messages in Threads", perms.send_messages_in_threads),
         # Pings the Siege Alerts role without making it pingable by everyone.
         ("Mention @everyone, @here and All Roles", perms.mention_everyone),
+        ("Speak", perms.speak), ("Priority Speaker", perms.priority_speaker),
     )
     return [name for name, ok in needed if not ok]
 

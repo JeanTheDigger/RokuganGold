@@ -16,6 +16,13 @@ Election, one per siege (times in `schedule.py`):
   4. 2 hours after the siege starts the role is removed, and applications for
      the next siege open.
 
+During the term the Faction Commander may step down with the button in the
+step-down channel. The role passes to the runner-up: the next applicant by
+votes (zero votes included), ties broken at random, skipping anyone who already
+stepped down or left the server. Nobody left: no Faction Commander for the rest
+of the siege. The role itself is what opens the Faction Command category and
+lets its holder speak in the command voice channel, so access moves with it.
+
 A background loop runs once a minute and drives all of it, so the steps happen
 on time without anyone pressing anything, and catch up after a restart.
 """
@@ -46,6 +53,14 @@ MAX_CANDIDATES = 25
 
 TIMER_KEY = "msg:siege_timer"
 PANEL_KEY = "msg:election_panel"
+STEP_DOWN_KEY = "msg:step_down"
+
+STEP_DOWN_TEXT = (
+    "## Step down\n"
+    "If you can't lead this siege for any reason, click **Step down**. Your Faction Commander "
+    "role goes to the runner-up: the applicant with the next most votes. You can't take it "
+    "back for this siege."
+)
 
 # Last text posted per message, so the loop only edits when something changed.
 _last_text: dict[int, str] = {}
@@ -121,7 +136,8 @@ def _election_line(guild: discord.Guild, store: Store, siege: dt.datetime, now: 
         return f"🗳️ Vote for the Faction Commander in {room}; voting ends {schedule.tag(schedule.poll_closes(siege), 'R')}."
     if e is not None and e.winner_id and e.status == "decided":
         return f"👑 Faction Commander: <@{e.winner_id}>."
-    if e is not None and e.status == "finished" and e.outcome in ("no_applicants", "no_votes"):
+    if e is not None and (e.outcome in ("no_applicants", "no_votes")
+                          or (e.status == "decided" and not e.winner_id)):
         return "No Faction Commander for this siege."
     return "🗳️ Counting the Faction Commander votes…"
 
@@ -180,6 +196,9 @@ async def ensure_messages(guild: discord.Guild, store: Store) -> list[str]:
     room = _channel(guild, store, layout.ELECTION)
     if room is not None and await _upsert(room, store, PANEL_KEY, panel_text(guild, store, now), ApplyPanel()):
         notes.append(f"Posted the Faction Commander panel in {room.mention}.")
+    desk = _channel(guild, store, layout.STEP_DOWN)
+    if desk is not None and await _upsert(desk, store, STEP_DOWN_KEY, STEP_DOWN_TEXT, StepDownPanel()):
+        notes.append(f"Posted the step-down button in {desk.mention}.")
     return notes
 
 
@@ -322,6 +341,95 @@ async def _refresh_poll(guild: discord.Guild, store: Store, e: Election, votes_c
         log.warning("Could not update poll %s", e.id)
 
 
+# --- stepping down --------------------------------------------------------------
+class StepDownPanel(discord.ui.View):
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Step down", style=discord.ButtonStyle.danger, emoji="🏳️",
+                       custom_id="aion2:fc:stepdown")
+    async def step_down(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        guild = interaction.guild
+        member = interaction.user
+        if guild is None or not isinstance(member, discord.Member):
+            return
+        if _current_term(store_of(interaction), guild, member.id) is None:
+            await _reply(interaction, "You aren't the Faction Commander right now.")
+            return
+        await interaction.response.send_message(
+            "Step down as Faction Commander? The role goes to the runner-up and you can't take "
+            "it back this siege.", view=ConfirmStepDown(), ephemeral=True,
+        )
+
+
+class ConfirmStepDown(discord.ui.View):
+    def __init__(self) -> None:
+        super().__init__(timeout=60)
+
+    @discord.ui.button(label="Yes, step down", style=discord.ButtonStyle.danger)
+    async def confirm(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await interaction.response.edit_message(content="Stepping down…", view=None)
+        await _step_down(interaction)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        await interaction.response.edit_message(content="You're still the Faction Commander.", view=None)
+
+
+def _current_term(store: Store, guild: discord.Guild, user_id: int) -> Election | None:
+    """The election whose term this person holds right now, if any."""
+    now = schedule.now_utc()
+    return next((e for e in store.unfinished_elections(guild.id)
+                 if e.status == "decided" and e.winner_id == user_id and now < schedule.term_ends(e.siege)),
+                None)
+
+
+def runner_up(guild: discord.Guild, store: Store, e: Election) -> int | None:
+    """Next in line: most votes (zero counts), ties at random, skipping who's out."""
+    counts = store.tally(e.id)
+    out = store.stepped_down(e.id) | {e.winner_id or 0}
+    pool = [u for u in store.candidates(e.id) if u not in out and guild.get_member(u) is not None]
+    random.shuffle(pool)
+    pool.sort(key=lambda u: -counts.get(u, 0))  # stable: ties stay in random order
+    return pool[0] if pool else None
+
+
+async def _step_down(interaction: discord.Interaction) -> None:
+    guild = interaction.guild
+    member = interaction.user
+    if guild is None or not isinstance(member, discord.Member):
+        return
+    store = store_of(interaction)
+    role = roles.find_role(guild, layout.FACTION_COMMANDER_ROLE)
+    async with _lock:
+        e = _current_term(store, guild, member.id)
+        if e is None:
+            await _reply(interaction, "You aren't the Faction Commander right now.")
+            return
+        store.add_stepdown(e.id, member.id)
+        if role is not None and role in member.roles:
+            await member.remove_roles(role, reason="Stepped down as Faction Commander")
+        nxt = runner_up(guild, store, e)
+        nxt_member = guild.get_member(nxt) if nxt else None
+        if nxt_member is not None and role is not None:
+            await nxt_member.add_roles(role, reason="Runner-up after the Faction Commander stepped down")
+            store.update_election(e.id, winner_id=nxt_member.id)
+            text = (f"🏳️ <@{member.id}> stepped down. **{nxt_member.mention} is now the Faction Commander** "
+                    f"as runner-up, until {schedule.tag(schedule.term_ends(e.siege), 't')}.")
+        else:
+            # The term stays open with nobody holding it, so its end (and the
+            # "applications are open" notice) still happens at the usual time.
+            store.update_election(e.id, outcome="stepped_down", winner_id=None)
+            text = (f"🏳️ <@{member.id}> stepped down, and there is no runner-up left, so there is no "
+                    "Faction Commander for the rest of this siege.")
+    room = _channel(guild, store, layout.ELECTION)
+    if room is not None:
+        await room.send(text, allowed_mentions=discord.AllowedMentions(users=[nxt_member] if nxt_member else False))
+    await _log(guild, store, text)
+    await _reply(interaction, "You've stepped down. Thank you for letting the faction know.")
+    await ensure_messages(guild, store)
+
+
 # --- the election steps, driven by the loop -----------------------------------
 async def _open_poll(guild: discord.Guild, store: Store, e: Election) -> Election:
     room = _channel(guild, store, layout.ELECTION)
@@ -414,13 +522,13 @@ async def _end_term(guild: discord.Guild, store: Store, e: Election) -> Election
             log.warning("Could not remove Faction Commander role from %s", member.id)
     room = _channel(guild, store, layout.ELECTION)
     nxt = schedule.application_target(schedule.term_ends(e.siege))
+    ended = f"<@{e.winner_id}>'s term as Faction Commander has ended. " if e.winner_id else ""
     if room is not None:
         await room.send(
-            f"<@{e.winner_id}>'s term as Faction Commander has ended. Applications for the "
-            f"{schedule.fmt_local(nxt)} siege are now open.",
+            f"{ended}Applications for the {schedule.fmt_local(nxt)} siege are now open.",
             allowed_mentions=discord.AllowedMentions.none(),
         )
-    await _log(guild, store, f"Faction Commander term of <@{e.winner_id}> ended.")
+    await _log(guild, store, f"Faction Commander term for the {schedule.fmt_local(e.siege)} siege ended.")
     return store.update_election(e.id, status="finished")
 
 

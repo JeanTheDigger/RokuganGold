@@ -11,6 +11,11 @@ Access levels (set on a category; a channel may override its category's):
   READ_ONLY  everyone can see; only Head Admin (and the bot) can post.
   APPROVED   only approved Legion commanders and members (and Head Admin).
   APPROVED_BOT_ONLY  approved people can see it, but only the bot posts.
+  FACTION_COMMAND    only the current Faction Commander and Head Admin.
+  FACTION_COMMAND_BOT_ONLY  the same people see it, but only the bot posts.
+  FACTION_LEADERS    the Faction Commander, every Legion Commander and Head Admin.
+  COMMAND_VOICE      (voice only) every approved person can join and listen; only
+                     the Faction Commander can speak.
   ADMIN      only Head Admin (and the bot) can see it at all.
 """
 
@@ -37,9 +42,14 @@ PUBLIC = "public"
 READ_ONLY = "read_only"
 APPROVED = "approved"
 APPROVED_BOT_ONLY = "approved_bot_only"
+FACTION_COMMAND = "faction_command"
+FACTION_COMMAND_BOT_ONLY = "faction_command_bot_only"
+FACTION_LEADERS = "faction_leaders"
+COMMAND_VOICE = "command_voice"
 ADMIN = "admin"
 
-Access = Literal["public", "read_only", "approved", "approved_bot_only", "admin"]
+Access = Literal["public", "read_only", "approved", "approved_bot_only", "faction_command",
+                 "faction_command_bot_only", "faction_leaders", "command_voice", "admin"]
 Kind = Literal["text", "voice"]
 
 # --- Purposes: what the bot uses a channel or category for ------------------
@@ -52,8 +62,10 @@ LEGIONS = "legions"                  # category: one private channel per approve
 SIEGE_TIMER = "siege_timer"          # the next-siege countdown, edited every minute
 ELECTION = "election"                # Faction Commander applications, polls and results
 SIEGE_ALERTS = "siege_alerts"        # siege reminders pinging the Siege Alerts role
+STEP_DOWN = "step_down"              # the Faction Commander's "Step down" button
 
-CHANNEL_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, BOT_LOG, SIEGE_TIMER, ELECTION, SIEGE_ALERTS)
+CHANNEL_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, BOT_LOG, SIEGE_TIMER, ELECTION,
+                    SIEGE_ALERTS, STEP_DOWN)
 CATEGORY_PURPOSES = (TICKETS, LEGIONS)
 
 
@@ -96,6 +108,15 @@ LAYOUT: tuple[Category, ...] = (
                 topic="Apply to be Faction Commander for the next siege, and vote."),
         Channel("siege-alerts", access=APPROVED_BOT_ONLY, purpose=SIEGE_ALERTS,
                 topic="Siege reminders. Turn pings on or off with the button."),
+        Channel("Faction Commander Orders", kind="voice", access=COMMAND_VOICE),
+    )),
+    # Unlocked by the Faction Commander role, for the length of the term. Names are drafts.
+    Category("Faction Command", FACTION_COMMAND, (
+        Channel("fc-head-admin", topic="The Faction Commander and the Head Admin."),
+        Channel("faction-leaders", access=FACTION_LEADERS,
+                topic="The Faction Commander with every Legion Commander."),
+        Channel("step-down", access=FACTION_COMMAND_BOT_ONLY, purpose=STEP_DOWN,
+                topic="Can't lead this siege? Step down and the runner-up takes over."),
     )),
     Category("Legions", ADMIN, purpose=LEGIONS),
     Category("Tickets", ADMIN, purpose=TICKETS),
@@ -107,7 +128,7 @@ LAYOUT: tuple[Category, ...] = (
 
 # Without these the bot cannot do its job, so setup refuses a layout missing one.
 REQUIRED_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, TICKETS, LEGIONS, SIEGE_TIMER, ELECTION,
-                     SIEGE_ALERTS)
+                     SIEGE_ALERTS, STEP_DOWN)
 
 
 def validate(layout: tuple[Category, ...] | None = None) -> list[str]:
@@ -132,7 +153,10 @@ def validate(layout: tuple[Category, ...] | None = None) -> list[str]:
             if ch_key in seen_channels:
                 problems.append(f"Channel '{ch.name}' is listed twice in '{cat.name}'.")
             seen_channels.add(ch_key)
-            if ch.kind == "voice" and (ch.access or cat.access) == READ_ONLY:
+            access = ch.access or cat.access
+            if ch.kind == "text" and access == COMMAND_VOICE:
+                problems.append(f"Channel '{ch.name}' in '{cat.name}': command_voice is for voice channels.")
+            if ch.kind == "voice" and access in (READ_ONLY, APPROVED_BOT_ONLY, FACTION_COMMAND_BOT_ONLY):
                 problems.append(
                     f"Voice channel '{ch.name}' in '{cat.name}' cannot be read-only; "
                     "use another access level."

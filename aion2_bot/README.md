@@ -17,7 +17,8 @@ countdown and a Faction Commander election for every siege.
 | Category | Who sees it | Channels |
 |---|---|---|
 | **Welcome** | everyone, including people with no role | `#arrivals` (read-only: the bot posts "**Name** entered the server."), `#chat` (anyone can talk), `#commander-applications` and `#member-applications` (read-only, each holds an apply button) |
-| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#general`, `#questions`, `#memes`, `#screenshots`; `#siege-timer`, `#faction-commander` and `#siege-alerts` (only the bot posts) |
+| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#general`, `#questions`, `#memes`, `#screenshots`; `#siege-timer`, `#faction-commander` and `#siege-alerts` (only the bot posts); 🔊 **Faction Commander Orders** (everyone approved listens, only the Faction Commander speaks) |
+| **Faction Command** (*draft names*) | the current Faction Commander and Head Admin | `#fc-head-admin` (Faction Commander ↔ Head Admin), `#faction-leaders` (also every Legion Commander), `#step-down` (the step-down button) |
 | **Legions** | Head Admin; each Legion's channel is also open to that Legion | one private channel per approved Legion, made automatically |
 | **Tickets** | Head Admin; each ticket is also open to the people in it | one private channel per open application, made automatically |
 | **Head Admin** | Head Admin only | `#admin-chat`, `#bot-log` (everything the bot does, plus ticket transcripts) |
@@ -87,6 +88,21 @@ For the Monday / Thursday / Saturday sieges that means:
 
 A background loop drives this once a minute. If the bot was offline when a step
 was due, it does that step as soon as it is back.
+
+**What the Faction Commander role gives.** Access moves with the role, so it
+changes hands automatically with each siege and each step-down.
+- The **Faction Command** category: `#fc-head-admin`, a private room with the
+  Head Admin; `#faction-leaders`, where the Faction Commander talks with every
+  Legion Commander; and `#step-down`. History is kept between terms.
+- 🔊 **Faction Commander Orders**: a voice channel every approved person can
+  join, where only the Faction Commander can speak (with Priority Speaker).
+  Everyone else listens. (Discord lets anyone with Administrator speak anywhere.)
+- **Step down**: the Faction Commander clicks the button in `#step-down` and
+  confirms. The bot takes their role and gives it to the **runner-up**: the
+  next applicant by votes (zero votes included), ties broken at random, skipping
+  anyone who stepped down or left the server. That repeats if the runner-up
+  steps down too. With nobody left there is no Faction Commander for the rest of
+  the siege. Whoever steps down can't take the role back that siege.
 
 **`#siege-alerts`** pings the opt-in **Siege Alerts** role. People turn it on or
 off with the button at the top of the channel. Each siege it posts:

@@ -31,4 +31,5 @@ def bot_overwrite() -> discord.PermissionOverwrite:
     return discord.PermissionOverwrite(
         view_channel=True, send_messages=True, manage_channels=True, manage_messages=True,
         read_message_history=True, embed_links=True, attach_files=True, connect=True,
+        speak=True,
     )
