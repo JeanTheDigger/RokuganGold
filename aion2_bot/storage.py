@@ -152,6 +152,7 @@ class Application:
     decided_at: str | None
     closed_at: str | None
     legion_color: int | None = None   # commander applications: the color asked for
+    reminders_sent: int = 0           # daily "still waiting" reminders posted so far
 
 
 @dataclass(frozen=True)
@@ -184,6 +185,7 @@ class Store:
     LATER_COLUMNS = (
         ("legions", "color", "INTEGER"),
         ("applications", "legion_color", "INTEGER"),
+        ("applications", "reminders_sent", "INTEGER NOT NULL DEFAULT 0"),
     )
 
     def _add_missing_columns(self) -> None:
@@ -353,6 +355,20 @@ class Store:
         ).fetchone()
         return Application(**dict(row)) if row else None
 
+    def pending_applications(self, guild_id: int) -> list[Application]:
+        rows = self.db.execute(
+            "SELECT * FROM applications WHERE guild_id = ? AND status = 'pending' ORDER BY id", (guild_id,)
+        ).fetchall()
+        return [Application(**dict(r)) for r in rows]
+
+    def last_denial(self, guild_id: int, user_id: int) -> Application | None:
+        row = self.db.execute(
+            "SELECT * FROM applications WHERE guild_id = ? AND applicant_id = ? AND status = 'denied' "
+            "ORDER BY decided_at DESC, id DESC LIMIT 1",
+            (guild_id, user_id),
+        ).fetchone()
+        return Application(**dict(row)) if row else None
+
     def pending_commander_claims(self, guild_id: int, legion_name: str, exclude_id: int) -> list[Application]:
         """Other pending commander applications naming the same Legion."""
         rows = self.db.execute(
@@ -365,7 +381,7 @@ class Store:
     def update_application(self, app_id: int, **fields: object) -> Application:
         allowed = {
             "status", "commander_approved_by", "admin_approved_by", "decided_by", "reason",
-            "channel_id", "message_id", "decided_at", "closed_at",
+            "channel_id", "message_id", "decided_at", "closed_at", "reminders_sent",
         }
         bad = set(fields) - allowed
         if bad:

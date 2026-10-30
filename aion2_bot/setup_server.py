@@ -21,15 +21,17 @@ from dataclasses import dataclass
 import discord
 from discord import app_commands
 
+import admin_tools
 import alerts
 import applications
+import guide
 import layout
 import legions
 import roles
 import siege
 from layout import (
     ADMIN, APPROVED, APPROVED_BOT_ONLY, COMMAND_VOICE, FACTION_COMMAND, FACTION_COMMAND_BOT_ONLY,
-    FACTION_LEADERS, PUBLIC, READ_ONLY, Category, Channel,
+    FACTION_LEADERS, PUBLIC, READ_ONLY, STAFF, Category, Channel,
 )
 from storage import Store
 
@@ -49,6 +51,7 @@ class ServerRoles:
     commander: discord.Role
     member: discord.Role
     faction_commander: discord.Role
+    officer: discord.Role
 
 
 def overwrites_for(access: str, guild: discord.Guild, r: ServerRoles) -> Overwrites:
@@ -121,6 +124,13 @@ def overwrites_for(access: str, guild: discord.Guild, r: ServerRoles) -> Overwri
                 view_channel=True, connect=True, speak=True, priority_speaker=True,
                 send_messages=True, read_message_history=True,
             ),
+            bot: roles.bot_overwrite(),
+        }
+    if access == STAFF:
+        return {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            r.head_admin: discord.PermissionOverwrite(view_channel=True),
+            r.officer: discord.PermissionOverwrite(view_channel=True),
             bot: roles.bot_overwrite(),
         }
     if access == ADMIN:
@@ -212,7 +222,7 @@ async def _ensure_roles(
         head_admin = await _create_head_admin(guild, owner, notes)
     found: list[discord.Role] = []
     for name in (layout.COMMANDER_ROLE, layout.MEMBER_ROLE, layout.FACTION_COMMANDER_ROLE,
-                 layout.SIEGE_ALERTS_ROLE):
+                 layout.SIEGE_ALERTS_ROLE, layout.OFFICER_ROLE):
         role = roles.find_role(guild, name)
         if role is None:
             # Rank roles show as their own group in the member list; the opt-in alerts role doesn't.
@@ -220,7 +230,7 @@ async def _ensure_roles(
             notes.append(f"Created the **{name}** role.")
         found.append(role)
     return ServerRoles(head_admin=head_admin, commander=found[0], member=found[1],
-                       faction_commander=found[2])
+                       faction_commander=found[2], officer=found[4])
 
 
 async def _create_head_admin(guild: discord.Guild, owner: discord.Member, notes: list[str]) -> discord.Role:
@@ -349,6 +359,8 @@ async def setup_server(interaction: discord.Interaction) -> None:
             notes += await siege.ensure_messages(guild, store, force=True)
             notes += await alerts.ensure_panel(guild, store)
             notes += await legions.ensure_panels(guild, store)
+            notes += await admin_tools.ensure_panel(guild, store)
+            notes += await guide.ensure_posted(guild, store)
     except discord.Forbidden as exc:
         log.warning("Setup forbidden in %s: %s", guild.id, exc)
         await interaction.followup.send(
@@ -356,7 +368,7 @@ async def setup_server(interaction: discord.Interaction) -> None:
             "Anything created before that point was kept. Check that the bot's role has the "
             "permissions above and sits **above** the "
             f"**{layout.HEAD_ADMIN_ROLE}**, **{layout.COMMANDER_ROLE}**, **{layout.MEMBER_ROLE}** and "
-            f"**{layout.FACTION_COMMANDER_ROLE}**, **{layout.SIEGE_ALERTS_ROLE}** roles in **Server Settings → Roles**, then run `/setup server` again: it picks up "
+            f"**{layout.FACTION_COMMANDER_ROLE}**, **{layout.SIEGE_ALERTS_ROLE}**, **{layout.OFFICER_ROLE}** roles in **Server Settings → Roles**, then run `/setup server` again: it picks up "
             "where it stopped.",
             ephemeral=True,
         )

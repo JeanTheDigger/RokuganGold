@@ -24,6 +24,7 @@ deletes the channel. Buttons keep working across bot restarts.
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import io
 import logging
 import re
@@ -45,6 +46,11 @@ _lock = asyncio.Lock()
 
 # Discord allows at most 50 channels in one category.
 CATEGORY_LIMIT = 50
+
+# After a denial, the applicant waits this long before applying again.
+DENY_COOLDOWN = dt.timedelta(hours=24)
+# A ticket still waiting gets a reminder this long after it opened, then as often again.
+REMINDER_EVERY = dt.timedelta(hours=24)
 
 COMMANDER_PANEL_TEXT = (
     "## Legion Commander applications\n"
@@ -127,6 +133,7 @@ async def reply(interaction: discord.Interaction, text: str) -> None:
 def ticket_overwrites(
     guild: discord.Guild, head_admin: discord.Role | None, people: list[discord.Member]
 ) -> dict[discord.Role | discord.Member, discord.PermissionOverwrite]:
+    """The applicant (and commander), Head Admin and Officers can see and talk."""
     talk = discord.PermissionOverwrite(
         view_channel=True, send_messages=True, read_message_history=True,
         attach_files=True, embed_links=True,
@@ -137,6 +144,9 @@ def ticket_overwrites(
     }
     if head_admin is not None:
         ow[head_admin] = talk
+    officer = roles.find_role(guild, layout.OFFICER_ROLE)
+    if officer is not None:
+        ow[officer] = talk
     for person in people:
         ow[person] = talk
     return ow
@@ -217,11 +227,33 @@ async def _refuse_new_application(interaction: discord.Interaction) -> bool:
         await reply(interaction, f"You are already approved in **{name}**. "
                                  "Ask the Head Admin if that needs to change.")
         return True
+    until = cooldown_ends(guild, store, interaction.user.id)
+    if until is not None:
+        await reply(interaction, f"Your last application was denied. You can apply again "
+                                 f"<t:{int(until.timestamp())}:R>.")
+        return True
     if not isinstance(configured(guild, store, layout.TICKETS, discord.CategoryChannel),
                       discord.CategoryChannel):
         await reply(interaction, "Applications aren't set up yet. Ask the Head Admin to run `/setup server`.")
         return True
     return False
+
+
+def cooldown_ends(guild: discord.Guild, store: Store, user_id: int) -> dt.datetime | None:
+    """When this person may apply again after a denial, or None if they may now.
+
+    Denials the bot made itself (the Legion was disbanded) don't count, and the
+    Head Admin can lift a cooldown early.
+    """
+    denial = store.last_denial(guild.id, user_id)
+    if denial is None or denial.decided_at is None or denial.decided_by == guild.me.id:
+        return None
+    denied_at = dt.datetime.fromisoformat(denial.decided_at)
+    lifted = store.get_config(guild.id, f"cooldown_lift:{user_id}")
+    if lifted is not None and dt.datetime.fromisoformat(lifted) >= denied_at:
+        return None
+    until = denied_at + DENY_COOLDOWN
+    return until if dt.datetime.now(dt.timezone.utc) < until else None
 
 
 # --- forms --------------------------------------------------------------------
@@ -591,25 +623,49 @@ async def _finalize_commander(
         return "The applicant has left the server. Deny the application instead."
     if store.membership(guild.id, applicant.id) is not None:
         return "The applicant already belongs to a Legion."
+    made = await create_legion(guild, store, name, applicant, app.legion_color, "approved")
+    if isinstance(made, str):
+        return made
+    legion, channel = made
+    app = store.update_application(app.id, admin_approved_by=actor.id)
+    app = store.decide(app.id, "approved", actor.id)
+    await _after_decision(guild, store, app, [applicant])
+    await _announce(guild, store, app, applicant,
+                    f"✅ Approved as commander of **{name}** by {actor.mention}. Your Legion is approved: "
+                    f"members can now apply to it, and your Legion channel is {channel.mention}.")
+    return None
+
+
+async def create_legion(
+    guild: discord.Guild, store: Store, name: str, commander: discord.Member, color: int | None, how: str,
+) -> tuple[Legion, discord.TextChannel] | str:
+    """Make a Legion: its role (colored), private channel and panel; the commander
+    gets Legion Commander + the Legion role. Returns (legion, channel) or an error.
+    Used by commander approval and by the Head Admin's "Create a Legion" tool.
+    """
+    if store.legion_by_name(guild.id, name) is not None:
+        return f"A Legion named **{name}** already exists."
+    if store.membership(guild.id, commander.id) is not None:
+        return f"{commander.mention} already belongs to a Legion."
     commander_role = roles.find_role(guild, layout.COMMANDER_ROLE)
     head_admin = roles.find_role(guild, layout.HEAD_ADMIN_ROLE)
     category = configured(guild, store, layout.LEGIONS, discord.CategoryChannel)
     if commander_role is None or not isinstance(category, discord.CategoryChannel):
-        return "The server isn't fully set up. Run `/setup server`, then approve again."
+        return "The server isn't fully set up. Run `/setup server`, then try again."
     if len(category.channels) >= CATEGORY_LIMIT:
         return f"The Legions category is full ({CATEGORY_LIMIT} channels, Discord's limit)."
 
+    reason = f"Legion {name} {how}"
     legion_role = roles.find_role(guild, roles.legion_role_name(name))
     new_role: discord.Role | None = None
     channel: discord.TextChannel | None = None
     try:
         if legion_role is None:
             legion_role = new_role = await guild.create_role(
-                name=roles.legion_role_name(name), colour=discord.Colour(app.legion_color or 0),
-                reason=f"Legion {name} approved",
+                name=roles.legion_role_name(name), colour=discord.Colour(color or 0), reason=reason,
             )
-        elif app.legion_color is not None:
-            await legion_role.edit(colour=discord.Colour(app.legion_color), reason=f"Legion {name} approved")
+        elif color is not None:
+            await legion_role.edit(colour=discord.Colour(color), reason=reason)
         overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             legion_role: discord.PermissionOverwrite(view_channel=True),
@@ -618,35 +674,63 @@ async def _finalize_commander(
         if head_admin is not None:
             overwrites[head_admin] = discord.PermissionOverwrite(view_channel=True)
         channel = await category.create_text_channel(
-            slug(name, f"legion-{app.id}"), overwrites=overwrites,
-            topic=f"Private channel of the Legion {name}.", reason=f"Legion {name} approved",
+            slug(name, f"legion-{commander.id}"), overwrites=overwrites,
+            topic=f"Private channel of the Legion {name}.", reason=reason,
         )
-        legion = store.create_legion(guild.id, name, applicant.id, legion_role.id, channel.id,
-                                     color=app.legion_color)
+        legion = store.create_legion(guild.id, name, commander.id, legion_role.id, channel.id, color=color)
     except Exception:
-        # Undo the half-made Legion so approving again starts clean.
+        # Undo the half-made Legion so trying again starts clean.
         for leftover in (channel, new_role):
             if leftover is not None:
                 try:
-                    await leftover.delete(reason="Legion approval failed")
+                    await leftover.delete(reason="Legion creation failed")
                 except discord.HTTPException:
                     pass
         raise
 
-    await applicant.add_roles(commander_role, legion_role, reason=f"Approved commander of {name}")
-    app = store.update_application(app.id, admin_approved_by=actor.id)
-    app = store.decide(app.id, "approved", actor.id)
-    await _after_decision(guild, store, app, [applicant])
+    await commander.add_roles(commander_role, legion_role, reason=reason)
     await channel.send(
-        f"Welcome, {applicant.mention}. This is the private channel of **{legion.name}**; "
+        f"Welcome, {commander.mention}. This is the private channel of **{legion.name}**; "
         "members you approve will see it too.",
     )
     import legions  # here, not at the top: legions imports this module
     await legions.ensure_legion_panel(guild, store, legion)
-    await _announce(guild, store, app, applicant,
-                    f"✅ Approved as commander of **{name}** by {actor.mention}. Your Legion is approved: "
-                    f"members can now apply to it, and your Legion channel is {channel.mention}.")
-    return None
+    return legion, channel
+
+
+async def remind_tick(guild: discord.Guild, store: Store, now: dt.datetime) -> None:
+    """Remind whoever still has to decide a ticket: 24 h after it opened, then daily.
+
+    After downtime it posts one reminder, not one per missed day.
+    """
+    head_admin = roles.find_role(guild, layout.HEAD_ADMIN_ROLE)
+    for app in store.pending_applications(guild.id):
+        waited = now - dt.datetime.fromisoformat(app.created_at)
+        due = int(waited // REMINDER_EVERY)
+        if due <= app.reminders_sent:
+            continue
+        store.update_application(app.id, reminders_sent=due)
+        channel = guild.get_channel(app.channel_id or 0)
+        if not isinstance(channel, discord.TextChannel):
+            continue
+        needed: list[str] = []
+        if app.kind == "member" and not app.commander_approved_by:
+            legion = store.get_legion(app.legion_id or 0)
+            if legion is not None:
+                needed.append(f"<@{legion.commander_id}> (the Legion's commander)")
+        if not app.admin_approved_by:
+            needed.append(f"{head_admin.mention if head_admin else 'the Head Admin'} (Head Admin)")
+        if not needed:
+            continue
+        days = waited.days
+        try:
+            await channel.send(
+                f"⏰ This application has been waiting {days} day{'s' if days != 1 else ''}. "
+                f"Still needed: {', '.join(needed)}.",
+                allowed_mentions=discord.AllowedMentions(users=True, roles=True),
+            )
+        except discord.HTTPException:
+            log.warning("Could not post reminder for application %s", app.id)
 
 
 async def _finalize_member(
@@ -799,8 +883,8 @@ async def _close(interaction: discord.Interaction, app_id: int) -> None:
         return
     guild, actor, app = loaded
     store = store_of(interaction)
-    if not roles.is_head_admin(actor):
-        await reply(interaction, "Only the Head Admin can close a ticket.")
+    if not (roles.is_head_admin(actor) or roles.has_role(actor, layout.OFFICER_ROLE)):
+        await reply(interaction, "Only the Head Admin or an Officer can close a ticket.")
         return
     if app.status == "pending":
         await reply(interaction, "Approve or deny the application before closing the ticket.")

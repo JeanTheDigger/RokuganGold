@@ -16,6 +16,7 @@ Access levels (set on a category; a channel may override its category's):
   FACTION_LEADERS    the Faction Commander, every Legion Commander and Head Admin.
   COMMAND_VOICE      (voice only) every approved person can join and listen; only
                      the Faction Commander can speak.
+  STAFF      only Head Admin and Officers (and the bot).
   ADMIN      only Head Admin (and the bot) can see it at all.
 """
 
@@ -33,6 +34,8 @@ COMMANDER_ROLE = "Legion Commander"
 MEMBER_ROLE = "Legion Member"
 # Held by the elected Faction Commander for one siege (see siege.py).
 FACTION_COMMANDER_ROLE = "Faction Commander"
+# Staff helpers: see every ticket, talk in it and close it, but can't approve.
+OFFICER_ROLE = "Officer"
 # Opt-in role pinged by siege reminders (see alerts.py).
 SIEGE_ALERTS_ROLE = "Siege Alerts"
 # Each approved Legion gets its own role, named this prefix + the Legion's name.
@@ -46,10 +49,11 @@ FACTION_COMMAND = "faction_command"
 FACTION_COMMAND_BOT_ONLY = "faction_command_bot_only"
 FACTION_LEADERS = "faction_leaders"
 COMMAND_VOICE = "command_voice"
+STAFF = "staff"
 ADMIN = "admin"
 
 Access = Literal["public", "read_only", "approved", "approved_bot_only", "faction_command",
-                 "faction_command_bot_only", "faction_leaders", "command_voice", "admin"]
+                 "faction_command_bot_only", "faction_leaders", "command_voice", "staff", "admin"]
 Kind = Literal["text", "voice"]
 
 # --- Purposes: what the bot uses a channel or category for ------------------
@@ -65,9 +69,14 @@ SIEGE_ALERTS = "siege_alerts"        # siege reminders pinging the Siege Alerts 
 STEP_DOWN = "step_down"              # the Faction Commander's "Step down" button
 SIEGE_CONTROL = "siege_control"      # the Head Admin's siege control panel
 LEGION_CONTROL = "legion_control"    # the Head Admin's Legion management panel
+RULES = "rules"                      # the server rules, one message the Head Admin edits
+GUIDE = "guide"                      # how the server works, written by the bot (same as /help)
+ANNOUNCEMENTS = "announcements"      # Head Admin announcements to everyone approved
+ADMIN_TOOLS = "admin_tools"          # the Head Admin's tools panel (rules, news, manual Legions)
 
 CHANNEL_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, BOT_LOG, SIEGE_TIMER, ELECTION,
-                    SIEGE_ALERTS, STEP_DOWN, SIEGE_CONTROL, LEGION_CONTROL)
+                    SIEGE_ALERTS, STEP_DOWN, SIEGE_CONTROL, LEGION_CONTROL, RULES, GUIDE,
+                    ANNOUNCEMENTS, ADMIN_TOOLS)
 CATEGORY_PURPOSES = (TICKETS, LEGIONS)
 
 
@@ -91,6 +100,9 @@ class Category:
 
 LAYOUT: tuple[Category, ...] = (
     Category("Welcome", PUBLIC, (
+        Channel("rules", topic="The server rules.", access=READ_ONLY, purpose=RULES),
+        Channel("how-it-works", topic="How applications, sieges and the vote work. Also: /help",
+                access=READ_ONLY, purpose=GUIDE),
         Channel("arrivals", topic="Who just walked in.", access=READ_ONLY, purpose=ARRIVALS),
         Channel("chat", topic="Open chat for everyone."),
         Channel("commander-applications", access=READ_ONLY, purpose=COMMANDER_APPLY,
@@ -100,6 +112,8 @@ LAYOUT: tuple[Category, ...] = (
     )),
     # The category name is still a draft. Siege times live in schedule.py.
     Category("Asmodian Command", APPROVED, (
+        Channel("announcements", access=APPROVED_BOT_ONLY, purpose=ANNOUNCEMENTS,
+                topic="News from the Head Admin."),
         Channel("general", topic="Talk between approved commanders and Legion members."),
         Channel("questions", topic="Ask anything."),
         Channel("memes"),
@@ -127,7 +141,7 @@ LAYOUT: tuple[Category, ...] = (
                 topic="Can't lead this siege? Step down and the runner-up takes over."),
     )),
     Category("Legions", ADMIN, purpose=LEGIONS),
-    Category("Tickets", ADMIN, purpose=TICKETS),
+    Category("Tickets", STAFF, purpose=TICKETS),
     Category("Head Admin", ADMIN, (
         Channel("admin-chat"),
         Channel("bot-log", topic="What the bot did, and when.", purpose=BOT_LOG),
@@ -135,12 +149,15 @@ LAYOUT: tuple[Category, ...] = (
                 purpose=SIEGE_CONTROL),
         Channel("legion-control", topic="Remove members, transfer command, rename or disband any Legion.",
                 purpose=LEGION_CONTROL),
+        Channel("admin-tools", topic="Edit the rules, post announcements, create Legions or add members by hand.",
+                purpose=ADMIN_TOOLS),
     )),
 )
 
 # Without these the bot cannot do its job, so setup refuses a layout missing one.
 REQUIRED_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, TICKETS, LEGIONS, SIEGE_TIMER, ELECTION,
-                     SIEGE_ALERTS, STEP_DOWN, SIEGE_CONTROL, LEGION_CONTROL)
+                     SIEGE_ALERTS, STEP_DOWN, SIEGE_CONTROL, LEGION_CONTROL, RULES, GUIDE,
+                     ANNOUNCEMENTS, ADMIN_TOOLS)
 
 
 def validate(layout: tuple[Category, ...] | None = None) -> list[str]:

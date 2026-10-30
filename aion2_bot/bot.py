@@ -13,9 +13,11 @@ import sys
 import discord
 from discord import app_commands
 
+import admin_tools
 import alerts
 import applications
 import controls
+import guide
 import layout
 import legions
 import setup_server
@@ -52,6 +54,7 @@ class Aion2Bot(discord.Client):
         self.tree.on_error = self.on_app_command_error
         self.tree.add_command(setup_server.setup_group)
         self.tree.add_command(applications.legion_group)
+        self.tree.add_command(guide.help_command)
 
     async def setup_hook(self) -> None:
         # Buttons that must keep working after a restart.
@@ -65,6 +68,7 @@ class Aion2Bot(discord.Client):
         self.add_view(controls.ControlPanel())
         self.add_view(legions.ControlPanel())
         self.add_dynamic_items(legions.LegionButton)
+        self.add_view(admin_tools.ToolsPanel())
         # Siege countdown + Faction Commander election, once a minute.
         self.siege_task = asyncio.create_task(siege.run_loop(self, self.store))
         # With DISCORD_GUILD_ID set, commands go to that one server and appear

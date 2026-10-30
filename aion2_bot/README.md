@@ -16,14 +16,14 @@ countdown and a Faction Commander election for every siege.
 
 | Category | Who sees it | Channels |
 |---|---|---|
-| **Welcome** | everyone, including people with no role | `#arrivals` (read-only: the bot posts "**Name** entered the server."), `#chat` (anyone can talk), `#commander-applications` and `#member-applications` (read-only, each holds an apply button) |
-| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#general`, `#questions`, `#memes`, `#screenshots`; `#siege-timer`, `#faction-commander` and `#siege-alerts` (only the bot posts); 🔊 **War Room** (everyone approved listens, only the Faction Commander speaks); 🔊 **Voice 1–5** (open voice chat for everyone approved) |
+| **Welcome** | everyone, including people with no role | `#rules` (one message the Head Admin edits), `#how-it-works` (the bot's guide, same as `/help`), `#arrivals` (read-only: the bot posts "**Name** entered the server."), `#chat` (anyone can talk), `#commander-applications` and `#member-applications` (read-only, each holds an apply button) |
+| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#announcements` (Head Admin news; only the bot posts), `#general`, `#questions`, `#memes`, `#screenshots`; `#siege-timer`, `#faction-commander` and `#siege-alerts` (only the bot posts); 🔊 **War Room** (everyone approved listens, only the Faction Commander speaks); 🔊 **Voice 1–5** (open voice chat for everyone approved) |
 | **Faction Command** (*draft names*) | the current Faction Commander and Head Admin | `#fc-head-admin` (Faction Commander ↔ Head Admin), `#faction-leaders` (also every Legion Commander), `#step-down` (the step-down button) |
 | **Legions** | Head Admin; each Legion's channel is also open to that Legion | one private channel per approved Legion, made automatically |
-| **Tickets** | Head Admin; each ticket is also open to the people in it | one private channel per open application, made automatically |
-| **Head Admin** | Head Admin only | `#admin-chat`, `#bot-log` (everything the bot does, plus ticket transcripts), `#siege-control` (the siege control panel), `#legion-control` (the Legion control panel) |
+| **Tickets** | Head Admin and Officers; each ticket is also open to the people in it | one private channel per open application, made automatically |
+| **Head Admin** | Head Admin only | `#admin-chat`, `#bot-log` (everything the bot does, plus ticket transcripts), `#siege-control` (the siege control panel), `#legion-control` (the Legion control panel), `#admin-tools` (rules, announcements, manual Legions) |
 
-Roles: **Head Admin**, **Legion Commander**, **Legion Member**, **Faction
+Roles: **Head Admin**, **Officer** (helps with tickets), **Legion Commander**, **Legion Member**, **Faction
 Commander** (held by the elected shot caller during a siege), **Siege Alerts**
 (opt-in, for reminder pings), and one
 **Legion: Name** role per approved Legion.
@@ -51,11 +51,17 @@ their Legion's role, which opens Asmodian Command and their Legion's channel.
 
 **Rules for everyone:**
 - One open application at a time, and one Legion per person.
+- After a **denial**, the applicant waits **24 hours** before applying again (the Head
+  Admin can lift this). Denials the bot makes itself, when a Legion is disbanded,
+  don't count.
+- A ticket still waiting gets a **reminder** 24 hours after it opened, then daily,
+  pinging whoever still has to approve.
+- **Officers** see every ticket, can talk in it and close it, but can't approve or deny.
 - Nobody can approve their own application.
 - A denial can carry a reason. The applicant is told in the ticket and by DM
   (if their DMs are open), and may apply again.
 - After a decision the ticket goes read-only for the applicant and commander.
-  The Head Admin's **Close ticket** button posts a transcript to `#bot-log`
+  The Head Admin's (or an Officer's) **Close ticket** button posts a transcript to `#bot-log`
   and deletes the ticket channel.
 - Every button keeps working after the bot restarts.
 
@@ -138,6 +144,18 @@ the commander asked for, and the bot **warns** (but allows it) when a color is
 very close to another Legion's. Pure black counts as "no color" in Discord, so
 the bot uses #010101 instead.
 
+## Head Admin tools
+
+The panel in `#admin-tools` (Head Admin only):
+
+| Button | What it does |
+|---|---|
+| 📜 **Edit rules** | Opens the current rules in a text box. Saving replaces the one rules message in `#rules`. |
+| 📣 **Post announcement** | Title and message, then a preview: post to `#announcements` **with a ping** (Legion Commander + Legion Member roles) or **without**, or cancel. |
+| 🛡️ **Create a Legion** | Pick the commander, then name and color. The Legion is made at once (role, channel, panel), with no ticket. |
+| ➕ **Add a member** | Pick a Legion and a person: they join it at once, with no ticket. Not for someone already in a Legion or with an application waiting. |
+| ⏳ **Lift a cooldown** | Lets someone who was denied apply again before the 24 hours are up. |
+
 ## Managing Legions
 
 Each Legion's private channel has a management panel for its **commander**, and
@@ -165,6 +183,7 @@ Automatic:
 | Command | Who | What it does |
 |---|---|---|
 | `/setup server` | Head Admin | Creates the roles, categories and channels from `layout.py`, and posts the apply buttons. |
+| `/help` | anyone | How the server works (the same guide as `#how-it-works`), shown only to you. |
 | `/legion list` | anyone | Lists approved Legions, their commanders and how many are approved in each. |
 
 ### `/setup server`
@@ -219,6 +238,10 @@ Automatic:
 | `alerts.py` | Siege reminders and the Siege Alerts on/off button. |
 | `controls.py` | The Head Admin siege control panel. |
 | `legions.py` | Legion management panels, and cleanup when people leave the server. |
+| `guide.py` | The `#how-it-works` guide and `/help`. |
+| `admin_tools.py` | The Head Admin tools panel: rules, announcements, manual Legions, cooldowns. |
+| `colors.py` | Legion colors: RGB and brightness. |
+| `ui_errors.py` | Turns a failed button or form into a message for the person. |
 | `roles.py` | Finding roles by name; the bot's own channel permissions. |
 | `storage.py` | The SQLite database (`aion2.db`, or the path in `AION2_DB`). |
 

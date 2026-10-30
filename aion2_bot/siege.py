@@ -38,6 +38,7 @@ import re
 import discord
 
 import alerts
+import applications
 import layout
 import roles
 import schedule
@@ -671,4 +672,9 @@ async def run_loop(client: discord.Client, store: Store) -> None:
                 await tick_guild(guild, store, now)
             except Exception:
                 log.exception("Siege tick failed in %s", guild.id)
+            try:
+                # Ticket reminders ride the same once-a-minute loop.
+                await applications.remind_tick(guild, store, now)
+            except Exception:
+                log.exception("Ticket reminders failed in %s", guild.id)
         await asyncio.sleep(60 - schedule.now_utc().second + 0.5)

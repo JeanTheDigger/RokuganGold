@@ -110,6 +110,37 @@ async def remove_member(guild: discord.Guild, store: Store, legion: Legion, user
     return text
 
 
+def _cannot_add(guild: discord.Guild, store: Store, user_id: int) -> str | None:
+    member = guild.get_member(user_id)
+    if member is None or member.bot:
+        return "Pick a person who is on the server."
+    if store.membership(guild.id, user_id) is not None:
+        return f"<@{user_id}> already belongs to a Legion."
+    pending = store.open_application_for(guild.id, user_id)
+    if pending is not None:
+        return (f"<@{user_id}> has an application waiting in <#{pending.channel_id}>; decide that "
+                "instead.")
+    return None
+
+
+async def add_member(guild: discord.Guild, store: Store, legion: Legion, user_id: int) -> str:
+    """Head Admin tool: put someone straight into a Legion, no ticket."""
+    problem = _cannot_add(guild, store, user_id)
+    if problem:
+        return problem
+    member = guild.get_member(user_id)
+    assert member is not None
+    give = [r for r in (roles.find_role(guild, layout.MEMBER_ROLE), guild.get_role(legion.role_id or 0))
+            if r is not None]
+    await member.add_roles(*give, reason=f"Added to Legion {legion.name} by the Head Admin")
+    store.add_member(guild.id, user_id, legion.id)
+    text = f"➕ <@{user_id}> was added to **{legion.name}** by the Head Admin."
+    await _legion_channel_say(guild, legion, f"Welcome to **{legion.name}**, <@{user_id}>.")
+    await applications.bot_log(guild, store, text)
+    await applications.dm(member, f"**{guild.name}**: the Head Admin added you to the Legion **{legion.name}**.")
+    return text
+
+
 async def transfer(guild: discord.Guild, store: Store, legion: Legion, new_id: int, why: str) -> str:
     membership = store.membership(guild.id, new_id)
     if membership is None or membership.legion_id != legion.id:
@@ -424,8 +455,14 @@ async def start_action(interaction: discord.Interaction, legion_id: int, action:
     checked = await _check(interaction, legion_id)
     if checked is None:
         return
-    _, _, legion = checked
-    if action == "rename":
+    _, actor, legion = checked
+    if action == "add":
+        # Head Admin tool only (not on the commander's panel): add someone without a ticket.
+        if not roles.is_head_admin(actor):
+            await _reply(interaction, "Only the Head Admin can add members directly.")
+            return
+        await _reply(interaction, f"Who should join **{legion.name}**?", MemberPicker(legion_id, "add"))
+    elif action == "rename":
         await interaction.response.send_modal(RenameModal(legion))
     elif action == "color":
         await interaction.response.send_modal(ColorModal(legion))
@@ -450,7 +487,16 @@ class MemberPicker(SafeView):
             return
         guild, _, legion = checked
         target_id = select.values[0].id
-        membership = store_of(interaction).membership(guild.id, target_id)
+        store = store_of(interaction)
+        membership = store.membership(guild.id, target_id)
+        if self.action == "add":
+            problem = _cannot_add(guild, store, target_id)
+            if problem:
+                await _reply(interaction, problem)
+                return
+            await _reply(interaction, f"Add <@{target_id}> to **{legion.name}** as a member, without a ticket?",
+                         Confirm(self.legion_id, "add", target_id))
+            return
         if membership is None or membership.legion_id != legion.id:
             await _reply(interaction, f"<@{target_id}> isn't a member of **{legion.name}**.")
             return
@@ -490,6 +536,9 @@ class Confirm(SafeView):
             elif self.action == "transfer":
                 assert self.target_id is not None
                 text = await transfer(guild, store, legion, self.target_id, why)
+            elif self.action == "add":
+                assert self.target_id is not None
+                text = await add_member(guild, store, legion, self.target_id)
             else:
                 text = await disband(guild, store, legion, why)
         await _reply(interaction, text)
