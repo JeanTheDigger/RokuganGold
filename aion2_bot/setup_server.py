@@ -21,6 +21,7 @@ from dataclasses import dataclass
 import discord
 from discord import app_commands
 
+import alerts
 import applications
 import layout
 import roles
@@ -172,10 +173,12 @@ async def _ensure_roles(
     if head_admin is None:
         head_admin = await _create_head_admin(guild, owner, notes)
     found: list[discord.Role] = []
-    for name in (layout.COMMANDER_ROLE, layout.MEMBER_ROLE, layout.FACTION_COMMANDER_ROLE):
+    for name in (layout.COMMANDER_ROLE, layout.MEMBER_ROLE, layout.FACTION_COMMANDER_ROLE,
+                 layout.SIEGE_ALERTS_ROLE):
         role = roles.find_role(guild, name)
         if role is None:
-            role = await guild.create_role(name=name, hoist=True, reason=REASON)
+            # Rank roles show as their own group in the member list; the opt-in alerts role doesn't.
+            role = await guild.create_role(name=name, hoist=name != layout.SIEGE_ALERTS_ROLE, reason=REASON)
             notes.append(f"Created the **{name}** role.")
         found.append(role)
     return ServerRoles(head_admin=head_admin, commander=found[0], member=found[1],
@@ -216,6 +219,8 @@ def _missing_bot_permissions(guild: discord.Guild) -> list[str]:
         ("Connect", perms.connect), ("Create Public Threads", perms.create_public_threads),
         ("Create Private Threads", perms.create_private_threads),
         ("Send Messages in Threads", perms.send_messages_in_threads),
+        # Pings the Siege Alerts role without making it pingable by everyone.
+        ("Mention @everyone, @here and All Roles", perms.mention_everyone),
     )
     return [name for name, ok in needed if not ok]
 
@@ -303,6 +308,7 @@ async def setup_server(interaction: discord.Interaction) -> None:
             created, existing = await build_layout(guild, server_roles, store)
             notes += await applications.ensure_panels(guild, store)
             notes += await siege.ensure_messages(guild, store)
+            notes += await alerts.ensure_panel(guild, store)
     except discord.Forbidden as exc:
         log.warning("Setup forbidden in %s: %s", guild.id, exc)
         await interaction.followup.send(
@@ -310,7 +316,7 @@ async def setup_server(interaction: discord.Interaction) -> None:
             "Anything created before that point was kept. Check that the bot's role has the "
             "permissions above and sits **above** the "
             f"**{layout.HEAD_ADMIN_ROLE}**, **{layout.COMMANDER_ROLE}**, **{layout.MEMBER_ROLE}** and "
-            f"**{layout.FACTION_COMMANDER_ROLE}** roles in **Server Settings → Roles**, then run `/setup server` again: it picks up "
+            f"**{layout.FACTION_COMMANDER_ROLE}**, **{layout.SIEGE_ALERTS_ROLE}** roles in **Server Settings → Roles**, then run `/setup server` again: it picks up "
             "where it stopped.",
             ephemeral=True,
         )

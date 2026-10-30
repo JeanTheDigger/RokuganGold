@@ -13,6 +13,7 @@ import sys
 import discord
 from discord import app_commands
 
+import alerts
 import applications
 import layout
 import setup_server
@@ -54,6 +55,7 @@ class Aion2Bot(discord.Client):
         self.add_dynamic_items(applications.TicketButton)
         self.add_view(siege.ApplyPanel())
         self.add_dynamic_items(siege.VoteSelect)
+        self.add_view(alerts.AlertsPanel())
         # Siege countdown + Faction Commander election, once a minute.
         self.siege_task = asyncio.create_task(siege.run_loop(self, self.store))
         # With DISCORD_GUILD_ID set, commands go to that one server and appear

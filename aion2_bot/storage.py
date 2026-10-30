@@ -82,6 +82,14 @@ CREATE TABLE IF NOT EXISTS votes (
     voted_at     TEXT    NOT NULL,
     PRIMARY KEY (election_id, voter_id)       -- one vote per person, final
 );
+-- Siege reminders already sent, so each goes out once.
+CREATE TABLE IF NOT EXISTS alerts_sent (
+    guild_id    INTEGER NOT NULL,
+    siege_start TEXT    NOT NULL,
+    kind        TEXT    NOT NULL,
+    sent_at     TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, siege_start, kind)
+);
 """
 
 
@@ -377,6 +385,16 @@ class Store:
             "SELECT candidate_id FROM votes WHERE election_id = ? AND voter_id = ?", (election_id, voter_id)
         ).fetchone()
         return int(row["candidate_id"]) if row else None
+
+    def mark_alert(self, guild_id: int, siege: datetime.datetime, kind: str) -> bool:
+        """Record a reminder as sent. False if it already was."""
+        key = siege.astimezone(datetime.timezone.utc).isoformat()
+        with self.db:
+            cur = self.db.execute(
+                "INSERT OR IGNORE INTO alerts_sent (guild_id, siege_start, kind, sent_at) VALUES (?, ?, ?, ?)",
+                (guild_id, key, kind, _now()),
+            )
+        return cur.rowcount == 1
 
     def tally(self, election_id: int) -> dict[int, int]:
         """Votes per candidate (only candidates with at least one vote)."""

@@ -17,13 +17,14 @@ countdown and a Faction Commander election for every siege.
 | Category | Who sees it | Channels |
 |---|---|---|
 | **Welcome** | everyone, including people with no role | `#arrivals` (read-only: the bot posts "**Name** entered the server."), `#chat` (anyone can talk), `#commander-applications` and `#member-applications` (read-only, each holds an apply button) |
-| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#general`, `#questions`, `#memes`, `#screenshots`; `#siege-timer` and `#faction-commander` (only the bot posts) |
+| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#general`, `#questions`, `#memes`, `#screenshots`; `#siege-timer`, `#faction-commander` and `#siege-alerts` (only the bot posts) |
 | **Legions** | Head Admin; each Legion's channel is also open to that Legion | one private channel per approved Legion, made automatically |
 | **Tickets** | Head Admin; each ticket is also open to the people in it | one private channel per open application, made automatically |
 | **Head Admin** | Head Admin only | `#admin-chat`, `#bot-log` (everything the bot does, plus ticket transcripts) |
 
 Roles: **Head Admin**, **Legion Commander**, **Legion Member**, **Faction
-Commander** (held by the elected shot caller during a siege), and one
+Commander** (held by the elected shot caller during a siege), **Siege Alerts**
+(opt-in, for reminder pings), and one
 **Legion: Name** role per approved Legion.
 
 ## How applications work
@@ -87,6 +88,21 @@ For the Monday / Thursday / Saturday sieges that means:
 A background loop drives this once a minute. If the bot was offline when a step
 was due, it does that step as soon as it is back.
 
+**`#siege-alerts`** pings the opt-in **Siege Alerts** role. People turn it on or
+off with the button at the top of the channel. Each siege it posts:
+
+| When (for a 9 PM siege) | Reminder |
+|---|---|
+| 9 PM the day before | The Faction Commander vote is open (only if someone applied). |
+| 6:30 PM | 2 hours left to vote (only if the vote is open). |
+| 8:00 PM | Siege in 1 hour, plus a last call to vote. |
+| 8:30 PM | Siege in 30 minutes, and who the Faction Commander is. |
+| 8:45 PM | Siege in 15 minutes. |
+| 9:00 PM | The siege has begun. |
+
+Each reminder goes out once. If the bot was offline and a reminder is more than
+5 minutes late, it is skipped rather than posted stale.
+
 ## Commands
 
 | Command | Who | What it does |
@@ -119,8 +135,9 @@ was due, it does that step as soon as it is back.
 2. **Invite it:** OAuth2 → URL Generator → scopes `bot` and `applications.commands`,
    permission **Administrator**. Open the URL and pick your server. In
    **Server Settings → Roles**, keep the bot's role **above** Head Admin, Legion
-   Commander, Legion Member, Faction Commander and the Legion roles, or it can't
-   hand them out.
+   Commander, Legion Member, Faction Commander, Siege Alerts and the Legion roles,
+   or it can't hand them out. Administrator also lets it ping Siege Alerts without
+   making that role pingable by everyone.
 3. **Configure:** copy `.env.example` to `.env` and paste the token. Optionally
    set `DISCORD_GUILD_ID` to your server's ID so commands appear instantly.
 4. **Run** (Python 3.10+):
@@ -140,6 +157,7 @@ was due, it does that step as soon as it is back.
 | `applications.py` | Apply buttons, forms, tickets, approvals, `/legion list`. |
 | `schedule.py` | The siege calendar: days, time, time zone, and when each election step happens. |
 | `siege.py` | The countdown, Faction Commander applications, the vote and the role. |
+| `alerts.py` | Siege reminders and the Siege Alerts on/off button. |
 | `roles.py` | Finding roles by name; the bot's own channel permissions. |
 | `storage.py` | The SQLite database (`aion2.db`, or the path in `AION2_DB`). |
 

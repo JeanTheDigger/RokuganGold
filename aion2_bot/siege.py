@@ -30,6 +30,7 @@ import re
 
 import discord
 
+import alerts
 import layout
 import roles
 import schedule
@@ -446,6 +447,7 @@ async def tick_guild(guild: discord.Guild, store: Store, now: dt.datetime) -> No
             e = store.election_for(guild.id, current, create=True)
             assert e is not None
             await advance(guild, store, e, now)
+        await alerts.tick(guild, store, now)
     await ensure_messages(guild, store)
 
 

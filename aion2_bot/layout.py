@@ -28,6 +28,8 @@ COMMANDER_ROLE = "Legion Commander"
 MEMBER_ROLE = "Legion Member"
 # Held by the elected Faction Commander for one siege (see siege.py).
 FACTION_COMMANDER_ROLE = "Faction Commander"
+# Opt-in role pinged by siege reminders (see alerts.py).
+SIEGE_ALERTS_ROLE = "Siege Alerts"
 # Each approved Legion gets its own role, named this prefix + the Legion's name.
 LEGION_ROLE_PREFIX = "Legion: "
 
@@ -49,8 +51,9 @@ TICKETS = "tickets"                  # category: one private channel per open ap
 LEGIONS = "legions"                  # category: one private channel per approved Legion
 SIEGE_TIMER = "siege_timer"          # the next-siege countdown, edited every minute
 ELECTION = "election"                # Faction Commander applications, polls and results
+SIEGE_ALERTS = "siege_alerts"        # siege reminders pinging the Siege Alerts role
 
-CHANNEL_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, BOT_LOG, SIEGE_TIMER, ELECTION)
+CHANNEL_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, BOT_LOG, SIEGE_TIMER, ELECTION, SIEGE_ALERTS)
 CATEGORY_PURPOSES = (TICKETS, LEGIONS)
 
 
@@ -91,6 +94,8 @@ LAYOUT: tuple[Category, ...] = (
                 topic="When the next Artifact Siege starts. Updated every minute."),
         Channel("faction-commander", access=APPROVED_BOT_ONLY, purpose=ELECTION,
                 topic="Apply to be Faction Commander for the next siege, and vote."),
+        Channel("siege-alerts", access=APPROVED_BOT_ONLY, purpose=SIEGE_ALERTS,
+                topic="Siege reminders. Turn pings on or off with the button."),
     )),
     Category("Legions", ADMIN, purpose=LEGIONS),
     Category("Tickets", ADMIN, purpose=TICKETS),
@@ -101,7 +106,8 @@ LAYOUT: tuple[Category, ...] = (
 )
 
 # Without these the bot cannot do its job, so setup refuses a layout missing one.
-REQUIRED_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, TICKETS, LEGIONS, SIEGE_TIMER, ELECTION)
+REQUIRED_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, TICKETS, LEGIONS, SIEGE_TIMER, ELECTION,
+                     SIEGE_ALERTS)
 
 
 def validate(layout: tuple[Category, ...] | None = None) -> list[str]:
