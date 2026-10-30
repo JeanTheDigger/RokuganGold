@@ -1,0 +1,6 @@
+# Aion 2 faction Discord bot: Python dependencies.
+# Install with:  pip install -r requirements.txt
+discord.py>=2.3,<3
+python-dotenv>=1.0
+# Time zone data for America/New_York (needed on Windows; harmless elsewhere).
+tzdata>=2024.1

@@ -1,0 +1,20 @@
+[Unit]
+Description=Aion 2 faction Discord bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aion2
+Group=aion2
+WorkingDirectory=/home/aion2/bot
+ExecStart=/home/aion2/bot/.venv/bin/python3 bot.py
+Restart=always
+RestartSec=10
+MemoryMax=512M
+TimeoutStopSec=10
+
+Environment=AION2_DB=/home/aion2/bot/aion2.db
+
+[Install]
+WantedBy=multi-user.target
