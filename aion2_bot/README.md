@@ -1,7 +1,8 @@
 # Aion 2 Discord Bot
 
 A Discord bot for an Asmodian faction Discord server in **Aion 2** (NCSoft's MMO):
-arrivals, and approval tickets for Legion commanders and Legion members.
+arrivals, approval tickets for Legion commanders and Legion members, a live siege
+countdown and a Faction Commander election for every siege.
 
 > **This folder is a completely separate project.** It shares no code with the
 > Godot / GDScript game in this repository, and none with the Rokugan L5R bot
@@ -16,12 +17,13 @@ arrivals, and approval tickets for Legion commanders and Legion members.
 | Category | Who sees it | Channels |
 |---|---|---|
 | **Welcome** | everyone, including people with no role | `#arrivals` (read-only: the bot posts "**Name** entered the server."), `#chat` (anyone can talk), `#commander-applications` and `#member-applications` (read-only, each holds an apply button) |
-| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#general`, `#questions`, `#memes`, `#screenshots`; PvP/siege channels to come |
+| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#general`, `#questions`, `#memes`, `#screenshots`; `#siege-timer` and `#faction-commander` (only the bot posts) |
 | **Legions** | Head Admin; each Legion's channel is also open to that Legion | one private channel per approved Legion, made automatically |
 | **Tickets** | Head Admin; each ticket is also open to the people in it | one private channel per open application, made automatically |
 | **Head Admin** | Head Admin only | `#admin-chat`, `#bot-log` (everything the bot does, plus ticket transcripts) |
 
-Roles: **Head Admin**, **Legion Commander**, **Legion Member**, and one
+Roles: **Head Admin**, **Legion Commander**, **Legion Member**, **Faction
+Commander** (held by the elected shot caller during a siege), and one
 **Legion: Name** role per approved Legion.
 
 ## How applications work
@@ -52,6 +54,38 @@ their Legion's role, which opens Asmodian Command and their Legion's channel.
   The Head Admin's **Close ticket** button posts a transcript to `#bot-log`
   and deletes the ticket channel.
 - Every button keeps working after the bot restarts.
+
+## Sieges and the Faction Commander
+
+Artifact Sieges run **Monday, Thursday and Saturday at 9 PM Eastern**
+(New York time, so it follows daylight saving). The schedule and every
+duration below are constants at the top of `schedule.py`.
+
+**`#siege-timer`** holds one message that says when the next siege starts,
+in Eastern time and in each reader's own time zone, with a countdown. The bot
+edits it every minute. During a siege it also shows that the siege is underway
+and who the Faction Commander is.
+
+**`#faction-commander`** runs one election per siege, all on its own:
+
+| When (for a 9 PM siege) | What happens |
+|---|---|
+| 11 PM after the previous siege (when the previous Faction Commander's term ends) | Applications open. Any approved person (Legion Commander, Legion Member or Head Admin) clicks **Apply**, and can **Withdraw** until the poll opens. Up to 25 applicants. |
+| 9 PM the day before (24 h before) | Applications close and the vote opens: a menu with every applicant's name. Each approved person votes **once**, for anyone, themselves included. Votes are **final**. Counts stay hidden until the end. |
+| 8:30 PM (30 min before) | Voting ends. Most votes wins, and a tie is broken at random among the tied. The winner gets the **Faction Commander** role. If nobody applied or nobody voted, there is no Faction Commander for that siege. |
+| 11 PM (2 h after the start) | The role is removed and applications for the next siege open. |
+
+For the Monday / Thursday / Saturday sieges that means:
+
+| | Monday siege | Thursday siege | Saturday siege |
+|---|---|---|---|
+| Applications open | Sat 11 PM | Mon 11 PM | Thu 11 PM |
+| Vote opens | Sun 9 PM | Wed 9 PM | Fri 9 PM |
+| Vote closes, role given | Mon 8:30 PM | Thu 8:30 PM | Sat 8:30 PM |
+| Role removed | Mon 11 PM | Thu 11 PM | Sat 11 PM |
+
+A background loop drives this once a minute. If the bot was offline when a step
+was due, it does that step as soon as it is back.
 
 ## Commands
 
@@ -85,7 +119,8 @@ their Legion's role, which opens Asmodian Command and their Legion's channel.
 2. **Invite it:** OAuth2 → URL Generator → scopes `bot` and `applications.commands`,
    permission **Administrator**. Open the URL and pick your server. In
    **Server Settings → Roles**, keep the bot's role **above** Head Admin, Legion
-   Commander, Legion Member and the Legion roles, or it can't hand them out.
+   Commander, Legion Member, Faction Commander and the Legion roles, or it can't
+   hand them out.
 3. **Configure:** copy `.env.example` to `.env` and paste the token. Optionally
    set `DISCORD_GUILD_ID` to your server's ID so commands appear instantly.
 4. **Run** (Python 3.10+):
@@ -103,6 +138,8 @@ their Legion's role, which opens Asmodian Command and their Legion's channel.
 | `layout.py` | The roles/categories/channels setup builds. Edit this to change the server. |
 | `setup_server.py` | The `/setup server` command. |
 | `applications.py` | Apply buttons, forms, tickets, approvals, `/legion list`. |
+| `schedule.py` | The siege calendar: days, time, time zone, and when each election step happens. |
+| `siege.py` | The countdown, Faction Commander applications, the vote and the role. |
 | `roles.py` | Finding roles by name; the bot's own channel permissions. |
 | `storage.py` | The SQLite database (`aion2.db`, or the path in `AION2_DB`). |
 
@@ -110,6 +147,10 @@ their Legion's role, which opens Asmodian Command and their Legion's channel.
 
 - Discord allows 50 channels per category, so at most 50 approved Legions and
   50 open tickets at once.
+- Discord lets anyone with **Administrator** (Head Admin, by default) post
+  anywhere, including the bot-only channels.
+- The siege schedule comes from community trackers, not NCSoft. If the game
+  changes it, edit `schedule.py`.
 - There are no commands yet to remove a member from a Legion, change a Legion's
   commander or delete a Legion. The bot remembers memberships even if someone
   leaves the server.

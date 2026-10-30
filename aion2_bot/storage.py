@@ -56,6 +56,32 @@ CREATE TABLE IF NOT EXISTS applications (
     decided_at            TEXT,
     closed_at             TEXT
 );
+-- One Faction Commander election per siege.
+CREATE TABLE IF NOT EXISTS elections (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id        INTEGER NOT NULL,
+    siege_start     TEXT    NOT NULL,       -- UTC ISO timestamp
+    status          TEXT    NOT NULL DEFAULT 'collecting'
+                            CHECK (status IN ('collecting', 'polling', 'decided', 'finished')),
+    poll_message_id INTEGER,
+    winner_id       INTEGER,
+    outcome         TEXT    NOT NULL DEFAULT '',  -- 'won', 'no_applicants', 'no_votes'
+    created_at      TEXT    NOT NULL,
+    UNIQUE (guild_id, siege_start)
+);
+CREATE TABLE IF NOT EXISTS candidates (
+    election_id INTEGER NOT NULL REFERENCES elections (id),
+    user_id     INTEGER NOT NULL,
+    applied_at  TEXT    NOT NULL,
+    PRIMARY KEY (election_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS votes (
+    election_id  INTEGER NOT NULL REFERENCES elections (id),
+    voter_id     INTEGER NOT NULL,
+    candidate_id INTEGER NOT NULL,
+    voted_at     TEXT    NOT NULL,
+    PRIMARY KEY (election_id, voter_id)       -- one vote per person, final
+);
 """
 
 
@@ -103,6 +129,22 @@ class Application:
     created_at: str
     decided_at: str | None
     closed_at: str | None
+
+
+@dataclass(frozen=True)
+class Election:
+    id: int
+    guild_id: int
+    siege_start: str
+    status: str
+    poll_message_id: int | None
+    winner_id: int | None
+    outcome: str
+    created_at: str
+
+    @property
+    def siege(self) -> datetime.datetime:
+        return datetime.datetime.fromisoformat(self.siege_start)
 
 
 class Store:
@@ -258,3 +300,88 @@ class Store:
 
     def mark_closed(self, app_id: int) -> None:
         self.update_application(app_id, closed_at=_now())
+
+    # --- elections --------------------------------------------------------
+    def election_for(self, guild_id: int, siege: datetime.datetime, create: bool = False) -> Election | None:
+        key = siege.astimezone(datetime.timezone.utc).isoformat()
+        if create:
+            with self.db:
+                self.db.execute(
+                    "INSERT OR IGNORE INTO elections (guild_id, siege_start, created_at) VALUES (?, ?, ?)",
+                    (guild_id, key, _now()),
+                )
+        row = self.db.execute(
+            "SELECT * FROM elections WHERE guild_id = ? AND siege_start = ?", (guild_id, key)
+        ).fetchone()
+        return Election(**dict(row)) if row else None
+
+    def get_election(self, election_id: int) -> Election | None:
+        row = self.db.execute("SELECT * FROM elections WHERE id = ?", (election_id,)).fetchone()
+        return Election(**dict(row)) if row else None
+
+    def unfinished_elections(self, guild_id: int) -> list[Election]:
+        rows = self.db.execute(
+            "SELECT * FROM elections WHERE guild_id = ? AND status != 'finished' ORDER BY siege_start",
+            (guild_id,),
+        ).fetchall()
+        return [Election(**dict(r)) for r in rows]
+
+    def update_election(self, election_id: int, **fields: object) -> Election:
+        allowed = {"status", "poll_message_id", "winner_id", "outcome"}
+        bad = set(fields) - allowed
+        if bad:
+            raise ValueError(f"Not updatable: {sorted(bad)}")
+        cols = ", ".join(f"{k} = ?" for k in fields)
+        with self.db:
+            self.db.execute(f"UPDATE elections SET {cols} WHERE id = ?", (*fields.values(), election_id))
+        election = self.get_election(election_id)
+        assert election is not None
+        return election
+
+    def candidates(self, election_id: int) -> list[int]:
+        """Applicants' user IDs, in the order they applied."""
+        rows = self.db.execute(
+            "SELECT user_id FROM candidates WHERE election_id = ? ORDER BY applied_at, rowid",
+            (election_id,),
+        ).fetchall()
+        return [int(r["user_id"]) for r in rows]
+
+    def add_candidate(self, election_id: int, user_id: int) -> bool:
+        """False if they had already applied."""
+        with self.db:
+            cur = self.db.execute(
+                "INSERT OR IGNORE INTO candidates (election_id, user_id, applied_at) VALUES (?, ?, ?)",
+                (election_id, user_id, _now()),
+            )
+        return cur.rowcount == 1
+
+    def remove_candidate(self, election_id: int, user_id: int) -> bool:
+        with self.db:
+            cur = self.db.execute(
+                "DELETE FROM candidates WHERE election_id = ? AND user_id = ?", (election_id, user_id)
+            )
+        return cur.rowcount == 1
+
+    def cast_vote(self, election_id: int, voter_id: int, candidate_id: int) -> bool:
+        """False if this person already voted (votes are final)."""
+        with self.db:
+            cur = self.db.execute(
+                "INSERT OR IGNORE INTO votes (election_id, voter_id, candidate_id, voted_at) "
+                "VALUES (?, ?, ?, ?)",
+                (election_id, voter_id, candidate_id, _now()),
+            )
+        return cur.rowcount == 1
+
+    def vote_of(self, election_id: int, voter_id: int) -> int | None:
+        row = self.db.execute(
+            "SELECT candidate_id FROM votes WHERE election_id = ? AND voter_id = ?", (election_id, voter_id)
+        ).fetchone()
+        return int(row["candidate_id"]) if row else None
+
+    def tally(self, election_id: int) -> dict[int, int]:
+        """Votes per candidate (only candidates with at least one vote)."""
+        rows = self.db.execute(
+            "SELECT candidate_id, COUNT(*) AS n FROM votes WHERE election_id = ? GROUP BY candidate_id",
+            (election_id,),
+        ).fetchall()
+        return {int(r["candidate_id"]): int(r["n"]) for r in rows}

@@ -24,7 +24,8 @@ from discord import app_commands
 import applications
 import layout
 import roles
-from layout import ADMIN, APPROVED, PUBLIC, READ_ONLY, Category, Channel
+import siege
+from layout import ADMIN, APPROVED, APPROVED_BOT_ONLY, PUBLIC, READ_ONLY, Category, Channel
 from storage import Store
 
 log = logging.getLogger("aion2_bot.setup")
@@ -42,6 +43,7 @@ class ServerRoles:
     head_admin: discord.Role
     commander: discord.Role
     member: discord.Role
+    faction_commander: discord.Role
 
 
 def overwrites_for(access: str, guild: discord.Guild, r: ServerRoles) -> Overwrites:
@@ -65,6 +67,21 @@ def overwrites_for(access: str, guild: discord.Guild, r: ServerRoles) -> Overwri
             r.commander: seen,
             r.member: seen,
             r.head_admin: seen,
+            bot: roles.bot_overwrite(),
+        }
+    if access == APPROVED_BOT_ONLY:
+        # Only the bot posts. (Members with Administrator, like Head Admin by
+        # default, bypass channel permissions in Discord and can still post.)
+        read = discord.PermissionOverwrite(
+            view_channel=True, read_message_history=True, send_messages=False,
+            create_public_threads=False, create_private_threads=False,
+            send_messages_in_threads=False,
+        )
+        return {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            r.commander: read,
+            r.member: read,
+            r.head_admin: read,
             bot: roles.bot_overwrite(),
         }
     if access == ADMIN:
@@ -155,13 +172,14 @@ async def _ensure_roles(
     if head_admin is None:
         head_admin = await _create_head_admin(guild, owner, notes)
     found: list[discord.Role] = []
-    for name in (layout.COMMANDER_ROLE, layout.MEMBER_ROLE):
+    for name in (layout.COMMANDER_ROLE, layout.MEMBER_ROLE, layout.FACTION_COMMANDER_ROLE):
         role = roles.find_role(guild, name)
         if role is None:
             role = await guild.create_role(name=name, hoist=True, reason=REASON)
             notes.append(f"Created the **{name}** role.")
         found.append(role)
-    return ServerRoles(head_admin=head_admin, commander=found[0], member=found[1])
+    return ServerRoles(head_admin=head_admin, commander=found[0], member=found[1],
+                       faction_commander=found[2])
 
 
 async def _create_head_admin(guild: discord.Guild, owner: discord.Member, notes: list[str]) -> discord.Role:
@@ -284,14 +302,15 @@ async def setup_server(interaction: discord.Interaction) -> None:
             server_roles = await _ensure_roles(guild, member, head_admin, notes)
             created, existing = await build_layout(guild, server_roles, store)
             notes += await applications.ensure_panels(guild, store)
+            notes += await siege.ensure_messages(guild, store)
     except discord.Forbidden as exc:
         log.warning("Setup forbidden in %s: %s", guild.id, exc)
         await interaction.followup.send(
             f"Discord refused one of the bot's actions: `{exc.text}`\n"
             "Anything created before that point was kept. Check that the bot's role has the "
             "permissions above and sits **above** the "
-            f"**{layout.HEAD_ADMIN_ROLE}**, **{layout.COMMANDER_ROLE}** and **{layout.MEMBER_ROLE}** "
-            "roles in **Server Settings → Roles**, then run `/setup server` again: it picks up "
+            f"**{layout.HEAD_ADMIN_ROLE}**, **{layout.COMMANDER_ROLE}**, **{layout.MEMBER_ROLE}** and "
+            f"**{layout.FACTION_COMMANDER_ROLE}** roles in **Server Settings → Roles**, then run `/setup server` again: it picks up "
             "where it stopped.",
             ephemeral=True,
         )

@@ -10,6 +10,7 @@ Access levels (set on a category; a channel may override its category's):
   PUBLIC     everyone can see and post, including people with no role.
   READ_ONLY  everyone can see; only Head Admin (and the bot) can post.
   APPROVED   only approved Legion commanders and members (and Head Admin).
+  APPROVED_BOT_ONLY  approved people can see it, but only the bot posts.
   ADMIN      only Head Admin (and the bot) can see it at all.
 """
 
@@ -25,15 +26,18 @@ HEAD_ADMIN_ROLE = "Head Admin"
 COMMANDER_ROLE = "Legion Commander"
 # Given to an approved Legion member.
 MEMBER_ROLE = "Legion Member"
+# Held by the elected Faction Commander for one siege (see siege.py).
+FACTION_COMMANDER_ROLE = "Faction Commander"
 # Each approved Legion gets its own role, named this prefix + the Legion's name.
 LEGION_ROLE_PREFIX = "Legion: "
 
 PUBLIC = "public"
 READ_ONLY = "read_only"
 APPROVED = "approved"
+APPROVED_BOT_ONLY = "approved_bot_only"
 ADMIN = "admin"
 
-Access = Literal["public", "read_only", "approved", "admin"]
+Access = Literal["public", "read_only", "approved", "approved_bot_only", "admin"]
 Kind = Literal["text", "voice"]
 
 # --- Purposes: what the bot uses a channel or category for ------------------
@@ -43,8 +47,10 @@ MEMBER_APPLY = "member_apply"        # holds the "Apply to a Legion" button
 BOT_LOG = "bot_log"                  # what the bot did; closed-ticket transcripts
 TICKETS = "tickets"                  # category: one private channel per open application
 LEGIONS = "legions"                  # category: one private channel per approved Legion
+SIEGE_TIMER = "siege_timer"          # the next-siege countdown, edited every minute
+ELECTION = "election"                # Faction Commander applications, polls and results
 
-CHANNEL_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, BOT_LOG)
+CHANNEL_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, BOT_LOG, SIEGE_TIMER, ELECTION)
 CATEGORY_PURPOSES = (TICKETS, LEGIONS)
 
 
@@ -75,13 +81,16 @@ LAYOUT: tuple[Category, ...] = (
         Channel("member-applications", access=READ_ONLY, purpose=MEMBER_APPLY,
                 topic="In an approved Legion? Apply here to join the server proper."),
     )),
-    # The category name is still a draft; the serious (PvP/siege) channels are to come.
-    # Artifact Siege: Monday, Thursday and Saturday (owner-confirmed); time zone TBD.
+    # The category name is still a draft. Siege times live in schedule.py.
     Category("Asmodian Command", APPROVED, (
         Channel("general", topic="Talk between approved commanders and Legion members."),
         Channel("questions", topic="Ask anything."),
         Channel("memes"),
         Channel("screenshots"),
+        Channel("siege-timer", access=APPROVED_BOT_ONLY, purpose=SIEGE_TIMER,
+                topic="When the next Artifact Siege starts. Updated every minute."),
+        Channel("faction-commander", access=APPROVED_BOT_ONLY, purpose=ELECTION,
+                topic="Apply to be Faction Commander for the next siege, and vote."),
     )),
     Category("Legions", ADMIN, purpose=LEGIONS),
     Category("Tickets", ADMIN, purpose=TICKETS),
@@ -92,7 +101,7 @@ LAYOUT: tuple[Category, ...] = (
 )
 
 # Without these the bot cannot do its job, so setup refuses a layout missing one.
-REQUIRED_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, TICKETS, LEGIONS)
+REQUIRED_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, TICKETS, LEGIONS, SIEGE_TIMER, ELECTION)
 
 
 def validate(layout: tuple[Category, ...] | None = None) -> list[str]:
