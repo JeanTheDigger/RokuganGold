@@ -59,7 +59,7 @@ their Legion's role, which opens Asmodian Command and their Legion's channel.
 - **Officers** see every ticket, can talk in it and close it, but can't approve or deny.
 - Nobody can approve their own application.
 - A denial can carry a reason. The applicant is told in the ticket and by DM
-  (if their DMs are open), and may apply again.
+  (if their DMs are open), and may apply again after the 24-hour cooldown.
 - After a decision the ticket goes read-only for the applicant and commander.
   The Head Admin's (or an Officer's) **Close ticket** button posts a transcript to `#bot-log`
   and deletes the ticket channel.
