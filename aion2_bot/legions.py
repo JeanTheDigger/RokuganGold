@@ -30,6 +30,7 @@ import re
 import discord
 
 import applications
+import colors
 import layout
 import roles
 import siege
@@ -156,6 +157,26 @@ async def transfer(guild: discord.Guild, store: Store, legion: Legion, new_id: i
     return text
 
 
+async def set_color(guild: discord.Guild, store: Store, legion: Legion, color: int | None, why: str) -> str:
+    """Recolor the Legion's role (None removes the color). Warns, doesn't refuse, if it's close to another's."""
+    role = guild.get_role(legion.role_id or 0)
+    if role is None:
+        return f"The **{roles.legion_role_name(legion.name)}** role is missing, so its color can't be set."
+    await role.edit(colour=discord.Colour(color or 0), reason=f"Legion {legion.name} color changed")
+    store.set_legion_color(legion.id, color)
+    updated = store.get_legion(legion.id)
+    if updated is not None:
+        await ensure_legion_panel(guild, store, updated)
+    text = (f"🎨 **{legion.name}** no longer has a color ({why})." if color is None else
+            f"🎨 **{legion.name}**'s color is now {colors.describe(color)} ({why}).")
+    await _legion_channel_say(guild, legion, text)
+    await applications.bot_log(guild, store, text)
+    near = colors.close_to(color, store.legion_colors(guild.id, exclude_id=legion.id))
+    if near:
+        text += f"\n⚠️ That's very close to the color of: {', '.join(near)}. Members may be hard to tell apart."
+    return text
+
+
 async def rename(guild: discord.Guild, store: Store, legion: Legion, new_name: str, why: str) -> str:
     clean = " ".join(new_name.split())
     if not clean:
@@ -248,6 +269,7 @@ ACTIONS = {
     "remove": ("Remove a member", discord.ButtonStyle.secondary, "🚪"),
     "transfer": ("Transfer command", discord.ButtonStyle.secondary, "👑"),
     "rename": ("Rename", discord.ButtonStyle.secondary, "✏️"),
+    "color": ("Change color", discord.ButtonStyle.secondary, "🎨"),
     "disband": ("Disband", discord.ButtonStyle.danger, "🏴"),
 }
 
@@ -255,13 +277,14 @@ ACTIONS = {
 def legion_panel_text(legion: Legion) -> str:
     return (f"## 🛡️ {legion.name}: Legion management\n"
             f"Commander: <@{legion.commander_id}>\n"
-            "The commander (or the Head Admin) can remove members, hand over command, rename or "
-            "disband the Legion with the buttons below.")
+            f"Color: {colors.describe(legion.color)}\n"
+            "The commander (or the Head Admin) can remove members, hand over command, rename, "
+            "change the Legion's color or disband it with the buttons below.")
 
 
 class LegionButton(
     discord.ui.DynamicItem[discord.ui.Button],
-    template=r"aion2:lg:(?P<legion_id>[0-9]+):(?P<action>remove|transfer|rename|disband)",
+    template=r"aion2:lg:(?P<legion_id>[0-9]+):(?P<action>remove|transfer|rename|color|disband)",
 ):
     def __init__(self, legion_id: int, action: str) -> None:
         label, style, emoji = ACTIONS[action]
@@ -404,6 +427,8 @@ async def start_action(interaction: discord.Interaction, legion_id: int, action:
     _, _, legion = checked
     if action == "rename":
         await interaction.response.send_modal(RenameModal(legion))
+    elif action == "color":
+        await interaction.response.send_modal(ColorModal(legion))
     elif action == "disband":
         await _reply(interaction, f"Disband **{legion.name}**? Everyone in it loses the Legion role and their "
                                   "approval, and its channel is deleted (a transcript goes to the bot log).",
@@ -491,6 +516,41 @@ class RenameModal(discord.ui.Modal, title="Rename Legion"):
                 return
             guild, actor, legion = checked
             text = await rename(guild, store, legion, str(self.name.value), _who(actor, legion))
+        await _reply(interaction, text)
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        await applications._form_failed(interaction, error)
+
+
+class ColorModal(discord.ui.Modal, title="Legion color"):
+    rgb = discord.ui.TextInput(
+        label="Red, Green, Blue (0-255 each)", max_length=20, required=False,
+        placeholder="e.g. 200, 30, 60. Leave blank to remove the color.",
+    )
+    brightness = discord.ui.TextInput(
+        label="Brightness, 0-100 (blank = 100)", max_length=4, required=False,
+        placeholder="100 = exact color, 50 = half as bright",
+    )
+
+    def __init__(self, legion: Legion) -> None:
+        super().__init__()
+        self.legion_id = legion.id
+        if legion.color is not None:
+            self.rgb.default = ", ".join(str(c) for c in colors.channels(legion.color))
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        color, problem = colors.parse(str(self.rgb.value or ""), str(self.brightness.value or ""))
+        if problem:
+            await _reply(interaction, f"{problem} Nothing was changed.")
+            return
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        store = store_of(interaction)
+        async with applications._lock:
+            checked = await _check(interaction, self.legion_id)
+            if checked is None:
+                return
+            guild, actor, legion = checked
+            text = await set_color(guild, store, legion, color, _who(actor, legion))
         await _reply(interaction, text)
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:

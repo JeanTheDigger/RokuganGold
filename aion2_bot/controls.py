@@ -101,7 +101,9 @@ def control_text(guild: discord.Guild, store: Store, now: dt.datetime) -> str:
         lines.append("**Election:** no applications yet")
     else:
         state = STATUS_TEXT[e.status]
-        if e.outcome in OUTCOME_TEXT:
+        if e.outcome == "skipped":
+            state = "skipped"
+        elif e.outcome in OUTCOME_TEXT:
             state += f" ({OUTCOME_TEXT[e.outcome]})"
         lines.append(f"**Election:** {state}, {len(store.candidates(e.id))} applicant(s)")
         lines.append(f"**Faction Commander:** {f'<@{e.winner_id}>' if e.winner_id else 'none'}")
@@ -283,7 +285,7 @@ class SkipPicker(SafeView):
         s = dt.datetime.fromisoformat(select.values[0])
         now_skipped = not store.is_skipped(guild.id, s)
         e = store.election_for(guild.id, s)
-        if not now_skipped and e is not None and e.status == "finished" and e.outcome == "skipped":
+        if not now_skipped and e is not None and e.outcome == "skipped":
             note = " Its vote was already cancelled, so it runs with no Faction Commander unless you appoint one."
         else:
             note = ""

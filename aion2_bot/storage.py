@@ -119,6 +119,7 @@ class Legion:
     role_id: int | None
     channel_id: int | None
     created_at: str
+    color: int | None = None   # the Legion role's color, 0xRRGGBB
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,7 @@ class Application:
     created_at: str
     decided_at: str | None
     closed_at: str | None
+    legion_color: int | None = None   # commander applications: the color asked for
 
 
 @dataclass(frozen=True)
@@ -174,7 +176,21 @@ class Store:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
         self.db.executescript(SCHEMA)
+        self._add_missing_columns()
         self.db.commit()
+
+    # Columns added after the first release; CREATE TABLE IF NOT EXISTS won't add
+    # them to a database that already exists.
+    LATER_COLUMNS = (
+        ("legions", "color", "INTEGER"),
+        ("applications", "legion_color", "INTEGER"),
+    )
+
+    def _add_missing_columns(self) -> None:
+        for table, column, decl in self.LATER_COLUMNS:
+            have = {r["name"] for r in self.db.execute(f"PRAGMA table_info({table})")}
+            if column not in have:
+                self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
     # --- config -----------------------------------------------------------
     def get_config(self, guild_id: int, key: str) -> str | None:
@@ -197,15 +213,16 @@ class Store:
 
     # --- legions ----------------------------------------------------------
     def create_legion(
-        self, guild_id: int, name: str, commander_id: int, role_id: int, channel_id: int
+        self, guild_id: int, name: str, commander_id: int, role_id: int, channel_id: int,
+        color: int | None = None,
     ) -> Legion:
         """Insert a Legion and its commander's membership in one transaction."""
         now = _now()
         with self.db:
             cur = self.db.execute(
-                "INSERT INTO legions (guild_id, name, commander_id, role_id, channel_id, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (guild_id, name, commander_id, role_id, channel_id, now),
+                "INSERT INTO legions (guild_id, name, commander_id, role_id, channel_id, created_at, color) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (guild_id, name, commander_id, role_id, channel_id, now, color),
             )
             legion_id = int(cur.lastrowid or 0)
             self.db.execute(
@@ -275,6 +292,15 @@ class Store:
             self.db.execute("UPDATE memberships SET rank = 'commander' WHERE legion_id = ? AND user_id = ?",
                             (legion_id, new_id))
 
+    def set_legion_color(self, legion_id: int, color: int | None) -> None:
+        with self.db:
+            self.db.execute("UPDATE legions SET color = ? WHERE id = ?", (color, legion_id))
+
+    def legion_colors(self, guild_id: int, exclude_id: int = 0) -> list[tuple[str, int]]:
+        """(name, color) of every other Legion that has a color."""
+        return [(lg.name, lg.color) for lg in self.list_legions(guild_id)
+                if lg.color is not None and lg.id != exclude_id]
+
     def rename_legion(self, legion_id: int, name: str) -> None:
         with self.db:
             self.db.execute("UPDATE legions SET name = ? WHERE id = ?", (name, legion_id))
@@ -301,12 +327,14 @@ class Store:
         about: str,
         legion_name: str | None = None,
         legion_id: int | None = None,
+        legion_color: int | None = None,
     ) -> Application:
         with self.db:
             cur = self.db.execute(
                 "INSERT INTO applications (guild_id, kind, applicant_id, character_name, about, "
-                "legion_name, legion_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (guild_id, kind, applicant_id, character_name, about, legion_name, legion_id, _now()),
+                "legion_name, legion_id, created_at, legion_color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (guild_id, kind, applicant_id, character_name, about, legion_name, legion_id, _now(),
+                 legion_color),
             )
         app = self.get_application(int(cur.lastrowid or 0))
         assert app is not None

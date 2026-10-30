@@ -604,7 +604,12 @@ async def cancel_poll(guild: discord.Guild, store: Store, e: Election, why: str)
 
 
 async def _apply_skip(guild: discord.Guild, store: Store, e: Election, now: dt.datetime) -> None:
-    """A skipped siege: stop its vote, take back its role, close it out."""
+    """A skipped siege: stop its vote and take back its role.
+
+    The election then sits as "decided, nobody, skipped" until the siege's term
+    would have ended, and ends the usual way, so the "applications for the next
+    siege are now open" notice still goes out on time.
+    """
     if e.status == "collecting" and now < schedule.poll_opens(e.siege):
         return  # may still be un-skipped before the vote would open
     if e.status == "polling":
@@ -613,7 +618,10 @@ async def _apply_skip(guild: discord.Guild, store: Store, e: Election, now: dt.d
     holder = guild.get_member(e.winner_id or 0)
     if role is not None and holder is not None and role in holder.roles:
         await holder.remove_roles(role, reason="Siege skipped by the Head Admin")
-    store.update_election(e.id, status="finished", outcome="skipped")
+    if not (e.status == "decided" and e.outcome == "skipped" and e.winner_id is None):
+        e = store.update_election(e.id, status="decided", winner_id=None, outcome="skipped")
+    if now >= schedule.term_ends(e.siege):
+        await _end_term(guild, store, e)
 
 
 async def advance(guild: discord.Guild, store: Store, e: Election, now: dt.datetime) -> None:

@@ -32,7 +32,9 @@ Commander** (held by the elected shot caller during a siege), **Siege Alerts**
 
 **Legion commander.** In `#commander-applications`, click **Apply as Legion
 Commander** and fill in your character name, the name of the Legion you lead,
-and who you are. A private ticket opens with you and the Head Admin. Only the
+who you are, and optionally your **Legion's color**: Red, Green and Blue (0–255
+each, like `200, 30, 60`) and a brightness from 0 to 100% (100% is the exact
+color, lower is darker). A private ticket opens with you and the Head Admin. Only the
 Head Admin can approve or deny. Approving approves **the commander and the
 Legion together**: the Legion gets its **Legion: Name** role and private
 channel, the commander gets **Legion Commander** + that role, and the Legion
@@ -75,7 +77,7 @@ and who the Faction Commander is.
 | 11 PM after the previous siege (when the previous Faction Commander's term ends) | Applications open. Any approved person (Legion Commander, Legion Member or Head Admin) clicks **Apply**, and can **Withdraw** until the poll opens. Up to 25 applicants. |
 | 9 PM the day before (24 h before) | Applications close and the vote opens: a menu with every applicant's name. Each approved person votes **once**, for anyone, themselves included. Votes are **final**. Counts stay hidden until the end. |
 | 8:30 PM (30 min before) | Voting ends. Most votes wins, and a tie is broken at random among the tied. The winner gets the **Faction Commander** role. If nobody applied or nobody voted, there is no Faction Commander for that siege. |
-| 11 PM (2 h after the start) | The role is removed and applications for the next siege open. |
+| 11 PM (2 h after the start) | The role is removed and applications for the next siege open (also after a skipped siege). |
 
 For the Monday / Thursday / Saturday sieges that means:
 
@@ -129,6 +131,13 @@ off with the button at the top of the channel. Each siege it posts:
 Each reminder goes out once. If the bot was offline and a reminder is more than
 5 minutes late, it is skipped rather than posted stale.
 
+**Legion colors.** A Legion's color is the color of its **Legion: Name** role,
+so the commander's and members' names show in it across Discord (the other
+roles have no color, so it is the one that shows). The ticket shows the color
+the commander asked for, and the bot **warns** (but allows it) when a color is
+very close to another Legion's. Pure black counts as "no color" in Discord, so
+the bot uses #010101 instead.
+
 ## Managing Legions
 
 Each Legion's private channel has a management panel for its **commander**, and
@@ -140,6 +149,7 @@ Admin**, who first picks the Legion. The commander or the Head Admin can:
 | 🚪 **Remove a member** | Pick a member and confirm. They lose the Legion role, their approval (Legion Member role) and Siege Alerts, and get a DM. They can apply again. Picking the **commander** disbands the Legion (with a warning first). |
 | 👑 **Transfer command** | Pick a member of the Legion and confirm. They become commander. The old commander stays on as a regular member. The new commander is added to the Legion's open member tickets, since they must approve them. |
 | ✏️ **Rename** | Type the new name. The Legion's role and channel are renamed too. The name must not belong to another Legion. |
+| 🎨 **Change color** | Type Red, Green, Blue (0–255) and a brightness (0–100%). The Legion's role takes that color, so its members' names show in it. Leave it blank to remove the color. |
 | 🏴 **Disband** | Confirm. Everyone in it loses the Legion role and their approval, its pending member applications are denied, and its channel's transcript goes to `#bot-log` before the channel and role are deleted. |
 
 Automatic:

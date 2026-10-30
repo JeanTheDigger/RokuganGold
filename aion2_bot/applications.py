@@ -31,6 +31,7 @@ import re
 import discord
 from discord import app_commands
 
+import colors
 import layout
 import roles
 from storage import Application, Legion, Store
@@ -243,14 +244,31 @@ class CommanderModal(discord.ui.Modal, title="Legion Commander application"):
         label="Who you are", style=discord.TextStyle.paragraph, max_length=1000,
         placeholder="Your role in the Legion, its size, anything that helps us verify you.",
     )
+    rgb = discord.ui.TextInput(
+        label="Legion color: Red, Green, Blue (0-255)", max_length=20, required=False,
+        placeholder="e.g. 200, 30, 60. Leave blank for no color.",
+    )
+    brightness = discord.ui.TextInput(
+        label="Color brightness, 0-100 (blank = 100)", max_length=4, required=False,
+        placeholder="100 = exact color, 50 = half as bright",
+    )
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
         await _form_failed(interaction, error)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
+        color, problem = colors.parse(str(self.rgb.value or ""), str(self.brightness.value or ""))
+        if problem:
+            # A form can't be shown again with an error, so hand back what they wrote.
+            await interaction.response.send_message(
+                f"{problem} Nothing was submitted; click **Apply as Legion Commander** again.\n"
+                f"Your answers, to copy back:\n```\n{self.character.value}\n{self.legion.value}\n"
+                f"{self.about.value}\n```", ephemeral=True,
+            )
+            return
         await _open_ticket(
             interaction, "commander", str(self.character.value), str(self.about.value),
-            legion_name=" ".join(str(self.legion.value).split()),
+            legion_name=" ".join(str(self.legion.value).split()), legion_color=color,
         )
 
 
@@ -315,7 +333,7 @@ class LegionPicker(SafeView):
 # --- opening a ticket ---------------------------------------------------------
 async def _open_ticket(
     interaction: discord.Interaction, kind: str, character: str, about: str,
-    legion_name: str | None = None, legion_id: int | None = None,
+    legion_name: str | None = None, legion_id: int | None = None, legion_color: int | None = None,
 ) -> None:
     guild = interaction.guild
     applicant = interaction.user
@@ -367,7 +385,7 @@ async def _open_ticket(
         )
         app = store.create_application(
             guild.id, kind, applicant.id, character.strip(), about.strip(),
-            legion_name=legion_name, legion_id=legion.id if legion else None,
+            legion_name=legion_name, legion_id=legion.id if legion else None, legion_color=legion_color,
         )
         pings = " ".join(p.mention for p in people)
         if head_admin is not None:
@@ -399,6 +417,10 @@ def ticket_embed(store: Store, app: Application) -> discord.Embed:
     embed.add_field(name="Applicant", value=f"<@{app.applicant_id}>")
     embed.add_field(name="Character", value=app.character_name or "-")
     embed.add_field(name="Legion", value=legion_text)
+    if app.kind == "commander":
+        near = colors.close_to(app.legion_color, store.legion_colors(app.guild_id))
+        warn = f"\n⚠️ Very close to: {', '.join(near)}" if near else ""
+        embed.add_field(name="Legion color", value=colors.describe(app.legion_color) + warn, inline=False)
     if app.about:
         embed.add_field(name="About", value=app.about[:1024], inline=False)
 
@@ -583,8 +605,11 @@ async def _finalize_commander(
     try:
         if legion_role is None:
             legion_role = new_role = await guild.create_role(
-                name=roles.legion_role_name(name), reason=f"Legion {name} approved",
+                name=roles.legion_role_name(name), colour=discord.Colour(app.legion_color or 0),
+                reason=f"Legion {name} approved",
             )
+        elif app.legion_color is not None:
+            await legion_role.edit(colour=discord.Colour(app.legion_color), reason=f"Legion {name} approved")
         overwrites: dict[discord.Role | discord.Member, discord.PermissionOverwrite] = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             legion_role: discord.PermissionOverwrite(view_channel=True),
@@ -596,7 +621,8 @@ async def _finalize_commander(
             slug(name, f"legion-{app.id}"), overwrites=overwrites,
             topic=f"Private channel of the Legion {name}.", reason=f"Legion {name} approved",
         )
-        legion = store.create_legion(guild.id, name, applicant.id, legion_role.id, channel.id)
+        legion = store.create_legion(guild.id, name, applicant.id, legion_role.id, channel.id,
+                                     color=app.legion_color)
     except Exception:
         # Undo the half-made Legion so approving again starts clean.
         for leftover in (channel, new_role):
@@ -807,6 +833,6 @@ async def legion_list(interaction: discord.Interaction) -> None:
     lines = [f"**Approved Legions ({len(legions)}):**"]
     for lg in legions:
         lines.append(f"• **{lg.name}**: commander <@{lg.commander_id}>, "
-                     f"{store.member_count(lg.id)} approved (commander included)")
+                     f"{store.member_count(lg.id)} approved (commander included), {colors.describe(lg.color)}")
     text = "\n".join(lines)
     await reply(interaction, text if len(text) <= 1900 else text[:1890] + "\n…")
