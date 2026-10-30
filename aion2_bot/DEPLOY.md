@@ -7,15 +7,23 @@ Vultr instance. It can share the **same server as the Rokugan bot**: it gets
 its own user (`aion2`), folder (`/home/aion2/bot`), service (`aion2-bot`)
 and backups (`/home/aion2/backups`), so the two never touch each other.
 
-Below, replace `<server-ip>` with your server's IP address (the same one you
-use for the Rokugan bot, if you share the server).
+The commands below use `96.30.196.68`, the Vultr server the Rokugan bot already
+runs on (from `discord_bot/DEPLOY.md`). If you ever move to another server,
+use its IP instead.
+
+**Sharing the server is safe:** this setup never touches the Rokugan bot's user,
+folder, service, token, database or backups. The only shared things are
+system-wide: the script updates Ubuntu's packages and makes sure the firewall
+allows SSH, which the Rokugan setup already did.
 
 ---
 
 ## Before you start: create the bot in Discord (5 minutes)
 
 1. Go to <https://discord.com/developers/applications> → **New Application**,
-   name it (e.g. "Aion 2 Bot").
+   name it (e.g. "Aion 2 Bot"). It must be a **new application, not the
+   Rokugan bot's**: two programs logged in with the same token knock each other
+   offline.
 2. Open **Bot**:
    - **Reset Token** → copy it and keep it somewhere safe (it's a password).
    - Turn on **Server Members Intent** and **Message Content Intent**. The bot
@@ -36,7 +44,7 @@ use for the Rokugan bot, if you share the server).
 
 On your computer, open a terminal (Mac/Linux) or PowerShell (Windows):
 ```bash
-ssh root@<server-ip>
+ssh root@96.30.196.68
 ```
 Type the password from your Vultr dashboard (nothing shows while you type) and
 press Enter.
@@ -52,7 +60,7 @@ git clone https://github.com/jeanthedigger/rokugangold.git /tmp/rokugangold
 **If it's private**, upload it from your computer instead. In a *second*
 terminal on your own computer (not the server):
 ```bash
-scp -r /path/to/RokuganGold/aion2_bot root@<server-ip>:/tmp/aion2_upload
+scp -r /path/to/RokuganGold/aion2_bot root@96.30.196.68:/tmp/aion2_upload
 ```
 Then back on the server:
 ```bash
@@ -116,7 +124,7 @@ as described; if one doesn't, the bot usually says why.
 The bot runs itself: it starts on boot and restarts if it crashes.
 
 ```bash
-ssh root@<server-ip>
+ssh root@96.30.196.68
 systemctl status aion2-bot      # is it running? green "active (running)" = good
 journalctl -u aion2-bot -f      # live log (Ctrl+C to stop watching)
 journalctl -u aion2-bot -n 100  # the last 100 log lines
@@ -163,7 +171,7 @@ systemctl start aion2-bot
 **Download a copy to your computer** (run on your computer). Worth doing now
 and then: backups on the same server don't help if the server itself is lost.
 ```bash
-scp root@<server-ip>:/home/aion2/bot/aion2.db ./aion2-backup.db
+scp root@96.30.196.68:/home/aion2/bot/aion2.db ./aion2-backup.db
 ```
 
 ---
@@ -207,7 +215,8 @@ systemctl start aion2-bot
 
 ## Cost
 
-The bot uses roughly 100 MB of memory and almost no CPU, so it fits easily next
-to the Rokugan bot on a $5/month Vultr instance (1 vCPU, 1 GB RAM). To stop
-paying, destroy the instance in the Vultr dashboard, **after** downloading a
-backup.
+Nothing extra: it runs on the Rokugan bot's existing $5/month Vultr instance
+(1 vCPU, 1 GB RAM). Each bot uses roughly 100–150 MB of memory and almost no
+CPU, so both fit comfortably. To check memory on the server: `free -h`.
+Destroying the instance would take **both** bots offline, so download backups
+of both databases first.
