@@ -16,7 +16,7 @@ arrivals, and approval tickets for Legion commanders and Legion members.
 | Category | Who sees it | Channels |
 |---|---|---|
 | **Welcome** | everyone, including people with no role | `#arrivals` (read-only: the bot posts "**Name** entered the server."), `#chat` (anyone can talk), `#commander-applications` and `#member-applications` (read-only, each holds an apply button) |
-| **Asmodian Command** | approved commanders and members, Head Admin | `#general`, `#pvp-planning` (*draft names*) |
+| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#general`, `#questions`, `#memes`, `#screenshots`; PvP/siege channels to come |
 | **Legions** | Head Admin; each Legion's channel is also open to that Legion | one private channel per approved Legion, made automatically |
 | **Tickets** | Head Admin; each ticket is also open to the people in it | one private channel per open application, made automatically |
 | **Head Admin** | Head Admin only | `#admin-chat`, `#bot-log` (everything the bot does, plus ticket transcripts) |

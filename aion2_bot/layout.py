@@ -75,10 +75,13 @@ LAYOUT: tuple[Category, ...] = (
         Channel("member-applications", access=READ_ONLY, purpose=MEMBER_APPLY,
                 topic="In an approved Legion? Apply here to join the server proper."),
     )),
-    # DRAFT channel names: the owner has not named these yet.
+    # The category name is still a draft; the serious (PvP/siege) channels are to come.
+    # Artifact Siege: Monday, Thursday and Saturday (owner-confirmed); time zone TBD.
     Category("Asmodian Command", APPROVED, (
         Channel("general", topic="Talk between approved commanders and Legion members."),
-        Channel("pvp-planning", topic="Managing the PvP."),
+        Channel("questions", topic="Ask anything."),
+        Channel("memes"),
+        Channel("screenshots"),
     )),
     Category("Legions", ADMIN, purpose=LEGIONS),
     Category("Tickets", ADMIN, purpose=TICKETS),
