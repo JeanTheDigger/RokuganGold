@@ -63,9 +63,10 @@ SIEGE_TIMER = "siege_timer"          # the next-siege countdown, edited every mi
 ELECTION = "election"                # Faction Commander applications, polls and results
 SIEGE_ALERTS = "siege_alerts"        # siege reminders pinging the Siege Alerts role
 STEP_DOWN = "step_down"              # the Faction Commander's "Step down" button
+SIEGE_CONTROL = "siege_control"      # the Head Admin's siege control panel
 
 CHANNEL_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, BOT_LOG, SIEGE_TIMER, ELECTION,
-                    SIEGE_ALERTS, STEP_DOWN)
+                    SIEGE_ALERTS, STEP_DOWN, SIEGE_CONTROL)
 CATEGORY_PURPOSES = (TICKETS, LEGIONS)
 
 
@@ -123,12 +124,14 @@ LAYOUT: tuple[Category, ...] = (
     Category("Head Admin", ADMIN, (
         Channel("admin-chat"),
         Channel("bot-log", topic="What the bot did, and when.", purpose=BOT_LOG),
+        Channel("siege-control", topic="Appoint or remove the Faction Commander, skip sieges, cancel votes.",
+                purpose=SIEGE_CONTROL),
     )),
 )
 
 # Without these the bot cannot do its job, so setup refuses a layout missing one.
 REQUIRED_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, TICKETS, LEGIONS, SIEGE_TIMER, ELECTION,
-                     SIEGE_ALERTS, STEP_DOWN)
+                     SIEGE_ALERTS, STEP_DOWN, SIEGE_CONTROL)
 
 
 def validate(layout: tuple[Category, ...] | None = None) -> list[str]:

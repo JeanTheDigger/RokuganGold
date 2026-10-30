@@ -89,6 +89,12 @@ CREATE TABLE IF NOT EXISTS stepdowns (
     at          TEXT    NOT NULL,
     PRIMARY KEY (election_id, user_id)
 );
+-- Sieges the Head Admin skipped (no vote, no reminders, no commander).
+CREATE TABLE IF NOT EXISTS skipped_sieges (
+    guild_id    INTEGER NOT NULL,
+    siege_start TEXT    NOT NULL,
+    PRIMARY KEY (guild_id, siege_start)
+);
 -- Siege reminders already sent, so each goes out once.
 CREATE TABLE IF NOT EXISTS alerts_sent (
     guild_id    INTEGER NOT NULL,
@@ -403,6 +409,26 @@ class Store:
     def stepped_down(self, election_id: int) -> set[int]:
         rows = self.db.execute("SELECT user_id FROM stepdowns WHERE election_id = ?", (election_id,)).fetchall()
         return {int(r["user_id"]) for r in rows}
+
+    def is_skipped(self, guild_id: int, siege: datetime.datetime) -> bool:
+        key = siege.astimezone(datetime.timezone.utc).isoformat()
+        return self.db.execute(
+            "SELECT 1 FROM skipped_sieges WHERE guild_id = ? AND siege_start = ?", (guild_id, key)
+        ).fetchone() is not None
+
+    def set_skipped(self, guild_id: int, siege: datetime.datetime, skipped: bool) -> None:
+        key = siege.astimezone(datetime.timezone.utc).isoformat()
+        with self.db:
+            if skipped:
+                self.db.execute("INSERT OR IGNORE INTO skipped_sieges (guild_id, siege_start) VALUES (?, ?)",
+                                (guild_id, key))
+            else:
+                self.db.execute("DELETE FROM skipped_sieges WHERE guild_id = ? AND siege_start = ?",
+                                (guild_id, key))
+
+    def clear_votes(self, election_id: int) -> None:
+        with self.db:
+            self.db.execute("DELETE FROM votes WHERE election_id = ?", (election_id,))
 
     def mark_alert(self, guild_id: int, siege: datetime.datetime, kind: str) -> bool:
         """Record a reminder as sent. False if it already was."""

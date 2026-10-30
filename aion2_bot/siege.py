@@ -97,11 +97,25 @@ async def _log(guild: discord.Guild, store: Store, text: str) -> None:
 
 
 # --- texts ----------------------------------------------------------------------
-def timer_text(guild: discord.Guild, store: Store, now: dt.datetime) -> str:
+def next_running_siege(guild: discord.Guild, store: Store, now: dt.datetime) -> tuple[dt.datetime, list[dt.datetime]]:
+    """The next siege that isn't skipped, and the skipped ones before it."""
+    skipped: list[dt.datetime] = []
     nxt = schedule.next_siege(now)
+    while store.is_skipped(guild.id, nxt) and len(skipped) < 30:
+        skipped.append(nxt)
+        nxt = schedule.next_siege(nxt)
+    return nxt, skipped
+
+
+def timer_text(guild: discord.Guild, store: Store, now: dt.datetime) -> str:
+    nxt, skipped = next_running_siege(guild, store, now)
     lines: list[str] = []
+    for s in skipped:
+        lines.append(f"⏭️ The {schedule.fmt_local(s)} siege is **skipped**.")
+    if skipped:
+        lines.append("")
     underway = schedule.siege_underway(now)
-    if underway is not None:
+    if underway is not None and not store.is_skipped(guild.id, underway):
         e = store.election_for(guild.id, underway)
         cmdr = f"<@{e.winner_id}>" if e and e.winner_id and e.status == "decided" else "none"
         lines += [f"🔥 **Siege underway** since {schedule.tag(underway, 't')}. "
@@ -136,7 +150,7 @@ def _election_line(guild: discord.Guild, store: Store, siege: dt.datetime, now: 
         return f"🗳️ Vote for the Faction Commander in {room}; voting ends {schedule.tag(schedule.poll_closes(siege), 'R')}."
     if e is not None and e.winner_id and e.status == "decided":
         return f"👑 Faction Commander: <@{e.winner_id}>."
-    if e is not None and (e.outcome in ("no_applicants", "no_votes")
+    if e is not None and (e.outcome in ("no_applicants", "no_votes", "cancelled", "skipped")
                           or (e.status == "decided" and not e.winner_id)):
         return "No Faction Commander for this siege."
     return "🗳️ Counting the Faction Commander votes…"
@@ -146,6 +160,8 @@ def panel_text(guild: discord.Guild, store: Store, now: dt.datetime) -> str:
     target = schedule.application_target(now)
     opens = schedule.applications_open(target)
     head = f"## 👑 Faction Commander: siege of {schedule.fmt_local(target)}"
+    if store.is_skipped(guild.id, target):
+        return f"{head}\n⏭️ The Head Admin has **skipped** this siege, so there is no vote for it."
     if now < opens:
         return (f"{head}\nApplications open {schedule.tag(opens, 'R')} ({schedule.tag(opens, 'f')}), "
                 "when the current Faction Commander's term ends.")
@@ -199,6 +215,8 @@ async def ensure_messages(guild: discord.Guild, store: Store) -> list[str]:
     desk = _channel(guild, store, layout.STEP_DOWN)
     if desk is not None and await _upsert(desk, store, STEP_DOWN_KEY, STEP_DOWN_TEXT, StepDownPanel()):
         notes.append(f"Posted the step-down button in {desk.mention}.")
+    import controls  # here, not at the top: controls imports this module
+    notes += await controls.ensure_panel(guild, store)
     return notes
 
 
@@ -233,6 +251,9 @@ async def _apply(interaction: discord.Interaction, withdraw: bool) -> None:
     if now < opens:
         await _reply(interaction, f"Applications for the {schedule.fmt_local(target)} siege open "
                                   f"{schedule.tag(opens, 'R')}, when the current Faction Commander's term ends.")
+        return
+    if store.is_skipped(guild.id, target):
+        await _reply(interaction, f"The Head Admin has skipped the {schedule.fmt_local(target)} siege.")
         return
     async with _lock:
         e = store.election_for(guild.id, target, create=True)
@@ -385,6 +406,8 @@ def _current_term(store: Store, guild: discord.Guild, user_id: int) -> Election 
 
 
 def runner_up(guild: discord.Guild, store: Store, e: Election) -> int | None:
+    # Everyone who held the role (stepped down or was removed) is recorded in
+    # stepdowns, so they are skipped here.
     """Next in line: most votes (zero counts), ties at random, skipping who's out."""
     counts = store.tally(e.id)
     out = store.stepped_down(e.id) | {e.winner_id or 0}
@@ -400,34 +423,48 @@ async def _step_down(interaction: discord.Interaction) -> None:
     if guild is None or not isinstance(member, discord.Member):
         return
     store = store_of(interaction)
-    role = roles.find_role(guild, layout.FACTION_COMMANDER_ROLE)
     async with _lock:
         e = _current_term(store, guild, member.id)
         if e is None:
             await _reply(interaction, "You aren't the Faction Commander right now.")
             return
-        store.add_stepdown(e.id, member.id)
-        if role is not None and role in member.roles:
-            await member.remove_roles(role, reason="Stepped down as Faction Commander")
-        nxt = runner_up(guild, store, e)
-        nxt_member = guild.get_member(nxt) if nxt else None
-        if nxt_member is not None and role is not None:
-            await nxt_member.add_roles(role, reason="Runner-up after the Faction Commander stepped down")
-            store.update_election(e.id, winner_id=nxt_member.id)
-            text = (f"🏳️ <@{member.id}> stepped down. **{nxt_member.mention} is now the Faction Commander** "
-                    f"as runner-up, until {schedule.tag(schedule.term_ends(e.siege), 't')}.")
-        else:
-            # The term stays open with nobody holding it, so its end (and the
-            # "applications are open" notice) still happens at the usual time.
-            store.update_election(e.id, outcome="stepped_down", winner_id=None)
-            text = (f"🏳️ <@{member.id}> stepped down, and there is no runner-up left, so there is no "
-                    "Faction Commander for the rest of this siege.")
+        await hand_over(guild, store, e, f"<@{member.id}> stepped down")
+    await _reply(interaction, "You've stepped down. Thank you for letting the faction know.")
+    await ensure_messages(guild, store)
+
+
+async def hand_over(guild: discord.Guild, store: Store, e: Election, why: str) -> str:
+    """Take the role from the current holder and pass it to the runner-up.
+
+    Call with `_lock` held. `why` starts the announcement ("<@x> stepped down").
+    The role is given now if the term has started (vote closed), otherwise the
+    runner-up is recorded and gets it at the usual time.
+    """
+    role = roles.find_role(guild, layout.FACTION_COMMANDER_ROLE)
+    leaving = guild.get_member(e.winner_id or 0)
+    if e.winner_id:
+        store.add_stepdown(e.id, e.winner_id)
+    if role is not None and leaving is not None and role in leaving.roles:
+        await leaving.remove_roles(role, reason="No longer Faction Commander")
+    nxt = runner_up(guild, store, e)
+    nxt_member = guild.get_member(nxt) if nxt else None
+    if nxt_member is not None:
+        if role is not None and schedule.now_utc() >= schedule.poll_closes(e.siege):
+            await nxt_member.add_roles(role, reason="Runner-up becomes Faction Commander")
+        store.update_election(e.id, winner_id=nxt_member.id)
+        text = (f"🏳️ {why}. **{nxt_member.mention} is now the Faction Commander** as runner-up, "
+                f"until {schedule.tag(schedule.term_ends(e.siege), 't')}.")
+    else:
+        # The term stays open with nobody holding it, so its end (and the
+        # "applications are open" notice) still happens at the usual time.
+        store.update_election(e.id, outcome="stepped_down", winner_id=None)
+        text = (f"🏳️ {why}, and there is no runner-up left, so there is no Faction Commander "
+                "for the rest of this siege.")
     room = _channel(guild, store, layout.ELECTION)
     if room is not None:
         await room.send(text, allowed_mentions=discord.AllowedMentions(users=[nxt_member] if nxt_member else False))
     await _log(guild, store, text)
-    await _reply(interaction, "You've stepped down. Thank you for letting the faction know.")
-    await ensure_messages(guild, store)
+    return text
 
 
 # --- the election steps, driven by the loop -----------------------------------
@@ -532,8 +569,44 @@ async def _end_term(guild: discord.Guild, store: Store, e: Election) -> Election
     return store.update_election(e.id, status="finished")
 
 
+async def cancel_poll(guild: discord.Guild, store: Store, e: Election, why: str) -> None:
+    """Strike out an open poll's message (the caller updates the election)."""
+    room = _channel(guild, store, layout.ELECTION)
+    if room is not None and e.poll_message_id is not None:
+        try:
+            await room.get_partial_message(e.poll_message_id).edit(
+                content=f"## 🗳️ Vote cancelled: Faction Commander for {schedule.fmt_local(e.siege)}\n{why}",
+                view=None, allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except discord.HTTPException:
+            log.warning("Could not strike out poll for election %s", e.id)
+
+
+async def _apply_skip(guild: discord.Guild, store: Store, e: Election, now: dt.datetime) -> None:
+    """A skipped siege: stop its vote, take back its role, close it out."""
+    if e.status == "collecting" and now < schedule.poll_opens(e.siege):
+        return  # may still be un-skipped before the vote would open
+    if e.status == "polling":
+        await cancel_poll(guild, store, e, "The Head Admin skipped this siege.")
+    role = roles.find_role(guild, layout.FACTION_COMMANDER_ROLE)
+    holder = guild.get_member(e.winner_id or 0)
+    if role is not None and holder is not None and role in holder.roles:
+        await holder.remove_roles(role, reason="Siege skipped by the Head Admin")
+    store.update_election(e.id, status="finished", outcome="skipped")
+
+
 async def advance(guild: discord.Guild, store: Store, e: Election, now: dt.datetime) -> None:
     """Move one election through every step whose time has come."""
+    if store.is_skipped(guild.id, e.siege):
+        await _apply_skip(guild, store, e, now)
+        return
+    if (e.status == "decided" and e.winner_id and e.outcome == "appointed"
+            and schedule.poll_closes(e.siege) <= now < schedule.term_ends(e.siege)):
+        # Appointed ahead of time: the role arrives when the term begins.
+        role = roles.find_role(guild, layout.FACTION_COMMANDER_ROLE)
+        holder = guild.get_member(e.winner_id)
+        if role is not None and holder is not None and role not in holder.roles:
+            await holder.add_roles(role, reason="Appointed Faction Commander: term begins")
     if e.status == "collecting" and now >= schedule.poll_opens(e.siege):
         e = await _open_poll(guild, store, e)
     if e.status == "polling" and now >= schedule.poll_closes(e.siege):

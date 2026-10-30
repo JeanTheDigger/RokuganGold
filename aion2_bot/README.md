@@ -21,7 +21,7 @@ countdown and a Faction Commander election for every siege.
 | **Faction Command** (*draft names*) | the current Faction Commander and Head Admin | `#fc-head-admin` (Faction Commander ↔ Head Admin), `#faction-leaders` (also every Legion Commander), `#step-down` (the step-down button) |
 | **Legions** | Head Admin; each Legion's channel is also open to that Legion | one private channel per approved Legion, made automatically |
 | **Tickets** | Head Admin; each ticket is also open to the people in it | one private channel per open application, made automatically |
-| **Head Admin** | Head Admin only | `#admin-chat`, `#bot-log` (everything the bot does, plus ticket transcripts) |
+| **Head Admin** | Head Admin only | `#admin-chat`, `#bot-log` (everything the bot does, plus ticket transcripts), `#siege-control` (the siege control panel) |
 
 Roles: **Head Admin**, **Legion Commander**, **Legion Member**, **Faction
 Commander** (held by the elected shot caller during a siege), **Siege Alerts**
@@ -104,6 +104,16 @@ changes hands automatically with each siege and each step-down.
   steps down too. With nobody left there is no Faction Commander for the rest of
   the siege. Whoever steps down can't take the role back that siege.
 
+**Head Admin siege controls** live on a button panel in `#siege-control`,
+which also shows the current siege, its election and any skipped sieges:
+
+| Button | What it does |
+|---|---|
+| 👑 **Appoint commander** | Pick any approved person as Faction Commander for the current or next siege. An open vote is cancelled and whoever held the role is replaced. Appointed ahead of time, they get the role when the term begins (30 min before the siege). |
+| 🚫 **Remove commander** | Takes the role from the current Faction Commander. The runner-up takes over, exactly like a step-down. |
+| ⏭️ **Skip / un-skip a siege** | Pick one of the next 4 sieges. A skipped siege has no vote, no reminders and no Faction Commander, and the countdown says so. Its open vote is cancelled and its role taken back. Pick it again to un-skip. |
+| 🗳️ **Cancel vote** | Only while a vote is open: **Restart fresh** (every vote wiped, same applicants, same closing time) or **End with no commander**. |
+
 **`#siege-alerts`** pings the opt-in **Siege Alerts** role. People turn it on or
 off with the button at the top of the channel. Each siege it posts:
 
@@ -174,6 +184,7 @@ Each reminder goes out once. If the bot was offline and a reminder is more than
 | `schedule.py` | The siege calendar: days, time, time zone, and when each election step happens. |
 | `siege.py` | The countdown, Faction Commander applications, the vote and the role. |
 | `alerts.py` | Siege reminders and the Siege Alerts on/off button. |
+| `controls.py` | The Head Admin siege control panel. |
 | `roles.py` | Finding roles by name; the bot's own channel permissions. |
 | `storage.py` | The SQLite database (`aion2.db`, or the path in `AION2_DB`). |
 

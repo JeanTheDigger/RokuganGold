@@ -133,6 +133,8 @@ async def tick(guild: discord.Guild, store: Store, now: dt.datetime) -> None:
         return
     role = roles.find_role(guild, layout.SIEGE_ALERTS_ROLE)
     siege = schedule.current_term_siege(now)
+    if store.is_skipped(guild.id, siege):
+        return
     for kind, when, text in _due(guild, store, siege):
         if text is None or not (when <= now < when + GRACE):
             continue
