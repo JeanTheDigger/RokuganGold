@@ -346,7 +346,7 @@ async def setup_server(interaction: discord.Interaction) -> None:
             server_roles = await _ensure_roles(guild, member, head_admin, notes)
             created, existing = await build_layout(guild, server_roles, store)
             notes += await applications.ensure_panels(guild, store)
-            notes += await siege.ensure_messages(guild, store)
+            notes += await siege.ensure_messages(guild, store, force=True)
             notes += await alerts.ensure_panel(guild, store)
             notes += await legions.ensure_panels(guild, store)
     except discord.Forbidden as exc:

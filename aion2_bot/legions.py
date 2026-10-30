@@ -33,7 +33,9 @@ import applications
 import layout
 import roles
 import siege
+import ui_errors
 from storage import Legion, Store
+from ui_errors import SafeView
 
 log = logging.getLogger("aion2_bot.legions")
 
@@ -276,7 +278,10 @@ class LegionButton(
         return cls(int(match["legion_id"]), match["action"])
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await start_action(interaction, self.legion_id, self.action)
+        try:
+            await start_action(interaction, self.legion_id, self.action)
+        except Exception as exc:
+            await ui_errors.report(interaction, exc)
 
 
 def legion_view(legion_id: int) -> discord.ui.View:
@@ -286,13 +291,13 @@ def legion_view(legion_id: int) -> discord.ui.View:
     return view
 
 
-async def ensure_legion_panel(guild: discord.Guild, store: Store, legion: Legion) -> bool:
+async def ensure_legion_panel(guild: discord.Guild, store: Store, legion: Legion, force: bool = False) -> bool:
     await ensure_control_panel(guild, store)  # keeps its Legion count current
     channel = guild.get_channel(legion.channel_id or 0)
     if not isinstance(channel, discord.TextChannel):
         return False
     return await siege._upsert(channel, store, panel_key(legion.id), legion_panel_text(legion),
-                               legion_view(legion.id))
+                               legion_view(legion.id), force=force)
 
 
 def control_text(guild: discord.Guild, store: Store) -> str:
@@ -302,7 +307,7 @@ def control_text(guild: discord.Guild, store: Store) -> str:
             "buttons in their own Legion's channel.")
 
 
-class ControlPanel(discord.ui.View):
+class ControlPanel(SafeView):
     def __init__(self) -> None:
         super().__init__(timeout=None)
         for action, (label, style, emoji) in ACTIONS.items():
@@ -327,7 +332,7 @@ class ControlPanel(discord.ui.View):
         return callback
 
 
-class LegionChooser(discord.ui.View):
+class LegionChooser(SafeView):
     PAGE = 25
 
     def __init__(self, legions: list[Legion], action: str, page: int = 0) -> None:
@@ -354,20 +359,20 @@ class LegionChooser(discord.ui.View):
                 self.add_item(button)
 
 
-async def ensure_control_panel(guild: discord.Guild, store: Store) -> list[str]:
+async def ensure_control_panel(guild: discord.Guild, store: Store, force: bool = False) -> list[str]:
     channel = siege._channel(guild, store, layout.LEGION_CONTROL)
     if channel is None:
         return []
-    if await siege._upsert(channel, store, CONTROL_KEY, control_text(guild, store), ControlPanel()):
+    if await siege._upsert(channel, store, CONTROL_KEY, control_text(guild, store), ControlPanel(), force=force):
         return [f"Posted the Legion control panel in {channel.mention}."]
     return []
 
 
 async def ensure_panels(guild: discord.Guild, store: Store) -> list[str]:
     """The Head Admin panel plus every Legion's own panel. Used by setup."""
-    notes = await ensure_control_panel(guild, store)
+    notes = await ensure_control_panel(guild, store, force=True)
     for legion in store.list_legions(guild.id):
-        if await ensure_legion_panel(guild, store, legion):
+        if await ensure_legion_panel(guild, store, legion, force=True):
             notes.append(f"Posted the management panel for **{legion.name}**.")
     return notes
 
@@ -408,7 +413,7 @@ async def start_action(interaction: discord.Interaction, legion_id: int, action:
         await _reply(interaction, f"Who do you want to {verb} **{legion.name}**?", MemberPicker(legion_id, action))
 
 
-class MemberPicker(discord.ui.View):
+class MemberPicker(SafeView):
     def __init__(self, legion_id: int, action: str) -> None:
         super().__init__(timeout=120)
         self.legion_id, self.action = legion_id, action
@@ -439,7 +444,7 @@ class MemberPicker(discord.ui.View):
         await _reply(interaction, text, Confirm(self.legion_id, self.action, target_id))
 
 
-class Confirm(discord.ui.View):
+class Confirm(SafeView):
     def __init__(self, legion_id: int, action: str, target_id: int | None) -> None:
         super().__init__(timeout=60)
         self.legion_id, self.action, self.target_id = legion_id, action, target_id

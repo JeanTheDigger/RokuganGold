@@ -26,6 +26,7 @@ import roles
 import schedule
 import siege
 from storage import Election, Store
+from ui_errors import SafeView
 
 log = logging.getLogger("aion2_bot.controls")
 
@@ -117,17 +118,17 @@ def _upcoming(now: dt.datetime) -> list[dt.datetime]:
     return out
 
 
-async def ensure_panel(guild: discord.Guild, store: Store) -> list[str]:
+async def ensure_panel(guild: discord.Guild, store: Store, force: bool = False) -> list[str]:
     channel = siege._channel(guild, store, layout.SIEGE_CONTROL)
     if channel is None:
         return []
     text = control_text(guild, store, schedule.now_utc())
-    if await siege._upsert(channel, store, PANEL_KEY, text, ControlPanel()):
+    if await siege._upsert(channel, store, PANEL_KEY, text, ControlPanel(), force=force):
         return [f"Posted the siege control panel in {channel.mention}."]
     return []
 
 
-class ControlPanel(discord.ui.View):
+class ControlPanel(SafeView):
     def __init__(self) -> None:
         super().__init__(timeout=None)
 
@@ -180,7 +181,7 @@ class ControlPanel(discord.ui.View):
 
 
 # --- appoint ----------------------------------------------------------------------
-class AppointPicker(discord.ui.View):
+class AppointPicker(SafeView):
     def __init__(self) -> None:
         super().__init__(timeout=120)
 
@@ -231,7 +232,7 @@ async def appoint(guild: discord.Guild, store: Store, target: discord.Member) ->
 
 
 # --- remove -----------------------------------------------------------------------
-class ConfirmRemove(discord.ui.View):
+class ConfirmRemove(SafeView):
     def __init__(self, election_id: int) -> None:
         super().__init__(timeout=60)
         self.election_id = election_id
@@ -259,7 +260,7 @@ class ConfirmRemove(discord.ui.View):
 
 
 # --- skip -------------------------------------------------------------------------
-class SkipPicker(discord.ui.View):
+class SkipPicker(SafeView):
     def __init__(self, guild: discord.Guild, store: Store) -> None:
         super().__init__(timeout=120)
         options = []
@@ -297,7 +298,7 @@ class SkipPicker(discord.ui.View):
 
 
 # --- cancel vote ------------------------------------------------------------------
-class CancelVoteChoice(discord.ui.View):
+class CancelVoteChoice(SafeView):
     def __init__(self, election_id: int) -> None:
         super().__init__(timeout=60)
         self.election_id = election_id

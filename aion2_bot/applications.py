@@ -34,6 +34,7 @@ from discord import app_commands
 import layout
 import roles
 from storage import Application, Legion, Store
+from ui_errors import SafeView
 
 log = logging.getLogger("aion2_bot.applications")
 
@@ -141,7 +142,7 @@ def ticket_overwrites(
 
 
 # --- panels -------------------------------------------------------------------
-class CommanderPanel(discord.ui.View):
+class CommanderPanel(SafeView):
     def __init__(self) -> None:
         super().__init__(timeout=None)
 
@@ -153,7 +154,7 @@ class CommanderPanel(discord.ui.View):
         await interaction.response.send_modal(CommanderModal())
 
 
-class MemberPanel(discord.ui.View):
+class MemberPanel(SafeView):
     def __init__(self) -> None:
         super().__init__(timeout=None)
 
@@ -274,7 +275,7 @@ class MemberModal(discord.ui.Modal):
         )
 
 
-class LegionPicker(discord.ui.View):
+class LegionPicker(SafeView):
     """Pick a Legion; pages of 25 (Discord's limit for one menu)."""
 
     PAGE = 25
@@ -502,6 +503,9 @@ async def _approve(interaction: discord.Interaction, app_id: int) -> None:
         return
     guild, actor, _ = loaded
     store = store_of(interaction)
+    # Answer Discord now: another decision may hold the lock for a few seconds
+    # (creating roles and channels), longer than Discord waits for a reply.
+    await interaction.response.defer()
     async with _lock:
         app = store.get_application(app_id)
         assert app is not None
@@ -515,7 +519,6 @@ async def _approve(interaction: discord.Interaction, app_id: int) -> None:
             if not roles.is_head_admin(actor):
                 await reply(interaction, "Only the Head Admin can approve a Legion Commander.")
                 return
-            await interaction.response.defer()
             error = await _finalize_commander(guild, store, app, actor)
         else:
             legion = store.get_legion(app.legion_id or 0)
@@ -538,7 +541,6 @@ async def _approve(interaction: discord.Interaction, app_id: int) -> None:
                 return
             completes = (app.admin_approved_by or updates.get("admin_approved_by")) and \
                         (app.commander_approved_by or updates.get("commander_approved_by"))
-            await interaction.response.defer()
             if completes:
                 error = await _finalize_member(guild, store, app, legion, actor, updates)
             else:
@@ -672,6 +674,7 @@ class DenyModal(discord.ui.Modal, title="Deny application"):
             return
         guild, actor, _ = loaded
         store = store_of(interaction)
+        await interaction.response.defer()
         async with _lock:
             app = store.get_application(self.app_id)
             assert app is not None
@@ -681,7 +684,6 @@ class DenyModal(discord.ui.Modal, title="Deny application"):
             if not _may_decide(store, app, actor):
                 await reply(interaction, "You can't deny this application.")
                 return
-            await interaction.response.defer()
             app = store.decide(app.id, "denied", actor.id, str(self.reason.value or "").strip())
             applicant = await get_member(guild, app.applicant_id)
             await _after_decision(guild, store, app, [applicant] if applicant else [])

@@ -177,8 +177,10 @@ Automatic:
 
 1. **Create the bot** at the [Discord Developer Portal](https://discord.com/developers/applications):
    New Application → **Bot** → **Reset Token** and copy the token. On the same
-   page, turn on **Server Members Intent**. The bot needs it to see people
-   join, and won't start without it.
+   page, turn on **Server Members Intent** and **Message Content Intent**. The
+   bot needs the first to see people join and leave, and the second to save
+   what people wrote in ticket and Legion transcripts (without it, their
+   messages come out blank). It won't start until both are on.
 2. **Invite it:** OAuth2 → URL Generator → scopes `bot` and `applications.commands`,
    permission **Administrator**. Open the URL and pick your server. In
    **Server Settings → Roles**, keep the bot's role **above** Head Admin, Legion

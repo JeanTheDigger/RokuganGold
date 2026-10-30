@@ -22,6 +22,7 @@ import layout
 import roles
 import schedule
 from storage import Store
+from ui_errors import SafeView
 
 log = logging.getLogger("aion2_bot.alerts")
 
@@ -43,7 +44,7 @@ def _channel(guild: discord.Guild, store: Store, purpose: str) -> discord.TextCh
     return found if isinstance(found, discord.TextChannel) else None
 
 
-class AlertsPanel(discord.ui.View):
+class AlertsPanel(SafeView):
     def __init__(self) -> None:
         super().__init__(timeout=None)
 

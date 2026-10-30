@@ -40,9 +40,12 @@ DB_PATH = os.environ.get("AION2_DB", "").strip() or os.path.join(os.path.dirname
 class Aion2Bot(discord.Client):
     def __init__(self) -> None:
         intents = discord.Intents.default()
-        # Privileged: needed to see members join. Turn on "Server Members Intent"
-        # in the Developer Portal (Bot page), or the bot will refuse to start.
+        # Both privileged: turn them on in the Developer Portal (Bot page), or the
+        # bot will refuse to start. Members: to see people join and leave.
+        # Message Content: to read what people wrote when saving transcripts of
+        # tickets and disbanded Legions (without it, their text comes back empty).
         intents.members = True
+        intents.message_content = True
         super().__init__(intents=intents)
         self.store = Store(DB_PATH)
         self.tree = app_commands.CommandTree(self)

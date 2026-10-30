@@ -41,7 +41,9 @@ import alerts
 import layout
 import roles
 import schedule
+import ui_errors
 from storage import Election, Store
+from ui_errors import SafeView
 
 log = logging.getLogger("aion2_bot.siege")
 
@@ -177,12 +179,17 @@ def panel_text(guild: discord.Guild, store: Store, now: dt.datetime) -> str:
 
 # --- the persistent messages -------------------------------------------------
 async def _upsert(
-    channel: discord.TextChannel, store: Store, key: str, text: str, view: discord.ui.View | None = None
+    channel: discord.TextChannel, store: Store, key: str, text: str, view: discord.ui.View | None = None,
+    force: bool = False,
 ) -> bool:
-    """Edit the remembered message, or post it if missing. True if newly posted."""
+    """Edit the remembered message, or post it if missing. True if newly posted.
+
+    Unchanged text is skipped (the loop runs every minute) unless `force`, which
+    setup uses so that a message deleted by hand is noticed and posted again.
+    """
     message_id = store.get_config_id(channel.guild.id, key)
     if message_id is not None:
-        if _last_text.get(message_id) == text:
+        if not force and _last_text.get(message_id) == text:
             return False
         try:
             kwargs: dict[str, object] = {"content": text, "allowed_mentions": discord.AllowedMentions.none()}
@@ -202,26 +209,28 @@ async def _upsert(
     return True
 
 
-async def ensure_messages(guild: discord.Guild, store: Store) -> list[str]:
-    """Post (or refresh) the countdown and the application panel. Used by setup and the loop."""
+async def ensure_messages(guild: discord.Guild, store: Store, force: bool = False) -> list[str]:
+    """Post (or refresh) the countdown and the panels. Used by setup (force) and the loop."""
     notes: list[str] = []
     now = schedule.now_utc()
     timer = _channel(guild, store, layout.SIEGE_TIMER)
-    if timer is not None and await _upsert(timer, store, TIMER_KEY, timer_text(guild, store, now)):
+    if timer is not None and await _upsert(timer, store, TIMER_KEY, timer_text(guild, store, now), force=force):
         notes.append(f"Posted the siege countdown in {timer.mention}.")
     room = _channel(guild, store, layout.ELECTION)
-    if room is not None and await _upsert(room, store, PANEL_KEY, panel_text(guild, store, now), ApplyPanel()):
+    if room is not None and await _upsert(room, store, PANEL_KEY, panel_text(guild, store, now), ApplyPanel(),
+                                          force=force):
         notes.append(f"Posted the Faction Commander panel in {room.mention}.")
     desk = _channel(guild, store, layout.STEP_DOWN)
-    if desk is not None and await _upsert(desk, store, STEP_DOWN_KEY, STEP_DOWN_TEXT, StepDownPanel()):
+    if desk is not None and await _upsert(desk, store, STEP_DOWN_KEY, STEP_DOWN_TEXT, StepDownPanel(),
+                                          force=force):
         notes.append(f"Posted the step-down button in {desk.mention}.")
     import controls  # here, not at the top: controls imports this module
-    notes += await controls.ensure_panel(guild, store)
+    notes += await controls.ensure_panel(guild, store, force=force)
     return notes
 
 
 # --- applying -------------------------------------------------------------------
-class ApplyPanel(discord.ui.View):
+class ApplyPanel(SafeView):
     def __init__(self) -> None:
         super().__init__(timeout=None)
 
@@ -245,6 +254,7 @@ async def _apply(interaction: discord.Interaction, withdraw: bool) -> None:
         await _reply(interaction, "Only approved Legion commanders and members can do that.")
         return
     store = store_of(interaction)
+    await interaction.response.defer(ephemeral=True, thinking=True)
     now = schedule.now_utc()
     target = schedule.application_target(now)
     opens = schedule.applications_open(target)
@@ -298,7 +308,10 @@ class VoteSelect(
         return cls(int(match["election_id"]), select=item)
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await _vote(interaction, self.election_id, int(self.item.values[0]))
+        try:
+            await _vote(interaction, self.election_id, int(self.item.values[0]))
+        except Exception as exc:
+            await ui_errors.report(interaction, exc)
 
 
 async def _vote(interaction: discord.Interaction, election_id: int, candidate_id: int) -> None:
@@ -310,6 +323,7 @@ async def _vote(interaction: discord.Interaction, election_id: int, candidate_id
         await _reply(interaction, "Only approved Legion commanders and members can vote.")
         return
     store = store_of(interaction)
+    await interaction.response.defer(ephemeral=True, thinking=True)
     async with _lock:
         e = store.get_election(election_id)
         if e is None or e.guild_id != guild.id or e.status != "polling":
@@ -343,7 +357,7 @@ def _poll_view(guild: discord.Guild, store: Store, e: Election) -> discord.ui.Vi
     options: list[discord.SelectOption] = []
     for uid in store.candidates(e.id):
         m = guild.get_member(uid)
-        label = (m.display_name if m else f"User {uid}")[:100]
+        label = (f"{m.display_name} (@{m.name})" if m else f"User {uid}")[:100]
         options.append(discord.SelectOption(label=label, value=str(uid)))
     view = discord.ui.View(timeout=None)
     view.add_item(VoteSelect(e.id, options))
@@ -363,7 +377,7 @@ async def _refresh_poll(guild: discord.Guild, store: Store, e: Election, votes_c
 
 
 # --- stepping down --------------------------------------------------------------
-class StepDownPanel(discord.ui.View):
+class StepDownPanel(SafeView):
     def __init__(self) -> None:
         super().__init__(timeout=None)
 
@@ -383,7 +397,7 @@ class StepDownPanel(discord.ui.View):
         )
 
 
-class ConfirmStepDown(discord.ui.View):
+class ConfirmStepDown(SafeView):
     def __init__(self) -> None:
         super().__init__(timeout=60)
 
@@ -406,9 +420,11 @@ def _current_term(store: Store, guild: discord.Guild, user_id: int) -> Election 
 
 
 def runner_up(guild: discord.Guild, store: Store, e: Election) -> int | None:
-    # Everyone who held the role (stepped down or was removed) is recorded in
-    # stepdowns, so they are skipped here.
-    """Next in line: most votes (zero counts), ties at random, skipping who's out."""
+    """Next in line: most votes (zero counts), ties at random, skipping who's out.
+
+    Everyone who held the role (stepped down or was removed) is recorded in
+    stepdowns, so they are skipped here.
+    """
     counts = store.tally(e.id)
     out = store.stepped_down(e.id) | {e.winner_id or 0}
     pool = [u for u in store.candidates(e.id)
@@ -512,7 +528,10 @@ async def _close_poll(guild: discord.Guild, store: Store, e: Election, now: dt.d
                         + ", broken at random")
 
     header = f"## 🗳️ Results: Faction Commander for {schedule.fmt_local(e.siege)}"
-    if winner_id is None:
+    if winner_id is None and counts:
+        verdict = ("Everyone who received votes has left the server or lost their approval, so there "
+                   "will be no Faction Commander for this siege.")
+    elif winner_id is None:
         verdict = "Nobody voted, so there will be no Faction Commander for this siege."
     else:
         verdict = (f"👑 **<@{winner_id}> is the Faction Commander**{tie_note}. The role lasts until "
