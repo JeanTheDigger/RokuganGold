@@ -111,6 +111,12 @@ LAYOUT: tuple[Category, ...] = (
         Channel("siege-alerts", access=APPROVED_BOT_ONLY, purpose=SIEGE_ALERTS,
                 topic="Siege reminders. Turn pings on or off with the button."),
         Channel("War Room", kind="voice", access=COMMAND_VOICE),
+        # Open voice chat for every approved person (the category's access).
+        Channel("Voice 1", kind="voice"),
+        Channel("Voice 2", kind="voice"),
+        Channel("Voice 3", kind="voice"),
+        Channel("Voice 4", kind="voice"),
+        Channel("Voice 5", kind="voice"),
     )),
     # Unlocked by the Faction Commander role, for the length of the term. Names are drafts.
     Category("Faction Command", FACTION_COMMAND, (
