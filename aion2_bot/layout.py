@@ -110,7 +110,7 @@ LAYOUT: tuple[Category, ...] = (
                 topic="Apply to be Faction Commander for the next siege, and vote."),
         Channel("siege-alerts", access=APPROVED_BOT_ONLY, purpose=SIEGE_ALERTS,
                 topic="Siege reminders. Turn pings on or off with the button."),
-        Channel("Faction Commander Orders", kind="voice", access=COMMAND_VOICE),
+        Channel("War Room", kind="voice", access=COMMAND_VOICE),
     )),
     # Unlocked by the Faction Commander role, for the length of the term. Names are drafts.
     Category("Faction Command", FACTION_COMMAND, (

@@ -17,7 +17,7 @@ countdown and a Faction Commander election for every siege.
 | Category | Who sees it | Channels |
 |---|---|---|
 | **Welcome** | everyone, including people with no role | `#arrivals` (read-only: the bot posts "**Name** entered the server."), `#chat` (anyone can talk), `#commander-applications` and `#member-applications` (read-only, each holds an apply button) |
-| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#general`, `#questions`, `#memes`, `#screenshots`; `#siege-timer`, `#faction-commander` and `#siege-alerts` (only the bot posts); 🔊 **Faction Commander Orders** (everyone approved listens, only the Faction Commander speaks) |
+| **Asmodian Command** (*draft name*) | approved commanders and members, Head Admin | `#general`, `#questions`, `#memes`, `#screenshots`; `#siege-timer`, `#faction-commander` and `#siege-alerts` (only the bot posts); 🔊 **War Room** (everyone approved listens, only the Faction Commander speaks) |
 | **Faction Command** (*draft names*) | the current Faction Commander and Head Admin | `#fc-head-admin` (Faction Commander ↔ Head Admin), `#faction-leaders` (also every Legion Commander), `#step-down` (the step-down button) |
 | **Legions** | Head Admin; each Legion's channel is also open to that Legion | one private channel per approved Legion, made automatically |
 | **Tickets** | Head Admin; each ticket is also open to the people in it | one private channel per open application, made automatically |
@@ -94,7 +94,7 @@ changes hands automatically with each siege and each step-down.
 - The **Faction Command** category: `#fc-head-admin`, a private room with the
   Head Admin; `#faction-leaders`, where the Faction Commander talks with every
   Legion Commander; and `#step-down`. History is kept between terms.
-- 🔊 **Faction Commander Orders**: a voice channel every approved person can
+- 🔊 **War Room**: a voice channel every approved person can
   join, where only the Faction Commander can speak (with Priority Speaker) and
   type in the channel's text chat. Everyone else listens and reads. (Discord lets anyone with Administrator speak anywhere.)
 - **Step down**: the Faction Commander clicks the button in `#step-down` and
