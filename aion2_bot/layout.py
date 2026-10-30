@@ -1,14 +1,15 @@
 """The server layout `/setup server` builds: roles, categories and channels.
 
 This is the one file to edit to change what setup creates. The setup logic in
-`setup_server.py` reads it and never hard-codes a channel name.
-
-DRAFT: the categories and channels below are a placeholder until the owner
-gives the real list.
+`setup_server.py` reads it and never hard-codes a channel name. Channels the
+bot itself uses (arrivals, the application rooms, tickets, Legion channels,
+the log) are found by their `purpose`, not their name, so renaming one here is
+safe.
 
 Access levels (set on a category; a channel may override its category's):
-  PUBLIC     everyone can see and post.
+  PUBLIC     everyone can see and post, including people with no role.
   READ_ONLY  everyone can see; only Head Admin (and the bot) can post.
+  APPROVED   only approved Legion commanders and members (and Head Admin).
   ADMIN      only Head Admin (and the bot) can see it at all.
 """
 
@@ -17,15 +18,34 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-# The role that gates `/setup server`. Matched by name, ignoring case.
+# --- Roles (matched by name, ignoring case) --------------------------------
+# Gates `/setup server` and approves applications.
 HEAD_ADMIN_ROLE = "Head Admin"
+# Given to an approved Legion commander.
+COMMANDER_ROLE = "Legion Commander"
+# Given to an approved Legion member.
+MEMBER_ROLE = "Legion Member"
+# Each approved Legion gets its own role, named this prefix + the Legion's name.
+LEGION_ROLE_PREFIX = "Legion: "
 
 PUBLIC = "public"
 READ_ONLY = "read_only"
+APPROVED = "approved"
 ADMIN = "admin"
 
-Access = Literal["public", "read_only", "admin"]
+Access = Literal["public", "read_only", "approved", "admin"]
 Kind = Literal["text", "voice"]
+
+# --- Purposes: what the bot uses a channel or category for ------------------
+ARRIVALS = "arrivals"                # "<member> entered the server." posts
+COMMANDER_APPLY = "commander_apply"  # holds the "Apply as Legion Commander" button
+MEMBER_APPLY = "member_apply"        # holds the "Apply to a Legion" button
+BOT_LOG = "bot_log"                  # what the bot did; closed-ticket transcripts
+TICKETS = "tickets"                  # category: one private channel per open application
+LEGIONS = "legions"                  # category: one private channel per approved Legion
+
+CHANNEL_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, BOT_LOG)
+CATEGORY_PURPOSES = (TICKETS, LEGIONS)
 
 
 @dataclass(frozen=True)
@@ -35,6 +55,7 @@ class Channel:
     topic: str = ""
     # None = inherit the category's access (the channel stays synced to it).
     access: Access | None = None
+    purpose: str | None = None
 
 
 @dataclass(frozen=True)
@@ -42,36 +63,33 @@ class Category:
     name: str
     access: Access = PUBLIC
     channels: tuple[Channel, ...] = field(default_factory=tuple)
+    purpose: str | None = None
 
 
 LAYOUT: tuple[Category, ...] = (
-    Category("Information", READ_ONLY, (
-        Channel("welcome", topic="Start here."),
-        Channel("rules", topic="Server rules."),
-        Channel("announcements", topic="News from the Head Admin."),
+    Category("Welcome", PUBLIC, (
+        Channel("arrivals", topic="Who just walked in.", access=READ_ONLY, purpose=ARRIVALS),
+        Channel("chat", topic="Open chat for everyone."),
+        Channel("commander-applications", access=READ_ONLY, purpose=COMMANDER_APPLY,
+                topic="Lead a Legion? Apply here to have you and your Legion approved."),
+        Channel("member-applications", access=READ_ONLY, purpose=MEMBER_APPLY,
+                topic="In an approved Legion? Apply here to join the server proper."),
     )),
-    Category("General", PUBLIC, (
-        Channel("general"),
-        Channel("screenshots"),
-        Channel("off-topic"),
+    # DRAFT channel names: the owner has not named these yet.
+    Category("Asmodian Command", APPROVED, (
+        Channel("general", topic="Talk between approved commanders and Legion members."),
+        Channel("pvp-planning", topic="Managing the PvP."),
     )),
-    Category("Aion 2", PUBLIC, (
-        Channel("looking-for-group", topic="Find a party for dungeons, raids and PvP."),
-        Channel("sieges"),
-        Channel("raids"),
-        Channel("builds-and-gear"),
-    )),
-    Category("Voice", PUBLIC, (
-        Channel("General", kind="voice"),
-        Channel("Raid 1", kind="voice"),
-        Channel("Raid 2", kind="voice"),
-        Channel("Siege", kind="voice"),
-    )),
+    Category("Legions", ADMIN, purpose=LEGIONS),
+    Category("Tickets", ADMIN, purpose=TICKETS),
     Category("Head Admin", ADMIN, (
         Channel("admin-chat"),
-        Channel("bot-log", topic="What the bot did, and when."),
+        Channel("bot-log", topic="What the bot did, and when.", purpose=BOT_LOG),
     )),
 )
+
+# Without these the bot cannot do its job, so setup refuses a layout missing one.
+REQUIRED_PURPOSES = (ARRIVALS, COMMANDER_APPLY, MEMBER_APPLY, TICKETS, LEGIONS)
 
 
 def validate(layout: tuple[Category, ...] | None = None) -> list[str]:
@@ -80,11 +98,16 @@ def validate(layout: tuple[Category, ...] | None = None) -> list[str]:
         layout = LAYOUT
     problems: list[str] = []
     seen_categories: set[str] = set()
+    purposes: list[str] = []
     for cat in layout:
         key = cat.name.casefold()
         if key in seen_categories:
             problems.append(f"Category '{cat.name}' is listed twice.")
         seen_categories.add(key)
+        if cat.purpose is not None:
+            if cat.purpose not in CATEGORY_PURPOSES:
+                problems.append(f"Category '{cat.name}' has unknown purpose '{cat.purpose}'.")
+            purposes.append(cat.purpose)
         seen_channels: set[tuple[str, str]] = set()
         for ch in cat.channels:
             ch_key = (ch.kind, normalize_channel_name(ch.name, ch.kind))
@@ -94,8 +117,20 @@ def validate(layout: tuple[Category, ...] | None = None) -> list[str]:
             if ch.kind == "voice" and (ch.access or cat.access) == READ_ONLY:
                 problems.append(
                     f"Voice channel '{ch.name}' in '{cat.name}' cannot be read-only; "
-                    "use public or admin."
+                    "use another access level."
                 )
+            if ch.purpose is not None:
+                if ch.purpose not in CHANNEL_PURPOSES:
+                    problems.append(f"Channel '{ch.name}' has unknown purpose '{ch.purpose}'.")
+                elif ch.kind != "text":
+                    problems.append(f"Channel '{ch.name}' has a purpose, so it must be a text channel.")
+                purposes.append(ch.purpose)
+    for p in set(purposes):
+        if purposes.count(p) > 1:
+            problems.append(f"Purpose '{p}' is given to more than one channel or category.")
+    for p in REQUIRED_PURPOSES:
+        if p not in purposes:
+            problems.append(f"No channel or category has the purpose '{p}'; the bot needs one.")
     return problems
 
 

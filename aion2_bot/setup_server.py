@@ -1,24 +1,31 @@
-"""`/setup server`: build the categories and channels from `layout.py`.
+"""`/setup server`: build the roles, categories and channels from `layout.py`.
 
 Who may run it: members with the Head Admin role. If no Head Admin role exists
 yet (a brand-new server), the server owner may run it once; that run creates the
 role and gives it to the owner, and from then on only Head Admin may run it.
 
-Setup is safe to run again. It only *creates* what is missing, matched by name.
-It never deletes, renames, moves or re-permissions anything that already exists,
-so channels and permissions edited by hand are left alone.
+Setup is safe to run again. It only *creates* what is missing, matched by name
+(or, for a channel the bot uses, by the ID it remembered, so a channel renamed
+by hand is still found). It never deletes, renames, moves or re-permissions
+anything that already exists, so hand-made channels and edits are left alone.
+It also records which channel serves which purpose and posts (or refreshes) the
+application buttons.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 
 import discord
 from discord import app_commands
 
+import applications
 import layout
-from layout import ADMIN, PUBLIC, READ_ONLY, Category, Channel
+import roles
+from layout import ADMIN, APPROVED, PUBLIC, READ_ONLY, Category, Channel
+from storage import Store
 
 log = logging.getLogger("aion2_bot.setup")
 
@@ -30,41 +37,41 @@ REASON = "Server setup (/setup server)"
 _locks: dict[int, asyncio.Lock] = {}
 
 
-def find_head_admin_role(guild: discord.Guild) -> discord.Role | None:
-    wanted = layout.HEAD_ADMIN_ROLE.casefold()
-    return next((r for r in guild.roles if r.name.casefold() == wanted), None)
+@dataclass(frozen=True)
+class ServerRoles:
+    head_admin: discord.Role
+    commander: discord.Role
+    member: discord.Role
 
 
-def is_head_admin(member: discord.Member) -> bool:
-    wanted = layout.HEAD_ADMIN_ROLE.casefold()
-    return any(r.name.casefold() == wanted for r in member.roles)
-
-
-def overwrites_for(
-    access: str, guild: discord.Guild, head_admin: discord.Role
-) -> Overwrites:
+def overwrites_for(access: str, guild: discord.Guild, r: ServerRoles) -> Overwrites:
     """Permission overwrites for one access level."""
     bot = guild.me
-    bot_ow = discord.PermissionOverwrite(
-        view_channel=True, send_messages=True, manage_channels=True,
-        manage_messages=True, connect=True,
-    )
     if access == PUBLIC:
-        return {bot: bot_ow}
+        return {bot: roles.bot_overwrite()}
     if access == READ_ONLY:
         return {
             guild.default_role: discord.PermissionOverwrite(
-                view_channel=True, send_messages=False, create_public_threads=False, create_private_threads=False,
-                send_messages_in_threads=False,
+                view_channel=True, send_messages=False, create_public_threads=False,
+                create_private_threads=False, send_messages_in_threads=False,
             ),
-            head_admin: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-            bot: bot_ow,
+            r.head_admin: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+            bot: roles.bot_overwrite(),
+        }
+    if access == APPROVED:
+        seen = discord.PermissionOverwrite(view_channel=True, connect=True)
+        return {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            r.commander: seen,
+            r.member: seen,
+            r.head_admin: seen,
+            bot: roles.bot_overwrite(),
         }
     if access == ADMIN:
         return {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            head_admin: discord.PermissionOverwrite(view_channel=True, connect=True),
-            bot: bot_ow,
+            r.head_admin: discord.PermissionOverwrite(view_channel=True, connect=True),
+            bot: roles.bot_overwrite(),
         }
     raise ValueError(f"Unknown access level: {access!r}")
 
@@ -80,28 +87,41 @@ def _find_channel(category: discord.CategoryChannel, ch: Channel) -> discord.abc
     return next((c for c in pool if layout.normalize_channel_name(c.name, ch.kind) == wanted), None)
 
 
+def _remembered(guild: discord.Guild, store: Store, purpose: str | None, cls: type) -> object | None:
+    """The channel/category the bot recorded for a purpose, if it still exists."""
+    if purpose is None:
+        return None
+    found = guild.get_channel(store.get_config_id(guild.id, purpose) or 0)
+    return found if isinstance(found, cls) else None
+
+
 async def build_layout(
-    guild: discord.Guild, head_admin: discord.Role
+    guild: discord.Guild, r: ServerRoles, store: Store
 ) -> tuple[list[str], list[str]]:
     """Create every missing category and channel. Returns (created, already_there)."""
     created: list[str] = []
     existing: list[str] = []
     for cat in layout.LAYOUT:
-        category = _find_category(guild, cat.name)
+        category = _remembered(guild, store, cat.purpose, discord.CategoryChannel) \
+            or _find_category(guild, cat.name)
         if category is None:
             category = await guild.create_category(
-                cat.name, overwrites=overwrites_for(cat.access, guild, head_admin), reason=REASON,
+                cat.name, overwrites=overwrites_for(cat.access, guild, r), reason=REASON,
             )
             created.append(f"📁 {cat.name}")
         else:
-            existing.append(f"📁 {cat.name}")
-        await _build_channels(guild, head_admin, cat, category, created, existing)
+            existing.append(f"📁 {category.name}")
+        assert isinstance(category, discord.CategoryChannel)
+        if cat.purpose is not None:
+            store.set_config(guild.id, cat.purpose, category.id)
+        await _build_channels(guild, r, store, cat, category, created, existing)
     return created, existing
 
 
 async def _build_channels(
     guild: discord.Guild,
-    head_admin: discord.Role,
+    r: ServerRoles,
+    store: Store,
     cat: Category,
     category: discord.CategoryChannel,
     created: list[str],
@@ -109,78 +129,42 @@ async def _build_channels(
 ) -> None:
     for ch in cat.channels:
         label = f"#{ch.name}" if ch.kind == "text" else f"🔊 {ch.name}"
-        if _find_channel(category, ch) is not None:
-            existing.append(f"{label} ({cat.name})")
-            continue
-        # A channel with its own access gets its own overwrites; otherwise it is
-        # created with the category's, which keeps it synced to the category.
-        access = ch.access or cat.access
-        overwrites = overwrites_for(access, guild, head_admin)
-        if ch.kind == "text":
-            await category.create_text_channel(
-                ch.name, topic=ch.topic or None, overwrites=overwrites, reason=REASON,
-            )
-        else:
-            await category.create_voice_channel(ch.name, overwrites=overwrites, reason=REASON)
-        created.append(f"{label} ({cat.name})")
-
-
-def _missing_bot_permissions(guild: discord.Guild, need_roles: bool) -> list[str]:
-    perms = guild.me.guild_permissions
-    missing: list[str] = []
-    if not perms.manage_channels:
-        missing.append("Manage Channels")
-    if need_roles and not perms.manage_roles:
-        missing.append("Manage Roles")
-    # Setting a permission overwrite (allow or deny) requires the bot to hold
-    # that permission itself, so it needs every one `overwrites_for` touches.
-    for name, ok in (
-        ("View Channels", perms.view_channel), ("Send Messages", perms.send_messages),
-        ("Manage Messages", perms.manage_messages), ("Connect", perms.connect),
-        ("Create Public Threads", perms.create_public_threads),
-        ("Create Private Threads", perms.create_private_threads),
-        ("Send Messages in Threads", perms.send_messages_in_threads),
-    ):
-        if not ok:
-            missing.append(name)
-    return missing
-
-
-def _summary(created: list[str], existing: list[str], notes: list[str]) -> str:
-    lines: list[str] = ["**Server setup complete.**"]
-    lines += notes
-    if created:
-        lines.append(f"\n**Created ({len(created)}):**")
-        lines += [f"• {item}" for item in created]
-    else:
-        lines.append("\nNothing was missing; nothing was created.")
-    if existing:
-        lines.append(f"\n**Already there, left untouched ({len(existing)}):** "
-                     + ", ".join(existing))
-    text = "\n".join(lines)
-    return text if len(text) <= 1900 else text[:1890] + "\n…"
-
-
-async def _post_to_bot_log(guild: discord.Guild, user: discord.abc.User, created: list[str]) -> None:
-    """Note the run in #bot-log, if the layout has one and it exists."""
-    for cat in layout.LAYOUT:
-        if not any(ch.name == "bot-log" for ch in cat.channels):
-            continue
-        category = _find_category(guild, cat.name)
-        target = category and _find_channel(category, Channel("bot-log"))
-        if isinstance(target, discord.TextChannel):
-            try:
-                await target.send(
-                    f"🛠️ {user.mention} ran `/setup server`: "
-                    f"{len(created)} item(s) created.",
-                    allowed_mentions=discord.AllowedMentions.none(),
+        found = _remembered(guild, store, ch.purpose, discord.TextChannel) or _find_channel(category, ch)
+        if found is None:
+            # A channel with its own access gets its own overwrites; otherwise it is
+            # created with the category's, which keeps it synced to the category.
+            overwrites = overwrites_for(ch.access or cat.access, guild, r)
+            if ch.kind == "text":
+                found = await category.create_text_channel(
+                    ch.name, topic=ch.topic or None, overwrites=overwrites, reason=REASON,
                 )
-            except discord.HTTPException:
-                log.warning("Could not post to #bot-log in %s", guild.id)
-        return
+            else:
+                found = await category.create_voice_channel(ch.name, overwrites=overwrites, reason=REASON)
+            created.append(f"{label} ({cat.name})")
+        else:
+            existing.append(f"{label} ({cat.name})")
+        if ch.purpose is not None:
+            store.set_config(guild.id, ch.purpose, found.id)
 
 
-async def _create_head_admin(guild: discord.Guild, owner: discord.Member) -> tuple[discord.Role, str]:
+async def _ensure_roles(
+    guild: discord.Guild, owner: discord.Member, head_admin: discord.Role | None, notes: list[str]
+) -> ServerRoles:
+    if head_admin is None:
+        head_admin = roles.find_role(guild, layout.HEAD_ADMIN_ROLE)
+    if head_admin is None:
+        head_admin = await _create_head_admin(guild, owner, notes)
+    found: list[discord.Role] = []
+    for name in (layout.COMMANDER_ROLE, layout.MEMBER_ROLE):
+        role = roles.find_role(guild, name)
+        if role is None:
+            role = await guild.create_role(name=name, hoist=True, reason=REASON)
+            notes.append(f"Created the **{name}** role.")
+        found.append(role)
+    return ServerRoles(head_admin=head_admin, commander=found[0], member=found[1])
+
+
+async def _create_head_admin(guild: discord.Guild, owner: discord.Member, notes: list[str]) -> discord.Role:
     """First run: create the Head Admin role and give it to the server owner.
 
     The role gets Administrator when the bot can grant it; Discord forbids a
@@ -198,7 +182,39 @@ async def _create_head_admin(guild: discord.Guild, owner: discord.Member) -> tup
     if not can_grant_admin:
         note += (" The bot is not an Administrator, so it could not give the role Administrator; "
                  "turn that on yourself in **Server Settings → Roles** if you want it.")
-    return role, note
+    notes.append(note)
+    return role
+
+
+def _missing_bot_permissions(guild: discord.Guild) -> list[str]:
+    perms = guild.me.guild_permissions
+    # Manage Roles/Channels to create things; the rest because setting a
+    # permission overwrite (allow or deny) requires the bot to hold it itself.
+    needed = (
+        ("Manage Roles", perms.manage_roles), ("Manage Channels", perms.manage_channels),
+        ("View Channels", perms.view_channel), ("Send Messages", perms.send_messages),
+        ("Manage Messages", perms.manage_messages), ("Read Message History", perms.read_message_history),
+        ("Embed Links", perms.embed_links), ("Attach Files", perms.attach_files),
+        ("Connect", perms.connect), ("Create Public Threads", perms.create_public_threads),
+        ("Create Private Threads", perms.create_private_threads),
+        ("Send Messages in Threads", perms.send_messages_in_threads),
+    )
+    return [name for name, ok in needed if not ok]
+
+
+def _summary(created: list[str], existing: list[str], notes: list[str]) -> str:
+    lines: list[str] = ["**Server setup complete.**"]
+    lines += notes
+    if created:
+        lines.append(f"\n**Created ({len(created)}):**")
+        lines += [f"• {item}" for item in created]
+    else:
+        lines.append("\nNothing was missing; nothing was created.")
+    if existing:
+        lines.append(f"\n**Already there, left untouched ({len(existing)}):** "
+                     + ", ".join(existing))
+    text = "\n".join(lines)
+    return text if len(text) <= 1900 else text[:1890] + "\n…"
 
 
 setup_group = app_commands.Group(
@@ -208,7 +224,7 @@ setup_group = app_commands.Group(
 
 @setup_group.command(
     name="server",
-    description="Create the server's categories and channels. Only adds what is missing. [Head Admin]",
+    description="Create the server's roles, categories and channels. Only adds what is missing. [Head Admin]",
 )
 async def setup_server(interaction: discord.Interaction) -> None:
     guild = interaction.guild
@@ -216,10 +232,10 @@ async def setup_server(interaction: discord.Interaction) -> None:
     if guild is None or not isinstance(member, discord.Member):
         await interaction.response.send_message("Run this inside the server.", ephemeral=True)
         return
+    store: Store = interaction.client.store  # type: ignore[attr-defined]
 
-    head_admin = find_head_admin_role(guild)
-    bootstrapping = head_admin is None
-    if bootstrapping:
+    head_admin = roles.find_role(guild, layout.HEAD_ADMIN_ROLE)
+    if head_admin is None:
         if member.id != guild.owner_id:
             await interaction.response.send_message(
                 f"There is no **{layout.HEAD_ADMIN_ROLE}** role on this server yet. "
@@ -227,7 +243,7 @@ async def setup_server(interaction: discord.Interaction) -> None:
                 ephemeral=True,
             )
             return
-    elif not is_head_admin(member):
+    elif not roles.is_head_admin(member):
         await interaction.response.send_message(
             f"Only members with the **{head_admin.name}** role can run server setup.",
             ephemeral=True,
@@ -243,7 +259,7 @@ async def setup_server(interaction: discord.Interaction) -> None:
         )
         return
 
-    missing = _missing_bot_permissions(guild, need_roles=bootstrapping)
+    missing = _missing_bot_permissions(guild)
     if missing:
         await interaction.response.send_message(
             "The bot is missing permissions it needs for setup:\n"
@@ -265,20 +281,18 @@ async def setup_server(interaction: discord.Interaction) -> None:
     notes: list[str] = []
     try:
         async with lock:
-            if head_admin is None:
-                head_admin = find_head_admin_role(guild)
-            if head_admin is None:
-                head_admin, note = await _create_head_admin(guild, member)
-                notes.append(note)
-            created, existing = await build_layout(guild, head_admin)
+            server_roles = await _ensure_roles(guild, member, head_admin, notes)
+            created, existing = await build_layout(guild, server_roles, store)
+            notes += await applications.ensure_panels(guild, store)
     except discord.Forbidden as exc:
         log.warning("Setup forbidden in %s: %s", guild.id, exc)
         await interaction.followup.send(
             f"Discord refused one of the bot's actions: `{exc.text}`\n"
-            "Anything created before that point was kept. Check that the bot's role has "
-            "**Manage Channels** and **Manage Roles** and sits above the "
-            f"**{layout.HEAD_ADMIN_ROLE}** role in **Server Settings → Roles**, then run "
-            "`/setup server` again: it picks up where it stopped.",
+            "Anything created before that point was kept. Check that the bot's role has the "
+            "permissions above and sits **above** the "
+            f"**{layout.HEAD_ADMIN_ROLE}**, **{layout.COMMANDER_ROLE}** and **{layout.MEMBER_ROLE}** "
+            "roles in **Server Settings → Roles**, then run `/setup server` again: it picks up "
+            "where it stopped.",
             ephemeral=True,
         )
         return
@@ -293,4 +307,6 @@ async def setup_server(interaction: discord.Interaction) -> None:
 
     log.info("Setup in %s by %s: created %d, existing %d", guild.id, member.id, len(created), len(existing))
     await interaction.followup.send(_summary(created, existing, notes), ephemeral=True)
-    await _post_to_bot_log(guild, member, created)
+    await applications.bot_log(
+        guild, store, f"🛠️ {member.mention} ran `/setup server`: {len(created)} item(s) created.",
+    )
