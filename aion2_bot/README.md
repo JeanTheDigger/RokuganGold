@@ -204,6 +204,12 @@ Automatic:
 
 ## Running it
 
+**On a server, 24/7:** follow [`DEPLOY.md`](DEPLOY.md). One script (`deploy/setup.sh`)
+installs the bot as a service with auto-restart and daily database backups,
+alongside the Rokugan bot if you like, and re-running it updates the bot.
+
+**On your own computer, for a quick try:**
+
 1. **Create the bot** at the [Discord Developer Portal](https://discord.com/developers/applications):
    New Application → **Bot** → **Reset Token** and copy the token. On the same
    page, turn on **Server Members Intent** and **Message Content Intent**. The
@@ -241,6 +247,7 @@ Automatic:
 | `guide.py` | The `#how-it-works` guide and `/help`. |
 | `admin_tools.py` | The Head Admin tools panel: rules, announcements, manual Legions, cooldowns. |
 | `colors.py` | Legion colors: RGB and brightness. |
+| `deploy/` | Server setup script, systemd service and backup script (see `DEPLOY.md`). |
 | `ui_errors.py` | Turns a failed button or form into a message for the person. |
 | `roles.py` | Finding roles by name; the bot's own channel permissions. |
 | `storage.py` | The SQLite database (`aion2.db`, or the path in `AION2_DB`). |
