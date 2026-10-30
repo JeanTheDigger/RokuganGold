@@ -95,8 +95,8 @@ changes hands automatically with each siege and each step-down.
   Head Admin; `#faction-leaders`, where the Faction Commander talks with every
   Legion Commander; and `#step-down`. History is kept between terms.
 - 🔊 **Faction Commander Orders**: a voice channel every approved person can
-  join, where only the Faction Commander can speak (with Priority Speaker).
-  Everyone else listens. (Discord lets anyone with Administrator speak anywhere.)
+  join, where only the Faction Commander can speak (with Priority Speaker) and
+  type in the channel's text chat. Everyone else listens and reads. (Discord lets anyone with Administrator speak anywhere.)
 - **Step down**: the Faction Commander clicks the button in `#step-down` and
   confirms. The bot takes their role and gives it to the **runner-up**: the
   next applicant by votes (zero votes included), ties broken at random, skipping

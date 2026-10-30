@@ -106,8 +106,12 @@ def overwrites_for(access: str, guild: discord.Guild, r: ServerRoles) -> Overwri
             ow[r.commander] = seen
         return ow
     if access == COMMAND_VOICE:
-        # Everyone approved may join and listen; only the Faction Commander speaks.
-        listen = discord.PermissionOverwrite(view_channel=True, connect=True, speak=False)
+        # Everyone approved may join and listen; only the Faction Commander speaks,
+        # and only they type in the channel's built-in text chat.
+        listen = discord.PermissionOverwrite(
+            view_channel=True, connect=True, speak=False, send_messages=False,
+            read_message_history=True,
+        )
         return {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             r.commander: listen,
@@ -115,6 +119,7 @@ def overwrites_for(access: str, guild: discord.Guild, r: ServerRoles) -> Overwri
             r.head_admin: discord.PermissionOverwrite(view_channel=True, connect=True),
             r.faction_commander: discord.PermissionOverwrite(
                 view_channel=True, connect=True, speak=True, priority_speaker=True,
+                send_messages=True, read_message_history=True,
             ),
             bot: roles.bot_overwrite(),
         }
