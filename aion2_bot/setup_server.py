@@ -24,6 +24,7 @@ from discord import app_commands
 import alerts
 import applications
 import layout
+import legions
 import roles
 import siege
 from layout import (
@@ -342,6 +343,7 @@ async def setup_server(interaction: discord.Interaction) -> None:
             notes += await applications.ensure_panels(guild, store)
             notes += await siege.ensure_messages(guild, store)
             notes += await alerts.ensure_panel(guild, store)
+            notes += await legions.ensure_panels(guild, store)
     except discord.Forbidden as exc:
         log.warning("Setup forbidden in %s: %s", guild.id, exc)
         await interaction.followup.send(

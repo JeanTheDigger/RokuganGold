@@ -17,6 +17,7 @@ import alerts
 import applications
 import controls
 import layout
+import legions
 import setup_server
 import siege
 from storage import Store
@@ -59,6 +60,8 @@ class Aion2Bot(discord.Client):
         self.add_view(alerts.AlertsPanel())
         self.add_view(siege.StepDownPanel())
         self.add_view(controls.ControlPanel())
+        self.add_view(legions.ControlPanel())
+        self.add_dynamic_items(legions.LegionButton)
         # Siege countdown + Faction Commander election, once a minute.
         self.siege_task = asyncio.create_task(siege.run_loop(self, self.store))
         # With DISCORD_GUILD_ID set, commands go to that one server and appear
@@ -87,6 +90,13 @@ class Aion2Bot(discord.Client):
                 )
             except discord.HTTPException:
                 log.warning("Could not post arrival of %s in %s", member.id, member.guild.id)
+
+    async def on_member_remove(self, member: discord.Member) -> None:
+        """Leaving the server takes someone out of their Legion (disbands it if they led it)."""
+        try:
+            await legions.member_left(member, self.store)
+        except Exception:
+            log.exception("Cleanup after %s left %s failed", member.id, member.guild.id)
 
     async def on_app_command_error(
         self, interaction: discord.Interaction, error: app_commands.AppCommandError

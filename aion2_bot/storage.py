@@ -255,6 +255,42 @@ class Store:
                 (guild_id, user_id, legion_id, _now()),
             )
 
+    def legion_members(self, legion_id: int) -> list[Membership]:
+        """Everyone in a Legion, commander included, oldest first."""
+        rows = self.db.execute(
+            "SELECT * FROM memberships WHERE legion_id = ? ORDER BY joined_at, rowid", (legion_id,)
+        ).fetchall()
+        return [Membership(**dict(r)) for r in rows]
+
+    def remove_membership(self, guild_id: int, user_id: int) -> None:
+        with self.db:
+            self.db.execute("DELETE FROM memberships WHERE guild_id = ? AND user_id = ?", (guild_id, user_id))
+
+    def set_commander(self, legion_id: int, new_id: int, old_id: int) -> None:
+        """Hand command over; the old commander stays on as a member."""
+        with self.db:
+            self.db.execute("UPDATE legions SET commander_id = ? WHERE id = ?", (new_id, legion_id))
+            self.db.execute("UPDATE memberships SET rank = 'member' WHERE legion_id = ? AND user_id = ?",
+                            (legion_id, old_id))
+            self.db.execute("UPDATE memberships SET rank = 'commander' WHERE legion_id = ? AND user_id = ?",
+                            (legion_id, new_id))
+
+    def rename_legion(self, legion_id: int, name: str) -> None:
+        with self.db:
+            self.db.execute("UPDATE legions SET name = ? WHERE id = ?", (name, legion_id))
+
+    def delete_legion(self, legion_id: int) -> None:
+        with self.db:
+            self.db.execute("DELETE FROM memberships WHERE legion_id = ?", (legion_id,))
+            self.db.execute("DELETE FROM legions WHERE id = ?", (legion_id,))
+
+    def pending_member_applications(self, legion_id: int) -> list[Application]:
+        rows = self.db.execute(
+            "SELECT * FROM applications WHERE kind = 'member' AND legion_id = ? AND status = 'pending'",
+            (legion_id,),
+        ).fetchall()
+        return [Application(**dict(r)) for r in rows]
+
     # --- applications -----------------------------------------------------
     def create_application(
         self,
@@ -375,6 +411,16 @@ class Store:
                 (election_id, user_id, _now()),
             )
         return cur.rowcount == 1
+
+    def withdraw_everywhere(self, guild_id: int, user_id: int) -> int:
+        """Take someone off every election still taking applications."""
+        with self.db:
+            cur = self.db.execute(
+                "DELETE FROM candidates WHERE user_id = ? AND election_id IN "
+                "(SELECT id FROM elections WHERE guild_id = ? AND status = 'collecting')",
+                (user_id, guild_id),
+            )
+        return cur.rowcount
 
     def remove_candidate(self, election_id: int, user_id: int) -> bool:
         with self.db:

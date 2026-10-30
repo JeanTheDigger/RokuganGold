@@ -411,7 +411,8 @@ def runner_up(guild: discord.Guild, store: Store, e: Election) -> int | None:
     """Next in line: most votes (zero counts), ties at random, skipping who's out."""
     counts = store.tally(e.id)
     out = store.stepped_down(e.id) | {e.winner_id or 0}
-    pool = [u for u in store.candidates(e.id) if u not in out and guild.get_member(u) is not None]
+    pool = [u for u in store.candidates(e.id)
+            if u not in out and (m := guild.get_member(u)) is not None and is_approved(m)]
     random.shuffle(pool)
     pool.sort(key=lambda u: -counts.get(u, 0))  # stable: ties stay in random order
     return pool[0] if pool else None
@@ -497,8 +498,9 @@ async def _close_poll(guild: discord.Guild, store: Store, e: Election, now: dt.d
         f"• <@{uid}>: {counts.get(uid, 0)} vote{'' if counts.get(uid, 0) == 1 else 's'}"
         for uid in sorted(names, key=lambda u: -counts.get(u, 0))
     )
-    # Applicants who left the server can't take the role.
-    eligible = {uid: n for uid, n in counts.items() if guild.get_member(uid) is not None}
+    # Applicants who left the server or lost their approval can't take the role.
+    eligible = {uid: n for uid, n in counts.items()
+                if (m := guild.get_member(uid)) is not None and is_approved(m)}
     winner_id: int | None = None
     tie_note = ""
     if eligible:

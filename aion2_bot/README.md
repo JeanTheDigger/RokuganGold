@@ -21,7 +21,7 @@ countdown and a Faction Commander election for every siege.
 | **Faction Command** (*draft names*) | the current Faction Commander and Head Admin | `#fc-head-admin` (Faction Commander ↔ Head Admin), `#faction-leaders` (also every Legion Commander), `#step-down` (the step-down button) |
 | **Legions** | Head Admin; each Legion's channel is also open to that Legion | one private channel per approved Legion, made automatically |
 | **Tickets** | Head Admin; each ticket is also open to the people in it | one private channel per open application, made automatically |
-| **Head Admin** | Head Admin only | `#admin-chat`, `#bot-log` (everything the bot does, plus ticket transcripts), `#siege-control` (the siege control panel) |
+| **Head Admin** | Head Admin only | `#admin-chat`, `#bot-log` (everything the bot does, plus ticket transcripts), `#siege-control` (the siege control panel), `#legion-control` (the Legion control panel) |
 
 Roles: **Head Admin**, **Legion Commander**, **Legion Member**, **Faction
 Commander** (held by the elected shot caller during a siege), **Siege Alerts**
@@ -129,6 +129,27 @@ off with the button at the top of the channel. Each siege it posts:
 Each reminder goes out once. If the bot was offline and a reminder is more than
 5 minutes late, it is skipped rather than posted stale.
 
+## Managing Legions
+
+Each Legion's private channel has a management panel for its **commander**, and
+`#legion-control` (Head Admin category) has the same buttons for the **Head
+Admin**, who first picks the Legion. The commander or the Head Admin can:
+
+| Button | What it does |
+|---|---|
+| 🚪 **Remove a member** | Pick a member and confirm. They lose the Legion role, their approval (Legion Member role) and Siege Alerts, and get a DM. They can apply again. Picking the **commander** disbands the Legion (with a warning first). |
+| 👑 **Transfer command** | Pick a member of the Legion and confirm. They become commander. The old commander stays on as a regular member. The new commander is added to the Legion's open member tickets, since they must approve them. |
+| ✏️ **Rename** | Type the new name. The Legion's role and channel are renamed too. The name must not belong to another Legion. |
+| 🏴 **Disband** | Confirm. Everyone in it loses the Legion role and their approval, its pending member applications are denied, and its channel's transcript goes to `#bot-log` before the channel and role are deleted. |
+
+Automatic:
+- A member who **leaves the server** is removed from their Legion and must apply
+  again if they come back.
+- A **commander** who leaves the server (or is removed) **disbands** the Legion.
+- Anyone who loses their approval is taken out of the Faction Commander race.
+  If they hold the Faction Commander role, it passes to the runner-up. Only
+  approved people can win a vote or take over as runner-up.
+
 ## Commands
 
 | Command | Who | What it does |
@@ -185,6 +206,7 @@ Each reminder goes out once. If the bot was offline and a reminder is more than
 | `siege.py` | The countdown, Faction Commander applications, the vote and the role. |
 | `alerts.py` | Siege reminders and the Siege Alerts on/off button. |
 | `controls.py` | The Head Admin siege control panel. |
+| `legions.py` | Legion management panels, and cleanup when people leave the server. |
 | `roles.py` | Finding roles by name; the bot's own channel permissions. |
 | `storage.py` | The SQLite database (`aion2.db`, or the path in `AION2_DB`). |
 
@@ -196,6 +218,3 @@ Each reminder goes out once. If the bot was offline and a reminder is more than
   anywhere, including the bot-only channels.
 - The siege schedule comes from community trackers, not NCSoft. If the game
   changes it, edit `schedule.py`.
-- There are no commands yet to remove a member from a Legion, change a Legion's
-  commander or delete a Legion. The bot remembers memberships even if someone
-  leaves the server.

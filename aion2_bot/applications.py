@@ -613,6 +613,8 @@ async def _finalize_commander(
         f"Welcome, {applicant.mention}. This is the private channel of **{legion.name}**; "
         "members you approve will see it too.",
     )
+    import legions  # here, not at the top: legions imports this module
+    await legions.ensure_legion_panel(guild, store, legion)
     await _announce(guild, store, app, applicant,
                     f"✅ Approved as commander of **{name}** by {actor.mention}. Your Legion is approved: "
                     f"members can now apply to it, and your Legion channel is {channel.mention}.")
@@ -747,6 +749,22 @@ async def _announce(
     await bot_log(guild, store, f"Application #{app.id} (<@{app.applicant_id}>, {app.kind}): {text}")
 
 
+async def transcript_file(channel: discord.TextChannel, filename: str) -> discord.File:
+    """The channel's whole history as a text file, oldest first."""
+    lines: list[str] = []
+    async for msg in channel.history(limit=None, oldest_first=True):
+        stamp = msg.created_at.strftime("%Y-%m-%d %H:%M")
+        body = msg.clean_content
+        for e in msg.embeds:
+            body += "\n" + "\n".join(
+                [e.title or ""] + [f"{f.name}: {f.value}" for f in e.fields]
+            )
+        for a in msg.attachments:
+            body += f"\n[attachment] {a.url}"
+        lines.append(f"[{stamp} UTC] {msg.author}: {body}")
+    return discord.File(io.BytesIO("\n".join(lines).encode("utf-8")), filename=filename)
+
+
 async def _close(interaction: discord.Interaction, app_id: int) -> None:
     loaded = await _load(interaction, app_id)
     if loaded is None:
@@ -763,20 +781,7 @@ async def _close(interaction: discord.Interaction, app_id: int) -> None:
     if not isinstance(channel, discord.TextChannel):
         return
     await interaction.response.send_message("Saving the transcript and closing this ticket…")
-    lines: list[str] = []
-    async for msg in channel.history(limit=None, oldest_first=True):
-        stamp = msg.created_at.strftime("%Y-%m-%d %H:%M")
-        body = msg.clean_content
-        for e in msg.embeds:
-            body += "\n" + "\n".join(
-                [e.title or ""] + [f"{f.name}: {f.value}" for f in e.fields]
-            )
-        for a in msg.attachments:
-            body += f"\n[attachment] {a.url}"
-        lines.append(f"[{stamp} UTC] {msg.author}: {body}")
-    transcript = discord.File(
-        io.BytesIO("\n".join(lines).encode("utf-8")), filename=f"application-{app.id}.txt",
-    )
+    transcript = await transcript_file(channel, f"application-{app.id}.txt")
     await bot_log(guild, store, f"🔒 {actor.mention} closed the ticket for application #{app.id}.",
                   file=transcript, embed=ticket_embed(store, app))
     store.mark_closed(app.id)
