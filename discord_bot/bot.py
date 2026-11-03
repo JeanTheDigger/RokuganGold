@@ -7884,6 +7884,10 @@ async def _location_area_autocomplete(
     ][:25]
 
 
+# The read-only channel an area gets when it is created with a description.
+_AREA_DESCRIPTION_CHANNEL = "description"
+
+
 @location_area_group.command(name="create", description="Create a new location area (Discord category). [Fortune]")
 @app_commands.describe(
     name="Area name (becomes the Discord category name).",
@@ -7977,7 +7981,7 @@ async def location_area_create(
                     view_channel=True, send_messages=True, read_message_history=True,
                     manage_messages=True,
                 )
-        desc_ch = await category.create_text_channel("description", overwrites=desc_overwrites)
+        desc_ch = await category.create_text_channel(_AREA_DESCRIPTION_CHANNEL, overwrites=desc_overwrites)
         embed = discord.Embed(
             title=clean_name, color=0xC4A747, description=description,
         )
@@ -8036,13 +8040,26 @@ async def location_area_delete(
                 pass
         store.delete_location(loc.id)
     cat_ch = guild.get_channel(int(area.category_id))
+    desc_removed = False
+    if isinstance(cat_ch, discord.CategoryChannel):
+        # The area's #description channel is not a tracked location, and Discord leaves a
+        # category's channels behind when it deletes the category, so remove it here.
+        for ch in list(cat_ch.text_channels):
+            if ch.name == _AREA_DESCRIPTION_CHANNEL:
+                try:
+                    await ch.delete(reason=f"Area {area.name} deleted")
+                    desc_removed = True
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
     if cat_ch:
         try:
             await cat_ch.delete(reason=f"Location area deleted by {interaction.user}")
         except discord.Forbidden:
             pass
     store.delete_location_area(area.id)
-    await interaction.followup.send(f"Deleted area **{area.name}** and {len(locs)} location(s).", ephemeral=True)
+    extra = " and its description channel" if desc_removed else ""
+    await interaction.followup.send(
+        f"Deleted area **{area.name}**, {len(locs)} location(s){extra}.", ephemeral=True)
 
 
 @location_area_group.command(name="list", description="List all location areas on this server.")
