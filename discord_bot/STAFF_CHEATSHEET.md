@@ -32,7 +32,7 @@ Fortune run the game. Kami also administer the server. Commands tagged [Kami] ne
 - `/dm party`  Every active PC at a glance.
 - `/dm pending`  Approvals still waiting, with jump links.
 - `/dm new_day`  Heal everyone, refresh Void and spell slots.
-- `/dm setdate`  Set the calendar.
+- `/dm setdate`  Set the calendar. It also shows in #calendar.
 - `/dm announce`  Post a session with RSVP reactions.
 - `/weather set`  Choose the weather.
 - `/dm undo preview`  Roll back the last change. Try preview first.

@@ -5128,24 +5128,55 @@ def _date_embed(date_str: str) -> discord.Embed:
         color=0xC4A747,
     )
 
-async def _update_date_display(guild_id: str, date_str: str, reason: str = "Time has advanced.") -> None:
-    """Edit the pinned date message and ping @everyone in the date channel."""
+def _find_calendar_channel(guild: discord.Guild) -> discord.TextChannel | None:
+    """The #calendar channel that /setup server creates in IC Information."""
+    cat = discord.utils.get(guild.categories, name="IC Information")
+    if cat is not None:
+        ch = discord.utils.get(cat.text_channels, name="calendar")
+        if ch is not None:
+            return ch
+    return discord.utils.get(guild.text_channels, name="calendar")
+
+
+async def _update_date_display(guild_id: str, date_str: str, reason: str = "Time has advanced.") -> bool:
+    """Edit the pinned date message and ping @everyone in the date channel.
+    If no date channel is registered yet, adopt the #calendar channel (/setup server only
+    registers it when a date already exists, which is rarely the case on a new server).
+    Returns True when a channel was updated, False when there was nowhere to post."""
     info = store.get_date_channel(guild_id)
+    channel = None
+    message_id = ""
     if info is None:
-        return
-    channel_id, message_id = info
-    channel = client.get_channel(int(channel_id))
-    if channel is None:
-        return
-    if message_id:
+        guild_obj = client.get_guild(int(guild_id))
+        channel = _find_calendar_channel(guild_obj) if guild_obj is not None else None
+        if channel is None:
+            return False
         try:
-            msg = await channel.fetch_message(int(message_id))
-            await msg.edit(embed=_date_embed(date_str))
-        except discord.NotFound:
             new_msg = await channel.send(embed=_date_embed(date_str))
             await new_msg.pin()
-            store.set_date_channel(guild_id, channel_id, str(new_msg.id))
-    await channel.send(f"@everyone {reason}\n**{date_str}**")
+        except (discord.Forbidden, discord.HTTPException):
+            log.warning("Could not post the date in #%s (guild %s): Missing permissions.", channel.name, guild_id)
+            return False
+        store.set_date_channel(guild_id, str(channel.id), str(new_msg.id))
+    else:
+        channel_id, message_id = info
+        channel = client.get_channel(int(channel_id))
+        if channel is None:
+            return False
+    try:
+        if message_id:
+            try:
+                msg = await channel.fetch_message(int(message_id))
+                await msg.edit(embed=_date_embed(date_str))
+            except discord.NotFound:
+                new_msg = await channel.send(embed=_date_embed(date_str))
+                await new_msg.pin()
+                store.set_date_channel(guild_id, str(channel.id), str(new_msg.id))
+        await channel.send(f"@everyone {reason}\n**{date_str}**")
+    except (discord.Forbidden, discord.HTTPException):
+        log.warning("Could not update the date in #%s (guild %s).", getattr(channel, "name", "?"), guild_id)
+        return False
+    return True
 
 def _advance_calendar(guild_id: str) -> str | None:
     """Advance the guild's calendar by 1 day. Returns the new date string, or None if no date set."""
@@ -5192,7 +5223,13 @@ async def dm_setdate(
         color=0xC4A747,
     )
     await interaction.response.send_message(embed=embed, ephemeral=True)
-    await _update_date_display(guild, date_str, reason="The calendar has been set.")
+    shown = await _update_date_display(guild, date_str, reason="The calendar has been set.")
+    if not shown:
+        await interaction.followup.send(
+            "The date is saved, but there is no date channel to show it in. "
+            f"A **{ROLE_KAMI}** can pick one with `/dm date_channel`, or run `/setup server` to create #calendar.",
+            ephemeral=True,
+        )
 
 def _parse_advdis_name(raw: str, kind: str) -> tuple[dict | None, str]:
     """Parse an advantage/disadvantage name with optional parameter.

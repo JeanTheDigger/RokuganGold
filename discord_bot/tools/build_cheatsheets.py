@@ -189,7 +189,7 @@ STAFF = Sheet(
             E("/dm party", "Every active PC at a glance."),
             E("/dm pending", "Approvals still waiting, with jump links."),
             E("/dm new_day", "Heal everyone, refresh Void and spell slots."),
-            E("/dm setdate", "Set the calendar."),
+            E("/dm setdate", "Set the calendar. It also shows in #calendar."),
             E("/dm announce", "Post a session with RSVP reactions."),
             E("/weather set", "Choose the weather."),
             E("/dm undo", "Roll back the last change. Try preview first.", "preview"),
