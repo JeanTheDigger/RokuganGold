@@ -9,6 +9,11 @@ character sheets, combat, and NPCs, with a Dungeon Master kept in the loop.
 > from: there is no shared code, no imports across the boundary, and running
 > this bot changes nothing about the Godot project.
 
+**Cheat sheets.** `PLAYER_CHEATSHEET.md` and `STAFF_CHEATSHEET.md` list the
+slash commands by task. Every section is under Discord's 2000-character limit,
+so each can be pasted into a channel as one message. Regenerate the command
+list from the bot if you add commands, and update the sheets to match.
+
 ---
 
 ## Status: Phase 63: Combat Enhancements
