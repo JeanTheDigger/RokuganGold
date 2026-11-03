@@ -8,11 +8,11 @@
 #   1. Updates the system
 #   2. Installs Python 3, pip, venv, git, sqlite3, ufw
 #   3. Creates a 'rokugan' system user (the bot runs as this user, not root)
-#   4. Copies bot code into /home/rokugan/bot/
+#   4. Puts the repository in /home/rokugan/repo/ (the bot runs from its discord_bot/ folder)
 #   5. Creates a Python virtual environment and installs dependencies
 #   6. Asks you to paste your Discord bot token
 #   7. Installs a systemd service (auto-start on boot, auto-restart on crash)
-#   8. Sets up daily database backups (keeps 14 days)
+#   8. Sets up daily backups of the database and portraits (keeps 14 days)
 #   9. Enables the firewall (SSH only: the bot makes outbound connections)
 #
 # After this script finishes, the bot is running. You're done.
@@ -45,42 +45,31 @@ else
     useradd --system --create-home --shell /bin/bash rokugan
 fi
 
-# --- 4. Copy bot code ---
-echo "[4/9] Setting up bot code in /home/rokugan/bot/ ..."
-BOT_DIR=/home/rokugan/bot
+# --- 4. Put the repository in place ---
+REPO_DIR=/home/rokugan/repo
+BOT_DIR=$REPO_DIR/discord_bot
+echo "[4/9] Setting up the code in $REPO_DIR ..."
 
-if [ -d "$BOT_DIR" ]; then
-    echo "  Bot directory already exists. Updating files..."
-    # Pull if it's a git checkout, otherwise just warn
-    if [ -d "$BOT_DIR/.git" ]; then
-        cd "$BOT_DIR"
-        sudo -u rokugan git pull || echo "  Git pull failed: you may need to update manually."
-        cd /root
-    fi
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SRC_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"   # the repository this script came from
+
+if [ -d "$REPO_DIR/.git" ]; then
+    echo "  $REPO_DIR already exists. Updating it..."
+    git -C "$REPO_DIR" pull || echo "  Git pull failed: update it by hand later."
+elif [ -d "$REPO_DIR" ]; then
+    echo "  $REPO_DIR exists but is not a git checkout. Leaving the code as it is."
+elif [ -f "$SRC_ROOT/discord_bot/bot.py" ]; then
+    echo "  Copying the repository from $SRC_ROOT (keeps its git history so 'git pull' works)..."
+    cp -a "$SRC_ROOT" "$REPO_DIR"
 else
-    # Check if we're running from inside the repo
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    DISCORD_BOT_DIR="$(dirname "$SCRIPT_DIR")"
-
-    if [ -f "$DISCORD_BOT_DIR/bot.py" ] && [ -d "$DISCORD_BOT_DIR/l5r_rules" ]; then
-        echo "  Copying from $DISCORD_BOT_DIR ..."
-        mkdir -p "$BOT_DIR"
-        cp -r "$DISCORD_BOT_DIR"/*.py "$BOT_DIR/"
-        cp -r "$DISCORD_BOT_DIR/l5r_rules" "$BOT_DIR/"
-        cp "$DISCORD_BOT_DIR/requirements.txt" "$BOT_DIR/"
-        cp "$DISCORD_BOT_DIR/.env.example" "$BOT_DIR/"
-        [ -d "$DISCORD_BOT_DIR/deploy" ] && cp -r "$DISCORD_BOT_DIR/deploy" "$BOT_DIR/"
-        chown -R rokugan:rokugan "$BOT_DIR"
-    else
-        echo "  ERROR: Can't find bot.py. Run this script from inside the discord_bot/deploy/"
-        echo "  directory, or clone the repo first and re-run."
-        echo ""
-        echo "  To clone (if the repo is public):"
-        echo "    git clone https://github.com/jeanthedigger/rokugangold.git /tmp/rokugangold"
-        echo "    bash /tmp/rokugangold/discord_bot/deploy/setup.sh"
-        exit 1
-    fi
+    echo "  ERROR: Can't find the repository. Clone it first, then run this script from inside the clone:"
+    echo "    git clone https://github.com/JeanTheDigger/RokuganGold.git /tmp/rokugangold"
+    echo "    bash /tmp/rokugangold/discord_bot/deploy/setup.sh"
+    exit 1
 fi
+# root runs 'git pull' on a folder the rokugan user owns, so tell git that is fine.
+git config --global --add safe.directory "$REPO_DIR"
+chown -R rokugan:rokugan /home/rokugan
 
 # --- 5. Python venv + dependencies ---
 echo "[5/9] Setting up Python virtual environment..."
@@ -94,7 +83,7 @@ sudo -u rokugan .venv/bin/pip install -q -r requirements.txt
 echo "[6/9] Discord bot token setup..."
 if [ -f "$BOT_DIR/.env" ]; then
     echo "  .env already exists: keeping it. Edit manually if you need to change the token:"
-    echo "    nano /home/rokugan/bot/.env"
+    echo "    nano /home/rokugan/repo/discord_bot/.env"
 else
     echo ""
     echo "  You need your Discord bot token from:"
@@ -104,12 +93,11 @@ else
     echo ""
     if [ -z "$BOT_TOKEN" ]; then
         echo "  WARNING: No token entered. The bot won't start until you set it:"
-        echo "    nano /home/rokugan/bot/.env"
+        echo "    nano /home/rokugan/repo/discord_bot/.env"
         cp "$BOT_DIR/.env.example" "$BOT_DIR/.env"
     else
         cat > "$BOT_DIR/.env" << ENVEOF
 DISCORD_BOT_TOKEN=${BOT_TOKEN}
-DB_PATH=/home/rokugan/bot/rokugan.db
 ENVEOF
     fi
 fi
@@ -123,12 +111,13 @@ cp "$BOT_DIR/deploy/rokugan-bot.service" /etc/systemd/system/rokugan-bot.service
 systemctl daemon-reload
 systemctl enable rokugan-bot
 
-# --- 8. Database backups ---
-echo "[8/9] Setting up daily database backups..."
+# --- 8. Backups (database + portraits) ---
+echo "[8/9] Setting up daily backups..."
 chmod +x "$BOT_DIR/deploy/backup.sh"
-cp "$BOT_DIR/deploy/backup.sh" /home/rokugan/backup.sh
-chown rokugan:rokugan /home/rokugan/backup.sh
-echo "0 4 * * * rokugan /home/rokugan/backup.sh" > /etc/cron.d/rokugan-backup
+mkdir -p /home/rokugan/backups
+chown rokugan:rokugan /home/rokugan/backups
+# Cron runs the script straight from the repository, so 'git pull' keeps it current.
+echo "0 4 * * * rokugan $BOT_DIR/deploy/backup.sh >> /home/rokugan/backups/backup.log 2>&1" > /etc/cron.d/rokugan-backup
 chmod 644 /etc/cron.d/rokugan-backup
 
 # --- 9. Firewall ---
@@ -155,7 +144,9 @@ if systemctl is-active --quiet rokugan-bot; then
     echo "    systemctl stop rokugan-bot     : stop the bot"
     echo ""
     echo "  The bot auto-starts on boot and auto-restarts on crash."
-    echo "  Database backups run daily at 04:00 UTC in /home/rokugan/backups/"
+    echo "  Backups of the database and portraits run daily at 04:00 UTC in /home/rokugan/backups/"
+    echo "  Testing one now..."
+    sudo -u rokugan "$BOT_DIR/deploy/backup.sh" || echo "  The test backup failed: see DEPLOY.md, section Backups."
     echo ""
 else
     echo ""
@@ -163,7 +154,7 @@ else
     echo "Check the logs:  journalctl -u rokugan-bot -n 50"
     echo ""
     echo "Common fix: make sure .env has a valid token:"
-    echo "  nano /home/rokugan/bot/.env"
+    echo "  nano /home/rokugan/repo/discord_bot/.env"
     echo "  systemctl restart rokugan-bot"
     echo ""
 fi

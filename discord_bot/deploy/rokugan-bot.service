@@ -7,14 +7,15 @@ Wants=network-online.target
 Type=simple
 User=rokugan
 Group=rokugan
-WorkingDirectory=/home/rokugan/bot
-ExecStart=/home/rokugan/bot/.venv/bin/python3 bot.py
+WorkingDirectory=/home/rokugan/repo/discord_bot
+ExecStart=/home/rokugan/repo/discord_bot/.venv/bin/python3 bot.py
 Restart=always
 RestartSec=10
 MemoryMax=512M
 TimeoutStopSec=10
 
-Environment=DB_PATH=/home/rokugan/bot/rokugan.db
+Environment=DB_PATH=/home/rokugan/repo/discord_bot/rokugan.db
+Environment=PORTRAIT_DIR=/home/rokugan/repo/discord_bot/portraits
 
 [Install]
 WantedBy=multi-user.target
