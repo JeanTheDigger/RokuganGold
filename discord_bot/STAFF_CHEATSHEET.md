@@ -1,121 +1,134 @@
 # Rokugan Bot: Staff Cheat Sheet
+*For Fortune and Kami.*
 
-For Fortune (game masters) and Kami (administrators). Each section fits in one Discord message, so paste them one by one into a staff channel.
+Fortune run the game. Kami also administer the server. Commands tagged [Kami] need Kami.
 
-**Roles and habits**
-Kami can do everything. Fortune can do everything not tagged [Kami] in a command's description.
-Most commands take `member:` (pick a player) or `character:` (type any character or NPC name, from any channel). The `character:` list autocompletes for staff only.
-`/dm wizard` is a menu of every staff action, grouped by category. Start there if you forget a command.
-Most replies are private to you. Players get a private notice in their character channel when you change their sheet, grant XP, deal damage, heal or give items.
-The bot never adds Honor or Glory on its own, and it never applies damage to NPCs or creatures by itself. You do both with the commands below.
+*A | B means pick one. Words after a command are its options. Most commands take member (pick a player) or character (type any name, NPCs too).*
 
 ---
 
-**First-time server setup (Kami)**
-`/setup server` Build the roles and channel layout. Run once, as an administrator.
-`/dm approval_channel` Where character submissions arrive for approval.
-`/dm damage_channel` Where damage, heal and Medicine cards arrive.
-`/dm log_channel` Combat event log. `/dm xp_log_channel` A Kami-only log of XP grants, spends and rank-up spells.
-`/dm date_channel` The pinned in-game date. Most have a clear twin, like `/dm clear_log`. `/dm xp_log_channel` with no channel clears itself.
-`/rumor channel` The notice board for public rumors.
-`/stipend set`, `/stipend view`, `/stipend clear` Monthly pay per clan, paid on a new month.
-`/dm roles` Who holds the Fortune and Kami roles.
-`/sync` Re-register the slash commands with Discord if they ever look stale.
-`/location area fix-permissions` Repair who can see the location areas.
+## Know this first
+- `/dm wizard`  A menu of every staff action. Start here if you forget a command.
+> `character` takes any character or NPC by name, from any channel. It autocompletes for staff only.
+> Players get a private notice when you edit their sheet, grant XP, deal damage, heal or give items.
+> The bot never changes Honor or Glory by itself, and never hurts NPCs by itself. You do both.
 
 ---
 
-**Running a session**
-`/dm party` Every active PC at a glance. `/dm pending` Approvals still waiting, with jump links.
-`/dm new_day` Advance one day: Heal everyone, refresh Void and spell slots.
-`/dm setdate` Set the calendar. `/dm announce` Post a session with RSVP reactions.
-`/weather set` Choose the weather. Players use `/weather now`.
-`/dm influence` Track Influence Points in a court scene.
-`/dm undo` Roll back the last change to a character or creature. Use `preview:` first.
-`/dm revive` Undo a death caused by a bug. PC death is otherwise permanent.
-`/dm taint` View or change Shadowlands Taint.
+## Set up once (Kami)
+- `/setup server`  Build the roles and channels.
+- `/dm approval_channel`  Where new characters arrive.
+- `/dm damage_channel`  Where damage and healing cards arrive.
+- `/dm log_channel`  The combat event log.
+- `/dm xp_log_channel`  A Kami-only log of XP and rank-up spells.
+- `/dm date_channel`  The pinned in-game date.
+- `/rumor channel`  The notice board for public rumors.
+- `/sync`  Re-register the commands if they look stale.
+> Most channel commands have a clear twin, like `/dm clear_log`.
 
 ---
 
-**Approvals**
-Character submissions land in the approval channel. Press Approve, or Deny to send the wizard back to the player so they can adjust and resubmit.
-Damage, healing and Medicine cards land in the damage channel. Press Roll & Apply Damage or Deny. Players are shown only the wound level.
-`/dm damage`, `/dm heal` Send a card for a character.
-`/dm treat` A healer rolls Medicine and you approve the result.
-`/edit wound`, `/edit heal` Change wounds directly, with no card.
-Spell condition requests and `/fight condition` requests also come to you for a yes or no.
+## Each session
+- `/dm party`  Every active PC at a glance.
+- `/dm pending`  Approvals still waiting, with jump links.
+- `/dm new_day`  Heal everyone, refresh Void and spell slots.
+- `/dm setdate`  Set the calendar.
+- `/dm announce`  Post a session with RSVP reactions.
+- `/weather set`  Choose the weather.
+- `/dm undo preview`  Roll back the last change. Try preview first.
+- `/dm revive`  Undo a bug death. Otherwise death is permanent.
+- `/dm taint`  View or change Shadowlands Taint.
+- `/dm influence`  Track Influence in a court scene.
 
 ---
 
-**Editing characters**
-`/edit trait` Set a Trait or Void. `/edit skill` Set one skill or many, like `Kenjutsu 3, Courtier 2`.
-`/edit field` Set honor, glory, status, infamy, taint, koku, bu, zeni, age, school_rank, void points, armor bonuses, `spell_ranks_learned`.
-`/edit identity` Clan, family and school. A catalogue family adds its +1 Trait.
-`/edit feature` Add or remove an advantage, disadvantage, technique, kata, kiho, owned weapon, weapon quality, emphasis, tattoo or spell.
-`/edit spell` Add or remove a spell. It warns you when the spell is above their Mastery limit.
-`/edit elements` Set Affinity and Deficiency. Do this for Isawa, who choose theirs.
-`/edit equip`, `/edit activate`, `/edit mount`, `/edit rename`, `/edit notes` Gear, active kata or kiho or tattoo, mounted state, name, freeform notes.
-`/sheet view`, `/sheet list`, `/sheet owner`, `/sheet delete`, `/sheet data import`, `/sheet learn` With `member:` or `character:`.
+## Approvals and damage
+> New characters: Press Approve, or Deny to send the wizard back so the player can adjust it.
+> Damage cards: Press Roll & Apply Damage or Deny. Players only see the wound level.
+- `/dm damage | heal`  Send a card for a character.
+- `/dm treat`  A healer rolls Medicine and you approve.
+- `/edit wound | heal`  Change wounds directly, with no card.
+> Condition requests from `/fight condition` and spells also come to you.
 
 ---
 
-**XP, items and portraits**
-`/xp grant amount: member:` Give XP. A negative amount corrects it. Add `reason:` and the player sees it. `/xp balance` shows a total.
-Players spend XP themselves in their own character channel. You can run `/xp trait` and friends with `member:` for them.
-`/give what:` Hand a character a catalogue weapon, armor, money or any item name. `/take what:` removes one. Arrows go to the quiver.
-`/inventory character:` Open anyone's gear panel, NPCs included, with armor and weapon quality controls.
-`/portrait set character:` Set or clear another character's picture.
-Rank-ups are automatic. The new technique lands on the sheet, and a shugenja gets a spell picker for three spells.
+## Edit characters
+- `/edit trait`  Set a Trait or Void.
+- `/edit skill`  One skill, or many like Kenjutsu 3, Courtier 2.
+- `/edit field`  Honor, glory, koku, school rank, void points and more.
+- `/edit feature`  Add or remove advantages, techniques, kata, kiho, weapons, emphasis, tattoos or spells.
+- `/edit spell`  Add or remove a spell. It warns you when it is above their rank.
+- `/edit elements`  Set Affinity and Deficiency. Isawa choose theirs.
+- `/edit identity | equip | activate | mount | rename | notes`  Clan, gear, active abilities, name and notes.
+- `/sheet view | list | owner | delete | learn`  Work on another sheet with member or character.
+- `/sheet data import`  Create a character from JSON.
 
 ---
 
-**NPCs**
-`/npc create` Step-by-step builder with exact stats. `/npc form` One typed stat block. `/npc generate` Fast random NPC from clan, family, school and rank.
-`/npc edit`, `/npc view`, `/npc list`, `/npc clone`, `/npc delete` Manage stored NPCs.
-`/npc template save`, `spawn`, `list`, `view`, `delete` Reusable templates, `spawn` makes several copies.
-`/npc place` and `/npc dismiss` Put an NPC in a room or remove it. `/npc say` Speak as an NPC in their own name.
-`/letter sendas` Send a letter as any character. `/letter delete` Remove one from the log.
+## XP, items and portraits
+- `/xp grant amount member reason`  Give XP. A negative amount corrects. Add a reason.
+- `/xp balance`  Check a total.
+- `/give | take what`  A weapon, armor, money or any item. Arrows go to the quiver.
+- `/inventory character`  Open anyone's gear, NPCs too.
+- `/portrait set character`  Set or clear another character's picture.
+> Rank-ups are automatic. The new technique lands on the sheet, and shugenja get a three-spell picker.
 
 ---
 
-**Creatures and categories**
-`/creature catalog`, `search`, `info`, `compare` Browse the bestiary without spawning.
-`/creature spawn` Make one from a template, `randomize:` for stat variety. `/creature create` Build a custom one.
-`/creature list`, `view`, `delete`, `wound`, `heal`, `attack` Manage and use spawned creatures.
-`/category create`, `delete`, `rename`, `add`, `remove`, `bulk_add`, `bulk_remove`, `list`, `view` Group NPCs and creatures, such as "Bandit Camp".
-`/category spawn` Spawn every creature template in a group at once.
+## NPCs
+- `/npc create`  Step-by-step builder with exact stats.
+- `/npc form`  One typed stat block.
+- `/npc generate`  A quick NPC from clan, family, school and rank.
+- `/npc edit | view | list | clone | delete`  Manage stored NPCs.
+- `/npc template save | spawn | list`  Reusable templates. Spawn several at once.
+- `/npc place | dismiss`  Put an NPC in a room or take them out.
+- `/npc say`  Speak as an NPC.
+- `/letter sendas`  Send a letter as any character.
 
 ---
 
-**Running combat**
-`/combat start` or `/combat setup`, then add people. A player may add themself with `/combat join`.
-`/combat npc`, `/combat creature`, `/combat category`, `/combat room`, `/combat add` Bring in NPCs, creatures, a whole category, everyone in a room, or a quick Reflexes-only monster.
-`/combat next`, `/combat board`, `/combat status`, `/combat summary`, `/combat recap` Run the order and review it.
-`/combat turn init`, `hold`, `delay`, `act`, `surprise` Adjust the initiative order.
-`/combat condition set`, `clear`, `list` Apply conditions such as Dazed or Grappled for a number of rounds.
-`/fight env cover`, `notes`, `damage` Terrain bonuses, environment notes and hazards.
-`/combat remove`, `/combat end` Take someone out or finish. Players can end a fight with only PCs in it.
-NPC hits do not auto-apply. Use `/creature wound`, `/edit wound` or a `/dm damage` card.
+## Creatures and groups
+- `/creature catalog | search | info`  Browse the bestiary.
+- `/creature spawn`  Make one from a template.
+- `/creature create`  Build a custom creature.
+- `/creature wound | heal`  Change its wounds directly.
+- `/creature attack`  A creature attacks.
+- `/creature list | view | delete`  Manage spawned creatures.
+- `/category create | add | bulk_add | list | view`  Group NPCs and creatures.
+- `/category spawn`  Spawn a whole group.
 
 ---
 
-**Attacks, checks and magic for others**
-`/fight attack attacker_npc:` An NPC attacks. `/creature attack` A creature does, with its fixed stat block.
-`/engage battle start`, `status`, `roll`, `damage`, `table` Mass battle.
-`/engage duel` and `/engage grapple` Run the same boards as players. The NPC and member options let you name NPCs or other players' characters.
-`/check contest` A contested roll between two characters. `/check cooperative` Helpers aid a roll.
-Most `/check` commands take `name:` plus `is_npc:` to roll for an NPC, or `member:` for another player.
-`/spell cast attacker_npc:` An NPC casts. `/spell resist`, `/spell interrupt`, `/spell damage` Resistance, mid-cast interruption and damage dice.
-`/dm craft_extended` A multi-step crafting project.
-`/ref heritage roll` Roll on a clan's Heritage Table.
+## Run a fight
+- `/combat start | setup`  Begin a fight.
+- `/combat npc | creature | category | room`  Add your side, or everyone in a room.
+- `/combat add`  A quick monster from its Reflexes.
+- `/combat next | board | status | summary`  Run the turn order.
+- `/combat turn init | hold | delay | act | surprise`  Adjust the order.
+- `/combat condition set | clear | list`  Dazed, Grappled and the rest.
+- `/fight env cover | notes | damage`  Terrain and hazards.
+- `/combat remove | end`  Take someone out, or finish.
+> NPC hits are not applied for you. Use `/creature wound`, `/edit wound` or a `/dm damage` card.
 
 ---
 
-**World, rumors and places**
-`/rumor post` Send a rumor to characters by clan, family, school or name. Tiers: Official, Hearsay, Whisper.
-`/rumor public` Post a notice to the board. `/rumor broadcast` Do both.
-`/rumor list`, `/rumor delete` See all rumors and remove one.
-`/location area create`, `delete` Make or remove a location area with its permissions.
-`/location create` Add a location channel to an area, optionally private.
-`/room close` Close any room, not just your own.
-`/stipend` Clan stipends. `/weather set` Weather. `/dm date_channel` The date display.
+## Act for NPCs
+- `/fight attack attacker_npc`  An NPC attacks.
+- `/spell cast attacker_npc`  An NPC casts.
+- `/spell resist | interrupt | damage`  Resistance, interruption and damage dice.
+- `/check contest | cooperative`  Contested rolls and team rolls.
+- `/check skill name is_npc`  Roll for an NPC. Most checks take the same.
+- `/engage battle start | status | roll | damage | table`  Mass battle.
+- `/dm craft_extended`  A multi-step crafting project.
+- `/ref heritage roll`  Roll on a clan's Heritage Table.
+
+---
+
+## The world
+- `/rumor post | public | broadcast`  Send to characters, post a notice, or both.
+- `/rumor list | delete`  Review and remove.
+- `/location area create | delete`  Areas and who sees them.
+- `/location create`  Add a location channel.
+- `/location area fix-permissions`  Repair visibility.
+- `/room close`  Close any room.
+- `/stipend set | view | clear`  Monthly pay per clan.
