@@ -49,17 +49,17 @@ Players roll their own `/check` commands (skill, stealth, social, lore, craft, m
 | One submission | Pressing Submit locks the wizard: the player sees "Thank you, staff are looking into it", a second press or a Resume while the review is pending shows the same, and nothing is posted twice. A denial re-opens the wizard with a Resume button in the player's channel so they can adjust and submit again. |
 | Click-once approvals | Every approval button (damage, healing, spells, creatures, Medicine, conditions, character approval, wizard Resume) accepts exactly one final click; a second click says so instead of applying twice. |
 | Fight safety | `/combat start` cannot wipe a fight that already has combatants or a roster unless you are staff. `/combat next` works for staff, the player whose turn it is, or the roster organizer opening the fight. Players cannot re-roll initiative by re-joining. `/sheet delete` is staff-only. |
-| Sheet edit audit | Every `/stat` change writes one line to the combat log: who edited, whose sheet, and the exact fields that changed (staff edits are marked). |
+| Sheet edit audit | Every `/edit` change writes one line to the combat log: who edited, whose sheet, and the exact fields that changed (staff edits are marked). |
 | Who may change a sheet | Players manage only gear and purse (`/inventory`), activations, Void spends, and advancement through `/xp`. Traits, skills, numeric fields, armor, weapon qualities, advantages, disadvantages, free Kata/Kiho records, wounds, healing and JSON import are **Fortune** only. Every staff change to a player's sheet, XP grant, applied damage or healing, treatment and Taint change is announced in that player's support channel. Staff commands that target a sheet take `character:` (any player character or NPC by name) as well as `member:`, so they work from any channel. |
 | XP log (Kami only) | `/setup server` creates `#xp-log` visible only to Kami and registers it; `/dm xp_log_channel` sets or clears it. Every `/xp grant` (who granted, to whom, how much, why, balance) and every XP spend is written there. A grant made while no channel is set warns the granter. |
 | Button errors | If a button or menu ever fails, the bot answers with an explanation instead of Discord's bare "This interaction failed", and logs the details. |
 | `/sheet view` | Show a sheet: rings (derived as min of two traits), wounds & wound level, Insight & Rank, standing, gear, skills. `member:` shows another player's (DM only). |
 | `/sheet list` | List your characters (active one marked). |
 | `/sheet activate` | Choose which of your characters is active. |
-| `/stat trait` | Set a Trait or Void (0–10). |
-| `/stat skill` | Set a skill rank (0 removes it). |
-| `/stat set` | Set a numeric field: honor, glory, status, infamy, taint, koku, age, school rank, void points, armor TN/reduction. |
-| `/sheet wound` / `/sheet heal` | Apply or heal wounds; shows the wound-level change. |
+| `/edit trait` | Staff: Set a Trait or Void (0–10). Pick the target with `member:` or `character:`. |
+| `/edit skill` | Staff: Set a skill rank (0 removes it), or several at once like `Kenjutsu 3, Courtier 2`. |
+| `/edit field` | Staff: Set a numeric field: honor, glory, status, infamy, taint, koku, bu, zeni, age, school rank, void points, armor TN and reduction. |
+| `/edit wound` / `/edit heal` | Staff: Apply or heal wounds directly; shows the wound-level change. `/dm damage` and `/dm heal` send an approval card instead. |
 | `/sheet data export` | Export your active character as JSON (for backup or sharing between servers). |
 | `/sheet data import` | Import a character from JSON (paste from `/sheet data export`). |
 | `/sheet delete` | Delete a character. |
@@ -80,7 +80,7 @@ Players roll their own `/check` commands (skill, stealth, social, lore, craft, m
 | `/dm clear_log` | **DM** removes the combat log channel: events stop being logged. |
 | `/dm party` | DM-only roster of every active PC: school, rings, wounds, VP, honor/glory/status, wielded weapon. Gold embed with player mention. |
 
-A **DM** (the **Fortune** role, or **Kami** for admins) can `view`, edit (`/stat`, `/sheet wound`, `/sheet heal`) and
+A **DM** (the **Fortune** role, or **Kami** for admins) can `view`, edit (`/edit`) and
 `delete` **any** player's active character by adding `member:@player`. Everyone
 else can only manage their own. Sheets are scoped **per server**, so one bot can
 run many separate games without them mixing.
@@ -209,7 +209,7 @@ and full effect text.
 |---|---|
 | `/ref advantage list` · `/ref advantage search` · `/ref advantage view` | Browse both, with costs and effects. |
 | `/xp advantage` | Buy an Advantage with XP (cost = its point value; pass `points:` for Variable-cost ones). |
-| `/stat advantage` · `/stat disadvantage` | Record/remove on the sheet (free): e.g. at creation. Taking a Disadvantage tells you the XP it grants; a DM applies that with `/xp grant`. |
+| `/edit feature` with category Advantage or Disadvantage | Record/remove on the sheet (free): e.g. at creation. Taking a Disadvantage tells you the XP it grants; a DM applies that with `/xp grant`. |
 
 **Auto-applied Advantage & Disadvantage combat effects**: when a character has
 one of the entries below, `/fight attack` applies the modifier automatically, the same
@@ -419,8 +419,8 @@ was **memorised** or **read from scroll**.
 | `/inventory` | One ephemeral panel for gear and purse: main hand and off hand menus (from owned weapons), drop a weapon, remove items, put armor on or take it off. Staff also set weapon qualities here, and can open any player's character (`member:`) or an NPC (`npc:`). Every change saves at once with an undo snapshot and an audit line. |
 | `/give` | Staff hand-out in one command: `what:` autocompletes catalog weapons (with real damage and skill), armor types, koku, bu, zeni, and item names already in use; anything else typed becomes a plain item. `quantity:` for counts or money amounts, `character:` (any player character or NPC by name, from any channel) or `member:` for the target, `reason:` optional. The player is told in their support channel. [Fortune] |
 | `/take` | The reverse: `what:` lists only what the target holds. Taking a wielded weapon unarms that hand; taking worn armor removes it; money refuses to go below zero. The player is told. [Fortune] |
-| `/stat identity` | Staff: set clan, family and/or school text on a sheet. A catalog family also applies its +1 Trait (once; `apply_bonus:false` to skip), which repairs a sheet created before minor clans were selectable in the wizard. |
-| `/stat armor` | Equip an armor type: sets the sheet's **Armor TN bonus** and **Reduction** automatically (e.g. Light → +5 TN, Reduction 3; Heavy → +10, 5); `none` removes it. |
+| `/edit identity` | Staff: set clan, family and/or school text on a sheet. A catalog family also applies its +1 Trait (once; `apply_bonus:false` to skip), which repairs a sheet created before minor clans were selectable in the wizard. |
+| `/edit equip` | Set the equipped weapon, off-hand and armor. Choosing an armor type sets the sheet's **Armor TN bonus** and **Reduction** automatically (e.g. Light → +5 TN, Reduction 3; Heavy → +10, 5); `none` removes it. |
 
 Weapon damage (used by `/fight attack`) and armor Reduction/Armor-TN (used by combat)
 now come from the full catalogs: Ashigaru +3/1, Tatami +4/1, Light +5/3, Heavy
@@ -532,13 +532,13 @@ prone]`), active guards show as `🛡️→WardName`, and Full Defense as
 | `/check fear` | Fear check: **Willpower vs TN 5 + (Fear Rank × 5)**. Raw Willpower roll (no explosion). |
 | `/check honor` | Honor Roll: **Honor Rank dice, keep 1** vs a DM-set TN. Resists temptation or dishonor. |
 
-**Void Point management** (`/sheet void`)
+**Void Point management** (`/void`)
 
 | Command | What it does |
 |---|---|
-| `/sheet void spend` | Spend a Void Point with a reason label (+1k1, negate conditional, etc.). Tracks VP. Players can spend their own; DMs can spend for NPCs/other players. |
-| `/sheet void refresh` | Recover VP: **Rest** (full refresh) or **Meditation** (Meditation/Void check vs TN, recovers 1 VP on success). |
-| `/sheet void status` | Show current VP with a visual bar. |
+| `/void spend` | Spend a Void Point with a reason label (+1k1, negate conditional, etc.). Tracks VP. Players can spend their own; DMs can spend for NPCs/other players. |
+| `/void refresh` | Recover VP: **Rest** (full refresh) or **Meditation** (Meditation/Void check vs TN, recovers 1 VP on success). |
+| `/void status` | Show current VP with a visual bar. |
 
 **Poison & Medicine** (your own character, or Fortune for others)
 
@@ -574,7 +574,7 @@ Stealth vs Investigation) is already handled by `/check contest`.
 |---|---|
 | `/npc generate` | DM generates a samurai NPC by `insight_rank` (1–5): Traits/Rings, Honor, Glory, age, koku within the s22.4 bands, random variance. A `school:` from the catalog (autocomplete) auto-fills the school's skills, Honor, clan, and type (the Benefit is already baked into the s22.4 ring bands, so it isn't re-applied); or set `skills` manually. |
 | `/npc view` · `/npc list` · `/npc delete` | View / roster / remove NPCs (delete is DM-only). |
-| `/npc-edit trait` · `/npc-edit skill` · `/npc-edit set` · `/npc-edit wound` · `/npc-edit heal` · `/npc rename` | Edit a generated NPC field-by-field (DM only): same fields as the `/sheet` editors. |
+| `/edit trait` · `/edit skill` · `/edit field` · `/edit wound` · `/edit heal` · `/edit rename` with `character:` | Edit any NPC or player character field by field (staff only). |
 
 NPCs plug into combat: `/combat npc name:` adds one to initiative, and `/fight attack`
 takes `target_npc:` (fight an NPC) and `attacker_npc:` (a DM runs a monster
@@ -622,7 +622,7 @@ DM-authorized damage via buttons): DM only.
 two characters, with per-side explode, wound penalties, and flat bonuses.
 **Fear Checks** (`/check fear`) roll Willpower vs TN 5 + Fear Rank × 5.
 **Honor Rolls** (`/check honor`) roll Honor Rank dice, keep 1, vs a DM-set TN.
-**Void Point Management** (`/sheet void`) tracks VP spending (with reason labels),
+**Void Point Management** (`/void`) tracks VP spending (with reason labels),
 rest recovery (full refresh), and Meditation/Void checks (recover 1 on success).
 **Poison Resistance** (`/check poison`) rolls Stamina vs TN Strength × 5.
 **Medicine Checks** (`/check medicine`) roll Medicine/Intelligence vs a TN for treatment.
@@ -791,15 +791,15 @@ Perception adds to damage (comparable to Strength for melee) - use
 **Extraordinary Weapon Qualities** (GDD s39 - Crafting Specials)
 
 Master crafters in Rokugan can forge weapons with exceptional properties. These
-are managed per-character via `/stat quality` (the qualities belong to the
+are managed per-character by staff through `/edit feature` (category Weapon Quality) or the staff panel in `/inventory` (the qualities belong to the
 character's currently-equipped weapon, not to a weapon type). When attacking,
 qualities apply only if the weapon used matches the character's `equipped_weapon`.
 
 | Command | What it does |
 |---|---|
-| `/sheet quality qualities:"balanced, swift"` | Set qualities on the equipped weapon (comma-separated). |
-| `/sheet quality clear:True` | Remove all weapon qualities. |
-| `/stat quality` | View current weapon qualities. |
+| `/edit feature category:Weapon Quality entry:balanced` | Add one quality to the equipped weapon. Repeat for each quality. |
+| `/edit feature category:Weapon Quality entry:balanced remove:True` | Remove one quality. |
+| `/inventory character:` | Staff panel with a qualities menu. `/sheet view` shows the current ones. |
 
 | Quality | Effect | Auto-applied? |
 |---|---|---|
@@ -847,7 +847,7 @@ Reduction, cost (koku), type (heavy/light), and special penalties.
 
 Armor is also included in the unified `/ref search` results alongside weapons,
 spells, schools, kata, kiho, advantages, and creatures. Equipping armor via
-`/stat armor` now shows the cost and special penalty text.
+`/edit equip` now shows the cost and special penalty text.
 
 **Rooms** (private play rooms: each is a Discord **private thread**)
 
@@ -1056,16 +1056,16 @@ Viewing an NPC (`/npc view`) or creature (`/creature view`) now shows which cate
 | Command | What it does |
 |---|---|
 | `/give character:` and `/take character:` | Add or remove weapons, armor, money and items on an NPC by name, the same way as for players. |
-| `/npc-edit spell` | Add or remove a spell from an NPC's known spell list. Case-insensitive duplicate detection. |
-| `/npc notes` | Set or clear free-text notes on an NPC (appearance, personality, plot hooks). Shown in the Details section of the NPC embed. Omit text to clear. |
+| `/edit spell character:` | Add or remove a spell from an NPC's known spell list. Case-insensitive duplicate detection. |
+| `/edit notes character:` | Set or clear free-text notes on an NPC (appearance, personality, plot hooks). Shown in the Details section of the NPC embed. Omit text to clear. |
 | `/npc clone` | Clone an existing NPC with a new name. Deep copies all fields (traits, skills, equipment, spells, inventory), resets wounds to 0. Useful for creating variants (e.g. "Guard Captain" from "Town Guard"). |
 | `/npc create` | Staff NPC builder with exact stats, ephemeral: name and notes, clan, family (+1 Trait), school and Rank (Benefit, skills, Honor, outfit, techniques), every Ring/Trait from a menu, skills by category (specialty skills and emphases via a popup), advantages and disadvantages by category, weapon/off-hand/armor, Honor/Glory/Status/Koku. Review, then save as an NPC, as a template, or both. |
 | `/npc edit` | Reopen a stored NPC in the same builder, seeded with its current values, starting at Rings and Traits. Save changes overwrites the NPC (wounds are kept; techniques follow the school and Rank). |
 | `/npc form` | The same in one popup: a typed stat block (`Sta 3 Wil 2 ...`, `Kenjutsu 3 (Katana), Lore: Shadowlands 2`, `weapon: katana; armor: light; adv: Large`, `clan: Crab; school: Hida Bushi; rank: 2; honor: 4.5`). Traits typed here are final values. Validated, previewed, then saved. |
 | `/npc template save` · `spawn` · `list` · `view` · `delete` | Reusable NPC templates. `save` copies an existing NPC; `spawn` creates fresh NPCs from a template (`count:` numbers them: Bandit 1, Bandit 2). Spawned NPCs are independent: wounds and edits never touch the template. |
-| `/npc-edit equip` | Set an NPC's equipped weapon, off-hand weapon, and/or armor name. All three parameters are optional - provide whichever you're changing. Empty string clears the field. |
-| `/npc-edit feature` | Add or remove from any list field: Advantage, Disadvantage, Technique, Kata, Kiho, Weapon (owned), Weapon Quality, or Emphasis (requires `skill:` parameter). Case-insensitive duplicate detection. |
-| `/npc-edit affinity` | Set an NPC's shugenja affinity and/or deficiency element. Choice of Air/Earth/Fire/Water/Void/(clear). |
+| `/edit equip character:` | Set an NPC's equipped weapon, off-hand weapon, and/or armor name. All three parameters are optional - provide whichever you're changing. Empty string clears the field. |
+| `/edit feature character:` | Add or remove from any list field: Advantage, Disadvantage, Technique, Kata, Kiho, Weapon (owned), Weapon Quality, or Emphasis (requires `skill:` parameter). Case-insensitive duplicate detection. |
+| `/edit elements character:` | Set an NPC's shugenja affinity and/or deficiency element. Choice of Air/Earth/Fire/Water/Void/(clear). |
 
 **Phase 63: Combat Enhancements**
 

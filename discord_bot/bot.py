@@ -1762,7 +1762,7 @@ async def _offer_rank_spells(interaction: discord.Interaction, rec: storage.Char
 # /sheet group
 # ===========================================================================
 sheet = app_commands.Group(name="sheet", description="Create and manage L5R 4e character sheets.")
-sheet_void = app_commands.Group(name="void", description="Void Point management: Spend, refresh, status.", parent=sheet)
+void_group = app_commands.Group(name="void", description="Void Point management: Spend, refresh, status.")
 sheet_kata_grp = app_commands.Group(name="kata", description="Record and activate Kata.", parent=sheet)
 sheet_kiho_grp = app_commands.Group(name="kiho", description="Record and activate Kiho.", parent=sheet)
 sheet_tattoo_grp = app_commands.Group(name="tattoo", description="Manage Togashi tattoos.", parent=sheet)
@@ -5840,7 +5840,7 @@ def _resolve_duelist(
 # /void group: Void Point management
 # ===========================================================================
 
-@sheet_void.command(name="spend", description="Spend a Void Point (general purpose: +1k1, negate Conditional, etc.).")
+@void_group.command(name="spend", description="Spend a Void Point (general purpose: +1k1, negate Conditional, etc.).")
 @app_commands.describe(
     reason="What the VP is for (e.g. '+1k1 on Investigation check').",
     member="Player spending VP (uses their active character). Omit = yourself.",
@@ -5896,7 +5896,7 @@ async def void_spend(
     embed.set_footer(text=f"Spent by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@sheet_void.command(name="refresh", description="Refresh Void Points (rest = full, or Meditation/Void check for 1).")
+@void_group.command(name="refresh", description="Refresh Void Points (rest = full, or Meditation/Void check for 1).")
 @app_commands.describe(
     mode="How VP are being refreshed.",
     member="Player refreshing (uses their active character). Omit = yourself.",
@@ -6008,7 +6008,7 @@ async def void_refresh(
         embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@sheet_void.command(name="status", description="Show current Void Points for a character.")
+@void_group.command(name="status", description="Show current Void Points for a character.")
 @app_commands.describe(
     member="Player to check (uses their active character). Omit = yourself.",
     character="Any character by name, player or NPC [Fortune]. Works from any channel.",
@@ -6050,65 +6050,6 @@ async def void_status(
         f"  Void Ring: **{c.void_ring}**{cap_note}",
         ephemeral=True,
     )
-
-# ===========================================================================
-# /void top-level shortcuts (forward to /sheet void subcommands)
-# ===========================================================================
-
-void_group = app_commands.Group(name="void", description="Void Point management: Spend, refresh, status.")
-
-
-@void_group.command(name="spend", description="Spend a Void Point (general purpose: +1k1, negate Conditional, etc.).")
-@app_commands.describe(
-    reason="What the VP is for (e.g. '+1k1 on Investigation check').",
-    member="Player spending VP (uses their active character). Omit = yourself.",
-    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
-)
-@app_commands.autocomplete(character=_any_character_autocomplete)
-async def void_spend_shortcut(
-    interaction: discord.Interaction,
-    reason: app_commands.Range[str, 1, 200],
-    member: discord.Member | None = None,
-    character: app_commands.Range[str, 1, 80] | None = None,
-) -> None:
-    await void_spend.callback(interaction, reason, member, character)
-
-
-@void_group.command(name="refresh", description="Refresh Void Points (rest = full, or Meditation/Void check for 1).")
-@app_commands.describe(
-    mode="How VP are being refreshed.",
-    member="Player refreshing (uses their active character). Omit = yourself.",
-    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
-    tn="Meditation TN (only for meditation mode; default 20).",
-)
-@app_commands.choices(mode=[
-    app_commands.Choice(name="Rest (full refresh)", value="rest"),
-    app_commands.Choice(name="Meditation (roll Meditation/Void, recover 1 on success)", value="meditation"),
-])
-@app_commands.autocomplete(character=_any_character_autocomplete)
-async def void_refresh_shortcut(
-    interaction: discord.Interaction,
-    mode: app_commands.Choice[str],
-    member: discord.Member | None = None,
-    character: app_commands.Range[str, 1, 80] | None = None,
-    tn: app_commands.Range[int, 1, 100] | None = None,
-) -> None:
-    await void_refresh.callback(interaction, mode, member, character, tn)
-
-
-@void_group.command(name="status", description="Show current Void Points for a character.")
-@app_commands.describe(
-    member="Player to check (uses their active character). Omit = yourself.",
-    character="Any character by name, player or NPC [Fortune]. Works from any channel.",
-)
-@app_commands.autocomplete(character=_any_character_autocomplete)
-async def void_status_shortcut(
-    interaction: discord.Interaction,
-    member: discord.Member | None = None,
-    character: app_commands.Range[str, 1, 80] | None = None,
-) -> None:
-    await void_status.callback(interaction, member, character)
-
 
 # ===========================================================================
 # /help: categorized command reference

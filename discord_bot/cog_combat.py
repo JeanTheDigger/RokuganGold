@@ -1966,7 +1966,7 @@ class CombatBoardView(views_base.PersistentView):
                 cb = cur
         if cb is None:
             await interaction.response.send_message(
-                "You have no combatant in this encounter. Use `/fight void armor` instead.", ephemeral=True,
+                "You have no combatant in this encounter. Use `/combat void armor` instead.", ephemeral=True,
             )
             return
         rec = _d.resolve_combatant_record(self.guild_id, cb)
@@ -2031,7 +2031,7 @@ class CombatBoardView(views_base.PersistentView):
                 cb = cur
         if cb is None:
             await interaction.response.send_message(
-                "You have no combatant in this encounter. Use `/fight void initiative` instead.", ephemeral=True,
+                "You have no combatant in this encounter. Use `/combat void initiative` instead.", ephemeral=True,
             )
             return
         rec = _d.resolve_combatant_record(self.guild_id, cb)
@@ -2100,7 +2100,7 @@ class CombatBoardView(views_base.PersistentView):
                 cb = cur
         if cb is None:
             await interaction.response.send_message(
-                "You have no combatant in this encounter. Use `/fight void swap` instead.", ephemeral=True,
+                "You have no combatant in this encounter. Use `/combat void swap` instead.", ephemeral=True,
             )
             return
         rec = _d.resolve_combatant_record(self.guild_id, cb)
