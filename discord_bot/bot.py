@@ -1998,7 +1998,7 @@ class _SchoolSelect(discord.ui.Select):
             return
         if self.state.get("school_name") != self.values[0]:
             # Anything chosen for the spell step belonged to the old school.
-            for k in ("chosen_spells", "_spell_allot_remaining", "_slot_assign", "affinity_element", "deficiency_element"):
+            for k in ("chosen_spells", "_spell_allot_remaining", "_slot_assign", "affinity_element", "deficiency_element", "gear_picks"):
                 self.state.pop(k, None)
         self.state["school_name"] = self.values[0]
         if self.state.get("full_wizard"):
@@ -2010,7 +2010,7 @@ class _SchoolSelect(discord.ui.Select):
                     self.state["wildcard_picks"] = []
                     await _chargen_wildcards(interaction, self.state)
                     return
-            await _chargen_heritage(interaction, self.state)
+            await _chargen_gear(interaction, self.state)
         else:
             await _show_confirmation(interaction, self.state)
 
@@ -2110,7 +2110,7 @@ _active_wizard_views: dict[tuple[str, str], "discord.ui.View"] = {}
 
 _CHARGEN_STEP_LABELS: dict[str, str] = {
     "clan": "1/10 Clan", "heritage": "3/10 Heritage", "school": "4/10 School", "wildcards": "4/10 School skills",
-    "hchoices": "4/10 Heritage choices", "traits": "5/10 Traits", "advantages": "6/10 Advantages", "disadvantages": "7/10 Disadvantages",
+    "gear": "4/10 Starting gear", "hchoices": "4/10 Heritage choices", "traits": "5/10 Traits", "advantages": "6/10 Advantages", "disadvantages": "7/10 Disadvantages",
     "skills": "8/10 Skills", "spells": "9/10 Spells", "review": "10/10 Review",
 }
 
@@ -2539,8 +2539,40 @@ def _heritage_pools() -> dict[str, list[str]]:
     }
 
 
-def _school_char(state: dict) -> Character:
-    """A Character with family, school and the school's skill picks applied (no Heritage, no XP purchases)."""
+def _gear_apply(state: dict, char: Character, school: dict) -> list[dict]:
+    """Swap a school's unresolved outfit lines ("any 1 weapon", "Light or Heavy Armor") for what the
+    player picked. Returns the picks still to make, one slot each: {"id", "label", "options"}."""
+    pending: list[dict] = []
+    picks = state.get("gear_picks") or {}
+    owned = {w.lower() for w in char.weapons}
+    for i, ch in enumerate(schools.outfit_choices(school)):
+        lit = ch["literal"]
+        if char.inventory.get(lit, 0) > 1:
+            char.inventory[lit] -= 1
+        else:
+            char.inventory.pop(lit, None)
+        taken: list[str] = []
+        for n in range(ch["picks"]):
+            opts = [o for o in ch["options"] if o["value"] not in taken and (o.get("owns") or "").lower() not in owned]
+            if not opts:
+                break
+            sid = f"{i}.{n}"
+            val = picks.get(sid)
+            chosen = next((o for o in opts if o["value"] == val), None)
+            if chosen is None:
+                label = f"{lit} ({n + 1} of {ch['picks']})" if ch["picks"] > 1 else lit
+                pending.append({"id": sid, "label": label, "options": opts, "kind": ch["kind"]})
+                break
+            schools.apply_outfit_pick(char, ch, chosen["value"])
+            taken.append(chosen["value"])
+            if chosen.get("owns"):
+                owned.add(chosen["owns"].lower())
+    return pending
+
+
+def _school_char_gear(state: dict) -> tuple[Character, list[dict]]:
+    """A Character with family, school and the school's skill picks applied (no Heritage, no XP purchases),
+    and the starting-gear picks it still needs."""
     char = Character(name=state["name"], clan=state.get("clan", ""),
                      family=state.get("family_name", ""), school="", school_type="Bushi")
     family_entry = families.get(state["family_name"]) if state.get("family_name") else None
@@ -2549,8 +2581,10 @@ def _school_char(state: dict) -> Character:
         if not char.clan:
             char.clan = family_entry["clan"]
     applied = schools.get(state["school_name"]) if state.get("school_name") else None
+    pending: list[dict] = []
     if applied:
         schools.apply_to_character(char, applied)
+        pending = _gear_apply(state, char, applied)
         if state.get("clan"):
             char.clan = state["clan"]  # a Fox studying at a school filed under Mantis is still a Fox
     for pick in state.get("wildcard_picks", []):
@@ -2559,7 +2593,11 @@ def _school_char(state: dict) -> Character:
             continue
         rk = pick["rank"]
         char.skills[sk] = max(char.skills.get(sk, 0), rk)
-    return char
+    return char, pending
+
+
+def _school_char(state: dict) -> Character:
+    return _school_char_gear(state)[0]
 
 
 def _heritage_ctx(state: dict, school_char: Character) -> dict:
@@ -2760,6 +2798,11 @@ def _materialize_character(state: dict) -> Character:
         if def_el and not char.deficiency_element:
             char.deficiency_element = def_el
 
+    # The school's Rank 1 Technique is part of the character from the start (s48: it comes with the
+    # rank). Combat reads it from this list, so without it the Technique would never apply.
+    if sch is not None:
+        _grant_school_techniques(char, sch)
+
     if state.get("heritage_result"):
         res = _heritage_resolve(state)
         heritage_perks.apply_rest(char, res)   # free skill ranks went in with the base character
@@ -2820,7 +2863,7 @@ async def _chargen_wildcards(interaction: discord.Interaction, state: dict) -> N
     slot_idx = len(picks)
 
     if slot_idx >= len(slots):
-        await _chargen_heritage(interaction, state)
+        await _chargen_gear(interaction, state)
         return
 
     slot = slots[slot_idx]
@@ -2861,7 +2904,7 @@ async def _chargen_wildcards(interaction: discord.Interaction, state: dict) -> N
             await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
             return
         state["wildcard_slots"] = slots[:len(state.get("wildcard_picks", []))]
-        await _chargen_heritage(btn_inter, state)
+        await _chargen_gear(btn_inter, state)
 
     skip_btn.callback = on_skip
     view.add_item(skip_btn)
@@ -2909,6 +2952,59 @@ async def _chargen_wildcard_category(interaction: discord.Interaction, state: di
     total = len(slots)
     await interaction.response.edit_message(
         content=f"**Starting Skills - Pick {slot_idx + 1} of {total}** ({category}){rank_note}\n{slot['label']}",
+        embed=_active_embed(state), view=view,
+    )
+
+
+# --- Starting gear: the choices a school's outfit leaves to the player ---
+async def _chargen_gear(interaction: discord.Interaction, state: dict, group: str | None = None) -> None:
+    """Step after the school: pick the weapons and armor its outfit says "any" or "or" about."""
+    state["step"] = "gear"
+    _, pending = _school_char_gear(state)
+    if not pending:
+        await _chargen_heritage(interaction, state)
+        return
+    slot = pending[0]
+    uid = int(state["user_id"])
+
+    async def check(inter: discord.Interaction) -> bool:
+        if inter.user.id != uid:
+            await inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return False
+        return True
+
+    async def on_answer(inter: discord.Interaction, value: str, detail: str) -> None:
+        now = _school_char_gear(state)[1]
+        if not now or now[0]["id"] != slot["id"] or not any(o["value"] == value for o in now[0]["options"]):
+            await _chargen_gear(inter, state)   # An out-of-date menu.
+            return
+        state.setdefault("gear_picks", {})[slot["id"]] = value
+        await _chargen_gear(inter, state)
+
+    async def on_group(inter: discord.Interaction, g: str) -> None:
+        await _chargen_gear(inter, state, group=g)
+
+    perk = {"id": "gear" + slot["id"], "label": slot["label"], "ask": {"kind": "choice"}}
+    view = _WizardView(state)
+    for item in _heritage_ask_items(perk, slot["options"], group, check, on_answer, on_group):
+        view.add_item(item)
+    picks = state.get("gear_picks") or {}
+    if picks or group:
+        undo = discord.ui.Button(label="Back to Categories" if group else "Undo Last Choice",
+                                 style=discord.ButtonStyle.secondary, row=2)
+
+        async def on_undo(inter: discord.Interaction) -> None:
+            if not await check(inter):
+                return
+            if group is None and picks:
+                picks.pop(list(picks)[-1], None)
+            await _chargen_gear(inter, state)
+
+        undo.callback = on_undo
+        view.add_item(undo)
+    await interaction.response.edit_message(
+        content=f"**Starting gear** · {len(pending)} choice{'s' if len(pending) != 1 else ''} left\n"
+                f"Your school's outfit says: **{slot['label']}**. Pick one.",
         embed=_active_embed(state), view=view,
     )
 
@@ -3319,6 +3415,20 @@ async def _chargen_traits(interaction: discord.Interaction, state: dict) -> None
 
         back_wc_btn.callback = on_back_wc
         view.add_item(back_wc_btn)
+
+    school_for_gear = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+    if school_for_gear is not None and schools.outfit_choices(school_for_gear):
+        gear_btn = discord.ui.Button(label="Change Starting Gear", style=discord.ButtonStyle.secondary, row=3)
+
+        async def on_gear(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            state.pop("gear_picks", None)
+            await _chargen_gear(btn_inter, state)
+
+        gear_btn.callback = on_gear
+        view.add_item(gear_btn)
 
     if any(p["who"] == "player" and p.get("ask") for p in state.get("heritage_perks", [])):
         redo_btn = discord.ui.Button(label="Redo Heritage Choices", style=discord.ButtonStyle.secondary, row=3)
@@ -4360,6 +4470,9 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
 
 # --- Step 10: Review & Submit ---
 async def _chargen_review(interaction: discord.Interaction, state: dict) -> None:
+    if _school_char_gear(state)[1]:
+        await _chargen_gear(interaction, state)   # A starting-gear choice is still open.
+        return
     if _heritage_resolve(state)["pending_player"]:
         # A choice the Heritage result gives is still open (or an earlier change made one invalid).
         await _chargen_heritage(interaction, state)
@@ -4526,6 +4639,12 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
     if state.get("submitted"):
         await interaction.response.send_message(
             _SUBMITTED_TEXT.format(name=state.get("name", "your character")), ephemeral=True,
+        )
+        return
+    if _school_char_gear(state)[1]:
+        await interaction.response.send_message(
+            "Your school's starting gear still has a choice to make. Go back to the traits step and press **Change Starting Gear**.",
+            ephemeral=True,
         )
         return
     if _heritage_resolve(state)["pending_player"]:
@@ -12535,7 +12654,7 @@ async def _cg_resume(interaction: discord.Interaction, state: dict) -> None:
         return
     handlers = {
         "heritage": _go_to_heritage_or_school, "school": _go_to_school_choice, "wildcards": _chargen_wildcards,
-        "hchoices": _chargen_heritage, "traits": _chargen_traits, "advantages": _chargen_advantages, "disadvantages": _chargen_disadvantages,
+        "gear": _chargen_gear, "hchoices": _chargen_heritage, "traits": _chargen_traits, "advantages": _chargen_advantages, "disadvantages": _chargen_disadvantages,
         "skills": _chargen_skills, "spells": _chargen_spells, "review": _chargen_review,
     }
     await handlers.get(step, _chargen_traits)(interaction, state)

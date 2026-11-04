@@ -882,6 +882,7 @@ own room.
 | `/ref dual_wield` | Show dual-wielding rules and off-hand penalties based on weapon size (Small −5, Medium −10, Large −15). |
 | `/ref heritage roll` | Roll on the Heritage table for a clan (d10). |
 | `/ref heritage table` | View the full Heritage table for a clan (10 entries). |
+| Starting gear in `/sheet create` | A **Starting gear** step follows the school. Outfit lines that leave a choice ("any 1 weapon", "Light or Heavy Armor", "Bow or Knife") become real weapons and armor on the sheet instead of text in the inventory. The school's Rank 1 Technique is added at creation. |
 | Heritage in `/sheet create` | The roll is fully applied to the character: free skill ranks and emphases, Honor/Glory/Status/koku changes, Advantages and Disadvantages, XP discounts (including Different School and the variable-cost Sacred Weapon, Luck, Gentry and Blackmail, bought from a **Heritage Purchases** button), restrictions (for example no Gentry), and the Dragon +1k0 Craft bonus. Choices the table gives the player are asked in a **Heritage choices** step. Anything the table leaves to Fortune is asked of staff when they press **Approve**, and the answers are written on the sheet under Heritage. |
 | `/dm taint` | View or modify Shadowlands Taint. Shows Taint Rank (floor(Taint/Earth)), effects, mutations, and madness when crossing rank boundaries. |
 | `/engage battle roll` | Mass Battle engagement roll: Battle/Perception vs a DM-set TN. Result determines engagement level (Reserves → Heroic Opportunity). |

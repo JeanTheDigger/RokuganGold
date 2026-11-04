@@ -400,6 +400,96 @@ def _add_inventory(character, name: str, qty: int = 1) -> None:
     character.inventory[name] = character.inventory.get(name, 0) + qty
 
 
+_ARMOR_WORDS = ("bogu", "ashigaru", "tatami", "light", "heavy", "riding")
+
+
+def _weapon_option(key: str, label: str | None = None, group: str | None = None) -> dict:
+    from .combat import WEAPON_CATALOG
+    return {"value": key, "label": label or _weapon_display(key),
+            "group": group or WEAPON_CATALOG.get(key, {}).get("skill") or "Other", "owns": _weapon_display(key)}
+
+
+def _weapons_with_skills(*skills: str) -> list[dict]:
+    from .combat import WEAPON_CATALOG
+    return [_weapon_option(k) for k, v in WEAPON_CATALOG.items()
+            if v.get("skill") in skills and not k.endswith(("_arrow", "_thrown")) and k != "unarmed"]
+
+
+def _parse_outfit_choice(item: str) -> dict | None:
+    """One outfit entry that leaves a choice to the player ("any 1 weapon", "Light or Heavy Armor").
+    {"literal", "kind", "picks", "options": [{"value", "label", "group", "owns"}]}, or None when the
+    text is not a choice this parser knows."""
+    low = item.lower()
+    base = {"literal": item, "picks": 1}
+    if "armor" in low:
+        keys = [k for k in _ARMOR_WORDS if re.search(r"\b" + k + r"\b", low)]
+        if len(keys) < 2:
+            return None
+        return {**base, "kind": "armor",
+                "options": [{"value": k, "label": f"{k.title()} Armor", "group": "Armor"} for k in keys]}
+    picks = 1
+    m = re.search(r"\bany\s+(\d+|one|two|three|four)\b", low)
+    if m:
+        picks = _WORD_NUMBERS.get(m.group(1), None) or (int(m.group(1)) if m.group(1).isdigit() else 1)
+    opts: list[dict]
+    if "ninja" in low:
+        opts = _weapons_with_skills("Ninjutsu")
+    elif "peasant" in low:
+        from .technique_effects import _PEASANT_WEAPONS
+        opts = [_weapon_option(k) for k in sorted(_PEASANT_WEAPONS)]
+    elif "bow" in low and "knife" in low:
+        arrows = "arrows" in low
+        opts = [_weapon_option("yumi+arrows" if arrows else "yumi", "Bow with 20 Arrows" if arrows else "Bow", "Bows and Knives"),
+                _weapon_option("tanto", "Knife (Tanto)", "Bows and Knives")]
+        opts[0]["owns"] = "Yumi"
+    elif re.search(r"spear|polearm|heavy weapon|war fan", low):
+        skills = [name for word, name in (("spear", "Spears"), ("polearm", "Polearms"),
+                                           ("heavy weapon", "Heavy Weapons"), ("war fan", "War Fan")) if word in low]
+        opts = _weapons_with_skills(*skills)
+    elif "weapon" in low and "any" in low:
+        opts = _weapons_with_skills("Chain Weapons", "Heavy Weapons", "Jiujutsu", "Kenjutsu", "Knives", "Kyujutsu",
+                                    "Ninjutsu", "Polearms", "Spears", "Staves", "War Fan")
+        if "knives" in low:
+            opts.append({"value": "__knife_pair__", "label": "A pair of Knives", "group": "Knives", "owns": ""})
+    else:
+        return None
+    if not opts:
+        return None
+    return {**base, "kind": "weapon", "picks": picks, "options": opts}
+
+
+def outfit_choices(school: dict) -> list[dict]:
+    """The choices a school's outfit leaves to the player, in outfit order."""
+    outfit = effective_fields(school)[2] or ""
+    out: list[dict] = []
+    for raw in _split_commas(outfit):
+        item = raw.strip()
+        if not item or "koku" in item.lower() or not re.search(r"\bany\b|\bor\b", item, re.IGNORECASE):
+            continue
+        ch = _parse_outfit_choice(item)
+        if ch:
+            out.append(ch)
+    return out
+
+
+def apply_outfit_pick(character, choice: dict, value: str) -> str:
+    """Put one picked outfit option on the character; returns its display name."""
+    from .combat import ARMOR_CATALOG
+    if choice["kind"] == "armor":
+        spec = ARMOR_CATALOG[value]
+        character.armor_name = value
+        character.armor_tn_bonus = spec["tn_bonus"]
+        character.armor_reduction = spec["reduction"]
+        return f"{value.title()} Armor"
+    if value == "__knife_pair__":
+        _add_inventory(character, "Knives (pair)")
+        return "A pair of Knives"
+    if value.endswith("+arrows"):
+        _add_inventory(character, "Arrows", 20)
+        value = value[: -len("+arrows")]
+    return _add_weapon(character, value)
+
+
 def apply_outfit(character, outfit: str) -> list[str]:
     """Parse a school outfit string and apply items to the character.
     Returns list of applied/recorded items for reporting."""

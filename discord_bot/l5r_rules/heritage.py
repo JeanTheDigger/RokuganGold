@@ -261,7 +261,7 @@ _CRANE_TABLE: dict = {
         {
             "rolls": [10],
             "effect": "Your ancestor was an artist of high renown and you're expected to follow in his footsteps, perhaps even to surpass him. You may take the Soul of Artistry Advantage for 2 less points, but you gain the Disadvantage Consumed by Perfection.",
-            "grants": {"disadvantages": ["Consumed by Perfection"]},
+            "grants": {"disadvantages": ["Consumed (Perfection)"]},
             "notes": ["May take the Soul of Artistry Advantage for 2 less XP."],
         },
     ],
@@ -529,7 +529,7 @@ _MANTIS_TABLE: dict = {
         {
             "rolls": [8, 9],
             "effect": "Your family was on the losing side of a commercial dispute and has never recovered. You gain the Disadvantage Seven Fortune's Curse: Daikoku.",
-            "grants": {"disadvantages": ["Seven Fortune's Curse (Daikoku)"]},
+            "grants": {"disadvantages": ["Seven Fortunes' Curse (Daikoku)"]},
         },
         {
             "rolls": [10],
@@ -646,7 +646,7 @@ _PHOENIX_TABLE: dict = {
         {
             "rolls": [10],
             "effect": "While researching powerful new magics, your ancestor disappeared in a flash of light, taking his notes with him. The Kitsu have determined his soul never made it to Meido. No one has been able to duplicate his work or determine where he has gone. Your family is obsessed with hunting for him; you gain the Consumed by Knowledge Disadvantage.",
-            "grants": {"disadvantages": ["Consumed by Knowledge"]},
+            "grants": {"disadvantages": ["Consumed (Knowledge)"]},
         },
     ],
     "illustrious": [
@@ -849,7 +849,7 @@ _UNICORN_TABLE: dict = {
         {
             "rolls": [1],
             "effect": "Your ancestor was a Moto who fell to the Shadowlands, and he would very much like you to join him. You gain the Disadvantage Cursed by Jigoku.",
-            "grants": {"disadvantages": ["Cursed by Jigoku"]},
+            "grants": {"disadvantages": ["Cursed by the Realm (Jigoku)"]},
         },
         {
             "rolls": [2, 3],
