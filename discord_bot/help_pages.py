@@ -52,9 +52,9 @@ TOPICS: list[Topic] = [
             "**1. Make a character.** Run `/sheet create`. The bot opens a private creation channel for you and "
             "walks you through clan, family, school, heritage, traits, advantages, skills and spells with menus. "
             "Nothing is final until you press **Submit for Approval**.\n"
-            "**2. Wait for approval.** Staff review the submission. On approval you get the Approved role, your clan "
-            "and family roles, your nickname, and a private support channel named after your character where you "
-            "talk to staff and spend XP.\n"
+            "**2. Wait for approval.** The moment you submit, you get a private support channel named after your "
+            "character, where staff can ask questions and tell you their decision. On approval you also get the "
+            "Approved role, your clan and family roles and your nickname, and the same channel is where you spend XP.\n"
             "**3. Your dashboard.** `/whoami` shows your status card (rings, wounds, Void, honor, what you wield) with "
             "buttons for the full sheet, inventory, Void, Kata, Kiho, tattoos and export. Everything it shows is "
             "private to you.\n"
@@ -323,7 +323,8 @@ TOPICS: list[Topic] = [
         groups=["dm", "edit", "give", "take", "xp", "sheet"],
         body=(
             "**Approvals.** New characters arrive as cards in the approval channel with **Approve** and **Reject**. "
-            "Approving assigns roles, nickname and a support channel. `/dm pending` lists what is waiting.\n"
+            "A submission creates the player's support channel, so you can message them right away; approving assigns roles and nickname. "
+            "`/dm pending` lists what is waiting.\n"
             "**Sheets.** `/edit` changes anything on a sheet; every edit is logged with who did it. `/sheet view "
             "member:` reads a player's sheet, `/sheet owner` reassigns, `/sheet delete` removes with cleanup, "
             "`/sheet data import` restores from JSON.\n"

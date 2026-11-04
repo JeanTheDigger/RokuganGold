@@ -4097,6 +4097,24 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
     char = _materialize_character(state)
     spent, remaining = _calc_chargen_xp(state)
 
+    # The player gets their private channel in Player Support as soon as they submit, so staff
+    # can ask questions there while the character is reviewed. A failure here never blocks the submission.
+    support_ch = None
+    guild_obj = interaction.guild
+    member_obj = interaction.user if isinstance(interaction.user, discord.Member) else (
+        guild_obj.get_member(int(state["user_id"])) if guild_obj is not None else None)
+    if guild_obj is not None and member_obj is not None:
+        try:
+            support_ch, _ = await _ensure_player_support_channel(
+                guild_obj, member_obj, state["name"],
+                intro=(f"Welcome, {member_obj.mention}! This is your private channel with the Staff. "
+                       f"**{state['name']}** has been submitted and is waiting for review. Staff will write "
+                       f"here if they have questions, and you will hear the decision here too. "
+                       f"Only you and Staff can see this."),
+            )
+        except Exception:
+            log.warning("Could not create the support channel for %s", state.get("user_id"), exc_info=True)
+
     embed = discord.Embed(
         title="Character Submission (Full Sheet)",
         color=0xC4A747,
@@ -4106,6 +4124,8 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
     embed.add_field(name="Clan / Family / School",
                     value=f"{char.clan} / {char.family} / {char.school} ({char.school_type})",
                     inline=False)
+    if support_ch is not None:
+        embed.add_field(name="Support channel", value=support_ch.mention, inline=True)
 
     if state.get("concept"):
         embed.add_field(name="Concept", value=state["concept"][:1024], inline=False)
@@ -4178,23 +4198,27 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
         )
         return
 
-    await interaction.response.edit_message(
-        content=_SUBMITTED_TEXT.format(name=state["name"]),
-        embed=None, view=None,
-    )
+    submitted_text = _SUBMITTED_TEXT.format(name=state["name"])
+    if support_ch is not None:
+        submitted_text += f"\nYour private channel with the staff is {support_ch.mention}: Ask questions there."
+    await interaction.response.edit_message(content=submitted_text, embed=None, view=None)
 
 
-async def _create_player_support_channel(
-    guild: discord.Guild, member: discord.Member, character_name: str,
-) -> str | None:
-    """Create a private channel in Player Support for a newly approved character.
-
-    Returns a note string on success/failure, or None if the category doesn't exist.
-    """
+async def _ensure_player_support_channel(
+    guild: discord.Guild, member: discord.Member, character_name: str, intro: str | None = None,
+) -> tuple[discord.TextChannel | None, str | None]:
+    """The player's private channel in Player Support: created the first time it is needed
+    (when they submit a character) and reused after that, so approval, a denial and a second
+    submission never make a duplicate. Returns (channel or None, a short note for staff).
+    The channel is None when the category is missing or Discord refused to make it."""
     support_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT)
     if support_cat is None:
-        return None
+        return None, None
     channel_name = helpers.support_slug(character_name)
+    for existing in support_cat.text_channels:
+        # Same name AND this player can see it: Another player's identically named character is not ours.
+        if existing.name == channel_name and existing.overwrites_for(member).view_channel is True:
+            return existing, f"Support channel {existing.mention} is ready."
     everyone = guild.default_role
     bot_member = guild.me
     fortune_role = discord.utils.get(guild.roles, name=ROLE_FORTUNE)
@@ -4219,17 +4243,17 @@ async def _create_player_support_channel(
         ch = await support_cat.create_text_channel(
             channel_name, overwrites=overwrites,
             topic=f"Private channel for {character_name} - speak with Staff here.",
-            reason=f"Player support channel for approved character '{character_name}'",
+            reason=f"Player support channel for '{character_name}'",
         )
-        await ch.send(
+        await ch.send(intro or (
             f"Welcome, {member.mention}! This is your private channel to communicate "
             f"with the Staff about **{character_name}**. Only you and Staff can see this."
-        )
-        return f"Support channel #{ch.name} created."
+        ))
+        return ch, f"Support channel {ch.mention} created."
     except discord.Forbidden:
-        return "Could not create support channel - bot lacks permission."
+        return None, "Could not create support channel - bot lacks permission."
     except discord.HTTPException as e:
-        return f"Could not create the support channel ({getattr(e, 'text', '') or 'Discord refused it'}). Create it by hand."
+        return None, f"Could not create the support channel ({getattr(e, 'text', '') or 'Discord refused it'}). Create it by hand."
 
 
 class _FullCharacterApprovalView(_DisableableView):
@@ -4323,7 +4347,14 @@ class _FullCharacterApprovalView(_DisableableView):
                     pass
             store.delete_creation_channel(guild_id, owner_id)
 
-        support_note = await _create_player_support_channel(guild, member, state["name"])
+        support_ch, support_note = await _ensure_player_support_channel(guild, member, state["name"])
+        if support_ch is not None:
+            try:
+                await support_ch.send(
+                    f"{member.mention}, **{state['name']}** has been approved! This channel is where you "
+                    f"talk to the Staff and spend XP (`/xp spend`). Welcome to Rokugan!")
+            except discord.HTTPException:
+                pass
 
         self._disable()
         await interaction.response.edit_message(view=self)
@@ -4389,10 +4420,15 @@ class _FullCharacterApprovalView(_DisableableView):
             except ValueError:
                 resume_view = None
         lobby = client.get_channel(self.lobby_channel_id)
+        support_where = ""
+        if guild is not None:
+            found = await helpers.find_support_channel(guild, self.character_state["name"], CAT_PLAYER_SUPPORT)
+            if found is not None:
+                support_where = f" in {found.mention}"
         if lobby and member:
             msg = await lobby.send(
                 f"{member.mention}, your character **{self.character_state['name']}** was not approved. "
-                f"Please speak with a DM for details"
+                f"Please speak with a DM for details{support_where}"
                 + (", then press **Resume** to adjust the sheet and submit again." if resume_view else " and feel free to submit again."),
                 view=resume_view,
             )
