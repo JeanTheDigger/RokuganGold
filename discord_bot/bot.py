@@ -4115,6 +4115,9 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
         except Exception:
             log.warning("Could not create the support channel for %s", state.get("user_id"), exc_info=True)
 
+    if support_ch is not None:
+        state["support_channel_id"] = support_ch.id   # So a denial can delete exactly this channel.
+
     embed = discord.Embed(
         title="Character Submission (Full Sheet)",
         color=0xC4A747,
@@ -4204,6 +4207,20 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
     await interaction.response.edit_message(content=submitted_text, embed=None, view=None)
 
 
+def _player_support_channel(guild: discord.Guild, member: discord.Member | None,
+                            character_name: str) -> discord.TextChannel | None:
+    """The player's channel in Player Support, matched by name AND by that player being able to see
+    it, so another player's identically named character is never picked up by mistake."""
+    support_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT)
+    if support_cat is None or member is None:
+        return None
+    slug = helpers.support_slug(character_name)
+    for ch in support_cat.text_channels:
+        if ch.name == slug and ch.overwrites_for(member).view_channel is True:
+            return ch
+    return None
+
+
 async def _ensure_player_support_channel(
     guild: discord.Guild, member: discord.Member, character_name: str, intro: str | None = None,
 ) -> tuple[discord.TextChannel | None, str | None]:
@@ -4215,10 +4232,9 @@ async def _ensure_player_support_channel(
     if support_cat is None:
         return None, None
     channel_name = helpers.support_slug(character_name)
-    for existing in support_cat.text_channels:
-        # Same name AND this player can see it: Another player's identically named character is not ours.
-        if existing.name == channel_name and existing.overwrites_for(member).view_channel is True:
-            return existing, f"Support channel {existing.mention} is ready."
+    existing = _player_support_channel(guild, member, character_name)
+    if existing is not None:
+        return existing, f"Support channel {existing.mention} is ready."
     everyone = guild.default_role
     bot_member = guild.me
     fortune_role = discord.utils.get(guild.roles, name=ROLE_FORTUNE)
@@ -4398,10 +4414,24 @@ class _FullCharacterApprovalView(_DisableableView):
             except discord.NotFound:
                 member = None
         member_str = member.mention if member else f"User {self.applicant_id}"
+        # A rejected application gets no support channel: Delete the one made at submission.
+        support_target = None
+        support_id = self.character_state.get("support_channel_id")
+        if support_id:
+            support_target = client.get_channel(int(support_id))
+        if support_target is None and guild is not None:   # A submission from before the id was kept.
+            support_target = _player_support_channel(guild, member, self.character_state["name"])
+        support_line = ""
+        if support_target is not None and getattr(support_target.category, "name", None) == CAT_PLAYER_SUPPORT:
+            try:
+                await support_target.delete(reason=f"Application for '{self.character_state['name']}' was denied")
+                support_line = "\nTheir support channel was deleted."
+            except (discord.Forbidden, discord.HTTPException):
+                support_line = f"\nCould not delete their support channel ({support_target.mention}): Remove it by hand."
         embed = discord.Embed(
             title="Character Denied",
             color=discord.Color.red(),
-            description=f"**{member_str}**'s character **{self.character_state['name']}** was denied.",
+            description=f"**{member_str}**'s character **{self.character_state['name']}** was denied.{support_line}",
         )
         embed.set_footer(text=f"Denied by {interaction.user.display_name}")
         await interaction.followup.send(embed=embed)
@@ -4415,20 +4445,16 @@ class _FullCharacterApprovalView(_DisableableView):
                 saved = json.loads(raw)
                 saved["submitted"] = False
                 saved.pop("submitted_at", None)
+                saved.pop("support_channel_id", None)
                 store.save_creation_state(guild_id, applicant, json.dumps(saved, default=str))
                 resume_view = _ChargenResumeView(guild_id, applicant)
             except ValueError:
                 resume_view = None
         lobby = client.get_channel(self.lobby_channel_id)
-        support_where = ""
-        if guild is not None:
-            found = await helpers.find_support_channel(guild, self.character_state["name"], CAT_PLAYER_SUPPORT)
-            if found is not None:
-                support_where = f" in {found.mention}"
         if lobby and member:
             msg = await lobby.send(
                 f"{member.mention}, your character **{self.character_state['name']}** was not approved. "
-                f"Please speak with a DM for details{support_where}"
+                f"Please speak with a DM here for details"
                 + (", then press **Resume** to adjust the sheet and submit again." if resume_view else " and feel free to submit again."),
                 view=resume_view,
             )
