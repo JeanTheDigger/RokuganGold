@@ -50,8 +50,8 @@ import storage
 import views_base
 from l5r_rules import (
     advancement, advantage_effects, advantages, combat, condition_effects, creature, enums,
-    families, heritage, kata, kata_effects, kiho, kiho_effects, mass_battle, npc_gen,
-    schools, skill_mastery, spells, stats, taint, technique_effects,
+    families, heritage, heritage_perks, kata, kata_effects, kiho, kiho_effects, mass_battle, npc_gen,
+    schools, skill_mastery, spells, stats, taint, tattoo_catalog, technique_effects,
 )
 from l5r_rules.character import Character, format_purse
 from l5r_rules.dice import DiceEngine, DiceResult
@@ -943,12 +943,15 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         for iname, qty in sorted(c.inventory.items()):
             inv_parts.append(f"{iname} ×{qty}" if qty > 1 else iname)
         extras.append("**Inventory:** " + ", ".join(inv_parts))
-    if c.heritage_result:
-        extras.append(f"**Heritage:** {c.heritage_result}")
     if c.notes:
         extras.append(f"*{c.notes}*")
     if extras:
         embed.add_field(name="Details", value="\n".join(extras)[:1024], inline=False)
+    if c.heritage_result or c.heritage_details:
+        # Own field: Heritage can run long once Fortune's decisions are written on the sheet.
+        h_lines = [c.heritage_result] if c.heritage_result else []
+        h_lines += [f"• {d}" for d in c.heritage_details]
+        embed.add_field(name="Heritage", value="\n".join(h_lines)[:1024], inline=False)
 
     if record.owner_id == NPC_OWNER:
         cats = store.list_entity_categories(record.guild_id, "npc", c.name)
@@ -1888,6 +1891,8 @@ async def _go_to_heritage_or_school(interaction: discord.Interaction, state: dic
                 heritage_text += "\n[Fortune]: " + "; ".join(notes)
             state["heritage_result"] = heritage_text
             state["heritage_grants"] = result.get("grants", {})
+            state["heritage_perks"] = heritage_perks.build_perks(result)
+            state["heritage_answers"] = {}
             store.record_heritage_roll(str(state["guild_id"]), str(state["user_id"]), heritage_text)
             await _go_to_school_choice(btn_inter, state)
 
@@ -2005,7 +2010,7 @@ class _SchoolSelect(discord.ui.Select):
                     self.state["wildcard_picks"] = []
                     await _chargen_wildcards(interaction, self.state)
                     return
-            await _chargen_traits(interaction, self.state)
+            await _chargen_heritage(interaction, self.state)
         else:
             await _show_confirmation(interaction, self.state)
 
@@ -2105,7 +2110,7 @@ _active_wizard_views: dict[tuple[str, str], "discord.ui.View"] = {}
 
 _CHARGEN_STEP_LABELS: dict[str, str] = {
     "clan": "1/10 Clan", "heritage": "3/10 Heritage", "school": "4/10 School", "wildcards": "4/10 School skills",
-    "traits": "5/10 Traits", "advantages": "6/10 Advantages", "disadvantages": "7/10 Disadvantages",
+    "hchoices": "4/10 Heritage choices", "traits": "5/10 Traits", "advantages": "6/10 Advantages", "disadvantages": "7/10 Disadvantages",
     "skills": "8/10 Skills", "spells": "9/10 Spells", "review": "10/10 Review",
 }
 
@@ -2504,8 +2509,38 @@ def _unsupported_slots(allot: dict[str, int] | None) -> bool:
     return bool(allot) and any(k not in _SPELL_ELEMENTS for k in allot)
 
 
-def _build_base_char(state: dict) -> Character:
-    """Build a Character with family+school applied (no XP purchases)."""
+_HERITAGE_WEAPONS: list[dict] | None = None
+
+
+def _heritage_weapon_options() -> list[dict]:
+    """Weapons a Heritage result can hand out, grouped by the skill that uses them."""
+    global _HERITAGE_WEAPONS
+    if _HERITAGE_WEAPONS is None:
+        opts = []
+        for key, spec in combat.WEAPON_CATALOG.items():
+            if key.endswith("_arrow") or key.endswith("_thrown") or key == "unarmed":
+                continue
+            opts.append({"value": key, "label": schools._weapon_display(key), "group": spec.get("skill") or "Other"})
+        opts.sort(key=lambda o: (o["group"], o["label"]))
+        _HERITAGE_WEAPONS = opts
+    return _HERITAGE_WEAPONS
+
+
+def _heritage_pools() -> dict[str, list[str]]:
+    """Skill lists Heritage results draw their "of your choice" picks from."""
+    return {
+        "weapon": list(_WEAPON_SKILLS),
+        "bugei": list(_CHARGEN_SKILL_CATS["Bugei"]),
+        "high": list(_CHARGEN_SKILL_CATS["High"]) + _ARTISAN_SKILLS + _LORE_SKILLS + _PERFORM_SKILLS,
+        "low": list(_CHARGEN_SKILL_CATS["Low"]),
+        "craft": list(_CRAFT_SKILLS),
+        "artisan": list(_ARTISAN_SKILLS),
+        "any": sorted({sk for lst in _CHARGEN_SKILL_CATS.values() for sk in lst}),
+    }
+
+
+def _school_char(state: dict) -> Character:
+    """A Character with family, school and the school's skill picks applied (no Heritage, no XP purchases)."""
     char = Character(name=state["name"], clan=state.get("clan", ""),
                      family=state.get("family_name", ""), school="", school_type="Bushi")
     family_entry = families.get(state["family_name"]) if state.get("family_name") else None
@@ -2527,19 +2562,63 @@ def _build_base_char(state: dict) -> Character:
     return char
 
 
+def _heritage_ctx(state: dict, school_char: Character) -> dict:
+    return {
+        "clan": state.get("clan", ""),
+        "school_type": school_char.school_type or "",
+        "school_skills": sorted(sk for sk, rk in school_char.skills.items() if rk > 0),
+        "pools": _heritage_pools(),
+        "weapons": _heritage_weapon_options(),
+        "tattoos": tattoo_catalog.tattoo_names(),
+        "purchased_bases": [heritage_perks._base_name(a["name"]) for a in state.get("advantages_chosen", [])],
+    }
+
+
+def _build_base_char_res(state: dict) -> tuple[Character, dict]:
+    """The character before any XP is spent, Heritage's free skill ranks included, with the
+    resolved Heritage (see l5r_rules.heritage_perks.resolve)."""
+    char = _school_char(state)
+    res = heritage_perks.resolve(state, _heritage_ctx(state, char))
+    heritage_perks.apply_skills(char, res)
+    return char, res
+
+
+def _build_base_char(state: dict) -> Character:
+    """Build a Character with family+school+Heritage skills applied (no XP purchases)."""
+    return _build_base_char_res(state)[0]
+
+
+def _heritage_open_discounts(state: dict) -> tuple[list[dict], str]:
+    """Heritage XP discounts the player has not used yet, and the school type they depend on."""
+    base, res = _build_base_char_res(state)
+    items = [{"name": "Different School", "points": 5}] if state.get("different_school") else []
+    items += [{"name": a["name"], "points": a["points"]} for a in state.get("advantages_chosen", [])]
+    return heritage_perks.unused_discounts(res["discounts"], items, base.school_type), base.school_type
+
+
+def _heritage_for_embed(state: dict) -> tuple[dict, list[dict]]:
+    base, res = _build_base_char_res(state)
+    items = [{"name": "Different School", "points": 5}] if state.get("different_school") else []
+    items += [{"name": a["name"], "points": a["points"]} for a in state.get("advantages_chosen", [])]
+    return res, heritage_perks.unused_discounts(res["discounts"], items, base.school_type)
+
+
+def _heritage_resolve(state: dict) -> dict:
+    return _build_base_char_res(state)[1]
+
+
 def _calc_chargen_xp(state: dict) -> tuple[int, int]:
     """Return (xp_spent, xp_remaining) from chargen purchases."""
     spent = 0
-    if state.get("different_school"):
-        spent += 5
-    base_char = _build_base_char(state)
+    base_char, res = _build_base_char_res(state)
     for trait, ranks in state.get("trait_purchases", {}).items():
         base_val = base_char.void_ring if trait == "void" else base_char.get_trait(trait)
         mult = advancement.VOID_XP_MULT if trait == "void" else advancement.TRAIT_XP_MULT
         for i in range(ranks):
             spent += (base_val + i + 1) * mult
-    for adv in state.get("advantages_chosen", []):
-        spent += adv["points"]
+    items = [{"name": "Different School", "points": 5}] if state.get("different_school") else []
+    items += [{"name": a["name"], "points": a["points"]} for a in state.get("advantages_chosen", [])]
+    spent += sum(cost for cost, _ in heritage_perks.price_items(res["discounts"], items, base_char.school_type))
     for skill, ranks in state.get("skill_purchases", {}).items():
         base_val = base_char.skills.get(skill, 0)
         for i in range(ranks):
@@ -2567,6 +2646,7 @@ def _chargen_embed(state: dict) -> discord.Embed:
         lines.append(f"**Family:** {state['family_name']}{bonus}")
     if state.get("heritage_result"):
         lines.append(f"**Heritage:** {state['heritage_result'][:600]}")
+        lines.extend(_heritage_effect_lines(*_heritage_for_embed(state)))
     if state.get("different_school"):
         lines.append("**Different School** (5 XP)")
     if state.get("school_name"):
@@ -2604,7 +2684,7 @@ def _chargen_embed(state: dict) -> discord.Embed:
     lines.append(f"\n**XP:** {remaining} remaining ({spent} spent of {_CHARGEN_XP}"
                  + (f" + {min(sum(d['points'] for d in state.get('disadvantages_chosen', [])), _MAX_DISADVANTAGE_XP)} from disadv." if state.get("disadvantages_chosen") else "")
                  + ")")
-    embed.description = "\n".join(lines) if lines else "Starting..."
+    embed.description = ("\n".join(lines) if lines else "Starting...")[:4000]
     return embed
 
 
@@ -2613,6 +2693,21 @@ def _active_embed(state: dict) -> discord.Embed:
     if state.get("full_wizard"):
         return _chargen_embed(state)
     return _wizard_embed(state)
+
+
+def _heritage_grant_techniques(char: Character, res: dict) -> None:
+    """A Heritage result (Ronin) that Fortune approved: a Technique of a higher Rank in the character's own school."""
+    sch = schools.get(char.school) if char.school else None
+    if sch is None:
+        return
+    for rank in res["technique_ranks"]:
+        for t in schools.techniques_up_to(sch["name"], rank):
+            if t["rank"] != rank:
+                continue
+            label = f"{sch['name']}: {t['name']}"
+            if not any(label.lower() == x.lower() or t["name"].lower() == x.lower() for x in char.techniques):
+                char.techniques.append(label)
+                char.heritage_details.append(f"Heritage Technique: {label} (Rank {rank})")
 
 
 def _materialize_character(state: dict) -> Character:
@@ -2665,10 +2760,10 @@ def _materialize_character(state: dict) -> Character:
         if def_el and not char.deficiency_element:
             char.deficiency_element = def_el
 
-    heritage_grants = state.get("heritage_grants", {})
-    if heritage_grants:
-        heritage.apply_heritage(char, {"grants": heritage_grants})
     if state.get("heritage_result"):
+        res = _heritage_resolve(state)
+        heritage_perks.apply_rest(char, res)   # free skill ranks went in with the base character
+        _heritage_grant_techniques(char, res)
         char.heritage_result = state["heritage_result"]
 
     spent, remaining = _calc_chargen_xp(state)
@@ -2725,7 +2820,7 @@ async def _chargen_wildcards(interaction: discord.Interaction, state: dict) -> N
     slot_idx = len(picks)
 
     if slot_idx >= len(slots):
-        await _chargen_traits(interaction, state)
+        await _chargen_heritage(interaction, state)
         return
 
     slot = slots[slot_idx]
@@ -2766,7 +2861,7 @@ async def _chargen_wildcards(interaction: discord.Interaction, state: dict) -> N
             await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
             return
         state["wildcard_slots"] = slots[:len(state.get("wildcard_picks", []))]
-        await _chargen_traits(btn_inter, state)
+        await _chargen_heritage(btn_inter, state)
 
     skip_btn.callback = on_skip
     view.add_item(skip_btn)
@@ -2815,6 +2910,321 @@ async def _chargen_wildcard_category(interaction: discord.Interaction, state: di
     await interaction.response.edit_message(
         content=f"**Starting Skills - Pick {slot_idx + 1} of {total}** ({category}){rank_note}\n{slot['label']}",
         embed=_active_embed(state), view=view,
+    )
+
+
+# --- Heritage: the questions a result asks (player choices, special purchases, staff decisions) ---
+def _heritage_groups(opts: list[dict]) -> dict[str, list[dict]] | None:
+    """Option groups for a menu of more than 25 entries (a Select holds 25), else None."""
+    if len(opts) <= 25:
+        return None
+    groups: dict[str, list[dict]] = {}
+    if any(o.get("group") for o in opts):
+        for o in opts:
+            groups.setdefault(o.get("group") or "Other", []).append(o)
+    else:
+        by_value = {o["value"]: o for o in opts}
+        for g, values in _wildcard_cat_groups(list(by_value)).items():
+            groups[g] = [by_value[v] for v in values]
+    return {g: v[:25] for g, v in sorted(groups.items())}
+
+
+def _heritage_options(state: dict, perk: dict) -> list[dict] | None:
+    """The perk's options for this character, minus any choice the rules forbid repeating."""
+    base, _ = _build_base_char_res(state)
+    opts = heritage_perks.ask_options(perk, _heritage_ctx(state, base))
+    ref = (perk.get("ask") or {}).get("differs_from")
+    if opts is not None and ref:
+        taken = (state.get("heritage_answers", {}).get(ref) or {}).get("v")
+        opts = [o for o in opts if o["value"] != taken]
+    return opts
+
+
+def _heritage_record(state: dict, perk_id: str, value: str, detail: str = "") -> None:
+    ans: dict[str, str] = {"v": value}
+    if detail:
+        ans["d"] = detail
+    state.setdefault("heritage_answers", {})[perk_id] = ans
+
+
+class _HeritageModal(discord.ui.Modal):
+    """Free text for a question, or the detail an option asks for (Who is your true love?)."""
+    answer = discord.ui.TextInput(label="Answer", max_length=100, required=True)
+
+    def __init__(self, perk: dict, label: str, maxlen: int, check, on_answer, option: dict | None = None):
+        super().__init__(title=(perk.get("label") or "Heritage")[:45])
+        self.perk = perk
+        self.option = option
+        self.check = check
+        self.on_answer = on_answer
+        self.answer.label = label[:45]
+        self.answer.max_length = max(1, min(maxlen, 1000))
+        if maxlen > 100:
+            self.answer.style = discord.TextStyle.paragraph
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not await self.check(interaction):
+            return
+        text = self.answer.value.strip()
+        if not text:
+            await interaction.response.send_message("Please write an answer.", ephemeral=True)
+            return
+        if self.option is not None:
+            await self.on_answer(interaction, self.option["value"], text)
+        else:
+            await self.on_answer(interaction, text, "")
+
+
+class _HeritageSelect(discord.ui.Select):
+    def __init__(self, perk: dict, options: list[dict], check, on_answer, placeholder: str):
+        self.perk = perk
+        self.opts = {o["value"]: o for o in options}
+        self.check = check
+        self.on_answer = on_answer
+        super().__init__(placeholder=placeholder[:150], options=[
+            discord.SelectOption(label=o["label"][:100], value=o["value"][:100]) for o in options])
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await self.check(interaction):
+            return
+        o = self.opts.get(self.values[0])
+        if o is None:
+            await interaction.response.defer()
+            return
+        if o.get("detail"):
+            await interaction.response.send_modal(
+                _HeritageModal(self.perk, o["detail"], 100, self.check, self.on_answer, option=o))
+            return
+        await self.on_answer(interaction, o["value"], "")
+
+
+class _HeritageGroupSelect(discord.ui.Select):
+    def __init__(self, groups: dict[str, list[dict]], check, on_group, placeholder: str):
+        self.check = check
+        self.on_group = on_group
+        super().__init__(placeholder=placeholder[:150], options=[
+            discord.SelectOption(label=g[:100], description=f"{len(v)} options") for g, v in groups.items()][:25])
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await self.check(interaction):
+            return
+        await self.on_group(interaction, self.values[0])
+
+
+class _HeritageTextButton(discord.ui.Button):
+    def __init__(self, perk: dict, check, on_answer):
+        super().__init__(label="Write the answer", style=discord.ButtonStyle.primary)
+        self.perk = perk
+        self.check = check
+        self.on_answer = on_answer
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if not await self.check(interaction):
+            return
+        ask = self.perk["ask"]
+        await interaction.response.send_modal(
+            _HeritageModal(self.perk, ask.get("prompt", "Answer"), int(ask.get("max", 100)), self.check, self.on_answer))
+
+
+def _heritage_ask_items(perk: dict, options: list[dict] | None, group: str | None,
+                        check, on_answer, on_group) -> list[discord.ui.Item]:
+    """The components that answer one question. Menus of more than 25 entries go through a group
+    menu first; `group` is the group already picked."""
+    if options is None:
+        return [_HeritageTextButton(perk, check, on_answer)]
+    groups = _heritage_groups(options)
+    if groups is None:
+        return [_HeritageSelect(perk, options, check, on_answer, "Choose...")]
+    if group in groups:
+        return [_HeritageSelect(perk, groups[group], check, on_answer, f"{group}...")]
+    return [_HeritageGroupSelect(groups, check, on_group, "Choose a category first...")]
+
+
+def _heritage_effect_lines(res: dict, open_discounts: list[dict]) -> list[str]:
+    """What the Heritage result adds to the sheet, as short lines for the wizard and the approval card."""
+    lines: list[str] = []
+    if res["skills"] or res["emphases"]:
+        bits = [f"{sk} +{r}" for sk, r in res["skills"].items()]
+        bits += [f"{sk} emphasis: {', '.join(e)}" for sk, e in res["emphases"].items()]
+        lines.append("**Free skills:** " + ", ".join(bits))
+    if res["advantages"]:
+        lines.append("**Free advantages:** " + ", ".join(res["advantages"]))
+    if res["disadvantages"]:
+        lines.append("**Disadvantages from Heritage:** " + ", ".join(res["disadvantages"]))
+    nums = [f"{k.capitalize()} {res[k]:+.1f}" for k in ("honor", "glory", "status", "infamy", "taint") if res[k]]
+    if res["glory_zero"]:
+        nums.insert(0, "Glory starts at 0.0")
+    if res["koku"]:
+        nums.append(f"{res['koku']:+d} koku")
+    if nums:
+        lines.append("**Heritage changes:** " + ", ".join(nums))
+    if res["weapons"]:
+        lines.append("**Free weapon:** " + ", ".join(schools._weapon_display(w) for w in res["weapons"]))
+    if res["tattoos"]:
+        lines.append("**Tattoo:** " + ", ".join(res["tattoos"]))
+    if res["blocked"]:
+        lines.append("**Cannot buy:** " + ", ".join(res["blocked"]))
+    if res["details"]:
+        lines.append("**Notes:** " + "; ".join(res["details"]))
+    if open_discounts:
+        lines.append("**XP discounts to use:** " + ", ".join(
+            f"{d['label']} ({'only ' + str(d['fixed']) + ' XP' if d.get('fixed') is not None else '-' + str(d['amount']) + ' XP'})"
+            for d in open_discounts))
+    if res["pending_player"]:
+        lines.append(f"**Heritage choices to make:** {len(res['pending_player'])}")
+    if res["pending_staff"]:
+        lines.append(f"**Left for Fortune to decide:** {len(res['pending_staff'])}")
+    return lines
+
+
+async def _chargen_heritage(interaction: discord.Interaction, state: dict, group: str | None = None) -> None:
+    """Step between the school and the traits: answer each choice the Heritage result gives."""
+    state["step"] = "hchoices"
+    res = _heritage_resolve(state)
+    pend = res["pending_player"]
+    if not pend:
+        await _chargen_traits(interaction, state)
+        return
+    perk = pend[0]
+    uid = int(state["user_id"])
+
+    async def check(inter: discord.Interaction) -> bool:
+        if inter.user.id != uid:
+            await inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return False
+        return True
+
+    async def on_answer(inter: discord.Interaction, value: str, detail: str) -> None:
+        now = _heritage_resolve(state)["pending_player"]
+        if not now or now[0]["id"] != perk["id"]:   # an out-of-date menu: Show the current question
+            await _chargen_heritage(inter, state)
+            return
+        _heritage_record(state, perk["id"], value, detail)
+        await _chargen_heritage(inter, state)
+
+    async def on_group(inter: discord.Interaction, g: str) -> None:
+        await _chargen_heritage(inter, state, group=g)
+
+    view = _WizardView(state)
+    for item in _heritage_ask_items(perk, _heritage_options(state, perk), group, check, on_answer, on_group):
+        view.add_item(item)
+    answered = [pid for pid in state.get("heritage_answers", {})
+                if any(p["id"] == pid and p["who"] == "player" for p in state.get("heritage_perks", []))]
+    if answered or group:
+        undo = discord.ui.Button(label="Back to Categories" if group else "Undo Last Choice",
+                                 style=discord.ButtonStyle.secondary, row=2)
+
+        async def on_undo(inter: discord.Interaction) -> None:
+            if not await check(inter):
+                return
+            if group is None and answered:
+                state["heritage_answers"].pop(answered[-1], None)
+            await _chargen_heritage(inter, state)
+
+        undo.callback = on_undo
+        view.add_item(undo)
+    left = len(pend)
+    await interaction.response.edit_message(
+        content=(f"**Heritage choice** · {left} left\n{perk['label']}\n"
+                 f"*From your Heritage roll: {(state.get('heritage_result') or '')[:300]}*"),
+        embed=_active_embed(state), view=view,
+    )
+
+
+# --- Heritage: advantages the menus cannot sell, opened up by a result ---
+class _BlackmailModal(discord.ui.Modal, title="Blackmail"):
+    target = discord.ui.TextInput(label="Who is the target?", max_length=60, required=True)
+    rank = discord.ui.TextInput(label="Target's Status Rank (cost)", max_length=2, required=True, placeholder="1 to 10")
+
+    def __init__(self, state: dict):
+        super().__init__()
+        self.state = state
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        try:
+            cost = int(self.rank.value.strip())
+        except ValueError:
+            cost = 0
+        if not 1 <= cost <= 10:
+            await interaction.response.send_message("The Status Rank must be a number from 1 to 10.", ephemeral=True)
+            return
+        await _heritage_buy(interaction, self.state, f"Blackmail ({self.target.value.strip()})", cost)
+
+
+async def _heritage_buy(interaction: discord.Interaction, state: dict, name: str, points: int) -> None:
+    chosen = state.setdefault("advantages_chosen", [])
+    if any(a["name"] == name for a in chosen):
+        await _chargen_heritage_purchases(interaction, state)   # Out-of-date menu.
+        return
+    chosen.append({"name": name, "points": points})
+    _, remaining = _calc_chargen_xp(state)
+    if remaining < 0:
+        chosen.pop()
+        await interaction.response.send_message("Not enough XP for that.", ephemeral=True)
+        return
+    await _chargen_heritage_purchases(interaction, state)
+
+
+class _HeritagePurchaseSelect(discord.ui.Select):
+    def __init__(self, state: dict, options: list[dict], labels: dict[str, str]):
+        self.state = state
+        self.by_value = {str(i): o for i, o in enumerate(options)}
+        super().__init__(placeholder="Buy with your Heritage...", options=[
+            discord.SelectOption(label=labels[k][:100], value=k) for k in self.by_value])
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        if interaction.user.id != int(self.state["user_id"]):
+            await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        o = self.by_value.get(self.values[0])
+        if o is None:
+            await interaction.response.defer()
+            return
+        if o.get("input") == "blackmail":
+            await interaction.response.send_modal(_BlackmailModal(self.state))
+            return
+        await _heritage_buy(interaction, self.state, o["name"], o["points"])
+
+
+def _heritage_purchase_options(state: dict) -> tuple[list[dict], dict[str, str]]:
+    base, res = _build_base_char_res(state)
+    items = [{"name": a["name"], "points": a["points"]} for a in state.get("advantages_chosen", [])]
+    if state.get("different_school"):
+        items.insert(0, {"name": "Different School", "points": 5})
+    opts = heritage_perks.special_options(res, items, base.school_type)
+    labels: dict[str, str] = {}
+    for i, o in enumerate(opts):
+        if o["points"] is None:
+            labels[str(i)] = f"{o['name']} (cost = the target's Status Rank)"
+        else:
+            cost = heritage_perks.price_items(res["discounts"], items + [{"name": o["name"], "points": o["points"]}],
+                                              base.school_type)[-1][0]
+            labels[str(i)] = f"{o['name']} ({cost} XP)" + (f", {o['points']} before Heritage" if cost != o["points"] else "")
+    return opts, labels
+
+
+async def _chargen_heritage_purchases(interaction: discord.Interaction, state: dict) -> None:
+    opts, labels = _heritage_purchase_options(state)
+    view = _ChargenView(state)
+    if opts:
+        view.add_item(_HeritagePurchaseSelect(state, opts[:25], labels))
+    back = discord.ui.Button(label="Back to Advantages", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(inter: discord.Interaction) -> None:
+        if inter.user.id != int(state["user_id"]):
+            await inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_advantages(inter, state)
+
+    back.callback = on_back
+    view.add_item(back)
+    await interaction.response.edit_message(
+        content="**Step 6/10 - Advantages (Heritage)** · These cost a variable amount, so the normal menus do not sell them. "
+                "Your Heritage lets you buy them here." + ("" if opts else "\nNothing is left to buy."),
+        embed=_chargen_embed(state), view=view,
     )
 
 
@@ -2909,6 +3319,21 @@ async def _chargen_traits(interaction: discord.Interaction, state: dict) -> None
 
         back_wc_btn.callback = on_back_wc
         view.add_item(back_wc_btn)
+
+    if any(p["who"] == "player" and p.get("ask") for p in state.get("heritage_perks", [])):
+        redo_btn = discord.ui.Button(label="Redo Heritage Choices", style=discord.ButtonStyle.secondary, row=3)
+
+        async def on_redo(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            player_ids = {p["id"] for p in state.get("heritage_perks", []) if p["who"] == "player"}
+            state["heritage_answers"] = {k: v for k, v in state.get("heritage_answers", {}).items()
+                                         if k not in player_ids}
+            await _chargen_heritage(btn_inter, state)
+
+        redo_btn.callback = on_redo
+        view.add_item(redo_btn)
 
     view.add_item(undo_btn)
     view.add_item(next_btn)
@@ -3021,6 +3446,14 @@ def _taken_names(state: dict, kind: str) -> set[str]:
     "Inheritance (a sword)" also takes its base name, so it cannot be bought twice."""
     chosen = state.get("advantages_chosen" if kind == "advantage" else "disadvantages_chosen", [])
     names: set[str] = set()
+    if state.get("heritage_result"):
+        # What Heritage already gave (or forbids) must not be offered, or the player would pay for nothing.
+        res = _heritage_resolve(state)
+        given = res["advantages" if kind == "advantage" else "disadvantages"]
+        names.update(given)
+        names.update(heritage_perks._base_name(n) for n in given)
+        if kind == "advantage":
+            names.update(res["blocked"])
     for a in chosen:
         names.add(a["name"])
         base = a["name"].split(" (")[0]
@@ -3058,9 +3491,15 @@ class _AdvantageSelect(discord.ui.Select):
         self.category = category
         pool = _adv_pool(state, "advantage", category)
         parts = max(1, -(-len(pool) // 25))
+        discounts, stype = _heritage_open_discounts(state)
+
+        def _desc(a: dict) -> str:
+            hint = heritage_perks.discount_hint(discounts, a["name"], a["points"], stype)
+            return f"{a['cost_text']} → {hint}" if hint else f"{a['cost_text']} - {a.get('category') or 'Other'}"
+
         options = [discord.SelectOption(
             label=a["name"][:100],
-            description=f"{a['cost_text']} - {a.get('category') or 'Other'}"[:100],
+            description=_desc(a)[:100],
         ) for a in pool[part * 25:(part + 1) * 25]]
         if not options:
             options = [discord.SelectOption(label="(none available)", value="__none__")]
@@ -3166,6 +3605,17 @@ async def _chargen_advantages(interaction: discord.Interaction, state: dict) -> 
     view.add_item(back_btn)
     view.add_item(undo_btn)
     view.add_item(next_btn)
+    if _heritage_purchase_options(state)[0]:
+        her_btn = discord.ui.Button(label="Heritage Purchases", style=discord.ButtonStyle.primary, row=3)
+
+        async def on_heritage(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            await _chargen_heritage_purchases(btn_inter, state)
+
+        her_btn.callback = on_heritage
+        view.add_item(her_btn)
 
     await interaction.response.edit_message(
         content="**Step 6/10 - Advantages** · Pick a category then select advantages. Press **Next** when done.",
@@ -3910,6 +4360,10 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
 
 # --- Step 10: Review & Submit ---
 async def _chargen_review(interaction: discord.Interaction, state: dict) -> None:
+    if _heritage_resolve(state)["pending_player"]:
+        # A choice the Heritage result gives is still open (or an earlier change made one invalid).
+        await _chargen_heritage(interaction, state)
+        return
     state["step"] = "review"
     # Going back to change an earlier step can leave bought ranks over the cap, or an emphasis
     # on a skill that is no longer there. Fix both before showing the sheet.
@@ -3935,9 +4389,10 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
     lines.append(f"**School:** {char.school} ({char.school_type})")
     if state.get("heritage_result"):
         lines.append(f"**Heritage:** {state['heritage_result'][:600]}")
+        lines.extend(_heritage_effect_lines(*_heritage_for_embed(state)))
     if state.get("concept"):
         lines.append(f"**Concept:** {state['concept'][:200]}")
-    embed.description = "\n".join(lines)
+    embed.description = "\n".join(lines)[:4000]
 
     rings = stats.all_rings(char)
     trait_lines = (
@@ -4073,6 +4528,12 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
             _SUBMITTED_TEXT.format(name=state.get("name", "your character")), ephemeral=True,
         )
         return
+    if _heritage_resolve(state)["pending_player"]:
+        await interaction.response.send_message(
+            "Your Heritage result still has choices to make. Go back to the traits step and press **Redo Heritage Choices**.",
+            ephemeral=True,
+        )
+        return
     spent, remaining = _calc_chargen_xp(state)
     if remaining < 0:
         await interaction.response.send_message(
@@ -4165,6 +4626,14 @@ async def _submit_for_approval(interaction: discord.Interaction, state: dict) ->
 
     if state.get("heritage_result"):
         embed.add_field(name="Heritage", value=state["heritage_result"][:1024], inline=False)
+        her_res = _heritage_resolve(state)
+        if her_res["pending_staff"]:
+            embed.add_field(
+                name="Heritage: Fortune decides",
+                value=("Press **Approve** and answer each question first. They are written on the sheet:\n"
+                       + "\n".join(f"• {p['label']}" for p in her_res["pending_staff"]))[:1024],
+                inline=False,
+            )
 
     since_24h = time.time() - 86400
     prior_rolls = store.get_heritage_rolls_since(guild_id, str(state["user_id"]), since_24h)
@@ -4272,6 +4741,51 @@ async def _ensure_player_support_channel(
         return None, f"Could not create the support channel ({getattr(e, 'text', '') or 'Discord refused it'}). Create it by hand."
 
 
+# --- Heritage: the questions Fortune answers on the approval card ---
+async def _heritage_staff_prompt(interaction: discord.Interaction, view: "_FullCharacterApprovalView",
+                                 approval_message: discord.Message | None, group: str | None = None,
+                                 first: bool = False) -> None:
+    """Ask staff the next open "Fortune determines ..." question, in a private message. Each answer is
+    written into the saved application; when none is left they press Approve again."""
+    state = view.character_state
+    res = _heritage_resolve(state)
+    pend = res["pending_staff"]
+    if not pend:
+        text = ("Every Heritage decision is recorded on the sheet. Press **Approve** again to finish.")
+        if first:
+            await interaction.response.send_message(text, ephemeral=True)
+        else:
+            await interaction.response.edit_message(content=text, view=None)
+        return
+    perk = pend[0]
+
+    async def check(inter: discord.Interaction) -> bool:
+        return await _require_dm_role(inter)
+
+    async def on_answer(inter: discord.Interaction, value: str, detail: str) -> None:
+        now = _heritage_resolve(state)["pending_staff"]
+        if now and now[0]["id"] == perk["id"]:
+            _heritage_record(state, perk["id"], value, detail)
+            for base in _heritage_resolve(state)["remove_purchases"]:
+                state["advantages_chosen"] = [a for a in state.get("advantages_chosen", [])
+                                              if heritage_perks._base_name(a["name"]) != base]
+            await view.persist(approval_message)
+        await _heritage_staff_prompt(inter, view, approval_message)
+
+    async def on_group(inter: discord.Interaction, g: str) -> None:
+        await _heritage_staff_prompt(inter, view, approval_message, group=g)
+
+    ui = discord.ui.View(timeout=900)
+    for item in _heritage_ask_items(perk, _heritage_options(state, perk), group, check, on_answer, on_group):
+        ui.add_item(item)
+    text = (f"**Heritage decision** · {len(pend)} left for **{state['name']}**\n{perk['label']}\n"
+            f"*Heritage roll: {(state.get('heritage_result') or '')[:300]}*")
+    if first:
+        await interaction.response.send_message(text, view=ui, ephemeral=True)
+    else:
+        await interaction.response.edit_message(content=text, view=ui)
+
+
 class _FullCharacterApprovalView(_DisableableView):
     """DM approval view for fully-built character sheets from the wizard."""
 
@@ -4287,6 +4801,10 @@ class _FullCharacterApprovalView(_DisableableView):
     @discord.ui.button(label="Approve", style=discord.ButtonStyle.success)
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await _require_dm_role(interaction):
+            return
+        if _heritage_resolve(self.character_state)["pending_staff"]:
+            # Fortune has questions to answer first; Approve stays live until they are.
+            await _heritage_staff_prompt(interaction, self, interaction.message, first=True)
             return
         if not self.claim():
             await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
@@ -9203,6 +9721,12 @@ async def xp_advantage(
     if canonical.lower() in [x.lower() for x in c.advantages]:
         await interaction.response.send_message(f"**{c.name}** already has **{canonical}**.", ephemeral=True)
         return
+    if adv["name"].lower() in {b.lower() for b in c.blocked_advantages}:
+        await interaction.response.send_message(
+            f"**{c.name}**'s Heritage forbids **{adv['name']}**. Staff can still grant it with `/edit feature`.",
+            ephemeral=True,
+        )
+        return
     if c.xp < cost:
         await interaction.response.send_message(
             f"Not enough XP: **{canonical}** costs **{cost}**, but **{c.name}** has {c.xp:g}.", ephemeral=True
@@ -12011,7 +12535,7 @@ async def _cg_resume(interaction: discord.Interaction, state: dict) -> None:
         return
     handlers = {
         "heritage": _go_to_heritage_or_school, "school": _go_to_school_choice, "wildcards": _chargen_wildcards,
-        "traits": _chargen_traits, "advantages": _chargen_advantages, "disadvantages": _chargen_disadvantages,
+        "hchoices": _chargen_heritage, "traits": _chargen_traits, "advantages": _chargen_advantages, "disadvantages": _chargen_disadvantages,
         "skills": _chargen_skills, "spells": _chargen_spells, "review": _chargen_review,
     }
     await handlers.get(step, _chargen_traits)(interaction, state)

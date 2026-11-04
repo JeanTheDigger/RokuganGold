@@ -16,6 +16,7 @@ Combat auto-applied (12 effects across 10 entries):
 
 Skill-check auto-applied:
   Silent: +1k0 Stealth
+  Heritage: +1k0 to all Craft rolls (Dragon)
   Voice: +1k1 Perform
   Wary: +1k1 Investigation (Notice emphasis only)
   Irreproachable: +1k0 vs Temptation (contested only)
@@ -356,6 +357,11 @@ def skill_check_modifiers(
     if _has_adv(character, "Silent") and sk == "stealth":
         rolled += 1
         notes.append("Silent +1k0 (Stealth)")
+
+    # Heritage (Dragon): "+1k0 to all Craft rolls".
+    if sk.startswith("craft") and _has_adv(character, "+1k0 to all Craft rolls"):
+        rolled += 1
+        notes.append("Heritage +1k0 (Craft)")
 
     if _has_adv(character, "Voice") and sk == "perform":
         rolled += 1; kept += 1

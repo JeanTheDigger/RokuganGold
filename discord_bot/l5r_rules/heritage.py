@@ -1289,7 +1289,7 @@ _RONIN_TABLE: dict = {
         {
             "rolls": [10],
             "effect": "One of your ancestors stumbled upon a cache of forbidden lore. You gain Forbidden Knowledge: Maho and one Rank of Taint.",
-            "grants": {"taint": 1.0, "disadvantages": ["Forbidden Knowledge: Maho"]},
+            "grants": {"taint": 1.0, "advantages": ["Forbidden Knowledge (Maho)"]},
         },
     ],
 }

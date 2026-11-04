@@ -199,6 +199,7 @@ STAFF = Sheet(
         ]),
         Card("Approvals and damage", [
             N("New characters: Press Approve, or Deny to send the wizard back so the player can adjust it."),
+            N("Heritage: Where a roll says Fortune determines something, Approve asks you first. Your answers go on the sheet."),
             N("Damage cards: Press Roll & Apply Damage or Deny. Players only see the wound level."),
             E("/dm damage | heal", "Send a card for a character."),
             E("/dm treat", "A healer rolls Medicine and you approve."),

@@ -51,7 +51,9 @@ TOPICS: list[Topic] = [
         body=(
             "**1. Make a character.** Run `/sheet create`. The bot opens a private creation channel for you and "
             "walks you through clan, family, school, heritage, traits, advantages, skills and spells with menus. "
-            "Nothing is final until you press **Submit for Approval**.\n"
+            "Nothing is final until you press **Submit for Approval**. A Heritage roll takes effect in full: free skill "
+            "ranks, XP discounts and Advantages go on your sheet, the wizard asks you each choice the roll gives, and "
+            "staff settle anything it leaves to Fortune when they approve.\n"
             "**2. Wait for approval.** The moment you submit, you get a private support channel named after your "
             "character, where staff can ask questions. If the application is denied the channel is deleted, and you "
             "fix the sheet in your creation channel and submit again. On approval you also get the "

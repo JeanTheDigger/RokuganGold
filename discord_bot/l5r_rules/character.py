@@ -135,6 +135,10 @@ class Character:
 
     # -- Heritage roll result text (includes Fortune notes for DM adjudication) --
     heritage_result: str = ""
+    # -- Heritage consequences kept on the sheet: staff decisions, entitlements and the
+    #    advantages Heritage forbids (base names; checked when buying with XP). --
+    heritage_details: list[str] = field(default_factory=list)
+    blocked_advantages: list[str] = field(default_factory=list)
 
     # -- Trait access helpers (mirror get/set_trait_value in the GDScript) --
     _TRAIT_ATTR = {
