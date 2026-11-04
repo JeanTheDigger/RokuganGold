@@ -1100,7 +1100,7 @@ def _spell_ceiling_warning(c, spell_name: str) -> str:
     entry = spells.get(spell_name)
     if entry is None:
         return "\n*Not in the spell catalog: The bot cannot check its Mastery Level.*"
-    ceiling = stats.spell_mastery_ceiling(c, entry["element"])
+    ceiling = stats.spell_mastery_ceiling(c, entry["element"], None, entry)
     if entry["mastery"] > ceiling:
         return (f"\n*Note: **{entry['name']}** is Mastery {entry['mastery']}, above **{c.name}**'s ceiling of "
                 f"{ceiling} in {entry['element']} at School Rank {c.school_rank}. They hold the scroll but "

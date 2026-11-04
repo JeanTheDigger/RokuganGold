@@ -562,6 +562,12 @@ class Store:
                 ).fetchall()
         return [r["name"] for r in rows]
 
+    def list_all_characters(self) -> list[CharacterRecord]:
+        """Every character in every guild (for one-off backfills at start-up)."""
+        with self._lock:
+            rows = self._conn.execute("SELECT * FROM characters").fetchall()
+        return [self._row_to_record(r) for r in rows]
+
     def list_by_owner(self, guild_id: str, owner_id: str) -> list[CharacterRecord]:
         with self._lock:
             rows = self._conn.execute(

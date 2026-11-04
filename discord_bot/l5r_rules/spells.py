@@ -9,7 +9,16 @@ from __future__ import annotations
 from .spells_catalog import SPELLS_DATA
 
 ALL = SPELLS_DATA
-_BY_NAME = {s["name"].lower(): s for s in SPELLS_DATA}
+
+# The extracted catalog kept a markdown escape in two names ("Wisdom ****&**** Clarity"). Show the
+# real name, and still find a spell stored on an older sheet under the escaped one.
+_JUNK = "****&****"
+_BY_NAME = {}
+for _s in SPELLS_DATA:
+    _old = _s["name"]
+    _s["name"] = _old.replace(_JUNK, "&")
+    _BY_NAME[_s["name"].lower()] = _s
+    _BY_NAME[_old.lower()] = _s
 
 
 def get(name: str) -> dict | None:

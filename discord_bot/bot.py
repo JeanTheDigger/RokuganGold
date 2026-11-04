@@ -310,6 +310,10 @@ class RokuganBot(discord.Client):
             restored = views_base.restore_all(self)
             if restored:
                 log.info("Re-attached %d pending approval view(s).", restored)
+            try:
+                _backfill_rank_techniques()
+            except Exception:
+                log.exception("Technique backfill failed")
 
 client = RokuganBot()
 
@@ -1691,19 +1695,47 @@ def _spell_list_text(c: Character) -> str:
     return ", ".join(f"{n} (memorised)" if stats.is_memorised(c, n) else n for n in c.spells_known)
 
 
-def _mastery_ceiling_text(c: Character, element: str, school_rank: int | None = None) -> str:
-    """Explain a character's Mastery ceiling in one element (s31/s48)."""
+def _mastery_ceiling_text(c: Character, element: str, school_rank: int | None = None,
+                          spell: dict | None = None) -> str:
+    """Explain a character's Mastery ceiling in one element (s31/s48), or for one spell when the
+    school's Affinity follows keywords (Yogo Wardmaster)."""
     rank = c.school_rank if school_rank is None else school_rank
-    eff = stats.spell_mastery_ceiling(c, element, school_rank)
+    eff = stats.spell_mastery_ceiling(c, element, school_rank, spell)
     el = element.lower()
     shift = ""
+    if spell is not None and stats.keyword_rule(c) is not None:
+        aff, deff = stats.spell_affinity_state(c, spell)
+        shift = " +1 Affinity" if aff else (" -1 Deficiency" if deff else "")
+        subject = f"**{spell['name']}**"
+        if eff <= 0:
+            return f"{subject} is in their Deficiency and School Rank {rank} makes it uncastable."
+        return f"Their ceiling for {subject} is Mastery {eff} (School Rank {rank}{shift})."
     if c.affinity_element and c.affinity_element.lower() == el:
         shift = " +1 Affinity"
-    elif c.deficiency_element and c.deficiency_element.lower() == el:
+    elif stats.is_deficient(c, el):
         shift = " -1 Deficiency"
     if eff <= 0:
         return f"{element.title()} is their Deficiency and School Rank {rank} makes it uncastable."
     return f"Their ceiling in {element.title()} is Mastery {eff} (School Rank {rank}{shift})."
+
+
+def _backfill_rank_techniques() -> None:
+    """Characters made before the wizard granted the Rank 1 Technique have none on the sheet, and
+    combat reads Techniques from that list. Give every PC the Techniques their School Rank already
+    entitles them to (what /sheet learn would). Safe to run at every start: it adds nothing twice."""
+    fixed = 0
+    for rec in store.list_all_characters():
+        c = rec.character
+        if rec.owner_id == NPC_OWNER or c.is_npc or not c.school:
+            continue
+        school = schools.get(c.school)
+        if school is None:
+            continue
+        if _grant_school_techniques(c, school):
+            store.save(rec, note="Technique backfill")
+            fixed += 1
+    if fixed:
+        log.info("Added missing School Techniques to %d character(s).", fixed)
 
 
 def _grant_school_techniques(c: Character, school: dict) -> list[str]:
@@ -1998,7 +2030,8 @@ class _SchoolSelect(discord.ui.Select):
             return
         if self.state.get("school_name") != self.values[0]:
             # Anything chosen for the spell step belonged to the old school.
-            for k in ("chosen_spells", "_spell_allot_remaining", "_slot_assign", "affinity_element", "deficiency_element", "gear_picks"):
+            for k in ("chosen_spells", "_spell_allot_remaining", "_slot_assign", "affinity_element", "deficiency_element", "gear_picks",
+                      "second_deficiency", "_spell_pool", "_yogo_wards"):
                 self.state.pop(k, None)
         self.state["school_name"] = self.values[0]
         if self.state.get("full_wizard"):
@@ -2714,7 +2747,8 @@ def _chargen_embed(state: dict) -> discord.Embed:
         el = ", ".join(f"{e['skill']}: {e['emphasis']}" for e in state["emphasis_purchases"])
         lines.append(f"**Emphases:** {el}")
     if state.get("affinity_element"):
-        deff = f" / Deficiency {state['deficiency_element']}" if state.get("deficiency_element") else ""
+        deff_list = [d for d in (state.get("deficiency_element"), state.get("second_deficiency")) if d]
+        deff = f" / Deficiency {' and '.join(deff_list)}" if deff_list else ""
         lines.append(f"**Affinity:** {state['affinity_element']}{deff}")
     if state.get("chosen_spells"):
         lines.append(f"**Spells:** {', '.join(state['chosen_spells'])}")
@@ -2781,10 +2815,13 @@ def _materialize_character(state: dict) -> Character:
             char.spells_known.append(spell_name)
 
     sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+    rule = _spell_rule(sch)
     if sch and sch.get("affinity"):
         allot = _parse_spell_allotment(sch)
-        if allot or _flexible_slot_sizes(sch):
-            for base_spell in ("Sense", "Commune", "Summon"):
+        if allot or _flexible_slot_sizes(sch) or rule:
+            # Yogo Wardmasters start with Commune and Summon only (s29.6).
+            base_spells = ("Commune", "Summon") if rule == "keyword" else ("Sense", "Commune", "Summon")
+            for base_spell in reversed(base_spells):
                 if base_spell not in char.spells_known:
                     char.spells_known.insert(0, base_spell)
         # The school's Affinity and Deficiency go on the sheet so casting rolls
@@ -2797,6 +2834,13 @@ def _materialize_character(state: dict) -> Character:
             char.affinity_element = aff_el
         if def_el and not char.deficiency_element:
             char.deficiency_element = def_el
+        if rule == "selftaught" and state.get("second_deficiency"):
+            char.deficiency_element = "/".join(
+                dict.fromkeys(e for e in (char.deficiency_element, state["second_deficiency"]) if e))
+        if rule == "voidmystic":   # Begins play with Ishiken-do and the Touch of the Void (s29.12).
+            for name, lst in (("Ishiken-Do", char.advantages), ("Touch of the Void", char.disadvantages)):
+                if name not in lst:
+                    lst.append(name)
 
     # The school's Rank 1 Technique is part of the character from the start (s48: it comes with the
     # rank). Combat reads it from this list, so without it the Technique would never apply.
@@ -3567,19 +3611,45 @@ def _taken_names(state: dict, kind: str) -> set[str]:
     for a in chosen:
         names.add(a["name"])
         base = a["name"].split(" (")[0]
-        if base in _CHARGEN_CHOICES:
+        if base in _CHARGEN_CHOICES or re.search(r"\(\d+ points?\)$", a["name"]):
             names.add(base)
     if kind == "advantage" and state.get("different_school"):
         names.add("Different School")
+    if state.get("school_name") == "Void Mystic":   # The school hands these out.
+        names.add("Ishiken-Do" if kind == "advantage" else "Touch of the Void")
     return names
+
+
+_NOT_AT_CREATION = re.compile(
+    r"NOT AVAILABLE AT CHARACTER CREATION|purchased during play only|Purchased after reading", re.IGNORECASE)
+_SHUGENJA_ONLY = re.compile(r"shugenja only|only shugenja|only available to shugenja", re.IGNORECASE)
+
+
+def _creation_gate_ok(a: dict, school_type: str, honor: float, affinity: str) -> bool:
+    """May a brand-new character buy this? The catalog marks what is closed at creation or limited to
+    shugenja; Sacrosanct needs Honor 6 and Void Versatility a Void Affinity."""
+    eff = a.get("effect") or ""
+    if _NOT_AT_CREATION.search(eff):
+        return False
+    if _SHUGENJA_ONLY.search(eff) and "shugenja" not in school_type.lower():
+        return False
+    if a["name"] == "Sacrosanct" and honor < 6:
+        return False
+    if a["name"] == "Void Versatility" and affinity.lower() != "void":
+        return False
+    return True
 
 
 def _adv_pool(state: dict, kind: str, category: str) -> list[dict]:
     """Fixed-cost entries a category menu offers, A to Z. Entries with no category
     in the data are listed under Other so none of them is unreachable."""
     taken = _taken_names(state, kind)
+    base, res = _build_base_char_res(state)
+    honor = base.honor + res["honor"]
+    affinity = state.get("affinity_element") or base.affinity_element or ""
     pool = [a for a in advantages.by_kind(kind)
             if a.get("points") is not None and a["name"] not in taken
+            and _creation_gate_ok(a, base.school_type, honor, affinity)
             and (a.get("category") or "Other") == category]
     pool.sort(key=lambda a: a["name"])
     return pool
@@ -3764,21 +3834,82 @@ class _DisadvantageSelect(discord.ui.Select):
         if dis["name"] in _taken_names(self.state, "disadvantage"):
             await _chargen_disadv_category(interaction, self.state, self.category)   # An out-of-date menu.
             return
-        current_disadv_xp = sum(d["points"] for d in self.state.get("disadvantages_chosen", []))
-        if current_disadv_xp + dis["points"] > _MAX_DISADVANTAGE_XP:
-            await interaction.response.send_message(
-                f"That would exceed the {_MAX_DISADVANTAGE_XP} XP disadvantage limit.",
-                ephemeral=True,
-            )
+        if len(_cost_tiers(dis)) > 1:
+            await _chargen_disadv_tier(interaction, self.state, dis, self.category)
             return
-        choice_spec = _CHARGEN_CHOICES.get(dis["name"])
-        if choice_spec:
-            modal = _AdvChoiceModal(self.state, dis, "disadvantage", choice_spec[0], choice_spec[1],
-                                    category=self.category)
-            await interaction.response.send_modal(modal)
+        await _take_disadvantage(interaction, self.state, dis, dis["points"], self.category)
+
+
+def _cost_tiers(rec: dict) -> list[int]:
+    """The cost levels of a tiered entry such as "2/4 pts" -> [2, 4]; [] when it has one cost."""
+    m = re.match(r"^\s*(\d+(?:\s*/\s*\d+)+)\s*pts?\b(?!\s*/)", rec.get("cost_text") or "")
+    return [int(n) for n in re.split(r"\s*/\s*", m.group(1))] if m and rec.get("points") is not None else []
+
+
+async def _take_disadvantage(interaction: discord.Interaction, state: dict, dis: dict, points: int,
+                             category: str, tiered: bool = False) -> None:
+    current_disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+    if current_disadv_xp + points > _MAX_DISADVANTAGE_XP:
+        await interaction.response.send_message(
+            f"That would exceed the {_MAX_DISADVANTAGE_XP} XP disadvantage limit.", ephemeral=True)
+        return
+    choice_spec = _CHARGEN_CHOICES.get(dis["name"])
+    if choice_spec:
+        modal = _AdvChoiceModal(state, {**dis, "points": points}, "disadvantage", choice_spec[0], choice_spec[1],
+                                category=category)
+        await interaction.response.send_modal(modal)
+        return
+    name = f"{dis['name']} ({points} points)" if tiered else dis["name"]
+    state.setdefault("disadvantages_chosen", []).append({"name": name, "points": points})
+    await _chargen_disadv_category(interaction, state, category)
+
+
+async def _chargen_disadv_tier(interaction: discord.Interaction, state: dict, dis: dict, category: str) -> None:
+    """A tiered Disadvantage gives back the XP of the level taken, so the player chooses the level."""
+    tiers = _cost_tiers(dis)
+    used = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+
+    def blurb(n: int) -> str:
+        m = re.search(rf"\b{n} pts?\b[^:(.]*[:(]\s*([^.]*)", dis.get("effect") or "")
+        return (m.group(1).strip().rstrip(")") if m else "")[:100]
+
+    sel = discord.ui.Select(
+        placeholder=f"How severe is {dis['name']}?",
+        options=[discord.SelectOption(label=f"{n} points", value=str(n), description=blurb(n) or None)
+                 for n in tiers if used + n <= _MAX_DISADVANTAGE_XP]
+                or [discord.SelectOption(label="(over the XP limit)", value="__none__")],
+    )
+
+    async def on_pick(sel_inter: discord.Interaction) -> None:
+        if sel_inter.user.id != int(state["user_id"]):
+            await sel_inter.response.send_message("This isn't your wizard.", ephemeral=True)
             return
-        self.state.setdefault("disadvantages_chosen", []).append({"name": dis["name"], "points": dis["points"]})
-        await _chargen_disadv_category(interaction, self.state, self.category)
+        if sel.values[0] == "__none__" or int(sel.values[0]) not in tiers:
+            await _chargen_disadv_category(sel_inter, state, category)
+            return
+        if dis["name"] in _taken_names(state, "disadvantage"):
+            await _chargen_disadv_category(sel_inter, state, category)   # An out-of-date menu.
+            return
+        await _take_disadvantage(sel_inter, state, dis, int(sel.values[0]), category, tiered=True)
+
+    sel.callback = on_pick
+    back = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_disadv_category(btn_inter, state, category)
+
+    back.callback = on_back
+    view = _ChargenView(state)
+    view.add_item(sel)
+    view.add_item(back)
+    await interaction.response.edit_message(
+        content=f"**Step 7/10 - {dis['name']}** · {dis['effect'][:900]}\nPick the level. Higher gives more XP "
+                f"({used}/{_MAX_DISADVANTAGE_XP} XP gained so far).",
+        embed=_chargen_embed(state), view=view,
+    )
 
 
 async def _chargen_disadv_category(interaction: discord.Interaction, state: dict, cat: str) -> None:
@@ -4163,12 +4294,49 @@ async def _chargen_emphasis_pick(interaction: discord.Interaction, state: dict) 
 
 
 # --- Step 9: Spells (shugenja only) ---
+_SPELL_RULES: dict[str, str] = {
+    "Dutiful Disciple Shugenja": "dutiful",   # 3 Affinity, 2 and 1 in two other non-Deficient elements (s54.8)
+    "Self-Taught Shugenja": "selftaught",     # any five spells they can cast (s29.12)
+    "Void Mystic": "voidmystic",              # no starting picks: casts any Void spell (s29.12)
+    "Yogo Wardmaster": "keyword",             # 3 Ward spells and 3 others, by keyword (s29.6)
+}
+
+
+def _spell_rule(sch: dict | None) -> str | None:
+    return _SPELL_RULES.get((sch or {}).get("name", ""))
+
+
+def _chargen_deficiencies(state: dict, sch: dict | None) -> set[str]:
+    """Lower-case elements the new character is Deficient in: the school's, plus a Self-Taught second one."""
+    out = {state.get("deficiency_element") or _school_elements(sch)[1]}
+    out.add(state.get("second_deficiency", ""))
+    return {e.lower() for e in out if e}
+
+
 def _chargen_max_mastery(state: dict, element: str) -> int:
     """Highest Mastery Level a new Rank 1 shugenja may take in this element: 1, or 2
     for the school's Affinity element (s31: Cast as if School Rank is 1 higher)."""
     sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+    if _spell_rule(sch) == "keyword":
+        return 2   # Ward spells open Mastery 2; _chargen_spell_ok judges each spell
     aff_el = state.get("affinity_element") or _school_elements(sch)[0]
     return 2 if aff_el and aff_el.lower() == element.lower() else 1
+
+
+def _chargen_spell_ok(state: dict, spell: dict, *, ward_stage: bool = False) -> bool:
+    """May a new Rank 1 character start with this spell? Schools that name their picks outright
+    (Dutiful, Self-Taught, Yogo) take no Void spells; a keyword school (Yogo) judges each spell by
+    its keywords."""
+    sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
+    if spell["element"].lower() == "void" and _spell_rule(sch) in ("dutiful", "selftaught", "keyword"):
+        return False
+    if _spell_rule(sch) == "keyword":
+        stub = Character(name="stub", school=sch["name"], school_rank=1)
+        aff, deff = stats.spell_affinity_state(stub, spell)
+        if aff != ward_stage:
+            return False   # Ward stage takes Wards only, the other stage takes everything else
+        return spell["mastery"] <= stats.spell_mastery_ceiling(stub, spell["element"], 1, spell)
+    return spell["mastery"] <= _chargen_max_mastery(state, spell["element"])
 
 
 class _SpellSelect(discord.ui.Select):
@@ -4178,7 +4346,8 @@ class _SpellSelect(discord.ui.Select):
         self.mastery = mastery
         chosen_names = set(state.get("chosen_spells", []))
         available = [s for s in spells.by_element(element)
-                     if s["mastery"] == mastery and s["name"] not in chosen_names]
+                     if s["mastery"] == mastery and s["name"] not in chosen_names
+                     and _chargen_spell_ok(state, s)]
         available.sort(key=lambda s: s["name"])
         options = []
         for s in available[:25]:
@@ -4207,11 +4376,15 @@ class _SpellSelect(discord.ui.Select):
         picked = self.state.setdefault("chosen_spells", [])
         entry = spells.get(chosen)
         if (allot_tracking.get(self.element, 0) <= 0 or chosen in picked or entry is None
-                or entry["mastery"] > _chargen_max_mastery(self.state, self.element)):
+                or not _chargen_spell_ok(self.state, entry)):
             await _chargen_spells(interaction, self.state)   # An out-of-date menu: Show the current one.
             return
         picked.append(chosen)
         allot_tracking[self.element] = allot_tracking.get(self.element, 0) - 1
+        if "_spell_pool" in self.state:   # Any-element picks share one allowance.
+            self.state["_spell_pool"] = max(0, self.state["_spell_pool"] - 1)
+            for k in allot_tracking:
+                allot_tracking[k] = self.state["_spell_pool"]
         await _chargen_spells(interaction, self.state)
 
 
@@ -4258,8 +4431,99 @@ async def _chargen_affinity_pick(interaction: discord.Interaction, state: dict, 
     await interaction.response.edit_message(content=text, embed=_chargen_embed(state), view=view)
 
 
-async def _chargen_assign_slots(interaction: discord.Interaction, state: dict, sizes: list[int]) -> None:
-    """Isawa-style starting spells: The player picks which element gets the 3, the 2, and so on."""
+async def _chargen_second_deficiency(interaction: discord.Interaction, state: dict) -> None:
+    """Self-Taught Shugenja: a second Deficiency "in any one other element of your choice" (GDD s29.12)."""
+    aff = state.get("affinity_element", "")
+    taken = {aff.lower(), (state.get("deficiency_element") or "").lower()}
+    sel = discord.ui.Select(
+        placeholder="Choose your second Deficiency...",
+        options=[discord.SelectOption(label=el, description="No spells of it until School Rank 2")
+                 for el in ("Air", "Earth", "Fire", "Water") if el.lower() not in taken],
+    )
+
+    async def on_pick(sel_inter: discord.Interaction) -> None:
+        if sel_inter.user.id != int(state["user_id"]):
+            await sel_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        state["second_deficiency"] = sel.values[0]
+        await _chargen_spells(sel_inter, state)
+
+    sel.callback = on_pick
+    back = discord.ui.Button(label="Change Affinity", style=discord.ButtonStyle.secondary, row=1)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        for k in ("affinity_element", "deficiency_element", "second_deficiency"):
+            state.pop(k, None)
+        await _chargen_spells(btn_inter, state)
+
+    back.callback = on_back
+    view = _ChargenView(state)
+    view.add_item(sel)
+    view.add_item(back)
+    await interaction.response.edit_message(
+        content=(f"**Step 9/10 - Second Deficiency** · Self-Taught Shugenja are Deficient in the element opposing their "
+                 f"Affinity ({state.get('deficiency_element', '')}) and in one other element you choose. "
+                 f"You will take no starting spells in either."),
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+async def _chargen_yogo_wards(interaction: discord.Interaction, state: dict) -> None:
+    """Yogo Wardmaster: three Ward spells, then three others (GDD s29.6)."""
+    wards = state.setdefault("_yogo_wards", [])
+    picked = set(state.get("chosen_spells", []))
+    pool = sorted((s for s in spells.ALL if s["name"] not in picked and _chargen_spell_ok(state, s, ward_stage=True)),
+                  key=lambda s: (s["mastery"], s["name"]))
+    sel = discord.ui.Select(
+        placeholder=f"Pick a Ward spell ({3 - len(wards)} left)...",
+        options=[discord.SelectOption(label=s["name"][:100], value=s["name"][:100],
+                                      description=f"{s['element']} Mastery {s['mastery']}"[:100]) for s in pool[:25]]
+                or [discord.SelectOption(label="(none available)", value="__none__")],
+    )
+
+    async def on_pick(sel_inter: discord.Interaction) -> None:
+        if sel_inter.user.id != int(state["user_id"]):
+            await sel_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        name = sel.values[0]
+        entry = spells.get(name)
+        w = state.setdefault("_yogo_wards", [])
+        if entry is None or name in state.get("chosen_spells", []) or len(w) >= 3 \
+                or not _chargen_spell_ok(state, entry, ward_stage=True):
+            await _chargen_spells(sel_inter, state)   # An out-of-date menu.
+            return
+        state.setdefault("chosen_spells", []).append(entry["name"])
+        w.append(entry["name"])
+        await _chargen_spells(sel_inter, state)
+
+    sel.callback = on_pick
+    back = discord.ui.Button(label="Back: Skills", style=discord.ButtonStyle.secondary, row=1)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills(btn_inter, state)
+
+    back.callback = on_back
+    view = _ChargenView(state)
+    view.add_item(sel)
+    view.add_item(back)
+    await interaction.response.edit_message(
+        content=("**Step 9/10 - Ward Spells** · Yogo Wardmasters start with 3 Ward spells and 3 others. Your Affinity covers "
+                 "every Ward spell (not Void), so Mastery 2 Wards are open. Spells with the Travel or Craft keyword are your "
+                 "Deficiency. (Commune and Summon are auto-granted.)"),
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+async def _chargen_assign_slots(interaction: discord.Interaction, state: dict, sizes: list[int],
+                                exclude: frozenset[str] = frozenset()) -> None:
+    """Isawa-style starting spells: The player picks which element gets the 3, the 2, and so on.
+    `exclude` lists elements that cannot be picked (a Deficiency, or Void)."""
     sch = schools.get(state.get("school_name", "")) or {}
     assigned = state.setdefault("_slot_assign", {})
     if len(assigned) >= len(sizes):
@@ -4269,7 +4533,8 @@ async def _chargen_assign_slots(interaction: discord.Interaction, state: dict, s
     size = sizes[len(assigned)]
     sel = discord.ui.Select(
         placeholder=f"Element for your {size} spell{'s' if size != 1 else ''}...",
-        options=[discord.SelectOption(label=el) for el in _SPELL_ELEMENTS if el not in assigned],
+        options=[discord.SelectOption(label=el) for el in _SPELL_ELEMENTS
+                 if el not in assigned and el.lower() not in exclude],
     )
 
     async def on_pick(sel_inter: discord.Interaction) -> None:
@@ -4277,7 +4542,7 @@ async def _chargen_assign_slots(interaction: discord.Interaction, state: dict, s
             await sel_inter.response.send_message("This isn't your wizard.", ephemeral=True)
             return
         assigned[sel.values[0]] = size
-        await _chargen_assign_slots(sel_inter, state, sizes)
+        await _chargen_assign_slots(sel_inter, state, sizes, exclude)
 
     sel.callback = on_pick
     back_btn = discord.ui.Button(label="Back: Skills", style=discord.ButtonStyle.secondary, row=1)
@@ -4295,7 +4560,8 @@ async def _chargen_assign_slots(interaction: discord.Interaction, state: dict, s
     view.add_item(back_btn)
     await interaction.response.edit_message(
         content=(f"**Step 9/10 - Starting Spells** · {sch.get('name', 'Your school')} starts with spells of "
-                 f"{', '.join(str(n) for n in sizes)} in different elements of your choice. "
+                 f"{', '.join(str(n) for n in sizes)} in different elements"
+                 f"{' (the first is your Affinity)' if _spell_rule(sch) == 'dutiful' else ' of your choice'}. "
                  f"Which element gets your **{size}** spell{'s' if size != 1 else ''}? "
                  f"({len(assigned) + 1} of {len(sizes)})"),
         embed=_chargen_embed(state), view=view,
@@ -4354,17 +4620,42 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
     allot = _parse_spell_allotment(sch) if sch else None
     flexible = _flexible_slot_sizes(sch)
     choice = _affinity_choice(sch)
+    rule = _spell_rule(sch)
     if choice and not state.get("affinity_element"):
         await _chargen_affinity_pick(interaction, state, choice)
         return
-    if allot is None and not flexible:
+    if rule == "voidmystic":   # Casts every Void spell up to their Rank without learning any (s29.12).
         await _chargen_review(interaction, state)
         return
-    if _unsupported_slots(allot):
+    if rule == "selftaught":
+        if not state.get("second_deficiency"):
+            await _chargen_second_deficiency(interaction, state)
+            return
+        if "_spell_allot_remaining" not in state:   # Any five spells they can cast.
+            state["_spell_pool"] = 5
+            state["_spell_allot_remaining"] = {
+                el: 5 for el in ("Air", "Earth", "Fire", "Water") if el.lower() not in _chargen_deficiencies(state, sch)}
+    elif rule == "keyword":
+        if len(state.get("_yogo_wards", [])) < 3:
+            await _chargen_yogo_wards(interaction, state)
+            return
+        if "_spell_allot_remaining" not in state:   # Then three others.
+            state["_spell_pool"] = 3
+            state["_spell_allot_remaining"] = {el: 3 for el in ("Air", "Earth", "Fire", "Water")}
+    elif rule == "dutiful":
+        flexible = [3, 2, 1]
+    if allot is None and not flexible and "_spell_pool" not in state:
+        await _chargen_review(interaction, state)
+        return
+    if rule != "keyword" and _unsupported_slots(allot):
         await _chargen_spells_unsupported(interaction, state, allot)
         return
     if flexible and "_spell_allot_remaining" not in state:
-        await _chargen_assign_slots(interaction, state, flexible)
+        if rule == "dutiful":
+            state.setdefault("_slot_assign", {state["affinity_element"]: 3})
+        await _chargen_assign_slots(
+            interaction, state, flexible,
+            frozenset(_chargen_deficiencies(state, sch) | {"void"}) if rule == "dutiful" else frozenset())
         return
 
     if "_spell_allot_remaining" not in state:
@@ -4372,7 +4663,8 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
         _apply_auto_spells(state, sch)
 
     remaining = state["_spell_allot_remaining"]
-    total_remaining = sum(max(0, v) for v in remaining.values())
+    total_remaining = (state["_spell_pool"] if "_spell_pool" in state
+                       else sum(max(0, v) for v in remaining.values()))
 
     if total_remaining <= 0:
         await _chargen_review(interaction, state)
@@ -4448,22 +4740,25 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
             if btn_inter.user.id != int(state["user_id"]):
                 await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
                 return
-            state.pop("affinity_element", None)
-            state.pop("deficiency_element", None)
+            for k in ("affinity_element", "deficiency_element", "second_deficiency", "_spell_pool",
+                      "_spell_allot_remaining", "_slot_assign"):
+                state.pop(k, None)
             await _chargen_spells(btn_inter, state)
 
         change_btn.callback = on_change
         view.add_item(change_btn)
 
-    slots_desc = ", ".join(f"{el}: {cnt}" for el, cnt in remaining.items() if cnt > 0)
-    deficient = state.get("deficiency_element") or _school_elements(sch)[1]
+    slots_desc = (f"{state['_spell_pool']} spell{'s' if state['_spell_pool'] != 1 else ''} of any element you can cast"
+                  if "_spell_pool" in state else ", ".join(f"{el}: {cnt}" for el, cnt in remaining.items() if cnt > 0))
     deficiency_note = ""
-    if deficient and remaining.get(deficient, 0) > 0:
-        deficiency_note = (f" Note: {deficient} is your Deficiency, which lowers your School Rank to 0 for it, "
-                           f"so you cannot cast {deficient} spells until you reach School Rank 2 (s31).")
+    for deficient in sorted(_chargen_deficiencies(state, sch)):
+        if remaining.get(deficient.title(), 0) > 0 and "_spell_pool" not in state:
+            deficiency_note += (f" Note: {deficient.title()} is your Deficiency, which lowers your School Rank to 0 for it, "
+                                f"so you cannot cast {deficient.title()} spells until you reach School Rank 2 (s31).")
+    auto = "Commune and Summon are auto-granted" if rule == "keyword" else "Sense, Commune, Summon are auto-granted"
     await interaction.response.edit_message(
-        content=f"**Step 9/10 - Starting Spells** · Remaining slots: {slots_desc}. "
-                f"(Sense, Commune, Summon are auto-granted.){deficiency_note}",
+        content=f"**Step 9/10 - Starting Spells** · Remaining: {slots_desc}. "
+                f"({auto}.){deficiency_note}",
         embed=_chargen_embed(state), view=view,
     )
 
@@ -6065,6 +6360,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         for element in SPELL_ELEMENTS:
             c.spell_slots[element] = stats.spell_slot_max(c, element)
         c.void_spell_bonus = stats.void_bonus_max(c)
+        c.spells_cast_today = []
         # s42 periodic Taint resistance: cadence by Rank, Earth roll vs TN 5 + 5 x Rank.
         if c.taint > 0:
             interval = taint.periodic_roll_interval(taint.taint_rank(c))
@@ -9732,10 +10028,10 @@ def _memorise_check(c: Character, name: str, ml: int | None) -> tuple[str | None
     if stats.is_memorised(c, match):
         return f"**{c.name}** has already memorised **{match}**.", match, ml
     if entry is not None:
-        ceiling = stats.spell_mastery_ceiling(c, entry["element"])
+        ceiling = stats.spell_mastery_ceiling(c, entry["element"], None, entry)
         if ml > ceiling:
             el = entry["element"].lower()
-            why = (_mastery_ceiling_text(c, el) if el in stats.SPELL_CAST_ELEMENTS + ("void",)
+            why = (_mastery_ceiling_text(c, el, None, entry) if el in stats.SPELL_CAST_ELEMENTS + ("void",)
                    else f"Their ceiling for a Universal spell is Mastery {ceiling}.")
             return f"**{c.name}** cannot memorise **{match}** (Mastery {ml}) yet: {why}", match, ml
     return None, match, ml
@@ -10126,7 +10422,7 @@ class _XpCategorySelect(discord.ui.View):
             entry = spells.get(n)
             ml = entry["mastery"] if entry else 1
             cost = advancement.misc_cost(ml)
-            if entry is not None and ml > stats.spell_mastery_ceiling(c, entry["element"]):
+            if entry is not None and ml > stats.spell_mastery_ceiling(c, entry["element"], None, entry):
                 state = "Above your rank"
             else:
                 state = "Can afford" if c.xp >= cost else "Not enough XP"
@@ -10795,7 +11091,9 @@ async def school_learn(
     entitled = schools.techniques_up_to(s["name"], c.school_rank)
     is_shugenja = "shugenja" in c.school_type.lower() or bool(s.get("affinity"))
     rank, owed = stats.pending_rank_spells(c) if is_shugenja else (0, 0)
-    if not entitled and not owed:
+    own_school = schools.get(c.school) if c.school else None
+    legacy_gear = bool(own_school and _legacy_gear_slots(c, own_school))
+    if not entitled and not owed and not legacy_gear:
         await interaction.response.send_message(
             f"**{s['name']}** grants no ranked techniques at School Rank {c.school_rank}.", ephemeral=True
         )
@@ -10817,8 +11115,77 @@ async def school_learn(
                 f"within the Mastery ceiling of School Rank {rank} (s48).")
         await interaction.response.send_message(
             msg, view=_RankSpellView(rec.id, interaction.user.id), ephemeral=True)
+    else:
+        await interaction.response.send_message(msg, embed=build_sheet_embed(rec), ephemeral=True)
+    if legacy_gear:
+        await _legacy_gear_prompt(interaction, rec.id, interaction.user.id, first_followup=True)
+
+
+def _legacy_gear_slots(c: Character, school: dict) -> list[dict]:
+    """School outfit choices a character made before the Starting gear step still holds as plain text in
+    the inventory ("any 1 weapon"): one slot each, with the options still open to them."""
+    slots: list[dict] = []
+    owned = {w.lower() for w in c.weapons}
+    for i, ch in enumerate(schools.outfit_choices(school)):
+        left = c.inventory.get(ch["literal"], 0)
+        for n in range(min(left, ch["picks"])):
+            opts = [o for o in ch["options"] if (o.get("owns") or "").lower() not in owned]
+            if opts:
+                slots.append({"id": f"{i}.{n}", "choice": ch, "label": ch["literal"], "options": opts})
+            break   # One slot at a time: the next appears once this is answered.
+    return slots
+
+
+async def _legacy_gear_prompt(interaction: discord.Interaction, rec_id: int, actor_id: int,
+                              group: str | None = None, first_followup: bool = False) -> None:
+    """Let the player (or staff acting for them) turn leftover outfit text into the real weapon or armor."""
+    rec = store.get_by_id(rec_id)
+    school = schools.get(rec.character.school) if rec and rec.character.school else None
+    slots = _legacy_gear_slots(rec.character, school) if school else []
+    if not slots:
+        text = "Your starting gear is sorted out."
+        if first_followup:
+            await interaction.followup.send(text, ephemeral=True)
+        else:
+            await interaction.response.edit_message(content=text, view=None)
         return
-    await interaction.response.send_message(msg, embed=build_sheet_embed(rec), ephemeral=True)
+    slot = slots[0]
+
+    async def check(inter: discord.Interaction) -> bool:
+        if inter.user.id != actor_id:
+            await inter.response.send_message("This isn't your menu.", ephemeral=True)
+            return False
+        return True
+
+    async def on_answer(inter: discord.Interaction, value: str, detail: str) -> None:
+        fresh = store.get_by_id(rec_id)
+        sch = schools.get(fresh.character.school) if fresh and fresh.character.school else None
+        now = _legacy_gear_slots(fresh.character, sch) if sch else []
+        if now and now[0]["label"] == slot["label"] and any(o["value"] == value for o in now[0]["options"]):
+            c = fresh.character
+            lit = slot["choice"]["literal"]
+            if c.inventory.get(lit, 0) > 1:
+                c.inventory[lit] -= 1
+            else:
+                c.inventory.pop(lit, None)
+            schools.apply_outfit_pick(c, slot["choice"], value)
+            store.save(fresh, note="Starting gear")
+        await _legacy_gear_prompt(inter, rec_id, actor_id)
+
+    async def on_group(inter: discord.Interaction, g: str) -> None:
+        await _legacy_gear_prompt(inter, rec_id, actor_id, group=g)
+
+    perk = {"id": "legacy" + slot["id"], "label": slot["label"], "ask": {"kind": "choice"}}
+    view = discord.ui.View(timeout=900)
+    for item in _heritage_ask_items(perk, slot["options"], group, check, on_answer, on_group):
+        view.add_item(item)
+    text = (f"**Starting gear** for **{rec.character.name}** · Your school's outfit says **{slot['label']}**, "
+            f"which was never turned into an item. Pick one."
+            + (" The school allows more than one, and staff can `/give` the rest." if slot["choice"]["picks"] > 1 else ""))
+    if first_followup:
+        await interaction.followup.send(text, view=view, ephemeral=True)
+    else:
+        await interaction.response.edit_message(content=text, view=view)
 
 
 _RANK_SPELL_ELEMENTS = ("Air", "Earth", "Fire", "Water", "Void", "Universal")
@@ -10857,7 +11224,8 @@ class _RankSpellView(discord.ui.View):
                         label=f"{el} (uncastable: Deficiency)", value=el, description="No spells can be taken here."))
                     continue
                 pool = [sp for sp in _rank_spell_pool(el)
-                        if sp["mastery"] <= ceiling and not stats.knows_spell(c, sp["name"])]
+                        if sp["mastery"] <= stats.spell_mastery_ceiling(c, sp["element"], rank, sp)
+                        and not stats.knows_spell(c, sp["name"])]
                 opts.append(discord.SelectOption(
                     label=f"{el} (up to Mastery {ceiling})"[:100], value=el,
                     description=f"{len(pool)} spell{'s' if len(pool) != 1 else ''} available"[:100]))
@@ -10870,7 +11238,8 @@ class _RankSpellView(discord.ui.View):
         ceiling = stats.spell_mastery_ceiling(c, key, rank)
         pool = sorted(
             (sp for sp in _rank_spell_pool(element)
-             if sp["mastery"] <= ceiling and not stats.knows_spell(c, sp["name"])),
+             if sp["mastery"] <= stats.spell_mastery_ceiling(c, sp["element"], rank, sp)
+             and not stats.knows_spell(c, sp["name"])),
             key=lambda sp: (sp["mastery"], sp["name"]))
         pages = [pool[i:i + 25] for i in range(0, len(pool), 25)] or [[]]
         self.page = max(0, min(page, len(pages) - 1))
@@ -10952,7 +11321,7 @@ class _RankSpellView(discord.ui.View):
                 content=f"**{c.name}** already knows **{sp['name']}**.",
                 view=_RankSpellView(self.rec_id, self.user_id, self.element, self.page))
             return
-        if sp["mastery"] > stats.spell_mastery_ceiling(c, sp["element"], rank):
+        if sp["mastery"] > stats.spell_mastery_ceiling(c, sp["element"], rank, sp):
             await interaction.response.edit_message(
                 content=f"**{sp['name']}** (Mastery {sp['mastery']}) is above the Rank {rank} ceiling.",
                 view=_RankSpellView(self.rec_id, self.user_id, self.element, self.page))
@@ -11142,23 +11511,26 @@ async def spell_cast(
             )
             return
         element = cast_element.value
-    if not attacker_npc and not stats.knows_spell(caster, s["name"]):
+    if not attacker_npc and not stats.knows_spell(caster, s["name"]) and not stats.void_mystic_can_cast(caster, s):
         await interaction.response.send_message(
             f"**{caster.name}** does not know **{s['name']}**. Spells come from rank advancement "
             f"(`/sheet learn`) or from staff (`/edit spell`). To cast an unknown spell, ask the kami "
             f"with `/spell importune`.", ephemeral=True,
         )
         return
-    ceiling = stats.spell_mastery_ceiling(caster, element)
+    mystic_problem = None if attacker_npc else stats.void_mystic_cast_problem(caster, s)
+    if mystic_problem:
+        await interaction.response.send_message(mystic_problem, ephemeral=True)
+        return
+    ceiling = stats.spell_mastery_ceiling(caster, element, None, s)
     if s["mastery"] > ceiling and not caster.is_npc:
         await interaction.response.send_message(
             f"**{caster.name}** cannot cast **{s['name']}** (Mastery {s['mastery']}): "
-            f"{_mastery_ceiling_text(caster, element)}", ephemeral=True,
+            f"{_mastery_ceiling_text(caster, element, None, s)}", ephemeral=True,
         )
         return
     ring_val = stats.ring_value(caster, element)
-    affinity = caster.affinity_element.lower() == element if caster.affinity_element else False
-    deficiency = caster.deficiency_element.lower() == element if caster.deficiency_element else False
+    affinity, deficiency = stats.spell_affinity_state(caster, s, element)
     # Spell slot check with Void bonus fallback.
     used_bonus_slot = False
     slot_remaining = caster.spell_slots.get(element)
@@ -11208,6 +11580,8 @@ async def spell_cast(
         caster.void_spell_bonus = max(0, caster.void_spell_bonus - 1)
     elif element in caster.spell_slots:
         caster.spell_slots[element] = max(0, caster.spell_slots[element] - 1)
+    if stats.is_void_mystic(caster) and s["name"] not in caster.spells_cast_today:
+        caster.spells_cast_today.append(s["name"])
     store.save(rec)
     success = result["success"]
     embed = discord.Embed(
@@ -11495,10 +11869,13 @@ async def spell_importune(
             )
             return
         element = cast_element.value
+    if stats.is_void_mystic(caster):
+        await interaction.response.send_message(
+            f"**{caster.name}** is a Void Mystic, and the school says they cannot Importune.", ephemeral=True)
+        return
     ring_val = stats.ring_value(caster, element)
     ml = s["mastery"]
-    affinity = caster.affinity_element.lower() == element if caster.affinity_element else False
-    deficiency = caster.deficiency_element.lower() == element if caster.deficiency_element else False
+    affinity, deficiency = stats.spell_affinity_state(caster, s, element)
     effective_rank = caster.school_rank + (1 if affinity else 0) + (-1 if deficiency else 0)
     if effective_rank <= 0:
         await interaction.response.send_message(

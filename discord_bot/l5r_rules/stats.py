@@ -25,6 +25,8 @@ Known simplifications vs the GDScript (documented, not silent):
 
 from __future__ import annotations
 
+import re
+
 from . import enums
 from .character import Character
 
@@ -156,6 +158,53 @@ def void_bonus_max(c: Character) -> int:
 SPELL_CAST_ELEMENTS = ("air", "earth", "fire", "water")
 
 
+def deficiency_elements(c: Character) -> set[str]:
+    """Every element the character is Deficient in. The sheet field holds one name, or several
+    separated by "/" or "," (Self-Taught Shugenja has two)."""
+    return {e.strip().lower() for e in re.split(r"[/,]", c.deficiency_element or "") if e.strip()}
+
+
+def is_deficient(c: Character, element: str) -> bool:
+    return element.lower() in deficiency_elements(c)
+
+
+# Schools whose Affinity and Deficiency follow a spell's keyword, not its element (GDD s29.6, Yogo
+# Wardmaster). `named` are spells the school's Technique text also treats as Wards.
+KEYWORD_SCHOOLS: dict[str, dict] = {
+    "yogo wardmaster": {
+        "affinity": {"ward", "wards"},
+        "deficiency": {"travel", "craft"},
+        "named": {
+            "to seek the truth", "by the light of the moon", "benten's touch", "summon fog",
+            "armor of earth", "courage of the seven thunders", "force of will", "wholeness of the world",
+            "extinguish", "fires of purity", "disrupt the aura", "haze of battle",
+            "globe of the everlasting sun", "reversal of fortunes", "rejuvenating vapors",
+            "wisdom & clarity", "near to ice",
+        },
+    },
+}
+
+
+def keyword_rule(c: Character) -> dict | None:
+    return KEYWORD_SCHOOLS.get((c.school or "").strip().lower())
+
+
+def spell_keywords(spell: dict) -> set[str]:
+    return {k.strip().lower() for k in (spell.get("keyword") or "").split(",") if k.strip()}
+
+
+def spell_affinity_state(c: Character, spell: dict, element: str | None = None) -> tuple[bool, bool]:
+    """(Affinity applies, Deficiency applies) for casting this spell (s31). A keyword school judges
+    the spell by its keywords; everyone else by the element it is cast with."""
+    rule = keyword_rule(c)
+    if rule is not None:
+        kws = spell_keywords(spell)
+        is_ward = bool(kws & rule["affinity"]) or spell["name"].lower().replace("\u2019", "'") in rule["named"]
+        return (is_ward and spell["element"].lower() != "void"), bool(kws & rule["deficiency"])
+    el = (element or spell["element"]).lower()
+    return bool(c.affinity_element and c.affinity_element.lower() == el), is_deficient(c, el)
+
+
 def effective_school_rank(c: Character, element: str, school_rank: int | None = None) -> int:
     """School Rank as it applies to spells of one element (s31): +1 in the Affinity
     element, -1 in the Deficiency element (0 = cannot cast that element)."""
@@ -163,15 +212,21 @@ def effective_school_rank(c: Character, element: str, school_rank: int | None = 
     el = element.lower()
     if c.affinity_element and c.affinity_element.lower() == el:
         rank += 1
-    if c.deficiency_element and c.deficiency_element.lower() == el:
+    if is_deficient(c, el):
         rank -= 1
     return rank
 
 
-def spell_mastery_ceiling(c: Character, spell_element: str, school_rank: int | None = None) -> int:
+def spell_mastery_ceiling(c: Character, spell_element: str, school_rank: int | None = None,
+                          spell: dict | None = None) -> int:
     """Highest Mastery Level the character may learn or cast in a spell's element
     (s48: the Rank sets the ceiling; s31: Affinity/Deficiency shift it by one).
-    Universal spells use the best of the four castable elements."""
+    Universal spells use the best of the four castable elements. Pass `spell` for a
+    keyword school (Yogo Wardmaster), whose shift depends on the spell, not its element."""
+    if spell is not None and keyword_rule(c) is not None:
+        rank = c.school_rank if school_rank is None else school_rank
+        aff, deff = spell_affinity_state(c, spell)
+        return rank + (1 if aff else 0) - (1 if deff else 0)
     el = spell_element.lower()
     if el in SPELL_CAST_ELEMENTS or el == "void":
         return effective_school_rank(c, el, school_rank)
@@ -193,9 +248,53 @@ def spell_source_note(c: Character, name: str) -> str:
     return "Memorised" if is_memorised(c, name) else "Read from scroll"
 
 
+def is_void_mystic(c: Character) -> bool:
+    return (c.school or "").strip().lower() == "void mystic"
+
+
+_VOID_MYSTIC_BASE = {"sense", "commune", "summon"}
+_VOID_MYSTIC_MAX_MASTERY = 5   # "Cannot cast Void spells above Rank 5" (GDD s29.12)
+
+
+def void_mystic_can_cast(c: Character, spell: dict) -> bool:
+    """The Void's Caress: a Void Mystic may cast any Void spell up to their Mastery, learned or not."""
+    return (is_void_mystic(c) and spell["element"].lower() == "void"
+            and spell["mastery"] <= min(c.school_rank, _VOID_MYSTIC_MAX_MASTERY))
+
+
+def void_mystic_cast_problem(c: Character, spell: dict) -> str | None:
+    """Why a Void Mystic may not cast this spell, or None. They cast only Void spells (and Sense,
+    Commune, Summon), each once per day."""
+    if not is_void_mystic(c):
+        return None
+    if spell["element"].lower() != "void":
+        if spell["name"].lower() not in _VOID_MYSTIC_BASE:
+            return "A Void Mystic cannot cast non-Void elemental spells except Sense, Commune, and Summon."
+        return None
+    if spell["name"] in c.spells_cast_today:
+        return f"A Void Mystic casts each spell once per day, and **{spell['name']}** is spent until the next new day."
+    return None
+
+
+def void_mystic_spells(c: Character) -> list[dict]:
+    """Void spells a Void Mystic can still cast today."""
+    from . import spells as _spells
+    if not is_void_mystic(c):
+        return []
+    return [s for s in _spells.by_element("void")
+            if void_mystic_can_cast(c, s) and s["name"] not in c.spells_cast_today]
+
+
+# Schools that do not hand out three spells per School Rank: Self-Taught must seek spells out
+# (GDD s29.12); a Void Mystic casts Void spells without learning them.
+_NO_RANK_SPELLS = {"self-taught shugenja", "void mystic"}
+
+
 def pending_rank_spells(c: Character) -> tuple[int, int]:
     """(rank being learned, picks still owed) for a shugenja whose School Rank is
     above the last rank whose three spells were taken (s48); (0, 0) if none."""
+    if (c.school or "").strip().lower() in _NO_RANK_SPELLS:
+        return 0, 0
     if c.school_rank <= c.spell_ranks_learned:
         return 0, 0
     return c.spell_ranks_learned + 1, max(0, 3 - c.rank_spell_picks)

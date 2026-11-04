@@ -1665,13 +1665,19 @@ def _build_castable_spells(c: Character) -> list[tuple[str, dict, str]]:
             slot = c.spell_slots.get(elem, 0)
             if slot <= 0 and c.void_spell_bonus <= 0:
                 continue
-        effective = stats.effective_school_rank(c, elem)
+        effective = stats.spell_mastery_ceiling(c, elem, None, s)
         if effective <= 0:
             continue
         # PCs are bound by the Mastery ceiling (s48); NPC stat blocks are staff's call.
         if s["mastery"] > effective and not c.is_npc:
             continue
         result.append((s["name"], s, elem))
+    if not c.is_npc:   # A Void Mystic casts Void spells they never learned (once a day each).
+        have = {name for name, _, _ in result}
+        for s in stats.void_mystic_spells(c):
+            slot = c.spell_slots.get("void", 1) if slots_tracked else 1
+            if s["name"] not in have and (slot > 0 or c.void_spell_bonus > 0):
+                result.append((s["name"], s, "void"))
     return result
 
 
@@ -1684,7 +1690,7 @@ def _uncastable_spells(c: Character) -> list[str]:
         s = spells.get(name)
         if s is None:
             continue
-        if s["mastery"] > stats.spell_mastery_ceiling(c, s["element"]):
+        if s["mastery"] > stats.spell_mastery_ceiling(c, s["element"], None, s):
             out.append(f"{s['name']} (M{s['mastery']})")
     return out
 
@@ -2671,9 +2677,12 @@ class _BoardSpellSelect(discord.ui.View):
                     view=None,
                 )
                 return
-        affinity = c.affinity_element.lower() == element if c.affinity_element else False
-        deficiency = c.deficiency_element.lower() == element if c.deficiency_element else False
-        if s["mastery"] > stats.spell_mastery_ceiling(c, element) and not c.is_npc:
+        affinity, deficiency = stats.spell_affinity_state(c, s, element)
+        problem = None if c.is_npc else stats.void_mystic_cast_problem(c, s)
+        if problem:
+            await interaction.response.edit_message(content=problem, view=None)
+            return
+        if s["mastery"] > stats.spell_mastery_ceiling(c, element, None, s) and not c.is_npc:
             await interaction.response.edit_message(
                 content=(f"**{c.name}** cannot cast **{s['name']}** (Mastery {s['mastery']}): "
                          f"Above their ceiling in {element.title()} at School Rank {c.school_rank}."),
@@ -2699,6 +2708,8 @@ class _BoardSpellSelect(discord.ui.View):
             c.void_spell_bonus = max(0, c.void_spell_bonus - 1)
         elif element in c.spell_slots:
             c.spell_slots[element] = max(0, c.spell_slots[element] - 1)
+        if stats.is_void_mystic(c) and s["name"] not in c.spells_cast_today:
+            c.spells_cast_today.append(s["name"])
         _d.store.save(rec)
         success = result["success"]
         embed = discord.Embed(

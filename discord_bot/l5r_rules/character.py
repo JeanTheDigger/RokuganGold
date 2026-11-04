@@ -59,6 +59,8 @@ class Character:
     spells_known: list[str] = field(default_factory=list)
     # -- Spells memorised with XP (s31: cast without a scroll). Subset of spells_known. --
     spells_memorised: list[str] = field(default_factory=list)
+    # -- Spells cast since the last /dm new_day. Only a Void Mystic is limited by it (each spell once a day). --
+    spells_cast_today: list[str] = field(default_factory=list)
     # -- Rank-up spells (s48): highest School Rank whose three new spells have been
     #    taken (chargen covers Rank 1), and picks already taken toward the next rank. --
     spell_ranks_learned: int = 1
