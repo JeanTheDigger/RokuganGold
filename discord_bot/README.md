@@ -71,10 +71,10 @@ Players roll their own `/check` commands (skill, stealth, social, lore, craft, m
 | Command | What it does |
 |---|---|
 | Fortune / Kami roles | DMs are members with the **Fortune** Discord role; **Kami** is the admin role. `/dm roles` shows who has them. |
-| `/dm new_day` | **DM** advances the in-game day: full VP refresh, natural healing (Stamina x 2 wounds), and spell slot refresh (Ring + School Rank per element) for all active PCs. No real-time connection: the DM decides when a new day dawns. |
+| `/dm new_day` | **DM** advances the in-game day: full VP refresh, natural healing ((Stamina x 2) + Insight Rank wounds), and spell slot refresh (Ring per element, plus Void Ring bonus slots) for all active PCs. No real-time connection: the DM decides when a new day dawns. |
 | `/dm damage` | **DM** applies raw damage to any PC or NPC: posts the pending effect publicly with Approve / Deny buttons. Damage respects Reduction. |
 | `/dm heal` | **DM** heals wounds on any PC or NPC: posts pending healing with Approve / Deny buttons. |
-| `/dm treat` | **DM** calls for a Medicine treatment: the healer rolls Medicine/Intelligence vs a TN (wound treatment TN 15, poison TN 20, etc.), and on success the DM authorizes the healing (Intelligence x 2 wounds by default). |
+| `/dm treat` | **DM** calls for a Medicine treatment: the healer rolls Medicine/Intelligence vs a TN (wound treatment TN 15, poison TN 20, etc.), and on success the DM authorizes the healing (a 1k1 healing roll by default, plus a die per Raise and +1k0 at Medicine 5). |
 | `/dm revive` | **DM** staff override: reverses a death caused by a bug (required reason, written to the combat log). Sets the character to the top of the Out level unless a wound total is given and re-activates the player's sheet. |
 | `/dm undo` | **DM** rolls back the last recorded change to a character or creature (wound, heal, damage approval, Taint change, new day, sheet edit…). Every save keeps the previous state as an undo entry (last 20 per sheet, purged after 30 days). `preview:true` lists the newest entries and what each would restore; omit the name to undo the newest change on the server. Undoing a death or a revive runs the usual bookkeeping (initiative removal / re-activation). |
 | `/dm pending` | **DM** lists every approval still waiting (attack, spell, DM damage/heal, creature damage, Medicine treatment, character submissions) with age and a jump link. Every approval prompt now pings the **Fortune** role (make the role mentionable, or give the bot *Mention Everyone*). |
@@ -919,7 +919,7 @@ raise-cost table (1–4 raises → limb, hand/foot, head, eye/ear/finger) and DM
 effects for each body part. `/dm treat` adds a full **Medicine treatment workflow**:
 the DM picks a healer and patient, the healer rolls Medicine/Intelligence vs a TN
 (wound treatment TN 15, disease diagnosis TN 15, poison treatment TN 20, antidote
-TN 20), and on success the DM authorizes healing (Intelligence × 2 wounds by
+TN 20), and on success the DM authorizes healing (a 1k1 healing roll by
 default, overridable). Failed treatment follows the L5R 4e rule that it cannot be
 re-attempted until the next day. `/sheet data export` dumps the active character as JSON
 (inline for small sheets, as a `.json` file attachment for large ones), and

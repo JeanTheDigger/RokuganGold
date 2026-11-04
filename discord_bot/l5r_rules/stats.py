@@ -141,8 +141,8 @@ def water_ring(c: Character) -> int:
 
 
 def natural_healing_rate(c: Character) -> int:
-    """L5R 4e: a character heals Stamina x 2 wounds per day of rest."""
-    return c.stamina * 2
+    """L5R 4e RAW, GDD s57.31.7a: a night's rest heals (Stamina x 2) + Insight Rank wounds."""
+    return c.stamina * 2 + insight_rank(c)
 
 
 def spell_slot_max(c: Character, element: str) -> int:

@@ -6405,7 +6405,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
         description=desc,
         color=discord.Color.green(),
     )
-    footer = "Rest: Full VP · Stamina x 2 healing · Spell slots: Ring per element + Void Ring bonus"
+    footer = "Rest: Full VP · (Stamina x 2) + Insight Rank healing · Spell slots: Ring per element + Void Ring bonus"
     if date_str:
         embed.add_field(name="Calendar", value=date_str, inline=False)
     else:
@@ -7013,7 +7013,7 @@ async def void_spend(
 )
 @app_commands.choices(mode=[
     app_commands.Choice(name="Rest (full refresh)", value="rest"),
-    app_commands.Choice(name="Meditation (roll Meditation/Void, recover 1 on success)", value="meditation"),
+    app_commands.Choice(name="Meditation (roll Meditation/Void, recover 1 to 3 on success)", value="meditation"),
 ])
 @app_commands.autocomplete(character=_any_character_autocomplete)
 async def void_refresh(
@@ -7081,8 +7081,12 @@ async def void_refresh(
         result = engine.roll_and_keep(max(1, rolled), max(1, kept), explodes)
         total = result.total + wp
         success = total >= meditation_tn
+        # Mastery (s57.32.3): Meditation 3+ restores up to 2 Void Points, 7+ up to 3. Never above the cap.
+        gain = 3 if meditation_skill >= 7 else 2 if meditation_skill >= 3 else 1
+        before_vp = c.current_void_points
         if success:
-            c.current_void_points = min(c.current_void_points + 1, vp_cap)
+            c.current_void_points = min(c.current_void_points + gain, vp_cap)
+        got = c.current_void_points - before_vp
         store.save(rec)
         embed = discord.Embed(
             title=f"Meditation: {c.name}",
@@ -7099,7 +7103,8 @@ async def void_refresh(
             embed.add_field(
                 name="Result",
                 value=(
-                    f"**{total}** vs TN {meditation_tn}: **Success!** Recovers 1 VP.\n"
+                    f"**{total}** vs TN {meditation_tn}: **Success!** Recovers {got} VP"
+                    + (f" (Meditation {meditation_skill}: up to {gain})" if gain > 1 else "") + ".\n"
                     f"VP: **{c.current_void_points}/{vp_cap}**"
                 ),
                 inline=False,
@@ -12552,9 +12557,10 @@ async def dm_clear_damage_channel(interaction: discord.Interaction) -> None:
     healer="Character performing the treatment.",
     patient="Character being treated.",
     treatment="Type of medical treatment.",
-    wounds_healed="Wounds healed on success (default: Healer's Intelligence x 2).",
+    wounds_healed="Wounds healed on success. Default: roll 1k1, plus a die per Raise and +1k0 at Medicine 5 (s57.31).",
     tn_override="Custom TN (overrides default for the treatment type).",
     bonus="Flat bonus (tools, emphasis, etc.).",
+    raises="Called Raises: Each adds +5 to the TN and a die to the healing roll. At most the healer's Void Ring.",
 )
 @app_commands.autocomplete(healer=_any_character_autocomplete, patient=_any_character_autocomplete)
 @app_commands.choices(treatment=[
@@ -12571,6 +12577,7 @@ async def dm_treat(
     wounds_healed: app_commands.Range[int, 0, 999] | None = None,
     tn_override: app_commands.Range[int, 1, 100] | None = None,
     bonus: app_commands.Range[int, -50, 50] = 0,
+    raises: app_commands.Range[int, 0, 10] = 0,
 ) -> None:
     if not await _require_guild(interaction):
         return
@@ -12592,12 +12599,21 @@ async def dm_treat(
     if stats.is_dead(pc):
         await interaction.response.send_message(f"**{pc.name}** is dead. PC death is permanent.", ephemeral=True)
         return
-    tn = tn_override if tn_override is not None else MEDICINE_TN.get(treatment.value, 15)
+    if raises > combat.max_raises(hc):
+        await interaction.response.send_message(
+            f"Too many Raises: {raises} called but the maximum per roll is the healer's Void Ring, "
+            f"**{combat.max_raises(hc)}**.", ephemeral=True)
+        return
+    tn = (tn_override if tn_override is not None else MEDICINE_TN.get(treatment.value, 15)) + 5 * raises
     medicine_skill = hc.skills.get("Medicine", 0)
     wp = stats.wound_penalty(hc)
     result = combat.resolve_medicine_check(hc.intelligence, medicine_skill, tn, engine, bonus=bonus + wp)
     success = result["success"]
-    heal_amount = wounds_healed if wounds_healed is not None else hc.intelligence * 2
+    # s57.31: a successful Wound Treatment heals 1k1 (one die kept), +1 die per Raise, and Medicine 5
+    # (Mastery) adds +1k0. Dice do not explode. Staff can still set the amount outright.
+    heal_rolled = 1 + raises + (1 if medicine_skill >= 5 else 0)
+    heal_roll = engine.roll_and_keep(heal_rolled, 1, explodes=False) if success and wounds_healed is None else None
+    heal_amount = wounds_healed if wounds_healed is not None else (heal_roll.total if heal_roll else 0)
     treat_label = treatment.name.split(" (")[0]
     embed = discord.Embed(
         title=f"{treat_label}: {hc.name} treats {pc.name}",
@@ -12624,7 +12640,7 @@ async def dm_treat(
     heals_wounds = treatment.value == "wound_treatment" or wounds_healed is not None
     if success and heals_wounds and heal_amount > 0 and pc.wounds_taken > 0:
         effective_heal = min(heal_amount, pc.wounds_taken)
-        heal_note = f"(Intelligence {hc.intelligence} × 2 = {hc.intelligence * 2})" if wounds_healed is None else f"(custom: {wounds_healed})"
+        heal_note = f"(healing roll {heal_rolled}k1)" if wounds_healed is None else f"(custom: {wounds_healed})"
         embed.add_field(
             name="Healing",
             value=f"**{effective_heal}** wounds to heal {heal_note}",
