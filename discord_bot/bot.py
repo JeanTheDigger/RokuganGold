@@ -1988,6 +1988,10 @@ class _SchoolSelect(discord.ui.Select):
         if interaction.user.id != int(self.state["user_id"]):
             await interaction.response.send_message("This isn't your wizard.", ephemeral=True)
             return
+        if self.state.get("school_name") != self.values[0]:
+            # Anything chosen for the spell step belonged to the old school.
+            for k in ("chosen_spells", "_spell_allot_remaining", "_slot_assign", "affinity_element", "deficiency_element"):
+                self.state.pop(k, None)
         self.state["school_name"] = self.values[0]
         if self.state.get("full_wizard"):
             sch = schools.get(self.values[0])
@@ -2436,7 +2440,9 @@ def _parse_spell_allotment(school: dict) -> dict[str, int] | None:
                 continue
             parts = chunk.split(None, 1)
             if len(parts) == 2 and parts[0].isdigit():
-                allot[parts[1]] = int(parts[0])
+                if re.match(r"of\s", parts[1]):
+                    continue  # "3 of any one element": See _flexible_slot_sizes
+                allot[re.sub(r"\s*\([^)]*\)", "", parts[1]).strip()] = int(parts[0])
         return allot if allot else None
     elements = ["Air", "Earth", "Fire", "Water"]
     aff_lower = aff.lower()
@@ -2454,6 +2460,45 @@ def _parse_spell_allotment(school: dict) -> dict[str, int] | None:
         if el != affinity_el:
             allot[el] = 1
     return allot
+
+
+_SLOT_RE = re.compile(r"(\d+)\s+of\s+(?:any one|any other|a third|a fourth|a fifth)\s+element", re.IGNORECASE)
+_AUTO_SPELL_RE = re.compile(r"\(one is automatically ([^)]+)\)", re.IGNORECASE)
+_OPPOSING_ELEMENT = {"Air": "Earth", "Earth": "Air", "Fire": "Water", "Water": "Fire"}
+_SPELL_ELEMENTS = ("Air", "Earth", "Fire", "Water", "Void")
+
+
+def _starting_spell_text(school: dict | None) -> str:
+    aff = (school or {}).get("affinity", "") or ""
+    return aff.split("|", 1)[1] if "|" in aff else ""
+
+
+def _flexible_slot_sizes(school: dict | None) -> list[int] | None:
+    """Starting spells the player assigns to elements of their own choice, such as
+    Isawa's "3 of any one element, 2 of any other element, ..." -> [3, 2, 1, 1]."""
+    sizes = [int(n) for n in _SLOT_RE.findall(_starting_spell_text(school))]
+    return sizes or None
+
+
+def _auto_spells(school: dict | None) -> list[str]:
+    """Starting spells a school grants outright, such as Fuzake's Path to Inner Peace."""
+    return [m.strip() for m in _AUTO_SPELL_RE.findall(_starting_spell_text(school))]
+
+
+def _affinity_choice(school: dict | None) -> dict | None:
+    """Schools whose rules let the player pick the Affinity element at creation:
+    {"elements": [...], "opposing": True when the opposing element becomes the Deficiency}."""
+    text = ((school or {}).get("affinity", "") or "").split("|", 1)[0]
+    if re.search(r"any element including void", text, re.IGNORECASE):
+        return {"elements": list(_SPELL_ELEMENTS), "opposing": False}
+    if re.search(r"non-void element(?!al)", text, re.IGNORECASE) and re.search(r"affinity", text, re.IGNORECASE):
+        return {"elements": ["Air", "Earth", "Fire", "Water"], "opposing": True}
+    return None
+
+
+def _unsupported_slots(allot: dict[str, int] | None) -> bool:
+    """True when a school's starting spells are not simple per-element counts (Yogo Wardmaster)."""
+    return bool(allot) and any(k not in _SPELL_ELEMENTS for k in allot)
 
 
 def _build_base_char(state: dict) -> Character:
@@ -2547,6 +2592,9 @@ def _chargen_embed(state: dict) -> discord.Embed:
     if state.get("emphasis_purchases"):
         el = ", ".join(f"{e['skill']}: {e['emphasis']}" for e in state["emphasis_purchases"])
         lines.append(f"**Emphases:** {el}")
+    if state.get("affinity_element"):
+        deff = f" / Deficiency {state['deficiency_element']}" if state.get("deficiency_element") else ""
+        lines.append(f"**Affinity:** {state['affinity_element']}{deff}")
     if state.get("chosen_spells"):
         lines.append(f"**Spells:** {', '.join(state['chosen_spells'])}")
 
@@ -2599,13 +2647,16 @@ def _materialize_character(state: dict) -> Character:
     sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
     if sch and sch.get("affinity"):
         allot = _parse_spell_allotment(sch)
-        if allot:
+        if allot or _flexible_slot_sizes(sch):
             for base_spell in ("Sense", "Commune", "Summon"):
                 if base_spell not in char.spells_known:
                     char.spells_known.insert(0, base_spell)
         # The school's Affinity and Deficiency go on the sheet so casting rolls
-        # apply them (s31). Schools that let the player choose are set by staff.
+        # apply them (s31). Where the school lets the player choose, the wizard
+        # stored their pick; otherwise the school fixes them.
         aff_el, def_el = _school_elements(sch)
+        if not aff_el and state.get("affinity_element"):
+            aff_el, def_el = state["affinity_element"], state.get("deficiency_element", "")
         if aff_el and not char.affinity_element:
             char.affinity_element = aff_el
         if def_el and not char.deficiency_element:
@@ -3471,7 +3522,7 @@ def _chargen_max_mastery(state: dict, element: str) -> int:
     """Highest Mastery Level a new Rank 1 shugenja may take in this element: 1, or 2
     for the school's Affinity element (s31: Cast as if School Rank is 1 higher)."""
     sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
-    aff_el, _ = _school_elements(sch)
+    aff_el = state.get("affinity_element") or _school_elements(sch)[0]
     return 2 if aff_el and aff_el.lower() == element.lower() else 1
 
 
@@ -3513,16 +3564,161 @@ class _SpellSelect(discord.ui.Select):
         await _chargen_spells(interaction, self.state)
 
 
+async def _chargen_affinity_pick(interaction: discord.Interaction, state: dict, choice: dict) -> None:
+    """Schools that let the player choose their Affinity element (Isawa, Dutiful Disciple,
+    Self-Taught). Asked before the spells, since it decides which Mastery Levels are open."""
+    sch = schools.get(state.get("school_name", "")) or {}
+    opposing = choice["opposing"]
+    sel = discord.ui.Select(
+        placeholder="Choose your Affinity element...",
+        options=[discord.SelectOption(
+            label=el, description=(f"Deficiency: {_OPPOSING_ELEMENT[el]}" if opposing else "No Deficiency"))
+            for el in choice["elements"]],
+    )
+
+    async def on_pick(sel_inter: discord.Interaction) -> None:
+        if sel_inter.user.id != int(state["user_id"]):
+            await sel_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        el = sel.values[0]
+        state["affinity_element"] = el
+        state["deficiency_element"] = _OPPOSING_ELEMENT.get(el, "") if opposing else ""
+        await _chargen_spells(sel_inter, state)
+
+    sel.callback = on_pick
+    back_btn = discord.ui.Button(label="Back: Skills", style=discord.ButtonStyle.secondary, row=1)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills(btn_inter, state)
+
+    back_btn.callback = on_back
+    view = _ChargenView(state)
+    view.add_item(sel)
+    view.add_item(back_btn)
+    text = (f"**Step 9/10 - Affinity** · {sch.get('name', 'Your school')} lets you choose your Affinity element. "
+            f"You may learn and cast spells of it as if your School Rank were one higher, so Mastery 2 spells are open to you. "
+            + ("The opposing element becomes your Deficiency." if opposing else "You have no Deficiency."))
+    if re.search(r"and in any one other element", sch.get("affinity", ""), re.IGNORECASE):
+        text += (" Your school also gives a second Deficiency of your choice: The sheet holds only one, "
+                 "so tell staff which element you want.")
+    await interaction.response.edit_message(content=text, embed=_chargen_embed(state), view=view)
+
+
+async def _chargen_assign_slots(interaction: discord.Interaction, state: dict, sizes: list[int]) -> None:
+    """Isawa-style starting spells: The player picks which element gets the 3, the 2, and so on."""
+    sch = schools.get(state.get("school_name", "")) or {}
+    assigned = state.setdefault("_slot_assign", {})
+    if len(assigned) >= len(sizes):
+        state["_spell_allot_remaining"] = dict(assigned)
+        await _chargen_spells(interaction, state)
+        return
+    size = sizes[len(assigned)]
+    sel = discord.ui.Select(
+        placeholder=f"Element for your {size} spell{'s' if size != 1 else ''}...",
+        options=[discord.SelectOption(label=el) for el in _SPELL_ELEMENTS if el not in assigned],
+    )
+
+    async def on_pick(sel_inter: discord.Interaction) -> None:
+        if sel_inter.user.id != int(state["user_id"]):
+            await sel_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        assigned[sel.values[0]] = size
+        await _chargen_assign_slots(sel_inter, state, sizes)
+
+    sel.callback = on_pick
+    back_btn = discord.ui.Button(label="Back: Skills", style=discord.ButtonStyle.secondary, row=1)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        state.pop("_slot_assign", None)
+        await _chargen_skills(btn_inter, state)
+
+    back_btn.callback = on_back
+    view = _ChargenView(state)
+    view.add_item(sel)
+    view.add_item(back_btn)
+    await interaction.response.edit_message(
+        content=(f"**Step 9/10 - Starting Spells** · {sch.get('name', 'Your school')} starts with spells of "
+                 f"{', '.join(str(n) for n in sizes)} in different elements of your choice. "
+                 f"Which element gets your **{size}** spell{'s' if size != 1 else ''}? "
+                 f"({len(assigned) + 1} of {len(sizes)})"),
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+async def _chargen_spells_unsupported(interaction: discord.Interaction, state: dict, allot: dict[str, int]) -> None:
+    """Starting spells the wizard cannot offer (Yogo Wardmaster picks by keyword): say so, let them skip."""
+    sch = schools.get(state.get("school_name", "")) or {}
+    view = _ChargenView(state)
+    back_btn = discord.ui.Button(label="Back: Skills", style=discord.ButtonStyle.secondary, row=0)
+    skip_btn = discord.ui.Button(label="Continue Without Spells", style=discord.ButtonStyle.primary, row=0)
+
+    async def on_back(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_skills(btn_inter, state)
+
+    async def on_skip(btn_inter: discord.Interaction) -> None:
+        if btn_inter.user.id != int(state["user_id"]):
+            await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        await _chargen_review(btn_inter, state)
+
+    back_btn.callback = on_back
+    skip_btn.callback = on_skip
+    view.add_item(back_btn)
+    view.add_item(skip_btn)
+    slots = ", ".join(f"{n} {k}" for k, n in allot.items())
+    await interaction.response.edit_message(
+        content=(f"**Step 9/10 - Starting Spells** · {sch.get('name', 'Your school')} starts with {slots}, picked by "
+                 f"keyword, which the wizard cannot do yet. Continue, and staff will add them with `/edit spell` "
+                 f"when they approve you. (Sense, Commune, Summon are auto-granted.)"),
+        embed=_chargen_embed(state), view=view,
+    )
+
+
+def _apply_auto_spells(state: dict, sch: dict | None) -> None:
+    """Spells the school hands out outright count against that element's slots."""
+    for name in _auto_spells(sch):
+        sp = spells.get(name)
+        if sp is None:
+            continue
+        chosen = state.setdefault("chosen_spells", [])
+        if sp["name"] not in chosen:
+            chosen.append(sp["name"])
+        rem = state["_spell_allot_remaining"]
+        if sp["element"] in rem:
+            rem[sp["element"]] = max(0, rem[sp["element"]] - 1)
+
+
 async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None:
     state["step"] = "spells"
     sch = schools.get(state.get("school_name", "")) if state.get("school_name") else None
     allot = _parse_spell_allotment(sch) if sch else None
-    if allot is None:
+    flexible = _flexible_slot_sizes(sch)
+    choice = _affinity_choice(sch)
+    if choice and not state.get("affinity_element"):
+        await _chargen_affinity_pick(interaction, state, choice)
+        return
+    if allot is None and not flexible:
         await _chargen_review(interaction, state)
+        return
+    if _unsupported_slots(allot):
+        await _chargen_spells_unsupported(interaction, state, allot)
+        return
+    if flexible and "_spell_allot_remaining" not in state:
+        await _chargen_assign_slots(interaction, state, flexible)
         return
 
     if "_spell_allot_remaining" not in state:
         state["_spell_allot_remaining"] = dict(allot)
+        _apply_auto_spells(state, sch)
 
     remaining = state["_spell_allot_remaining"]
     total_remaining = sum(max(0, v) for v in remaining.values())
@@ -3594,6 +3790,19 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
     skip_btn.callback = on_skip
     view.add_item(back_btn)
     view.add_item(skip_btn)
+    if choice and not state.get("chosen_spells"):
+        change_btn = discord.ui.Button(label="Change Affinity", style=discord.ButtonStyle.secondary, row=2)
+
+        async def on_change(btn_inter: discord.Interaction) -> None:
+            if btn_inter.user.id != int(state["user_id"]):
+                await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            state.pop("affinity_element", None)
+            state.pop("deficiency_element", None)
+            await _chargen_spells(btn_inter, state)
+
+        change_btn.callback = on_change
+        view.add_item(change_btn)
 
     slots_desc = ", ".join(f"{el}: {cnt}" for el, cnt in remaining.items() if cnt > 0)
     await interaction.response.edit_message(

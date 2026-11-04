@@ -58,7 +58,7 @@ Fortune run the game. Kami also administer the server. Commands tagged [Kami] ne
 - `/edit field`  Honor, glory, koku, school rank, void points and more.
 - `/edit feature`  Add or remove advantages, techniques, kata, kiho, weapons, emphasis, tattoos or spells.
 - `/edit spell`  Add or remove a spell. It warns you when it is above their rank.
-- `/edit elements`  Set Affinity and Deficiency. Isawa choose theirs.
+- `/edit elements`  Set Affinity and Deficiency by hand. The wizard asks Isawa and similar schools.
 - `/edit identity | equip | activate | mount | rename | notes`  Clan, gear, active abilities, name and notes.
 - `/sheet view | list | owner | delete | learn`  Work on another sheet with member or character.
 - `/sheet data import`  Create a character from JSON.
