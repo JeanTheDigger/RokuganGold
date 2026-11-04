@@ -26,6 +26,12 @@ def match_character(char, filters: list[tuple[str, str]]) -> bool:
     return False
 
 
+def support_slug(character_name: str) -> str:
+    """The name of a character's private support channel: lowercase, spaces to hyphens, and
+    at most 100 characters (Discord's limit, so a long name cannot make creation fail)."""
+    return character_name.lower().replace(" ", "-")[:100]
+
+
 async def find_support_channel(
     guild: discord.Guild, character_name: str, category_name: str,
 ) -> discord.TextChannel | None:
@@ -33,5 +39,5 @@ async def find_support_channel(
     cat = discord.utils.get(guild.categories, name=category_name)
     if cat is None:
         return None
-    slug = character_name.lower().replace(" ", "-")
+    slug = support_slug(character_name)
     return discord.utils.get(cat.text_channels, name=slug)

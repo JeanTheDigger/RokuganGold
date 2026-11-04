@@ -113,6 +113,9 @@ STALE_TURN_MINUTES: int = 10
 # Mentions allowed on approval / nudge messages (role pings need the Fortune role
 # to be mentionable, or the bot to hold Mention Everyone).
 _PING_MENTIONS = discord.AllowedMentions(roles=True, users=True, everyone=False)
+# Everything else the bot posts may mention people but never @everyone, @here or a role, so a
+# character named "@everyone" cannot ping the server. Pings the bot means to send pass their own.
+_SAFE_MENTIONS = discord.AllowedMentions(everyone=False, roles=False, users=True, replied_user=True)
 
 def _dm_ping(guild: discord.Guild | None) -> str:
     """The Fortune role mention (plus a space) for approval prompts, or ''."""
@@ -254,7 +257,7 @@ async def _sync_tree(
 
 class RokuganBot(discord.Client):
     def __init__(self) -> None:
-        super().__init__(intents=intents)
+        super().__init__(intents=intents, allowed_mentions=_SAFE_MENTIONS)
         self.tree = app_commands.CommandTree(self)
 
     async def on_interaction(self, interaction: discord.Interaction) -> None:
@@ -679,7 +682,7 @@ async def _on_lost(guild_id: str, rec: storage.CharacterRecord) -> list[str]:
             f"The character is now under staff control."
         )
         support_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT)
-        support = discord.utils.get(support_cat.text_channels, name=old_name.lower().replace(" ", "-")) if support_cat else None
+        support = discord.utils.get(support_cat.text_channels, name=helpers.support_slug(old_name)) if support_cat else None
         if support is not None:
             try:
                 await support.send(text)
@@ -725,12 +728,12 @@ async def _on_rename(guild_id: str, rec: storage.CharacterRecord, old_name: str)
     if not is_npc:
         guild = client.get_guild(int(guild_id))
         support_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT) if guild else None
-        old_slug = old_name.lower().replace(" ", "-")
+        old_slug = helpers.support_slug(old_name)
         support = discord.utils.get(support_cat.text_channels, name=old_slug) if support_cat else None
         if support is not None:
             try:
                 await support.edit(
-                    name=new_name.lower().replace(" ", "-"),
+                    name=helpers.support_slug(new_name),
                     topic=f"Private channel for {new_name} - speak with Staff here.",
                     reason=f"Character renamed: {old_name} → {new_name}",
                 )
@@ -1141,7 +1144,7 @@ async def _require_xp_channel(interaction: discord.Interaction, character_name: 
         return True
     channel = interaction.channel
     cat = getattr(channel, "category", None) if channel else None
-    slug = character_name.lower().replace(" ", "-")
+    slug = helpers.support_slug(character_name)
     if cat is not None and cat.name == CAT_PLAYER_SUPPORT and channel.name == slug:
         return True
     await interaction.response.send_message(
@@ -2749,7 +2752,8 @@ async def _chargen_wildcards(interaction: discord.Interaction, state: dict) -> N
             if btn_inter.user.id != int(state["user_id"]):
                 await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
                 return
-            state["wildcard_picks"].pop()
+            if state.get("wildcard_picks"):
+                state["wildcard_picks"].pop()
             await _chargen_wildcards(btn_inter, state)
 
         undo_btn.callback = on_undo
@@ -2846,6 +2850,12 @@ class _TraitRaiseSelect(discord.ui.Select):
             await interaction.response.defer()
             return
         purchases = self.state.setdefault("trait_purchases", {})
+        base = _build_base_char(self.state)
+        current = (base.void_ring if chosen == "void" else base.get_trait(chosen)) + purchases.get(chosen, 0)
+        if current >= _CHARGEN_TRAIT_CAP:
+            # The menu was out of date (double click or a second device): Show the current one.
+            await _chargen_traits(interaction, self.state)
+            return
         prev = purchases.pop(chosen, 0)
         purchases[chosen] = prev + 1
         _, remaining = _calc_chargen_xp(self.state)
@@ -2976,6 +2986,9 @@ class _AdvChoiceModal(discord.ui.Modal):
         if not detail:
             await interaction.response.send_message("Please specify a choice.", ephemeral=True)
             return
+        if self.entry["name"] in _taken_names(self.state, self.kind):
+            await interaction.response.send_message(f"You already have {self.entry['name']}.", ephemeral=True)
+            return
         name = f"{self.entry['name']} ({detail})"
         entry_data = {"name": name, "points": self.entry["points"]}
         if self.kind == "advantage":
@@ -3003,32 +3016,56 @@ class _AdvChoiceModal(discord.ui.Modal):
                 await _chargen_disadvantages(interaction, self.state)
 
 
+def _taken_names(state: dict, kind: str) -> set[str]:
+    """Names already taken, as the menus must hide them. A choice-based entry such as
+    "Inheritance (a sword)" also takes its base name, so it cannot be bought twice."""
+    chosen = state.get("advantages_chosen" if kind == "advantage" else "disadvantages_chosen", [])
+    names: set[str] = set()
+    for a in chosen:
+        names.add(a["name"])
+        base = a["name"].split(" (")[0]
+        if base in _CHARGEN_CHOICES:
+            names.add(base)
+    if kind == "advantage" and state.get("different_school"):
+        names.add("Different School")
+    return names
+
+
+def _adv_pool(state: dict, kind: str, category: str) -> list[dict]:
+    """Fixed-cost entries a category menu offers, A to Z. Entries with no category
+    in the data are listed under Other so none of them is unreachable."""
+    taken = _taken_names(state, kind)
+    pool = [a for a in advantages.by_kind(kind)
+            if a.get("points") is not None and a["name"] not in taken
+            and (a.get("category") or "Other") == category]
+    pool.sort(key=lambda a: a["name"])
+    return pool
+
+
+def _adv_categories(kind: str) -> list[str]:
+    cats = ["Mental", "Physical", "Social", "Spiritual", "Material"]
+    if kind == "advantage":
+        cats.append("Mystical")
+    if any(a.get("points") is not None and not a.get("category") for a in advantages.by_kind(kind)):
+        cats.append("Other")
+    return cats
+
+
 # --- Step 6: Advantages ---
 class _AdvantageSelect(discord.ui.Select):
-    def __init__(self, state: dict, category: str):
+    def __init__(self, state: dict, category: str, part: int = 0):
         self.state = state
         self.category = category
-        chosen_names = set()
-        for a in state.get("advantages_chosen", []):
-            chosen_names.add(a["name"])
-            base = a["name"].split(" (")[0]
-            if base in _CHARGEN_CHOICES:
-                chosen_names.add(base)
-        if state.get("different_school"):
-            chosen_names.add("Different School")
-        advs = [a for a in advantages.by_kind("advantage")
-                if a.get("points") is not None and a["name"] not in chosen_names
-                and (a.get("category") or "") == category]
-        advs.sort(key=lambda a: a["name"])
-        options = []
-        for a in advs[:25]:
-            options.append(discord.SelectOption(
-                label=a["name"][:100],
-                description=f"{a['cost_text']} - {a.get('category', '')}",
-            ))
+        pool = _adv_pool(state, "advantage", category)
+        parts = max(1, -(-len(pool) // 25))
+        options = [discord.SelectOption(
+            label=a["name"][:100],
+            description=f"{a['cost_text']} - {a.get('category') or 'Other'}"[:100],
+        ) for a in pool[part * 25:(part + 1) * 25]]
         if not options:
             options = [discord.SelectOption(label="(none available)", value="__none__")]
-        super().__init__(placeholder=f"{category} advantages...", options=options)
+        tag = f" ({part + 1}/{parts})" if parts > 1 else ""
+        super().__init__(placeholder=f"{category} advantages{tag}...", options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != int(self.state["user_id"]):
@@ -3041,6 +3078,9 @@ class _AdvantageSelect(discord.ui.Select):
         adv = advantages.get(chosen, "advantage")
         if not adv or adv.get("points") is None:
             await interaction.response.send_message("That advantage has a variable cost; ask a DM.", ephemeral=True)
+            return
+        if adv["name"] in _taken_names(self.state, "advantage"):
+            await _chargen_adv_category(interaction, self.state, self.category)   # An out-of-date menu.
             return
         choice_spec = _CHARGEN_CHOICES.get(adv["name"])
         if choice_spec:
@@ -3059,7 +3099,8 @@ class _AdvantageSelect(discord.ui.Select):
 
 async def _chargen_adv_category(interaction: discord.Interaction, state: dict, cat: str) -> None:
     view = _ChargenView(state)
-    view.add_item(_AdvantageSelect(state, cat))
+    for part in range(max(1, -(-len(_adv_pool(state, "advantage", cat)) // 25))):
+        view.add_item(_AdvantageSelect(state, cat, part))
     back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
 
     async def on_back(btn_inter: discord.Interaction) -> None:
@@ -3079,8 +3120,7 @@ async def _chargen_adv_category(interaction: discord.Interaction, state: dict, c
 class _AdvCategorySelect(discord.ui.Select):
     def __init__(self, state: dict):
         self.state = state
-        cats = ["Mental", "Physical", "Social", "Spiritual", "Material", "Mystical"]
-        options = [discord.SelectOption(label=c) for c in cats]
+        options = [discord.SelectOption(label=c) for c in _adv_categories("advantage")]
         super().__init__(placeholder="Pick a category to browse...", options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -3135,28 +3175,19 @@ async def _chargen_advantages(interaction: discord.Interaction, state: dict) -> 
 
 # --- Step 7: Disadvantages ---
 class _DisadvantageSelect(discord.ui.Select):
-    def __init__(self, state: dict, category: str):
+    def __init__(self, state: dict, category: str, part: int = 0):
         self.state = state
         self.category = category
-        chosen_names = set()
-        for d in state.get("disadvantages_chosen", []):
-            chosen_names.add(d["name"])
-            base = d["name"].split(" (")[0]
-            if base in _CHARGEN_CHOICES:
-                chosen_names.add(base)
-        disadvs = [d for d in advantages.by_kind("disadvantage")
-                   if d.get("points") is not None and d["name"] not in chosen_names
-                   and (d.get("category") or "") == category]
-        disadvs.sort(key=lambda d: d["name"])
-        options = []
-        for d in disadvs[:25]:
-            options.append(discord.SelectOption(
-                label=d["name"][:100],
-                description=f"{d['cost_text']} - gives XP back",
-            ))
+        pool = _adv_pool(state, "disadvantage", category)
+        parts = max(1, -(-len(pool) // 25))
+        options = [discord.SelectOption(
+            label=d["name"][:100],
+            description=f"{d['cost_text']} - gives XP back"[:100],
+        ) for d in pool[part * 25:(part + 1) * 25]]
         if not options:
             options = [discord.SelectOption(label="(none available)", value="__none__")]
-        super().__init__(placeholder=f"{category} disadvantages...", options=options)
+        tag = f" ({part + 1}/{parts})" if parts > 1 else ""
+        super().__init__(placeholder=f"{category} disadvantages{tag}...", options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != int(self.state["user_id"]):
@@ -3169,6 +3200,9 @@ class _DisadvantageSelect(discord.ui.Select):
         dis = advantages.get(chosen, "disadvantage")
         if not dis or dis.get("points") is None:
             await interaction.response.send_message("That disadvantage has a variable cost; ask a DM.", ephemeral=True)
+            return
+        if dis["name"] in _taken_names(self.state, "disadvantage"):
+            await _chargen_disadv_category(interaction, self.state, self.category)   # An out-of-date menu.
             return
         current_disadv_xp = sum(d["points"] for d in self.state.get("disadvantages_chosen", []))
         if current_disadv_xp + dis["points"] > _MAX_DISADVANTAGE_XP:
@@ -3189,7 +3223,8 @@ class _DisadvantageSelect(discord.ui.Select):
 
 async def _chargen_disadv_category(interaction: discord.Interaction, state: dict, cat: str) -> None:
     view = _ChargenView(state)
-    view.add_item(_DisadvantageSelect(state, cat))
+    for part in range(max(1, -(-len(_adv_pool(state, "disadvantage", cat)) // 25))):
+        view.add_item(_DisadvantageSelect(state, cat, part))
     back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.secondary, row=2)
 
     async def on_back(btn_inter: discord.Interaction) -> None:
@@ -3211,8 +3246,7 @@ async def _chargen_disadv_category(interaction: discord.Interaction, state: dict
 class _DisadvCategorySelect(discord.ui.Select):
     def __init__(self, state: dict):
         self.state = state
-        cats = ["Mental", "Physical", "Social", "Spiritual", "Material"]
-        options = [discord.SelectOption(label=c) for c in cats]
+        options = [discord.SelectOption(label=c) for c in _adv_categories("disadvantage")]
         super().__init__(placeholder="Pick a category to browse...", options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -3300,6 +3334,9 @@ class _SkillSelect(discord.ui.Select):
             await interaction.response.defer()
             return
         purchases = self.state.setdefault("skill_purchases", {})
+        if _build_base_char(self.state).skills.get(chosen, 0) + purchases.get(chosen, 0) >= _CHARGEN_SKILL_CAP:
+            await _chargen_skills_category(interaction, self.state, self._category)
+            return
         prev = purchases.pop(chosen, 0)
         purchases[chosen] = prev + 1
         _, remaining = _calc_chargen_xp(self.state)
@@ -3344,7 +3381,44 @@ async def _chargen_skills_category(interaction: discord.Interaction, state: dict
     )
 
 
-async def _chargen_skills(interaction: discord.Interaction, state: dict) -> None:
+def _clamp_purchases(state: dict) -> list[str]:
+    """Bring bought trait and skill ranks back under the starting cap when an earlier step changed
+    after they were bought (a free skill or family picked again, say). Returns what was reduced."""
+    base = _build_base_char(state)
+    notes: list[str] = []
+    for key, cap, rank_of in (
+        ("trait_purchases", _CHARGEN_TRAIT_CAP, lambda t: base.void_ring if t == "void" else base.get_trait(t)),
+        ("skill_purchases", _CHARGEN_SKILL_CAP, lambda sk: base.skills.get(sk, 0)),
+    ):
+        bought = state.get(key, {})
+        for name, n in list(bought.items()):
+            room = max(0, cap - rank_of(name))
+            if n > room:
+                if room:
+                    bought[name] = room
+                else:
+                    del bought[name]
+                notes.append(f"{name.capitalize() if key == 'trait_purchases' else name} to {cap}")
+    return notes
+
+
+def _prune_emphases(state: dict) -> list[str]:
+    """Drop bought emphases a skill can no longer carry (its rank fell after Undo), newest first.
+    Returns what was removed, as "Skill: Emphasis"."""
+    base = _build_base_char(state)
+    removed: list[str] = []
+    emphs = state.get("emphasis_purchases", [])
+    for e in reversed(list(emphs)):
+        rank = base.skills.get(e["skill"], 0) + state.get("skill_purchases", {}).get(e["skill"], 0)
+        owned = len(base.emphases.get(e["skill"], []))
+        bought = sum(1 for x in emphs if x["skill"] == e["skill"])
+        if rank < 1 or owned + bought > advancement.emphasis_limit(rank):
+            emphs.remove(e)
+            removed.append(f"{e['skill']}: {e['emphasis']}")
+    return removed
+
+
+async def _chargen_skills(interaction: discord.Interaction, state: dict, note: str = "") -> None:
     state["step"] = "skills"
     view = _ChargenView(state)
     view.add_item(_SkillCategorySelect(state))
@@ -3362,7 +3436,10 @@ async def _chargen_skills(interaction: discord.Interaction, state: dict) -> None
             purchases[last_key] -= 1
             if purchases[last_key] <= 0:
                 del purchases[last_key]
-        await _chargen_skills(btn_inter, state)
+        dropped = _prune_emphases(state)
+        await _chargen_skills(btn_inter, state, note=(
+            "Removed the emphasis " + ", ".join(dropped) + ", since the skill dropped too low to carry it. "
+            if dropped else ""))
 
     async def on_next(btn_inter: discord.Interaction) -> None:
         if btn_inter.user.id != int(state["user_id"]):
@@ -3415,24 +3492,31 @@ async def _chargen_skills(interaction: discord.Interaction, state: dict) -> None
     view.add_item(undo_emph_btn)
 
     await interaction.response.edit_message(
-        content="**Step 8/10 - Skills** · Pick a category then select skills to buy. "
+        content=note + "**Step 8/10 - Skills** · Pick a category then select skills to buy. "
                 "Use **Buy Emphasis** to add skill emphases. Press **Next** when done.",
         embed=_chargen_embed(state), view=view,
     )
 
 
+def _emphasis_skill_list(state: dict) -> list[tuple[str, int]]:
+    base = _build_base_char(state)
+    all_skills: dict[str, int] = dict(base.skills)
+    for sk, ranks in state.get("skill_purchases", {}).items():
+        all_skills[sk] = all_skills.get(sk, 0) + ranks
+    return [(sk, rk) for sk, rk in sorted(all_skills.items()) if rk >= 1]
+
+
 class _EmphasisSkillSelect(discord.ui.Select):
-    def __init__(self, state: dict):
+    def __init__(self, state: dict, part: int = 0):
         self.state = state
-        base = _build_base_char(state)
-        all_skills: dict[str, int] = dict(base.skills)
-        for sk, ranks in state.get("skill_purchases", {}).items():
-            all_skills[sk] = all_skills.get(sk, 0) + ranks
-        options = [discord.SelectOption(label=f"{sk} (Rank {rk})", value=sk)
-                   for sk, rk in sorted(all_skills.items()) if rk >= 1]
+        skills_owned = _emphasis_skill_list(state)
+        parts = max(1, -(-len(skills_owned) // 25))
+        options = [discord.SelectOption(label=f"{sk} (Rank {rk})"[:100], value=sk)
+                   for sk, rk in skills_owned[part * 25:(part + 1) * 25]]
         if not options:
             options = [discord.SelectOption(label="(no skills yet)", value="__none__")]
-        super().__init__(placeholder="Which skill gets the emphasis?", options=options[:25])
+        tag = f" ({part + 1}/{parts})" if parts > 1 else ""
+        super().__init__(placeholder=f"Which skill gets the emphasis?{tag}", options=options)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if interaction.user.id != int(self.state["user_id"]):
@@ -3498,7 +3582,8 @@ class _EmphasisModal(discord.ui.Modal):
 
 async def _chargen_emphasis_pick(interaction: discord.Interaction, state: dict) -> None:
     view = _ChargenView(state)
-    view.add_item(_EmphasisSkillSelect(state))
+    for part in range(max(1, -(-len(_emphasis_skill_list(state)) // 25))):
+        view.add_item(_EmphasisSkillSelect(state, part))
     back_btn = discord.ui.Button(label="Back to Skills", style=discord.ButtonStyle.secondary, row=2)
 
     async def on_back(btn_inter: discord.Interaction) -> None:
@@ -3558,8 +3643,14 @@ class _SpellSelect(discord.ui.Select):
         if chosen == "__none__":
             await interaction.response.defer()
             return
-        self.state.setdefault("chosen_spells", []).append(chosen)
         allot_tracking = self.state.setdefault("_spell_allot_remaining", {})
+        picked = self.state.setdefault("chosen_spells", [])
+        entry = spells.get(chosen)
+        if (allot_tracking.get(self.element, 0) <= 0 or chosen in picked or entry is None
+                or entry["mastery"] > _chargen_max_mastery(self.state, self.element)):
+            await _chargen_spells(interaction, self.state)   # An out-of-date menu: Show the current one.
+            return
+        picked.append(chosen)
         allot_tracking[self.element] = allot_tracking.get(self.element, 0) - 1
         await _chargen_spells(interaction, self.state)
 
@@ -3805,9 +3896,14 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
         view.add_item(change_btn)
 
     slots_desc = ", ".join(f"{el}: {cnt}" for el, cnt in remaining.items() if cnt > 0)
+    deficient = state.get("deficiency_element") or _school_elements(sch)[1]
+    deficiency_note = ""
+    if deficient and remaining.get(deficient, 0) > 0:
+        deficiency_note = (f" Note: {deficient} is your Deficiency, which lowers your School Rank to 0 for it, "
+                           f"so you cannot cast {deficient} spells until you reach School Rank 2 (s31).")
     await interaction.response.edit_message(
         content=f"**Step 9/10 - Starting Spells** · Remaining slots: {slots_desc}. "
-                f"(Sense, Commune, Summon are auto-granted.)",
+                f"(Sense, Commune, Summon are auto-granted.){deficiency_note}",
         embed=_chargen_embed(state), view=view,
     )
 
@@ -3815,6 +3911,15 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
 # --- Step 10: Review & Submit ---
 async def _chargen_review(interaction: discord.Interaction, state: dict) -> None:
     state["step"] = "review"
+    # Going back to change an earlier step can leave bought ranks over the cap, or an emphasis
+    # on a skill that is no longer there. Fix both before showing the sheet.
+    lowered = _clamp_purchases(state)
+    dropped = _prune_emphases(state)
+    note = ""
+    if lowered:
+        note += f"Lowered {', '.join(lowered)} (the starting maximum), since an earlier choice changed. Your XP was refunded.\n"
+    if dropped:
+        note += f"Removed the emphasis {', '.join(dropped)}: Its skill is no longer on your sheet. Your XP was refunded.\n"
     char = _materialize_character(state)
     spent, remaining = _calc_chargen_xp(state)
 
@@ -3938,7 +4043,7 @@ async def _chargen_review(interaction: discord.Interaction, state: dict) -> None
         view.add_item(back_spells_btn)
 
     await interaction.response.edit_message(
-        content="**Step 10/10 - Review** · Check your character below, then submit for DM approval.",
+        content=note + "**Step 10/10 - Review** · Check your character below, then submit for DM approval.",
         embed=embed, view=view,
     )
 
@@ -4089,7 +4194,7 @@ async def _create_player_support_channel(
     support_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT)
     if support_cat is None:
         return None
-    channel_name = character_name.lower().replace(" ", "-")
+    channel_name = helpers.support_slug(character_name)
     everyone = guild.default_role
     bot_member = guild.me
     fortune_role = discord.utils.get(guild.roles, name=ROLE_FORTUNE)
@@ -4123,6 +4228,8 @@ async def _create_player_support_channel(
         return f"Support channel #{ch.name} created."
     except discord.Forbidden:
         return "Could not create support channel - bot lacks permission."
+    except discord.HTTPException as e:
+        return f"Could not create the support channel ({getattr(e, 'text', '') or 'Discord refused it'}). Create it by hand."
 
 
 class _FullCharacterApprovalView(_DisableableView):
@@ -4195,11 +4302,16 @@ class _FullCharacterApprovalView(_DisableableView):
         await member.add_roles(*roles_to_add,
                                reason=f"Character '{state['name']}' approved by {interaction.user.display_name}")
         nick_note = ""
+        nickname = state["name"] if len(state["name"]) <= 32 else state["name"][:32].rstrip()
         try:
-            await member.edit(nick=state["name"], reason=f"Character approved: {state['name']}")
+            await member.edit(nick=nickname, reason=f"Character approved: {state['name']}")
+            if nickname != state["name"]:
+                nick_note = "\n(Nickname shortened to 32 characters, Discord's limit.)"
         except discord.Forbidden:
             nick_note = ("\n(Could not change nickname - the bot's role may be too low "
                          "or the member is the server owner.)")
+        except discord.HTTPException:
+            nick_note = "\n(Could not set the nickname: Discord refused it.)"
 
         creation_ch_id = store.get_creation_channel(guild_id, owner_id)
         if creation_ch_id:
@@ -4531,7 +4643,7 @@ class _DeleteConfirmView(discord.ui.View):
 
             support_cat = discord.utils.get(guild.categories, name=CAT_PLAYER_SUPPORT)
             if support_cat:
-                channel_slug = char.name.lower().replace(" ", "-")
+                channel_slug = helpers.support_slug(char.name)
                 support_ch = discord.utils.get(support_cat.text_channels, name=channel_slug)
                 if support_ch:
                     try:
@@ -5381,7 +5493,8 @@ async def _update_date_display(guild_id: str, date_str: str, reason: str = "Time
                 new_msg = await channel.send(embed=_date_embed(date_str))
                 await new_msg.pin()
                 store.set_date_channel(guild_id, str(channel.id), str(new_msg.id))
-        await channel.send(f"@everyone {reason}\n**{date_str}**")
+        await channel.send(f"@everyone {reason}\n**{date_str}**",
+                           allowed_mentions=discord.AllowedMentions(everyone=True))
     except (discord.Forbidden, discord.HTTPException):
         log.warning("Could not update the date in #%s (guild %s).", getattr(channel, "name", "?"), guild_id)
         return False
