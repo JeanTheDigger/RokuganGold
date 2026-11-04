@@ -903,7 +903,7 @@ def build_sheet_embed(record: storage.CharacterRecord) -> discord.Embed:
         if slot_parts:
             embed.add_field(name="Spell Slots", value=" · ".join(slot_parts), inline=False)
 
-    water = stats.water_ring(c)
+    water = stats.move_ring(c)
     embed.add_field(
         name="Movement",
         value=f"Free Move: {water * 5} ft · Simple Move: {water * 10} ft  (Water Ring {water})",
@@ -1205,7 +1205,7 @@ def _whoami_lines(interaction: discord.Interaction, rec: storage.CharacterRecord
         wound_str = f"{wound_str}"
     vp_str = f"{c.current_void_points}/{taint.void_point_cap(c)} VP"
     header = " · ".join(b for b in (c.clan, c.school) if b) or " "
-    water = stats.water_ring(c)
+    water = stats.move_ring(c)
     move_str = f"Move: {water * 5} ft (Free) / {water * 10} ft (Simple)"
     track = stats.wound_track(c)
     lines = [
@@ -2651,6 +2651,10 @@ def _build_base_char_res(state: dict) -> tuple[Character, dict]:
     char = _school_char(state)
     res = heritage_perks.resolve(state, _heritage_ctx(state, char))
     heritage_perks.apply_skills(char, res)
+    # Free skill ranks an Advantage hands out (Water Hammer Citizen ...) count before any purchase is priced.
+    for nm in [a["name"] for a in state.get("advantages_chosen", [])] + list(res["advantages"]):
+        for sk, r in advantage_effects.free_skill_ranks(nm).items():
+            char.skills[sk] = char.skills.get(sk, 0) + r
     return char, res
 
 
@@ -2678,22 +2682,33 @@ def _heritage_resolve(state: dict) -> dict:
     return _build_base_char_res(state)[1]
 
 
+def _cost_char(state: dict, base_char: Character | None = None, res: dict | None = None) -> Character:
+    """A stand-in for the finished character, for XP prices that depend on its Advantages and Disadvantages
+    (Enlightened, Elemental Blessing, Obtuse): everything chosen so far plus what Heritage and the school give."""
+    if base_char is None or res is None:
+        base_char, res = _build_base_char_res(state)
+    stand_in = Character(name="cost", skills=dict(base_char.skills))
+    stand_in.advantages = [a["name"] for a in state.get("advantages_chosen", [])] + list(res["advantages"])
+    stand_in.disadvantages = [d["name"] for d in state.get("disadvantages_chosen", [])] + list(res["disadvantages"])
+    return stand_in
+
+
 def _calc_chargen_xp(state: dict) -> tuple[int, int]:
     """Return (xp_spent, xp_remaining) from chargen purchases."""
     spent = 0
     base_char, res = _build_base_char_res(state)
+    priced = _cost_char(state, base_char, res)
     for trait, ranks in state.get("trait_purchases", {}).items():
         base_val = base_char.void_ring if trait == "void" else base_char.get_trait(trait)
-        mult = advancement.VOID_XP_MULT if trait == "void" else advancement.TRAIT_XP_MULT
         for i in range(ranks):
-            spent += (base_val + i + 1) * mult
+            spent += advancement.trait_step_cost(priced, trait, base_val + i + 1)
     items = [{"name": "Different School", "points": 5}] if state.get("different_school") else []
     items += [{"name": a["name"], "points": a["points"]} for a in state.get("advantages_chosen", [])]
     spent += sum(cost for cost, _ in heritage_perks.price_items(res["discounts"], items, base_char.school_type))
     for skill, ranks in state.get("skill_purchases", {}).items():
         base_val = base_char.skills.get(skill, 0)
         for i in range(ranks):
-            spent += (base_val + i + 1) * advancement.SKILL_XP_MULT
+            spent += advancement.skill_step_cost(priced, skill, base_val + i + 1)
     spent += len(state.get("emphasis_purchases", [])) * _EMPHASIS_XP_COST
     disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
     disadv_xp = min(disadv_xp, _MAX_DISADVANTAGE_XP)
@@ -2852,6 +2867,12 @@ def _materialize_character(state: dict) -> Character:
         heritage_perks.apply_rest(char, res)   # free skill ranks went in with the base character
         _heritage_grant_techniques(char, res)
         char.heritage_result = state["heritage_result"]
+
+    # One-time effects of what the character has taken (Virtuous, Wealthy, Infamous ...).
+    for nm in list(char.advantages):
+        advantage_effects.apply_acquired(char, nm, "advantage", skills=False)
+    for nm in list(char.disadvantages):
+        advantage_effects.apply_acquired(char, nm, "disadvantage")
 
     spent, remaining = _calc_chargen_xp(state)
     char.xp_spent = float(spent)
@@ -3373,6 +3394,7 @@ class _TraitRaiseSelect(discord.ui.Select):
     def __init__(self, state: dict):
         self.state = state
         base = _build_base_char(state)
+        priced = _cost_char(state)
         options = []
         for t in advancement.TRAIT_NAMES:
             cur = base.void_ring if t == "void" else base.get_trait(t)
@@ -3380,8 +3402,7 @@ class _TraitRaiseSelect(discord.ui.Select):
             effective = cur + bought
             if effective >= _CHARGEN_TRAIT_CAP:
                 continue
-            mult = advancement.VOID_XP_MULT if t == "void" else advancement.TRAIT_XP_MULT
-            cost = (effective + 1) * mult
+            cost = advancement.trait_step_cost(priced, t, effective + 1)
             options.append(discord.SelectOption(
                 label=f"{t.capitalize()} ({effective} → {effective + 1})",
                 value=t,
@@ -3523,6 +3544,9 @@ _CHARGEN_CHOICES: dict[str, tuple[str, str]] = {
     "Spy Network": ("Where?", "Province, city, or region your network covers"),
     "Touch of the Spirit Realms": ("Which spirit realm?", "Chikushudo, Gaki-do, Meido, Sakkaku, Tengoku, Toshigoku, Yomi, Yume-do"),
     "Way of the Land": ("Which province?", "Province name (e.g. Beiden, Ryoko Owari)"),
+    "Water Hammer Citizen": ("Which Craft Skill?", "e.g. Craft: Blacksmithing"),
+    "Zakyo Toshi Citizen": ("Which Games Skill?", "e.g. Games: Go"),
+    "Watanu-Trained": ("Which Craft Skill (metal goods)?", "e.g. Craft: Jewelry"),
     # Disadvantages
     "Bad Fortune": ("Which type?", "Secret Love, Disfigurement, Evil Eye, Allergy, Lingering Misfortune, Unknown Enemy"),
     "Compulsion": ("What compulsion?", "e.g. Gambling, Drinking, Lying, Cleaning, Bragging"),
@@ -3625,7 +3649,7 @@ _NOT_AT_CREATION = re.compile(
 _SHUGENJA_ONLY = re.compile(r"shugenja only|only shugenja|only available to shugenja", re.IGNORECASE)
 
 
-def _creation_gate_ok(a: dict, school_type: str, honor: float, affinity: str) -> bool:
+def _creation_gate_ok(a: dict, school_type: str, honor: float, affinity: str, disadvantages: tuple = ()) -> bool:
     """May a brand-new character buy this? The catalog marks what is closed at creation or limited to
     shugenja; Sacrosanct needs Honor 6 and Void Versatility a Void Affinity."""
     eff = a.get("effect") or ""
@@ -3637,6 +3661,8 @@ def _creation_gate_ok(a: dict, school_type: str, honor: float, affinity: str) ->
         return False
     if a["name"] == "Void Versatility" and affinity.lower() != "void":
         return False
+    if a["name"] in ("Ishiken-Do", "Void Versatility") and any(d.lower().startswith("uncentered") for d in disadvantages):
+        return False   # Uncentered: cannot take Ishiken-do or Void Versatility
     return True
 
 
@@ -3649,7 +3675,8 @@ def _adv_pool(state: dict, kind: str, category: str) -> list[dict]:
     affinity = state.get("affinity_element") or base.affinity_element or ""
     pool = [a for a in advantages.by_kind(kind)
             if a.get("points") is not None and a["name"] not in taken
-            and _creation_gate_ok(a, base.school_type, honor, affinity)
+            and _creation_gate_ok(a, base.school_type, honor, affinity,
+                                  tuple(d["name"] for d in state.get("disadvantages_chosen", [])))
             and (a.get("category") or "Other") == category]
     pool.sort(key=lambda a: a["name"])
     return pool
@@ -3999,6 +4026,7 @@ class _SkillSelect(discord.ui.Select):
         self._category = category
         skill_list = _CHARGEN_SKILL_CATS.get(category, [])
         base = _build_base_char(state)
+        priced = _cost_char(state)
         options = []
         for sk in skill_list:
             base_rank = base.skills.get(sk, 0)
@@ -4006,7 +4034,7 @@ class _SkillSelect(discord.ui.Select):
             effective = base_rank + bought
             if effective >= _CHARGEN_SKILL_CAP:
                 continue
-            cost = (effective + 1) * advancement.SKILL_XP_MULT
+            cost = advancement.skill_step_cost(priced, sk, effective + 1)
             label = f"{sk} ({effective} → {effective + 1})" if effective > 0 else f"{sk} (0 → 1)"
             options.append(discord.SelectOption(
                 label=label[:100], value=sk,
@@ -6361,6 +6389,7 @@ async def dm_new_day(interaction: discord.Interaction) -> None:
             c.spell_slots[element] = stats.spell_slot_max(c, element)
         c.void_spell_bonus = stats.void_bonus_max(c)
         c.spells_cast_today = []
+        c.fate_used = [f for f in c.fate_used if f != "Dark Fate"]   # Dark Fate: once per session, so once per day here
         # s42 periodic Taint resistance: cadence by Rank, Earth roll vs TN 5 + 5 x Rank.
         if c.taint > 0:
             interval = taint.periodic_roll_interval(taint.taint_rank(c))
@@ -6495,6 +6524,17 @@ async def _update_date_display(guild_id: str, date_str: str, reason: str = "Time
         return False
     return True
 
+def _set_calendar(guild_id: str, year: int, month: int, day: int) -> None:
+    """Store the date. When the year changes, Great Destiny's once-a-year death-save comes back."""
+    old = store.get_calendar(guild_id)
+    store.set_calendar(guild_id, year, month, day)
+    if old is not None and old[0] != year:
+        for _owner, rec in store.list_active_pcs(guild_id):
+            if "Great Destiny" in rec.character.fate_used:
+                rec.character.fate_used = [f for f in rec.character.fate_used if f != "Great Destiny"]
+                store.save(rec, note="new year")
+
+
 def _advance_calendar(guild_id: str) -> str | None:
     """Advance the guild's calendar by 1 day. Returns the new date string, or None if no date set."""
     cal = store.get_calendar(guild_id)
@@ -6508,7 +6548,7 @@ def _advance_calendar(guild_id: str) -> str | None:
         if month > 12:
             month = 1
             year += 1
-    store.set_calendar(guild_id, year, month, day)
+    _set_calendar(guild_id, year, month, day)
     return _format_rokugani_date(year, month, day)
 
 @dm.command(name="setdate", description="Set the Rokugani calendar date. [Fortune]")
@@ -6532,7 +6572,7 @@ async def dm_setdate(
     if not await _require_dm_role(interaction):
         return
     guild = str(interaction.guild_id)
-    store.set_calendar(guild, year, month, day)
+    _set_calendar(guild, year, month, day)
     date_str = _format_rokugani_date(year, month, day)
     embed = discord.Embed(
         title="Calendar Set",
@@ -7854,8 +7894,10 @@ class CreatureAttackView(_DisableableView):
         )
         if applied["level_changed"]:
             status = f"{self.target_name}: {applied['old_wound_level']} → **{applied['new_wound_level']}**"
+            status += f" · {applied['fate_note']}" if applied.get("fate_note") else ""
         else:
             status = f"{self.target_name}: **{applied['new_wound_level']}**"
+            status += f" · {applied['fate_note']}" if applied.get("fate_note") else ""
         if applied["is_dead"]:
             status += "  **DEAD**" + death_line
         embed.add_field(name="Result", value=status, inline=False)
@@ -8024,8 +8066,10 @@ class SpellDamageView(_DisableableView):
         )
         if applied["level_changed"]:
             status = f"{self.target_name}: {applied['old_wound_level']} → **{applied['new_wound_level']}**"
+            status += f" · {applied['fate_note']}" if applied.get("fate_note") else ""
         else:
             status = f"{self.target_name}: **{applied['new_wound_level']}**"
+            status += f" · {applied['fate_note']}" if applied.get("fate_note") else ""
         if applied["is_dead"]:
             status += "  **DEAD**" + death_line
         embed.add_field(name="Result", value=status, inline=False)
@@ -8106,8 +8150,10 @@ class DmDamageView(_DisableableView):
         )
         if applied["level_changed"]:
             status = f"{self.target_name}: {applied['old_wound_level']} → **{applied['new_wound_level']}**"
+            status += f" · {applied['fate_note']}" if applied.get("fate_note") else ""
         else:
             status = f"{self.target_name}: **{applied['new_wound_level']}**"
+            status += f" · {applied['fate_note']}" if applied.get("fate_note") else ""
         if applied["is_dead"]:
             status += "  **DEAD**" + death_line
         embed.add_field(name="Result", value=status, inline=False)
@@ -10001,6 +10047,8 @@ async def xp_kiho(
             return
         if "shugenja" in stype and not shugenja:
             shugenja = True
+        if advancement.has_friend_of_brotherhood(c):   # Buys Kiho as a Brotherhood monk would
+            non_brotherhood = shugenja = False
         if kiho_entry and kiho_entry.get("element"):
             elem = kiho_entry["element"].lower()
             if elem != "void":
@@ -10155,9 +10203,12 @@ async def xp_advantage(
     c.advantages.append(canonical)
     c.xp -= cost
     c.xp_spent += cost
+    acquired = advantage_effects.apply_acquired(c, canonical, "advantage")
     changed = store.save(rec, note="xp spend")
     await _xp_spend_log(interaction, rec, changed)
     msg = f"**{c.name}** gains the advantage **{canonical}** for **{cost}** XP. XP left {c.xp:g}"
+    if acquired:
+        msg += "\n" + "\n".join(f"• {n}" for n in acquired)
     param_hint = advantage_effects.PARAMETERISED_ADVANTAGES.get(adv["name"])
     if param_hint and ":" not in input_name:
         msg += f"\n*Hint: Use `{adv['name']}: <{param_hint}>` to record the chosen option.*"
@@ -10765,7 +10816,9 @@ class _XpKihoElementPick(discord.ui.View):
                 ring_val = stats.ring_value(c, elem)
                 if ring_val < ml:
                     continue
-            cost = advancement.kiho_cost(ml, non_brotherhood=not is_brotherhood and not is_shugenja, shugenja=is_shugenja)
+            fob = advancement.has_friend_of_brotherhood(c)
+            cost = advancement.kiho_cost(ml, non_brotherhood=not is_brotherhood and not is_shugenja and not fob,
+                                         shugenja=is_shugenja and not fob)
             can = c.xp >= cost
             opts.append(discord.SelectOption(
                 label=f"{entry['name']} (ML {ml}, {cost} XP)"[:100],
@@ -10831,7 +10884,9 @@ class _XpKihoPick(discord.ui.View):
         ml = kiho_entry["mastery"] if kiho_entry else 1
         is_shugenja = "shugenja" in c.school_type.lower()
         is_brotherhood = "brotherhood" in c.school.lower() if c.school else False
-        cost = advancement.kiho_cost(ml, non_brotherhood=not is_brotherhood and not is_shugenja, shugenja=is_shugenja)
+        fob = advancement.has_friend_of_brotherhood(c)
+        cost = advancement.kiho_cost(ml, non_brotherhood=not is_brotherhood and not is_shugenja and not fob,
+                                     shugenja=is_shugenja and not fob)
         if any(k.lower() == name.lower() for k in c.kiho):
             await interaction.response.edit_message(content=f"**{c.name}** already knows **{name}**.", view=None)
             return
@@ -11566,11 +11621,16 @@ async def spell_cast(
         extra_rolled = extra_kept = 1
     fear_r = _fear_penalty(interaction.channel_id, caster.name)
     extra_rolled -= fear_r
+    mr_bonus, mr_note = 0, ""
+    if target:
+        target_rec = _find_any_character(guild, target)
+        if target_rec is not None and target_rec.character is not caster:
+            mr_bonus, mr_note = advantage_effects.magic_resistance_tn(target_rec.character, s)
     result = combat.resolve_spell_casting(
         ring_val, caster.school_rank, s["mastery"], engine,
         affinity=affinity, deficiency=deficiency,
         extra_rolled=extra_rolled, extra_kept=extra_kept,
-        raises=raises, extra_flat=wound_pen,
+        raises=raises, extra_flat=wound_pen, tn_bonus=mr_bonus,
     )
     if result.get("cannot_cast"):
         await interaction.response.send_message(
@@ -11594,6 +11654,8 @@ async def spell_cast(
         color=discord.Color.gold() if success else discord.Color.red(),
     )
     notes = [stats.spell_source_note(caster, s["name"])]
+    if mr_note:
+        notes.append(mr_note)
     if affinity:
         notes.append(f"Affinity ({element.title()}): Effective rank {result['effective_rank']}")
     if deficiency:

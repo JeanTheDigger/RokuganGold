@@ -69,6 +69,14 @@ Oracles, Weakness, Doubt, Fukurokujin, Heart of Vengeance, etc.) are stored
 as "Name: Parameter" on the character sheet (e.g. "Weakness: Willpower").
 The _get_adv_param / _get_disadv_param helpers extract the parameter.
 
+Also auto-applied (catalogue text, GDD s45): Broken Wave Citizen, Imperial Spouse, Imperial Scribe,
+Nikesake Citizen, Naga Ancestry, Prodigy, Iron Heart Native, Sacred Forest Native, Watanu-Trained,
+Laughing Plains Native (Fear), Crab Hands / Crafty / Sage / Sensation (unskilled floor), Daredevil
+(Void on Athletics), Dangerous Beauty, Anachronism, Disbeliever, Disturbing Countenance, Broken Wave
+Stigma, Water Hammer Stigma, Nikesake Stigma, Wanderer, and what others' Gullible, Greedy, Lechery
+and Frail Mind give an opponent. Target-dependent effects read the roll's `target` (a clan, school
+type or race) or the opponent's sheet.
+
 Reminder-only (not auto-applied):
   Quick (Initiative re-add needs Reactions Stage), Prodigy (school-skill
   detection not modelled), Sacred Weapons (weapon identity not tracked beyond
@@ -81,9 +89,10 @@ Reminder-only (not auto-applied):
 from __future__ import annotations
 
 import math
+import re
 
 from .character import Character
-from . import stats
+from . import skill_groups, stats
 
 
 def _has_adv(c: Character, name: str) -> bool:
@@ -176,6 +185,15 @@ def attacker_attack_dice(
         if taint_rank > 0:
             flat += taint_rank
             notes.append(f"Touch of Jigoku +{taint_rank} attack (Taint Rank)")
+
+    school_skills = _school_skill_bases(attacker)
+    weapon_skill = str(weapon_profile.get("skill", ""))
+    if weapon_skill and _has_disadv(attacker, "Nikesake Stigma") and skill_groups.base(weapon_skill) not in school_skills:
+        rolled -= 1
+        notes.append(f"Nikesake Stigma -1k0 ({weapon_skill} is not a School Skill)")
+    if weapon_skill and _has_adv(attacker, "Prodigy") and skill_groups.base(weapon_skill) in school_skills:
+        rolled += 1
+        notes.append(f"Prodigy +1k0 ({weapon_skill} is a School Skill)")
 
     weak_param = _get_disadv_param(attacker, "Weakness")
     if weak_param:
@@ -327,6 +345,240 @@ def _armor_skill_penalty(
     return 0, []
 
 
+_ALIASES = {
+    "monks": "monk", "shugenjas": "shugenja", "artisans": "artisan", "courtiers": "courtier",
+    "bushi": "bushi", "nagas": "naga", "families": "imperial", "emperor": "imperial", "emperors": "imperial",
+}
+
+
+def target_tags(target: str | None, opponent: Character | None = None) -> set[str]:
+    """Lower-case words that describe who a roll is aimed at: clan, school type, race.
+    Built from a free-text `target` ("Crane shugenja") and/or the opponent's sheet."""
+    tags: set[str] = set()
+    for tok in re.split(r"[^a-z]+", (target or "").lower()):
+        if tok and tok not in ("clan", "the", "a", "an", "of", "and", "family"):
+            tags.add(_ALIASES.get(tok, tok))
+    if opponent is not None:
+        if opponent.clan:
+            tags.add(opponent.clan.lower())
+        for part in re.split(r"[^a-z]+", (opponent.school_type or "").lower()):
+            if part:
+                tags.add(part)
+    return tags
+
+
+def unskilled_floor(c: Character, skill_name: str) -> int:
+    """Rank an Unskilled roll is treated as having (0 if no Advantage lifts it): Crab Hands for a Weapon
+    Skill, Crafty for a Low Skill, Sage for a Lore Skill, Sensation for a Perform Skill."""
+    if c.skills.get(skill_name, 0) > 0:
+        return 0
+    b = skill_groups.base(skill_name)
+    if (_has_adv(c, "Crab Hands") and skill_groups.is_weapon(skill_name)) \
+            or (_has_adv(c, "Crafty") and skill_groups.is_low(skill_name)) \
+            or (_has_adv(c, "Sage") and b == "lore") \
+            or (_has_adv(c, "Sensation") and b == "perform"):
+        return 1
+    return 0
+
+
+def effective_skill_rank(c: Character, skill_name: str) -> int:
+    """The skill's rank for a roll: the sheet's, or the Unskilled floor an Advantage grants."""
+    return c.skills.get(skill_name, 0) or unskilled_floor(c, skill_name)
+
+
+def _school_skill_bases(c: Character) -> set[str]:
+    if not c.school:
+        return set()
+    from . import schools
+    s = schools.get(c.school)
+    if s is None:
+        return set()
+    assigned, _ = schools.parse_skills(schools.effective_fields(s)[0])
+    return {skill_groups.base(name) for name, _, _ in assigned}
+
+
+def _name_base(name: str) -> str:
+    return re.split(r"\s*[(:]", name, maxsplit=1)[0].strip().lower()
+
+
+def _name_param(name: str) -> str:
+    m = re.search(r"\(([^)]*)\)\s*$", name) or re.search(r":\s*(.+)$", name)
+    return m.group(1).strip() if m else ""
+
+
+def _prefixed(param: str, prefix: str) -> str:
+    """"Blacksmithing" -> "Craft: Blacksmithing"; an already-prefixed name stays as it is."""
+    p = param.strip()[:60]   # a skill name ends up in menus, where Discord allows 100 characters
+    return p if p.lower().startswith(prefix.lower()) else f"{prefix}: {p}"
+
+
+def free_skill_ranks(name: str) -> dict[str, int]:
+    """Skill ranks an Advantage hands out the moment it is taken: Water Hammer Citizen (a Craft Skill),
+    Zakyo Toshi Citizen (a Games Skill), Dark Edge Native (Lore: Iaijutsu)."""
+    base, param = _name_base(name), _name_param(name)
+    if base == "water hammer citizen" and param:
+        return {_prefixed(param, "Craft"): 1}
+    if base == "zakyo toshi citizen" and param:
+        return {_prefixed(param, "Games"): 1}
+    if base == "dark edge native":
+        return {"Lore: Iaijutsu": 1}
+    return {}
+
+
+def apply_acquired(c: Character, name: str, kind: str, *, skills: bool = True) -> list[str]:
+    """One-time effects of taking an Advantage or Disadvantage, applied to the sheet once: Virtuous (+1 Honor
+    Rank), Fame (+1 Glory Rank), Wealthy (+2 koku a point), Zakyo Toshi Citizen (+50% starting koku),
+    Infamous (Glory becomes Infamy), Social Disadvantage (Status 0), Dishonored (Status 1), Ruined City
+    Survivor (no koku), Shadowlands Taint (0.5 Taint). Returns notes. `skills=False` leaves the free
+    skill ranks to the caller (the creation wizard already priced its purchases on top of them)."""
+    base = _name_base(name)
+    notes: list[str] = []
+    if kind == "advantage":
+        if base == "virtuous":
+            c.honor = min(10.0, c.honor + 1.0); notes.append("Virtuous: +1.0 Honor")
+        elif base == "fame":
+            c.glory += 1.0; notes.append("Fame: +1.0 Glory")
+        elif base == "wealthy":
+            m = re.search(r"(\d+)", _name_param(name) or "")
+            ranks = int(m.group(1)) if m else 1
+            c.koku += 2 * ranks
+            notes.append(f"Wealthy: +{2 * ranks} koku")
+        elif base == "zakyo toshi citizen":
+            extra = c.koku // 2
+            c.koku += extra; notes.append(f"Zakyo Toshi Citizen: +{extra} koku (50% more)")
+        if skills:
+            for sk, r in free_skill_ranks(name).items():
+                c.skills[sk] = c.skills.get(sk, 0) + r
+                notes.append(f"{name}: +{r} {sk}")
+    else:
+        if base == "infamous":
+            c.infamy += c.glory; c.glory = 0.0; notes.append("Infamous: Glory becomes Infamy")
+        elif base == "social disadvantage":
+            c.status = 0.0; notes.append("Social Disadvantage: Status 0")
+        elif base == "dishonored":
+            c.status = 1.0; notes.append("Dishonored: Status Rank 1")
+        elif base == "ruined city survivor":
+            c.koku = c.bu = c.zeni = 0; notes.append("Ruined City Survivor: no starting koku (two Outfit items are missing: staff decide which)")
+        elif base == "shadowlands taint":
+            c.taint += 0.5; notes.append("Shadowlands Taint: 0.5 Taint")
+    return notes
+
+
+def magic_resistance_tn(target: Character, spell: dict) -> tuple[int, str]:
+    """(TN bonus, note): each rank of Magic Resistance adds +3 to the Spell Casting Roll TN of elemental
+    spells aimed at the holder. Maho, gaijin and non-human magic are unaffected."""
+    if spell["element"].lower() not in ("air", "earth", "fire", "water") or "maho" in (spell.get("keyword") or "").lower() \
+            or "maho" in [t.lower() for t in spell.get("tags", [])]:
+        return 0, ""
+    for a in target.advantages:
+        if _name_base(a) == "magic resistance":
+            m = re.search(r"(\d+)", _name_param(a) or "")
+            ranks = max(1, min(3, int(m.group(1)))) if m else 1
+            return 3 * ranks, f"{target.name}'s Magic Resistance {ranks}: TN +{3 * ranks}"
+    return 0, ""
+
+
+def daredevil(c: Character) -> bool:
+    """Daredevil: a Void Point spent on an Athletics roll gives +3k1 instead of +1k1."""
+    return _has_adv(c, "Daredevil")
+
+
+def fear_resist_bonus(c: Character) -> tuple[int, list[str]]:
+    """Flat bonus to resist a Fear effect: Laughing Plains Native +5."""
+    if _has_adv(c, "Laughing Plains Native"):
+        return 5, ["Laughing Plains Native +5 (resisting Fear)"]
+    return 0, []
+
+
+def _situational_modifiers(
+    c: Character, skill_name: str, sk: str, tr: str, emphasis: str | None,
+    tags: set[str], opponent: Character | None,
+) -> tuple[int, int, int, list[str]]:
+    """Advantages and Disadvantages whose effect depends on the skill, on who the roll is aimed at,
+    or on what the opponent has. (rolled, kept, flat, notes); a flat TN penalty is a negative flat."""
+    rolled = kept = flat = 0
+    notes: list[str] = []
+    social = sk in _SOCIAL_SKILLS
+    emph = (emphasis or "").lower()
+
+    def plus(r: int, k: int, text: str) -> None:
+        nonlocal rolled, kept
+        rolled += r; kept += k
+        notes.append(text)
+
+    # -- Advantages --
+    if _has_adv(c, "Broken Wave Citizen") and sk in ("commerce", "sailing"):
+        plus(1, 0, f"Broken Wave Citizen +1k0 ({skill_name})")
+    if social and _has_adv(c, "Imperial Spouse") and "imperial" in tags:
+        plus(1, 1, "Imperial Spouse +1k1 (Imperial families)")
+    if social and _has_adv(c, "Imperial Scribe") and tags & {"shugenja", "artisan"}:
+        plus(1, 0, "Imperial Scribe +1k0 (shugenja and artisans)")
+    if sk == "calligraphy" and _has_adv(c, "Imperial Scribe"):
+        flat += 5
+        notes.append("Imperial Scribe: Free Raise (+5) on Calligraphy")
+    if social and _has_adv(c, "Nikesake Citizen") and "crane" in tags:
+        plus(1, 0, "Nikesake Citizen +1k0 (Crane Clan)")
+    if social and _has_adv(c, "Naga Ancestry") and "naga" in tags:
+        plus(1, 0, "Naga Ancestry +1k0 (Naga)")
+    if _has_adv(c, "Prodigy") and skill_groups.base(skill_name) in _school_skill_bases(c):
+        plus(1, 0, f"Prodigy +1k0 (School Skill: {skill_name})")
+    if _has_adv(c, "Iron Heart Native") and tr in ("stamina", "strength") and sk != "damage":
+        plus(1, 0, f"Iron Heart Native +1k0 ({tr.title()} roll)")
+    if _has_adv(c, "Sacred Forest Native") and sk in ("lore: theology", "lore: spirit realms"):
+        plus(1, 0, f"Sacred Forest Native +1k0 ({skill_name})")
+    watanu = _get_adv_param(c, "Watanu-Trained")
+    if watanu and sk == watanu.lower():
+        plus(1, 1, f"Watanu-Trained +1k1 ({skill_name})")
+    if sk == "temptation" and _has_adv(c, "Dangerous Beauty"):
+        plus(1, 0, "Dangerous Beauty +1k0 (Temptation; the sheet does not track orientation, so DM checks it)")
+    if _has_adv(c, "Precise Memory") and tr == "intelligence":
+        notes.append("Precise Memory: +1k1 on this roll if it is to remember something exactly (DM: apply)")
+    if _has_adv(c, "Bland"):
+        notes.append("Bland: may add 10 to the TN of any roll to learn your Honor or identify you by Glory")
+
+    # -- Disadvantages --
+    if _has_disadv(c, "Anachronism") and (social or sk.startswith(("artisan", "craft"))):
+        flat -= 5
+        notes.append("Anachronism: TN +5 (Artisan, Craft and Social)")
+    if social and _has_disadv(c, "Disbeliever") and tags & {"shugenja", "monk"}:
+        flat -= 5
+        notes.append("Disbeliever: TN +5 (shugenja and monks)")
+    if social and _has_disadv(c, "Disturbing Countenance"):
+        flat -= 5
+        notes.append("Disturbing Countenance: TN +5 (Social)")
+    if social and _has_disadv(c, "Broken Wave Stigma") and "phoenix" in tags:
+        plus(-1, 0, "Broken Wave Stigma -1k0 (Phoenix Clan)")
+    if social and _has_disadv(c, "Water Hammer Stigma"):
+        if tags and "dragon" not in tags:
+            plus(-1, 0, "Water Hammer Stigma -1k0 (not Dragon Clan)")
+        elif not tags:
+            notes.append("Water Hammer Stigma: -1k0 on Social rolls with anyone outside the Dragon Clan (name the target to apply)")
+    if _has_disadv(c, "Wanderer") and emph == "navigation":
+        flat -= 15
+        notes.append("Wanderer -15 (Navigation emphasis)")
+    if _has_disadv(c, "Lame") and tr == "agility":
+        notes.append("Lame: +10 TN on Agility rolls that use the lower limbs (DM: apply)")
+    if _has_disadv(c, "Missing Limb"):
+        notes.append("Missing Limb: +10 TN on tasks that need the missing limb (DM: apply)")
+    if _has_disadv(c, "Gaijin Name") and social:
+        notes.append("Gaijin Name: each die explodes at most once on this Social roll (max 20 per die)")
+
+    # -- What the opponent's Disadvantages give this roller --
+    if opponent is not None:
+        if _has_disadv(opponent, "Gullible") and sk == "sincerity" and "deceit" in emph:
+            plus(1, 1, "Opponent is Gullible: +1k1 (Sincerity: Deceit)")
+        if _has_disadv(opponent, "Greedy") and sk == "temptation" and "bribery" in emph:
+            plus(1, 1, "Opponent is Greedy: +1k1 (Temptation: Bribery)")
+        if _has_disadv(opponent, "Lechery") and sk == "temptation" and "seduction" in emph:
+            plus(1, 1, "Opponent has Lechery: +1k1 (Temptation: Seduction, if their attraction matches)")
+        if _has_disadv(opponent, "Frail Mind") and tr == "willpower":
+            plus(2, 0, "Opponent has Frail Mind: +2k0 (contested Willpower)")
+        if _has_adv(opponent, "Shadowed Heart") and sk in ("investigation", "sincerity", "courtier", "etiquette", "temptation", "intimidation"):
+            flat -= 5
+            notes.append("Opponent has Shadowed Heart: TN +5 to discern their intentions")
+    return rolled, kept, flat, notes
+
+
 def skill_check_modifiers(
     character: Character,
     skill_name: str,
@@ -335,6 +587,8 @@ def skill_check_modifiers(
     emphasis: str | None = None,
     is_contested: bool = False,
     opponent_skill: str | None = None,
+    target: str | None = None,
+    opponent: Character | None = None,
 ) -> tuple[int, int, int, list[str]]:
     """(extra_rolled, extra_kept, flat_bonus, notes) for a skill check.
 
@@ -454,6 +708,11 @@ def skill_check_modifiers(
     if doubt_param and doubt_param.lower() == sk:
         flat -= 5
         notes.append(f"Doubt -5 ({doubt_param}: Must call 1 Raise that does nothing)")
+
+    # --- Who or what the roll is against ---
+    sr, sk_, sf, sn = _situational_modifiers(
+        character, skill_name, sk, tr, emphasis, target_tags(target, opponent), opponent)
+    rolled += sr; kept += sk_; flat += sf; notes.extend(sn)
 
     # --- Skill Mastery Abilities (L5R 4e RAW) ---
     _sr = character.skills.get(skill_name, 0)

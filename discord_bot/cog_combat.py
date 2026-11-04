@@ -614,8 +614,10 @@ class DamageView(views_base.PersistentView):
         c = target_rec.character
         if applied["level_changed"]:
             status = f"{self.target_name}: {applied['old_wound_level']} → **{applied['new_wound_level']}**"
+            status += f" · {applied['fate_note']}" if applied.get("fate_note") else ""
         else:
             status = f"{self.target_name}: **{applied['new_wound_level']}**"
+            status += f" · {applied['fate_note']}" if applied.get("fate_note") else ""
         if applied["is_dead"]:
             status += "  **DEAD**"
         return status
@@ -9064,6 +9066,7 @@ async def battle_damage(
     member="Player whose character to use.",
     is_npc="Target is an NPC.",
     bonus="Flat bonus (advantages, terrain, wound penalties applied automatically).",
+    tactician="Tactician: Shift the result by +5 or -5.",
 )
 @app_commands.autocomplete(name=_duelist_autocomplete)
 @app_commands.choices(
@@ -9087,6 +9090,7 @@ async def battle_table(
     member: discord.Member | None = None,
     is_npc: bool = False,
     bonus: int = 0,
+    tactician: app_commands.Range[int, -5, 5] = 0,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -9100,6 +9104,14 @@ async def battle_table(
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
         return
+    if tactician:
+        if tactician not in (-5, 5):
+            await interaction.response.send_message("Tactician shifts the result by exactly +5 or -5.", ephemeral=True)
+            return
+        if not any(a.lower() == "tactician" for a in c.advantages):
+            await interaction.response.send_message(f"**{c.name}** does not have the Tactician Advantage.", ephemeral=True)
+            return
+        bonus += tactician
     battle_skill = c.skills.get("Battle", 0)
     water = stats.water_ring(c)
     wp = stats.wound_penalty(c)

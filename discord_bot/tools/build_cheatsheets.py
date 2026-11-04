@@ -81,9 +81,11 @@ PLAYER = Sheet(
             E("/dice 5k3", "The quick way. Also 7k2+5."),
             E("/check skill | social | stealth | investigate | lore | craft",
               "A skill roll against a TN your GM names. Every one but skill picks the trait for you."),
+            E("/check drawback", "Roll the save a Disadvantage calls for, like Brash or Can't Lie."),
             E("/macro save | roll", "Save a roll you repeat, then roll it by name."),
             E("/history", "The latest rolls in this channel."),
             N("Add `spend_void` to a check for +1k1. Use `secret` to choose who sees it."),
+            N("Your Advantages and Disadvantages apply to checks on their own. On a social check, name the `target`, like Crane or shugenja, when an Advantage depends on who you face."),
         ]),
         Card("Void and abilities", [
             E("/void status", "How many Void Points you have."),

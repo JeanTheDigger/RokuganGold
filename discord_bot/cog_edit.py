@@ -740,10 +740,13 @@ async def edit_wound(
         return
     old = stats.wound_level_name(c)
     c.wounds_taken += amount
+    fate = stats.fate_save(c)   # Great Destiny / Dark Fate
     changed = _d.store.save(rec, note="wound")
     await _d.audit_stat(interaction, rec, "edit wound", changed)
     new = stats.wound_level_name(c)
     crossed = f"  ({old} → **{new}**)" if new != old else ""
+    if fate:
+        crossed += f"  *{fate}.*"
     dead = ""
     if stats.is_dead(c):
         death_notes = await _d.on_death(str(interaction.guild_id), c.name, rec.owner_id, rec.id)

@@ -12,7 +12,7 @@ import re
 import discord
 from discord import app_commands
 
-from l5r_rules import combat, enums, stats, taint
+from l5r_rules import combat, drawback_rolls, enums, stats, taint
 from l5r_rules import advantage_effects
 from l5r_rules import tattoo_effects
 import storage as _storage_mod
@@ -149,8 +149,12 @@ def _try_spend_void(
         else:
             c.current_void_points -= 1
             void_r = void_k = 1
-            void_spent = True
             void_line = f"Void +1k1 ({c.current_void_points} VP left)"
+            if skill_name.lower() == "athletics" or skill_name.lower().startswith("athletics"):
+                if advantage_effects.daredevil(c):   # Daredevil: Void on Athletics gives +3k1 instead
+                    void_r, void_k = 3, 1
+                    void_line = f"Void +3k1 (Daredevil, {c.current_void_points} VP left)"
+            void_spent = True
     if void_unskilled and not spend_void:
         if sk > 0:
             void_line = f"Void: Already has {skill_name} {sk} - use {void_param_label} for +1k1 instead"
@@ -381,15 +385,15 @@ async def contest(
         return
     tv_a = stats.trait_value(ca, trait_a.value)
     tv_b = stats.trait_value(cb, trait_b.value)
-    sk_a = ca.skills.get(skill_a, 0)
-    sk_b = cb.skills.get(skill_b, 0)
+    sk_a = advantage_effects.effective_skill_rank(ca, skill_a)
+    sk_b = advantage_effects.effective_skill_rank(cb, skill_b)
     wp_a = stats.wound_penalty(ca)
     wp_b = stats.wound_penalty(cb)
     adv_ra, adv_ka, adv_fa, adv_notes_a = advantage_effects.skill_check_modifiers(
-        ca, skill_a, trait_a.value, is_contested=True, opponent_skill=skill_b,
+        ca, skill_a, trait_a.value, is_contested=True, opponent_skill=skill_b, opponent=cb,
     )
     adv_rb, adv_kb, adv_fb, adv_notes_b = advantage_effects.skill_check_modifiers(
-        cb, skill_b, trait_b.value, is_contested=True, opponent_skill=skill_a,
+        cb, skill_b, trait_b.value, is_contested=True, opponent_skill=skill_a, opponent=ca,
     )
     # GDD s46: the side resisting Intimidation or Temptation adds Honor Rank.
     soh_ra, soh_fa, soh_na = advantage_effects.strength_of_honor(ca, skill_b)
@@ -524,6 +528,8 @@ async def fear_check(
     wp = stats.wound_penalty(c)
     void_r, void_k, void_spent, void_line, _ = _try_spend_void(c, spend_void)
     soh_r, soh_f, soh_notes = advantage_effects.strength_of_honor(c, "fear")
+    lp_f, lp_notes = advantage_effects.fear_resist_bonus(c)
+    soh_f += lp_f; soh_notes = soh_notes + lp_notes
     prev_fear = _d.fear_penalty(interaction.channel_id, c.name)
     if prev_fear:
         soh_notes = soh_notes + [f"Fear: -{prev_fear}k0 (earlier failed Fear check)"]
@@ -820,6 +826,7 @@ async def medicine_check(
     emphasis="Emphasis applies: Rerolls 1s.",
     reason="Label shown with the roll.",
     secret="True: Only you see it. False: Others see total, TN and outcome.",
+    target="Who the roll is aimed at, for Advantages that depend on it (e.g. Crane, Phoenix shugenja, Imperial).",
 )
 @app_commands.choices(trait=_CONTEST_TRAITS)
 async def skill_check_cmd(
@@ -836,6 +843,7 @@ async def skill_check_cmd(
     emphasis: app_commands.Range[str, 1, 80] | None = None,
     reason: app_commands.Range[str, 1, 200] | None = None,
     secret: bool = True,
+    target: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -847,9 +855,10 @@ async def skill_check_cmd(
     if await _d.refuse_if_cannot_act(interaction, c):
         return
     tv = stats.trait_value(c, trait.value)
-    sk = c.skills.get(skill, 0)
+    sk = advantage_effects.effective_skill_rank(c, skill)
     wp = stats.wound_penalty(c)
-    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait.value)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(
+        c, skill, trait.value, emphasis=emphasis, target=target)
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     tp_r, tp_notes = taint.social_roll_penalty(c, skill)
     adv_r += tp_r; adv_notes = adv_notes + tp_notes
@@ -987,7 +996,7 @@ async def check_cooperative(
             adv_notes = adv_notes + [f"Emphasis ({e}): 1s rerolled once"]
         return adv_r, adv_k, adv_f, adv_notes, e
 
-    sk = c.skills.get(skill, 0)
+    sk = advantage_effects.effective_skill_rank(c, skill)
     wp = stats.wound_penalty(c)
     tv = stats.trait_value(c, trait.value)
     adv_r, adv_k, adv_f, adv_notes, _ = _modifiers(c)
@@ -1142,7 +1151,7 @@ async def stealth_check(
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
         return
-    sk = c.skills.get("Stealth", 0)
+    sk = advantage_effects.effective_skill_rank(c, "Stealth")
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, "Stealth", "agility")
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
@@ -1225,7 +1234,7 @@ async def investigate_check(
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
         return
-    sk = c.skills.get("Investigation", 0)
+    sk = advantage_effects.effective_skill_rank(c, "Investigation")
     wp = stats.wound_penalty(c)
     emp_name = emphasis.value if emphasis else None
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(
@@ -1287,6 +1296,7 @@ async def investigate_check(
     emphasis="Emphasis applies: Rerolls 1s.",
     reason="Label (e.g. 'convincing the magistrate').",
     trait="Override the Trait. Perform varies; Dance and instruments use Agility.",
+    target="Who the roll is aimed at, for Advantages that depend on it (e.g. Crane, Phoenix shugenja, Imperial).",
 )
 @app_commands.choices(skill=_SOCIAL_SKILLS, trait=_CONTEST_TRAITS)
 async def social_check(
@@ -1302,6 +1312,7 @@ async def social_check(
     emphasis: app_commands.Range[str, 1, 80] | None = None,
     reason: app_commands.Range[str, 1, 200] | None = None,
     trait: app_commands.Choice[str] | None = None,
+    target: app_commands.Range[str, 1, 80] | None = None,
 ) -> None:
     if not await _d.require_guild(interaction):
         return
@@ -1317,9 +1328,10 @@ async def social_check(
         return
     trait_attr = trait.value if trait else _SOCIAL_TRAIT_MAP[skill.value]
     tv = stats.trait_value(c, trait_attr)
-    sk = c.skills.get(skill.value, 0)
+    sk = advantage_effects.effective_skill_rank(c, skill.value)
     wp = stats.wound_penalty(c)
-    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill.value, trait_attr)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(
+        c, skill.value, trait_attr, emphasis=emphasis, target=target)
     tp_r, tp_notes = taint.social_roll_penalty(c, skill.value)
     adv_r += tp_r; adv_notes = adv_notes + tp_notes
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
@@ -1393,7 +1405,7 @@ async def craft_check(
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
         return
-    sk = c.skills.get(skill, 0)
+    sk = advantage_effects.effective_skill_rank(c, skill)
     wp = stats.wound_penalty(c)
     if trait is not None:
         trait_attr = trait.value
@@ -1402,7 +1414,7 @@ async def craft_check(
     else:
         trait_attr = "intelligence"
     trait_label = "Void" if trait_attr == "void" else trait_attr.capitalize()
-    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait_attr)
+    adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, skill, trait_attr, emphasis=emphasis)
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)
     emph, emph_err = _emphasis_for(c, skill, emphasis)
     if emph_err:
@@ -1424,6 +1436,81 @@ async def craft_check(
     embed = _build_check_embed(title, c.name, skill_label, trait_label, result, wp, bonus, adv_notes=adv_notes, void_line=void_line, footer=f"Rolled by {interaction.user.display_name}")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+
+
+# ---------------------------------------------------------------------------
+# /check drawback
+# ---------------------------------------------------------------------------
+
+_DRAWBACK_CHOICES = [app_commands.Choice(name=d.label, value=d.key) for d in drawback_rolls.DRAWBACKS.values()]
+
+
+@check.command(
+    name="drawback",
+    description="Roll the save a Disadvantage calls for (Brash, Can't Lie, Epilepsy, Overconfident, Rumormonger ...).",
+)
+@app_commands.describe(
+    drawback="Which Disadvantage is being tested.",
+    name="Defaults to you. Others need Fortune.",
+    glory_rank="Highest Glory Rank involved (Contrary and Rumormonger: TN = 5 x this).",
+    member="A player's character [Fortune]",
+    is_npc="Name is an NPC.",
+    bonus="Flat bonus.",
+    spend_void="Spend Void for +1k1.",
+)
+@app_commands.choices(drawback=_DRAWBACK_CHOICES)
+async def drawback_check(
+    interaction: discord.Interaction,
+    drawback: app_commands.Choice[str],
+    name: app_commands.Range[str, 1, 80] | None = None,
+    glory_rank: app_commands.Range[int, 0, 10] | None = None,
+    member: discord.Member | None = None,
+    is_npc: bool = False,
+    bonus: app_commands.Range[int, -50, 50] = 0,
+    spend_void: bool = False,
+) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    rec = await _resolve_roller(interaction, name, is_npc, member)
+    if rec is None:
+        return
+    c = rec.character
+    if await _d.refuse_if_cannot_act(interaction, c):
+        return
+    spec = drawback_rolls.DRAWBACKS[drawback.value]
+    owned = drawback_rolls.owned_name(c, spec.key)
+    if owned is None:
+        await interaction.response.send_message(f"**{c.name}** does not have **{spec.label}**.", ephemeral=True)
+        return
+    tn, how = drawback_rolls.tn_for(spec, owned, glory_rank)
+    if tn is None:
+        await interaction.response.send_message(
+            f"**{spec.label}** needs a `glory_rank:` (TN = 5 x the highest Glory Rank among those involved).", ephemeral=True)
+        return
+    trait_val = stats.trait_value(c, spec.trait)
+    extra = stats.honor_rank(c) if spec.plus_honor_rank else 0
+    wp = stats.wound_penalty(c)
+    void_r, void_k, void_spent, void_line, _ = _try_spend_void(c, spend_void)
+    rolled = max(1, trait_val + extra + void_r)
+    kept = max(1, trait_val + void_k)
+    dice = _d.engine.roll_and_keep(rolled, kept)
+    total = dice.total + bonus + wp
+    success = total >= tn
+    if void_spent:
+        _d.store.save(rec)
+        _d.tally(interaction.channel_id, c.name, "void")
+    embed = discord.Embed(
+        title=f"{spec.label}: {c.name}",
+        color=discord.Color.green() if success else discord.Color.red(),
+    )
+    parts = f"{spec.trait.capitalize()}" + (f" + Honor Rank {extra}" if extra else "")
+    embed.add_field(name="Roll", value=f"{parts} ({rolled}k{kept}{f' {wp}' if wp else ''}{f' {bonus:+d}' if bonus else ''}) vs TN **{tn}** ({how})"
+                    + (f"\n{void_line}" if void_line else ""), inline=False)
+    embed.add_field(name="Dice", value=_d.format_dice(dice)[:1024], inline=False)
+    embed.add_field(name="Result", value=f"**{total}** vs TN {tn}: {'**Passes.** ' + spec.passed if success else '**Fails.** ' + spec.failed}",
+                    inline=False)
+    embed.set_footer(text=f"Rolled by {interaction.user.display_name}")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # ---------------------------------------------------------------------------
 # /check lore
@@ -1470,7 +1557,7 @@ async def lore_check(
     c = rec.character
     if await _d.refuse_if_cannot_act(interaction, c):
         return
-    sk = c.skills.get(specialty, 0)
+    sk = advantage_effects.effective_skill_rank(c, specialty)
     wp = stats.wound_penalty(c)
     adv_r, adv_k, adv_f, adv_notes = advantage_effects.skill_check_modifiers(c, specialty, "intelligence")
     adv_r, adv_notes = _fear(interaction, c, adv_r, adv_notes)

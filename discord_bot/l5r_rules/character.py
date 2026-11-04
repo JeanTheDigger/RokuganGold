@@ -61,6 +61,8 @@ class Character:
     spells_memorised: list[str] = field(default_factory=list)
     # -- Spells cast since the last /dm new_day. Only a Void Mystic is limited by it (each spell once a day). --
     spells_cast_today: list[str] = field(default_factory=list)
+    # -- Death-saves already spent: "Great Destiny" (cleared each in-game year) and "Dark Fate" (cleared each new day). --
+    fate_used: list[str] = field(default_factory=list)
     # -- Rank-up spells (s48): highest School Rank whose three new spells have been
     #    taken (chargen covers Rank 1), and picks already taken toward the next rank. --
     spell_ranks_learned: int = 1

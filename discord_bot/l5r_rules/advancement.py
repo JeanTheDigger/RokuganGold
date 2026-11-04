@@ -21,7 +21,9 @@ what was bought.
 from __future__ import annotations
 
 import math
+import re
 
+from . import skill_groups
 from .character import Character
 
 SKILL_XP_MULT = 1   # Skill to rank N = N × 1 XP (RAW)
@@ -39,6 +41,47 @@ TRAIT_NAMES = [
 ]
 
 
+_ELEMENT_TRAITS = {
+    "air": ("reflexes", "awareness"), "earth": ("stamina", "willpower"),
+    "fire": ("agility", "intelligence"), "water": ("strength", "perception"),
+}
+
+
+def _owns(items: list[str], name: str) -> bool:
+    return any(i.lower() == name.lower() or i.lower().startswith(name.lower() + " (") or i.lower().startswith(name.lower() + ":")
+               for i in items)
+
+
+def has_friend_of_brotherhood(character: Character) -> bool:
+    return _owns(character.advantages, "Friend of the Brotherhood")
+
+
+def trait_step_cost(character: Character, trait: str, new_rank: int) -> int:
+    """XP to raise a Trait or Void to `new_rank`, with the character's Advantages applied:
+    Enlightened takes 2 off each Void raise, Elemental Blessing 1 off each of its element's two Traits."""
+    trait = trait.lower()
+    cost = new_rank * (VOID_XP_MULT if trait == "void" else TRAIT_XP_MULT)
+    if trait == "void" and _owns(character.advantages, "Enlightened"):
+        cost -= 2
+    for a in character.advantages:
+        if a.lower().startswith("elemental blessing"):
+            m = re.search(r"\b(air|earth|fire|water)\b", a.lower())
+            if m and trait in _ELEMENT_TRAITS[m.group(1)]:
+                cost -= 1
+                break
+    return max(1, cost)
+
+
+def skill_step_cost(character: Character, skill: str, new_rank: int) -> int:
+    """XP to raise a Skill to `new_rank`. Obtuse doubles it for any High Skill except Investigation and Medicine."""
+    cost = new_rank * SKILL_XP_MULT
+    if _owns(character.disadvantages, "Obtuse"):
+        b = skill_groups.base(skill)
+        if skill_groups.is_high(skill) and b not in ("investigation", "medicine"):
+            cost *= 2
+    return cost
+
+
 def _trait_current(character: Character, trait: str) -> int:
     return character.void_ring if trait == "void" else character.get_trait(trait)
 
@@ -54,7 +97,7 @@ def trait_raise_quote(character: Character, trait: str) -> tuple[int, int] | Non
     if current >= cap:
         return None
     new_rank = current + 1
-    return new_rank, new_rank * mult
+    return new_rank, trait_step_cost(character, trait, new_rank)
 
 
 def skill_raise_quote(character: Character, skill: str) -> tuple[int, int] | None:
@@ -63,7 +106,7 @@ def skill_raise_quote(character: Character, skill: str) -> tuple[int, int] | Non
     if current >= MAX_SKILL_RANK:
         return None
     new_rank = current + 1
-    return new_rank, new_rank * SKILL_XP_MULT
+    return new_rank, skill_step_cost(character, skill, new_rank)
 
 
 def emphasis_limit(skill_rank: int) -> int:

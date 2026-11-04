@@ -43,14 +43,24 @@ def earth_ring(c: Character) -> int:
     return ring_value(c, "earth")
 
 
+def _has(items: list[str], name: str) -> bool:
+    return any(i.lower() == name.lower() for i in items)
+
+
+def wound_earth(c: Character) -> int:
+    """Earth Ring as the Wound Ranks see it: Bad Health counts it one lower (never below 1)."""
+    e = earth_ring(c)
+    return max(1, e - 1) if _has(c.disadvantages, "Bad Health") else e
+
+
 def healthy_wound_threshold(c: Character) -> int:
     """Wounds the Healthy level holds (RAW: Earth x 5)."""
-    return earth_ring(c) * 5
+    return wound_earth(c) * 5
 
 
 def wound_threshold_per_level(c: Character) -> int:
     """Wounds each level after Healthy holds (RAW: Earth x 2)."""
-    return earth_ring(c) * 2
+    return wound_earth(c) * 2
 
 
 def wound_level_index(c: Character) -> int:
@@ -82,6 +92,20 @@ def total_wound_capacity(c: Character) -> int:
 
 def is_dead(c: Character) -> bool:
     return wound_level_index(c) == 8
+
+
+def fate_save(c: Character) -> str | None:
+    """Great Destiny (advantage) and Dark Fate (disadvantage): wounds that would kill leave the character
+    with 1 Wound remaining instead, once (Great Destiny each in-game year, Dark Fate each day). Call after
+    applying damage; returns a note if the character was spared, else None."""
+    if not is_dead(c):
+        return None
+    for name, owned in (("Great Destiny", c.advantages), ("Dark Fate", c.disadvantages)):
+        if _has(owned, name) and name not in c.fate_used:
+            c.fate_used.append(name)
+            c.wounds_taken = total_wound_capacity(c) - 1
+            return f"{name}: spared from death and left with 1 Wound remaining"
+    return None
 
 
 def _skill_rank(c: Character, name: str) -> int:
@@ -140,9 +164,16 @@ def water_ring(c: Character) -> int:
     return ring_value(c, "water")
 
 
+def move_ring(c: Character) -> int:
+    """The Water Ring a Move Action uses: Lame counts it as 1."""
+    return 1 if _has(c.disadvantages, "Lame") else water_ring(c)
+
+
 def natural_healing_rate(c: Character) -> int:
-    """L5R 4e RAW, GDD s57.31.7a: a night's rest heals (Stamina x 2) + Insight Rank wounds."""
-    return c.stamina * 2 + insight_rank(c)
+    """L5R 4e RAW, GDD s57.31.7a: a night's rest heals (Stamina x 2) + Insight Rank wounds.
+    Quick Healer counts Stamina as 2 higher for recovering Wounds."""
+    stamina = c.stamina + (2 if _has(c.advantages, "Quick Healer") else 0)
+    return stamina * 2 + insight_rank(c)
 
 
 def spell_slot_max(c: Character, element: str) -> int:

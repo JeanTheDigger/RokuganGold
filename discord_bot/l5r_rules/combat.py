@@ -295,8 +295,10 @@ def resolve_spell_casting(
     extra_kept: int = 0,
     raises: int = 0,
     extra_flat: int = 0,
+    tn_bonus: int = 0,
 ) -> dict:
     """Spell Casting Roll (s31): (Ring + effective School Rank) keep Ring.
+    `tn_bonus` raises the TN outright (a target's Magic Resistance).
 
     Affinity: +1 effective School Rank. Deficiency: -1 (0 = cannot cast)."""
     effective_rank = school_rank
@@ -313,7 +315,7 @@ def resolve_spell_casting(
     rolled = ring_value + effective_rank + extra_rolled
     kept = ring_value + extra_kept
     tn = spell_casting_tn(mastery_level)
-    effective_tn = tn + raises * 5
+    effective_tn = tn + raises * 5 + tn_bonus
     result = dice_engine.roll_and_keep(max(1, rolled), max(1, kept))
     total = result.total + extra_flat
     return {
@@ -557,7 +559,8 @@ def resolve_attack(
     kata's North/South Wind Air-Ring bonus, per s30)."""
     weapon = get_weapon_profile(weapon_name)
     skill_name = weapon.get("skill", "Kenjutsu")
-    skill_rank = attacker.skills.get(skill_name, 0)
+    from . import advantage_effects   # Crab Hands: an Unskilled weapon roll counts as Rank 1
+    skill_rank = advantage_effects.effective_skill_rank(attacker, skill_name)
 
     trait_name = weapon.get("trait", "agility")
     trait_value = getattr(attacker, trait_name, attacker.agility)
@@ -641,6 +644,7 @@ def apply_damage(target: Character, raw_damage: int, reduction: int | None = Non
     final_damage = max(0, raw_damage - reduction)
     old_level = stats.wound_level_name(target)
     target.wounds_taken += final_damage
+    fate_note = stats.fate_save(target)   # Great Destiny / Dark Fate
     new_level = stats.wound_level_name(target)
     return {
         "raw_damage": raw_damage,
@@ -650,6 +654,7 @@ def apply_damage(target: Character, raw_damage: int, reduction: int | None = Non
         "new_wound_level": new_level,
         "is_dead": stats.is_dead(target),
         "level_changed": old_level != new_level,
+        "fate_note": fate_note,
     }
 
 
