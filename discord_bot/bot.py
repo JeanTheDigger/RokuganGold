@@ -225,6 +225,9 @@ def _tree_payload_hash(tree: app_commands.CommandTree, guild: discord.abc.Snowfl
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+_GLOBAL_COMMANDS: list | None = None
+
+
 async def _sync_tree(
     tree: app_commands.CommandTree, guild: discord.abc.Snowflake, *, force: bool = False,
 ) -> tuple[int, str]:
@@ -235,6 +238,14 @@ async def _sync_tree(
     startup sync is skipped when the definitions have not changed since the last
     successful one. /sync passes force=True to register regardless."""
     guild_id = str(getattr(guild, "id", "?"))
+    # Syncing one guild clears the global copies (below), so a second guild would copy nothing and be
+    # registered with zero commands. Keep the first full list and put it back when it has been cleared.
+    global _GLOBAL_COMMANDS
+    if _GLOBAL_COMMANDS is None:
+        _GLOBAL_COMMANDS = list(tree.get_commands())
+    elif not tree.get_commands():
+        for cmd in _GLOBAL_COMMANDS:
+            tree.add_command(cmd)
     payload_hash = _tree_payload_hash(tree, guild)
     if not force and store.get_sync_hash(guild_id) == payload_hash:
         count = len(tree.get_commands(guild=guild)) or len(tree.get_commands())
@@ -266,14 +277,10 @@ class RokuganBot(discord.Client):
         # "didn't respond in time". Answer it instead.
         if interaction.type is not discord.InteractionType.component or interaction.guild_id is None:
             return
-        try:
-            if _component_has_handler(self, interaction):
-                return
-        except Exception:  # never let the fallback itself break a live click
-            log.exception("orphan check failed")
+        if _click_had_owner(interaction.id):
             return
         if interaction.response.is_done():
-            return   # A live view answered it and swapped in its next step, so the old menu only looks orphaned.
+            return   # Something already answered it.
         await _handle_orphan_component(interaction)
 
     async def setup_hook(self) -> None:
@@ -341,7 +348,7 @@ _ORPHAN_MENU_TEXT = (
 )
 
 
-def _component_has_handler(bot_client: discord.Client, interaction: discord.Interaction) -> bool:
+def _store_has_handler(vs, interaction: discord.Interaction) -> bool:
     """Mirror discord.py's component dispatch: True if a view or dynamic item owns
     this click (by message id, then the persistent views registered without one)."""
     data = interaction.data or {}
@@ -349,7 +356,6 @@ def _component_has_handler(bot_client: discord.Client, interaction: discord.Inte
     ctype = data.get("component_type")
     if custom_id is None or ctype is None:
         return True
-    vs = bot_client._connection._view_store
     if any(p.fullmatch(str(custom_id)) for p in vs._dynamic_items):
         return True
     key = (int(ctype), str(custom_id))
@@ -357,6 +363,39 @@ def _component_has_handler(bot_client: discord.Client, interaction: discord.Inte
     if mid is not None and key in vs._views.get(mid, {}):
         return True
     return key in vs._views.get(None, {})
+
+
+# Clicks a live view owned at the moment Discord delivered them. The owner check has to happen then:
+# a wizard step stops the previous step's view as soon as it builds the next one, so a few
+# milliseconds later the click no longer looks owned and the fallback would answer it a second time.
+_OWNED_CLICKS: "dict[int, None]" = {}
+
+
+def _click_had_owner(interaction_id: int) -> bool:
+    return _OWNED_CLICKS.pop(interaction_id, False) is None
+
+
+def _install_click_tracker() -> None:
+    from discord.ui.view import ViewStore
+    if getattr(ViewStore.dispatch_view, "_rokugan_tracked", False):
+        return
+    original = ViewStore.dispatch_view
+
+    def dispatch_view(self, component_type, custom_id, interaction):
+        try:
+            if _store_has_handler(self, interaction):
+                _OWNED_CLICKS[interaction.id] = None
+                while len(_OWNED_CLICKS) > 500:
+                    _OWNED_CLICKS.pop(next(iter(_OWNED_CLICKS)))
+        except Exception:
+            log.exception("click tracking failed")
+        return original(self, component_type, custom_id, interaction)
+
+    dispatch_view._rokugan_tracked = True
+    ViewStore.dispatch_view = dispatch_view
+
+
+_install_click_tracker()
 
 
 async def _handle_orphan_component(interaction: discord.Interaction) -> None:
