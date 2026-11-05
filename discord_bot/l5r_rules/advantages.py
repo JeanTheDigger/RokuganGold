@@ -40,3 +40,64 @@ def search(query: str, kind: str | None = None) -> list[dict]:
 
 def by_kind(kind: str) -> list[dict]:
     return [r for r in ADVANTAGES_DATA if r["kind"] == kind]
+
+
+# --- Clan and school-type price adjustments ------------------------------------
+# The entries print them in their own text: "Lion pay 6 pts", "Crab and bushi pay 2 pts",
+# "Worth 4 pts to Lion", "Worth 1 additional pt to courtiers".
+_PAY_SPLIT = re.compile(r",\s+(?=[A-Z][\w' -]*\s+pay\b)")
+_PAY_RE = re.compile(r"^(?P<who>[A-Z][\w' ,-]*?)\s+pays?\s+(?P<n>\d+)\s+pts?(?P<less>\s+less)?(?P<tail>\s+total)?\b")
+_WORTH_RE = re.compile(r"Worth\s+(?P<n>\d+)\s+(?P<add>additional\s+)?pts?\s+to\s+(?P<who>[^.]+)")
+_CLASS_WORDS = {"bushi": "bushi", "courtier": "courtier", "courtiers": "courtier", "shugenja": "shugenja",
+                "monk": "monk", "monks": "monk", "ninja": "ninja"}
+
+
+def _who_matches(who: str, clan: str, school_type: str, family: str) -> bool:
+    who = re.sub(r"\bcharacters?\b", "", who, flags=re.IGNORECASE)
+    stype = (school_type or "").lower()
+    for tok in re.split(r",|\band\b|\bor\b", who):
+        t = tok.strip().lower()
+        if not t:
+            continue
+        cls = _CLASS_WORDS.get(t)
+        if cls is not None:
+            if cls in stype:
+                return True
+        elif t in ((clan or "").lower(), (family or "").lower()):
+            return True
+    return False
+
+
+def price_delta(entry: dict | None, clan: str = "", school_type: str = "", family: str = "") -> int:
+    """How much the points of an Advantage (negative) or Disadvantage (positive) change for a character
+    of this Clan, school type and family, from the price line in the entry's own text.
+    0 when the text names nobody who matches."""
+    if not entry or entry.get("points") is None:
+        return 0
+    text = entry.get("effect") or ""
+    base = entry["points"]
+    best = base
+    if entry["kind"] == "advantage":
+        for sentence in re.split(r"\.\s+(?=[A-Z])", text):
+            for clause in _PAY_SPLIT.split(sentence):
+                m = _PAY_RE.match(clause.strip())
+                if not m or m["tail"]:
+                    continue
+                if _who_matches(m["who"], clan, school_type, family):
+                    price = base - int(m["n"]) if m["less"] else int(m["n"])
+                    best = min(best, price)
+        return max(0, best) - base
+    for m in _WORTH_RE.finditer(text):
+        if _who_matches(m["who"], clan, school_type, family):
+            worth = base + int(m["n"]) if m["add"] else int(m["n"])
+            best = max(best, worth)
+    return best - base
+
+
+def base_entry(name: str, kind: str | None = None) -> dict | None:
+    """The catalog entry behind a name stored on a sheet, such as "Debt (4 points)" or "Friend of the Elements (Fire)"."""
+    hit = get(name, kind)
+    if hit is not None:
+        return hit
+    stripped = re.sub(r"\s*\(.*$", "", name).strip()
+    return get(stripped, kind) if stripped and stripped != name else None

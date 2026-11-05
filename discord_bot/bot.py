@@ -2696,6 +2696,7 @@ def _build_base_char(state: dict) -> Character:
 
 def _heritage_open_discounts(state: dict) -> tuple[list[dict], str]:
     """Heritage XP discounts the player has not used yet, and the school type they depend on."""
+    _reprice(state)
     base, res = _build_base_char_res(state)
     items = [{"name": "Different School", "points": 5}] if state.get("different_school") else []
     items += [{"name": a["name"], "points": a["points"]} for a in state.get("advantages_chosen", [])]
@@ -2703,6 +2704,7 @@ def _heritage_open_discounts(state: dict) -> tuple[list[dict], str]:
 
 
 def _heritage_for_embed(state: dict) -> tuple[dict, list[dict]]:
+    _reprice(state)
     base, res = _build_base_char_res(state)
     items = [{"name": "Different School", "points": 5}] if state.get("different_school") else []
     items += [{"name": a["name"], "points": a["points"]} for a in state.get("advantages_chosen", [])]
@@ -2724,8 +2726,45 @@ def _cost_char(state: dict, base_char: Character | None = None, res: dict | None
     return stand_in
 
 
+def _price_ctx(state: dict) -> tuple[str, str, str]:
+    """Clan, school type and family a price line such as "Lion pay 6 pts" is matched against."""
+    sch = schools.get(state["school_name"], state.get("clan")) if state.get("school_name") else None
+    stype = (schools._infer_type(sch) if sch else None) or "Bushi"
+    return state.get("clan", "") or "", stype, state.get("family_name", "") or ""
+
+
+def _chosen_price(state: dict, name: str, kind: str, base: int) -> int:
+    """What an Advantage costs, or a Disadvantage gives back, for this character: the printed points
+    moved by the entry's own clan and school-type price line."""
+    entry = advantages.base_entry(name, kind)
+    if entry is None:
+        return base
+    return max(0, base + advantages.price_delta(entry, *_price_ctx(state)))
+
+
+def _entry_price_hint(state: dict, entry: dict) -> str:
+    """"5 pts for you" when the entry's price line applies to this character, else an empty string."""
+    delta = advantages.price_delta(entry, *_price_ctx(state))
+    return f"{entry['points'] + delta} pts for you" if delta else ""
+
+
+def _reprice(state: dict) -> None:
+    """Re-price every chosen Advantage and Disadvantage from its printed points. Each keeps its printed
+    value in "base", so changing Clan, Family or School later re-prices it correctly."""
+    for key, kind in (("advantages_chosen", "advantage"), ("disadvantages_chosen", "disadvantage")):
+        for e in state.get(key, []):
+            base = e.setdefault("base", e["points"])
+            e["points"] = _chosen_price(state, e["name"], kind, base)
+
+
+def _disadv_total(state: dict) -> int:
+    _reprice(state)
+    return sum(d["points"] for d in state.get("disadvantages_chosen", []))
+
+
 def _calc_chargen_xp(state: dict) -> tuple[int, int]:
     """Return (xp_spent, xp_remaining) from chargen purchases."""
+    _reprice(state)
     spent = 0
     base_char, res = _build_base_char_res(state)
     priced = _cost_char(state, base_char, res)
@@ -2741,8 +2780,7 @@ def _calc_chargen_xp(state: dict) -> tuple[int, int]:
         for i in range(ranks):
             spent += advancement.skill_step_cost(priced, skill, base_val + i + 1)
     spent += len(state.get("emphasis_purchases", [])) * _EMPHASIS_XP_COST
-    disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
-    disadv_xp = min(disadv_xp, _MAX_DISADVANTAGE_XP)
+    disadv_xp = min(_disadv_total(state), _MAX_DISADVANTAGE_XP)
     return spent, _CHARGEN_XP + disadv_xp - spent
 
 
@@ -2800,7 +2838,7 @@ def _chargen_embed(state: dict) -> discord.Embed:
         lines.append(f"**Spells:** {', '.join(state['chosen_spells'])}")
 
     lines.append(f"\n**XP:** {remaining} remaining ({spent} spent of {_CHARGEN_XP}"
-                 + (f" + {min(sum(d['points'] for d in state.get('disadvantages_chosen', [])), _MAX_DISADVANTAGE_XP)} from disadv." if state.get("disadvantages_chosen") else "")
+                 + (f" + {min(_disadv_total(state), _MAX_DISADVANTAGE_XP)} from disadv." if state.get("disadvantages_chosen") else "")
                  + ")")
     embed.description = ("\n".join(lines) if lines else "Starting...")[:4000]
     return embed
@@ -3384,6 +3422,7 @@ class _HeritagePurchaseSelect(discord.ui.Select):
 
 
 def _heritage_purchase_options(state: dict) -> tuple[list[dict], dict[str, str]]:
+    _reprice(state)
     base, res = _build_base_char_res(state)
     items = [{"name": a["name"], "points": a["points"]} for a in state.get("advantages_chosen", [])]
     if state.get("different_school"):
@@ -3639,8 +3678,8 @@ class _AdvChoiceModal(discord.ui.Modal):
             else:
                 await _chargen_advantages(interaction, self.state)
         else:
-            current_disadv_xp = sum(d["points"] for d in self.state.get("disadvantages_chosen", []))
-            if current_disadv_xp + self.entry["points"] > _MAX_DISADVANTAGE_XP:
+            current_disadv_xp = _disadv_total(self.state)
+            if current_disadv_xp + _chosen_price(self.state, self.entry["name"], "disadvantage", self.entry["points"]) > _MAX_DISADVANTAGE_XP:
                 await interaction.response.send_message(
                     f"That would exceed the {_MAX_DISADVANTAGE_XP} XP disadvantage limit.", ephemeral=True,
                 )
@@ -3734,8 +3773,11 @@ class _AdvantageSelect(discord.ui.Select):
         discounts, stype = _heritage_open_discounts(state)
 
         def _desc(a: dict) -> str:
-            hint = heritage_perks.discount_hint(discounts, a["name"], a["points"], stype)
-            return f"{a['cost_text']} → {hint}" if hint else f"{a['cost_text']} - {a.get('category') or 'Other'}"
+            mine = advantages.price_delta(a, *_price_ctx(state))
+            hint = heritage_perks.discount_hint(discounts, a["name"], a["points"] + mine, stype)
+            if hint:
+                return f"{a['cost_text']} → {hint}"
+            return f"{a['cost_text']} → {_entry_price_hint(state, a)}" if mine else f"{a['cost_text']} - {a.get('category') or 'Other'}"
 
         options = [discord.SelectOption(
             label=a["name"][:100],
@@ -3863,6 +3905,15 @@ async def _chargen_advantages(interaction: discord.Interaction, state: dict) -> 
     )
 
 
+def _disadv_desc(state: dict, d: dict) -> str:
+    delta = advantages.price_delta(d, *_price_ctx(state))
+    if not delta:
+        return f"{d['cost_text']} - gives XP back"
+    if len(_cost_tiers(d)) > 1:
+        return f"{d['cost_text']} → {delta:+d} XP for you at each level"
+    return f"{d['cost_text']} → {d['points'] + delta} XP for you"
+
+
 # --- Step 7: Disadvantages ---
 class _DisadvantageSelect(discord.ui.Select):
     def __init__(self, state: dict, category: str, part: int = 0):
@@ -3872,7 +3923,7 @@ class _DisadvantageSelect(discord.ui.Select):
         parts = max(1, -(-len(pool) // 25))
         options = [discord.SelectOption(
             label=d["name"][:100],
-            description=f"{d['cost_text']} - gives XP back"[:100],
+            description=_disadv_desc(state, d)[:100],
         ) for d in pool[part * 25:(part + 1) * 25]]
         if not options:
             options = [discord.SelectOption(label="(none available)", value="__none__")]
@@ -3908,8 +3959,8 @@ def _cost_tiers(rec: dict) -> list[int]:
 
 async def _take_disadvantage(interaction: discord.Interaction, state: dict, dis: dict, points: int,
                              category: str, tiered: bool = False) -> None:
-    current_disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
-    if current_disadv_xp + points > _MAX_DISADVANTAGE_XP:
+    current_disadv_xp = _disadv_total(state)
+    if current_disadv_xp + _chosen_price(state, dis["name"], "disadvantage", points) > _MAX_DISADVANTAGE_XP:
         await interaction.response.send_message(
             f"That would exceed the {_MAX_DISADVANTAGE_XP} XP disadvantage limit.", ephemeral=True)
         return
@@ -3927,7 +3978,8 @@ async def _take_disadvantage(interaction: discord.Interaction, state: dict, dis:
 async def _chargen_disadv_tier(interaction: discord.Interaction, state: dict, dis: dict, category: str) -> None:
     """A tiered Disadvantage gives back the XP of the level taken, so the player chooses the level."""
     tiers = _cost_tiers(dis)
-    used = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+    used = _disadv_total(state)
+    shift = advantages.price_delta(dis, *_price_ctx(state))
 
     def blurb(n: int) -> str:
         m = re.search(rf"\b{n} pts?\b[^:(.]*[:(]\s*([^.]*)", dis.get("effect") or "")
@@ -3935,8 +3987,9 @@ async def _chargen_disadv_tier(interaction: discord.Interaction, state: dict, di
 
     sel = discord.ui.Select(
         placeholder=f"How severe is {dis['name']}?",
-        options=[discord.SelectOption(label=f"{n} points", value=str(n), description=blurb(n) or None)
-                 for n in tiers if used + n <= _MAX_DISADVANTAGE_XP]
+        options=[discord.SelectOption(label=f"{n} points" + (f" (gives {n + shift} XP)" if shift else ""),
+                                      value=str(n), description=blurb(n) or None)
+                 for n in tiers if used + n + shift <= _MAX_DISADVANTAGE_XP]
                 or [discord.SelectOption(label="(over the XP limit)", value="__none__")],
     )
 
@@ -3986,7 +4039,7 @@ async def _chargen_disadv_category(interaction: discord.Interaction, state: dict
 
     back_btn.callback = on_back
     view.add_item(back_btn)
-    disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+    disadv_xp = _disadv_total(state)
     await interaction.response.edit_message(
         content=f"**Step 7/10 - Disadvantages ({cat})** · "
                 f"Select a disadvantage ({disadv_xp}/{_MAX_DISADVANTAGE_XP} XP gained).",
@@ -4044,7 +4097,7 @@ async def _chargen_disadvantages(interaction: discord.Interaction, state: dict) 
     view.add_item(undo_btn)
     view.add_item(next_btn)
 
-    disadv_xp = sum(d["points"] for d in state.get("disadvantages_chosen", []))
+    disadv_xp = _disadv_total(state)
     await interaction.response.edit_message(
         content=f"**Step 7/10 - Disadvantages** · Pick a category to browse. "
                 f"({disadv_xp}/{_MAX_DISADVANTAGE_XP} XP gained). Press **Next** when done.",
@@ -10213,16 +10266,17 @@ async def xp_advantage(
         return
     input_name = name.strip()
     base_name = input_name.split(":")[0].strip() if ":" in input_name else input_name
-    adv = advantages.get(base_name, "advantage")
+    adv = advantages.get(input_name, "advantage") or advantages.get(base_name, "advantage")
     if adv is None:
         await interaction.response.send_message(
             f"No advantage named **{base_name}**: See `/ref advantage search`.", ephemeral=True
         )
         return
     canonical = adv["name"]
-    if ":" in input_name:
+    if ":" in input_name and adv["name"].lower() != input_name.lower():
         param = input_name[input_name.index(":") + 1:].strip()
         canonical = f"{canonical}: {param}"
+    c = rec.character
     cost = points if points is not None else adv["points"]
     if cost is None:
         await interaction.response.send_message(
@@ -10230,7 +10284,8 @@ async def xp_advantage(
             ephemeral=True,
         )
         return
-    c = rec.character
+    if points is None:
+        cost = max(0, cost + advantages.price_delta(adv, c.clan, c.school_type, c.family))   # The entry's own clan or school-type price
     if canonical.lower() in [x.lower() for x in c.advantages]:
         await interaction.response.send_message(f"**{c.name}** already has **{canonical}**.", ephemeral=True)
         return
@@ -10302,6 +10357,8 @@ async def xp_remove_disadvantage(
     base_for_lookup = canonical.split(":")[0].strip()
     adv = advantages.get(canonical, "disadvantage") or advantages.get(base_for_lookup, "disadvantage")
     base_cost = points if points is not None else (adv["points"] if adv else None)
+    if points is None and adv is not None and base_cost is not None:
+        base_cost += advantages.price_delta(adv, c.clan, c.school_type, c.family)   # Worth more to some Clans and school types
     if base_cost is None:
         await interaction.response.send_message(
             f"**{canonical}** has a Variable cost: Pass `points:` to set its base value.", ephemeral=True
@@ -11034,6 +11091,8 @@ class _XpAdvCategoryPick(discord.ui.View):
             if entry["name"].lower() in owned_lower:
                 continue
             pts = entry.get("points")
+            if pts is not None:
+                pts = max(0, pts + advantages.price_delta(entry, c.clan, c.school_type, c.family))
             if pts is None:
                 cost_str = f"Variable ({entry.get('cost_text', '?')})"
                 desc_suffix = "Variable cost: Use /xp advantage with points param"
@@ -11107,6 +11166,8 @@ class _XpAdvPick(discord.ui.View):
             await interaction.response.edit_message(content=f"Advantage **{name}** not found.", view=None)
             return
         pts = adv.get("points")
+        if pts is not None:
+            pts = max(0, pts + advantages.price_delta(adv, c.clan, c.school_type, c.family))
         if pts is None:
             await interaction.response.edit_message(
                 content=f"**{adv['name']}** has a Variable cost ({adv.get('cost_text', '?')}). "
