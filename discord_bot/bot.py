@@ -3255,13 +3255,14 @@ class _HeritageModal(discord.ui.Modal):
 
 
 class _HeritageSelect(discord.ui.Select):
-    def __init__(self, perk: dict, options: list[dict], check, on_answer, placeholder: str):
+    def __init__(self, perk: dict, options: list[dict], check, on_answer, placeholder: str, row: int | None = None):
         self.perk = perk
         self.opts = {o["value"]: o for o in options}
         self.check = check
         self.on_answer = on_answer
         super().__init__(placeholder=placeholder[:150], options=[
-            discord.SelectOption(label=o["label"][:100], value=o["value"][:100]) for o in options])
+            discord.SelectOption(label=o["label"][:100], value=o["value"][:100],
+                                 description=(o.get("group") or None) and o["group"][:100]) for o in options], row=row)
 
     async def callback(self, interaction: discord.Interaction) -> None:
         if not await self.check(interaction):
@@ -3314,6 +3315,15 @@ def _heritage_ask_items(perk: dict, options: list[dict] | None, group: str | Non
     groups = _heritage_groups(options)
     if groups is None:
         return [_HeritageSelect(perk, options, check, on_answer, "Choose...")]
+    if len(options) <= 50:
+        # Two menus side by side show everything at once; a category step is only for longer lists.
+        half = -(-len(options) // 2)
+        parts = [options[:half], options[half:]]
+
+        def edge(o: dict) -> str:
+            return o.get("group") or o["label"]
+        return [_HeritageSelect(perk, part, check, on_answer, f"{edge(part[0])} to {edge(part[-1])}...", row=i)
+                for i, part in enumerate(parts)]
     if group in groups:
         return [_HeritageSelect(perk, groups[group], check, on_answer, f"{group}...")]
     return [_HeritageGroupSelect(groups, check, on_group, "Choose a category first...")]
