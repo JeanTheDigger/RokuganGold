@@ -512,6 +512,16 @@ def apply_outfit(character, outfit: str) -> list[str]:
             character.zeni += frac_zeni % 10
             applied.append(item)
             continue
+        m_small = re.match(r"(\d+)\s+(bu|zeni)$", low)   # "5 bu" and "5 zeni" are money too
+        if m_small:
+            if m_small.group(2) == "bu":
+                character.bu += int(m_small.group(1))
+            else:
+                character.zeni += int(m_small.group(1))
+            from .character import normalise_purse
+            normalise_purse(character)
+            applied.append(item)
+            continue
         if low == "daisho":
             for w in ("Katana", "Wakizashi"):
                 if w not in character.weapons:

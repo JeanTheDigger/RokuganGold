@@ -312,8 +312,9 @@ class RokuganBot(discord.Client):
                 log.info("Re-attached %d pending approval view(s).", restored)
             try:
                 _backfill_rank_techniques()
+                _backfill_school_money()
             except Exception:
-                log.exception("Technique backfill failed")
+                log.exception("Start-up backfill failed")
 
 client = RokuganBot()
 
@@ -1717,6 +1718,28 @@ def _mastery_ceiling_text(c: Character, element: str, school_rank: int | None = 
     if eff <= 0:
         return f"{element.title()} is their Deficiency and School Rank {rank} makes it uncastable."
     return f"Their ceiling in {element.title()} is Mastery {eff} (School Rank {rank}{shift})."
+
+
+def _backfill_school_money() -> None:
+    """Sheets made before the outfit parser knew "5 bu" and "5 zeni" hold that money as an inventory item
+    named "bu" or "zeni". Move it into the purse."""
+    from l5r_rules.character import normalise_purse
+    fixed = 0
+    for rec in store.list_all_characters():
+        c = rec.character
+        moved = False
+        for unit in ("bu", "zeni"):
+            qty = c.inventory.get(unit, 0)
+            if qty:
+                setattr(c, unit, getattr(c, unit) + int(qty))
+                del c.inventory[unit]
+                moved = True
+        if moved:
+            normalise_purse(c)
+            store.save(rec, note="Outfit money backfill")
+            fixed += 1
+    if fixed:
+        log.info("Moved starting bu/zeni from the inventory into the purse for %d character(s).", fixed)
 
 
 def _backfill_rank_techniques() -> None:
@@ -4432,6 +4455,9 @@ async def _chargen_affinity_pick(interaction: discord.Interaction, state: dict, 
         if sel_inter.user.id != int(state["user_id"]):
             await sel_inter.response.send_message("This isn't your wizard.", ephemeral=True)
             return
+        if state.get("chosen_spells"):   # An out-of-date menu: Spells are already picked for the old Affinity.
+            await _chargen_spells(sel_inter, state)
+            return
         el = sel.values[0]
         state["affinity_element"] = el
         state["deficiency_element"] = _OPPOSING_ELEMENT.get(el, "") if opposing else ""
@@ -4473,6 +4499,9 @@ async def _chargen_second_deficiency(interaction: discord.Interaction, state: di
         if sel_inter.user.id != int(state["user_id"]):
             await sel_inter.response.send_message("This isn't your wizard.", ephemeral=True)
             return
+        if state.get("chosen_spells") or state.get("second_deficiency"):   # An out-of-date menu.
+            await _chargen_spells(sel_inter, state)
+            return
         state["second_deficiency"] = sel.values[0]
         await _chargen_spells(sel_inter, state)
 
@@ -4482,6 +4511,9 @@ async def _chargen_second_deficiency(interaction: discord.Interaction, state: di
     async def on_back(btn_inter: discord.Interaction) -> None:
         if btn_inter.user.id != int(state["user_id"]):
             await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+            return
+        if state.get("chosen_spells"):   # An out-of-date button: The spells were picked for this Affinity.
+            await _chargen_spells(btn_inter, state)
             return
         for k in ("affinity_element", "deficiency_element", "second_deficiency"):
             state.pop(k, None)
@@ -4767,6 +4799,9 @@ async def _chargen_spells(interaction: discord.Interaction, state: dict) -> None
         async def on_change(btn_inter: discord.Interaction) -> None:
             if btn_inter.user.id != int(state["user_id"]):
                 await btn_inter.response.send_message("This isn't your wizard.", ephemeral=True)
+                return
+            if state.get("chosen_spells"):   # An out-of-date button: Spells are already picked.
+                await _chargen_spells(btn_inter, state)
                 return
             for k in ("affinity_element", "deficiency_element", "second_deficiency", "_spell_pool",
                       "_spell_allot_remaining", "_slot_assign"):
