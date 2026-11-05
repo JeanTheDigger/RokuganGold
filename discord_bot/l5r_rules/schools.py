@@ -67,18 +67,45 @@ _SCHOOL_TYPES = {"bushi": "Bushi", "courtier": "Courtier", "shugenja": "Shugenja
                  "monk": "Monk", "ninja": "Ninja", "artisan": "Artisan"}
 
 ALL = SCHOOLS_DATA
-_BY_NAME = {s["name"].lower(): s for s in SCHOOLS_DATA}
+_VARIANTS: dict[str, list[dict]] = {}
+for _s in SCHOOLS_DATA:
+    _VARIANTS.setdefault(_s["name"].lower(), []).append(_s)
+_CATEGORY_ORDER = {"basic": 0, "alternate": 1, "advanced": 2}
 
 
-def get(name: str) -> dict | None:
+def variants(name: str) -> list[dict]:
+    """Every school entry that carries this exact name. A few names exist under
+    two or three Clans (Tsume Pikemen: Crane and Ronin), so one name can be several schools."""
+    return list(_VARIANTS.get(name.lower().strip(), []))
+
+
+def _pick(options: list[dict], clan: str | None) -> dict | None:
+    if not options:
+        return None
+    if clan:
+        same = [s for s in options if s.get("clan", "").lower() == clan.lower().strip()]
+        if same:
+            options = same
+    return sorted(options, key=lambda s: _CATEGORY_ORDER.get(s.get("category", "basic"), 0))[0]
+
+
+def get(name: str, clan: str | None = None) -> dict | None:
     """Exact (case-insensitive) match, else the one school whose name starts with
-    the text before its ': Clan' tag ("Usagi Bushi" finds "Usagi Bushi: Hare Clan")."""
+    the text before its ': Clan' tag ("Usagi Bushi" finds "Usagi Bushi: Hare Clan").
+    Pass clan to choose between same-named schools of different Clans; without it,
+    the Starting School wins over the Alternate Path, which wins over the Advanced one."""
     key = name.lower().strip()
-    hit = _BY_NAME.get(key)
+    hit = _VARIANTS.get(key)
     if hit is not None or not key:
-        return hit
-    starts = [s for k, s in _BY_NAME.items() if k.startswith(key + ":") or k.startswith(key + " (")]
-    return starts[0] if len(starts) == 1 else None
+        return _pick(hit or [], clan)
+    base, _, tag = key.partition(":")
+    if tag and base.strip() in _VARIANTS:
+        tag = tag.strip().removesuffix(" clan")
+        named = [s for s in _VARIANTS[base.strip()] if s.get("clan", "").lower() == tag]
+        if named:
+            return _pick(named, clan)
+    starts = [k for k in _VARIANTS if k.startswith(key + ":") or k.startswith(key + " (")]
+    return _pick(_VARIANTS[starts[0]], clan) if len(starts) == 1 else None
 
 
 def search(query: str) -> list[dict]:
@@ -157,9 +184,9 @@ def basic_for_clan(clan: str) -> list[dict]:
     return [s for s in basic() if any(s["name"].lower().startswith(f + " ") for f in fams)]
 
 
-def techniques_up_to(name: str, rank: int) -> list[dict]:
+def techniques_up_to(name: str, rank: int, clan: str | None = None) -> list[dict]:
     """Ranked techniques (1..rank) a character of this school is entitled to."""
-    s = get(name)
+    s = get(name, clan)
     if not s:
         return []
     return [t for t in s["techniques"] if 1 <= t["rank"] <= rank]
@@ -203,6 +230,18 @@ def parse_benefit(benefit: str) -> tuple[str, int] | None:
 def parse_honor(honor: str) -> float | None:
     m = re.search(r"[\d.]+", honor or "")
     return float(m.group(0)) if m else None
+
+
+_HONOR_EITHER_RE = re.compile(r"(\d+(?:\.\d+)?)\s+or\s+(\d+(?:\.\d+)?)")
+
+
+def honor_choice(school: dict | None) -> list[float] | None:
+    """Starting Honor values a school lets the player pick between ("Honor: 1.5 or 4.5"), else None."""
+    if not school:
+        return None
+    honor = effective_fields(school)[1]
+    m = _HONOR_EITHER_RE.match(honor.strip())
+    return [float(m.group(1)), float(m.group(2))] if m else None
 
 
 def _split_commas(s: str) -> list[str]:

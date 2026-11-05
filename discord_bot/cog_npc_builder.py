@@ -117,7 +117,7 @@ def base_character(state: dict) -> Character:
         c.clan = fam["clan"]
     if state.get("clan"):
         c.clan = state["clan"]
-    sch = schools.get(state["school"]) if state.get("school") else None
+    sch = schools.get(state["school"], state.get("clan")) if state.get("school") else None
     if sch:
         schools.apply_to_character(c, sch)
         if state.get("clan"):
@@ -809,7 +809,7 @@ def form_to_state(user_id: int, guild_id: int, name: str, traits_text: str, skil
         state["family"] = fam["name"]
         state["clan"] = state["clan"] or fam["clan"]
     if details.get("school"):
-        sch = schools.get(details["school"])
+        sch = schools.get(details["school"], state.get("clan"))
         if sch is None:
             raise ParseError(f"No school named '{details['school']}'. See /ref school search.")
         state["school"] = sch["name"]

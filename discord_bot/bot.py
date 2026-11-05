@@ -1751,7 +1751,7 @@ def _backfill_rank_techniques() -> None:
         c = rec.character
         if rec.owner_id == NPC_OWNER or c.is_npc or not c.school:
             continue
-        school = schools.get(c.school)
+        school = schools.get(c.school, c.clan)
         if school is None:
             continue
         if _grant_school_techniques(c, school):
@@ -1765,7 +1765,7 @@ def _grant_school_techniques(c: Character, school: dict) -> list[str]:
     """Put every technique the school grants up to c.school_rank on the sheet.
     Returns the labels added (s48: the technique comes with the rank)."""
     added: list[str] = []
-    for t in schools.techniques_up_to(school["name"], c.school_rank):
+    for t in schools.techniques_up_to(school["name"], c.school_rank, school.get("clan")):
         label = f"{school['name']}: {t['name']}"
         if not any(label.lower() == x.lower() or t["name"].lower() == x.lower() for x in c.techniques):
             c.techniques.append(label)
@@ -1782,7 +1782,7 @@ def _check_insight_rank_advance(c: Character, picker_follows: bool = False) -> s
         return ""
     old, new_rank = result
     msg = f"\n**School Rank {old} → {new_rank}!** (Insight {stats.insight(c)})."
-    school = schools.get(c.school) if c.school else None
+    school = schools.get(c.school, c.clan) if c.school else None
     if school is not None:
         added = _grant_school_techniques(c, school)
         if added:
@@ -2623,6 +2623,14 @@ def _gear_apply(state: dict, char: Character, school: dict) -> list[dict]:
             taken.append(chosen["value"])
             if chosen.get("owns"):
                 owned.add(chosen["owns"].lower())
+    either = schools.honor_choice(school)
+    if either:
+        opts = [{"value": f"{v:g}", "label": f"{v:g}" + (" (low)" if v == min(either) else " (high)")} for v in either]
+        chosen = next((o for o in opts if o["value"] == picks.get("honor")), None)
+        if chosen is None:
+            pending.append({"id": "honor", "label": "Starting Honor", "options": opts, "kind": "honor"})
+        else:
+            char.honor = float(chosen["value"])
     return pending
 
 
@@ -2807,11 +2815,11 @@ def _active_embed(state: dict) -> discord.Embed:
 
 def _heritage_grant_techniques(char: Character, res: dict) -> None:
     """A Heritage result (Ronin) that Fortune approved: a Technique of a higher Rank in the character's own school."""
-    sch = schools.get(char.school) if char.school else None
+    sch = schools.get(char.school, char.clan) if char.school else None
     if sch is None:
         return
     for rank in res["technique_ranks"]:
-        for t in schools.techniques_up_to(sch["name"], rank):
+        for t in schools.techniques_up_to(sch["name"], rank, sch.get("clan")):
             if t["rank"] != rank:
                 continue
             label = f"{sch['name']}: {t['name']}"
@@ -3092,7 +3100,9 @@ async def _chargen_gear(interaction: discord.Interaction, state: dict, group: st
         view.add_item(undo)
     await interaction.response.edit_message(
         content=f"**Starting gear** · {len(pending)} choice{'s' if len(pending) != 1 else ''} left\n"
-                f"Your school's outfit says: **{slot['label']}**. Pick one.",
+                + ("Your school lets you start with **1.5 or 4.5 Honor**. Pick one."
+                   if slot.get("kind") == "honor" else
+                   f"Your school's outfit says: **{slot['label']}**. Pick one."),
         embed=_active_embed(state), view=view,
     )
 
@@ -3505,7 +3515,7 @@ async def _chargen_traits(interaction: discord.Interaction, state: dict) -> None
         view.add_item(back_wc_btn)
 
     school_for_gear = schools.get(state.get("school_name", "")) if state.get("school_name") else None
-    if school_for_gear is not None and schools.outfit_choices(school_for_gear):
+    if school_for_gear is not None and (schools.outfit_choices(school_for_gear) or schools.honor_choice(school_for_gear)):
         gear_btn = discord.ui.Button(label="Change Starting Gear", style=discord.ButtonStyle.secondary, row=3)
 
         async def on_gear(btn_inter: discord.Interaction) -> None:
@@ -11175,7 +11185,7 @@ async def school_learn(
         if not await _require_dm_role(interaction):
             return
     lookup = school_name or c.school
-    s = schools.get(lookup) if lookup else None
+    s = schools.get(lookup, c.clan) if lookup else None
     if s is None:
         await interaction.response.send_message(
             f"No school named **{lookup or '(unset)'}**. Set one with `school_name:` "
@@ -11183,10 +11193,10 @@ async def school_learn(
             ephemeral=True,
         )
         return
-    entitled = schools.techniques_up_to(s["name"], c.school_rank)
+    entitled = schools.techniques_up_to(s["name"], c.school_rank, s.get("clan"))
     is_shugenja = "shugenja" in c.school_type.lower() or bool(s.get("affinity"))
     rank, owed = stats.pending_rank_spells(c) if is_shugenja else (0, 0)
-    own_school = schools.get(c.school) if c.school else None
+    own_school = schools.get(c.school, c.clan) if c.school else None
     legacy_gear = bool(own_school and _legacy_gear_slots(c, own_school))
     if not entitled and not owed and not legacy_gear:
         await interaction.response.send_message(

@@ -390,7 +390,7 @@ def _school_skill_bases(c: Character) -> set[str]:
     if not c.school:
         return set()
     from . import schools
-    s = schools.get(c.school)
+    s = schools.get(c.school, c.clan)
     if s is None:
         return set()
     assigned, _ = schools.parse_skills(schools.effective_fields(s)[0])

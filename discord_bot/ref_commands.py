@@ -384,7 +384,13 @@ async def school_view(interaction: discord.Interaction, name: app_commands.Range
             f"No school named **{name}**. Try `/ref school search`.", ephemeral=True
         )
         return
-    await interaction.response.send_message(embed=build_school_embed(s), ephemeral=True)
+    others = [v for v in schools.variants(s["name"]) if v is not s]
+    note = ""
+    if others:
+        note = ("Other schools share this name: "
+                + ", ".join(f"{v['clan']} ({v.get('category', 'basic')})" for v in others)
+                + f". Add the Clan to see one, for example `{s['name']}: {others[0]['clan']}`.")
+    await interaction.response.send_message(content=note or None, embed=build_school_embed(s), ephemeral=True)
 
 
 # ---------------------------------------------------------------------------

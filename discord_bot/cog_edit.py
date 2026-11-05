@@ -424,7 +424,7 @@ async def edit_identity(
         else:
             changes.append(f"Family already **{c.family}** (unchanged, no bonus re-applied)")
     if school is not None:
-        sch = schools.get(school.strip())
+        sch = schools.get(school.strip(), c.clan)
         c.school = sch["name"] if sch else school.strip()
         changes.append(
             f"School **{c.school or '(none)'}**"
