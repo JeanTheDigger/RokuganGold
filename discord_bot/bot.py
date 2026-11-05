@@ -272,6 +272,8 @@ class RokuganBot(discord.Client):
         except Exception:  # never let the fallback itself break a live click
             log.exception("orphan check failed")
             return
+        if interaction.response.is_done():
+            return   # A live view answered it and swapped in its next step, so the old menu only looks orphaned.
         await _handle_orphan_component(interaction)
 
     async def setup_hook(self) -> None:
@@ -361,6 +363,8 @@ async def _handle_orphan_component(interaction: discord.Interaction) -> None:
     """A click nobody handles. A stale character-creation step is re-rendered on the
     same message from the saved wizard state; anything else gets a short notice."""
     guild_id, user_id = str(interaction.guild_id), str(interaction.user.id)
+    if interaction.response.is_done():
+        return
     try:
         if store.get_creation_channel(guild_id, user_id) == str(interaction.channel_id):
             raw = store.get_creation_state(guild_id, user_id)
@@ -369,6 +373,10 @@ async def _handle_orphan_component(interaction: discord.Interaction) -> None:
                 log.info("Reviving stale wizard step for %s in %s", user_id, interaction.channel_id)
                 await _cg_resume(interaction, state)
                 return
+    except discord.HTTPException as exc:
+        if exc.code == 40060:   # Another handler answered the same click first; nothing to repair.
+            return
+        log.exception("wizard revive failed")
     except Exception:
         log.exception("wizard revive failed")
     try:
