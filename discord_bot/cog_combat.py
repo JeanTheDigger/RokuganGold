@@ -3241,6 +3241,221 @@ combat_duel = app_commands.Group(name="duel", description="Iaijutsu dueling.", p
 combat_battle = app_commands.Group(name="battle", description="Mass Battle system.", parent=engage_group)
 
 
+# ---------------------------------------------------------------------------
+# /fight custom_roll: a roll nobody else has a command for, approved by a DM
+# ---------------------------------------------------------------------------
+
+_CUSTOM_ROLL_LIMIT = 30
+
+
+def _dice_label(rolled: int, kept: int, bonus: int) -> str:
+    return f"{rolled}k{kept}" + (f"{bonus:+d}" if bonus else "")
+
+
+class _CustomRollEditModal(discord.ui.Modal):
+    """The DM changes the dice before they are rolled."""
+
+    def __init__(self, view: "CustomRollView") -> None:
+        super().__init__(title="Edit the roll, then roll it")
+        self.parent_view = view
+        self.rolled = discord.ui.TextInput(label="Dice rolled", default=str(view.rolled), max_length=2)
+        self.kept = discord.ui.TextInput(label="Dice kept", default=str(view.kept), max_length=2)
+        self.bonus = discord.ui.TextInput(label="Flat bonus", default=str(view.bonus), max_length=4)
+        self.tn = discord.ui.TextInput(label="Target Number (empty for none)",
+                                       default="" if view.tn is None else str(view.tn),
+                                       required=False, max_length=3)
+        for item in (self.rolled, self.kept, self.bonus, self.tn):
+            self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        try:
+            rolled, kept = int(self.rolled.value), int(self.kept.value)
+            bonus = int(self.bonus.value.replace(" ", "") or "0")
+            tn = int(self.tn.value) if self.tn.value.strip() else None
+        except ValueError:
+            await interaction.response.send_message("Use whole numbers only.", ephemeral=True)
+            return
+        if not (1 <= rolled <= _CUSTOM_ROLL_LIMIT and 1 <= kept <= _CUSTOM_ROLL_LIMIT):
+            await interaction.response.send_message(
+                f"Rolled and kept must be 1 to {_CUSTOM_ROLL_LIMIT}.", ephemeral=True)
+            return
+        if not -50 <= bonus <= 50 or (tn is not None and not 1 <= tn <= 200):
+            await interaction.response.send_message("Bonus must be -50 to 50 and the TN 1 to 200.", ephemeral=True)
+            return
+        v = self.parent_view
+        if not v.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
+        await v.resolve(interaction, rolled, kept, bonus, tn)
+
+
+class CustomRollView(views_base.PersistentView):
+    """A DM-only card for a roll a player asked for with /fight custom_roll."""
+
+    KIND = "custom_roll"
+
+    def __init__(
+        self,
+        requester_id: int,
+        character_name: str,
+        rolled: int,
+        kept: int,
+        bonus: int,
+        tn: int | None,
+        emphasis: bool,
+        unskilled: bool,
+        reason: str,
+        source_channel_id: int,
+    ) -> None:
+        super().__init__()
+        self.requester_id = requester_id
+        self.character_name = character_name
+        self.rolled = rolled
+        self.kept = kept
+        self.bonus = bonus
+        self.tn = tn
+        self.emphasis = emphasis
+        self.unskilled = unskilled
+        self.reason = reason
+        self.source_channel_id = source_channel_id
+
+    async def _post(self, interaction: discord.Interaction, content: str | None, embed: discord.Embed | None = None) -> None:
+        src = _d.bot_client.get_channel(self.source_channel_id) if self.source_channel_id else None
+        if src is not None:
+            await src.send(content=content, embed=embed, allowed_mentions=_PING_MENTIONS)
+            await interaction.followup.send(f"Posted in <#{self.source_channel_id}>.", ephemeral=True)
+        else:
+            await interaction.followup.send(content=content, embed=embed)
+
+    async def resolve(self, interaction: discord.Interaction, rolled: int, kept: int, bonus: int, tn: int | None) -> None:
+        explodes = not self.unskilled
+        if tn is not None:
+            out = _d.engine.roll_check(rolled, kept, tn, 0, bonus, explodes, self.emphasis)
+            result, total, success = out["dice"], out["total"], out["success"]
+            colour = discord.Color.green() if success else discord.Color.red()
+        else:
+            result = _d.engine.roll_and_keep(rolled, kept, explodes, self.emphasis)
+            total, success = result.total + bonus, None
+            colour = discord.Color.blurple()
+        embed = discord.Embed(title=f"{self.character_name}: custom roll", description=self.reason[:300], color=colour)
+        asked = _dice_label(self.rolled, self.kept, self.bonus)
+        done = _dice_label(rolled, kept, bonus)
+        embed.add_field(name="Roll", value=f"`{done}`" + (f" *(asked for `{asked}`)*" if done != asked else ""), inline=True)
+        if tn is not None:
+            embed.add_field(name="Target", value=f"TN {tn}", inline=True)
+        embed.add_field(name="Result", value=_d.format_dice(result)[:1024], inline=False)
+        total_str = f"**{total}**" + (f"  (dice {result.total} {'+' if bonus >= 0 else '−'} {abs(bonus)})" if bonus else "")
+        if success is not None:
+            total_str += f" vs TN {tn}: " + ("**Success**" if success else "**Failure**") + f" (margin {total - tn:+d})"
+        embed.add_field(name="Total", value=total_str, inline=False)
+        flags = [f for f, on in (("Emphasis", self.emphasis), ("Unskilled (no explode)", self.unskilled)) if on]
+        embed.set_footer(text=f"Approved by {interaction.user.display_name}" + ("".join(" · " + f for f in flags)))
+        self._disable()
+        if interaction.response.is_done():
+            await interaction.followup.send("Rolled.", ephemeral=True)
+        else:
+            await interaction.response.edit_message(view=self)
+        await self._post(interaction, f"<@{self.requester_id}>", embed)
+        guild_id = str(interaction.guild_id)
+        await _d.combat_log(guild_id, f"Custom roll: {self.character_name} {done} = {total}"
+                            + ("" if success is None else (" (success)" if success else " (failure)"))
+                            + f" · {self.reason[:100]} · approved by {interaction.user.display_name}")
+
+    @discord.ui.button(label="Approve & Roll", style=discord.ButtonStyle.success)
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await _d.require_dm_role(interaction):
+            return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
+        await self.resolve(interaction, self.rolled, self.kept, self.bonus, self.tn)
+
+    @discord.ui.button(label="Edit & Roll", style=discord.ButtonStyle.primary)
+    async def edit(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await _d.require_dm_role(interaction):
+            return
+        if self._claimed:
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
+        await interaction.response.send_modal(_CustomRollEditModal(self))
+
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.secondary)
+    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await _d.require_dm_role(interaction):
+            return
+        if not self.claim():
+            await interaction.response.send_message("Already handled by an earlier click.", ephemeral=True)
+            return
+        self._disable()
+        await interaction.response.edit_message(view=self)
+        await self._post(
+            interaction,
+            f"<@{self.requester_id}> {interaction.user.display_name} did not approve the custom roll "
+            f"`{_dice_label(self.rolled, self.kept, self.bonus)}` for **{self.character_name}**: {self.reason[:200]}",
+        )
+
+
+@fight_group.command(
+    name="custom_roll",
+    description="Ask a DM to approve a roll for an Advantage or ability that no other command covers.",
+)
+@app_commands.describe(
+    rolled="Dice to roll (the X in XkY).",
+    kept="Dice to keep (the Y in XkY).",
+    reason="What the roll is for and which rule or Advantage allows it. The DM reads this.",
+    bonus="Flat modifier added to the total.",
+    tn="Target Number, if the roll has one. The DM can change it.",
+    emphasis="Reroll any initial 1 once.",
+    unskilled="Dice do not explode.",
+)
+@app_commands.checks.cooldown(1, 3.0)
+async def custom_roll(
+    interaction: discord.Interaction,
+    rolled: app_commands.Range[int, 1, _CUSTOM_ROLL_LIMIT],
+    kept: app_commands.Range[int, 1, _CUSTOM_ROLL_LIMIT],
+    reason: app_commands.Range[str, 3, 300],
+    bonus: app_commands.Range[int, -50, 50] = 0,
+    tn: app_commands.Range[int, 1, 200] | None = None,
+    emphasis: bool = False,
+    unskilled: bool = False,
+) -> None:
+    if not await _d.require_guild(interaction):
+        return
+    guild = str(interaction.guild_id)
+    rec = _d.store.get_active(guild, str(interaction.user.id))
+    if rec is None:
+        await interaction.response.send_message("You have no active character. Use `/sheet create` first.", ephemeral=True)
+        return
+    if await _d.refuse_if_cannot_act(interaction, rec.character):
+        return
+    approval_ch = await _require_approval_channel(interaction, guild)
+    if approval_ch is None:
+        return
+    view = CustomRollView(
+        interaction.user.id, rec.character.name, rolled, kept, bonus, tn, emphasis, unskilled,
+        reason.strip(), interaction.channel_id or 0,
+    )
+    embed = discord.Embed(
+        title=f"{rec.character.name}: custom roll request",
+        description=reason.strip(),
+        color=discord.Color.orange(),
+    )
+    embed.add_field(name="Roll", value=f"`{_dice_label(rolled, kept, bonus)}`", inline=True)
+    embed.add_field(name="Target", value=f"TN {tn}" if tn is not None else "None", inline=True)
+    flags = [f for f, on in (("Emphasis", emphasis), ("Unskilled", unskilled)) if on]
+    if flags:
+        embed.add_field(name="Options", value=", ".join(flags), inline=True)
+    enc = _d.encounters.get(interaction.channel_id)
+    if enc is not None and enc.started:
+        cur = enc.current()
+        embed.add_field(name="Combat", value=f"Round {enc.round}" + (f", {cur.name}'s turn" if cur else ""), inline=False)
+    await _post_damage_card(approval_ch, interaction.guild, interaction.user, interaction.channel_id or 0,
+                            f"{rec.character.name} asks for a custom roll.", embed, view)
+    await interaction.response.send_message(
+        f"Sent to the DMs: `{_dice_label(rolled, kept, bonus)}` for {reason.strip()[:200]}. "
+        "The result appears here once one approves it.", ephemeral=True)
+
+
 @fight_group.command(
     name="attack",
     description="Attack another character. Rolls to hit; on a hit a DM authorizes the outcome.",

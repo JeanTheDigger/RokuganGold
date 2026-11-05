@@ -117,6 +117,7 @@ PLAYER = Sheet(
             E("/combat board", "Post the board of action buttons."),
             E("/fight stance", "Pick this first. It locks once you act."),
             E("/fight attack", "Attack, with raises and maneuvers."),
+            E("/fight custom_roll", "Ask staff to approve a roll no command covers."),
             E("/fight action | full_defense | guard", "Track your actions, or defend."),
             E("/combat turn done", "End your turn."),
             E("/combat status | recap", "The turn order, or the tally so far."),

@@ -64,6 +64,7 @@ Type `/` in any channel, pick a command, then fill in its options. `/help` opens
 - `/combat board`  Post the board of action buttons.
 - `/fight stance`  Pick this first. It locks once you act.
 - `/fight attack`  Attack, with raises and maneuvers.
+- `/fight custom_roll`  Ask staff to approve a roll no command covers.
 - `/fight action | full_defense | guard`  Track your actions, or defend.
 - `/combat turn done`  End your turn.
 - `/combat status | recap`  The turn order, or the tally so far.

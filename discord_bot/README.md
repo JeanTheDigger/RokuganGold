@@ -96,6 +96,7 @@ Approve / Deny buttons that only a DM can click. This applies to:
 - **Attack damage** (`/fight attack` → DM clicks "Roll & Apply Damage" or "Deny")
 - **Spell damage** (`/spell damage` with `target:` → DM clicks "Apply Damage" or "Deny")
 - **Creature attacks** (`/creature attack` → DM clicks "Apply Creature Damage" or "No Damage")
+- **Custom rolls** (`/fight custom_roll` → DM clicks "Approve & Roll", "Edit & Roll" or "Deny")
 - **Arbitrary damage** (`/dm damage` → DM clicks "Apply Damage" or "Deny")
 - **Healing** (`/dm heal` → DM clicks "Apply Healing" or "Deny")
 - **Medicine treatment** (`/dm treat` → roll, then DM clicks "Apply Healing" or "Deny")
